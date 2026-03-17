@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { Plus } from 'lucide-react';
 import { teamsApi } from '@/api/teams.api';
 import { orgsApi } from '@/api/orgs.api';
 
@@ -42,7 +43,7 @@ export default function CreateTeam() {
   return (
     <div className="max-w-lg mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create team</h1>
-      {error && <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-danger">{error}</div>}
+      {error && <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">{error}</div>}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input id="name" label="Team name" value={name} onChange={(e) => handleNameChange(e.target.value)} placeholder="Backend" required />
         <Input id="slug" label="URL slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="backend" required />
@@ -53,7 +54,7 @@ export default function CreateTeam() {
             rows={3} placeholder="What does this team work on?" />
         </div>
         <Button type="submit" disabled={loading}>
-          {loading ? <Spinner className="h-4 w-4" /> : 'Create team'}
+          {loading ? <Spinner className="h-4 w-4" /> : <><Plus className="h-4 w-4" /> Create team</>}
         </Button>
       </form>
     </div>

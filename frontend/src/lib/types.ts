@@ -25,6 +25,10 @@ export interface Team {
   slug: string;
   description?: string;
   _count?: { members: number; repos: number; projects: number };
+  members?: TeamMember[];
+  repos?: { id: string; name: string; slug: string; visibility: string }[];
+  projects?: { id: string; name: string; slug: string; prefix: string }[];
+  wikiSpaces?: { id: string; name: string; slug: string }[];
 }
 
 export interface TeamMember {

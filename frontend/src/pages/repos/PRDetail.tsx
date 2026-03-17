@@ -79,7 +79,7 @@ export default function PRDetail() {
   const basePath = `/${org}/${teamSlug}/repos/${repoSlug}`;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div>
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
@@ -128,8 +128,8 @@ export default function PRDetail() {
                 {diff.stats.map((s: any) => (
                   <div key={s.file} className="flex items-center gap-3 px-4 py-2 text-sm">
                     <span className="flex-1 font-mono text-xs truncate">{s.file}</span>
-                    <span className="text-green-600 text-xs">+{s.additions}</span>
-                    <span className="text-red-600 text-xs">-{s.deletions}</span>
+                    <span className="text-success text-xs">+{s.additions}</span>
+                    <span className="text-danger text-xs">-{s.deletions}</span>
                   </div>
                 ))}
               </div>
@@ -143,9 +143,9 @@ export default function PRDetail() {
               <pre className="rounded-lg border border-border bg-surface p-4 text-xs font-mono overflow-x-auto max-h-[600px] overflow-y-auto">
                 {diff.diff.split('\n').map((line: string, i: number) => (
                   <div key={i} className={
-                    line.startsWith('+') && !line.startsWith('+++') ? 'text-green-600 bg-green-50' :
-                    line.startsWith('-') && !line.startsWith('---') ? 'text-red-600 bg-red-50' :
-                    line.startsWith('@@') ? 'text-blue-600 bg-blue-50' : ''
+                    line.startsWith('+') && !line.startsWith('+++') ? 'text-success bg-success-light' :
+                    line.startsWith('-') && !line.startsWith('---') ? 'text-danger bg-danger-light' :
+                    line.startsWith('@@') ? 'text-primary bg-primary-light' : ''
                   }>{line}</div>
                 ))}
               </pre>

@@ -53,4 +53,15 @@ else
   git clone --bare "$SOURCE_DIR" "$DISK_PATH"
 fi
 
-echo "Done: $DISK_PATH"
+# On WSL2 the Docker volume is written from the host but the running container
+# may not see the new files due to kernel-level directory caching. Copy the
+# repo into the container directly to guarantee visibility.
+CONTAINER=$(docker ps --filter "name=axiom-api" --format "{{.Names}}" 2>/dev/null | head -1)
+if [ -n "$CONTAINER" ]; then
+  echo "Syncing into container $CONTAINER via docker cp..."
+  docker exec "$CONTAINER" mkdir -p /data/repos/axiom/core
+  docker cp "$DISK_PATH" "$CONTAINER:/data/repos/axiom/core/axiom.git"
+  echo "Done: visible at /data/repos/axiom/core/axiom.git inside $CONTAINER"
+else
+  echo "Done: $DISK_PATH (no running api container found to sync)"
+fi

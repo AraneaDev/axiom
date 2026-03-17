@@ -27,7 +27,8 @@ router.delete('/:repoId/branches/:branchName', reposController.deleteBranch);
 router.get('/:repoId/commits', reposController.listCommits);
 router.get('/:repoId/commits/:sha', reposController.getCommit);
 
-// File browser
+// File browser — root and subdirectory variants
+router.get('/:repoId/tree/:ref', reposController.getTree);
 router.get('/:repoId/tree/:ref/*', reposController.getTree);
 router.get('/:repoId/blob/:ref/*', reposController.getBlob);
 router.get('/:repoId/blame/:ref/*', reposController.getBlame);

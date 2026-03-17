@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
-import { PRIORITY_COLORS, ISSUE_TYPE_ICONS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
+import { PRIORITY_COLORS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { cn, formatRelative } from '@/lib/utils';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
@@ -52,6 +53,12 @@ export default function IssueDetail() {
   const { data: repos = [] } = useQuery({
     queryKey: ['repos', currentTeam?.id],
     queryFn: () => reposApi.listByTeam(currentTeam!.id),
+    enabled: !!currentTeam?.id,
+  });
+
+  const { data: teamDetail } = useQuery({
+    queryKey: ['team-detail', currentTeam?.id],
+    queryFn: () => teamsApi.get(currentTeam!.id),
     enabled: !!currentTeam?.id,
   });
 
@@ -102,12 +109,12 @@ export default function IssueDetail() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div>
       <div className="grid grid-cols-3 gap-6">
         {/* Main content */}
         <div className="col-span-2">
           <div className="flex items-start gap-3 mb-4">
-            <span className="text-lg mt-1">{ISSUE_TYPE_ICONS[issue.type]}</span>
+            <IssueTypeIcon type={issue.type} className="h-5 w-5 mt-1" />
             <div className="flex-1 min-w-0">
               {editingTitle ? (
                 <div className="flex items-center gap-2">
@@ -205,13 +212,13 @@ export default function IssueDetail() {
                   {Object.entries(ISSUE_TYPE_LABELS).map(([key, label]) => (
                     <button key={key} onClick={() => updateMutation.mutate({ type: key })}
                       className={cn('text-xs px-2 py-1 rounded-md border transition-colors', issue.type === key ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-primary')}>
-                      {ISSUE_TYPE_ICONS[key as keyof typeof ISSUE_TYPE_ICONS]} {label}
+                      <IssueTypeIcon type={key} className="h-3 w-3" /> {label}
                     </button>
                   ))}
                 </div>
               ) : (
                 <button onClick={() => setEditingField('type')} className="text-sm hover:text-primary transition-colors">
-                  {ISSUE_TYPE_ICONS[issue.type]} {ISSUE_TYPE_LABELS[issue.type]}
+                  <IssueTypeIcon type={issue.type} className="h-3.5 w-3.5" /> {ISSUE_TYPE_LABELS[issue.type]}
                 </button>
               )}
             </div>
@@ -237,15 +244,36 @@ export default function IssueDetail() {
               )}
             </div>
 
+            {/* Assignee - click to edit */}
             <div>
               <p className="text-xs text-text-secondary uppercase font-semibold mb-1">Assignee</p>
-              {issue.assignee ? (
-                <div className="flex items-center gap-2">
-                  <Avatar name={issue.assignee.displayName} size="sm" />
-                  <span className="text-sm">{issue.assignee.displayName}</span>
+              {editingField === 'assignee' ? (
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  <button
+                    onClick={() => updateMutation.mutate({ assigneeId: null })}
+                    className={cn('w-full text-left text-xs px-2 py-1.5 rounded-md border transition-colors', !issue.assignee ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-primary')}
+                  >
+                    Unassigned
+                  </button>
+                  {teamDetail?.members?.map((m: any) => (
+                    <button key={m.user.id} onClick={() => updateMutation.mutate({ assigneeId: m.user.id })}
+                      className={cn('w-full text-left text-xs px-2 py-1.5 rounded-md border transition-colors flex items-center gap-2', issue.assignee?.id === m.user.id ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-primary')}>
+                      <Avatar name={m.user.displayName} size="sm" />
+                      {m.user.displayName}
+                    </button>
+                  ))}
                 </div>
               ) : (
-                <span className="text-sm text-text-secondary">Unassigned</span>
+                <button onClick={() => setEditingField('assignee')} className="hover:opacity-80 transition-opacity">
+                  {issue.assignee ? (
+                    <div className="flex items-center gap-2">
+                      <Avatar name={issue.assignee.displayName} size="sm" />
+                      <span className="text-sm">{issue.assignee.displayName}</span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-text-secondary hover:text-primary transition-colors">Unassigned</span>
+                  )}
+                </button>
               )}
             </div>
             {issue.labels?.length > 0 && (

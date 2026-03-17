@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
-import { PRIORITY_COLORS, ISSUE_TYPE_ICONS } from '@/lib/constants';
+import { PRIORITY_COLORS } from '@/lib/constants';
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -20,7 +21,7 @@ export default function SearchResults() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div>
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-4">
           <Search className="h-5 w-5 text-text-secondary" />
@@ -49,7 +50,7 @@ export default function SearchResults() {
                 <Link key={item.id} to={item.url ?? '#'} className="block p-3 hover:bg-surface-secondary transition-colors">
                   {group.type === 'issues' ? (
                     <div className="flex items-center gap-3">
-                      <span>{ISSUE_TYPE_ICONS[item.type as keyof typeof ISSUE_TYPE_ICONS]}</span>
+                      <IssueTypeIcon type={item.type as string} className="h-3.5 w-3.5" />
                       <span className="text-xs font-mono text-text-secondary">{item.key}</span>
                       <span className="text-sm font-medium flex-1">{item.title}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[item.priority as keyof typeof PRIORITY_COLORS] ?? ''}`}>{item.priority}</span>

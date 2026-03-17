@@ -81,7 +81,7 @@ export const reposApi = {
 
   // File browser
   getTree: (repoId: string, ref: string, path: string = '') =>
-    get<TreeEntry[]>(`/repos/${repoId}/tree/${ref}/${path}`),
+    get<TreeEntry[]>(`/repos/${repoId}/tree/${ref}${path ? '/' + path : ''}`),
   getBlob: (repoId: string, ref: string, path: string) =>
     get<{ content: string; size: number }>(`/repos/${repoId}/blob/${ref}/${path}`),
   getBlame: (repoId: string, ref: string, path: string) =>

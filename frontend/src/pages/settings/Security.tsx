@@ -28,7 +28,7 @@ export default function Security() {
           </div>
           {!user?.twoFactorEnabled && (
             <Link to="/setup-2fa" className="mt-3 block">
-              <Button size="sm">Enable 2FA</Button>
+              <Button size="sm"><Shield className="h-4 w-4" /> Enable 2FA</Button>
             </Link>
           )}
         </div>

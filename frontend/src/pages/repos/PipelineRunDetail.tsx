@@ -103,7 +103,7 @@ export default function PipelineRunDetail() {
   if (!run) return <div className="p-8 text-center text-text-secondary">Run not found</div>;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div>
       <div className="flex items-center gap-3 mb-6">
         <Link to={`/${org}/${teamSlug}/repos/${repoSlug}`} className="text-text-tertiary hover:text-text transition-colors">
           <ArrowLeft className="h-4 w-4" />

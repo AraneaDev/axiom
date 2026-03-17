@@ -1,15 +1,16 @@
 export const PRIORITY_COLORS = {
-  CRITICAL: 'bg-red-100 text-red-800',
-  HIGH: 'bg-orange-100 text-orange-800',
-  MEDIUM: 'bg-yellow-100 text-yellow-800',
-  LOW: 'bg-green-100 text-green-800',
+  CRITICAL: 'bg-danger-light text-danger',
+  HIGH: 'bg-warning-light text-warning',
+  MEDIUM: 'bg-primary-light text-primary',
+  LOW: 'bg-success-light text-success',
 } as const;
 
-export const ISSUE_TYPE_ICONS = {
-  TASK: '☐',
-  BUG: '🐛',
-  STORY: '📖',
-  EPIC: '⚡',
+// Issue type icon names — render with Lucide components in UI
+export const ISSUE_TYPE_ICON_NAMES = {
+  TASK: 'CheckSquare',
+  BUG: 'Bug',
+  STORY: 'BookOpen',
+  EPIC: 'Zap',
 } as const;
 
 export const PRIORITY_LABELS = {

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { Plus, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { issuesApi } from '@/api/issues.api';
 import { projectsApi } from '@/api/projects.api';
@@ -58,7 +59,7 @@ export default function IssueCreate() {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create Issue</h1>
-      {error && <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-danger">{error}</div>}
+      {error && <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">{error}</div>}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input id="title" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs to be done?" required />
 
@@ -96,9 +97,9 @@ export default function IssueCreate() {
 
         <div className="flex gap-3">
           <Button type="submit" disabled={loading}>
-            {loading ? <Spinner className="h-4 w-4" /> : 'Create Issue'}
+            {loading ? <Spinner className="h-4 w-4" /> : <><Plus className="h-4 w-4" /> Create Issue</>}
           </Button>
-          <Button type="button" variant="secondary" onClick={() => navigate(-1)}>Cancel</Button>
+          <Button type="button" variant="secondary" onClick={() => navigate(-1)}><ArrowLeft className="h-4 w-4" /> Cancel</Button>
         </div>
       </form>
     </div>

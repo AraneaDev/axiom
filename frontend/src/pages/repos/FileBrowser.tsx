@@ -37,7 +37,7 @@ export default function FileBrowser() {
   }));
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div>
       <div className="flex items-center gap-1 mb-4 text-sm">
         <Link to={`${basePath}`} className="text-primary hover:underline">{repoSlug}</Link>
         {crumbs.map((c) => (

@@ -9,7 +9,8 @@ import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { PageLoader } from '@/components/ui/Spinner';
-import { PRIORITY_COLORS, ISSUE_TYPE_ICONS } from '@/lib/constants';
+import { PRIORITY_COLORS } from '@/lib/constants';
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { cn } from '@/lib/utils';
 import type { BoardColumn, Issue } from '@/lib/types';
 
@@ -22,7 +23,7 @@ function IssueCard({ issue, org, team, project, onDragStart }: { issue: Issue; o
       className="block rounded-md border border-border bg-surface p-3 hover:shadow-sm hover:border-primary/30 transition-all cursor-grab active:cursor-grabbing"
     >
       <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="text-xs">{ISSUE_TYPE_ICONS[issue.type]}</span>
+        <IssueTypeIcon type={issue.type} className="h-3.5 w-3.5" />
         <span className="text-xs text-text-secondary font-mono">{issue.key}</span>
         <span className={`ml-auto text-xs px-1.5 py-0.5 rounded-full ${PRIORITY_COLORS[issue.priority]}`}>
           {issue.priority[0]}

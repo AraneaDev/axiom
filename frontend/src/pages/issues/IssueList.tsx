@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
-import { PRIORITY_COLORS, ISSUE_TYPE_ICONS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
+import { PRIORITY_COLORS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { cn, formatRelative } from '@/lib/utils';
 
 type SortField = 'createdAt' | 'updatedAt' | 'priority';
@@ -51,6 +52,8 @@ export default function IssueList() {
   // Filter state
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
+  const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
   // Sort state
@@ -68,11 +71,30 @@ export default function IssueList() {
     setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
   };
 
+  // Extract unique assignees and labels for filter options
+  const allAssignees = useMemo(() => {
+    const map = new Map<string, { id: string; displayName: string }>();
+    for (const issue of data?.issues ?? []) {
+      if (issue.assignee) map.set(issue.assignee.id, issue.assignee);
+    }
+    return Array.from(map.values());
+  }, [data?.issues]);
+
+  const allLabels = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const issue of data?.issues ?? []) {
+      for (const label of issue.labels ?? []) map.set(label.id, label);
+    }
+    return Array.from(map.values());
+  }, [data?.issues]);
+
   // Filtered and sorted issues
   const filteredIssues = useMemo(() => {
     let issues = data?.issues ?? [];
     if (typeFilter.length) issues = issues.filter((i) => typeFilter.includes(i.type));
     if (priorityFilter.length) issues = issues.filter((i) => priorityFilter.includes(i.priority));
+    if (assigneeFilter.length) issues = issues.filter((i) => i.assignee && assigneeFilter.includes(i.assignee.id));
+    if (labelFilter.length) issues = issues.filter((i) => i.labels?.some((l) => labelFilter.includes(l.id)));
     issues = [...issues].sort((a, b) => {
       let cmp = 0;
       if (sortField === 'priority') {
@@ -83,14 +105,14 @@ export default function IssueList() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return issues;
-  }, [data?.issues, typeFilter, priorityFilter, sortField, sortDir]);
+  }, [data?.issues, typeFilter, priorityFilter, assigneeFilter, labelFilter, sortField, sortDir]);
 
-  const activeFilterCount = typeFilter.length + priorityFilter.length;
+  const activeFilterCount = typeFilter.length + priorityFilter.length + assigneeFilter.length + labelFilter.length;
 
   if (isLoading) return <PageLoader />;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold">{currentProject?.name} Issues</h1>
@@ -159,7 +181,7 @@ export default function IssueList() {
               {Object.entries(ISSUE_TYPE_LABELS).map(([key, label]) => (
                 <button key={key} onClick={() => toggleFilter(typeFilter, key, setTypeFilter)}
                   className={cn('text-xs px-2 py-1 rounded-md border transition-colors', typeFilter.includes(key) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-border-focus')}>
-                  {ISSUE_TYPE_ICONS[key as keyof typeof ISSUE_TYPE_ICONS]} {label}
+                  <IssueTypeIcon type={key} className="h-3 w-3" /> {label}
                 </button>
               ))}
             </div>
@@ -175,8 +197,34 @@ export default function IssueList() {
               ))}
             </div>
           </div>
+          {allAssignees.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-text-secondary mb-1.5">Assignee</p>
+              <div className="flex flex-wrap gap-1">
+                {allAssignees.map((a) => (
+                  <button key={a.id} onClick={() => toggleFilter(assigneeFilter, a.id, setAssigneeFilter)}
+                    className={cn('text-xs px-2 py-1 rounded-md border transition-colors', assigneeFilter.includes(a.id) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-border-focus')}>
+                    {a.displayName}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {allLabels.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-text-secondary mb-1.5">Label</p>
+              <div className="flex flex-wrap gap-1">
+                {allLabels.map((l) => (
+                  <button key={l.id} onClick={() => toggleFilter(labelFilter, l.id, setLabelFilter)}
+                    className={cn('text-xs px-2 py-1 rounded-md border transition-colors', labelFilter.includes(l.id) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-border-focus')}>
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {activeFilterCount > 0 && (
-            <button onClick={() => { setTypeFilter([]); setPriorityFilter([]); }} className="text-xs text-text-tertiary hover:text-danger flex items-center gap-1 self-end">
+            <button onClick={() => { setTypeFilter([]); setPriorityFilter([]); setAssigneeFilter([]); setLabelFilter([]); }} className="text-xs text-text-tertiary hover:text-danger flex items-center gap-1 self-end">
               <X className="h-3 w-3" /> Clear all
             </button>
           )}
@@ -193,7 +241,7 @@ export default function IssueList() {
               to={`/${org}/${teamSlug}/${projectSlug}/issues/${issue.number}`}
               className="flex items-center gap-3 p-3 hover:bg-surface-secondary transition-colors"
             >
-              <span className="text-sm" title={issue.type}>{ISSUE_TYPE_ICONS[issue.type]}</span>
+              <IssueTypeIcon type={issue.type} className="h-4 w-4" />
               <span className="text-xs text-text-secondary font-mono w-16">{issue.key}</span>
               <span className="flex-1 text-sm font-medium truncate">{issue.title}</span>
               {issue.labels?.map((l) => (
@@ -217,7 +265,7 @@ export default function IssueList() {
               className="block rounded-lg border border-border bg-surface p-4 hover:shadow-sm hover:border-primary/30 transition-all"
             >
               <div className="flex items-center gap-1.5 mb-2">
-                <span className="text-sm">{ISSUE_TYPE_ICONS[issue.type]}</span>
+                <IssueTypeIcon type={issue.type} className="h-4 w-4" />
                 <span className="text-xs text-text-secondary font-mono">{issue.key}</span>
                 <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[issue.priority]}`}>
                   {issue.priority}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { Plus } from 'lucide-react';
 import { orgsApi } from '@/api/orgs.api';
 
 export default function CreateOrg() {
@@ -37,7 +38,7 @@ export default function CreateOrg() {
       <h1 className="text-2xl font-bold mb-6">Create organization</h1>
 
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-danger">{error}</div>
+        <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">{error}</div>
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -55,7 +56,7 @@ export default function CreateOrg() {
           />
         </div>
         <Button type="submit" disabled={loading}>
-          {loading ? <Spinner className="h-4 w-4" /> : 'Create organization'}
+          {loading ? <Spinner className="h-4 w-4" /> : <><Plus className="h-4 w-4" /> Create organization</>}
         </Button>
       </form>
     </div>

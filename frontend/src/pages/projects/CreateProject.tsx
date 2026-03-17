@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { Plus } from 'lucide-react';
 import { projectsApi } from '@/api/projects.api';
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
@@ -52,7 +53,7 @@ export default function CreateProject() {
   return (
     <div className="max-w-lg mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create project</h1>
-      {error && <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-danger">{error}</div>}
+      {error && <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">{error}</div>}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input id="name" label="Project name" value={name} onChange={(e) => handleNameChange(e.target.value)} placeholder="API" required />
         <Input id="slug" label="URL slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="api" required />
@@ -65,7 +66,7 @@ export default function CreateProject() {
             rows={3} placeholder="What is this project about?" />
         </div>
         <Button type="submit" disabled={loading}>
-          {loading ? <Spinner className="h-4 w-4" /> : 'Create project'}
+          {loading ? <Spinner className="h-4 w-4" /> : <><Plus className="h-4 w-4" /> Create project</>}
         </Button>
       </form>
     </div>

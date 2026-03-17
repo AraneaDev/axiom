@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Key, Plus, Trash2 } from 'lucide-react';
+import { Key, Plus, Trash2, X } from 'lucide-react';
 import { usersApi } from '@/api/users.api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -53,7 +53,7 @@ export default function SshKeys() {
 
       {showForm && (
         <div className="rounded-lg border border-border bg-surface p-4 mb-6">
-          {error && <div className="mb-3 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-danger">{error}</div>}
+          {error && <div className="mb-3 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">{error}</div>}
           <div className="space-y-3">
             <Input id="keyTitle" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="My laptop" />
             <div className="flex flex-col gap-1">
@@ -64,9 +64,9 @@ export default function SshKeys() {
             </div>
             <div className="flex gap-2">
               <Button size="sm" onClick={() => addMutation.mutate()} disabled={addMutation.isPending || !title || !publicKey}>
-                {addMutation.isPending ? <Spinner className="h-4 w-4" /> : 'Add key'}
+                {addMutation.isPending ? <Spinner className="h-4 w-4" /> : <><Plus className="h-4 w-4" /> Add key</>}
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button size="sm" variant="secondary" onClick={() => setShowForm(false)}><X className="h-4 w-4" /> Cancel</Button>
             </div>
           </div>
         </div>
@@ -95,8 +95,8 @@ export default function SshKeys() {
       <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Confirm Delete" size="sm">
         <p className="text-sm text-text-secondary">Are you sure? This action cannot be undone.</p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setDeleteId(null)}>Cancel</Button>
-          <Button variant="danger" onClick={() => { handleDelete(deleteId!); setDeleteId(null); }}>Delete</Button>
+          <Button variant="secondary" onClick={() => setDeleteId(null)}><X className="h-4 w-4" /> Cancel</Button>
+          <Button variant="danger" onClick={() => { handleDelete(deleteId!); setDeleteId(null); }}><Trash2 className="h-4 w-4" /> Delete</Button>
         </ModalFooter>
       </Modal>
     </div>

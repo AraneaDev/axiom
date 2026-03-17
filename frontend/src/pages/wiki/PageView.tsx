@@ -133,7 +133,7 @@ export default function PageView() {
   // If no page slug, show the space overview with tree
   if (!pageSlug) {
     return (
-      <div className="max-w-5xl mx-auto">
+      <div>
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">{currentSpace?.name ?? 'Wiki'}</h1>
           <Link to={`${basePath}/new`}>
@@ -154,7 +154,7 @@ export default function PageView() {
   if (!page) return <EmptyState title="Page not found" />;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div>
       <div className="grid grid-cols-4 gap-6">
         {/* Page tree sidebar */}
         <div className="col-span-1 hidden lg:block">

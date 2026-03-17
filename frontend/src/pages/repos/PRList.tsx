@@ -39,7 +39,7 @@ export default function PRList() {
   const basePath = `/${org}/${teamSlug}/repos/${repoSlug}`;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Pull Requests</h1>
         <Link to={`${basePath}/pulls/new`}><Button size="sm"><Plus className="h-4 w-4" /> New PR</Button></Link>

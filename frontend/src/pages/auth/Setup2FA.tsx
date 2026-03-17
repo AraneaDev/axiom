@@ -49,7 +49,7 @@ export default function Setup2FA() {
         </p>
 
         <div className="flex flex-col items-center gap-4 mb-6">
-          <div className="rounded-lg border border-border p-4 bg-white">
+          <div className="rounded-lg border border-border p-4 bg-surface">
             <img
               src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUrl)}`}
               alt="2FA QR Code"
@@ -63,7 +63,7 @@ export default function Setup2FA() {
         </div>
 
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-danger">
+          <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
             {error}
           </div>
         )}

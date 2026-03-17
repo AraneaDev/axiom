@@ -32,7 +32,7 @@ export function Header() {
       >
         <Search className="h-3.5 w-3.5" />
         <span className="text-xs">Search anything...</span>
-        <kbd className="ml-auto text-[10px] font-mono bg-surface-tertiary text-text-tertiary px-1.5 py-0.5 rounded">⌘K</kbd>
+        <kbd className="ml-auto text-[10px] font-mono bg-surface-tertiary text-text-tertiary px-1.5 py-0.5 rounded">Ctrl+K</kbd>
       </button>
 
       <div className="flex items-center gap-1">

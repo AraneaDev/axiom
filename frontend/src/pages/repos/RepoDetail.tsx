@@ -63,7 +63,7 @@ export default function RepoDetail() {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold">{currentRepo.name}</h1>

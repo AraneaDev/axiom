@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
-import { FolderKanban, BookOpen, Users, Plus, Settings } from 'lucide-react';
+import { FolderKanban, BookOpen, Users, Plus, GitBranch } from 'lucide-react';
 import { teamsApi } from '@/api/teams.api';
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
+import { reposApi } from '@/api/repos.api';
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -29,6 +30,12 @@ export default function TeamDetail() {
     enabled: !!currentTeam?.id,
   });
 
+  const { data: repos } = useQuery({
+    queryKey: ['repos', currentTeam?.id],
+    queryFn: () => reposApi.listByTeam(currentTeam!.id),
+    enabled: !!currentTeam?.id,
+  });
+
   const { data: spaces } = useQuery({
     queryKey: ['wikiSpaces', currentTeam?.id],
     queryFn: () => wikiApi.listSpaces(currentTeam!.id),
@@ -44,7 +51,7 @@ export default function TeamDetail() {
   if (projectsLoading) return <PageLoader />;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">{currentTeam?.name}</h1>
@@ -106,6 +113,33 @@ export default function TeamDetail() {
                 </div>
                 {s.description && <p className="text-sm text-text-secondary line-clamp-1">{s.description}</p>}
                 <p className="text-xs text-text-secondary mt-2">{s._count?.pages ?? 0} pages</p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Repositories */}
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Repositories</h2>
+          <Link to={`/${org}/${teamSlug}/repos/new`}>
+            <Button variant="ghost" size="sm"><Plus className="h-4 w-4" /> New</Button>
+          </Link>
+        </div>
+        {!repos?.length ? (
+          <EmptyState icon={<GitBranch className="h-10 w-10" />} title="No repositories yet" description="Create a repository to start hosting code." />
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {repos.map((r) => (
+              <Link key={r.id} to={`/${org}/${teamSlug}/repos/${r.slug}`}
+                className="rounded-lg border border-border bg-surface p-4 hover:border-primary/50 transition-all">
+                <div className="flex items-center gap-2 mb-1">
+                  <GitBranch className="h-4 w-4 text-primary" />
+                  <span className="font-medium">{r.name}</span>
+                  <span className="text-xs text-text-tertiary ml-auto">{r.visibility.toLowerCase()}</span>
+                </div>
+                {r.description && <p className="text-sm text-text-secondary line-clamp-1">{r.description}</p>}
               </Link>
             ))}
           </div>

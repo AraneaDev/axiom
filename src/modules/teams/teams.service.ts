@@ -43,6 +43,8 @@ export async function listOrgTeams(orgId: string) {
     where: { orgId },
     include: {
       _count: { select: { members: true, repos: true, projects: true } },
+      repos: { select: { id: true, name: true, slug: true, visibility: true }, orderBy: { name: 'asc' } },
+      wikiSpaces: { select: { id: true, name: true, slug: true, _count: { select: { pages: true } } }, orderBy: { name: 'asc' } },
     },
     orderBy: { name: 'asc' },
   });
