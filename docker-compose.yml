@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: axiom
+      POSTGRES_USER: axiom
+      POSTGRES_PASSWORD: axiom_dev
+    expose:
+      - "5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U axiom"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      target: production
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://axiom:axiom_dev@db:5432/axiom?schema=public
+      JWT_SECRET: dev-secret-change-in-production-min-32-chars!!
+      JWT_REFRESH_SECRET: dev-refresh-secret-change-in-prod-32-chars!!
+      PORT: 3000
+      REPOS_PATH: /data/repos
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - git_repos:/data/repos
+
+  web:
+    build:
+      context: ./frontend
+      target: production
+    ports:
+      - "7000:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  git_repos:

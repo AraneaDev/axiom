@@ -1,0 +1,37 @@
+import { test, expect } from '@playwright/test';
+import { login, ORG } from './helpers';
+
+const WIKI_URL = `/${ORG}/core/wiki`;
+
+test.describe('Wiki', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page);
+  });
+
+  test('wiki home lists spaces', async ({ page }) => {
+    await page.goto(WIKI_URL);
+    await expect(page.getByRole('heading', { name: /wiki/i })).toBeVisible();
+    // Seed has "Docs" space for Core team
+    await expect(page.getByText('Docs')).toBeVisible();
+  });
+
+  test('wiki page renders markdown', async ({ page }) => {
+    await page.goto(`${WIKI_URL}/docs/getting-started`);
+    // Page should have rendered markdown content (headings, paragraphs)
+    await expect(page.locator('.prose h1, .prose h2').first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('wiki page with mermaid diagram renders', async ({ page }) => {
+    await page.goto(`${WIKI_URL}/docs/architecture`);
+    // Mermaid diagrams render as SVG
+    await expect(page.locator('svg').first()).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('wiki page edit button navigates to editor', async ({ page }) => {
+    await page.goto(`${WIKI_URL}/docs/getting-started`);
+    await page.getByRole('link', { name: /edit/i }).click();
+    await expect(page).toHaveURL(`${WIKI_URL}/docs/getting-started/edit`);
+    // TipTap editor should be present
+    await expect(page.locator('.tiptap-editor, .ProseMirror')).toBeVisible({ timeout: 10_000 });
+  });
+});

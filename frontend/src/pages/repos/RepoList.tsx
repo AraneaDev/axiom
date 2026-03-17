@@ -1,0 +1,66 @@
+import { useQuery } from '@tanstack/react-query';
+import { Link, useParams } from 'react-router';
+import { GitBranch, Plus, Lock, Globe, Building2 } from 'lucide-react';
+import { reposApi } from '@/api/repos.api';
+import { orgsApi } from '@/api/orgs.api';
+import { teamsApi } from '@/api/teams.api';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { PageLoader } from '@/components/ui/Spinner';
+import { formatRelative } from '@/lib/utils';
+
+const VIS_ICON = { PRIVATE: Lock, INTERNAL: Building2, PUBLIC: Globe };
+const VIS_BADGE: Record<string, 'default' | 'warning' | 'success'> = { PRIVATE: 'default', INTERNAL: 'warning', PUBLIC: 'success' };
+
+export default function RepoList() {
+  const { org, team: teamSlug } = useParams();
+  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const currentOrg = orgs?.find((o) => o.slug === org);
+  const { data: teams } = useQuery({
+    queryKey: ['teams', currentOrg?.id], queryFn: () => teamsApi.listByOrg(currentOrg!.id), enabled: !!currentOrg?.id,
+  });
+  const currentTeam = teams?.find((t) => t.slug === teamSlug);
+
+  const { data: repos, isLoading } = useQuery({
+    queryKey: ['repos', currentTeam?.id], queryFn: () => reposApi.listByTeam(currentTeam!.id), enabled: !!currentTeam?.id,
+  });
+
+  if (isLoading) return <PageLoader />;
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Repositories</h1>
+        <Link to={`/${org}/${teamSlug}/repos/new`}>
+          <Button size="sm"><Plus className="h-4 w-4" /> New Repository</Button>
+        </Link>
+      </div>
+      {!repos?.length ? (
+        <EmptyState icon={<GitBranch className="h-12 w-12" />} title="No repositories" description="Create your first repository." />
+      ) : (
+        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+          {repos.map((repo) => {
+            const Icon = VIS_ICON[repo.visibility];
+            return (
+              <Link key={repo.id} to={`/${org}/${teamSlug}/repos/${repo.slug}`}
+                className="flex items-center gap-3 p-4 hover:bg-surface-secondary transition-colors">
+                <GitBranch className="h-5 w-5 text-primary shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{repo.name}</span>
+                    <Badge variant={VIS_BADGE[repo.visibility]} className="text-xs">
+                      <Icon className="h-3 w-3 mr-1" />{repo.visibility.toLowerCase()}
+                    </Badge>
+                  </div>
+                  {repo.description && <p className="text-xs text-text-secondary truncate">{repo.description}</p>}
+                </div>
+                <span className="text-xs text-text-secondary">{repo.defaultBranch}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

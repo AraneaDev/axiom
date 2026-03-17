@@ -1,0 +1,106 @@
+import { prisma } from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
+
+export async function createRule(repoId: string, data: {
+  pattern: string;
+  requiredReviews?: number;
+  requireCI?: boolean;
+  noForcePush?: boolean;
+  noDirectPush?: boolean;
+  requireLinear?: boolean;
+}) {
+  const existing = await prisma.branchProtection.findUnique({
+    where: { repoId_pattern: { repoId, pattern: data.pattern } },
+  });
+  if (existing) throw new AppError(409, 'Protection rule for this pattern already exists');
+
+  return prisma.branchProtection.create({
+    data: { repoId, ...data },
+  });
+}
+
+export async function listRules(repoId: string) {
+  return prisma.branchProtection.findMany({
+    where: { repoId },
+    orderBy: { pattern: 'asc' },
+  });
+}
+
+export async function getRule(ruleId: string) {
+  const rule = await prisma.branchProtection.findUnique({ where: { id: ruleId } });
+  if (!rule) throw new AppError(404, 'Protection rule not found');
+  return rule;
+}
+
+export async function updateRule(ruleId: string, data: {
+  requiredReviews?: number;
+  requireCI?: boolean;
+  noForcePush?: boolean;
+  noDirectPush?: boolean;
+  requireLinear?: boolean;
+}) {
+  const rule = await prisma.branchProtection.findUnique({ where: { id: ruleId } });
+  if (!rule) throw new AppError(404, 'Protection rule not found');
+  return prisma.branchProtection.update({ where: { id: ruleId }, data });
+}
+
+export async function deleteRule(ruleId: string) {
+  const rule = await prisma.branchProtection.findUnique({ where: { id: ruleId } });
+  if (!rule) throw new AppError(404, 'Protection rule not found');
+  await prisma.branchProtection.delete({ where: { id: ruleId } });
+}
+
+/**
+ * Check if a branch matches any protection rules for a repo.
+ * Returns the matching rule or null.
+ */
+export async function getMatchingRule(repoId: string, branchName: string) {
+  const rules = await prisma.branchProtection.findMany({ where: { repoId } });
+
+  for (const rule of rules) {
+    if (matchesPattern(rule.pattern, branchName)) {
+      return rule;
+    }
+  }
+  return null;
+}
+
+/**
+ * Simple glob matching: supports exact match and trailing wildcard.
+ * "main" matches "main"
+ * "release/*" matches "release/v1.0", "release/hotfix"
+ * "*" matches everything
+ */
+function matchesPattern(pattern: string, branchName: string): boolean {
+  if (pattern === '*') return true;
+  if (pattern === branchName) return true;
+  if (pattern.endsWith('/*')) {
+    const prefix = pattern.slice(0, -1); // "release/"
+    return branchName.startsWith(prefix);
+  }
+  return false;
+}
+
+/**
+ * Enforce protection rules before a merge.
+ * Throws AppError if any rule is violated.
+ */
+export async function enforceMergeProtection(repoId: string, targetBranch: string, prId: string) {
+  const rule = await getMatchingRule(repoId, targetBranch);
+  if (!rule) return; // No protection
+
+  if (rule.requiredReviews > 0) {
+    const approvedCount = await prisma.pRReview.count({
+      where: {
+        prId,
+        status: 'APPROVED',
+      },
+    });
+    if (approvedCount < rule.requiredReviews) {
+      throw new AppError(403, `Requires at least ${rule.requiredReviews} approved review(s), has ${approvedCount}`);
+    }
+  }
+
+  // requireCI would check external status checks — placeholder for now
+  // noDirectPush is enforced at the git protocol level, not here
+}

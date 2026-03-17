@@ -1,0 +1,94 @@
+const API_BASE = '/api';
+
+class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public code?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+let accessToken: string | null = localStorage.getItem('accessToken');
+let refreshToken: string | null = localStorage.getItem('refreshToken');
+let refreshPromise: Promise<void> | null = null;
+
+export function setTokens(access: string, refresh: string) {
+  accessToken = access;
+  refreshToken = refresh;
+  localStorage.setItem('accessToken', access);
+  localStorage.setItem('refreshToken', refresh);
+}
+
+export function clearTokens() {
+  accessToken = null;
+  refreshToken = null;
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
+
+export function getAccessToken() {
+  return accessToken;
+}
+
+async function refreshAccessToken(): Promise<void> {
+  if (!refreshToken) throw new ApiError(401, 'No refresh token');
+
+  const res = await fetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  if (!res.ok) {
+    clearTokens();
+    throw new ApiError(401, 'Refresh failed');
+  }
+
+  const data = await res.json();
+  setTokens(data.accessToken, data.refreshToken);
+}
+
+export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  };
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  let res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+  // Auto-refresh on 401
+  if (res.status === 401 && refreshToken) {
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    await refreshPromise;
+
+    headers['Authorization'] = `Bearer ${accessToken}`;
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.error?.message ?? 'Request failed', body.error?.code);
+  }
+
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+// Convenience methods
+export const get = <T = any>(path: string) => api<T>(path);
+export const post = <T = any>(path: string, body: any) =>
+  api<T>(path, { method: 'POST', body: JSON.stringify(body) });
+export const patch = <T = any>(path: string, body: any) =>
+  api<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+export const del = <T = any>(path: string) => api<T>(path, { method: 'DELETE' });

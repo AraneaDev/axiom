@@ -1,0 +1,18 @@
+import { Request, Response } from 'express';
+import * as svc from './issue-links.service';
+
+export async function getLinks(req: Request, res: Response) {
+  const { projectId, issueNumber } = req.params;
+  res.json(await svc.getLinks(projectId, parseInt(issueNumber)));
+}
+
+export async function addLink(req: Request, res: Response) {
+  const { projectId, issueNumber } = req.params;
+  const link = await svc.addLink(projectId, parseInt(issueNumber), req.body);
+  res.status(201).json(link);
+}
+
+export async function deleteLink(req: Request, res: Response) {
+  await svc.deleteLink(req.params.linkId);
+  res.status(204).send();
+}
