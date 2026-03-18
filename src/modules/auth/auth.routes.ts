@@ -9,6 +9,7 @@ const router = Router();
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.post('/refresh', authController.refreshToken);
+router.post('/logout', authenticate, authController.logout);
 
 // 2FA — requires authentication
 router.post('/2fa/enable', authenticate, authController.enableTwoFactor);

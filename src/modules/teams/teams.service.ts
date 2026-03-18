@@ -103,7 +103,11 @@ export async function deleteTeam(teamId: string) {
  * @param userId
  * @param role
  */
-export async function addTeamMember(teamId: string, userId: string, role: TeamRole = 'MEMBER') {
+export async function addTeamMember(
+  teamId: string,
+  userId: string,
+  role: TeamRole = TeamRole.MEMBER,
+) {
   const existing = await prisma.teamMembership.findUnique({
     where: { userId_teamId: { userId, teamId } },
   });

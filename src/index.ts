@@ -1,3 +1,5 @@
+import { createServer } from 'http';
+
 import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
@@ -7,24 +9,63 @@ import morgan from 'morgan';
 import { env } from './config/env';
 import hookRoutes from './git/hook-handler';
 import smartHttpRoutes from './git/smart-http.routes';
-import { handleMcpSse, handleMcpMessage } from './mcp/server';
+import { auditMiddleware } from './middleware/auditMiddleware';
 import { authenticate } from './middleware/auth';
 import { csrfGuard } from './middleware/csrfGuard';
 import { errorHandler } from './middleware/errorHandler';
+import activityRoutes from './modules/activity/activity.routes';
+import adminRoutes from './modules/admin/admin.routes';
+import attachmentsRoutes from './modules/attachments/attachments.routes';
+import auditRoutes from './modules/audit/audit.routes';
 import authRoutes from './modules/auth/auth.routes';
+import automationRoutes from './modules/automation/automation.routes';
+import codeOwnersRoutes from './modules/code-owners/code-owners.routes';
+import customFieldsDirectRoutes from './modules/custom-fields/custom-fields-direct.routes';
+import customFieldsRoutes from './modules/custom-fields/custom-fields.routes';
+import deploymentsRoutes from './modules/deployments/deployments.routes';
+import issueTemplatesRoutes from './modules/issue-templates/issue-templates.routes';
 import issuesRoutes from './modules/issues/issues.routes';
+import labelsRoutes from './modules/labels/labels.routes';
+import notificationsRoutes from './modules/notifications/notifications.routes';
 import orgsRoutes from './modules/orgs/orgs.routes';
 import pipelinesRoutes from './modules/pipelines/pipelines.routes';
 import projectsRoutes from './modules/projects/projects.routes';
 import pullsRoutes from './modules/pulls/pulls.routes';
 import releasesRoutes from './modules/releases/releases.routes';
+import insightsRoutes from './modules/repos/insights.routes';
 import protectionRoutes from './modules/repos/protection.routes';
 import reposRoutes from './modules/repos/repos.routes';
 import webhooksRoutes from './modules/repos/webhooks.routes';
+import savedFiltersRoutes from './modules/saved-filters/saved-filters.routes';
 import searchRoutes from './modules/search/search.routes';
+import sprintsRoutes from './modules/sprints/sprints.routes';
+import statusChecksRoutes from './modules/status-checks/status-checks.routes';
 import teamsRoutes from './modules/teams/teams.routes';
 import usersRoutes from './modules/users/users.routes';
 import wikiRoutes from './modules/wiki/wiki.routes';
+import workflowRoutes from './modules/workflows/workflow.routes';
+import { createWebSocketServer } from './realtime/ws-server';
+
+// MCP SDK excluded from typecheck — see https://github.com/modelcontextprotocol/typescript-sdk/issues/985
+
+let handleMcpSse: import('express').RequestHandler;
+let handleMcpMessage: import('express').RequestHandler;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mcp = require('./mcp/server') as {
+    handleMcpSse: import('express').RequestHandler;
+    handleMcpMessage: import('express').RequestHandler;
+  };
+  handleMcpSse = mcp.handleMcpSse;
+  handleMcpMessage = mcp.handleMcpMessage;
+} catch {
+  // MCP SDK may not be available in test environments
+  const noop: import('express').RequestHandler = (_req, res) => {
+    res.status(501).json({ error: { message: 'MCP not available' } });
+  };
+  handleMcpSse = noop;
+  handleMcpMessage = noop;
+}
 
 const app = express();
 
@@ -69,6 +110,9 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', version: '0.1.0-alpha', name: 'axiom' });
 });
 
+// Audit middleware: registers finish listener to log mutating API requests
+app.use('/api', auditMiddleware);
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -76,14 +120,31 @@ app.use('/api/orgs', orgsRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/projects', issuesRoutes);
+app.use('/api/projects', activityRoutes);
+app.use('/api/projects', sprintsRoutes);
 app.use('/api/wiki', wikiRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/repos', reposRoutes);
+app.use('/api/repos', insightsRoutes);
 app.use('/api/repos', pullsRoutes);
 app.use('/api/repos', protectionRoutes);
 app.use('/api/repos', webhooksRoutes);
 app.use('/api/repos', releasesRoutes);
 app.use('/api/repos', pipelinesRoutes);
+app.use('/api/repos', statusChecksRoutes);
+app.use('/api/repos', codeOwnersRoutes);
+app.use('/api/repos', deploymentsRoutes);
+app.use('/api/projects', customFieldsRoutes);
+app.use('/api/projects', workflowRoutes);
+app.use('/api/projects', automationRoutes);
+app.use('/api/projects', labelsRoutes);
+app.use('/api/projects', issueTemplatesRoutes);
+app.use('/api', customFieldsDirectRoutes);
+app.use('/api/attachments', attachmentsRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/saved-filters', savedFiltersRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin/audit-logs', auditRoutes);
 
 // Git Smart HTTP (must be before JSON body parser doesn't matter — has its own raw parser)
 app.use('/git', smartHttpRoutes);
@@ -100,7 +161,9 @@ app.use(errorHandler);
 
 // Only listen when run directly (not imported by tests)
 if (require.main === module) {
-  app.listen(env.PORT, () => {
+  const server = createServer(app);
+  createWebSocketServer(server);
+  server.listen(env.PORT, () => {
     console.warn(`Axiom API running on port ${env.PORT} [${env.NODE_ENV}]`);
   });
 }

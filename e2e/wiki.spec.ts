@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+
 import { login, ORG } from './helpers';
 
 const WIKI_URL = `/${ORG}/core/wiki`;
@@ -33,5 +34,26 @@ test.describe('Wiki', () => {
     await expect(page).toHaveURL(`${WIKI_URL}/docs/getting-started/edit`);
     // TipTap editor should be present
     await expect(page.locator('.tiptap-editor, .ProseMirror')).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('export wiki page triggers download', async ({ page }) => {
+    await page.goto(`${WIKI_URL}/docs/getting-started`);
+    // Look for an export or download button
+    const exportButton = page.getByRole('button', { name: /export|download/i });
+    // If an export button exists, clicking it should start a download
+    if (await exportButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      const downloadPromise = page.waitForEvent('download', { timeout: 10_000 });
+      await exportButton.click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBeTruthy();
+    } else {
+      // Some UIs put export behind a menu -- look for a more-actions menu
+      const menuButton = page.getByRole('button', { name: /more|actions|\.\.\./i });
+      if (await menuButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await menuButton.click();
+        const exportOption = page.getByRole('menuitem', { name: /export|download/i });
+        await expect(exportOption).toBeVisible();
+      }
+    }
   });
 });

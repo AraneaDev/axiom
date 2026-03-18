@@ -76,8 +76,8 @@ export async function getRepo(repoId: string) {
   if (repo.diskPath && (await repoExists(repo.diskPath))) {
     try {
       size = await getRepoSize(repo.diskPath);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.error('Failed to get repository size', err);
     }
   }
 
@@ -87,12 +87,25 @@ export async function getRepo(repoId: string) {
 /**
  *
  * @param teamId
+ * @param opts
+ * @param opts.limit
+ * @param opts.offset
  */
-export async function listRepos(teamId: string) {
-  return prisma.repository.findMany({
-    where: { teamId },
-    orderBy: { name: 'asc' },
-  });
+export async function listRepos(teamId: string, opts?: { limit?: number; offset?: number }) {
+  const limit = Math.min(opts?.limit ?? 25, 100);
+  const offset = opts?.offset ?? 0;
+
+  const [repos, total] = await Promise.all([
+    prisma.repository.findMany({
+      where: { teamId },
+      orderBy: { name: 'asc' },
+      take: limit,
+      skip: offset,
+    }),
+    prisma.repository.count({ where: { teamId } }),
+  ]);
+
+  return { data: repos, total, limit, offset };
 }
 
 /**
@@ -114,6 +127,38 @@ export async function updateRepo(
   },
 ) {
   return prisma.repository.update({ where: { id: repoId }, data });
+}
+
+/**
+ * Update repository settings like defaultMergeStrategy and codeOwnersEnabled.
+ * @param repoId
+ * @param data
+ * @param data.defaultMergeStrategy
+ * @param data.codeOwnersEnabled
+ */
+export async function updateRepoSettings(
+  repoId: string,
+  data: {
+    defaultMergeStrategy?: string;
+    codeOwnersEnabled?: boolean;
+  },
+) {
+  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
+  if (!repo) throw new AppError(404, 'Repository not found');
+
+  const updateData: Record<string, unknown> = {};
+  if (data.defaultMergeStrategy !== undefined) {
+    const valid = ['MERGE', 'SQUASH', 'REBASE'];
+    if (!valid.includes(data.defaultMergeStrategy)) {
+      throw new AppError(400, `Invalid merge strategy. Must be one of: ${valid.join(', ')}`);
+    }
+    updateData.defaultMergeStrategy = data.defaultMergeStrategy;
+  }
+  if (data.codeOwnersEnabled !== undefined) {
+    updateData.codeOwnersEnabled = data.codeOwnersEnabled;
+  }
+
+  return prisma.repository.update({ where: { id: repoId }, data: updateData });
 }
 
 /**
@@ -233,15 +278,17 @@ export async function deleteRepoBranch(repoId: string, name: string) {
  * @param ref
  * @param limit
  * @param skip
+ * @param filePath
  */
 export async function getCommits(
   repoId: string,
   ref: string = 'HEAD',
   limit: number = 20,
   skip: number = 0,
+  filePath?: string,
 ) {
   const diskPath = await getRepoDiskPath(repoId);
-  return gitCmd.log(diskPath, ref, limit, skip);
+  return gitCmd.log(diskPath, ref, limit, skip, filePath);
 }
 
 /**
@@ -254,7 +301,10 @@ export async function getCommitDetail(repoId: string, sha: string) {
   const commit = await gitCmd.getCommit(diskPath, sha);
   if (!commit) throw new AppError(404, 'Commit not found');
   const diffOutput = await gitCmd.diffCommit(diskPath, sha);
-  const stats = await gitCmd.diffStat(diskPath, `${sha}~1`, sha).catch(() => []);
+  const stats = await gitCmd.diffStat(diskPath, `${sha}~1`, sha).catch((err) => {
+    console.error('Failed to get diff stats for commit', err);
+    return [];
+  });
   return { ...commit, diff: diffOutput, stats };
 }
 

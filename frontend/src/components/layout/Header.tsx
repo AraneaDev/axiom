@@ -1,7 +1,8 @@
-import { Search, Bell, Menu, Moon, Sun, Settings, LogOut, User, Shield } from 'lucide-react';
+import { Search, Menu, Moon, Sun, Settings, LogOut, User, Shield } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
+import { NotificationCenter } from '@/components/layout/NotificationCenter';
 import { Avatar } from '@/components/ui/Avatar';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { useAuthStore } from '@/stores/auth.store';
@@ -57,9 +58,7 @@ export function Header() {
           )}
         </button>
 
-        <button className="p-1.5 rounded-md hover:bg-surface-tertiary transition-colors relative">
-          <Bell className="h-4 w-4 text-text-tertiary" />
-        </button>
+        <NotificationCenter />
 
         <div className="relative ml-1">
           <button

@@ -1,0 +1,69 @@
+import { get, patch, del } from './client';
+
+export interface SystemStats {
+  totalUsers: number;
+  totalOrgs: number;
+  totalRepos: number;
+  totalIssues: number;
+  totalWikiPages: number;
+  storage: {
+    reposBytes: number;
+    storageBytes: number;
+    totalBytes: number;
+  };
+  databaseSize: string;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+  twoFactorEnabled: boolean;
+  createdAt: string;
+  orgMemberships: {
+    role: string;
+    org: { id: string; name: string; slug: string };
+  }[];
+  teamMemberships?: {
+    role: string;
+    team: { id: string; name: string; slug: string };
+  }[];
+}
+
+export interface UserListResponse {
+  users: AdminUser[];
+  total: number;
+}
+
+export interface SystemSettings {
+  reposPath: string;
+  storagePath: string;
+  nodeEnv: string;
+  port: number;
+  corsOrigin: string;
+  version: string;
+}
+
+export const adminApi = {
+  getStats: () => get<SystemStats>('/admin/stats'),
+
+  listUsers: (opts?: { search?: string; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set('search', opts.search);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.offset) params.set('offset', String(opts.offset));
+    const qs = params.toString();
+    return get<UserListResponse>(`/admin/users${qs ? `?${qs}` : ''}`);
+  },
+
+  getUser: (userId: string) => get<AdminUser>(`/admin/users/${userId}`),
+
+  updateUser: (userId: string, data: { role?: string; disabled?: boolean }) =>
+    patch<AdminUser>(`/admin/users/${userId}`, data),
+
+  deleteUser: (userId: string) => del<{ deleted: boolean }>(`/admin/users/${userId}`),
+
+  getSettings: () => get<SystemSettings>('/admin/settings'),
+};

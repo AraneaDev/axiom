@@ -9,6 +9,9 @@ import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
+import { notifyMentions } from '../../utils/mention-notifier';
+import { logActivity } from '../activity/activity.service';
+import { createNotification } from '../notifications/notifications.service';
 import { enforceMergeProtection } from '../repos/protection.service';
 
 const ISSUE_REF_RE = /(?:(closes?|fixes?)\s+)?#(\d+)/gi;
@@ -28,10 +31,10 @@ async function parseAndLinkIssues(prId: string, repoId: string, text: string): P
     const keyword = match[1]?.toLowerCase();
     const issueNum = parseInt(match[2]);
     const refType: CommitRefType = keyword?.startsWith('clos')
-      ? 'CLOSES'
+      ? CommitRefType.CLOSES
       : keyword?.startsWith('fix')
-        ? 'FIXES'
-        : 'REFS';
+        ? CommitRefType.FIXES
+        : CommitRefType.REFS;
 
     for (const project of teamProjects) {
       const issue = await prisma.issue.findUnique({
@@ -120,6 +123,7 @@ export async function createPR(
   });
 
   await parseAndLinkIssues(pr.id, repoId, `${data.title}\n${data.body ?? ''}`);
+  await logActivity('pull_request', pr.id, 'created', authorId, { title: data.title, number });
   return pr;
 }
 
@@ -160,18 +164,35 @@ export async function getPR(repoId: string, prNumber: number) {
  *
  * @param repoId
  * @param status
+ * @param opts
+ * @param opts.limit
+ * @param opts.offset
  */
-export async function listPRs(repoId: string, status?: 'OPEN' | 'MERGED' | 'CLOSED') {
+export async function listPRs(
+  repoId: string,
+  status?: 'OPEN' | 'MERGED' | 'CLOSED',
+  opts?: { limit?: number; offset?: number },
+) {
   const where: Record<string, unknown> = { repoId };
   if (status) where.status = status;
 
-  return prisma.pullRequest.findMany({
-    where,
-    orderBy: { updatedAt: 'desc' },
-    include: {
-      _count: { select: { reviews: true, comments: true } },
-    },
-  });
+  const limit = Math.min(opts?.limit ?? 25, 100);
+  const offset = opts?.offset ?? 0;
+
+  const [prs, total] = await Promise.all([
+    prisma.pullRequest.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        _count: { select: { reviews: true, comments: true } },
+      },
+      take: limit,
+      skip: offset,
+    }),
+    prisma.pullRequest.count({ where }),
+  ]);
+
+  return { data: prs, total, limit, offset };
 }
 
 /**
@@ -217,10 +238,53 @@ export async function closePR(repoId: string, prNumber: number) {
   if (!pr) throw new AppError(404, 'Pull request not found');
   if (pr.status !== 'OPEN') throw new AppError(400, 'PR is not open');
 
-  return prisma.pullRequest.update({
+  const closed = await prisma.pullRequest.update({
     where: { id: pr.id },
     data: { status: 'CLOSED' },
   });
+  await logActivity('pull_request', pr.id, 'closed', pr.authorId, { number: prNumber });
+  return closed;
+}
+
+/**
+ * Get merge check status for a PR (review requirements, CI, conflicts).
+ * @param repoId
+ * @param prNumber
+ */
+export async function getMergeChecks(repoId: string, prNumber: number) {
+  const pr = await prisma.pullRequest.findUnique({
+    where: { repoId_number: { repoId, number: prNumber } },
+  });
+  if (!pr) throw new AppError(404, 'Pull request not found');
+
+  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
+  const _protection = await prisma.branchProtection.findFirst({
+    where: { repoId: pr.repoId },
+  });
+  // Find the matching rule for the target branch
+  const matchingRule = await (
+    await import('../repos/protection.service')
+  ).getMatchingRule(repoId, pr.targetBranch);
+
+  const requiredReviews = matchingRule?.requiredReviews ?? 0;
+  const approvedCount = await prisma.pRReview.count({
+    where: { prId: pr.id, status: 'APPROVED' },
+  });
+
+  const requireCI = matchingRule?.requireCI ?? false;
+  const ciPassed = !requireCI || pr.ciStatus === 'SUCCESS';
+
+  const reviewsMet = approvedCount >= requiredReviews;
+
+  return {
+    requiredReviews,
+    approvedReviews: approvedCount,
+    reviewsMet,
+    requireCI,
+    ciPassed,
+    canMerge: reviewsMet && ciPassed,
+    defaultStrategy: repo?.defaultMergeStrategy ?? 'MERGE',
+  };
 }
 
 /**
@@ -232,13 +296,20 @@ export async function closePR(repoId: string, prNumber: number) {
 export async function mergePR(
   repoId: string,
   prNumber: number,
-  strategy: 'merge' | 'squash' | 'rebase' = 'merge',
+  strategy?: 'merge' | 'squash' | 'rebase',
 ) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
   });
   if (!pr) throw new AppError(404, 'Pull request not found');
   if (pr.status !== 'OPEN') throw new AppError(400, 'PR is not open');
+
+  // Resolve effective strategy: explicit > repo default > 'merge'
+  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
+  const effectiveStrategy: 'merge' | 'squash' | 'rebase' =
+    strategy ??
+    (repo?.defaultMergeStrategy?.toLowerCase() as 'merge' | 'squash' | 'rebase') ??
+    'merge';
 
   // CI gate
   const protection = await prisma.branchProtection.findFirst({
@@ -253,7 +324,7 @@ export async function mergePR(
     }
   }
 
-  // Enforce branch protection rules
+  // Enforce branch protection rules (review requirements)
   await enforceMergeProtection(repoId, pr.targetBranch, pr.id);
 
   const { diskPath } = await getRepoDisk(repoId);
@@ -283,7 +354,7 @@ export async function mergePR(
       cwd: diskPath,
     });
 
-    if (strategy === 'merge') {
+    if (effectiveStrategy === 'merge') {
       await execFileAsync('git', [
         '-C',
         worktreeDir,
@@ -293,19 +364,10 @@ export async function mergePR(
         '-m',
         `Merge PR #${pr.number}: ${pr.title}`,
       ]);
-    } else if (strategy === 'squash') {
-      await execFileAsync('git', ['-C', worktreeDir, 'merge', '--squash', sourceSha]);
-      await execFileAsync('git', [
-        '-C',
-        worktreeDir,
-        'commit',
-        '-m',
-        `${pr.title} (#${pr.number})`,
-        '--author',
-        'Axiom <noreply@axiom.dev>',
-      ]);
-    } else if (strategy === 'rebase') {
-      await execFileAsync('git', ['-C', worktreeDir, 'rebase', sourceSha]);
+    } else if (effectiveStrategy === 'squash') {
+      await gitCmd.squashMerge(worktreeDir, sourceSha, `${pr.title} (#${pr.number})`);
+    } else if (effectiveStrategy === 'rebase') {
+      await gitCmd.rebaseMerge(worktreeDir, sourceSha);
     }
 
     // Update the bare repo's target branch ref to the new HEAD
@@ -319,14 +381,18 @@ export async function mergePR(
     // Clean up worktree
     await execFileAsync('git', ['worktree', 'remove', '--force', worktreeDir], {
       cwd: diskPath,
-    }).catch(() => {});
-    await fs.rm(worktreeDir, { recursive: true, force: true }).catch(() => {});
+    }).catch((err) => {
+      console.error('Failed to remove merge worktree', err);
+    });
+    await fs.rm(worktreeDir, { recursive: true, force: true }).catch((err) => {
+      console.error('Failed to clean up merge worktree directory', err);
+    });
   }
 
-  // Update PR status
+  // Update PR status and save which strategy was used
   const mergedPr = await prisma.pullRequest.update({
     where: { id: pr.id },
-    data: { status: 'MERGED' },
+    data: { status: 'MERGED', mergeStrategy: effectiveStrategy.toUpperCase() },
   });
 
   // Auto-close linked issues
@@ -358,10 +424,16 @@ export async function mergePR(
             read: false,
           },
         })
-        .catch(() => {}); // notification creation is non-critical
+        .catch((err) => {
+          console.error('Failed to create issue-closed notification', err);
+        });
     }
   }
 
+  await logActivity('pull_request', pr.id, 'merged', pr.authorId, {
+    number: prNumber,
+    strategy: effectiveStrategy,
+  });
   return mergedPr;
 }
 
@@ -456,7 +528,7 @@ export async function submitReview(
   if (!pr) throw new AppError(404, 'Pull request not found');
   if (pr.status !== 'OPEN') throw new AppError(400, 'Can only review open PRs');
 
-  return prisma.pRReview.create({
+  const review = await prisma.pRReview.create({
     data: {
       prId: pr.id,
       reviewerId,
@@ -464,6 +536,34 @@ export async function submitReview(
       body: data.body ?? '',
     },
   });
+
+  // Notify PR author about the review (if not self-review)
+  if (pr.authorId !== reviewerId) {
+    const statusLabel =
+      data.status === 'APPROVED'
+        ? 'approved'
+        : data.status === 'CHANGES_REQUESTED'
+          ? 'requested changes on'
+          : 'commented on';
+    createNotification(
+      pr.authorId,
+      'pr:reviewed',
+      `Review ${statusLabel} PR #${prNumber}: ${pr.title}`,
+      data.body
+        ? data.body.length > 120
+          ? data.body.slice(0, 120) + '...'
+          : data.body
+        : undefined,
+    ).catch((err) => {
+      console.error('Failed to send PR review notification', err);
+    });
+  }
+
+  await logActivity('pull_request', pr.id, 'review_submitted', reviewerId, {
+    status: data.status,
+    prNumber,
+  });
+  return review;
 }
 
 /**
@@ -510,7 +610,7 @@ export async function addPRComment(
   });
   if (!pr) throw new AppError(404, 'Pull request not found');
 
-  return prisma.pRComment.create({
+  const comment = await prisma.pRComment.create({
     data: {
       prId: pr.id,
       authorId,
@@ -519,6 +619,13 @@ export async function addPRComment(
       line: data.line,
     },
   });
+
+  // Notify @mentioned users in the PR comment
+  notifyMentions(data.body, authorId).catch((err) => {
+    console.error('Failed to send mention notifications', err);
+  });
+
+  return comment;
 }
 
 /**
@@ -536,4 +643,259 @@ export async function listPRComments(repoId: string, prNumber: number) {
     where: { prId: pr.id },
     orderBy: { createdAt: 'asc' },
   });
+}
+
+// ─── Suggestions ────────────────────────────────────────────
+
+const SUGGESTION_RE = /```suggestion\n([\s\S]*?)```/;
+
+function extractSuggestion(body: string): string | null {
+  const match = body.match(SUGGESTION_RE);
+  return match ? match[1] : null;
+}
+
+/**
+ * Apply a single code suggestion from a PR comment.
+ * Reads the suggestion block, replaces the relevant lines in the file,
+ * and creates a commit on the source branch.
+ * @param repoId
+ * @param prNumber
+ * @param commentId
+ * @param userId
+ */
+export async function applySuggestion(
+  repoId: string,
+  prNumber: number,
+  commentId: string,
+  userId: string,
+) {
+  const pr = await prisma.pullRequest.findUnique({
+    where: { repoId_number: { repoId, number: prNumber } },
+  });
+  if (!pr) throw new AppError(404, 'Pull request not found');
+  if (pr.status !== 'OPEN') throw new AppError(400, 'Can only apply suggestions on open PRs');
+
+  const comment = await prisma.pRComment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new AppError(404, 'Comment not found');
+  if (!comment.filePath || comment.line == null) {
+    throw new AppError(400, 'Comment does not reference a file location');
+  }
+
+  const suggestion = extractSuggestion(comment.body);
+  if (!suggestion) throw new AppError(400, 'Comment does not contain a suggestion block');
+
+  const { diskPath } = await getRepoDisk(repoId);
+
+  if (!(await gitCmd.branchExists(diskPath, pr.sourceBranch))) {
+    throw new AppError(400, 'Source branch no longer exists');
+  }
+
+  // Read the current file content from the source branch
+  let fileContent: string;
+  try {
+    fileContent = await gitCmd.showBlob(diskPath, pr.sourceBranch, comment.filePath);
+  } catch {
+    throw new AppError(400, `File '${comment.filePath}' not found on source branch`);
+  }
+
+  const lines = fileContent.split('\n');
+  const lineIndex = comment.line - 1;
+  if (lineIndex < 0 || lineIndex >= lines.length) {
+    throw new AppError(400, 'Comment line is out of range');
+  }
+
+  // Count how many lines the suggestion replaces (default: 1 line)
+  const suggestionLines = suggestion.endsWith('\n')
+    ? suggestion.slice(0, -1).split('\n')
+    : suggestion.split('\n');
+
+  // Replace the single line with the suggestion content
+  lines.splice(lineIndex, 1, ...suggestionLines);
+  const newContent = lines.join('\n');
+
+  // Apply via a temporary worktree
+  await applyFileChange(
+    diskPath,
+    pr.sourceBranch,
+    comment.filePath,
+    newContent,
+    'Apply suggestion from code review',
+  );
+
+  await logActivity('pull_request', pr.id, 'suggestion_applied', userId, {
+    commentId,
+    filePath: comment.filePath,
+  });
+
+  return { applied: true, commentId };
+}
+
+/**
+ * Apply multiple code suggestions from PR comments as a single commit.
+ * @param repoId
+ * @param prNumber
+ * @param commentIds
+ * @param userId
+ */
+export async function batchApplySuggestions(
+  repoId: string,
+  prNumber: number,
+  commentIds: string[],
+  userId: string,
+) {
+  const pr = await prisma.pullRequest.findUnique({
+    where: { repoId_number: { repoId, number: prNumber } },
+  });
+  if (!pr) throw new AppError(404, 'Pull request not found');
+  if (pr.status !== 'OPEN') throw new AppError(400, 'Can only apply suggestions on open PRs');
+
+  if (!commentIds.length) throw new AppError(400, 'No comment IDs provided');
+
+  const comments = await prisma.pRComment.findMany({
+    where: { id: { in: commentIds } },
+    orderBy: { line: 'desc' }, // Process bottom-up so line numbers stay valid
+  });
+
+  if (comments.length !== commentIds.length) {
+    throw new AppError(404, 'One or more comments not found');
+  }
+
+  const { diskPath } = await getRepoDisk(repoId);
+
+  if (!(await gitCmd.branchExists(diskPath, pr.sourceBranch))) {
+    throw new AppError(400, 'Source branch no longer exists');
+  }
+
+  // Group suggestions by file, then apply bottom-up within each file
+  const fileChanges = new Map<string, { line: number; suggestion: string; commentId: string }[]>();
+  for (const comment of comments) {
+    if (!comment.filePath || comment.line == null) {
+      throw new AppError(400, `Comment ${comment.id} does not reference a file location`);
+    }
+    const suggestion = extractSuggestion(comment.body);
+    if (!suggestion) {
+      throw new AppError(400, `Comment ${comment.id} does not contain a suggestion block`);
+    }
+    const existing = fileChanges.get(comment.filePath) ?? [];
+    existing.push({ line: comment.line, suggestion, commentId: comment.id });
+    fileChanges.set(comment.filePath, existing);
+  }
+
+  // Build the set of file path -> new content
+  const filePatchMap = new Map<string, string>();
+  for (const [filePath, changes] of fileChanges) {
+    let fileContent: string;
+    try {
+      fileContent = await gitCmd.showBlob(diskPath, pr.sourceBranch, filePath);
+    } catch {
+      throw new AppError(400, `File '${filePath}' not found on source branch`);
+    }
+
+    const lines = fileContent.split('\n');
+    // Sort descending by line so earlier replacements don't shift later ones
+    const sorted = [...changes].sort((a, b) => b.line - a.line);
+    for (const change of sorted) {
+      const lineIndex = change.line - 1;
+      if (lineIndex < 0 || lineIndex >= lines.length) {
+        throw new AppError(400, `Line ${change.line} out of range in ${filePath}`);
+      }
+      const suggestionLines = change.suggestion.endsWith('\n')
+        ? change.suggestion.slice(0, -1).split('\n')
+        : change.suggestion.split('\n');
+      lines.splice(lineIndex, 1, ...suggestionLines);
+    }
+    filePatchMap.set(filePath, lines.join('\n'));
+  }
+
+  const count = commentIds.length;
+  const message = `Apply ${count} suggestions from code review`;
+
+  // Apply all file changes in a single commit
+  await applyMultiFileChanges(diskPath, pr.sourceBranch, filePatchMap, message);
+
+  await logActivity('pull_request', pr.id, 'suggestions_batch_applied', userId, {
+    count,
+    commentIds,
+  });
+
+  return { applied: true, count };
+}
+
+/**
+ * Helper: apply a single file change as a commit on a branch in a bare repo.
+ * @param diskPath
+ * @param branch
+ * @param filePath
+ * @param newContent
+ * @param message
+ */
+async function applyFileChange(
+  diskPath: string,
+  branch: string,
+  filePath: string,
+  newContent: string,
+  message: string,
+): Promise<void> {
+  const patchMap = new Map<string, string>();
+  patchMap.set(filePath, newContent);
+  await applyMultiFileChanges(diskPath, branch, patchMap, message);
+}
+
+/**
+ * Helper: apply multiple file changes as a single commit on a branch in a bare repo.
+ * @param diskPath
+ * @param branch
+ * @param fileChanges
+ * @param message
+ */
+async function applyMultiFileChanges(
+  diskPath: string,
+  branch: string,
+  fileChanges: Map<string, string>,
+  message: string,
+): Promise<void> {
+  const worktreeDir = path.join(diskPath, '..', `_suggestion_${Date.now()}`);
+  try {
+    await execFileAsync('git', ['worktree', 'add', worktreeDir, branch], {
+      cwd: diskPath,
+    });
+
+    // Write the new file contents
+    for (const [filePath, content] of fileChanges) {
+      const fullPath = path.join(worktreeDir, filePath);
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      await fs.writeFile(fullPath, content, 'utf-8');
+      await execFileAsync('git', ['-C', worktreeDir, 'add', filePath]);
+    }
+
+    // Commit
+    await execFileAsync('git', [
+      '-C',
+      worktreeDir,
+      '-c',
+      'user.name=Axiom',
+      '-c',
+      'user.email=axiom@local',
+      'commit',
+      '-m',
+      message,
+    ]);
+
+    // Update the bare repo ref
+    const newHead = (
+      await execFileAsync('git', ['-C', worktreeDir, 'rev-parse', 'HEAD'])
+    ).stdout.trim();
+    await execFileAsync('git', ['update-ref', `refs/heads/${branch}`, newHead], {
+      cwd: diskPath,
+    });
+  } finally {
+    await execFileAsync('git', ['worktree', 'remove', '--force', worktreeDir], {
+      cwd: diskPath,
+    }).catch((err) => {
+      console.error('Failed to remove suggestion worktree', err);
+    });
+    await fs.rm(worktreeDir, { recursive: true, force: true }).catch((err) => {
+      console.error('Failed to clean up suggestion worktree directory', err);
+    });
+  }
 }

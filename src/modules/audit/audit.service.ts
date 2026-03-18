@@ -1,0 +1,86 @@
+import { prisma } from '../../config/database';
+
+export interface LogAuditData {
+  userId?: string;
+  orgId?: string;
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  details?: Record<string, unknown>;
+  ipAddress?: string;
+}
+
+export interface ListAuditLogsOpts {
+  orgId?: string;
+  userId?: string;
+  resourceType?: string;
+  action?: string;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Create an audit log entry.
+ * @param data
+ */
+export async function logAudit(data: LogAuditData) {
+  const resource = data.resourceId ? `${data.resourceType}:${data.resourceId}` : data.resourceType;
+
+  return prisma.auditLog.create({
+    data: {
+      orgId: data.orgId ?? 'system',
+      userId: data.userId ?? null,
+      action: data.action,
+      resource,
+      details: {
+        ...(data.details ?? {}),
+        ...(data.ipAddress ? { ipAddress: data.ipAddress } : {}),
+      },
+    },
+  });
+}
+
+/**
+ * Query audit logs with filters.
+ * @param opts
+ */
+export async function listAuditLogs(opts: ListAuditLogsOpts) {
+  const where: Record<string, unknown> = {};
+
+  if (opts.orgId) where.orgId = opts.orgId;
+  if (opts.userId) where.userId = opts.userId;
+  if (opts.action) where.action = { contains: opts.action };
+  if (opts.resourceType) where.resource = { startsWith: opts.resourceType };
+
+  if (opts.startDate || opts.endDate) {
+    const createdAt: Record<string, Date> = {};
+    if (opts.startDate) createdAt.gte = opts.startDate;
+    if (opts.endDate) createdAt.lte = opts.endDate;
+    where.createdAt = createdAt;
+  }
+
+  const limit = Math.min(opts.limit ?? 50, 200);
+  const offset = opts.offset ?? 0;
+
+  const [logs, total] = await Promise.all([
+    prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset,
+    }),
+    prisma.auditLog.count({ where }),
+  ]);
+
+  return { logs, total };
+}
+
+/**
+ * Get a single audit log entry by ID.
+ * @param id
+ */
+export async function getAuditLog(id: string) {
+  return prisma.auditLog.findUnique({ where: { id } });
+}

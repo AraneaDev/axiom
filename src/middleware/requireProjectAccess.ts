@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { prisma } from '../config/database';
+import { param } from '../utils/params';
 
 import { AppError } from './errorHandler';
 
@@ -13,13 +14,12 @@ import { AppError } from './errorHandler';
  */
 export async function requireProjectAccess(req: Request, _res: Response, next: NextFunction) {
   try {
-    const { projectId } = req.params;
-    if (!projectId) return next(new AppError(400, 'Project ID required'));
+    const projectId = param(req, 'projectId');
 
-    const project = await prisma.project.findUnique({
+    const project = (await prisma.project.findUnique({
       where: { id: projectId },
-      select: { team: { select: { id: true } } },
-    });
+      include: { team: { select: { id: true } } },
+    })) as { teamId: string; team: { id: string } } | null;
     if (!project) return next(new AppError(404, 'Project not found'));
 
     const membership = await prisma.teamMembership.findUnique({

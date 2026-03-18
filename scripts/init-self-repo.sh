@@ -31,37 +31,26 @@ fi
 if [ -n "${REPOS_PATH:-}" ]; then
   REPOS_BASE="$REPOS_PATH"
 else
-  # Try to resolve the Docker volume mountpoint on the host.
-  MOUNTPOINT=$(docker volume inspect axiom_git_repos --format '{{.Mountpoint}}' 2>/dev/null || true)
-  if [ -z "$MOUNTPOINT" ]; then
-    echo "ERROR: Cannot determine repos path." >&2
-    echo "       Either set REPOS_PATH or ensure the axiom_git_repos Docker volume exists." >&2
-    exit 1
-  fi
-  REPOS_BASE="$MOUNTPOINT"
+  # Use the bind-mount directory next to the project root.
+  REPOS_BASE="$SOURCE_DIR/.data/repos"
 fi
 
-DISK_PATH="$REPOS_BASE/axiom/core/axiom.git"
+# Must match the diskPath in seed-demo.ts: {org}/{team}/{repo}.git
+DISK_PATH="$REPOS_BASE/aranea-dev/axiom/axiom.git"
 
 mkdir -p "$(dirname "$DISK_PATH")"
 
 if [ -d "$DISK_PATH" ]; then
   echo "Updating bare clone at $DISK_PATH"
   git -C "$DISK_PATH" fetch "$SOURCE_DIR" --tags 2>/dev/null || true
+  # Update all branches from source
+  git -C "$DISK_PATH" fetch "$SOURCE_DIR" '+refs/heads/*:refs/heads/*' 2>/dev/null || true
 else
   echo "Creating bare clone at $DISK_PATH"
   git clone --bare "$SOURCE_DIR" "$DISK_PATH"
 fi
 
-# On WSL2 the Docker volume is written from the host but the running container
-# may not see the new files due to kernel-level directory caching. Copy the
-# repo into the container directly to guarantee visibility.
-CONTAINER=$(docker ps --filter "name=axiom-api" --format "{{.Names}}" 2>/dev/null | head -1)
-if [ -n "$CONTAINER" ]; then
-  echo "Syncing into container $CONTAINER via docker cp..."
-  docker exec "$CONTAINER" mkdir -p /data/repos/axiom/core
-  docker cp "$DISK_PATH" "$CONTAINER:/data/repos/axiom/core/axiom.git"
-  echo "Done: visible at /data/repos/axiom/core/axiom.git inside $CONTAINER"
-else
-  echo "Done: $DISK_PATH (no running api container found to sync)"
-fi
+# Ensure the bare repo accepts pushes (for use as a remote)
+git -C "$DISK_PATH" config receive.denyCurrentBranch ignore 2>/dev/null || true
+
+echo "Done: $DISK_PATH (accessible via git_repos volume at /data/repos inside containers)"

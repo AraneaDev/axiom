@@ -1,13 +1,36 @@
-import { useQuery } from '@tanstack/react-query';
-import { Edit, History, ChevronRight, Plus, FileText, Hash } from 'lucide-react';
-import { useMemo } from 'react';
-import { Link, useParams } from 'react-router';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Edit,
+  History,
+  ChevronRight,
+  Plus,
+  FileText,
+  Hash,
+  Download,
+  FileType,
+  BookOpen,
+  FileCode,
+  Type,
+  Tag,
+  X,
+  ArrowRight,
+  Copy,
+  Trash2,
+  MoreVertical,
+} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link, useParams, useNavigate } from 'react-router';
 
 import { wikiApi } from '@/api/wiki.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Input } from '@/components/ui/Input';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
+import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
+import { PageComments } from '@/components/wiki/PageComments';
 import type { PageTreeNode } from '@/lib/types';
 import { cn, formatRelative } from '@/lib/utils';
 
@@ -126,12 +149,63 @@ function TreeNode({
   );
 }
 
+const EXPORT_FORMATS = [
+  { key: 'html', label: 'HTML', icon: FileCode },
+  { key: 'docx', label: 'Word (DOCX)', icon: FileType },
+  { key: 'epub', label: 'EPUB', icon: BookOpen },
+  { key: 'pdf', label: 'PDF', icon: FileText },
+  { key: 'latex', label: 'LaTeX', icon: FileCode },
+  { key: 'plain', label: 'Plain Text', icon: Type },
+];
+
+function ExportDropdown({ spaceId, pageSlug }: { spaceId: string; pageSlug: string }) {
+  const [exporting, setExporting] = useState(false);
+  const toast = useToast();
+
+  async function handleExport(format: string) {
+    setExporting(true);
+    try {
+      await wikiApi.exportPage(spaceId, pageSlug, format);
+      toast.success('Export downloaded');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <Dropdown
+      align="right"
+      trigger={
+        <Button variant="ghost" size="sm" disabled={exporting}>
+          {exporting ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />} Export
+        </Button>
+      }
+    >
+      {EXPORT_FORMATS.map(({ key, label, icon: Icon }) => (
+        <DropdownItem key={key} onClick={() => handleExport(key)}>
+          <Icon className="h-4 w-4" /> {label}
+        </DropdownItem>
+      ))}
+    </Dropdown>
+  );
+}
+
 /**
  *
  */
 export default function PageView() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const toast = useToast();
   const basePath = `/${org}/${team}/wiki/${spaceSlug}`;
+
+  const [labelInput, setLabelInput] = useState('');
+  const [showAddLabel, setShowAddLabel] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [moveTargetParent, setMoveTargetParent] = useState('');
 
   // We need spaceId -- get it from spaces list
   const { data: orgs } = useQuery({
@@ -164,7 +238,62 @@ export default function PageView() {
     enabled: !!currentSpace?.id && !!pageSlug,
   });
 
+  const { data: labels = [] } = useQuery({
+    queryKey: ['pageLabels', page?.id],
+    queryFn: () => wikiApi.listPageLabels(page!.id),
+    enabled: !!page?.id,
+  });
+
   const tocEntries = useMemo(() => (page?.body ? extractToc(page.body) : []), [page?.body]);
+
+  const addLabelMutation = useMutation({
+    mutationFn: (label: string) => wikiApi.addPageLabel(page!.id, label),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pageLabels', page?.id] });
+      setLabelInput('');
+      setShowAddLabel(false);
+    },
+    onError: (err: unknown) =>
+      toast.error(err instanceof Error ? err.message : 'Failed to add label'),
+  });
+
+  const removeLabelMutation = useMutation({
+    mutationFn: (label: string) => wikiApi.removePageLabel(page!.id, label),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pageLabels', page?.id] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => wikiApi.deletePage(currentSpace!.id, pageSlug!),
+    onSuccess: () => {
+      toast.success('Page deleted');
+      navigate(`/${org}/${team}/wiki/${spaceSlug}`);
+    },
+    onError: (err: unknown) =>
+      toast.error(err instanceof Error ? err.message : 'Failed to delete page'),
+  });
+
+  const copyMutation = useMutation({
+    mutationFn: () => wikiApi.copyPage(page!.id, {}),
+    onSuccess: (copied) => {
+      toast.success('Page copied');
+      queryClient.invalidateQueries({ queryKey: ['pageTree', currentSpace?.id] });
+      navigate(`${basePath}/${copied.slug}`);
+    },
+    onError: (err: unknown) =>
+      toast.error(err instanceof Error ? err.message : 'Failed to copy page'),
+  });
+
+  const moveMutation = useMutation({
+    mutationFn: (data: { targetParentId?: string | null }) =>
+      wikiApi.movePage(page!.id, { targetParentId: data.targetParentId }),
+    onSuccess: () => {
+      toast.success('Page moved');
+      queryClient.invalidateQueries({ queryKey: ['pageTree', currentSpace?.id] });
+      setShowMoveModal(false);
+    },
+    onError: (err: unknown) =>
+      toast.error(err instanceof Error ? err.message : 'Failed to move page'),
+  });
 
   if (isLoading) return <PageLoader />;
 
@@ -201,7 +330,7 @@ export default function PageView() {
 
   return (
     <div>
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Page tree sidebar */}
         <div className="col-span-1 hidden lg:block">
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">
@@ -228,6 +357,7 @@ export default function PageView() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold">{page.title}</h1>
             <div className="flex gap-2">
+              <ExportDropdown spaceId={currentSpace!.id} pageSlug={pageSlug!} />
               <Link to={`${basePath}/${pageSlug}/history`}>
                 <Button variant="ghost" size="sm">
                   <History className="h-4 w-4" /> History
@@ -238,8 +368,89 @@ export default function PageView() {
                   <Edit className="h-4 w-4" /> Edit
                 </Button>
               </Link>
+              <Dropdown
+                align="right"
+                trigger={
+                  <Button variant="ghost" size="sm">
+                    <MoreVertical className="h-4 w-4" /> Actions
+                  </Button>
+                }
+              >
+                <DropdownItem onClick={() => setShowMoveModal(true)}>
+                  <ArrowRight className="h-4 w-4" /> Move
+                </DropdownItem>
+                <DropdownItem onClick={() => copyMutation.mutate()}>
+                  <Copy className="h-4 w-4" /> Copy
+                </DropdownItem>
+                <DropdownItem
+                  danger
+                  onClick={() => {
+                    if (window.confirm('Delete this page?')) deleteMutation.mutate();
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" /> Delete
+                </DropdownItem>
+              </Dropdown>
             </div>
           </div>
+
+          {/* Labels */}
+          <div className="flex items-center gap-2 flex-wrap mb-3">
+            {labels.map((pl) => (
+              <span
+                key={pl.id}
+                className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2.5 py-0.5 text-xs font-medium text-primary"
+              >
+                <Tag className="h-3 w-3" />
+                {pl.label}
+                <button
+                  type="button"
+                  onClick={() => removeLabelMutation.mutate(pl.label)}
+                  className="ml-0.5 hover:text-danger transition-colors"
+                  title="Remove label"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {showAddLabel ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (labelInput.trim()) addLabelMutation.mutate(labelInput.trim());
+                }}
+                className="flex items-center gap-1"
+              >
+                <input
+                  type="text"
+                  value={labelInput}
+                  onChange={(e) => setLabelInput(e.target.value)}
+                  placeholder="Label name"
+                  className="h-6 w-32 rounded border border-border bg-surface px-2 text-xs focus:border-border-focus focus:ring-1 focus:ring-primary/15 focus:outline-none"
+                  autoFocus
+                />
+                <Button type="submit" size="xs" disabled={!labelInput.trim()}>
+                  <Plus className="h-3 w-3" /> Add
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => {
+                    setShowAddLabel(false);
+                    setLabelInput('');
+                  }}
+                >
+                  <X className="h-3 w-3" /> Cancel
+                </Button>
+              </form>
+            ) : (
+              <Button variant="ghost" size="xs" onClick={() => setShowAddLabel(true)}>
+                <Tag className="h-3 w-3" /> Add label
+              </Button>
+            )}
+          </div>
+
           {page.versions?.[0] && (
             <p className="text-xs text-text-secondary mb-4">
               Last edited {formatRelative(page.versions[0].createdAt)} by{' '}
@@ -269,8 +480,44 @@ export default function PageView() {
               </div>
             </div>
           )}
+
+          {/* Comments */}
+          <div className="mt-8 border-t border-border-light pt-6">
+            <PageComments pageId={page.id} />
+          </div>
         </div>
       </div>
+
+      {/* Move page modal */}
+      <Modal open={showMoveModal} onClose={() => setShowMoveModal(false)} title="Move Page">
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary">
+            Move &quot;{page.title}&quot; to a new parent page. Leave empty to move to root level.
+          </p>
+          <Input
+            id="move-parent"
+            label="Parent page ID (leave empty for root)"
+            value={moveTargetParent}
+            onChange={(e) => setMoveTargetParent(e.target.value)}
+            placeholder="Parent page ID"
+          />
+          <ModalFooter>
+            <Button variant="secondary" onClick={() => setShowMoveModal(false)}>
+              <X className="h-4 w-4" /> Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                moveMutation.mutate({
+                  targetParentId: moveTargetParent.trim() || null,
+                })
+              }
+              disabled={moveMutation.isPending}
+            >
+              <ArrowRight className="h-4 w-4" /> Move
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
     </div>
   );
 }

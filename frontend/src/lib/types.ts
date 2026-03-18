@@ -69,17 +69,61 @@ export interface Issue {
   assignee?: { id: string; username: string; displayName: string };
   creator: { id: string; username: string; displayName: string };
   labels: Label[];
-  column?: { id: string; name: string };
+  column?: { id: string; name: string; isDone?: boolean };
   comments?: Comment[];
+  parentId?: string;
+  parent?: { id: string; number: number; title: string; key?: string };
+  children?: Issue[];
   dueDate?: string;
+  storyPoints?: number;
+  sprintId?: string;
+  sprint?: { id: string; name: string };
+  timeEstimate?: number | null;
+  timeSpent?: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EpicProgress {
+  total: number;
+  completed: number;
+  inProgress: number;
+  percentage: number;
+}
+
+export interface RoadmapEpic extends Issue {
+  progress: { total: number; completed: number; percentage: number };
+  startDate: string;
+  endDate: string;
+}
+
+export interface Sprint {
+  id: string;
+  projectId: string;
+  name: string;
+  goal?: string;
+  startDate: string;
+  endDate: string;
+  status: 'PLANNING' | 'ACTIVE' | 'COMPLETED';
+  issues: Issue[];
+  _storyPoints?: number;
+  createdAt: string;
+}
+
+export interface VelocityDataPoint {
+  sprintId: string;
+  sprintName: string;
+  startDate: string;
+  endDate: string;
+  completedPoints: number;
+  issueCount: number;
 }
 
 export interface Label {
   id: string;
   name: string;
   color: string;
+  description?: string;
 }
 
 export interface Comment {
@@ -131,6 +175,32 @@ export interface PageVersion {
   createdAt: string;
 }
 
+export interface PageTemplate {
+  id: string;
+  spaceId: string;
+  name: string;
+  body: string;
+  description?: string;
+  createdAt: string;
+}
+
+export interface PageComment {
+  id: string;
+  pageId: string;
+  userId: string;
+  user: { id: string; username: string; displayName: string };
+  body: string;
+  anchorText?: string;
+  resolved: boolean;
+  createdAt: string;
+}
+
+export interface PageLabel {
+  id: string;
+  pageId: string;
+  label: string;
+}
+
 export interface ApiToken {
   id: string;
   name: string;
@@ -158,13 +228,44 @@ export interface SearchResultItem {
   title?: string;
   name?: string;
   priority?: string;
+  status?: string;
+  projectName?: string;
+  spaceName?: string;
+  snippet?: string;
+  description?: string;
+  visibility?: string;
+  assignee?: { id: string; username: string; displayName: string; avatarUrl?: string };
   space?: { name: string };
   slug?: string;
 }
 
 export interface SearchResult {
-  type: 'issues' | 'wiki';
+  type: 'issues' | 'wiki' | 'repos' | 'code';
   items: SearchResultItem[];
+  total: number;
+}
+
+export interface CodeMatch {
+  repoId: string;
+  repoName: string;
+  repoUrl: string;
+  filePath: string;
+  lineNumber: number;
+  lineContent: string;
+}
+
+export interface CodeSearchResult {
+  type: 'code';
+  items: CodeMatch[];
+  total: number;
+}
+
+export interface SavedSearch {
+  id: string;
+  userId: string;
+  name: string;
+  query: { q: string; type?: string; filters?: Record<string, string> };
+  createdAt: string;
 }
 
 export interface AuthResponse {

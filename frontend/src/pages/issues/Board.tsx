@@ -150,14 +150,14 @@ export default function Board() {
 
   const moveMutation = useMutation({
     mutationFn: ({
-      issueId,
+      issueNumber,
       columnId,
       position,
     }: {
-      issueId: string;
+      issueNumber: number;
       columnId: string;
       position: number;
-    }) => issuesApi.moveIssue(issueId, { columnId, position }),
+    }) => issuesApi.moveIssue(currentProject!.id, issueNumber, { columnId, position }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['board', currentProject?.id] });
     },
@@ -204,8 +204,9 @@ export default function Board() {
         }
 
         const targetCol = prevColumns?.find((c) => c.id === targetColumnId);
+        const movedIssue = prevColumns?.flatMap((c) => c.issues).find((i) => i.id === data.issueId);
         moveMutation.mutate({
-          issueId: data.issueId,
+          issueNumber: movedIssue?.number ?? 0,
           columnId: targetColumnId,
           position: targetCol?.issues.length ?? 0,
         });

@@ -1,15 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { common, createLowlight } from 'lowlight';
-import { ChevronRight, Copy } from 'lucide-react';
+import { ChevronRight, Copy, Clock, FileWarning, GitBranch } from 'lucide-react';
 import React from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, Navigate, useParams } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
-import { teamsApi } from '@/api/teams.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
+import { useRepoContext } from '@/hooks/useRepoContext';
 
 const lowlight = createLowlight(common);
 
@@ -103,31 +103,43 @@ function flattenToLineNodes(children: HastNode[]): React.ReactNode[][] {
  *
  */
 export default function FileView() {
-  const { org, team: teamSlug, repo: repoSlug, ref, '*': filePath } = useParams();
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: repos } = useQuery({
-    queryKey: ['repos', currentTeam?.id],
-    queryFn: () => reposApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentRepo = repos?.find((r) => r.slug === repoSlug);
+  const { ref, '*': filePath } = useParams();
+  const { currentRepo, basePath, repoSlug } = useRepoContext();
 
-  const { data: blob, isLoading } = useQuery({
+  const {
+    data: blob,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['blob', currentRepo?.id, ref, filePath],
     queryFn: () => reposApi.getBlob(currentRepo!.id, ref!, filePath!),
     enabled: !!currentRepo?.id && !!ref && !!filePath,
   });
 
+  // Guard missing params — redirect to repo page (after all hooks)
+  if (!ref || !filePath) {
+    return <Navigate to={basePath} replace />;
+  }
+
   if (isLoading) return <PageLoader />;
 
-  const basePath = `/${org}/${teamSlug}/repos/${repoSlug}`;
+  if (isError || (!isLoading && !blob && currentRepo)) {
+    return (
+      <EmptyState
+        icon={<FileWarning className="h-10 w-10" />}
+        title="File not found"
+        description={`Could not load ${filePath} at ref ${ref}.`}
+        action={
+          <Link to={basePath}>
+            <Button variant="secondary">
+              <GitBranch className="h-4 w-4" /> Back to repository
+            </Button>
+          </Link>
+        }
+      />
+    );
+  }
+
   const parts = filePath?.split('/') ?? [];
   const fileName = parts[parts.length - 1] ?? '';
   const isMarkdown = /\.mdx?$/i.test(fileName);
@@ -163,13 +175,25 @@ export default function FileView() {
           {blob?.size ? `${(blob.size / 1024).toFixed(1)} KB` : ''}
           {!isMarkdown && ` · ${lines.length} lines`}
         </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigator.clipboard.writeText(blob?.content ?? '')}
-        >
-          <Copy className="h-4 w-4" /> Copy
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link to={`${basePath}/blame/${ref}/${filePath}`}>
+            <Button variant="ghost" size="sm">
+              <GitBranch className="h-4 w-4" /> Blame
+            </Button>
+          </Link>
+          <Link to={`${basePath}/history/${ref}/${filePath}`}>
+            <Button variant="ghost" size="sm">
+              <Clock className="h-4 w-4" /> History
+            </Button>
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigator.clipboard.writeText(blob?.content ?? '')}
+          >
+            <Copy className="h-4 w-4" /> Copy
+          </Button>
+        </div>
       </div>
 
       {/* Content */}

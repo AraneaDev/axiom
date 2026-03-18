@@ -62,7 +62,7 @@ export async function listUserOrgs(userId: string) {
       org: { select: { id: true, name: true, slug: true, description: true } },
     },
   });
-  return memberships.map((m) => ({ ...m.org, role: m.role }));
+  return memberships.map((m: (typeof memberships)[number]) => ({ ...m.org, role: m.role }));
 }
 
 /**

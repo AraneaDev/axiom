@@ -114,7 +114,9 @@ export async function handleInfoRefs(req: Request, res: Response, next: NextFunc
       return sendAuthChallenge(res);
     }
 
-    const { org, team, repo: repoSlug } = req.params;
+    const org = req.params.org as string;
+    const team = req.params.team as string;
+    const repoSlug = req.params.repo as string;
     const cleanSlug = repoSlug.replace(/\.git$/, '');
     const needsWrite = service === 'git-receive-pack';
     const repoRecord = await resolveRepo(org, team, cleanSlug, userId, needsWrite);
@@ -165,7 +167,9 @@ export async function handleServiceRpc(req: Request, res: Response, next: NextFu
       return sendAuthChallenge(res);
     }
 
-    const { org, team, repo: repoSlug } = req.params;
+    const org = req.params.org as string;
+    const team = req.params.team as string;
+    const repoSlug = req.params.repo as string;
     const cleanSlug = repoSlug.replace(/\.git$/, '');
     const needsWrite = service === 'git-receive-pack';
     const repoRecord = await resolveRepo(org, team, cleanSlug, userId, needsWrite);

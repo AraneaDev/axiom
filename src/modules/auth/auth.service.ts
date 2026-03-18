@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 
+import { OrgRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { authenticator } from 'otplib';
@@ -8,6 +9,7 @@ import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import type { AuthPayload } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
+import { logAudit } from '../audit/audit.service';
 
 const SALT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '15m';
@@ -85,7 +87,7 @@ export async function register(data: {
   // If invite was used, add user to the org and increment usage
   if (invite) {
     await prisma.orgMembership.create({
-      data: { userId: user.id, orgId: invite.orgId, role: invite.role },
+      data: { userId: user.id, orgId: invite.orgId, role: invite.role as OrgRole },
     });
     await prisma.inviteLink.update({
       where: { id: invite.id },
@@ -153,6 +155,17 @@ export async function login(data: { login: string; password: string; twoFactorCo
     },
   });
 
+  // Audit: log successful login
+  logAudit({
+    userId: user.id,
+    action: 'login',
+    resourceType: 'user',
+    resourceId: user.id,
+    details: { username: user.username },
+  }).catch(() => {
+    /* fire-and-forget */
+  });
+
   return {
     user: {
       id: user.id,
@@ -192,6 +205,30 @@ export async function refresh(refreshTokenValue: string) {
   });
 
   return { accessToken, refreshToken: newRefreshToken };
+}
+
+/**
+ * Log out by deleting the refresh token and recording the event.
+ * @param userId
+ * @param refreshTokenValue
+ */
+export async function logout(userId: string, refreshTokenValue?: string) {
+  if (refreshTokenValue) {
+    const tokenHash = crypto.createHash('sha256').update(refreshTokenValue).digest('hex');
+    await prisma.refreshToken.deleteMany({ where: { tokenHash } });
+  }
+
+  // Audit: log logout
+  logAudit({
+    userId,
+    action: 'logout',
+    resourceType: 'user',
+    resourceId: userId,
+  }).catch(() => {
+    /* fire-and-forget */
+  });
+
+  return { success: true };
 }
 
 /**

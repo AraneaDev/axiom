@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { logActivity } from '../activity/activity.service';
 
 /**
  *
@@ -109,6 +110,7 @@ export async function createPage(
     include: { versions: true },
   });
 
+  await logActivity('wiki_page', page.id, 'created', authorId, { title: data.title });
   return page;
 }
 
@@ -166,7 +168,7 @@ export async function updatePage(
 
   const nextVersion = (page.versions[0]?.version ?? 0) + 1;
 
-  return prisma.page.update({
+  const updated = await prisma.page.update({
     where: { id: page.id },
     data: {
       title: data.title ?? page.title,
@@ -184,19 +186,26 @@ export async function updatePage(
     },
     include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
   });
+
+  await logActivity('wiki_page', page.id, 'updated', authorId, { title: updated.title });
+  return updated;
 }
 
 /**
  *
  * @param spaceId
  * @param pageSlug
+ * @param userId
  */
-export async function deletePage(spaceId: string, pageSlug: string) {
+export async function deletePage(spaceId: string, pageSlug: string, userId?: string) {
   const page = await prisma.page.findUnique({
     where: { spaceId_slug: { spaceId, slug: pageSlug } },
   });
   if (!page) throw new AppError(404, 'Page not found');
   await prisma.page.delete({ where: { id: page.id } });
+  if (userId) {
+    await logActivity('wiki_page', page.id, 'deleted', userId, { title: page.title });
+  }
 }
 
 /**
@@ -241,8 +250,265 @@ export async function getPageTree(spaceId: string) {
 
   function buildTree(parentId: string | null): PageNode[] {
     const children = map.get(parentId) ?? [];
-    return children.map((p) => ({ ...p, children: buildTree(p.id) }));
+    return children.map((p: (typeof children)[number]) => ({ ...p, children: buildTree(p.id) }));
   }
 
   return buildTree(null);
+}
+
+// ─── Templates ──────────────────────────────────────────────
+
+/**
+ *
+ * @param spaceId
+ * @param data
+ * @param data.name
+ * @param data.body
+ * @param data.description
+ */
+export async function createTemplate(
+  spaceId: string,
+  data: { name: string; body: string; description?: string },
+) {
+  return prisma.pageTemplate.create({
+    data: { spaceId, ...data },
+  });
+}
+
+/**
+ *
+ * @param spaceId
+ */
+export async function listTemplates(spaceId: string) {
+  return prisma.pageTemplate.findMany({
+    where: { spaceId },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ *
+ * @param id
+ */
+export async function getTemplate(id: string) {
+  const template = await prisma.pageTemplate.findUnique({ where: { id } });
+  if (!template) throw new AppError(404, 'Template not found');
+  return template;
+}
+
+/**
+ *
+ * @param id
+ */
+export async function deleteTemplate(id: string) {
+  const template = await prisma.pageTemplate.findUnique({ where: { id } });
+  if (!template) throw new AppError(404, 'Template not found');
+  await prisma.pageTemplate.delete({ where: { id } });
+}
+
+// ─── Page Comments ──────────────────────────────────────────
+
+/**
+ *
+ * @param pageId
+ * @param userId
+ * @param body
+ * @param anchorText
+ */
+export async function addPageComment(
+  pageId: string,
+  userId: string,
+  body: string,
+  anchorText?: string,
+) {
+  const page = await prisma.page.findUnique({ where: { id: pageId } });
+  if (!page) throw new AppError(404, 'Page not found');
+
+  return prisma.pageComment.create({
+    data: { pageId, userId, body, anchorText },
+    include: { user: { select: { id: true, username: true, displayName: true } } },
+  });
+}
+
+/**
+ *
+ * @param pageId
+ */
+export async function listPageComments(pageId: string) {
+  return prisma.pageComment.findMany({
+    where: { pageId },
+    include: { user: { select: { id: true, username: true, displayName: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+/**
+ *
+ * @param commentId
+ */
+export async function resolveComment(commentId: string) {
+  const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new AppError(404, 'Comment not found');
+
+  return prisma.pageComment.update({
+    where: { id: commentId },
+    data: { resolved: !comment.resolved },
+    include: { user: { select: { id: true, username: true, displayName: true } } },
+  });
+}
+
+/**
+ *
+ * @param commentId
+ */
+export async function deletePageComment(commentId: string) {
+  const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new AppError(404, 'Comment not found');
+  await prisma.pageComment.delete({ where: { id: commentId } });
+}
+
+// ─── Page Labels ────────────────────────────────────────────
+
+/**
+ *
+ * @param pageId
+ * @param label
+ */
+export async function addLabel(pageId: string, label: string) {
+  const page = await prisma.page.findUnique({ where: { id: pageId } });
+  if (!page) throw new AppError(404, 'Page not found');
+
+  return prisma.pageLabel.create({
+    data: { pageId, label },
+  });
+}
+
+/**
+ *
+ * @param pageId
+ * @param label
+ */
+export async function removeLabel(pageId: string, label: string) {
+  const existing = await prisma.pageLabel.findUnique({
+    where: { pageId_label: { pageId, label } },
+  });
+  if (!existing) throw new AppError(404, 'Label not found on this page');
+  await prisma.pageLabel.delete({ where: { id: existing.id } });
+}
+
+/**
+ *
+ * @param pageId
+ */
+export async function listLabels(pageId: string) {
+  return prisma.pageLabel.findMany({
+    where: { pageId },
+    orderBy: { label: 'asc' },
+  });
+}
+
+/**
+ *
+ * @param spaceId
+ * @param label
+ */
+export async function searchPagesByLabel(spaceId: string, label: string) {
+  return prisma.page.findMany({
+    where: {
+      spaceId,
+      pageLabels: { some: { label } },
+    },
+    select: { id: true, title: true, slug: true },
+    orderBy: { title: 'asc' },
+  });
+}
+
+// ─── Page Move / Copy ───────────────────────────────────────
+
+/**
+ *
+ * @param pageId
+ * @param targetSpaceId
+ * @param targetParentId
+ */
+export async function movePage(
+  pageId: string,
+  targetSpaceId?: string,
+  targetParentId?: string | null,
+) {
+  const page = await prisma.page.findUnique({ where: { id: pageId } });
+  if (!page) throw new AppError(404, 'Page not found');
+
+  const newSpaceId = targetSpaceId ?? page.spaceId;
+
+  // Check slug uniqueness in target space if moving to a different space
+  if (newSpaceId !== page.spaceId) {
+    const existing = await prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId: newSpaceId, slug: page.slug } },
+    });
+    if (existing) throw new AppError(409, 'Page slug already taken in target space');
+  }
+
+  // Prevent circular parent
+  if (targetParentId === pageId) {
+    throw new AppError(400, 'Cannot set page as its own parent');
+  }
+
+  return prisma.page.update({
+    where: { id: pageId },
+    data: {
+      spaceId: newSpaceId,
+      parentId: targetParentId !== undefined ? targetParentId : page.parentId,
+    },
+  });
+}
+
+/**
+ *
+ * @param pageId
+ * @param authorId
+ * @param targetSpaceId
+ * @param newSlug
+ */
+export async function copyPage(
+  pageId: string,
+  authorId: string,
+  targetSpaceId?: string,
+  newSlug?: string,
+) {
+  const page = await prisma.page.findUnique({ where: { id: pageId } });
+  if (!page) throw new AppError(404, 'Page not found');
+
+  const destSpaceId = targetSpaceId ?? page.spaceId;
+  const destSlug = newSlug ?? `${page.slug}-copy`;
+
+  const existing = await prisma.page.findUnique({
+    where: { spaceId_slug: { spaceId: destSpaceId, slug: destSlug } },
+  });
+  if (existing) throw new AppError(409, 'Page slug already taken in target space');
+
+  const lastPage = await prisma.page.findFirst({
+    where: { spaceId: destSpaceId, parentId: null },
+    orderBy: { position: 'desc' },
+    select: { position: true },
+  });
+
+  return prisma.page.create({
+    data: {
+      spaceId: destSpaceId,
+      title: `${page.title} (copy)`,
+      slug: destSlug,
+      body: page.body,
+      position: (lastPage?.position ?? 0) + 1,
+      versions: {
+        create: {
+          version: 1,
+          title: `${page.title} (copy)`,
+          body: page.body,
+          authorId,
+        },
+      },
+    },
+    include: { versions: true },
+  });
 }

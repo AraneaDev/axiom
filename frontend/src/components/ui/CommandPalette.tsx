@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Search, FileText, BookOpen, ArrowRight } from 'lucide-react';
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Search, FileText, BookOpen, GitFork, ArrowRight, Info } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 
@@ -10,7 +10,7 @@ import { useUIStore } from '@/stores/ui.store';
 
 interface FlatItem {
   id: string;
-  type: 'issues' | 'wiki';
+  type: 'issues' | 'wiki' | 'repos';
   title: string;
   url: string;
 }
@@ -90,38 +90,38 @@ export function CommandPalette() {
   }, [searchOpen]);
 
   /* ---- select handler ---- */
-  const selectItem = useCallback(
-    (item: FlatItem) => {
-      toggleSearch();
-      navigate(item.url);
-    },
-    [navigate, toggleSearch],
-  );
+  const selectItem = (item: FlatItem) => {
+    toggleSearch();
+    navigate(item.url);
+  };
 
   /* ---- keyboard navigation ---- */
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        toggleSearch();
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActiveIndex((i) => (i + 1) % Math.max(flatItems.length, 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActiveIndex((i) => (i - 1 + flatItems.length) % Math.max(flatItems.length, 1));
-      } else if (e.key === 'Enter' && flatItems[activeIndex]) {
-        e.preventDefault();
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      toggleSearch();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((i) => (i + 1) % Math.max(flatItems.length, 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((i) => (i - 1 + flatItems.length) % Math.max(flatItems.length, 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (flatItems[activeIndex]) {
         selectItem(flatItems[activeIndex]);
+      } else if (query.trim()) {
+        toggleSearch();
+        navigate(`/search?q=${encodeURIComponent(query.trim())}`);
       }
-    },
-    [flatItems, activeIndex, selectItem, toggleSearch],
-  );
+    }
+  };
 
   /* ---- group items for display ---- */
   if (!searchOpen) return null;
 
   const issueItems = flatItems.filter((i) => i.type === 'issues');
   const wikiItems = flatItems.filter((i) => i.type === 'wiki');
+  const repoItems = flatItems.filter((i) => i.type === 'repos');
 
   const renderGroup = (label: string, icon: React.ReactNode, items: FlatItem[]) => {
     if (items.length === 0) return null;
@@ -170,13 +170,20 @@ export function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search issues, wiki pages..."
+            placeholder="Search issues, wiki, repos... (type:bug status:open)"
             className="flex-1 bg-transparent text-sm text-text placeholder:text-text-tertiary outline-none"
           />
           <kbd className="hidden sm:inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary">
             ESC
           </kbd>
         </div>
+        {/* Structured query hint */}
+        {query.length === 0 && (
+          <div className="flex items-center gap-1.5 px-4 py-2 text-[10px] text-text-tertiary border-b border-border-light">
+            <Info className="h-3 w-3 flex-shrink-0" />
+            <span>Use type:bug status:open priority:high assignee:name for advanced search</span>
+          </div>
+        )}
 
         {/* Results */}
         <div className="max-h-80 overflow-y-auto py-2">
@@ -187,6 +194,7 @@ export function CommandPalette() {
           )}
           {renderGroup('Issues', <FileText className="h-3.5 w-3.5" />, issueItems)}
           {renderGroup('Wiki', <BookOpen className="h-3.5 w-3.5" />, wikiItems)}
+          {renderGroup('Repositories', <GitFork className="h-3.5 w-3.5" />, repoItems)}
         </div>
 
         {/* Footer hint */}

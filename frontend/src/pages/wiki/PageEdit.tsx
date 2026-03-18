@@ -1,16 +1,20 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Eye, EyeOff, Save, X } from 'lucide-react';
+import { Eye, EyeOff, Save, X, FileText, Wifi, WifiOff } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
+import { CollaborativeEditor } from '@/components/editor/CollaborativeEditor';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { PresenceIndicators } from '@/components/wiki/PresenceIndicators';
+import { useCollaboration } from '@/hooks/useCollaboration';
 import { cn } from '@/lib/utils';
 
 /**
@@ -35,6 +39,12 @@ export default function PageEdit() {
   });
   const currentSpace = spaces?.find((s) => s.slug === spaceSlug);
 
+  const { data: templates = [] } = useQuery({
+    queryKey: ['wikiTemplates', currentSpace?.id],
+    queryFn: () => wikiApi.listTemplates(currentSpace!.id),
+    enabled: !!currentSpace?.id,
+  });
+
   const isNew = pageSlug === 'new';
   const draftKey = `wiki-draft-${spaceSlug}-${pageSlug ?? 'new'}`;
 
@@ -43,6 +53,13 @@ export default function PageEdit() {
     queryFn: () => wikiApi.getPage(currentSpace!.id, pageSlug!),
     enabled: !!currentSpace?.id && !isNew,
   });
+
+  // Real-time collaboration (only for existing pages, not new ones)
+  const collab = useCollaboration({
+    pageId: existingPage?.id,
+    enabled: !isNew && !!existingPage?.id,
+  });
+  const useCollab = collab.isConnected && collab.ydoc && collab.provider;
 
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -151,7 +168,46 @@ export default function PageEdit() {
             </span>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          {/* Collaboration presence indicators */}
+          {!isNew && collab.presenceUsers.length > 0 && (
+            <PresenceIndicators users={collab.presenceUsers} />
+          )}
+          {!isNew && existingPage?.id && (
+            <span
+              className={cn(
+                'flex items-center gap-1 text-xs',
+                collab.isConnected ? 'text-success' : 'text-text-tertiary',
+              )}
+              title={collab.isConnected ? 'Real-time sync active' : 'Editing offline'}
+            >
+              {collab.isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            </span>
+          )}
+          {isNew && templates.length > 0 && (
+            <Dropdown
+              align="right"
+              trigger={
+                <Button variant="ghost" size="sm">
+                  <FileText className="h-4 w-4" /> From template
+                </Button>
+              }
+            >
+              {templates.map((tpl) => (
+                <DropdownItem
+                  key={tpl.id}
+                  onClick={() => {
+                    setBody(tpl.body);
+                    if (!title.trim()) {
+                      handleTitleChange(tpl.name);
+                    }
+                  }}
+                >
+                  <FileText className="h-4 w-4" /> {tpl.name}
+                </DropdownItem>
+              ))}
+            </Dropdown>
+          )}
           <Button variant="secondary" size="sm" onClick={() => setShowPreview(!showPreview)}>
             {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             {showPreview ? 'Hide Preview' : 'Preview'}
@@ -203,7 +259,17 @@ export default function PageEdit() {
         <div className={cn('gap-4', showPreview ? 'grid grid-cols-2' : '')}>
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-text">Content</label>
-            <MarkdownEditor value={body} onChange={setBody} placeholder="Write your content..." />
+            {useCollab && collab.ydoc && collab.provider ? (
+              <CollaborativeEditor
+                ydoc={collab.ydoc}
+                provider={collab.provider}
+                fragmentName={collab.fragmentName}
+                onChange={setBody}
+                placeholder="Write your content..."
+              />
+            ) : (
+              <MarkdownEditor value={body} onChange={setBody} placeholder="Write your content..." />
+            )}
           </div>
           {showPreview && (
             <div className="flex flex-col gap-1">

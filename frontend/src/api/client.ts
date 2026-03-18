@@ -94,7 +94,10 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const body = await res.json().catch((err) => {
+      console.error('Failed to parse error response JSON', err);
+      return {};
+    });
     throw new ApiError(res.status, body.error?.message ?? 'Request failed', body.error?.code);
   }
 

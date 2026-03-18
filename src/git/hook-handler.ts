@@ -4,6 +4,7 @@ import { CommitRefType } from '@prisma/client';
 import { Request, Response, NextFunction, Router } from 'express';
 
 import { prisma } from '../config/database';
+import { triggerPipelineOnPush } from '../pipelines/trigger';
 
 import * as gitCmd from './git-commands';
 
@@ -99,7 +100,7 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
     if (!isTag && !isDelete) {
       try {
         const ISSUE_REF_RE = /(?:(closes?|fixes?)\s+)?#(\d+)/gi;
-        const recentCommits = await gitCmd.log(repo.diskPath, payload.after, 50, 0);
+        const recentCommits = await gitCmd.log(repo.diskPath!, payload.after, 50, 0);
 
         for (const commit of recentCommits) {
           const matches = [...commit.message.matchAll(ISSUE_REF_RE)];
@@ -120,10 +121,10 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
               if (!issue) continue;
 
               const refType: CommitRefType = keyword?.startsWith('clos')
-                ? 'CLOSES'
+                ? CommitRefType.CLOSES
                 : keyword?.startsWith('fix')
-                  ? 'FIXES'
-                  : 'REFS';
+                  ? CommitRefType.FIXES
+                  : CommitRefType.REFS;
 
               await prisma.issueCommit.upsert({
                 where: { issueId_sha: { issueId: issue.id, sha: commit.sha } },
@@ -160,6 +161,13 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
       }
     }
 
+    // Trigger CI/CD pipelines on push events
+    if (event === 'push' && !isDelete) {
+      triggerPipelineOnPush(repo.id, refName, payload.after).catch((err) => {
+        console.error('[hook-handler] pipeline trigger error:', err);
+      });
+    }
+
     res.json({ ok: true, event, ref: refName });
   } catch (err) {
     next(err);
@@ -182,7 +190,7 @@ async function dispatchWebhook(
   const body = JSON.stringify(payload);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Axiom-Event': payload.event,
+    'X-Axiom-Event': payload.event as string,
     'User-Agent': 'Axiom-Webhooks/0.1.0',
   };
 

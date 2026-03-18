@@ -8,9 +8,15 @@ const router = Router();
 
 router.use(authenticate);
 
+// User search
+router.get('/search', usersController.searchUsersHandler);
+
 // Profile
 router.get('/me', usersController.getMe);
 router.patch('/me', usersController.updateMe);
+
+// Dashboard
+router.get('/me/dashboard', usersController.getDashboard);
 
 // SSH Keys
 router.get('/me/ssh-keys', usersController.listSshKeys);

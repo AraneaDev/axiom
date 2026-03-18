@@ -58,6 +58,22 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
  * @param res
  * @param next
  */
+export async function logout(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { refreshToken } = req.body;
+    await authService.logout(req.userId!, refreshToken);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function enableTwoFactor(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await authService.enableTwoFactor(req.userId!);

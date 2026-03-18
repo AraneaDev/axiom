@@ -42,7 +42,7 @@ export async function getLinks(projectId: string, issueNumber: number) {
     },
   });
 
-  return links.map((l) => ({
+  return links.map((l: (typeof links)[number]) => ({
     ...l,
     fromKey: `${l.from.project.prefix}-${l.from.number}`,
     toKey: `${l.to.project.prefix}-${l.to.number}`,

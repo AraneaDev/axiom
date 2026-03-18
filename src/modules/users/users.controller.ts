@@ -5,6 +5,22 @@ import { addSshKeySchema, createApiTokenSchema } from '../../utils/validation';
 
 import * as usersService from './users.service';
 
+/**
+ * Search users by username or display name.
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function searchUsersHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const q = (req.query.q as string) || '';
+    const users = await usersService.searchUsers(q);
+    res.json(users);
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Profile
 /**
  *
@@ -31,6 +47,22 @@ export async function updateMe(req: Request, res: Response, next: NextFunction) 
   try {
     const user = await usersService.updateProfile(req.userId!, req.body);
     res.json(user);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Dashboard
+/**
+ * Get aggregated dashboard data for the current user.
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function getDashboard(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await usersService.getDashboard(req.userId!);
+    res.json(data);
   } catch (err) {
     next(err);
   }

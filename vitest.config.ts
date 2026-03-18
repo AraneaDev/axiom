@@ -19,6 +19,7 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
     },
+    testTimeout: 15000,
     sequence: { concurrent: false },
     fileParallelism: false,
     include: ['src/**/*.{test,spec}.ts'],

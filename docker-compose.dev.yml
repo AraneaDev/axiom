@@ -28,6 +28,7 @@ services:
       JWT_REFRESH_SECRET: axiom-dev-refresh-secret-change-in-prod-32-chars-min
       PORT: 3000
       REPOS_PATH: /data/repos
+      STORAGE_PATH: /data/uploads
       NODE_ENV: development
     depends_on:
       db:
@@ -35,7 +36,8 @@ services:
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
-      - git_repos:/data/repos
+      - ./.data/repos:/data/repos
+      - ./.data/uploads:/data/uploads
 
   web:
     build:
@@ -54,4 +56,3 @@ services:
 
 volumes:
   pgdata:
-  git_repos:

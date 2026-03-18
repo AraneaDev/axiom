@@ -31,12 +31,27 @@ type Segment = { type: 'html'; content: string } | { type: 'mermaid'; content: s
 
 const MERMAID_FENCE = /```mermaid\s*\n([\s\S]*?)```/g;
 
+function linkifyMentionsAndRefs(html: string): string {
+  // Replace @username with styled link
+  let result = html.replace(
+    /(^|[\s(>])@([a-zA-Z0-9_-]+)/g,
+    '$1<span class="mention-ref" style="color:var(--color-primary);font-weight:500">@$2</span>',
+  );
+  // Replace #PREFIX-123 with styled badge link
+  result = result.replace(
+    /#([A-Z]+-\d+)/g,
+    '<a href="/issues/$1" class="issue-ref-badge" style="color:var(--color-primary);font-weight:500;text-decoration:none">#$1</a>',
+  );
+  return result;
+}
+
 function sanitize(raw: string) {
   const sanitized = DOMPurify.sanitize(raw, { ADD_ATTR: ['id', 'data-issue-key'] });
-  return sanitized.replace(
+  const withIssueKeys = sanitized.replace(
     /<span[^>]*data-issue-key="([^"]+)"[^>]*>([^<]*)<\/span>/g,
     (_, key) => `<a href="/issues/${key}" class="issue-ref" data-issue-key="${key}">${key}</a>`,
   );
+  return linkifyMentionsAndRefs(withIssueKeys);
 }
 
 function parseMarkdown(markdown: string): Segment[] {

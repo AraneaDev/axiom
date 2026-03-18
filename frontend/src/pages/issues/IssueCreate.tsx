@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { Plus, ArrowLeft } from 'lucide-react';
+import { Plus, ArrowLeft, FileText } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
+import { issueTemplatesApi, type IssueTemplate } from '@/api/issue-templates.api';
 import { issuesApi } from '@/api/issues.api';
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
@@ -36,12 +37,26 @@ export default function IssueCreate() {
   });
   const currentProject = projects?.find((p) => p.slug === projectSlug);
 
+  const { data: templates = [] } = useQuery({
+    queryKey: ['issue-templates', currentProject?.id],
+    queryFn: () => issueTemplatesApi.list(currentProject!.id),
+    enabled: !!currentProject?.id,
+  });
+
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [type, setType] = useState('TASK');
   const [priority, setPriority] = useState('MEDIUM');
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  function applyTemplate(template: IssueTemplate) {
+    setTitle(template.title);
+    setBody(template.body);
+    setType(template.type);
+    setSelectedLabels(template.labels ?? []);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -49,7 +64,13 @@ export default function IssueCreate() {
     setError('');
     setLoading(true);
     try {
-      const issue = await issuesApi.create(currentProject.id, { title, body, type, priority });
+      const issue = await issuesApi.create(currentProject.id, {
+        title,
+        body,
+        type,
+        priority,
+        labels: selectedLabels.length > 0 ? selectedLabels : undefined,
+      });
       navigate(`/${org}/${teamSlug}/${projectSlug}/issues/${issue.number}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create issue';
@@ -63,6 +84,31 @@ export default function IssueCreate() {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create Issue</h1>
+      {templates.length > 0 && (
+        <div className="mb-4">
+          <label className="text-sm font-medium text-text">From template</label>
+          <div className="flex items-center gap-2 mt-1">
+            <FileText className="h-4 w-4 text-text-tertiary" />
+            <select
+              onChange={(e) => {
+                const tmpl = templates.find((t) => t.id === e.target.value);
+                if (tmpl) applyTemplate(tmpl);
+              }}
+              defaultValue=""
+              className="rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="" disabled>
+                Select a template...
+              </option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.type})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
       {error && (
         <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
           {error}

@@ -42,7 +42,9 @@ export async function get(req: Request, res: Response, next: NextFunction) {
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
     const status = req.query.status as 'OPEN' | 'MERGED' | 'CLOSED' | undefined;
-    res.json(await pullsService.listPRs(param(req, 'repoId'), status));
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    res.json(await pullsService.listPRs(param(req, 'repoId'), status, { limit, offset }));
   } catch (err) {
     next(err);
   }
@@ -89,6 +91,22 @@ export async function merge(req: Request, res: Response, next: NextFunction) {
     const strategy = req.body.strategy || 'merge';
     res.json(
       await pullsService.mergePR(param(req, 'repoId'), parseInt(param(req, 'number')), strategy),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function mergeChecks(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(
+      await pullsService.getMergeChecks(param(req, 'repoId'), parseInt(param(req, 'number'))),
     );
   } catch (err) {
     next(err);
@@ -206,6 +224,47 @@ export async function listComments(req: Request, res: Response, next: NextFuncti
     res.json(
       await pullsService.listPRComments(param(req, 'repoId'), parseInt(param(req, 'number'))),
     );
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Suggestions
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function applySuggestion(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await pullsService.applySuggestion(
+      param(req, 'repoId'),
+      parseInt(param(req, 'number')),
+      req.body.commentId,
+      req.userId!,
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function batchApplySuggestions(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await pullsService.batchApplySuggestions(
+      param(req, 'repoId'),
+      parseInt(param(req, 'number')),
+      req.body.commentIds,
+      req.userId!,
+    );
+    res.json(result);
   } catch (err) {
     next(err);
   }

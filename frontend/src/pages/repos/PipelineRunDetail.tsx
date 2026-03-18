@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   CheckCircle2,
   XCircle,
@@ -8,13 +8,17 @@ import {
   ChevronRight,
   ArrowLeft,
   X,
+  Play,
+  Terminal,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
 
 import { pipelinesApi, type RunStatus, type PipelineJob } from '@/api/pipelines.api';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { PageLoader } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
 import { usePipelineLogs } from '@/hooks/usePipelineLogs';
 import { cn, formatRelative } from '@/lib/utils';
 
@@ -43,11 +47,38 @@ function duration(start?: string, end?: string): string {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-interface JobCardProps {
-  job: PipelineJob;
+interface LogViewerProps {
+  output: string;
+  autoScroll?: boolean;
 }
 
-function JobCard({ job }: JobCardProps) {
+function LogViewer({ output, autoScroll = false }: LogViewerProps) {
+  const containerRef = useRef<HTMLPreElement>(null);
+
+  useEffect(() => {
+    if (autoScroll && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [output, autoScroll]);
+
+  if (!output) return null;
+
+  return (
+    <pre
+      ref={containerRef}
+      className="bg-surface-tertiary text-text text-xs p-4 overflow-x-auto max-h-96 overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap border-t border-border"
+    >
+      {output}
+    </pre>
+  );
+}
+
+interface JobCardProps {
+  job: PipelineJob;
+  isLive: boolean;
+}
+
+function JobCard({ job, isLive }: JobCardProps) {
   const [expanded, setExpanded] = useState(job.status === 'FAILURE' || job.status === 'RUNNING');
   const [expandedStep, setExpandedStep] = useState<string | null>(null);
 
@@ -84,6 +115,11 @@ function JobCard({ job }: JobCardProps) {
                   {step.command.slice(0, 40)}
                   {step.command.length > 40 ? '...' : ''}
                 </code>
+                {step.exitCode != null && step.exitCode !== 0 && (
+                  <Badge variant="danger" className="mr-2 text-[10px]">
+                    exit {step.exitCode}
+                  </Badge>
+                )}
                 <span className="text-xs text-text-tertiary">
                   {duration(step.startedAt, step.finishedAt)}
                 </span>
@@ -94,10 +130,8 @@ function JobCard({ job }: JobCardProps) {
                     <ChevronRight className="h-3 w-3 text-text-tertiary" />
                   ))}
               </Button>
-              {expandedStep === step.id && step.output && (
-                <pre className="bg-[#0d1117] text-[#e6edf3] text-xs p-4 overflow-x-auto max-h-80 overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap">
-                  {step.output}
-                </pre>
+              {expandedStep === step.id && (
+                <LogViewer output={step.output} autoScroll={isLive && step.status === 'RUNNING'} />
               )}
             </div>
           ))}
@@ -118,6 +152,9 @@ export default function PipelineRunDetail() {
     runId,
   } = useParams<{ org: string; team: string; repo: string; runId: string }>();
 
+  const queryClient = useQueryClient();
+  const { success: toastSuccess, error: toastError } = useToast();
+
   const { data: run, isLoading } = useQuery({
     queryKey: ['pipeline-run', runId],
     queryFn: () => pipelinesApi.getRun('', runId!),
@@ -134,6 +171,24 @@ export default function PipelineRunDetail() {
   const { jobs: liveJobs } = usePipelineLogs(run?.repoId ?? '', runId ?? null, isTerminal);
 
   const displayJobs = liveJobs.length > 0 ? liveJobs : (run?.jobs ?? []);
+
+  const rerunMutation = useMutation({
+    mutationFn: () => {
+      if (!run) throw new Error('No run data');
+      return pipelinesApi.triggerRun(run.repoId, run.pipelineId, run.triggerRef);
+    },
+    onSuccess: (newRun) => {
+      toastSuccess('Pipeline re-run triggered');
+      queryClient.invalidateQueries({ queryKey: ['pipeline-run'] });
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+      // Navigate to the new run (update URL without full page reload)
+      window.history.pushState({}, '', `/${org}/${teamSlug}/repos/${repoSlug}/runs/${newRun.id}`);
+      window.location.reload();
+    },
+    onError: () => {
+      toastError('Failed to trigger re-run');
+    },
+  });
 
   if (isLoading) return <PageLoader />;
   if (!run) return <div className="p-8 text-center text-text-secondary">Run not found</div>;
@@ -165,14 +220,55 @@ export default function PipelineRunDetail() {
             {run.startedAt && <span>Duration: {duration(run.startedAt, run.finishedAt)}</span>}
           </div>
         </div>
+        <div className="flex gap-2">
+          {isTerminal && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => rerunMutation.mutate()}
+              disabled={rerunMutation.isPending}
+            >
+              <RefreshCw className={cn('h-4 w-4', rerunMutation.isPending && 'animate-spin')} />
+              Re-run
+            </Button>
+          )}
+          {!isTerminal && (
+            <div className="flex items-center gap-1.5 text-xs text-warning">
+              <Terminal className="h-4 w-4" />
+              <span>Running</span>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Job summary bar */}
+      {displayJobs.length > 0 && (
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {displayJobs.map((job) => (
+            <div
+              key={job.id}
+              className={cn(
+                'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border',
+                STATUS_BADGE[job.status],
+              )}
+            >
+              {STATUS_ICON[job.status]}
+              <span>{job.name}</span>
+              {job.startedAt && (
+                <span className="opacity-70">{duration(job.startedAt, job.finishedAt)}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-3">
         {displayJobs.map((job) => (
-          <JobCard key={job.id} job={job} />
+          <JobCard key={job.id} job={job} isLive={!isTerminal} />
         ))}
         {!displayJobs.length && (
-          <div className="text-center py-8 text-text-tertiary text-sm">
+          <div className="flex flex-col items-center justify-center py-12 text-text-tertiary text-sm gap-2">
+            <Play className="h-8 w-8 opacity-30" />
             {run.status === 'PENDING' ? 'Waiting for runner...' : 'No jobs recorded.'}
           </div>
         )}

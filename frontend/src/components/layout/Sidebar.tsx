@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Users, FolderKanban, BookOpen, GitBranch, Plus, ChevronDown } from 'lucide-react';
+import {
+  Users,
+  FolderKanban,
+  BookOpen,
+  GitBranch,
+  Plus,
+  ChevronDown,
+  ShieldCheck,
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { NavLink, useParams } from 'react-router';
 
@@ -79,7 +87,7 @@ function SectionHeader({
  */
 export function Sidebar() {
   const { org, team } = useParams();
-  const { sidebarOpen, currentOrgId, setCurrentOrg, setCurrentTeam } = useUIStore();
+  const { sidebarOpen, setSidebarOpen, currentOrgId, setCurrentOrg, setCurrentTeam } = useUIStore();
   const [orgsCollapsed, setOrgsCollapsed] = useState(false);
   const [teamsCollapsed, setTeamsCollapsed] = useState(false);
 
@@ -104,60 +112,27 @@ export function Sidebar() {
   if (!sidebarOpen) return null;
 
   return (
-    <aside className="w-56 border-r border-border bg-surface flex flex-col shrink-0 overflow-y-auto">
-      {/* Org section */}
-      <div className="p-3 space-y-1">
-        <SectionHeader
-          label="Organization"
-          collapsed={orgsCollapsed}
-          onToggle={() => setOrgsCollapsed(!orgsCollapsed)}
-          action={
-            <NavLink
-              to="/orgs/new"
-              className="text-text-tertiary hover:text-primary transition-colors"
-            >
-              <Plus className="h-3 w-3" />
-            </NavLink>
-          }
-        />
-        <div
-          className={cn(
-            'overflow-hidden transition-all duration-200',
-            orgsCollapsed ? 'max-h-0' : 'max-h-96',
-          )}
-        >
-          {orgs?.map((o) => (
-            <NavLink
-              key={o.id}
-              to={`/${o.slug}`}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] transition-all duration-150',
-                  isActive
-                    ? 'bg-surface-tertiary text-text font-medium shadow-sm'
-                    : 'text-text-secondary hover:bg-surface-tertiary hover:text-text',
-                )
-              }
-            >
-              <div className="h-5 w-5 rounded bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center">
-                <span className="text-[9px] text-white font-bold">{o.name[0]}</span>
-              </div>
-              <span className="truncate">{o.name}</span>
-            </NavLink>
-          ))}
-        </div>
-      </div>
-
-      {/* Teams */}
-      {currentOrg && teams && (
-        <div className="flex-1 p-3 pt-0 space-y-1">
+    <>
+      {/* Mobile backdrop */}
+      <div
+        className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+        onClick={() => setSidebarOpen(false)}
+      />
+      <aside
+        className={cn(
+          'w-56 border-r border-border bg-surface flex flex-col shrink-0 overflow-y-auto',
+          'fixed inset-y-0 left-0 z-40 pt-12 lg:pt-0 lg:relative lg:z-auto',
+        )}
+      >
+        {/* Org section */}
+        <div className="p-3 space-y-1">
           <SectionHeader
-            label="Teams"
-            collapsed={teamsCollapsed}
-            onToggle={() => setTeamsCollapsed(!teamsCollapsed)}
+            label="Organization"
+            collapsed={orgsCollapsed}
+            onToggle={() => setOrgsCollapsed(!orgsCollapsed)}
             action={
               <NavLink
-                to={`/${org}/teams/new`}
+                to="/orgs/new"
                 className="text-text-tertiary hover:text-primary transition-colors"
               >
                 <Plus className="h-3 w-3" />
@@ -167,32 +142,84 @@ export function Sidebar() {
           <div
             className={cn(
               'overflow-hidden transition-all duration-200',
-              teamsCollapsed ? 'max-h-0' : 'max-h-96',
+              orgsCollapsed ? 'max-h-0' : 'max-h-96',
             )}
           >
-            {teams.map((t) => (
-              <NavItem
-                key={t.id}
-                to={`/${org}/${t.slug}`}
-                icon={Users}
-                label={t.name}
-                count={t._count?.projects}
-              />
+            {orgs?.map((o) => (
+              <NavLink
+                key={o.id}
+                to={`/${o.slug}`}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] transition-all duration-150',
+                    isActive
+                      ? 'bg-surface-tertiary text-text font-medium shadow-sm'
+                      : 'text-text-secondary hover:bg-surface-tertiary hover:text-text',
+                  )
+                }
+              >
+                <div className="h-5 w-5 rounded bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center">
+                  <span className="text-[9px] text-white font-bold">{o.name[0]}</span>
+                </div>
+                <span className="truncate">{o.name}</span>
+              </NavLink>
             ))}
           </div>
         </div>
-      )}
 
-      {/* Team sub-nav */}
-      {currentTeam && (
-        <div className="border-t border-border-light p-3 space-y-1">
-          <SectionHeader label={currentTeam.name} />
-          <NavItem to={`/${org}/${team}/projects`} icon={FolderKanban} label="Projects" />
-          <NavItem to={`/${org}/${team}/repos`} icon={GitBranch} label="Repositories" />
-          <NavItem to={`/${org}/${team}/wiki`} icon={BookOpen} label="Wiki" />
-          <NavItem to={`/${org}/${team}/members`} icon={Users} label="Members" />
-        </div>
-      )}
-    </aside>
+        {/* Teams */}
+        {currentOrg && teams && (
+          <div className="flex-1 p-3 pt-0 space-y-1">
+            <SectionHeader
+              label="Teams"
+              collapsed={teamsCollapsed}
+              onToggle={() => setTeamsCollapsed(!teamsCollapsed)}
+              action={
+                <NavLink
+                  to={`/${org}/teams/new`}
+                  className="text-text-tertiary hover:text-primary transition-colors"
+                >
+                  <Plus className="h-3 w-3" />
+                </NavLink>
+              }
+            />
+            <div
+              className={cn(
+                'overflow-hidden transition-all duration-200',
+                teamsCollapsed ? 'max-h-0' : 'max-h-96',
+              )}
+            >
+              {teams.map((t) => (
+                <NavItem
+                  key={t.id}
+                  to={`/${org}/${t.slug}`}
+                  icon={Users}
+                  label={t.name}
+                  count={t._count?.projects}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Team sub-nav */}
+        {currentTeam && (
+          <div className="border-t border-border-light p-3 space-y-1">
+            <SectionHeader label={currentTeam.name} />
+            <NavItem to={`/${org}/${team}/projects`} icon={FolderKanban} label="Projects" />
+            <NavItem to={`/${org}/${team}/repos`} icon={GitBranch} label="Repositories" />
+            <NavItem to={`/${org}/${team}/wiki`} icon={BookOpen} label="Wiki" />
+            <NavItem to={`/${org}/${team}/members`} icon={Users} label="Members" />
+          </div>
+        )}
+
+        {/* Admin link -- only for org owners */}
+        {orgs?.some((o) => o.role === 'OWNER') && (
+          <div className="border-t border-border-light p-3 mt-auto">
+            <NavItem to="/admin" icon={ShieldCheck} label="Admin" />
+          </div>
+        )}
+      </aside>
+    </>
   );
 }

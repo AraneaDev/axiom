@@ -4,11 +4,60 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { prisma } from '../../config/database';
+import { broadcastToRoom } from '../../realtime/ws-server';
+import { createOrUpdateStatus } from '../status-checks/status-checks.service';
 
 import { parsePipelineYaml, getTopologicalOrder } from './pipeline-parser';
 import type { ParsedStep } from './pipeline-parser';
 
 const STEP_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Broadcast a pipeline update event to all WS clients watching the repo.
+ * @param repoId
+ * @param runId
+ */
+function notifyPipelineUpdate(repoId: string, runId: string): void {
+  try {
+    broadcastToRoom(`repo:${repoId}`, {
+      type: 'pipeline:updated',
+      repoId,
+      runId,
+    });
+  } catch {
+    // WS broadcast is best-effort
+  }
+}
+
+/**
+ * Report a commit status check for the pipeline run.
+ * @param repoId
+ * @param commitSha
+ * @param pipelineName
+ * @param state
+ */
+async function reportCommitStatus(
+  repoId: string,
+  commitSha: string | null | undefined,
+  pipelineName: string,
+  state: 'PENDING' | 'SUCCESS' | 'FAILURE',
+): Promise<void> {
+  if (!commitSha) return;
+  try {
+    await createOrUpdateStatus(repoId, commitSha, {
+      context: `ci/${pipelineName}`,
+      state,
+      description:
+        state === 'PENDING'
+          ? 'Pipeline is running'
+          : state === 'SUCCESS'
+            ? 'Pipeline passed'
+            : 'Pipeline failed',
+    });
+  } catch (err) {
+    console.error('[pipeline-runner] Failed to report commit status:', err);
+  }
+}
 
 interface RunContext {
   run: { id: string; commitSha?: string | null; triggerRef: string; repoId: string };
@@ -85,6 +134,7 @@ async function executeStep(
         where: { id: dbStep.id },
         data: { status, exitCode: code ?? -1, finishedAt: new Date() },
       });
+      notifyPipelineUpdate(ctx.run.repoId, ctx.run.id);
       resolve({ success: code === 0 && !killed, exitCode: code ?? -1 });
     });
   });
@@ -114,6 +164,7 @@ async function executeJob(
     where: { id: dbJobId },
     data: { status: success ? 'SUCCESS' : 'FAILURE', finishedAt: new Date() },
   });
+  notifyPipelineUpdate(ctx.run.repoId, ctx.run.id);
 
   return success;
 }
@@ -141,6 +192,7 @@ export async function runPipeline(runRecord: {
       where: { id: runRecord.id },
       data: { status: 'RUNNING', startedAt: new Date() },
     });
+    notifyPipelineUpdate(runRecord.repoId, runRecord.id);
 
     // Get pipeline and repo
     const pipeline = await prisma.pipeline.findUnique({ where: { id: runRecord.pipelineId } });
@@ -148,6 +200,9 @@ export async function runPipeline(runRecord: {
     if (!pipeline || !repo?.diskPath) throw new Error('Pipeline or repo not found');
 
     const parsed = parsePipelineYaml(pipeline.yamlContent);
+
+    // Report PENDING commit status
+    await reportCommitStatus(runRecord.repoId, runRecord.commitSha, pipeline.name, 'PENDING');
 
     // Clone repo to temp dir
     tmpDir = await mkdtemp(join(tmpdir(), 'axiom-ci-'));
@@ -205,6 +260,15 @@ export async function runPipeline(runRecord: {
       where: { id: runRecord.id },
       data: { status: finalStatus, finishedAt: new Date() },
     });
+    notifyPipelineUpdate(runRecord.repoId, runRecord.id);
+
+    // Report commit status check
+    await reportCommitStatus(
+      runRecord.repoId,
+      runRecord.commitSha,
+      pipeline.name,
+      finalStatus as 'SUCCESS' | 'FAILURE',
+    );
 
     // Update PR ciStatus if triggered by PR
     const run = await prisma.pipelineRun.findUnique({ where: { id: runRecord.id } });

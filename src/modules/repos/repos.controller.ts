@@ -42,8 +42,10 @@ export async function get(req: Request, res: Response, next: NextFunction) {
  */
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const repos = await reposService.listRepos(param(req, 'teamId'));
-    res.json(repos);
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    const result = await reposService.listRepos(param(req, 'teamId'), { limit, offset });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -90,6 +92,22 @@ export async function fork(req: Request, res: Response, next: NextFunction) {
     const { targetTeamId, slug } = req.body;
     const repo = await reposService.forkRepoById(param(req, 'repoId'), targetTeamId, slug);
     res.status(201).json(repo);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Settings
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function updateSettings(req: Request, res: Response, next: NextFunction) {
+  try {
+    const repo = await reposService.updateRepoSettings(param(req, 'repoId'), req.body);
+    res.json(repo);
   } catch (err) {
     next(err);
   }
@@ -168,7 +186,8 @@ export async function listCommits(req: Request, res: Response, next: NextFunctio
     const ref = (req.query.ref as string) || 'HEAD';
     const limit = parseInt((req.query.limit as string) || '20');
     const skip = parseInt((req.query.skip as string) || '0');
-    res.json(await reposService.getCommits(param(req, 'repoId'), ref, limit, skip));
+    const filePath = (req.query.path as string) || undefined;
+    res.json(await reposService.getCommits(param(req, 'repoId'), ref, limit, skip, filePath));
   } catch (err) {
     next(err);
   }

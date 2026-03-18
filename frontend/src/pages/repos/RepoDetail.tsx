@@ -8,19 +8,29 @@ import {
   Tag,
   Code,
   Workflow,
+  Copy,
+  Check,
+  Settings,
+  ChevronDown,
+  BarChart3,
+  Rocket,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
+import EnvironmentsTab from './EnvironmentsTab';
+import InsightsTab from './InsightsTab';
 import PipelinesTab from './PipelinesTab';
 import ReleasesTab from './ReleasesTab';
 
-import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
-import { teamsApi } from '@/api/teams.api';
+import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Dropdown } from '@/components/ui/Dropdown';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Tabs } from '@/components/ui/Tabs';
+import { useRepoContext } from '@/hooks/useRepoContext';
 import { formatRelative } from '@/lib/utils';
 
 /**
@@ -29,21 +39,7 @@ import { formatRelative } from '@/lib/utils';
 export default function RepoDetail() {
   const { org, team: teamSlug, repo: repoSlug } = useParams();
   const [activeTab, setActiveTab] = useState('code');
-
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: repos } = useQuery({
-    queryKey: ['repos', currentTeam?.id],
-    queryFn: () => reposApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentRepo = repos?.find((r) => r.slug === repoSlug);
+  const { currentRepo, basePath } = useRepoContext();
 
   const { data: branches } = useQuery({
     queryKey: ['branches', currentRepo?.id],
@@ -69,8 +65,18 @@ export default function RepoDetail() {
     enabled: !!currentRepo?.id,
   });
 
+  // Find README in tree and fetch its content
+  const readmeEntry = tree?.find((e) => /^readme\.md$/i.test(e.name));
+  const { data: readmeBlob } = useQuery({
+    queryKey: ['blob', currentRepo?.id, currentRepo?.defaultBranch, readmeEntry?.name],
+    queryFn: () => reposApi.getBlob(currentRepo!.id, currentRepo!.defaultBranch, readmeEntry!.name),
+    enabled: !!currentRepo?.id && !!readmeEntry,
+  });
+
+  const [cloneCopied, setCloneCopied] = useState(false);
+
   if (!currentRepo) return <PageLoader />;
-  const basePath = `/${org}/${teamSlug}/repos/${repoSlug}`;
+  const cloneUrl = `${window.location.origin}/git/${org}/${teamSlug}/${repoSlug}.git`;
 
   const tabs = [
     { key: 'code', label: 'Code', icon: <Code className="h-4 w-4" /> },
@@ -87,6 +93,8 @@ export default function RepoDetail() {
     { key: 'commits', label: 'Commits', icon: <GitCommit className="h-4 w-4" /> },
     { key: 'releases', label: 'Releases', icon: <Tag className="h-4 w-4" /> },
     { key: 'pipelines', label: 'Pipelines', icon: <Workflow className="h-4 w-4" /> },
+    { key: 'environments', label: 'Environments', icon: <Rocket className="h-4 w-4" /> },
+    { key: 'insights', label: 'Insights', icon: <BarChart3 className="h-4 w-4" /> },
   ];
 
   return (
@@ -97,6 +105,47 @@ export default function RepoDetail() {
           {currentRepo.description && (
             <p className="text-sm text-text-secondary mt-1">{currentRepo.description}</p>
           )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Dropdown
+            trigger={
+              <Button variant="secondary" size="sm">
+                <Code className="h-4 w-4" /> Clone <ChevronDown className="h-3 w-3" />
+              </Button>
+            }
+          >
+            <div className="p-3 min-w-[320px]">
+              <p className="text-xs font-medium text-text-secondary mb-2">HTTPS</p>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={cloneUrl}
+                  className="flex-1 text-xs font-mono bg-surface-secondary border border-border rounded px-2 py-1.5"
+                />
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => {
+                    navigator.clipboard.writeText(cloneUrl);
+                    setCloneCopied(true);
+                    setTimeout(() => setCloneCopied(false), 2000);
+                  }}
+                  title="Copy clone URL"
+                >
+                  {cloneCopied ? (
+                    <Check className="h-4 w-4 text-success" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Dropdown>
+          <Link to={`${basePath}/settings`}>
+            <Button variant="ghost" size="sm" title="Repository settings">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -146,6 +195,19 @@ export default function RepoDetail() {
                 )}
               </Link>
             ))}
+        </div>
+      )}
+
+      {/* README */}
+      {activeTab === 'code' && readmeBlob?.content && (
+        <div className="mt-4 rounded-lg border border-border bg-surface p-6">
+          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-border">
+            <FileText className="h-4 w-4 text-text-secondary" />
+            <span className="text-sm font-medium">{readmeEntry?.name}</span>
+          </div>
+          <div className="prose max-w-none">
+            <MarkdownRenderer content={readmeBlob.content} />
+          </div>
         </div>
       )}
 
@@ -210,11 +272,21 @@ export default function RepoDetail() {
         />
       )}
 
+      {/* Environments tab */}
+      {activeTab === 'environments' && currentRepo && <EnvironmentsTab repoId={currentRepo.id} />}
+
+      {/* Insights tab */}
+      {activeTab === 'insights' && currentRepo && <InsightsTab repoId={currentRepo.id} />}
+
       {/* Commits tab */}
       {activeTab === 'commits' && commits && commits.length > 0 && (
         <div className="rounded-lg border border-border bg-surface divide-y divide-border">
           {commits.map((c) => (
-            <div key={c.sha} className="flex items-center gap-3 px-4 py-3">
+            <Link
+              key={c.sha}
+              to={`${basePath}/commits/${c.sha}`}
+              className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
+            >
               <GitCommit className="h-4 w-4 text-text-secondary shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{c.message}</p>
@@ -223,7 +295,7 @@ export default function RepoDetail() {
                 </p>
               </div>
               <code className="text-xs text-text-secondary font-mono">{c.shortSha}</code>
-            </div>
+            </Link>
           ))}
         </div>
       )}

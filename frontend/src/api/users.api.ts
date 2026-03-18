@@ -2,7 +2,15 @@ import { get, post, patch, del } from './client';
 
 import type { User, ApiToken, SshKey } from '@/lib/types';
 
+interface UserSearchResult {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
 export const usersApi = {
+  search: (q: string) => get<UserSearchResult[]>(`/users/search?q=${encodeURIComponent(q)}`),
   getMe: () => get<User>('/users/me'),
   updateMe: (data: { displayName?: string; avatarUrl?: string }) => patch<User>('/users/me', data),
   listSshKeys: () => get<SshKey[]>('/users/me/ssh-keys'),

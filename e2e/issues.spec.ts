@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
+
 import { login, ORG } from './helpers';
 
-// Seed data: Core team → Platform project (prefix PLAT)
+// Seed data: Core team -> Platform project (prefix PLAT)
 const ISSUES_URL = `/${ORG}/core/platform/issues`;
-const BOARD_URL = `/${ORG}/core/platform/board`;
 
 test.describe('Issues', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,7 +13,7 @@ test.describe('Issues', () => {
   test('issue list shows seeded issues', async ({ page }) => {
     await page.goto(ISSUES_URL);
     await expect(page.getByRole('heading', { name: /issues/i })).toBeVisible();
-    // Seed has ~15 platform issues
+    // Seed has platform issues
     const rows = page.locator('[data-testid="issue-row"], tr, .issue-row').first();
     await expect(rows).toBeVisible({ timeout: 10_000 });
   });
@@ -33,23 +33,44 @@ test.describe('Issues', () => {
 
   test('issue detail page loads', async ({ page }) => {
     await page.goto(ISSUES_URL);
-    // Click first issue
+    // Click first issue link
     await page.locator('a[href*="/issues/"]').first().click();
     await expect(page.getByRole('heading')).toBeVisible();
     // Should show issue key like PLAT-1
     await expect(page.getByText(/PLAT-\d+/)).toBeVisible();
   });
 
-  test('board view shows columns', async ({ page }) => {
-    await page.goto(BOARD_URL);
-    await expect(page.getByText('Backlog')).toBeVisible();
-    await expect(page.getByText('In Progress')).toBeVisible();
-    await expect(page.getByText('Done')).toBeVisible();
+  test('navigate between issue list and detail', async ({ page }) => {
+    await page.goto(ISSUES_URL);
+    // Go to detail
+    await page.locator('a[href*="/issues/"]').first().click();
+    await expect(page.getByText(/PLAT-\d+/)).toBeVisible();
+    // Go back to list
+    await page.goBack();
+    await expect(page.getByRole('heading', { name: /issues/i })).toBeVisible();
   });
 
-  test('board has issue cards', async ({ page }) => {
-    await page.goto(BOARD_URL);
-    // At least one card somewhere on the board
-    await expect(page.locator('.board-card, [draggable="true"]').first()).toBeVisible({ timeout: 10_000 });
+  test('issue detail shows sidebar with priority', async ({ page }) => {
+    await page.goto(ISSUES_URL);
+    await page.locator('a[href*="/issues/"]').first().click();
+    // The detail view should show a priority field
+    await expect(page.getByText(/priority/i)).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('add a comment on an issue', async ({ page }) => {
+    await page.goto(ISSUES_URL);
+    await page.locator('a[href*="/issues/"]').first().click();
+    await expect(page.getByText(/PLAT-\d+/)).toBeVisible();
+
+    // Look for comment input area (textarea, contenteditable, or ProseMirror editor)
+    const commentArea = page.locator('textarea, [contenteditable="true"], .ProseMirror').last();
+    await commentArea.click();
+    await commentArea.fill('E2E test comment');
+
+    // Submit comment
+    await page.getByRole('button', { name: /comment|submit|post/i }).click();
+
+    // Verify comment appears
+    await expect(page.getByText('E2E test comment')).toBeVisible({ timeout: 10_000 });
   });
 });

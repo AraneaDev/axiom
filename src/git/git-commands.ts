@@ -99,18 +99,19 @@ export interface CommitInfo {
  * @param ref
  * @param limit
  * @param skip
+ * @param filePath
  */
 export async function log(
   repoPath: string,
   ref: string = 'HEAD',
   limit: number = 20,
   skip: number = 0,
+  filePath?: string,
 ): Promise<CommitInfo[]> {
   const format = '%H%n%h%n%an%n%ae%n%aI%n%s';
-  const stdout = await git(
-    ['log', `--format=${format}`, `--skip=${skip}`, `-n`, `${limit}`, ref, '--'],
-    { cwd: repoPath },
-  );
+  const args = ['log', `--format=${format}`, `--skip=${skip}`, `-n`, `${limit}`, ref, '--'];
+  if (filePath) args.push(filePath);
+  const stdout = await git(args, { cwd: repoPath });
   if (!stdout.trim()) return [];
   const lines = stdout.trim().split('\n');
   const commits: CommitInfo[] = [];
@@ -177,7 +178,7 @@ export async function lsTree(
   treePath: string = '',
 ): Promise<TreeEntry[]> {
   const args = ['ls-tree', '-l', ref];
-  if (treePath) args.push('--', treePath);
+  if (treePath) args.push('--', treePath.endsWith('/') ? treePath : treePath + '/');
 
   const stdout = await git(args, { cwd: repoPath });
   if (!stdout.trim()) return [];
@@ -194,7 +195,7 @@ export async function lsTree(
         type: match[2] as 'blob' | 'tree',
         sha: match[3],
         size: match[4] === '-' ? undefined : parseInt(match[4], 10),
-        name: match[5],
+        name: treePath ? match[5].replace(/^.*\//, '') : match[5],
       };
     })
     .filter(Boolean) as TreeEntry[];
@@ -375,6 +376,66 @@ export async function canMerge(repoPath: string, source: string, target: string)
   } catch {
     return false;
   }
+}
+
+// ─── Merge strategies ───────────────────────────────────
+
+/**
+ * Perform a squash merge in a worktree directory.
+ * Combines all incoming commits into a single commit.
+ * @param worktreeDir - path to the checked-out worktree (already on target branch)
+ * @param sourceSha - the SHA of the source branch tip
+ * @param message - commit message for the squashed commit
+ */
+export async function squashMerge(
+  worktreeDir: string,
+  sourceSha: string,
+  message: string,
+): Promise<void> {
+  await git(['-C', worktreeDir, 'merge', '--squash', sourceSha], { cwd: worktreeDir });
+  await git(
+    [
+      '-C',
+      worktreeDir,
+      '-c',
+      'user.name=Axiom',
+      '-c',
+      'user.email=axiom@local',
+      'commit',
+      '-m',
+      message,
+    ],
+    { cwd: worktreeDir },
+  );
+}
+
+/**
+ * Perform a rebase merge in a worktree directory.
+ * Replays source commits onto the target branch.
+ * @param worktreeDir - path to the checked-out worktree (already on target branch)
+ * @param sourceSha - the SHA of the source branch tip
+ */
+export async function rebaseMerge(worktreeDir: string, sourceSha: string): Promise<void> {
+  // We need to rebase the source commits on top of target.
+  // The worktree is on target branch. We cherry-pick the range
+  // from merge-base to source onto target using rebase --onto.
+  const mergeBaseOut = await git(['merge-base', 'HEAD', sourceSha], { cwd: worktreeDir });
+  const base = mergeBaseOut.trim();
+  // Replay commits from base..sourceSha onto current HEAD (target)
+  await git(
+    [
+      '-c',
+      'user.name=Axiom',
+      '-c',
+      'user.email=axiom@local',
+      'rebase',
+      '--onto',
+      'HEAD',
+      base,
+      sourceSha,
+    ],
+    { cwd: worktreeDir },
+  );
 }
 
 // ─── Refs ───────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 FROM node:22-alpine AS base
-RUN apk add --no-cache git
+RUN apk add --no-cache git pandoc weasyprint font-noto
 WORKDIR /app
 
 # Dependencies

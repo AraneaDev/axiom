@@ -10,76 +10,86 @@ datasource db {
 // ─── Identity & Auth ────────────────────────────────────────
 
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  username      String   @unique
-  displayName   String
-  passwordHash  String
-  avatarUrl     String?
+  id           String  @id @default(cuid())
+  email        String  @unique
+  username     String  @unique
+  displayName  String
+  passwordHash String
+  avatarUrl    String?
 
   // 2FA
-  twoFactorEnabled Boolean  @default(false)
+  twoFactorEnabled Boolean @default(false)
   twoFactorSecret  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  notificationEmail String?
+
   // Relations
-  apiTokens       ApiToken[]
-  sshKeys         SshKey[]
-  orgMemberships  OrgMembership[]
-  teamMemberships TeamMembership[]
-  assignedIssues   Issue[]          @relation("assignee")
-  createdIssues    Issue[]          @relation("creator")
-  comments         Comment[]
-  pageEdits        PageVersion[]
-  notifications    Notification[]
-  createdBranches  IssueBranch[]    @relation("CreatedBranches")
-  authoredReleases Release[]        @relation("AuthoredReleases")
-  triggeredRuns    PipelineRun[]    @relation("TriggeredRuns")
+  apiTokens               ApiToken[]
+  sshKeys                 SshKey[]
+  orgMemberships          OrgMembership[]
+  teamMemberships         TeamMembership[]
+  assignedIssues          Issue[]                  @relation("assignee")
+  createdIssues           Issue[]                  @relation("creator")
+  comments                Comment[]
+  pageEdits               PageVersion[]
+  notifications           Notification[]
+  createdBranches         IssueBranch[]            @relation("CreatedBranches")
+  authoredReleases        Release[]                @relation("AuthoredReleases")
+  triggeredRuns           PipelineRun[]            @relation("TriggeredRuns")
+  attachments             Attachment[]
+  activities              Activity[]
+  notificationPreferences NotificationPreference[]
+  pageComments            PageComment[]
+  savedFilters            SavedFilter[]
+  issueVotes              IssueVote[]
+  issueWatchers           IssueWatcher[]
+  deployments             Deployment[]             @relation("DeployedBy")
 
   @@map("users")
 }
 
 model ApiToken {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  tokenHash   String   @unique
-  prefix      String   // first 8 chars for identification
-  scopes      String[] // e.g. ["repo:read", "issues:write", "wiki:read"]
-  lastUsedAt  DateTime?
-  expiresAt   DateTime?
-  createdAt   DateTime @default(now())
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  prefix     String // first 8 chars for identification
+  scopes     String[] // e.g. ["repo:read", "issues:write", "wiki:read"]
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
 
   @@map("api_tokens")
 }
 
 model SshKey {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   title       String
-  fingerprint String   @unique
+  fingerprint String    @unique
   publicKey   String
   lastUsedAt  DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@map("ssh_keys")
 }
 
 model InviteLink {
-  id        String   @id @default(cuid())
-  code      String   @unique
+  id        String       @id @default(cuid())
+  code      String       @unique
   orgId     String
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  role      OrgRole  @default(MEMBER)
+  role      OrgRole      @default(MEMBER)
   createdBy String
-  maxUses   Int      @default(1)
-  uses      Int      @default(0)
+  maxUses   Int          @default(1)
+  uses      Int          @default(0)
   expiresAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime     @default(now())
 
   @@map("invite_links")
 }
@@ -121,12 +131,12 @@ enum OrgRole {
 }
 
 model OrgMembership {
-  id     String  @id @default(cuid())
+  id     String       @id @default(cuid())
   userId String
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   orgId  String
   org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  role   OrgRole @default(MEMBER)
+  role   OrgRole      @default(MEMBER)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -138,7 +148,7 @@ model OrgMembership {
 // ─── Teams ──────────────────────────────────────────────────
 
 model Team {
-  id          String   @id @default(cuid())
+  id          String       @id @default(cuid())
   orgId       String
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   name        String
@@ -187,46 +197,53 @@ enum RepoVisibility {
 }
 
 model Repository {
-  id          String         @id @default(cuid())
-  teamId      String
-  team        Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  name        String
-  slug        String
-  description String?
-  visibility  RepoVisibility @default(PRIVATE)
-  diskPath    String?        // path to bare git repo on disk
-  defaultBranch String       @default("main")
+  id            String         @id @default(cuid())
+  teamId        String
+  team          Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  name          String
+  slug          String
+  description   String?
+  visibility    RepoVisibility @default(PRIVATE)
+  diskPath      String? // path to bare git repo on disk
+  defaultBranch String         @default("main")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  pullRequests      PullRequest[]
-  webhooks          Webhook[]
-  branchProtections BranchProtection[]
-  issueCommits      IssueCommit[]
-  issueBranches     IssueBranch[]
-  releases          Release[]
-  pipelines         Pipeline[]
-  pipelineRuns      PipelineRun[]
+  defaultMergeStrategy String  @default("MERGE")
+  codeOwnersEnabled    Boolean @default(false)
+
+  pullRequests           PullRequest[]
+  webhooks               Webhook[]
+  branchProtections      BranchProtection[]
+  issueCommits           IssueCommit[]
+  issueBranches          IssueBranch[]
+  releases               Release[]
+  pipelines              Pipeline[]
+  pipelineRuns           PipelineRun[]
+  commitStatuses         CommitStatus[]
+  deploymentEnvironments DeploymentEnvironment[]
 
   @@unique([teamId, slug])
   @@map("repositories")
 }
 
 model PullRequest {
-  id          String @id @default(cuid())
-  repoId      String
-  repo        Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  number      Int
-  title       String
-  body        String // markdown
-  authorId    String
+  id           String     @id @default(cuid())
+  repoId       String
+  repo         Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  number       Int
+  title        String
+  body         String // markdown
+  authorId     String
   sourceBranch String
   targetBranch String
-  status      PRStatus @default(OPEN)
+  status       PRStatus   @default(OPEN)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  mergeStrategy String? // MERGE, SQUASH, REBASE
 
   reviews      PRReview[]
   comments     PRComment[]
@@ -244,13 +261,13 @@ enum PRStatus {
 }
 
 model PRReview {
-  id          String @id @default(cuid())
-  prId        String
-  pr          PullRequest @relation(fields: [prId], references: [id], onDelete: Cascade)
-  reviewerId  String
-  status      ReviewStatus
-  body        String? // markdown
-  createdAt   DateTime @default(now())
+  id         String       @id @default(cuid())
+  prId       String
+  pr         PullRequest  @relation(fields: [prId], references: [id], onDelete: Cascade)
+  reviewerId String
+  status     ReviewStatus
+  body       String? // markdown
+  createdAt  DateTime     @default(now())
 
   @@map("pr_reviews")
 }
@@ -262,27 +279,27 @@ enum ReviewStatus {
 }
 
 model PRComment {
-  id        String @id @default(cuid())
+  id        String      @id @default(cuid())
   prId      String
   pr        PullRequest @relation(fields: [prId], references: [id], onDelete: Cascade)
   authorId  String
   body      String // markdown
   filePath  String? // for inline comments
-  line      Int?    // for inline comments
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  line      Int? // for inline comments
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   @@map("pr_comments")
 }
 
 model Webhook {
-  id     String @id @default(cuid())
+  id     String     @id @default(cuid())
   repoId String
   repo   Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
   url    String
   secret String?
   events String[] // e.g. ["push", "pr:created", "pr:merged"]
-  active Boolean @default(true)
+  active Boolean    @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -293,20 +310,27 @@ model Webhook {
 // ─── Projects & Issues ──────────────────────────────────────
 
 model Project {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   teamId      String
-  team        Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team        Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
   name        String
   slug        String
   description String? // markdown
-  prefix      String  // issue key prefix, e.g. "TICK"
+  prefix      String // issue key prefix, e.g. "TICK"
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  issues  Issue[]
-  labels  Label[]
-  columns BoardColumn[]
+  issueTemplates Json? // JSON array of issue templates
+
+  issues                 Issue[]
+  labels                 Label[]
+  columns                BoardColumn[]
+  sprints                Sprint[]
+  customFieldDefinitions CustomFieldDefinition[]
+  workflowRules          WorkflowRule[]
+  automationRules        AutomationRule[]
+  savedFilters           SavedFilter[]
 
   @@unique([teamId, slug])
   @@unique([teamId, prefix])
@@ -314,7 +338,7 @@ model Project {
 }
 
 model BoardColumn {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name      String
@@ -322,7 +346,9 @@ model BoardColumn {
   isDefault Boolean @default(false)
   isDone    Boolean @default(false)
 
-  issues Issue[]
+  issues            Issue[]
+  workflowRulesFrom WorkflowRule[] @relation("fromColumn")
+  workflowRulesTo   WorkflowRule[] @relation("toColumn")
 
   @@map("board_columns")
 }
@@ -342,45 +368,60 @@ enum Priority {
 }
 
 model Issue {
-  id          String    @id @default(cuid())
-  projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  number      Int       // sequential within project
-  title       String
-  body        String    // markdown
-  type        IssueType @default(TASK)
-  priority    Priority  @default(MEDIUM)
-  columnId    String?
-  column      BoardColumn? @relation(fields: [columnId], references: [id])
-  assigneeId  String?
-  assignee    User?     @relation("assignee", fields: [assigneeId], references: [id])
-  creatorId   String
-  creator     User      @relation("creator", fields: [creatorId], references: [id])
-  dueDate     DateTime?
-  position    Int       @default(0) // ordering within column
+  id         String       @id @default(cuid())
+  projectId  String
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number     Int // sequential within project
+  title      String
+  body       String // markdown
+  type       IssueType    @default(TASK)
+  priority   Priority     @default(MEDIUM)
+  columnId   String?
+  column     BoardColumn? @relation(fields: [columnId], references: [id])
+  assigneeId String?
+  assignee   User?        @relation("assignee", fields: [assigneeId], references: [id])
+  creatorId  String
+  creator    User         @relation("creator", fields: [creatorId], references: [id])
+  dueDate    DateTime?
+  position   Int          @default(0) // ordering within column
+
+  // Epic hierarchy & sprint planning
+  parentId     String?
+  parent       Issue?  @relation("issueHierarchy", fields: [parentId], references: [id])
+  children     Issue[] @relation("issueHierarchy")
+  storyPoints  Int?
+  sprintId     String?
+  sprint       Sprint? @relation(fields: [sprintId], references: [id])
+  timeEstimate Int? // minutes
+  timeSpent    Int? // minutes
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  labels   Label[]
-  comments Comment[]
+  labels            Label[]
+  comments          Comment[]
   // Issue linking
-  linksFrom IssueLink[] @relation("linkFrom")
-  linksTo   IssueLink[] @relation("linkTo")
-  commits      IssueCommit[]
-  linkedPrs    IssuePullRequest[]
-  branches     IssueBranch[]
+  linksFrom         IssueLink[]        @relation("linkFrom")
+  linksTo           IssueLink[]        @relation("linkTo")
+  commits           IssueCommit[]
+  linkedPrs         IssuePullRequest[]
+  branches          IssueBranch[]
+  customFieldValues CustomFieldValue[]
+  attachments       Attachment[]
+  votes             IssueVote[]
+  watchers          IssueWatcher[]
 
   @@unique([projectId, number])
   @@map("issues")
 }
 
 model Label {
-  id        String  @id @default(cuid())
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name      String
-  color     String  @default("#6366f1")
+  id          String  @id @default(cuid())
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  color       String  @default("#6366f1")
+  description String?
 
   issues Issue[]
 
@@ -396,12 +437,12 @@ enum LinkType {
 }
 
 model IssueLink {
-  id       String   @id @default(cuid())
-  fromId   String
-  from     Issue    @relation("linkFrom", fields: [fromId], references: [id], onDelete: Cascade)
-  toId     String
-  to       Issue    @relation("linkTo", fields: [toId], references: [id], onDelete: Cascade)
-  type     LinkType
+  id     String   @id @default(cuid())
+  fromId String
+  from   Issue    @relation("linkFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId   String
+  to     Issue    @relation("linkTo", fields: [toId], references: [id], onDelete: Cascade)
+  type   LinkType
 
   createdAt DateTime @default(now())
 
@@ -420,15 +461,17 @@ model Comment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  attachments Attachment[]
+
   @@map("comments")
 }
 
 // ─── Wiki ───────────────────────────────────────────────────
 
 model WikiSpace {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   teamId      String
-  team        Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team        Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
   name        String
   slug        String
   description String?
@@ -436,29 +479,33 @@ model WikiSpace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  pages Page[]
+  pages         Page[]
+  pageTemplates PageTemplate[]
 
   @@unique([teamId, slug])
   @@map("wiki_spaces")
 }
 
 model Page {
-  id          String    @id @default(cuid())
-  spaceId     String
-  space       WikiSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  parentId    String?
-  parent      Page?     @relation("pageTree", fields: [parentId], references: [id])
-  children    Page[]    @relation("pageTree")
-  title       String
-  slug        String
-  body        String    // markdown
-  position    Int       @default(0)
-  isDraft     Boolean   @default(false)
+  id       String    @id @default(cuid())
+  spaceId  String
+  space    WikiSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  parentId String?
+  parent   Page?     @relation("pageTree", fields: [parentId], references: [id])
+  children Page[]    @relation("pageTree")
+  title    String
+  slug     String
+  body     String // markdown
+  position Int       @default(0)
+  isDraft  Boolean   @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  versions PageVersion[]
+  versions     PageVersion[]
+  pageComments PageComment[]
+  pageLabels   PageLabel[]
+  attachments  Attachment[]
 
   @@unique([spaceId, slug])
   @@map("pages")
@@ -483,14 +530,14 @@ model PageVersion {
 // ─── Notifications ──────────────────────────────────────────
 
 model Notification {
-  id       String  @id @default(cuid())
-  userId   String
-  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type     String  // e.g. "issue:assigned", "pr:review_requested", "mention"
-  title    String
-  body     String?
-  link     String? // deep link within app
-  read     Boolean @default(false)
+  id     String  @id @default(cuid())
+  userId String
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   String // e.g. "issue:assigned", "pr:review_requested", "mention"
+  title  String
+  body   String?
+  link   String? // deep link within app
+  read   Boolean @default(false)
 
   createdAt DateTime @default(now())
 
@@ -504,7 +551,7 @@ model BranchProtection {
   id              String     @id @default(cuid())
   repoId          String
   repo            Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  pattern         String     // glob: "main", "release/*"
+  pattern         String // glob: "main", "release/*"
   requiredReviews Int        @default(1)
   requireCI       Boolean    @default(false)
   noForcePush     Boolean    @default(true)
@@ -644,6 +691,7 @@ model PipelineRun {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   jobs          PipelineJob[]
+  deployments   Deployment[]
 
   @@map("pipeline_runs")
 }
@@ -679,15 +727,274 @@ model PipelineStep {
 // ─── Audit Log ──────────────────────────────────────────────
 
 model AuditLog {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   orgId    String
   userId   String?
-  action   String  // e.g. "team.create", "issue.delete", "member.role_change"
-  resource String  // e.g. "team:cuid123"
-  details  Json?   // additional context
+  action   String // e.g. "team.create", "issue.delete", "member.role_change"
+  resource String // e.g. "team:cuid123"
+  details  Json? // additional context
 
   createdAt DateTime @default(now())
 
   @@index([orgId, createdAt])
   @@map("audit_logs")
+}
+
+// ─── Platform Expansion Enums ────────────────────────────────
+
+enum SprintStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+}
+
+enum CommitStatusState {
+  PENDING
+  SUCCESS
+  FAILURE
+  ERROR
+}
+
+enum DeploymentStatus {
+  PENDING
+  IN_PROGRESS
+  SUCCESS
+  FAILURE
+}
+
+// ─── Platform Expansion Models ───────────────────────────────
+
+model Sprint {
+  id        String       @id @default(cuid())
+  projectId String
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  goal      String?
+  startDate DateTime
+  endDate   DateTime
+  status    SprintStatus @default(PLANNING)
+  createdAt DateTime     @default(now())
+
+  issues Issue[]
+
+  @@map("sprints")
+}
+
+model CustomFieldDefinition {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  type      String // TEXT, NUMBER, DATE, SELECT, MULTI_SELECT, USER
+  options   Json? // for select types
+  required  Boolean @default(false)
+  position  Int     @default(0)
+
+  values CustomFieldValue[]
+
+  @@map("custom_field_definitions")
+}
+
+model CustomFieldValue {
+  id                String                @id @default(cuid())
+  issueId           String
+  issue             Issue                 @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  fieldDefinitionId String
+  fieldDefinition   CustomFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
+  value             String
+
+  @@unique([issueId, fieldDefinitionId])
+  @@map("custom_field_values")
+}
+
+model WorkflowRule {
+  id             String      @id @default(cuid())
+  projectId      String
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromColumnId   String
+  fromColumn     BoardColumn @relation("fromColumn", fields: [fromColumnId], references: [id], onDelete: Cascade)
+  toColumnId     String
+  toColumn       BoardColumn @relation("toColumn", fields: [toColumnId], references: [id], onDelete: Cascade)
+  requiredFields Json?
+  createdAt      DateTime    @default(now())
+
+  @@unique([projectId, fromColumnId, toColumnId])
+  @@map("workflow_rules")
+}
+
+model AutomationRule {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name       String
+  trigger    String
+  conditions Json
+  actions    Json
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@map("automation_rules")
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  storageKey   String
+  uploaderId   String
+  uploader     User     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  issueId      String?
+  issue        Issue?   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  pageId       String?
+  page         Page?    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  commentId    String?
+  comment      Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@map("attachments")
+}
+
+model Activity {
+  id           String   @id @default(cuid())
+  resourceType String
+  resourceId   String
+  action       String
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  @@map("activities")
+}
+
+model NotificationPreference {
+  id           String  @id @default(cuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventType    String
+  emailEnabled Boolean @default(true)
+  inAppEnabled Boolean @default(true)
+
+  @@unique([userId, eventType])
+  @@map("notification_preferences")
+}
+
+model CommitStatus {
+  id          String            @id @default(cuid())
+  repoId      String
+  repo        Repository        @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  sha         String
+  context     String
+  state       CommitStatusState @default(PENDING)
+  targetUrl   String?
+  description String?
+  createdAt   DateTime          @default(now())
+
+  @@unique([repoId, sha, context])
+  @@map("commit_statuses")
+}
+
+model PageComment {
+  id         String   @id @default(cuid())
+  pageId     String
+  page       Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body       String
+  anchorText String?
+  resolved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@map("page_comments")
+}
+
+model PageLabel {
+  id     String @id @default(cuid())
+  pageId String
+  page   Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  label  String
+
+  @@unique([pageId, label])
+  @@map("page_labels")
+}
+
+model PageTemplate {
+  id          String    @id @default(cuid())
+  spaceId     String
+  space       WikiSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  name        String
+  body        String
+  description String?
+  createdAt   DateTime  @default(now())
+
+  @@map("page_templates")
+}
+
+model SavedFilter {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  query     Json
+  createdAt DateTime @default(now())
+
+  @@map("saved_filters")
+}
+
+model IssueVote {
+  id        String   @id @default(cuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([issueId, userId])
+  @@map("issue_votes")
+}
+
+model IssueWatcher {
+  id        String   @id @default(cuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([issueId, userId])
+  @@map("issue_watchers")
+}
+
+model DeploymentEnvironment {
+  id              String     @id @default(cuid())
+  repoId          String
+  repo            Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  name            String
+  url             String?
+  lastDeployedAt  DateTime?
+  protectionRules Json?
+  createdAt       DateTime   @default(now())
+
+  deployments Deployment[]
+
+  @@map("deployment_environments")
+}
+
+model Deployment {
+  id            String                @id @default(cuid())
+  environmentId String
+  environment   DeploymentEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  commitSha     String
+  pipelineRunId String?
+  pipelineRun   PipelineRun?          @relation(fields: [pipelineRunId], references: [id])
+  status        DeploymentStatus      @default(PENDING)
+  deployedById  String
+  deployedBy    User                  @relation("DeployedBy", fields: [deployedById], references: [id])
+  createdAt     DateTime              @default(now())
+
+  @@map("deployments")
 }

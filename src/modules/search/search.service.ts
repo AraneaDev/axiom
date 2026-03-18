@@ -1,69 +1,362 @@
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
+import { repoExists } from '../../git/repo-manager';
+
+const execFileAsync = promisify(execFile);
+
+// ─── Types ──────────────────────────────────────────────────
 
 interface SearchParams {
   q: string;
-  type: 'issues' | 'wiki' | 'all';
+  type: 'issues' | 'wiki' | 'repos' | 'code' | 'all';
   teamId?: string;
   projectId?: string;
   limit: number;
   offset: number;
 }
 
+interface StructuredQuery {
+  freeText: string;
+  filters: Record<string, string>;
+}
+
+interface CodeSearchParams {
+  q: string;
+  repoIds?: string;
+  limit: number;
+}
+
+export interface CodeMatch {
+  repoId: string;
+  repoName: string;
+  repoUrl: string;
+  filePath: string;
+  lineNumber: number;
+  lineContent: string;
+}
+
+// ─── Structured Query Parsing ───────────────────────────────
+
+const STRUCTURED_FIELDS = new Set([
+  'type',
+  'status',
+  'priority',
+  'assignee',
+  'label',
+  'project',
+  'author',
+]);
+
 /**
- *
+ * Parse a query string like "type:bug status:open fix login" into
+ * structured filters and remaining free text.
+ * @param raw
+ */
+function parseStructuredQuery(raw: string): StructuredQuery {
+  const filters: Record<string, string> = {};
+  const freeTextParts: string[] = [];
+
+  const tokens = raw.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+  for (const token of tokens) {
+    const colonIdx = token.indexOf(':');
+    if (colonIdx > 0) {
+      const field = token.substring(0, colonIdx).toLowerCase();
+      const value = token.substring(colonIdx + 1).replace(/^"|"$/g, '');
+      if (STRUCTURED_FIELDS.has(field) && value) {
+        filters[field] = value;
+        continue;
+      }
+    }
+    freeTextParts.push(token);
+  }
+
+  return { freeText: freeTextParts.join(' '), filters };
+}
+
+/**
+ * Convert a free-text string into a tsquery-safe string.
+ * Splits on whitespace, strips non-alphanumeric chars, joins with &.
+ * @param text
+ */
+function toTsQuery(text: string): string {
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.replace(/[^a-zA-Z0-9]/g, ''))
+    .filter((w) => w.length > 0);
+  if (words.length === 0) return '';
+  // Prefix-match on last word for autocomplete-style search
+  return words.map((w, i) => (i === words.length - 1 ? `${w}:*` : w)).join(' & ');
+}
+
+// ─── Main Search ────────────────────────────────────────────
+
+/**
  * @param params
  */
 export async function search(params: SearchParams) {
-  const results: { type: string; items: Record<string, unknown>[] }[] = [];
+  const { freeText, filters } = parseStructuredQuery(params.q);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const results: { type: string; items: any[]; total: number }[] = [];
 
   if (params.type === 'issues' || params.type === 'all') {
-    const where: Prisma.IssueWhereInput = {
-      OR: [
-        { title: { contains: params.q, mode: 'insensitive' } },
-        { body: { contains: params.q, mode: 'insensitive' } },
-      ],
-      ...(params.projectId ? { projectId: params.projectId } : {}),
-    };
+    const issueResults = await searchIssues(freeText, filters, params);
+    results.push(issueResults);
+  }
 
-    const issues = await prisma.issue.findMany({
+  if (params.type === 'wiki' || params.type === 'all') {
+    const wikiResults = await searchWiki(freeText, filters, params);
+    results.push(wikiResults);
+  }
+
+  if (params.type === 'repos' || params.type === 'all') {
+    const repoResults = await searchRepos(freeText, params);
+    results.push(repoResults);
+  }
+
+  if (params.type === 'code') {
+    const codeResults = await searchCode({ q: freeText || params.q, limit: params.limit });
+    results.push(codeResults);
+  }
+
+  return results;
+}
+
+// ─── Issue Search (FTS + Structured Filters) ────────────────
+
+async function searchIssues(
+  freeText: string,
+  filters: Record<string, string>,
+  params: SearchParams,
+) {
+  const tsq = toTsQuery(freeText);
+  const useFts = tsq.length > 0;
+
+  // Build where clause with structured filters
+  const where: Prisma.IssueWhereInput = {};
+  const andClauses: Prisma.IssueWhereInput[] = [];
+
+  if (params.projectId) {
+    where.projectId = params.projectId;
+  }
+
+  if (filters.type) {
+    const issueType = filters.type.toUpperCase();
+    if (['TASK', 'BUG', 'STORY', 'EPIC'].includes(issueType)) {
+      andClauses.push({ type: issueType as 'TASK' | 'BUG' | 'STORY' | 'EPIC' });
+    }
+  }
+
+  if (filters.priority) {
+    const priority = filters.priority.toUpperCase();
+    if (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(priority)) {
+      andClauses.push({ priority: priority as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' });
+    }
+  }
+
+  if (filters.assignee) {
+    andClauses.push({
+      assignee: {
+        OR: [
+          { username: { equals: filters.assignee, mode: 'insensitive' } },
+          { displayName: { contains: filters.assignee, mode: 'insensitive' } },
+        ],
+      },
+    });
+  }
+
+  if (filters.status) {
+    andClauses.push({
+      column: { name: { equals: filters.status, mode: 'insensitive' } },
+    });
+  }
+
+  if (filters.label) {
+    andClauses.push({
+      labels: { some: { name: { equals: filters.label, mode: 'insensitive' } } },
+    });
+  }
+
+  if (filters.project) {
+    andClauses.push({
+      project: {
+        OR: [
+          { slug: { equals: filters.project, mode: 'insensitive' } },
+          { prefix: { equals: filters.project.toUpperCase() } },
+        ],
+      },
+    });
+  }
+
+  if (andClauses.length > 0) {
+    where.AND = andClauses;
+  }
+
+  // If we have free text, use PostgreSQL full-text search via $queryRaw for ranking
+  if (useFts) {
+    try {
+      const rawIssues = await prisma.$queryRaw<
+        Array<{
+          id: string;
+          rank: number;
+        }>
+      >`
+        SELECT id, ts_rank(
+          to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, '')),
+          to_tsquery('english', ${tsq})
+        ) AS rank
+        FROM issues
+        WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+          @@ to_tsquery('english', ${tsq})
+        ORDER BY rank DESC
+        LIMIT ${params.limit + 50}
+      `;
+
+      const ftsIds = rawIssues.map((r) => r.id);
+      if (ftsIds.length === 0) {
+        return { type: 'issues', items: [], total: 0 };
+      }
+
+      where.id = { in: ftsIds };
+    } catch {
+      // Fallback to LIKE search if FTS fails (e.g., invalid query)
+      where.OR = [
+        { title: { contains: freeText, mode: 'insensitive' } },
+        { body: { contains: freeText, mode: 'insensitive' } },
+      ];
+    }
+  } else if (!andClauses.length) {
+    // No text and no filters -- nothing to search
+    return { type: 'issues', items: [], total: 0 };
+  }
+
+  const [issues, total] = await Promise.all([
+    prisma.issue.findMany({
       where,
       include: {
         project: {
           select: {
             prefix: true,
             slug: true,
+            name: true,
             team: { select: { slug: true, org: { select: { slug: true } } } },
           },
         },
-        assignee: { select: { id: true, username: true, displayName: true } },
+        assignee: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
         labels: true,
+        column: { select: { name: true, isDone: true } },
       },
       take: params.limit,
       skip: params.offset,
       orderBy: { updatedAt: 'desc' },
-    });
+    }),
+    prisma.issue.count({ where }),
+  ]);
 
-    results.push({
-      type: 'issues',
-      items: issues.map((i) => ({
-        ...i,
-        key: `${i.project.prefix}-${i.number}`,
-        url: `/${i.project.team.org.slug}/${i.project.team.slug}/${i.project.slug}/issues/${i.number}`,
-      })),
-    });
+  return {
+    type: 'issues',
+    total,
+    items: issues.map((i: (typeof issues)[number]) => ({
+      ...i,
+      key: `${i.project.prefix}-${i.number}`,
+      url: `/${i.project.team.org.slug}/${i.project.team.slug}/${i.project.slug}/issues/${i.number}`,
+      projectName: i.project.name,
+      status: i.column?.name ?? 'Backlog',
+    })),
+  };
+}
+
+// ─── Wiki Search (FTS) ──────────────────────────────────────
+
+async function searchWiki(
+  freeText: string,
+  _filters: Record<string, string>,
+  params: SearchParams,
+) {
+  if (!freeText) {
+    return { type: 'wiki', items: [], total: 0 };
   }
 
-  if (params.type === 'wiki' || params.type === 'all') {
-    const where: Prisma.PageWhereInput = {
-      OR: [
-        { title: { contains: params.q, mode: 'insensitive' } },
-        { body: { contains: params.q, mode: 'insensitive' } },
-      ],
-    };
+  const tsq = toTsQuery(freeText);
+  const where: Prisma.PageWhereInput = {};
 
-    const pages = await prisma.page.findMany({
+  if (tsq) {
+    try {
+      const rawPages = await prisma.$queryRaw<
+        Array<{
+          id: string;
+          rank: number;
+          snippet: string;
+        }>
+      >`
+        SELECT id, ts_rank(
+          to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, '')),
+          to_tsquery('english', ${tsq})
+        ) AS rank,
+        ts_headline('english', body, to_tsquery('english', ${tsq}),
+          'MaxWords=30, MinWords=15, StartSel=<<, StopSel=>>'
+        ) AS snippet
+        FROM pages
+        WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+          @@ to_tsquery('english', ${tsq})
+        ORDER BY rank DESC
+        LIMIT ${params.limit + 20}
+      `;
+
+      if (rawPages.length === 0) {
+        return { type: 'wiki', items: [], total: 0 };
+      }
+
+      const snippetMap = new Map(rawPages.map((r) => [r.id, r.snippet]));
+      where.id = { in: rawPages.map((r) => r.id) };
+
+      const [pages, total] = await Promise.all([
+        prisma.page.findMany({
+          where,
+          include: {
+            space: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                team: { select: { slug: true, org: { select: { slug: true } } } },
+              },
+            },
+          },
+          take: params.limit,
+          skip: params.offset,
+          orderBy: { updatedAt: 'desc' },
+        }),
+        prisma.page.count({ where }),
+      ]);
+
+      return {
+        type: 'wiki',
+        total,
+        items: pages.map((p: (typeof pages)[number]) => ({
+          ...p,
+          url: `/${p.space.team.org.slug}/${p.space.team.slug}/wiki/${p.space.slug}/${p.slug}`,
+          spaceName: p.space.name,
+          snippet: snippetMap.get(p.id) ?? '',
+        })),
+      };
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Fallback to LIKE search
+  where.OR = [
+    { title: { contains: freeText, mode: 'insensitive' } },
+    { body: { contains: freeText, mode: 'insensitive' } },
+  ];
+
+  const [pages, total] = await Promise.all([
+    prisma.page.findMany({
       where,
       include: {
         space: {
@@ -78,16 +371,200 @@ export async function search(params: SearchParams) {
       take: params.limit,
       skip: params.offset,
       orderBy: { updatedAt: 'desc' },
-    });
+    }),
+    prisma.page.count({ where }),
+  ]);
 
-    results.push({
-      type: 'wiki',
-      items: pages.map((p) => ({
-        ...p,
-        url: `/${p.space.team.org.slug}/${p.space.team.slug}/wiki/${p.space.slug}/${p.slug}`,
-      })),
-    });
+  return {
+    type: 'wiki',
+    total,
+    items: pages.map((p: (typeof pages)[number]) => ({
+      ...p,
+      url: `/${p.space.team.org.slug}/${p.space.team.slug}/wiki/${p.space.slug}/${p.slug}`,
+      spaceName: p.space.name,
+      snippet: '',
+    })),
+  };
+}
+
+// ─── Repo Search ────────────────────────────────────────────
+
+async function searchRepos(freeText: string, params: SearchParams) {
+  if (!freeText) {
+    return { type: 'repos', items: [], total: 0 };
   }
 
-  return results;
+  const where: Prisma.RepositoryWhereInput = {
+    OR: [
+      { name: { contains: freeText, mode: 'insensitive' } },
+      { description: { contains: freeText, mode: 'insensitive' } },
+    ],
+  };
+
+  const [repos, total] = await Promise.all([
+    prisma.repository.findMany({
+      where,
+      include: {
+        team: {
+          select: {
+            slug: true,
+            org: { select: { slug: true } },
+          },
+        },
+      },
+      take: params.limit,
+      skip: params.offset,
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.repository.count({ where }),
+  ]);
+
+  return {
+    type: 'repos',
+    total,
+    items: repos.map((r: (typeof repos)[number]) => ({
+      id: r.id,
+      name: r.name,
+      slug: r.slug,
+      description: r.description,
+      visibility: r.visibility,
+      defaultBranch: r.defaultBranch,
+      url: `/${r.team.org.slug}/${r.team.slug}/repos/${r.slug}`,
+      updatedAt: r.updatedAt,
+    })),
+  };
+}
+
+// ─── Code Search (git grep) ────────────────────────────────
+
+const MAX_MATCHES_PER_REPO = 10;
+
+/**
+ * @param params
+ */
+export async function searchCode(
+  params: CodeSearchParams,
+): Promise<{ type: string; items: CodeMatch[]; total: number }> {
+  const repoFilter: Prisma.RepositoryWhereInput = {};
+  if (params.repoIds) {
+    repoFilter.id = { in: params.repoIds.split(',').map((s) => s.trim()) };
+  }
+
+  const repos = await prisma.repository.findMany({
+    where: repoFilter,
+    include: {
+      team: {
+        select: {
+          slug: true,
+          org: { select: { slug: true } },
+        },
+      },
+    },
+    take: 20, // limit repos to search
+  });
+
+  const allMatches: CodeMatch[] = [];
+
+  for (const repo of repos) {
+    if (allMatches.length >= params.limit) break;
+    if (!repo.diskPath) continue;
+
+    const exists = await repoExists(repo.diskPath);
+    if (!exists) continue;
+
+    try {
+      const remaining = Math.min(MAX_MATCHES_PER_REPO, params.limit - allMatches.length);
+      const { stdout } = await execFileAsync(
+        'git',
+        [
+          '--no-pager',
+          'grep',
+          '-n', // line numbers
+          '-I', // skip binary files
+          '--max-count',
+          String(remaining),
+          '-e',
+          params.q,
+          'HEAD',
+          '--',
+        ],
+        {
+          cwd: repo.diskPath,
+          timeout: 10_000,
+          maxBuffer: 1024 * 1024,
+        },
+      );
+
+      const repoUrl = `/${repo.team.org.slug}/${repo.team.slug}/repos/${repo.slug}`;
+      const lines = stdout.trim().split('\n').filter(Boolean);
+
+      for (const line of lines) {
+        // Format: HEAD:path/to/file:lineNum:content
+        const match = line.match(/^HEAD:(.+?):(\d+):(.*)$/);
+        if (match) {
+          allMatches.push({
+            repoId: repo.id,
+            repoName: repo.name,
+            repoUrl,
+            filePath: match[1],
+            lineNumber: parseInt(match[2], 10),
+            lineContent: match[3],
+          });
+        }
+      }
+    } catch {
+      // git grep exits with 1 when no matches found -- ignore
+    }
+  }
+
+  return {
+    type: 'code',
+    items: allMatches.slice(0, params.limit),
+    total: allMatches.length,
+  };
+}
+
+// ─── Saved Searches ─────────────────────────────────────────
+
+/**
+ * @param userId
+ * @param data
+ * @param data.name
+ * @param data.query
+ */
+export async function createSavedSearch(
+  userId: string,
+  data: { name: string; query: Record<string, unknown> },
+) {
+  return prisma.savedFilter.create({
+    data: {
+      userId,
+      name: data.name,
+      query: data.query as Prisma.InputJsonValue,
+      // projectId is null for global saved searches
+    },
+  });
+}
+
+/**
+ * @param userId
+ */
+export async function getSavedSearches(userId: string) {
+  return prisma.savedFilter.findMany({
+    where: {
+      userId,
+      projectId: null, // global saved searches only
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * @param id
+ * @param userId
+ */
+export async function deleteSavedSearch(id: string, userId: string) {
+  return prisma.savedFilter.deleteMany({
+    where: { id, userId, projectId: null },
+  });
 }

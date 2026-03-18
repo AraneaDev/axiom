@@ -44,6 +44,119 @@ export async function updateProfile(
   });
 }
 
+/**
+ * Search users by username or display name.
+ * @param query
+ * @param limit
+ */
+export async function searchUsers(query: string, limit = 10) {
+  return prisma.user.findMany({
+    where: {
+      OR: [
+        { username: { contains: query, mode: 'insensitive' } },
+        { displayName: { contains: query, mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true, username: true, displayName: true, avatarUrl: true },
+    take: limit,
+    orderBy: { username: 'asc' },
+  });
+}
+
+// ─── Dashboard ──────────────────────────────────────────────
+
+/**
+ * Get aggregated dashboard data for the current user.
+ * @param userId
+ */
+export async function getDashboard(userId: string) {
+  const now = new Date();
+  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const [assignedIssues, reviewRequests, recentActivity, upcomingDueDates] = await Promise.all([
+    // Open issues assigned to user across all projects
+    prisma.issue.findMany({
+      where: {
+        assigneeId: userId,
+        OR: [{ column: { isDone: false } }, { columnId: null }],
+      },
+      include: {
+        project: { include: { team: { include: { org: true } } } },
+        column: { select: { id: true, name: true, isDone: true } },
+        assignee: { select: { id: true, displayName: true, username: true, avatarUrl: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    }),
+
+    // Open PRs where user is a reviewer
+    prisma.pullRequest.findMany({
+      where: {
+        reviews: { some: { reviewerId: userId } },
+        status: 'OPEN',
+      },
+      include: {
+        repo: { select: { id: true, name: true, slug: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    }),
+
+    // Recent activity for user
+    prisma.activity.findMany({
+      where: { userId },
+      include: {
+        user: { select: { id: true, displayName: true, username: true, avatarUrl: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    }),
+
+    // Issues with due dates in next 7 days
+    prisma.issue.findMany({
+      where: {
+        assigneeId: userId,
+        dueDate: { lte: sevenDaysFromNow },
+        OR: [{ column: { isDone: false } }, { columnId: null }],
+      },
+      include: {
+        project: { include: { team: { include: { org: true } } } },
+        column: { select: { id: true, name: true, isDone: true } },
+      },
+      orderBy: { dueDate: 'asc' },
+      take: 20,
+    }),
+  ]);
+
+  // Fetch author info for PRs separately since PullRequest has no author relation
+  const authorIds = [...new Set(reviewRequests.map((pr) => pr.authorId))];
+  const authors =
+    authorIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: authorIds } },
+          select: { id: true, displayName: true, username: true, avatarUrl: true },
+        })
+      : [];
+  const authorMap = new Map(authors.map((a) => [a.id, a]));
+
+  const reviewRequestsWithAuthors = reviewRequests.map((pr) => ({
+    ...pr,
+    author: authorMap.get(pr.authorId) ?? {
+      id: pr.authorId,
+      displayName: 'Unknown',
+      username: 'unknown',
+      avatarUrl: null,
+    },
+  }));
+
+  return {
+    assignedIssues,
+    reviewRequests: reviewRequestsWithAuthors,
+    recentActivity,
+    upcomingDueDates,
+  };
+}
+
 // ─── SSH Keys ───────────────────────────────────────────────
 
 function parseAndFingerprintKey(publicKey: string): string {

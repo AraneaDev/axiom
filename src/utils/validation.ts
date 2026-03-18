@@ -87,6 +87,30 @@ export const createIssueSchema = z.object({
 export const updateIssueSchema = createIssueSchema.partial().extend({
   columnId: z.string().optional(),
   position: z.number().int().optional(),
+  storyPoints: z.number().int().min(0).max(100).nullable().optional(),
+  sprintId: z.string().nullable().optional(),
+  timeEstimate: z.number().int().min(0).nullable().optional(),
+  timeSpent: z.number().int().min(0).nullable().optional(),
+});
+
+// ─── Worklogs ───────────────────────────────────────────────
+
+export const logWorkSchema = z.object({
+  minutes: z.number().int().min(1),
+  description: z.string().max(500).optional(),
+});
+
+// ─── Bulk Operations ────────────────────────────────────────
+
+export const bulkUpdateIssuesSchema = z.object({
+  issueIds: z.array(z.string()).min(1),
+  updates: z.object({
+    status: z.string().optional(),
+    assigneeId: z.string().nullable().optional(),
+    priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional(),
+    sprintId: z.string().nullable().optional(),
+    labels: z.array(z.string()).optional(),
+  }),
 });
 
 // ─── Comments ───────────────────────────────────────────────
@@ -121,6 +145,44 @@ export const createPageSchema = z.object({
 
 export const updatePageSchema = createPageSchema.partial();
 
+// ─── Wiki Templates ─────────────────────────────────────────
+
+export const createPageTemplateSchema = z.object({
+  name: z.string().min(1).max(200),
+  body: z.string().default(''),
+  description: z.string().max(500).optional(),
+});
+
+// ─── Wiki Page Comments ─────────────────────────────────────
+
+export const createPageCommentSchema = z.object({
+  body: z.string().min(1),
+  anchorText: z.string().optional(),
+});
+
+// ─── Wiki Page Labels ───────────────────────────────────────
+
+export const addPageLabelSchema = z.object({
+  label: z.string().min(1).max(100),
+});
+
+// ─── Wiki Page Move / Copy ──────────────────────────────────
+
+export const movePageSchema = z.object({
+  targetSpaceId: z.string().optional(),
+  targetParentId: z.string().nullable().optional(),
+});
+
+export const copyPageSchema = z.object({
+  targetSpaceId: z.string().optional(),
+  newSlug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
+});
+
 // ─── API Tokens ─────────────────────────────────────────────
 
 export const createApiTokenSchema = z.object({
@@ -140,9 +202,24 @@ export const addSshKeySchema = z.object({
 
 export const searchSchema = z.object({
   q: z.string().min(1),
-  type: z.enum(['issues', 'wiki', 'all']).default('all'),
+  type: z.enum(['issues', 'wiki', 'repos', 'code', 'all']).default('all'),
   teamId: z.string().optional(),
   projectId: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
+});
+
+export const codeSearchSchema = z.object({
+  q: z.string().min(1),
+  repoIds: z.string().optional(), // comma-separated repo IDs
+  limit: z.coerce.number().int().min(1).max(50).default(50),
+});
+
+export const savedSearchSchema = z.object({
+  name: z.string().min(1).max(100),
+  query: z.object({
+    q: z.string(),
+    type: z.string().optional(),
+    filters: z.record(z.string()).optional(),
+  }),
 });

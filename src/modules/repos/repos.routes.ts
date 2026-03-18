@@ -18,6 +18,7 @@ router.get('/:repoId', reposController.get);
 router.patch('/:repoId', reposController.update);
 router.delete('/:repoId', reposController.remove);
 router.post('/:repoId/fork', reposController.fork);
+router.patch('/:repoId/settings', reposController.updateSettings);
 
 // Branches
 router.get('/:repoId/branches', reposController.listBranches);

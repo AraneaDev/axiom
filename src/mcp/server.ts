@@ -501,14 +501,216 @@ function createMcpServer(userId: string) {
     },
   );
 
+  // ─── Update Issue Tool ──────────────────────────────────────
+
+  server.tool(
+    'update_issue',
+    'Update an existing issue: change status (columnId), priority, assignee, labels, story points, or sprint',
+    {
+      projectId: z.string().describe('Project ID'),
+      issueNumber: z.number().describe('Issue number within the project'),
+      columnId: z
+        .string()
+        .optional()
+        .describe('Board column ID to move the issue to (changes status)'),
+      priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional(),
+      assigneeId: z.string().optional().describe('User ID to assign, or empty string to unassign'),
+      labels: z.array(z.string()).optional().describe('Label names to set on the issue'),
+      storyPoints: z.number().optional().describe('Story point estimate'),
+      sprintId: z
+        .string()
+        .optional()
+        .describe('Sprint ID to move issue to, or empty string to remove from sprint'),
+    },
+    async ({
+      projectId,
+      issueNumber,
+      columnId,
+      priority,
+      assigneeId,
+      labels,
+      storyPoints,
+      sprintId,
+    }) => {
+      const orgId = await getOrgIdFromProject(projectId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Project not found' }] };
+      await assertMcpPermission('update_issue', orgId);
+      const issue = await prisma.issue.findUnique({
+        where: { projectId_number: { projectId, number: issueNumber } },
+      });
+      if (!issue) return { content: [{ type: 'text' as const, text: 'Issue not found' }] };
+
+      const updateData: Record<string, unknown> = {};
+      if (columnId !== undefined) updateData.column = { connect: { id: columnId } };
+      if (priority !== undefined) updateData.priority = priority;
+      if (assigneeId !== undefined) {
+        updateData.assignee = assigneeId ? { connect: { id: assigneeId } } : { disconnect: true };
+      }
+      if (storyPoints !== undefined) updateData.storyPoints = storyPoints;
+      if (sprintId !== undefined) {
+        updateData.sprint = sprintId ? { connect: { id: sprintId } } : { disconnect: true };
+      }
+      if (labels !== undefined) {
+        updateData.labels = {
+          set: [],
+          connectOrCreate: labels.map((name) => ({
+            where: { projectId_name: { projectId, name } },
+            create: { projectId, name },
+          })),
+        };
+      }
+
+      const updated = await prisma.issue.update({
+        where: { id: issue.id },
+        data: updateData,
+        include: {
+          project: { select: { prefix: true } },
+          assignee: { select: { id: true, username: true, displayName: true } },
+          labels: true,
+          column: { select: { name: true } },
+          sprint: { select: { id: true, name: true } },
+        },
+      });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(
+              { ...updated, key: `${updated.project.prefix}-${updated.number}` },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
+  // ─── Create Pull Request Tool ─────────────────────────────
+
+  server.tool(
+    'create_pull_request',
+    'Open a new pull request from a source branch to a target branch in a repository',
+    {
+      repoId: z.string().describe('Repository ID'),
+      title: z.string().describe('PR title'),
+      body: z.string().default('').describe('PR description'),
+      sourceBranch: z.string().describe('Branch with changes'),
+      targetBranch: z
+        .string()
+        .optional()
+        .describe('Branch to merge into (defaults to repo default branch)'),
+    },
+    async ({ repoId, title, body, sourceBranch, targetBranch }) => {
+      const repo = await prisma.repository.findUnique({
+        where: { id: repoId },
+        include: { team: true },
+      });
+      if (!repo) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('create_pull_request', repo.team.orgId);
+
+      const target = targetBranch || repo.defaultBranch;
+
+      // Validate branches exist
+      if (!repo.diskPath || !(await repoExists(repo.diskPath))) {
+        return { content: [{ type: 'text' as const, text: 'Repository not found on disk' }] };
+      }
+      const sourceExists = await gitCmd.branchExists(repo.diskPath, sourceBranch);
+      if (!sourceExists)
+        return {
+          content: [{ type: 'text' as const, text: `Source branch '${sourceBranch}' not found` }],
+        };
+      const targetExists = await gitCmd.branchExists(repo.diskPath, target);
+      if (!targetExists)
+        return {
+          content: [{ type: 'text' as const, text: `Target branch '${target}' not found` }],
+        };
+      if (sourceBranch === target)
+        return {
+          content: [
+            { type: 'text' as const, text: 'Source and target branches must be different' },
+          ],
+        };
+
+      const lastPR = await prisma.pullRequest.findFirst({
+        where: { repoId },
+        orderBy: { number: 'desc' },
+        select: { number: true },
+      });
+      const number = (lastPR?.number ?? 0) + 1;
+
+      const pr = await prisma.pullRequest.create({
+        data: {
+          repoId,
+          number,
+          title,
+          body,
+          authorId: userId,
+          sourceBranch,
+          targetBranch: target,
+          status: 'OPEN',
+        },
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(pr, null, 2) }] };
+    },
+  );
+
+  // ─── Get Pull Request Tool ────────────────────────────────
+
+  server.tool(
+    'get_pull_request',
+    'Get details of a specific pull request including diff stats',
+    {
+      repoId: z.string().describe('Repository ID'),
+      prNumber: z.number().describe('Pull request number'),
+    },
+    async ({ repoId, prNumber }) => {
+      const repo = await prisma.repository.findUnique({
+        where: { id: repoId },
+        include: { team: true },
+      });
+      if (!repo) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('get_pull_request', repo.team.orgId);
+
+      const pr = await prisma.pullRequest.findUnique({
+        where: { repoId_number: { repoId, number: prNumber } },
+        include: {
+          reviews: { orderBy: { createdAt: 'desc' } },
+          comments: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+      if (!pr) return { content: [{ type: 'text' as const, text: 'Pull request not found' }] };
+
+      let stats: unknown[] = [];
+      if (repo.diskPath && (await repoExists(repo.diskPath))) {
+        try {
+          stats = await gitCmd.diffStat(repo.diskPath, pr.targetBranch, pr.sourceBranch);
+        } catch {
+          /* branch may have been deleted */
+        }
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ ...pr, stats }, null, 2) }],
+      };
+    },
+  );
+
   // ─── Search Tool ────────────────────────────────────────────
 
   server.tool(
     'search',
-    'Search across issues and wiki pages',
+    'Global search across issues, repos, and wiki pages with a query string',
     {
-      query: z.string(),
-      type: z.enum(['issues', 'wiki', 'all']).default('all'),
+      query: z
+        .string()
+        .describe(
+          'Search query string. Supports structured filters like type:bug, priority:high, assignee:username',
+        ),
+      type: z
+        .enum(['issues', 'wiki', 'repos', 'all'])
+        .default('all')
+        .describe('Type of resources to search'),
       limit: z.number().default(10),
     },
     async ({ query, type, limit }) => {
@@ -537,6 +739,31 @@ function createMcpServer(userId: string) {
           })),
         );
       }
+      if (type === 'repos' || type === 'all') {
+        const orgIds = await getUserOrgIds();
+        const repos = await prisma.repository.findMany({
+          where: {
+            OR: [
+              { name: { contains: query, mode: 'insensitive' } },
+              { description: { contains: query, mode: 'insensitive' } },
+            ],
+            team: { orgId: { in: orgIds } },
+          },
+          select: { id: true, name: true, slug: true, description: true, visibility: true },
+          take: limit,
+          orderBy: { updatedAt: 'desc' },
+        });
+        results.push(
+          ...repos.map((r) => ({
+            type: 'repo',
+            id: r.id,
+            name: r.name,
+            slug: r.slug,
+            description: r.description,
+            visibility: r.visibility,
+          })),
+        );
+      }
       if (type === 'wiki' || type === 'all') {
         const orgIds = await getUserOrgIds();
         const pages = await prisma.page.findMany({
@@ -561,6 +788,141 @@ function createMcpServer(userId: string) {
         );
       }
       return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] };
+    },
+  );
+
+  // ─── Sprints Tools ────────────────────────────────────────
+
+  server.tool(
+    'list_sprints',
+    'List sprints for a project, optionally filtered by status (PLANNING, ACTIVE, COMPLETED)',
+    {
+      projectId: z.string().describe('Project ID'),
+      status: z
+        .enum(['PLANNING', 'ACTIVE', 'COMPLETED'])
+        .optional()
+        .describe('Filter by sprint status'),
+    },
+    async ({ projectId, status }) => {
+      const orgId = await getOrgIdFromProject(projectId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Project not found' }] };
+      await assertMcpPermission('list_sprints', orgId);
+
+      const where: Record<string, unknown> = { projectId };
+      if (status) where.status = status;
+
+      const sprints = await prisma.sprint.findMany({
+        where,
+        include: { _count: { select: { issues: true } } },
+        orderBy: { startDate: 'desc' },
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(sprints, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'get_sprint',
+    'Get a sprint with all its issues',
+    {
+      sprintId: z.string().describe('Sprint ID'),
+    },
+    async ({ sprintId }) => {
+      const sprint = await prisma.sprint.findUnique({
+        where: { id: sprintId },
+        include: {
+          project: { select: { prefix: true, team: { select: { orgId: true } } } },
+          issues: {
+            include: {
+              assignee: { select: { id: true, username: true, displayName: true } },
+              labels: true,
+              column: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+      if (!sprint) return { content: [{ type: 'text' as const, text: 'Sprint not found' }] };
+      await assertMcpPermission('get_sprint', sprint.project.team.orgId);
+
+      const result = {
+        ...sprint,
+        _storyPoints: sprint.issues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0),
+        issues: sprint.issues.map((i) => ({
+          ...i,
+          key: `${sprint.project.prefix}-${i.number}`,
+        })),
+      };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  // ─── List Branches Tool ───────────────────────────────────
+
+  server.tool(
+    'list_branches',
+    'List all branches in a repository with their latest commit info',
+    { repoId: z.string().describe('Repository ID') },
+    async ({ repoId }) => {
+      const repo = await prisma.repository.findUnique({
+        where: { id: repoId },
+        include: { team: true },
+      });
+      if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
+        return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('list_branches', repo.team.orgId);
+      const branches = await gitCmd.listBranches(repo.diskPath, repo.defaultBranch);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(branches, null, 2) }] };
+    },
+  );
+
+  // ─── Update Wiki Page Tool ────────────────────────────────
+
+  server.tool(
+    'update_wiki_page',
+    'Update an existing wiki page title and/or body',
+    {
+      spaceId: z.string().describe('Wiki space ID'),
+      pageSlug: z.string().describe('Current page slug'),
+      title: z.string().optional().describe('New page title'),
+      body: z.string().optional().describe('New page body content (markdown)'),
+    },
+    async ({ spaceId, pageSlug, title, body }) => {
+      const space = await prisma.wikiSpace.findUnique({ where: { id: spaceId } });
+      if (!space) return { content: [{ type: 'text' as const, text: 'Space not found' }] };
+      const team = await prisma.team.findUnique({ where: { id: space.teamId } });
+      if (team) await assertMcpPermission('update_wiki_page', team.orgId);
+
+      const page = await prisma.page.findUnique({
+        where: { spaceId_slug: { spaceId, slug: pageSlug } },
+      });
+      if (!page) return { content: [{ type: 'text' as const, text: 'Page not found' }] };
+
+      const updateData: Record<string, unknown> = {};
+      if (title !== undefined) updateData.title = title;
+      if (body !== undefined) updateData.body = body;
+
+      // Create a new version
+      const lastVersion = await prisma.pageVersion.findFirst({
+        where: { pageId: page.id },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      const nextVersion = (lastVersion?.version ?? 0) + 1;
+
+      const updated = await prisma.page.update({
+        where: { id: page.id },
+        data: {
+          ...updateData,
+          versions: {
+            create: {
+              version: nextVersion,
+              title: title ?? page.title,
+              body: body ?? page.body,
+              authorId: userId,
+            },
+          },
+        },
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(updated, null, 2) }] };
     },
   );
 

@@ -8,6 +8,8 @@ export interface Repo {
   description?: string;
   visibility: 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
   defaultBranch: string;
+  defaultMergeStrategy?: string;
+  codeOwnersEnabled?: boolean;
   diskPath?: string;
   size?: number;
 }
@@ -45,6 +47,7 @@ export interface PullRequest {
   sourceBranch: string;
   targetBranch: string;
   status: 'OPEN' | 'MERGED' | 'CLOSED';
+  mergeStrategy?: string;
   mergeable?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -53,15 +56,47 @@ export interface PullRequest {
   _count?: { reviews: number; comments: number };
 }
 
+export interface MergeChecks {
+  requiredReviews: number;
+  approvedReviews: number;
+  reviewsMet: boolean;
+  requireCI: boolean;
+  ciPassed: boolean;
+  canMerge: boolean;
+  defaultStrategy: string;
+}
+
+export interface CommitDetail {
+  commit: CommitInfo;
+  diff: string;
+  stats: { file: string; additions: number; deletions: number }[];
+  parents: string[];
+}
+
+export interface BlameLine {
+  sha: string;
+  author: string;
+  date: string;
+  lineNum: number;
+  content: string;
+}
+
 export const reposApi = {
   // Repos
-  listByTeam: (teamId: string) => get<Repo[]>(`/repos/team/${teamId}`),
+  listByTeam: async (teamId: string) => {
+    const res = await get<{ data: Repo[]; total: number } | Repo[]>(`/repos/team/${teamId}`);
+    return Array.isArray(res) ? res : res.data;
+  },
   get: (repoId: string) => get<Repo>(`/repos/${repoId}`),
   create: (
     teamId: string,
     data: { name: string; slug: string; description?: string; visibility?: string },
   ) => post<Repo>(`/repos/team/${teamId}`, data),
   update: (repoId: string, data: Partial<Repo>) => patch<Repo>(`/repos/${repoId}`, data),
+  updateSettings: (
+    repoId: string,
+    data: { defaultMergeStrategy?: string; codeOwnersEnabled?: boolean },
+  ) => patch<Repo>(`/repos/${repoId}/settings`, data),
   delete: (repoId: string) => del(`/repos/${repoId}`),
   fork: (repoId: string, targetTeamId: string, slug: string) =>
     post<Repo>(`/repos/${repoId}/fork`, { targetTeamId, slug }),
@@ -77,7 +112,7 @@ export const reposApi = {
     if (limit) params.set('limit', String(limit));
     return get<CommitInfo[]>(`/repos/${repoId}/commits?${params}`);
   },
-  getCommit: (repoId: string, sha: string) => get(`/repos/${repoId}/commits/${sha}`),
+  getCommit: (repoId: string, sha: string) => get<CommitDetail>(`/repos/${repoId}/commits/${sha}`),
 
   // File browser
   getTree: (repoId: string, ref: string, path: string = '') =>
@@ -85,7 +120,16 @@ export const reposApi = {
   getBlob: (repoId: string, ref: string, path: string) =>
     get<{ content: string; size: number }>(`/repos/${repoId}/blob/${ref}/${path}`),
   getBlame: (repoId: string, ref: string, path: string) =>
-    get(`/repos/${repoId}/blame/${ref}/${path}`),
+    get<BlameLine[]>(`/repos/${repoId}/blame/${ref}/${path}`),
+
+  // File history (commits for a single file)
+  getFileLog: (repoId: string, ref: string, path: string, limit?: number) => {
+    const params = new URLSearchParams();
+    params.set('ref', ref);
+    if (limit) params.set('limit', String(limit));
+    params.set('path', path);
+    return get<CommitInfo[]>(`/repos/${repoId}/commits?${params}`);
+  },
 
   // Tags
   listTags: (repoId: string) => get(`/repos/${repoId}/tags`),
@@ -104,6 +148,8 @@ export const reposApi = {
     patch(`/repos/${repoId}/pulls/${number}`, data),
   mergePR: (repoId: string, number: number, strategy?: string) =>
     post(`/repos/${repoId}/pulls/${number}/merge`, { strategy }),
+  getMergeChecks: (repoId: string, number: number) =>
+    get<MergeChecks>(`/repos/${repoId}/pulls/${number}/merge-checks`),
   closePR: (repoId: string, number: number) => post(`/repos/${repoId}/pulls/${number}/close`, {}),
   getPRDiff: (repoId: string, number: number) =>
     get<{ diff: string; stats: { file: string; additions: number; deletions: number }[] }>(
@@ -118,6 +164,16 @@ export const reposApi = {
     number: number,
     data: { body: string; filePath?: string; line?: number },
   ) => post(`/repos/${repoId}/pulls/${number}/comments`, data),
+  applySuggestion: (repoId: string, number: number, commentId: string) =>
+    post<{ applied: boolean; commentId: string }>(
+      `/repos/${repoId}/pulls/${number}/suggestions/apply`,
+      { commentId },
+    ),
+  batchApplySuggestions: (repoId: string, number: number, commentIds: string[]) =>
+    post<{ applied: boolean; count: number }>(
+      `/repos/${repoId}/pulls/${number}/suggestions/batch-apply`,
+      { commentIds },
+    ),
 
   // Branch protection
   listProtectionRules: (repoId: string) => get(`/repos/${repoId}/branch-protection`),

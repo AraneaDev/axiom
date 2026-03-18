@@ -1,18 +1,57 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { GitMerge, XCircle, Check, X } from 'lucide-react';
-import { useState } from 'react';
+import {
+  GitMerge,
+  XCircle,
+  Check,
+  X,
+  ChevronDown,
+  GitCommitHorizontal,
+  GitBranchPlus,
+  ShieldCheck,
+  ShieldX,
+  CircleDot,
+  CheckCircle2,
+  XCircle as XCircleIcon,
+  AlertCircle,
+  ExternalLink,
+  Users,
+  Loader2,
+  Columns2,
+  Rows3,
+  ListChecks,
+} from 'lucide-react';
+import { useState, useCallback } from 'react';
 import { useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
 import type { CommitInfo } from '@/api/repos.api';
+import { statusChecksApi } from '@/api/status-checks.api';
+import type { StatusCheck, CodeOwnerStatus } from '@/api/status-checks.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { SuggestionBlock, hasSuggestion } from '@/components/SuggestionBlock';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { formatRelative } from '@/lib/utils';
+
+const STRATEGY_LABELS: Record<string, { label: string; icon: React.ReactNode }> = {
+  merge: {
+    label: 'Merge commit',
+    icon: <GitMerge className="h-4 w-4" />,
+  },
+  squash: {
+    label: 'Squash and merge',
+    icon: <GitCommitHorizontal className="h-4 w-4" />,
+  },
+  rebase: {
+    label: 'Rebase and merge',
+    icon: <GitBranchPlus className="h-4 w-4" />,
+  },
+};
 
 const STATUS_BADGE: Record<string, 'primary' | 'success' | 'default'> = {
   OPEN: 'primary',
@@ -27,7 +66,19 @@ export default function PRDetail() {
   const { org, team: teamSlug, repo: repoSlug, number: prNum } = useParams();
   const queryClient = useQueryClient();
   const [commentBody, setCommentBody] = useState('');
-  const [mergeStrategy, setMergeStrategy] = useState('merge');
+  const [mergeStrategy, setMergeStrategy] = useState('');
+  const [diffView, setDiffView] = useState<'unified' | 'split'>('unified');
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
+  const [applyingComment, setApplyingComment] = useState<string | null>(null);
+
+  const toggleSuggestion = useCallback((commentId: string) => {
+    setSelectedSuggestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(commentId)) next.delete(commentId);
+      else next.add(commentId);
+      return next;
+    });
+  }, []);
 
   const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
   const currentOrg = orgs?.find((o) => o.slug === org);
@@ -51,6 +102,17 @@ export default function PRDetail() {
     enabled: !!currentRepo?.id,
   });
 
+  const { data: mergeChecks } = useQuery({
+    queryKey: ['mergeChecks', currentRepo?.id, prNumber],
+    queryFn: () => reposApi.getMergeChecks(currentRepo!.id, prNumber),
+    enabled: !!currentRepo?.id,
+  });
+
+  // Set initial strategy from repo default once merge checks load
+  if (mergeChecks && mergeStrategy === '') {
+    setMergeStrategy(mergeChecks.defaultStrategy.toLowerCase());
+  }
+
   const { data: diff } = useQuery({
     queryKey: ['prDiff', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getPRDiff(currentRepo!.id, prNumber),
@@ -60,6 +122,18 @@ export default function PRDetail() {
   const { data: commits } = useQuery({
     queryKey: ['prCommits', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getPRCommits(currentRepo!.id, prNumber),
+    enabled: !!currentRepo?.id,
+  });
+
+  const { data: prStatuses } = useQuery({
+    queryKey: ['prStatuses', currentRepo?.id, prNumber],
+    queryFn: () => statusChecksApi.getPRStatuses(currentRepo!.id, prNumber),
+    enabled: !!currentRepo?.id && pr?.status === 'OPEN',
+  });
+
+  const { data: codeOwners } = useQuery({
+    queryKey: ['prCodeOwners', currentRepo?.id, prNumber],
+    queryFn: () => statusChecksApi.getPRCodeOwners(currentRepo!.id, prNumber),
     enabled: !!currentRepo?.id,
   });
 
@@ -84,6 +158,29 @@ export default function PRDetail() {
     onSuccess: () => {
       setCommentBody('');
       queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+    },
+  });
+
+  const applySuggestionMutation = useMutation({
+    mutationFn: (commentId: string) =>
+      reposApi.applySuggestion(currentRepo!.id, prNumber, commentId),
+    onMutate: (commentId) => setApplyingComment(commentId),
+    onSettled: () => setApplyingComment(null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+      queryClient.invalidateQueries({ queryKey: ['prDiff', currentRepo?.id, prNumber] });
+      queryClient.invalidateQueries({ queryKey: ['prCommits', currentRepo?.id, prNumber] });
+    },
+  });
+
+  const batchApplyMutation = useMutation({
+    mutationFn: () =>
+      reposApi.batchApplySuggestions(currentRepo!.id, prNumber, [...selectedSuggestions]),
+    onSuccess: () => {
+      setSelectedSuggestions(new Set());
+      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+      queryClient.invalidateQueries({ queryKey: ['prDiff', currentRepo?.id, prNumber] });
+      queryClient.invalidateQueries({ queryKey: ['prCommits', currentRepo?.id, prNumber] });
     },
   });
 
@@ -156,25 +253,49 @@ export default function PRDetail() {
           {/* Diff content */}
           {diff?.diff && (
             <div>
-              <h2 className="text-sm font-semibold mb-2">Diff</h2>
-              <pre className="rounded-lg border border-border bg-surface p-4 text-xs font-mono overflow-x-auto max-h-[600px] overflow-y-auto">
-                {diff.diff.split('\n').map((line: string, i: number) => (
-                  <div
-                    key={i}
-                    className={
-                      line.startsWith('+') && !line.startsWith('+++')
-                        ? 'text-success bg-success-light'
-                        : line.startsWith('-') && !line.startsWith('---')
-                          ? 'text-danger bg-danger-light'
-                          : line.startsWith('@@')
-                            ? 'text-primary bg-primary-light'
-                            : ''
-                    }
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold">Diff</h2>
+                <div className="flex items-center rounded-lg border border-border bg-surface overflow-hidden">
+                  <Button
+                    size="sm"
+                    variant={diffView === 'unified' ? 'primary' : 'ghost'}
+                    className="rounded-none border-0"
+                    onClick={() => setDiffView('unified')}
                   >
-                    {line}
-                  </div>
-                ))}
-              </pre>
+                    <Rows3 className="h-3.5 w-3.5" /> Unified
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={diffView === 'split' ? 'primary' : 'ghost'}
+                    className="rounded-none border-0"
+                    onClick={() => setDiffView('split')}
+                  >
+                    <Columns2 className="h-3.5 w-3.5" /> Split
+                  </Button>
+                </div>
+              </div>
+              {diffView === 'unified' ? (
+                <pre className="rounded-lg border border-border bg-surface p-4 text-xs font-mono overflow-x-auto max-h-[600px] overflow-y-auto">
+                  {diff.diff.split('\n').map((line: string, i: number) => (
+                    <div
+                      key={i}
+                      className={
+                        line.startsWith('+') && !line.startsWith('+++')
+                          ? 'text-success bg-success-light'
+                          : line.startsWith('-') && !line.startsWith('---')
+                            ? 'text-danger bg-danger-light'
+                            : line.startsWith('@@')
+                              ? 'text-primary bg-primary-light'
+                              : ''
+                      }
+                    >
+                      {line}
+                    </div>
+                  ))}
+                </pre>
+              ) : (
+                <SplitDiffView rawDiff={diff.diff} />
+              )}
             </div>
           )}
 
@@ -218,7 +339,24 @@ export default function PRDetail() {
           {/* Comments */}
           {pr.comments && pr.comments.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold mb-2">Comments ({pr.comments.length})</h2>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold">Comments ({pr.comments.length})</h2>
+                {selectedSuggestions.size > 0 && pr.status === 'OPEN' && (
+                  <Button
+                    size="sm"
+                    disabled={batchApplyMutation.isPending}
+                    onClick={() => batchApplyMutation.mutate()}
+                  >
+                    {batchApplyMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <ListChecks className="h-3.5 w-3.5" />
+                    )}
+                    Apply {selectedSuggestions.size} suggestion
+                    {selectedSuggestions.size !== 1 ? 's' : ''}
+                  </Button>
+                )}
+              </div>
               <div className="space-y-2">
                 {pr.comments.map(
                   (c: {
@@ -235,6 +373,16 @@ export default function PRDetail() {
                         </p>
                       )}
                       <MarkdownRenderer content={c.body} className="text-sm" />
+                      {pr.status === 'OPEN' && hasSuggestion(c.body) && (
+                        <SuggestionBlock
+                          commentId={c.id}
+                          body={c.body}
+                          isApplying={applyingComment === c.id}
+                          isSelected={selectedSuggestions.has(c.id)}
+                          onApply={(id) => applySuggestionMutation.mutate(id)}
+                          onToggleSelect={toggleSuggestion}
+                        />
+                      )}
                       <p className="text-xs text-text-secondary mt-1">
                         {formatRelative(c.createdAt)}
                       </p>
@@ -260,7 +408,13 @@ export default function PRDetail() {
                   disabled={!commentBody.trim() || commentMutation.isPending}
                   onClick={() => commentMutation.mutate()}
                 >
-                  {commentMutation.isPending ? <Spinner className="h-4 w-4" /> : 'Comment'}
+                  {commentMutation.isPending ? (
+                    <Spinner className="h-4 w-4" />
+                  ) : (
+                    <>
+                      <GitCommitHorizontal className="h-4 w-4" /> Comment
+                    </>
+                  )}
                 </Button>
                 <Button
                   size="sm"
@@ -302,39 +456,154 @@ export default function PRDetail() {
                   <Badge>Unknown</Badge>
                 )
               ) : (
-                <Badge variant={pr.status === 'MERGED' ? 'success' : 'default'}>{pr.status}</Badge>
+                <Badge variant={pr.status === 'MERGED' ? 'success' : 'default'}>
+                  {pr.status}
+                  {pr.status === 'MERGED' && pr.mergeStrategy
+                    ? ` (${pr.mergeStrategy.toLowerCase()})`
+                    : ''}
+                </Badge>
               )}
             </div>
 
+            {/* Merge checks */}
+            {pr.status === 'OPEN' && mergeChecks && (
+              <div className="space-y-2">
+                <p className="text-xs text-text-secondary uppercase font-semibold">Merge checks</p>
+                <div className="flex items-center gap-2 text-sm">
+                  {mergeChecks.reviewsMet ? (
+                    <ShieldCheck className="h-4 w-4 text-success" />
+                  ) : (
+                    <ShieldX className="h-4 w-4 text-danger" />
+                  )}
+                  <span className={mergeChecks.reviewsMet ? 'text-success' : 'text-danger'}>
+                    {mergeChecks.approvedReviews} of {mergeChecks.requiredReviews} required
+                    review(s)
+                  </span>
+                </div>
+                {mergeChecks.requireCI && (
+                  <div className="flex items-center gap-2 text-sm">
+                    {mergeChecks.ciPassed ? (
+                      <Check className="h-4 w-4 text-success" />
+                    ) : (
+                      <X className="h-4 w-4 text-danger" />
+                    )}
+                    <span className={mergeChecks.ciPassed ? 'text-success' : 'text-danger'}>
+                      CI checks {mergeChecks.ciPassed ? 'passed' : 'required'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Status checks */}
+            {pr.status === 'OPEN' && prStatuses && prStatuses.statuses.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-text-secondary uppercase font-semibold">
+                    Status checks
+                  </p>
+                  <Badge
+                    variant={
+                      prStatuses.combined === 'success'
+                        ? 'success'
+                        : prStatuses.combined === 'failure'
+                          ? 'danger'
+                          : 'default'
+                    }
+                  >
+                    {prStatuses.combined}
+                  </Badge>
+                </div>
+                <div className="space-y-1">
+                  {prStatuses.statuses.map((status: StatusCheck) => (
+                    <div key={status.id} className="flex items-center gap-2 text-sm">
+                      {status.state === 'SUCCESS' ? (
+                        <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                      ) : status.state === 'FAILURE' ? (
+                        <XCircleIcon className="h-4 w-4 text-danger shrink-0" />
+                      ) : status.state === 'ERROR' ? (
+                        <AlertCircle className="h-4 w-4 text-danger shrink-0" />
+                      ) : (
+                        <Loader2 className="h-4 w-4 text-warning animate-spin shrink-0" />
+                      )}
+                      <span className="flex-1 truncate">{status.context}</span>
+                      {status.targetUrl && (
+                        <a
+                          href={status.targetUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                          title="View details"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                  {prStatuses.statuses.some((s: StatusCheck) => s.description) && (
+                    <div className="mt-1 space-y-1">
+                      {prStatuses.statuses
+                        .filter((s: StatusCheck) => s.description)
+                        .map((s: StatusCheck) => (
+                          <p key={s.id} className="text-xs text-text-tertiary">
+                            {s.context}: {s.description}
+                          </p>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {pr.status === 'OPEN' && (
               <>
-                <div>
-                  <p className="text-xs text-text-secondary uppercase font-semibold mb-1">
-                    Strategy
-                  </p>
-                  <select
-                    value={mergeStrategy}
-                    onChange={(e) => setMergeStrategy(e.target.value)}
-                    className="w-full text-sm border border-border rounded px-2 py-1"
+                {/* Merge strategy split button */}
+                <div className="flex w-full">
+                  <Button
+                    className="flex-1 rounded-r-none"
+                    disabled={
+                      !pr.mergeable ||
+                      mergeMutation.isPending ||
+                      (mergeChecks != null && !mergeChecks.canMerge)
+                    }
+                    onClick={() => mergeMutation.mutate()}
                   >
-                    <option value="merge">Merge commit</option>
-                    <option value="squash">Squash and merge</option>
-                    <option value="rebase">Rebase</option>
-                  </select>
+                    {mergeMutation.isPending ? (
+                      <Spinner className="h-4 w-4" />
+                    ) : (
+                      <>
+                        {STRATEGY_LABELS[mergeStrategy || 'merge']?.icon}
+                        {STRATEGY_LABELS[mergeStrategy || 'merge']?.label ?? 'Merge'}
+                      </>
+                    )}
+                  </Button>
+                  <Dropdown
+                    align="right"
+                    trigger={
+                      <Button
+                        className="rounded-l-none border-l border-l-primary-hover px-2"
+                        disabled={!pr.mergeable || (mergeChecks != null && !mergeChecks.canMerge)}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    }
+                  >
+                    <DropdownItem onClick={() => setMergeStrategy('merge')}>
+                      <GitMerge className="h-4 w-4" /> Merge commit
+                    </DropdownItem>
+                    <DropdownItem onClick={() => setMergeStrategy('squash')}>
+                      <GitCommitHorizontal className="h-4 w-4" /> Squash and merge
+                    </DropdownItem>
+                    <DropdownItem onClick={() => setMergeStrategy('rebase')}>
+                      <GitBranchPlus className="h-4 w-4" /> Rebase and merge
+                    </DropdownItem>
+                  </Dropdown>
                 </div>
-                <Button
-                  className="w-full"
-                  disabled={!pr.mergeable || mergeMutation.isPending}
-                  onClick={() => mergeMutation.mutate()}
-                >
-                  {mergeMutation.isPending ? (
-                    <Spinner className="h-4 w-4" />
-                  ) : (
-                    <>
-                      <GitMerge className="h-4 w-4" /> Merge
-                    </>
-                  )}
-                </Button>
+                {mergeChecks && !mergeChecks.canMerge && (
+                  <p className="text-xs text-danger">
+                    Merge requirements not met. Check review and CI status above.
+                  </p>
+                )}
                 {mergeMutation.isError && (
                   <p className="text-xs text-danger">
                     {mergeMutation.error instanceof Error
@@ -349,6 +618,40 @@ export default function PRDetail() {
             )}
           </div>
 
+          {/* Code Owners */}
+          {codeOwners && codeOwners.owners.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-text-secondary" />
+                <p className="text-xs text-text-secondary uppercase font-semibold">Code Owners</p>
+                <Badge variant={codeOwners.allApproved ? 'success' : 'default'}>
+                  {codeOwners.allApproved ? 'All approved' : 'Pending'}
+                </Badge>
+              </div>
+              <div className="space-y-1">
+                {codeOwners.owners.map((owner: CodeOwnerStatus) => (
+                  <div key={owner.owner} className="flex items-center gap-2 text-sm">
+                    {owner.approved ? (
+                      <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                    ) : owner.reviewStatus === 'CHANGES_REQUESTED' ? (
+                      <XCircleIcon className="h-4 w-4 text-danger shrink-0" />
+                    ) : (
+                      <CircleDot className="h-4 w-4 text-text-tertiary shrink-0" />
+                    )}
+                    <span className="flex-1">{owner.owner}</span>
+                    <span className="text-xs text-text-tertiary">
+                      {owner.approved
+                        ? 'Approved'
+                        : owner.reviewStatus
+                          ? owner.reviewStatus.toLowerCase().replace('_', ' ')
+                          : 'Awaiting review'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-lg border border-border bg-surface p-4">
             <p className="text-xs text-text-secondary uppercase font-semibold mb-1">Branches</p>
             <p className="text-sm">
@@ -361,6 +664,132 @@ export default function PRDetail() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Split Diff View ────────────────────────────────────────
+
+interface SplitLine {
+  left: { num: number | null; content: string; type: 'same' | 'del' | 'empty' };
+  right: { num: number | null; content: string; type: 'same' | 'add' | 'empty' };
+}
+
+function parseDiffToSplit(raw: string): { file: string; lines: SplitLine[] }[] {
+  const files: { file: string; lines: SplitLine[] }[] = [];
+  const chunks = raw.split(/^diff --git /m).filter(Boolean);
+
+  for (const chunk of chunks) {
+    const linesRaw = chunk.split('\n');
+    // Extract filename from the first line (a/path b/path)
+    const headerMatch = linesRaw[0]?.match(/a\/(.+?) b\//);
+    const file = headerMatch?.[1] ?? 'unknown';
+    const splitLines: SplitLine[] = [];
+
+    let leftNum = 0;
+    let rightNum = 0;
+
+    for (const line of linesRaw) {
+      if (line.startsWith('@@')) {
+        const hunkMatch = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (hunkMatch) {
+          leftNum = parseInt(hunkMatch[1], 10) - 1;
+          rightNum = parseInt(hunkMatch[2], 10) - 1;
+        }
+        splitLines.push({
+          left: { num: null, content: line, type: 'same' },
+          right: { num: null, content: line, type: 'same' },
+        });
+        continue;
+      }
+      if (
+        line.startsWith('---') ||
+        line.startsWith('+++') ||
+        line.startsWith('index ') ||
+        line.startsWith('new file') ||
+        line.startsWith('deleted file')
+      ) {
+        continue;
+      }
+      if (line.startsWith('-')) {
+        leftNum++;
+        splitLines.push({
+          left: { num: leftNum, content: line.slice(1), type: 'del' },
+          right: { num: null, content: '', type: 'empty' },
+        });
+      } else if (line.startsWith('+')) {
+        rightNum++;
+        splitLines.push({
+          left: { num: null, content: '', type: 'empty' },
+          right: { num: rightNum, content: line.slice(1), type: 'add' },
+        });
+      } else if (line.length > 0 || line === '') {
+        leftNum++;
+        rightNum++;
+        splitLines.push({
+          left: {
+            num: leftNum,
+            content: line.startsWith(' ') ? line.slice(1) : line,
+            type: 'same',
+          },
+          right: {
+            num: rightNum,
+            content: line.startsWith(' ') ? line.slice(1) : line,
+            type: 'same',
+          },
+        });
+      }
+    }
+    if (splitLines.length > 0) {
+      files.push({ file, lines: splitLines });
+    }
+  }
+  return files;
+}
+
+function SplitDiffView({ rawDiff }: { rawDiff: string }) {
+  const files = parseDiffToSplit(rawDiff);
+
+  const bgClass = (type: string) =>
+    type === 'del'
+      ? 'bg-danger-light text-danger'
+      : type === 'add'
+        ? 'bg-success-light text-success'
+        : type === 'empty'
+          ? 'bg-surface-secondary'
+          : '';
+
+  return (
+    <div className="space-y-4">
+      {files.map((f) => (
+        <div key={f.file} className="rounded-lg border border-border overflow-hidden">
+          <div className="bg-surface-secondary px-3 py-1.5 text-xs font-mono text-text-secondary border-b border-border">
+            {f.file}
+          </div>
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table className="w-full text-xs font-mono border-collapse">
+              <tbody>
+                {f.lines.map((row, i) => (
+                  <tr key={i}>
+                    <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-border bg-surface-secondary">
+                      {row.left.num ?? ''}
+                    </td>
+                    <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.left.type)}`}>
+                      {row.left.content}
+                    </td>
+                    <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-l border-border bg-surface-secondary">
+                      {row.right.num ?? ''}
+                    </td>
+                    <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.right.type)}`}>
+                      {row.right.content}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
