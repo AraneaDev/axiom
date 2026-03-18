@@ -1,12 +1,13 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import app from '../../index';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 describe('Search API', () => {
   let token: string;
-  let orgId: string;
+  let _orgId: string;
   let teamId: string;
   let projectId: string;
   let spaceId: string;
@@ -32,7 +33,7 @@ describe('Search API', () => {
         members: { create: { userId: user.id, role: 'OWNER' } },
       },
     });
-    orgId = org.id;
+    _orgId = org.id;
 
     const team = await prisma.team.create({
       data: {

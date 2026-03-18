@@ -1,10 +1,19 @@
-import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { GitBranch, GitCommit, GitPullRequest, Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  GitBranch,
+  GitCommit,
+  GitPullRequest,
+  Plus,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
+import { useState } from 'react';
+
+import CreateBranchModal from './CreateBranchModal';
+
 import { issuesApi } from '@/api/issues.api';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
-import CreateBranchModal from './CreateBranchModal';
 
 interface Repo {
   id: string;
@@ -28,6 +37,13 @@ const PR_STATUS_COLORS: Record<string, string> = {
   CLOSED: 'bg-danger/10 text-danger border-danger/20',
 };
 
+/**
+ *
+ * @param root0
+ * @param root0.projectId
+ * @param root0.issueNumber
+ * @param root0.repos
+ */
 export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: Props) {
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
@@ -37,7 +53,7 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
   });
   const qc = useQueryClient();
 
-  const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggle = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const { data: branches = [] } = useQuery({
     queryKey: ['issue-branches', projectId, issueNumber],
@@ -65,14 +81,22 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
 
       {/* Branches */}
       <div className="mb-2">
-        <button
+        <Button
+          variant="ghost"
+          size="xs"
           onClick={() => toggle('branches')}
-          className="flex items-center gap-1 text-xs font-semibold text-text-secondary mb-1.5 w-full hover:text-text transition-colors"
+          className="flex items-center gap-1 text-xs font-semibold text-text-secondary mb-1.5 w-full hover:text-text"
         >
-          {expanded.branches ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {expanded.branches ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
           Branches
-          {branches.length > 0 && <span className="ml-auto text-text-tertiary">{branches.length}</span>}
-        </button>
+          {branches.length > 0 && (
+            <span className="ml-auto text-text-tertiary">{branches.length}</span>
+          )}
+        </Button>
         {expanded.branches && (
           <div className="space-y-1">
             {branches.map((b) => (
@@ -82,13 +106,23 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
                 <span className="text-text-tertiary ml-auto flex-shrink-0">{b.repo.name}</span>
               </div>
             ))}
-            <Button variant="ghost" size="sm" className="w-full text-xs mt-1" onClick={() => setShowBranchModal(true)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs mt-1"
+              onClick={() => setShowBranchModal(true)}
+            >
               <Plus className="h-3 w-3" /> Create Branch
             </Button>
           </div>
         )}
         {!expanded.branches && branches.length === 0 && (
-          <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setShowBranchModal(true)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs"
+            onClick={() => setShowBranchModal(true)}
+          >
             <Plus className="h-3 w-3" /> Create Branch
           </Button>
         )}
@@ -97,20 +131,31 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
       {/* Pull Requests */}
       {prs.length > 0 && (
         <div className="mb-2">
-          <button
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={() => toggle('prs')}
-            className="flex items-center gap-1 text-xs font-semibold text-text-secondary mb-1.5 w-full hover:text-text transition-colors"
+            className="flex items-center gap-1 text-xs font-semibold text-text-secondary mb-1.5 w-full hover:text-text"
           >
-            {expanded.prs ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {expanded.prs ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
             Pull Requests <span className="ml-auto text-text-tertiary">{prs.length}</span>
-          </button>
+          </Button>
           {expanded.prs && (
             <div className="space-y-1">
               {prs.map((p) => (
                 <div key={p.id} className="flex items-center gap-2 text-xs py-0.5">
                   <GitPullRequest className="h-3 w-3 text-text-tertiary flex-shrink-0" />
                   <span className="text-text truncate flex-1">{p.pr.title}</span>
-                  <span className={cn('px-1.5 py-0.5 rounded-full border text-[10px]', PR_STATUS_COLORS[p.pr.status] ?? '')}>
+                  <span
+                    className={cn(
+                      'px-1.5 py-0.5 rounded-full border text-[10px]',
+                      PR_STATUS_COLORS[p.pr.status] ?? '',
+                    )}
+                  >
                     {p.pr.status}
                   </span>
                 </div>
@@ -123,20 +168,28 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
       {/* Commits */}
       {commits.length > 0 && (
         <div>
-          <button
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={() => toggle('commits')}
-            className="flex items-center gap-1 text-xs font-semibold text-text-secondary mb-1.5 w-full hover:text-text transition-colors"
+            className="flex items-center gap-1 text-xs font-semibold text-text-secondary mb-1.5 w-full hover:text-text"
           >
-            {expanded.commits ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {expanded.commits ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
             Commits <span className="ml-auto text-text-tertiary">{commits.length}</span>
-          </button>
+          </Button>
           {expanded.commits && (
             <div className="space-y-1">
               {commits.slice(0, 5).map((c) => (
                 <div key={c.id} className="flex items-center gap-2 text-xs py-0.5">
                   <GitCommit className="h-3 w-3 text-text-tertiary flex-shrink-0" />
                   <code className="text-text-tertiary flex-shrink-0">{c.sha.slice(0, 7)}</code>
-                  <span className="text-text truncate flex-1">{c.message.split('\n')[0].slice(0, 60)}</span>
+                  <span className="text-text truncate flex-1">
+                    {c.message.split('\n')[0].slice(0, 60)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -144,9 +197,7 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
         </div>
       )}
 
-      {!hasDev && (
-        <p className="text-xs text-text-tertiary">No branches, commits, or PRs yet.</p>
-      )}
+      {!hasDev && <p className="text-xs text-text-tertiary">No branches, commits, or PRs yet.</p>}
 
       {showBranchModal && repos.length > 0 && (
         <CreateBranchModal

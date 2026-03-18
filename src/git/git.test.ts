@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
-import { execFile } from 'child_process';
 import { promisify } from 'util';
-import {
-  initBareRepo, deleteRepo, forkRepo, repoExists, getRepoSize,
-} from './repo-manager';
+
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import * as gitCmd from './git-commands';
+import { initBareRepo, deleteRepo, forkRepo, repoExists, getRepoSize } from './repo-manager';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,20 +22,47 @@ async function seedRepo() {
   await fs.mkdir(path.join(WORK_REPO, 'src'), { recursive: true });
   await fs.writeFile(path.join(WORK_REPO, 'src', 'index.ts'), 'console.log("hello");');
   await execFileAsync('git', ['-C', WORK_REPO, 'add', '.']);
-  await execFileAsync('git', ['-C', WORK_REPO, 'commit', '-m', 'Initial commit', '--author', 'Test User <test@axiom.dev>']);
+  await execFileAsync('git', [
+    '-C',
+    WORK_REPO,
+    'commit',
+    '-m',
+    'Initial commit',
+    '--author',
+    'Test User <test@axiom.dev>',
+  ]);
   await execFileAsync('git', ['-C', WORK_REPO, 'push', 'origin', 'main']);
 
   // Second commit
-  await fs.writeFile(path.join(WORK_REPO, 'src', 'utils.ts'), 'export const add = (a: number, b: number) => a + b;');
+  await fs.writeFile(
+    path.join(WORK_REPO, 'src', 'utils.ts'),
+    'export const add = (a: number, b: number) => a + b;',
+  );
   await execFileAsync('git', ['-C', WORK_REPO, 'add', '.']);
-  await execFileAsync('git', ['-C', WORK_REPO, 'commit', '-m', 'Add utils', '--author', 'Test User <test@axiom.dev>']);
+  await execFileAsync('git', [
+    '-C',
+    WORK_REPO,
+    'commit',
+    '-m',
+    'Add utils',
+    '--author',
+    'Test User <test@axiom.dev>',
+  ]);
   await execFileAsync('git', ['-C', WORK_REPO, 'push', 'origin', 'main']);
 
   // Create a feature branch
   await execFileAsync('git', ['-C', WORK_REPO, 'checkout', '-b', 'feature/auth']);
   await fs.writeFile(path.join(WORK_REPO, 'src', 'auth.ts'), 'export function login() {}');
   await execFileAsync('git', ['-C', WORK_REPO, 'add', '.']);
-  await execFileAsync('git', ['-C', WORK_REPO, 'commit', '-m', 'Add auth module', '--author', 'Test User <test@axiom.dev>']);
+  await execFileAsync('git', [
+    '-C',
+    WORK_REPO,
+    'commit',
+    '-m',
+    'Add auth module',
+    '--author',
+    'Test User <test@axiom.dev>',
+  ]);
   await execFileAsync('git', ['-C', WORK_REPO, 'push', 'origin', 'feature/auth']);
 }
 

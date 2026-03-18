@@ -1,6 +1,7 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Tag, Wand2, X } from 'lucide-react';
+import { useState } from 'react';
+
 import { releasesApi } from '@/api/releases.api';
 import { reposApi, type BranchInfo } from '@/api/repos.api';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +13,14 @@ interface Props {
   onCreated: () => void;
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.repoId
+ * @param root0.defaultBranch
+ * @param root0.onClose
+ * @param root0.onCreated
+ */
 export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onCreated }: Props) {
   const [tagName, setTagName] = useState('');
   const [title, setTitle] = useState('');
@@ -56,7 +65,14 @@ export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onC
     setError('');
     setLoading(true);
     try {
-      await releasesApi.create(repoId, { tagName, title, body, isDraft, isPrerelease, targetBranch });
+      await releasesApi.create(repoId, {
+        tagName,
+        title,
+        body,
+        isDraft,
+        isPrerelease,
+        targetBranch,
+      });
       onCreated();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create release');
@@ -73,13 +89,9 @@ export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onC
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Tag className="h-5 w-5" /> New Release
           </h2>
-          <button
-            onClick={onClose}
-            title="Close"
-            className="text-text-tertiary hover:text-text transition-colors p-1 rounded"
-          >
+          <Button variant="ghost" size="xs" onClick={onClose} title="Close">
             <X className="h-5 w-5" />
-          </button>
+          </Button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -165,16 +177,15 @@ export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onC
             </label>
           </div>
 
-          {error && (
-            <p className="text-sm text-danger bg-danger-light p-3 rounded-lg">{error}</p>
-          )}
+          {error && <p className="text-sm text-danger bg-danger-light p-3 rounded-lg">{error}</p>}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={onClose}>
               <X className="h-4 w-4" /> Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              <Tag className="h-4 w-4" /> {loading ? 'Creating...' : isDraft ? 'Save Draft' : 'Publish Release'}
+              <Tag className="h-4 w-4" />{' '}
+              {loading ? 'Creating...' : isDraft ? 'Save Draft' : 'Publish Release'}
             </Button>
           </div>
         </form>

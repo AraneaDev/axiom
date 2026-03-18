@@ -1,9 +1,17 @@
 import { cn } from '@/lib/utils';
 
+/**
+ *
+ * @param root0
+ * @param root0.className
+ */
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('animate-pulse rounded-md bg-surface-tertiary', className)} />;
 }
 
+/**
+ *
+ */
 export function CardSkeleton() {
   return (
     <div className="rounded-lg border border-border bg-surface p-5">
@@ -20,6 +28,11 @@ export function CardSkeleton() {
   );
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.rows
+ */
 export function ListSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="rounded-lg border border-border bg-surface divide-y divide-border">
@@ -37,13 +50,22 @@ export function ListSkeleton({ rows = 5 }: { rows?: number }) {
   );
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.rows
+ * @param root0.cols
+ */
 export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
   return (
     <div className="rounded-lg border border-border bg-surface">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-4 p-3 border-b border-border last:border-0">
           {Array.from({ length: cols }).map((_, j) => (
-            <Skeleton key={j} className={cn('h-4', j === 0 ? 'w-12' : j === 1 ? 'flex-1' : 'w-20')} />
+            <Skeleton
+              key={j}
+              className={cn('h-4', j === 0 ? 'w-12' : j === 1 ? 'flex-1' : 'w-20')}
+            />
           ))}
         </div>
       ))}

@@ -1,9 +1,14 @@
 import { Outlet } from 'react-router';
+
+import { Breadcrumbs } from './Breadcrumbs';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
-import { Breadcrumbs } from './Breadcrumbs';
+
 import { CommandPalette } from '@/components/ui/CommandPalette';
 
+/**
+ *
+ */
 export function AppShell() {
   return (
     <div className="flex h-screen flex-col bg-surface-secondary">

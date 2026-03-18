@@ -1,10 +1,12 @@
 import { Router } from 'express';
-import * as issuesController from './issues.controller';
-import * as linksCtrl from './issue-links.controller';
-import * as commitsCtrl from './issue-commits.controller';
-import * as branchesCtrl from './issue-branches.controller';
+
 import { authenticate } from '../../middleware/auth';
 import { requireProjectAccess } from '../../middleware/requireProjectAccess';
+
+import * as branchesCtrl from './issue-branches.controller';
+import * as commitsCtrl from './issue-commits.controller';
+import * as linksCtrl from './issue-links.controller';
+import * as issuesController from './issues.controller';
 
 const router = Router();
 

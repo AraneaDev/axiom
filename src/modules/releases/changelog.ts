@@ -27,6 +27,10 @@ const TYPE_ORDER = ['feat', 'fix', 'perf', 'refactor', 'docs', 'test', 'chore', 
 
 const CONVENTIONAL_RE = /^(feat|fix|chore|docs|refactor|test|perf)(\([^)]+\))?!?:\s+(.+)/i;
 
+/**
+ *
+ * @param commits
+ */
 export function generateChangelog(commits: CommitEntry[]): ChangelogSection[] {
   const groups: Record<string, CommitEntry[]> = {};
 
@@ -38,11 +42,9 @@ export function generateChangelog(commits: CommitEntry[]): ChangelogSection[] {
     groups[type].push(commit);
   }
 
-  return TYPE_ORDER
-    .filter(t => groups[t] && groups[t].length > 0)
-    .map(t => ({
-      type: t,
-      label: TYPE_LABELS[t] ?? t,
-      commits: groups[t],
-    }));
+  return TYPE_ORDER.filter((t) => groups[t] && groups[t].length > 0).map((t) => ({
+    type: t,
+    label: TYPE_LABELS[t] ?? t,
+    commits: groups[t],
+  }));
 }

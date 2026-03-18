@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import app from '../../index';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 describe('Auth API', () => {
   const testUser = {
@@ -136,9 +137,7 @@ describe('Auth API', () => {
     });
 
     it('should access profile with valid token', async () => {
-      const res = await request(app)
-        .get('/api/users/me')
-        .set('Authorization', `Bearer ${token}`);
+      const res = await request(app).get('/api/users/me').set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
       expect(res.body.email).toBe(testUser.email);
     });

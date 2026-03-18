@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+
 import { prisma } from '../config/database';
 import { env } from '../config/env';
+
 import { AppError } from './errorHandler';
 
 export interface AuthPayload {
@@ -9,6 +11,7 @@ export interface AuthPayload {
 }
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- Express augmentation requires namespace
   namespace Express {
     interface Request {
       userId?: string;
@@ -20,12 +23,11 @@ declare global {
  * Authenticate via JWT Bearer token or API token.
  * API tokens use the "Token" scheme: `Authorization: Token tk_...`
  * JWTs use the "Bearer" scheme: `Authorization: Bearer eyJ...`
+ * @param req
+ * @param _res
+ * @param next
  */
-export async function authenticate(
-  req: Request,
-  _res: Response,
-  next: NextFunction
-) {
+export async function authenticate(req: Request, _res: Response, next: NextFunction) {
   try {
     const header = req.headers.authorization;
     if (!header) throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');

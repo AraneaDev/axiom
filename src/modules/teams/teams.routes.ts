@@ -1,7 +1,9 @@
 import { Router } from 'express';
-import * as teamsController from './teams.controller';
+
 import { authenticate } from '../../middleware/auth';
 import { requireOrgPermission, requireTeamPermission } from '../../middleware/rbac';
+
+import * as teamsController from './teams.controller';
 
 const router = Router();
 
@@ -17,8 +19,20 @@ router.patch('/:teamId', requireTeamPermission('team:manage_members'), teamsCont
 router.delete('/:teamId', requireTeamPermission('team:delete'), teamsController.remove);
 
 // Team members
-router.post('/:teamId/members', requireTeamPermission('team:manage_members'), teamsController.addMember);
-router.patch('/:teamId/members/:memberId', requireTeamPermission('team:manage_members'), teamsController.updateMemberRole);
-router.delete('/:teamId/members/:memberId', requireTeamPermission('team:manage_members'), teamsController.removeMember);
+router.post(
+  '/:teamId/members',
+  requireTeamPermission('team:manage_members'),
+  teamsController.addMember,
+);
+router.patch(
+  '/:teamId/members/:memberId',
+  requireTeamPermission('team:manage_members'),
+  teamsController.updateMemberRole,
+);
+router.delete(
+  '/:teamId/members/:memberId',
+  requireTeamPermission('team:manage_members'),
+  teamsController.removeMember,
+);
 
 export default router;

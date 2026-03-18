@@ -1,11 +1,15 @@
+import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
+
+import { orgsApi } from '@/api/orgs.api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
-import { Plus } from 'lucide-react';
-import { orgsApi } from '@/api/orgs.api';
 
+/**
+ *
+ */
 export default function CreateOrg() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
@@ -16,7 +20,12 @@ export default function CreateOrg() {
 
   function handleNameChange(value: string) {
     setName(value);
-    setSlug(value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+    setSlug(
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, ''),
+    );
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -26,8 +35,8 @@ export default function CreateOrg() {
     try {
       const org = await orgsApi.create({ name, slug, description: description || undefined });
       navigate(`/${org.slug}`);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create organization');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create organization');
     } finally {
       setLoading(false);
     }
@@ -38,14 +47,32 @@ export default function CreateOrg() {
       <h1 className="text-2xl font-bold mb-6">Create organization</h1>
 
       {error && (
-        <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">{error}</div>
+        <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
+          {error}
+        </div>
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <Input id="name" label="Organization name" value={name} onChange={(e) => handleNameChange(e.target.value)} placeholder="My Company" required />
-        <Input id="slug" label="URL slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="my-company" required />
+        <Input
+          id="name"
+          label="Organization name"
+          value={name}
+          onChange={(e) => handleNameChange(e.target.value)}
+          placeholder="My Company"
+          required
+        />
+        <Input
+          id="slug"
+          label="URL slug"
+          value={slug}
+          onChange={(e) => setSlug(e.target.value)}
+          placeholder="my-company"
+          required
+        />
         <div className="flex flex-col gap-1">
-          <label htmlFor="desc" className="text-sm font-medium text-text">Description (optional)</label>
+          <label htmlFor="desc" className="text-sm font-medium text-text">
+            Description (optional)
+          </label>
           <textarea
             id="desc"
             value={description}
@@ -56,7 +83,13 @@ export default function CreateOrg() {
           />
         </div>
         <Button type="submit" disabled={loading}>
-          {loading ? <Spinner className="h-4 w-4" /> : <><Plus className="h-4 w-4" /> Create organization</>}
+          {loading ? (
+            <Spinner className="h-4 w-4" />
+          ) : (
+            <>
+              <Plus className="h-4 w-4" /> Create organization
+            </>
+          )}
         </Button>
       </form>
     </div>

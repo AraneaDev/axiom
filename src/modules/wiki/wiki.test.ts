@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import app from '../../index';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 describe('Wiki API', () => {
   let token: string;

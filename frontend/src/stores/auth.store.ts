@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import type { User } from '@/lib/types';
-import { setTokens, clearTokens, getAccessToken } from '@/api/client';
+
 import { authApi } from '@/api/auth.api';
+import { setTokens, clearTokens, getAccessToken } from '@/api/client';
 import { usersApi } from '@/api/users.api';
+import type { User } from '@/lib/types';
 
 interface AuthState {
   user: User | null;
@@ -41,8 +42,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       setTokens(res.accessToken, res.refreshToken);
       set({ user: res.user, isAuthenticated: true });
       return {};
-    } catch (err: any) {
-      if (err.code === 'TWO_FACTOR_REQUIRED') {
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'TWO_FACTOR_REQUIRED') {
         return { twoFactorRequired: true };
       }
       throw err;

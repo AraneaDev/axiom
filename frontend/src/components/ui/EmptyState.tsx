@@ -5,6 +5,14 @@ interface EmptyStateProps {
   action?: React.ReactNode;
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.icon
+ * @param root0.title
+ * @param root0.description
+ * @param root0.action
+ */
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">

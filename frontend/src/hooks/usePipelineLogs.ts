@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+
 import type { PipelineJob } from '@/api/pipelines.api';
 
+/**
+ *
+ * @param repoId
+ * @param runId
+ * @param isTerminal
+ */
 export function usePipelineLogs(repoId: string, runId: string | null, isTerminal: boolean) {
   const [jobs, setJobs] = useState<PipelineJob[]>([]);
   const [done, setDone] = useState(false);
@@ -16,7 +23,9 @@ export function usePipelineLogs(repoId: string, runId: string | null, isTerminal
       try {
         const data = JSON.parse(event.data);
         if (data.jobs) setJobs(data.jobs);
-      } catch {}
+      } catch {
+        /* ignore malformed SSE data */
+      }
     };
 
     es.addEventListener('done', () => {

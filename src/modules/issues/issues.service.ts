@@ -1,16 +1,34 @@
 import { Prisma } from '@prisma/client';
+
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
-export async function createIssue(projectId: string, creatorId: string, data: {
-  title: string;
-  body?: string;
-  type?: 'TASK' | 'BUG' | 'STORY' | 'EPIC';
-  priority?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  assigneeId?: string;
-  labels?: string[];
-  dueDate?: string;
-}) {
+/**
+ *
+ * @param projectId
+ * @param creatorId
+ * @param data
+ * @param data.title
+ * @param data.body
+ * @param data.type
+ * @param data.priority
+ * @param data.assigneeId
+ * @param data.labels
+ * @param data.dueDate
+ */
+export async function createIssue(
+  projectId: string,
+  creatorId: string,
+  data: {
+    title: string;
+    body?: string;
+    type?: 'TASK' | 'BUG' | 'STORY' | 'EPIC';
+    priority?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+    assigneeId?: string;
+    labels?: string[];
+    dueDate?: string;
+  },
+) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new AppError(404, 'Project not found');
 
@@ -39,12 +57,14 @@ export async function createIssue(projectId: string, creatorId: string, data: {
       creatorId,
       columnId: defaultColumn?.id,
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
-      labels: data.labels ? {
-        connectOrCreate: data.labels.map((name) => ({
-          where: { projectId_name: { projectId, name } },
-          create: { projectId, name },
-        })),
-      } : undefined,
+      labels: data.labels
+        ? {
+            connectOrCreate: data.labels.map((name) => ({
+              where: { projectId_name: { projectId, name } },
+              create: { projectId, name },
+            })),
+          }
+        : undefined,
     },
     include: {
       assignee: { select: { id: true, username: true, displayName: true } },
@@ -57,6 +77,11 @@ export async function createIssue(projectId: string, creatorId: string, data: {
   return { ...issue, key: `${project.prefix}-${number}` };
 }
 
+/**
+ *
+ * @param projectId
+ * @param issueNumber
+ */
 export async function getIssue(projectId: string, issueNumber: number) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new AppError(404, 'Project not found');
@@ -79,21 +104,36 @@ export async function getIssue(projectId: string, issueNumber: number) {
   return { ...issue, key: `${project.prefix}-${issue.number}` };
 }
 
-export async function listIssues(projectId: string, filters?: {
-  type?: string;
-  priority?: string;
-  assigneeId?: string;
-  columnId?: string;
-  label?: string;
-  limit?: number;
-  offset?: number;
-}) {
+/**
+ *
+ * @param projectId
+ * @param filters
+ * @param filters.type
+ * @param filters.priority
+ * @param filters.assigneeId
+ * @param filters.columnId
+ * @param filters.label
+ * @param filters.limit
+ * @param filters.offset
+ */
+export async function listIssues(
+  projectId: string,
+  filters?: {
+    type?: string;
+    priority?: string;
+    assigneeId?: string;
+    columnId?: string;
+    label?: string;
+    limit?: number;
+    offset?: number;
+  },
+) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new AppError(404, 'Project not found');
 
   const where: Prisma.IssueWhereInput = { projectId };
-  if (filters?.type) (where as any).type = filters.type;
-  if (filters?.priority) (where as any).priority = filters.priority;
+  if (filters?.type) where.type = filters.type as Prisma.IssueWhereInput['type'];
+  if (filters?.priority) where.priority = filters.priority as Prisma.IssueWhereInput['priority'];
   if (filters?.assigneeId) where.assigneeId = filters.assigneeId;
   if (filters?.columnId) where.columnId = filters.columnId;
   if (filters?.label) where.labels = { some: { name: filters.label } };
@@ -119,17 +159,36 @@ export async function listIssues(projectId: string, filters?: {
   };
 }
 
-export async function updateIssue(projectId: string, issueNumber: number, data: {
-  title?: string;
-  body?: string;
-  type?: 'TASK' | 'BUG' | 'STORY' | 'EPIC';
-  priority?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  assigneeId?: string;
-  columnId?: string;
-  position?: number;
-  dueDate?: string;
-  labels?: string[];
-}) {
+/**
+ *
+ * @param projectId
+ * @param issueNumber
+ * @param data
+ * @param data.title
+ * @param data.body
+ * @param data.type
+ * @param data.priority
+ * @param data.assigneeId
+ * @param data.columnId
+ * @param data.position
+ * @param data.dueDate
+ * @param data.labels
+ */
+export async function updateIssue(
+  projectId: string,
+  issueNumber: number,
+  data: {
+    title?: string;
+    body?: string;
+    type?: 'TASK' | 'BUG' | 'STORY' | 'EPIC';
+    priority?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+    assigneeId?: string;
+    columnId?: string;
+    position?: number;
+    dueDate?: string;
+    labels?: string[];
+  },
+) {
   const issue = await prisma.issue.findUnique({
     where: { projectId_number: { projectId, number: issueNumber } },
   });
@@ -140,7 +199,10 @@ export async function updateIssue(projectId: string, issueNumber: number, data: 
   if (data.body !== undefined) updateData.body = data.body;
   if (data.type !== undefined) updateData.type = data.type;
   if (data.priority !== undefined) updateData.priority = data.priority;
-  if (data.assigneeId !== undefined) updateData.assignee = data.assigneeId ? { connect: { id: data.assigneeId } } : { disconnect: true };
+  if (data.assigneeId !== undefined)
+    updateData.assignee = data.assigneeId
+      ? { connect: { id: data.assigneeId } }
+      : { disconnect: true };
   if (data.columnId !== undefined) updateData.column = { connect: { id: data.columnId } };
   if (data.position !== undefined) updateData.position = data.position;
   if (data.dueDate !== undefined) updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
@@ -166,6 +228,11 @@ export async function updateIssue(projectId: string, issueNumber: number, data: 
   });
 }
 
+/**
+ *
+ * @param projectId
+ * @param issueNumber
+ */
 export async function deleteIssue(projectId: string, issueNumber: number) {
   const issue = await prisma.issue.findUnique({
     where: { projectId_number: { projectId, number: issueNumber } },
@@ -174,6 +241,12 @@ export async function deleteIssue(projectId: string, issueNumber: number) {
   await prisma.issue.delete({ where: { id: issue.id } });
 }
 
+/**
+ *
+ * @param issueId
+ * @param authorId
+ * @param body
+ */
 export async function addComment(issueId: string, authorId: string, body: string) {
   return prisma.comment.create({
     data: { issueId, authorId, body },
@@ -181,6 +254,10 @@ export async function addComment(issueId: string, authorId: string, body: string
   });
 }
 
+/**
+ *
+ * @param projectId
+ */
 export async function getBoard(projectId: string) {
   const columns = await prisma.boardColumn.findMany({
     where: { projectId },

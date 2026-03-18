@@ -1,15 +1,35 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
-import { initBareRepo, deleteRepo, forkRepo, getRepoPath, repoExists, getRepoSize } from '../../git/repo-manager';
 import * as gitCmd from '../../git/git-commands';
+import {
+  initBareRepo,
+  deleteRepo,
+  forkRepo,
+  getRepoPath,
+  repoExists,
+  getRepoSize,
+} from '../../git/repo-manager';
+import { AppError } from '../../middleware/errorHandler';
 
-export async function createRepo(teamId: string, data: {
-  name: string;
-  slug: string;
-  description?: string;
-  visibility?: 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
-  defaultBranch?: string;
-}) {
+/**
+ *
+ * @param teamId
+ * @param data
+ * @param data.name
+ * @param data.slug
+ * @param data.description
+ * @param data.visibility
+ * @param data.defaultBranch
+ */
+export async function createRepo(
+  teamId: string,
+  data: {
+    name: string;
+    slug: string;
+    description?: string;
+    visibility?: 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
+    defaultBranch?: string;
+  },
+) {
   const team = await prisma.team.findUnique({
     where: { id: teamId },
     include: { org: { select: { slug: true } } },
@@ -39,6 +59,10 @@ export async function createRepo(teamId: string, data: {
   });
 }
 
+/**
+ *
+ * @param repoId
+ */
 export async function getRepo(repoId: string) {
   const repo = await prisma.repository.findUnique({
     where: { id: repoId },
@@ -49,13 +73,21 @@ export async function getRepo(repoId: string) {
   if (!repo) throw new AppError(404, 'Repository not found');
 
   let size: number | undefined;
-  if (repo.diskPath && await repoExists(repo.diskPath)) {
-    try { size = await getRepoSize(repo.diskPath); } catch { /* ignore */ }
+  if (repo.diskPath && (await repoExists(repo.diskPath))) {
+    try {
+      size = await getRepoSize(repo.diskPath);
+    } catch {
+      /* ignore */
+    }
   }
 
   return { ...repo, size };
 }
 
+/**
+ *
+ * @param teamId
+ */
 export async function listRepos(teamId: string) {
   return prisma.repository.findMany({
     where: { teamId },
@@ -63,26 +95,48 @@ export async function listRepos(teamId: string) {
   });
 }
 
-export async function updateRepo(repoId: string, data: {
-  name?: string;
-  description?: string;
-  visibility?: 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
-  defaultBranch?: string;
-}) {
+/**
+ *
+ * @param repoId
+ * @param data
+ * @param data.name
+ * @param data.description
+ * @param data.visibility
+ * @param data.defaultBranch
+ */
+export async function updateRepo(
+  repoId: string,
+  data: {
+    name?: string;
+    description?: string;
+    visibility?: 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
+    defaultBranch?: string;
+  },
+) {
   return prisma.repository.update({ where: { id: repoId }, data });
 }
 
+/**
+ *
+ * @param repoId
+ */
 export async function deleteRepoById(repoId: string) {
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
   if (!repo) throw new AppError(404, 'Repository not found');
 
-  if (repo.diskPath && await repoExists(repo.diskPath)) {
+  if (repo.diskPath && (await repoExists(repo.diskPath))) {
     await deleteRepo(repo.diskPath);
   }
 
   await prisma.repository.delete({ where: { id: repoId } });
 }
 
+/**
+ *
+ * @param repoId
+ * @param targetTeamId
+ * @param newSlug
+ */
 export async function forkRepoById(repoId: string, targetTeamId: string, newSlug: string) {
   const source = await prisma.repository.findUnique({
     where: { id: repoId },
@@ -117,7 +171,7 @@ export async function forkRepoById(repoId: string, targetTeamId: string, newSlug
 async function getRepoDiskPath(repoId: string): Promise<string> {
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
   if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
-  if (!await repoExists(repo.diskPath)) throw new AppError(404, 'Repository not found on disk');
+  if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not found on disk');
   return repo.diskPath;
 }
 
@@ -127,11 +181,20 @@ async function getRepoWithDefault(repoId: string) {
   return repo;
 }
 
+/**
+ *
+ * @param repoId
+ */
 export async function getBranches(repoId: string) {
   const repo = await getRepoWithDefault(repoId);
   return gitCmd.listBranches(repo.diskPath!, repo.defaultBranch);
 }
 
+/**
+ *
+ * @param repoId
+ * @param branchName
+ */
 export async function getBranchDetail(repoId: string, branchName: string) {
   const diskPath = await getRepoDiskPath(repoId);
   const exists = await gitCmd.branchExists(diskPath, branchName);
@@ -141,23 +204,51 @@ export async function getBranchDetail(repoId: string, branchName: string) {
   return { name: branchName, latestCommit: commits[0] ?? null, commitCount: count };
 }
 
+/**
+ *
+ * @param repoId
+ * @param name
+ * @param startPoint
+ */
 export async function createRepoBranch(repoId: string, name: string, startPoint: string) {
   const diskPath = await getRepoDiskPath(repoId);
   await gitCmd.createBranch(diskPath, name, startPoint);
   return { name, startPoint };
 }
 
+/**
+ *
+ * @param repoId
+ * @param name
+ */
 export async function deleteRepoBranch(repoId: string, name: string) {
   const repo = await getRepoWithDefault(repoId);
   if (name === repo.defaultBranch) throw new AppError(400, 'Cannot delete default branch');
   await gitCmd.deleteBranch(repo.diskPath!, name);
 }
 
-export async function getCommits(repoId: string, ref: string = 'HEAD', limit: number = 20, skip: number = 0) {
+/**
+ *
+ * @param repoId
+ * @param ref
+ * @param limit
+ * @param skip
+ */
+export async function getCommits(
+  repoId: string,
+  ref: string = 'HEAD',
+  limit: number = 20,
+  skip: number = 0,
+) {
   const diskPath = await getRepoDiskPath(repoId);
   return gitCmd.log(diskPath, ref, limit, skip);
 }
 
+/**
+ *
+ * @param repoId
+ * @param sha
+ */
 export async function getCommitDetail(repoId: string, sha: string) {
   const diskPath = await getRepoDiskPath(repoId);
   const commit = await gitCmd.getCommit(diskPath, sha);
@@ -167,11 +258,23 @@ export async function getCommitDetail(repoId: string, sha: string) {
   return { ...commit, diff: diffOutput, stats };
 }
 
+/**
+ *
+ * @param repoId
+ * @param ref
+ * @param treePath
+ */
 export async function getTree(repoId: string, ref: string, treePath: string = '') {
   const diskPath = await getRepoDiskPath(repoId);
   return gitCmd.lsTree(diskPath, ref, treePath);
 }
 
+/**
+ *
+ * @param repoId
+ * @param ref
+ * @param filePath
+ */
 export async function getBlob(repoId: string, ref: string, filePath: string) {
   const diskPath = await getRepoDiskPath(repoId);
   const content = await gitCmd.showBlob(diskPath, ref, filePath);
@@ -179,11 +282,21 @@ export async function getBlob(repoId: string, ref: string, filePath: string) {
   return { content, size, path: filePath };
 }
 
+/**
+ *
+ * @param repoId
+ * @param ref
+ * @param filePath
+ */
 export async function getBlame(repoId: string, ref: string, filePath: string) {
   const diskPath = await getRepoDiskPath(repoId);
   return gitCmd.blame(diskPath, ref, filePath);
 }
 
+/**
+ *
+ * @param repoId
+ */
 export async function getTags(repoId: string) {
   const diskPath = await getRepoDiskPath(repoId);
   return gitCmd.listTags(diskPath);

@@ -1,11 +1,22 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Workflow, Plus, Play, Trash2, CheckCircle2, XCircle, RefreshCw, Clock, X } from 'lucide-react';
+import {
+  Workflow,
+  Plus,
+  Play,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Clock,
+  X,
+} from 'lucide-react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
+
 import { pipelinesApi, type RunStatus, type Pipeline } from '@/api/pipelines.api';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { cn, formatRelative } from '@/lib/utils';
+import { formatRelative } from '@/lib/utils';
 
 const STATUS_ICON: Record<RunStatus, React.ReactNode> = {
   SUCCESS: <CheckCircle2 className="h-3.5 w-3.5 text-success" />,
@@ -73,25 +84,29 @@ function PipelineEditorModal({ repoId, pipeline, onClose, onSaved }: PipelineEdi
           <h2 className="font-semibold flex items-center gap-2">
             <Workflow className="h-4 w-4" /> {pipeline ? 'Edit Pipeline' : 'New Pipeline'}
           </h2>
-          <button onClick={onClose} className="text-text-tertiary hover:text-text p-1 rounded transition-colors">
+          <Button variant="ghost" size="xs" onClick={onClose} title="Close">
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
         <div className="p-4 space-y-3 flex-1 overflow-y-auto">
           <div>
-            <label className="text-xs font-semibold text-text-secondary mb-1.5 block">Pipeline Name</label>
+            <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
+              Pipeline Name
+            </label>
             <input
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={(e) => setName(e.target.value)}
               placeholder="CI"
               className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs font-semibold text-text-secondary mb-1.5 block">YAML Configuration</label>
+            <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
+              YAML Configuration
+            </label>
             <textarea
               value={yaml}
-              onChange={e => setYaml(e.target.value)}
+              onChange={(e) => setYaml(e.target.value)}
               rows={20}
               className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors font-mono resize-y text-xs"
               spellCheck={false}
@@ -99,12 +114,18 @@ function PipelineEditorModal({ repoId, pipeline, onClose, onSaved }: PipelineEdi
           </div>
           {errors.length > 0 && (
             <div className="bg-danger-light border border-danger/20 rounded-lg p-3">
-              {errors.map((e, i) => <p key={i} className="text-sm text-danger">{e}</p>)}
+              {errors.map((e, i) => (
+                <p key={i} className="text-sm text-danger">
+                  {e}
+                </p>
+              ))}
             </div>
           )}
         </div>
         <div className="flex justify-end gap-2 p-4 border-t border-border">
-          <Button variant="secondary" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
+          <Button variant="secondary" onClick={onClose}>
+            <X className="h-4 w-4" /> Cancel
+          </Button>
           <Button onClick={handleSave} disabled={!name || loading}>
             <Workflow className="h-4 w-4" /> {loading ? 'Saving...' : 'Save Pipeline'}
           </Button>
@@ -118,8 +139,17 @@ interface Props {
   repoId: string;
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.repoId
+ */
 export default function PipelinesTab({ repoId }: Props) {
-  const { org, team: teamSlug, repo: repoSlug } = useParams<{ org: string; team: string; repo: string }>();
+  const {
+    org,
+    team: teamSlug,
+    repo: repoSlug,
+  } = useParams<{ org: string; team: string; repo: string }>();
   const qc = useQueryClient();
   const [showEditor, setShowEditor] = useState(false);
   const [editPipeline, setEditPipeline] = useState<Pipeline | undefined>();
@@ -150,7 +180,13 @@ export default function PipelinesTab({ repoId }: Props) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-text-secondary">{pipelines.length} pipelines</p>
-        <Button size="sm" onClick={() => { setEditPipeline(undefined); setShowEditor(true); }}>
+        <Button
+          size="sm"
+          onClick={() => {
+            setEditPipeline(undefined);
+            setShowEditor(true);
+          }}
+        >
           <Plus className="h-4 w-4" /> New Pipeline
         </Button>
       </div>
@@ -160,20 +196,29 @@ export default function PipelinesTab({ repoId }: Props) {
           icon={<Workflow className="h-10 w-10" />}
           title="No pipelines yet"
           description="Create a pipeline to automate your CI/CD workflow."
-          action={<Button onClick={() => setShowEditor(true)}><Plus className="h-4 w-4" /> Create Pipeline</Button>}
+          action={
+            <Button onClick={() => setShowEditor(true)}>
+              <Plus className="h-4 w-4" /> Create Pipeline
+            </Button>
+          }
         />
       ) : (
         <>
           <div className="rounded-lg border border-border bg-surface overflow-hidden mb-6">
             <div className="divide-y divide-border">
-              {pipelines.map(p => {
+              {pipelines.map((p) => {
                 const lastRun = p.runs?.[0];
                 return (
-                  <div key={p.id} className="flex items-center gap-3 p-3 hover:bg-surface-secondary transition-colors">
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-3 p-3 hover:bg-surface-secondary transition-colors"
+                  >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm">{p.name}</span>
-                        {!p.isActive && <span className="text-xs text-text-tertiary">(inactive)</span>}
+                        {!p.isActive && (
+                          <span className="text-xs text-text-tertiary">(inactive)</span>
+                        )}
                       </div>
                       {lastRun && (
                         <div className="flex items-center gap-1.5 text-xs text-text-tertiary mt-0.5">
@@ -185,16 +230,33 @@ export default function PipelinesTab({ repoId }: Props) {
                       )}
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" title="Run pipeline"
-                        onClick={() => triggerMutation.mutate({ pipelineId: p.id })}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Run pipeline"
+                        onClick={() => triggerMutation.mutate({ pipelineId: p.id })}
+                      >
                         <Play className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="sm" title="Edit pipeline"
-                        onClick={() => { setEditPipeline(p); setShowEditor(true); }}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Edit pipeline"
+                        onClick={() => {
+                          setEditPipeline(p);
+                          setShowEditor(true);
+                        }}
+                      >
                         <Workflow className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="sm" title="Delete pipeline"
-                        onClick={() => { if (confirm(`Delete pipeline "${p.name}"?`)) deleteMutation.mutate(p.id); }}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Delete pipeline"
+                        onClick={() => {
+                          if (confirm(`Delete pipeline "${p.name}"?`)) deleteMutation.mutate(p.id);
+                        }}
+                      >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -209,7 +271,7 @@ export default function PipelinesTab({ repoId }: Props) {
               <h3 className="text-sm font-semibold mb-2">Recent Runs</h3>
               <div className="rounded-lg border border-border bg-surface overflow-hidden">
                 <div className="divide-y divide-border">
-                  {recentRuns.map(run => (
+                  {recentRuns.map((run) => (
                     <Link
                       key={run.id}
                       to={`/${org}/${teamSlug}/repos/${repoSlug}/runs/${run.id}`}
@@ -218,8 +280,14 @@ export default function PipelinesTab({ repoId }: Props) {
                       {STATUS_ICON[run.status]}
                       <span className="text-sm flex-1">{run.pipeline?.name}</span>
                       <span className="text-xs text-text-tertiary font-mono">{run.triggerRef}</span>
-                      {run.commitSha && <code className="text-xs text-text-tertiary">{run.commitSha.slice(0, 7)}</code>}
-                      <span className="text-xs text-text-tertiary">{formatRelative(run.createdAt)}</span>
+                      {run.commitSha && (
+                        <code className="text-xs text-text-tertiary">
+                          {run.commitSha.slice(0, 7)}
+                        </code>
+                      )}
+                      <span className="text-xs text-text-tertiary">
+                        {formatRelative(run.createdAt)}
+                      </span>
                     </Link>
                   ))}
                 </div>

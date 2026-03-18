@@ -1,11 +1,13 @@
+import crypto from 'crypto';
+
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 import { authenticator } from 'otplib';
+
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
-import { AppError } from '../../middleware/errorHandler';
 import type { AuthPayload } from '../../middleware/auth';
+import { AppError } from '../../middleware/errorHandler';
 
 const SALT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '15m';
@@ -19,6 +21,15 @@ function generateTokens(userId: string) {
   return { accessToken, refreshToken };
 }
 
+/**
+ *
+ * @param data
+ * @param data.email
+ * @param data.username
+ * @param data.displayName
+ * @param data.password
+ * @param data.inviteCode
+ */
 export async function register(data: {
   email: string;
   username: string;
@@ -28,7 +39,14 @@ export async function register(data: {
 }) {
   // Validate invite code (required unless no users exist — first user is admin)
   const userCount = await prisma.user.count();
-  let invite: any = null;
+  let invite: {
+    id: string;
+    orgId: string;
+    role: string;
+    expiresAt: Date | null;
+    uses: number;
+    maxUses: number;
+  } | null = null;
 
   if (userCount > 0) {
     if (!data.inviteCode) {
@@ -89,11 +107,14 @@ export async function register(data: {
   return { user, accessToken, refreshToken };
 }
 
-export async function login(data: {
-  login: string;
-  password: string;
-  twoFactorCode?: string;
-}) {
+/**
+ *
+ * @param data
+ * @param data.login
+ * @param data.password
+ * @param data.twoFactorCode
+ */
+export async function login(data: { login: string; password: string; twoFactorCode?: string }) {
   const user = await prisma.user.findFirst({
     where: {
       OR: [{ email: data.login }, { username: data.login }],
@@ -144,6 +165,10 @@ export async function login(data: {
   };
 }
 
+/**
+ *
+ * @param refreshTokenValue
+ */
 export async function refresh(refreshTokenValue: string) {
   const tokenHash = crypto.createHash('sha256').update(refreshTokenValue).digest('hex');
 
@@ -169,6 +194,10 @@ export async function refresh(refreshTokenValue: string) {
   return { accessToken, refreshToken: newRefreshToken };
 }
 
+/**
+ *
+ * @param userId
+ */
 export async function enableTwoFactor(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new AppError(404, 'User not found');
@@ -186,6 +215,11 @@ export async function enableTwoFactor(userId: string) {
   return { secret, otpauthUrl };
 }
 
+/**
+ *
+ * @param userId
+ * @param code
+ */
 export async function verifyAndActivateTwoFactor(userId: string, code: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.twoFactorSecret) {
@@ -203,6 +237,11 @@ export async function verifyAndActivateTwoFactor(userId: string, code: string) {
   return { enabled: true };
 }
 
+/**
+ *
+ * @param userId
+ * @param code
+ */
 export async function disableTwoFactor(userId: string, code: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.twoFactorSecret) {

@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+
 import { cn } from '@/lib/utils';
 
 interface TooltipProps {
@@ -16,11 +17,20 @@ const positions = {
 
 const arrows = {
   top: 'top-full left-1/2 -translate-x-1/2 border-t-surface-elevated border-x-transparent border-b-transparent border-4',
-  bottom: 'bottom-full left-1/2 -translate-x-1/2 border-b-surface-elevated border-x-transparent border-t-transparent border-4',
+  bottom:
+    'bottom-full left-1/2 -translate-x-1/2 border-b-surface-elevated border-x-transparent border-t-transparent border-4',
   left: 'left-full top-1/2 -translate-y-1/2 border-l-surface-elevated border-y-transparent border-r-transparent border-4',
-  right: 'right-full top-1/2 -translate-y-1/2 border-r-surface-elevated border-y-transparent border-l-transparent border-4',
+  right:
+    'right-full top-1/2 -translate-y-1/2 border-r-surface-elevated border-y-transparent border-l-transparent border-4',
 };
 
+/**
+ *
+ * @param root0
+ * @param root0.content
+ * @param root0.side
+ * @param root0.children
+ */
 export function Tooltip({ content, side = 'top', children }: TooltipProps) {
   return (
     <span className="group relative inline-flex">

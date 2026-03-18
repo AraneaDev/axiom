@@ -1,19 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router';
 import type { LucideIcon } from 'lucide-react';
-import {
-  Plus, Building2, ArrowRight, Users, GitBranch, FolderKanban, Layers,
-} from 'lucide-react';
-import { useAuthStore } from '@/stores/auth.store';
+import { Plus, Building2, ArrowRight, Users, GitBranch, FolderKanban, Layers } from 'lucide-react';
+import { Link } from 'react-router';
+
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
-import { Badge } from '@/components/ui/Badge';
 import type { Team } from '@/lib/types';
+import { useAuthStore } from '@/stores/auth.store';
 
-function StatCard({ icon: Icon, label, value, color }: { icon: LucideIcon; label: string; value: string | number; color: string }) {
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  color,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string | number;
+  color: string;
+}) {
   return (
     <div className="rounded-xl border border-border bg-surface p-4 flex items-center gap-4">
       <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${color}`}>
@@ -27,7 +36,13 @@ function StatCard({ icon: Icon, label, value, color }: { icon: LucideIcon; label
   );
 }
 
-function TeamCard({ team, orgSlug }: { team: Team & { _count?: { members: number; repos: number; projects: number } }; orgSlug: string }) {
+function TeamCard({
+  team,
+  orgSlug,
+}: {
+  team: Team & { _count?: { members: number; repos: number; projects: number } };
+  orgSlug: string;
+}) {
   return (
     <Link
       to={`/${orgSlug}/${team.slug}`}
@@ -47,14 +62,23 @@ function TeamCard({ team, orgSlug }: { team: Team & { _count?: { members: number
         <p className="text-sm text-text-secondary line-clamp-2 mb-3">{team.description}</p>
       )}
       <div className="flex gap-4 text-xs text-text-tertiary">
-        <span className="flex items-center gap-1"><FolderKanban className="h-3 w-3" /> {team._count?.projects ?? 0} projects</span>
-        <span className="flex items-center gap-1"><GitBranch className="h-3 w-3" /> {team._count?.repos ?? 0} repos</span>
-        <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {team._count?.members ?? 0} members</span>
+        <span className="flex items-center gap-1">
+          <FolderKanban className="h-3 w-3" /> {team._count?.projects ?? 0} projects
+        </span>
+        <span className="flex items-center gap-1">
+          <GitBranch className="h-3 w-3" /> {team._count?.repos ?? 0} repos
+        </span>
+        <span className="flex items-center gap-1">
+          <Users className="h-3 w-3" /> {team._count?.members ?? 0} members
+        </span>
       </div>
     </Link>
   );
 }
 
+/**
+ *
+ */
 export default function Dashboard() {
   const { user } = useAuthStore();
   const { data: orgs, isLoading } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
@@ -82,11 +106,15 @@ export default function Dashboard() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-text">{greeting}, {user?.displayName?.split(' ')[0]}</h1>
+          <h1 className="text-2xl font-bold text-text">
+            {greeting}, {user?.displayName?.split(' ')[0]}
+          </h1>
           <p className="text-text-secondary text-sm mt-0.5">Here's an overview of your workspace</p>
         </div>
         <Link to="/orgs/new">
-          <Button variant="outline" size="sm"><Plus className="h-3.5 w-3.5" /> New Organization</Button>
+          <Button variant="outline" size="sm">
+            <Plus className="h-3.5 w-3.5" /> New Organization
+          </Button>
         </Link>
       </div>
 
@@ -95,16 +123,42 @@ export default function Dashboard() {
           icon={<Building2 className="h-12 w-12" />}
           title="No organizations yet"
           description="Create your first organization to start managing projects and documentation."
-          action={<Link to="/orgs/new"><Button><Plus className="h-4 w-4" /> Create Organization</Button></Link>}
+          action={
+            <Link to="/orgs/new">
+              <Button>
+                <Plus className="h-4 w-4" /> Create Organization
+              </Button>
+            </Link>
+          }
         />
       ) : (
         <>
           {/* Stat cards */}
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-8">
-            <StatCard icon={Layers} label="Teams" value={totalTeams} color="bg-gradient-to-br from-indigo-500 to-purple-600" />
-            <StatCard icon={FolderKanban} label="Projects" value={totalProjects} color="bg-gradient-to-br from-emerald-400 to-teal-500" />
-            <StatCard icon={GitBranch} label="Repositories" value={totalRepos} color="bg-gradient-to-br from-sky-400 to-blue-500" />
-            <StatCard icon={Users} label="Team Members" value={totalMembers} color="bg-gradient-to-br from-amber-400 to-orange-500" />
+            <StatCard
+              icon={Layers}
+              label="Teams"
+              value={totalTeams}
+              color="bg-gradient-to-br from-indigo-500 to-purple-600"
+            />
+            <StatCard
+              icon={FolderKanban}
+              label="Projects"
+              value={totalProjects}
+              color="bg-gradient-to-br from-emerald-400 to-teal-500"
+            />
+            <StatCard
+              icon={GitBranch}
+              label="Repositories"
+              value={totalRepos}
+              color="bg-gradient-to-br from-sky-400 to-blue-500"
+            />
+            <StatCard
+              icon={Users}
+              label="Team Members"
+              value={totalMembers}
+              color="bg-gradient-to-br from-amber-400 to-orange-500"
+            />
           </div>
 
           {/* Org cards */}
@@ -124,11 +178,15 @@ export default function Dashboard() {
                 <div className="p-5 pt-7">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-semibold text-text text-sm truncate">{org.name}</h3>
-                    <Badge variant="outline" size="sm">{org.role?.toLowerCase()}</Badge>
+                    <Badge variant="outline" size="sm">
+                      {org.role?.toLowerCase()}
+                    </Badge>
                   </div>
                   <p className="text-xs text-text-tertiary mb-2">/{org.slug}</p>
                   {org.description && (
-                    <p className="text-sm text-text-secondary line-clamp-2 mb-3">{org.description}</p>
+                    <p className="text-sm text-text-secondary line-clamp-2 mb-3">
+                      {org.description}
+                    </p>
                   )}
                   <div className="flex items-center text-xs text-text-tertiary group-hover:text-primary transition-colors">
                     <span>Open workspace</span>

@@ -1,4 +1,5 @@
 import { get } from './client';
+
 import type { SearchResult } from '@/lib/types';
 
 export const searchApi = {

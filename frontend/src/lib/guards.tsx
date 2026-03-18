@@ -1,7 +1,11 @@
 import { Navigate, Outlet } from 'react-router';
-import { useAuthStore } from '@/stores/auth.store';
-import { PageLoader } from '@/components/ui/Spinner';
 
+import { PageLoader } from '@/components/ui/Spinner';
+import { useAuthStore } from '@/stores/auth.store';
+
+/**
+ *
+ */
 export function AuthGuard() {
   const { isAuthenticated, isLoading } = useAuthStore();
 
@@ -10,6 +14,9 @@ export function AuthGuard() {
   return <Outlet />;
 }
 
+/**
+ *
+ */
 export function GuestGuard() {
   const { isAuthenticated, isLoading } = useAuthStore();
 

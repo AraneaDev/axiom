@@ -1,8 +1,22 @@
 import { TeamRole } from '@prisma/client';
+
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
-export async function createTeam(orgId: string, userId: string, data: { name: string; slug: string; description?: string }) {
+/**
+ *
+ * @param orgId
+ * @param userId
+ * @param data
+ * @param data.name
+ * @param data.slug
+ * @param data.description
+ */
+export async function createTeam(
+  orgId: string,
+  userId: string,
+  data: { name: string; slug: string; description?: string },
+) {
   const existing = await prisma.team.findUnique({
     where: { orgId_slug: { orgId, slug: data.slug } },
   });
@@ -24,6 +38,10 @@ export async function createTeam(orgId: string, userId: string, data: { name: st
   });
 }
 
+/**
+ *
+ * @param teamId
+ */
 export async function getTeam(teamId: string) {
   const team = await prisma.team.findUnique({
     where: { id: teamId },
@@ -38,26 +56,53 @@ export async function getTeam(teamId: string) {
   return team;
 }
 
+/**
+ *
+ * @param orgId
+ */
 export async function listOrgTeams(orgId: string) {
   return prisma.team.findMany({
     where: { orgId },
     include: {
       _count: { select: { members: true, repos: true, projects: true } },
-      repos: { select: { id: true, name: true, slug: true, visibility: true }, orderBy: { name: 'asc' } },
-      wikiSpaces: { select: { id: true, name: true, slug: true, _count: { select: { pages: true } } }, orderBy: { name: 'asc' } },
+      repos: {
+        select: { id: true, name: true, slug: true, visibility: true },
+        orderBy: { name: 'asc' },
+      },
+      wikiSpaces: {
+        select: { id: true, name: true, slug: true, _count: { select: { pages: true } } },
+        orderBy: { name: 'asc' },
+      },
     },
     orderBy: { name: 'asc' },
   });
 }
 
+/**
+ *
+ * @param teamId
+ * @param data
+ * @param data.name
+ * @param data.description
+ */
 export async function updateTeam(teamId: string, data: { name?: string; description?: string }) {
   return prisma.team.update({ where: { id: teamId }, data });
 }
 
+/**
+ *
+ * @param teamId
+ */
 export async function deleteTeam(teamId: string) {
   await prisma.team.delete({ where: { id: teamId } });
 }
 
+/**
+ *
+ * @param teamId
+ * @param userId
+ * @param role
+ */
 export async function addTeamMember(teamId: string, userId: string, role: TeamRole = 'MEMBER') {
   const existing = await prisma.teamMembership.findUnique({
     where: { userId_teamId: { userId, teamId } },
@@ -79,6 +124,12 @@ export async function addTeamMember(teamId: string, userId: string, role: TeamRo
   });
 }
 
+/**
+ *
+ * @param teamId
+ * @param memberId
+ * @param role
+ */
 export async function updateTeamMemberRole(teamId: string, memberId: string, role: TeamRole) {
   const membership = await prisma.teamMembership.findFirst({
     where: { userId: memberId, teamId },
@@ -91,6 +142,11 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
   });
 }
 
+/**
+ *
+ * @param teamId
+ * @param memberId
+ */
 export async function removeTeamMember(teamId: string, memberId: string) {
   const membership = await prisma.teamMembership.findFirst({
     where: { userId: memberId, teamId },

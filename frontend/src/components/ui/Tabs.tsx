@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+
 import { cn } from '@/lib/utils';
 
 interface Tab {
@@ -14,6 +15,14 @@ interface TabsProps {
   className?: string;
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.tabs
+ * @param root0.activeKey
+ * @param root0.onChange
+ * @param root0.className
+ */
 export function Tabs({ tabs, activeKey, onChange, className }: TabsProps) {
   return (
     <div
@@ -31,9 +40,7 @@ export function Tabs({ tabs, activeKey, onChange, className }: TabsProps) {
             onClick={() => onChange(tab.key)}
             className={cn(
               'relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
-              active
-                ? 'text-primary'
-                : 'text-text-tertiary hover:text-text',
+              active ? 'text-primary' : 'text-text-tertiary hover:text-text',
             )}
           >
             {tab.icon && <span className="h-4 w-4">{tab.icon}</span>}

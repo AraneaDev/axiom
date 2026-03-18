@@ -1,11 +1,12 @@
+import { useQuery } from '@tanstack/react-query';
+import { Search, FileText, BookOpen, ArrowRight } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
-import { Search, FileText, BookOpen, ArrowRight } from 'lucide-react';
+
+import { searchApi } from '@/api/search.api';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
-import { searchApi } from '@/api/search.api';
 
 interface FlatItem {
   id: string;
@@ -14,6 +15,9 @@ interface FlatItem {
   url: string;
 }
 
+/**
+ *
+ */
 export function CommandPalette() {
   const { searchOpen, toggleSearch } = useUIStore();
   const navigate = useNavigate();
@@ -41,15 +45,16 @@ export function CommandPalette() {
   const flatItems = useMemo<FlatItem[]>(() => {
     if (!results) return [];
     return results.flatMap((group) =>
-      group.items.map((item: any) => ({
+      group.items.map((item) => ({
         id: item.id,
-        type: group.type,
-        title: item.title ?? item.name,
+        type: group.type as FlatItem['type'],
+        title: item.title ?? item.name ?? '',
         url: item.url,
       })),
     );
   }, [results]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- reset state on open/results change */
   /* ---- reset active index when results change ---- */
   useEffect(() => setActiveIndex(0), [flatItems]);
 
@@ -61,6 +66,7 @@ export function CommandPalette() {
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [searchOpen]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   /* ---- global shortcut (Cmd/Ctrl + K) ---- */
   useEffect(() => {
@@ -186,9 +192,15 @@ export function CommandPalette() {
         {/* Footer hint */}
         {flatItems.length > 0 && (
           <div className="flex items-center gap-4 border-t border-border-light px-4 py-2 text-[10px] text-text-tertiary">
-            <span><kbd className="font-semibold">&uarr;&darr;</kbd> navigate</span>
-            <span><kbd className="font-semibold">&crarr;</kbd> open</span>
-            <span><kbd className="font-semibold">esc</kbd> close</span>
+            <span>
+              <kbd className="font-semibold">&uarr;&darr;</kbd> navigate
+            </span>
+            <span>
+              <kbd className="font-semibold">&crarr;</kbd> open
+            </span>
+            <span>
+              <kbd className="font-semibold">esc</kbd> close
+            </span>
           </div>
         )}
       </div>

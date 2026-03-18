@@ -1,7 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
-import * as authService from './auth.service';
+
 import { registerSchema, loginSchema, refreshSchema } from '../../utils/validation';
 
+import * as authService from './auth.service';
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
     const data = registerSchema.parse(req.body);
@@ -12,6 +20,12 @@ export async function register(req: Request, res: Response, next: NextFunction) 
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const data = loginSchema.parse(req.body);
@@ -22,6 +36,12 @@ export async function login(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function refreshToken(req: Request, res: Response, next: NextFunction) {
   try {
     const { refreshToken } = refreshSchema.parse(req.body);
@@ -32,6 +52,12 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function enableTwoFactor(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await authService.enableTwoFactor(req.userId!);
@@ -41,6 +67,12 @@ export async function enableTwoFactor(req: Request, res: Response, next: NextFun
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function verifyTwoFactor(req: Request, res: Response, next: NextFunction) {
   try {
     const { code } = req.body;
@@ -51,6 +83,12 @@ export async function verifyTwoFactor(req: Request, res: Response, next: NextFun
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function disableTwoFactor(req: Request, res: Response, next: NextFunction) {
   try {
     const { code } = req.body;

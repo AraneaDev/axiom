@@ -1,4 +1,5 @@
 import { get, post, patch, del } from './client';
+
 import type { User, ApiToken, SshKey } from '@/lib/types';
 
 export const usersApi = {

@@ -25,18 +25,31 @@ export interface BranchInfo {
   isDefault: boolean;
 }
 
+/**
+ *
+ * @param repoPath
+ * @param defaultBranch
+ */
 export async function listBranches(repoPath: string, defaultBranch: string): Promise<BranchInfo[]> {
   const stdout = await git(
     ['for-each-ref', '--format=%(refname:short) %(objectname:short)', 'refs/heads/'],
     { cwd: repoPath },
   );
   if (!stdout.trim()) return [];
-  return stdout.trim().split('\n').map((line) => {
-    const [name, sha] = line.split(' ');
-    return { name, sha, isDefault: name === defaultBranch };
-  });
+  return stdout
+    .trim()
+    .split('\n')
+    .map((line) => {
+      const [name, sha] = line.split(' ');
+      return { name, sha, isDefault: name === defaultBranch };
+    });
 }
 
+/**
+ *
+ * @param repoPath
+ * @param branch
+ */
 export async function branchExists(repoPath: string, branch: string): Promise<boolean> {
   try {
     await git(['rev-parse', '--verify', `refs/heads/${branch}`], { cwd: repoPath });
@@ -46,10 +59,25 @@ export async function branchExists(repoPath: string, branch: string): Promise<bo
   }
 }
 
-export async function createBranch(repoPath: string, name: string, startPoint: string): Promise<void> {
+/**
+ *
+ * @param repoPath
+ * @param name
+ * @param startPoint
+ */
+export async function createBranch(
+  repoPath: string,
+  name: string,
+  startPoint: string,
+): Promise<void> {
   await git(['branch', name, startPoint], { cwd: repoPath });
 }
 
+/**
+ *
+ * @param repoPath
+ * @param name
+ */
 export async function deleteBranch(repoPath: string, name: string): Promise<void> {
   await git(['branch', '-D', name], { cwd: repoPath });
 }
@@ -65,6 +93,13 @@ export interface CommitInfo {
   message: string;
 }
 
+/**
+ *
+ * @param repoPath
+ * @param ref
+ * @param limit
+ * @param skip
+ */
 export async function log(
   repoPath: string,
   ref: string = 'HEAD',
@@ -92,6 +127,11 @@ export async function log(
   return commits;
 }
 
+/**
+ *
+ * @param repoPath
+ * @param sha
+ */
 export async function getCommit(repoPath: string, sha: string): Promise<CommitInfo | null> {
   try {
     const commits = await log(repoPath, sha, 1);
@@ -101,6 +141,11 @@ export async function getCommit(repoPath: string, sha: string): Promise<CommitIn
   }
 }
 
+/**
+ *
+ * @param repoPath
+ * @param ref
+ */
 export async function commitCount(repoPath: string, ref: string = 'HEAD'): Promise<number> {
   try {
     const stdout = await git(['rev-list', '--count', ref], { cwd: repoPath });
@@ -120,31 +165,57 @@ export interface TreeEntry {
   size?: number;
 }
 
-export async function lsTree(repoPath: string, ref: string, treePath: string = ''): Promise<TreeEntry[]> {
+/**
+ *
+ * @param repoPath
+ * @param ref
+ * @param treePath
+ */
+export async function lsTree(
+  repoPath: string,
+  ref: string,
+  treePath: string = '',
+): Promise<TreeEntry[]> {
   const args = ['ls-tree', '-l', ref];
   if (treePath) args.push('--', treePath);
 
   const stdout = await git(args, { cwd: repoPath });
   if (!stdout.trim()) return [];
 
-  return stdout.trim().split('\n').map((line) => {
-    // Format: mode SP type SP sha TAB name  (with -l: mode SP type SP sha SP size TAB name)
-    const match = line.match(/^(\d+)\s+(blob|tree)\s+([a-f0-9]+)\s+(-|\d+)\t(.+)$/);
-    if (!match) return null;
-    return {
-      mode: match[1],
-      type: match[2] as 'blob' | 'tree',
-      sha: match[3],
-      size: match[4] === '-' ? undefined : parseInt(match[4], 10),
-      name: match[5],
-    };
-  }).filter(Boolean) as TreeEntry[];
+  return stdout
+    .trim()
+    .split('\n')
+    .map((line) => {
+      // Format: mode SP type SP sha TAB name  (with -l: mode SP type SP sha SP size TAB name)
+      const match = line.match(/^(\d+)\s+(blob|tree)\s+([a-f0-9]+)\s+(-|\d+)\t(.+)$/);
+      if (!match) return null;
+      return {
+        mode: match[1],
+        type: match[2] as 'blob' | 'tree',
+        sha: match[3],
+        size: match[4] === '-' ? undefined : parseInt(match[4], 10),
+        name: match[5],
+      };
+    })
+    .filter(Boolean) as TreeEntry[];
 }
 
+/**
+ *
+ * @param repoPath
+ * @param ref
+ * @param filePath
+ */
 export async function showBlob(repoPath: string, ref: string, filePath: string): Promise<string> {
   return git(['show', `${ref}:${filePath}`], { cwd: repoPath });
 }
 
+/**
+ *
+ * @param repoPath
+ * @param ref
+ * @param filePath
+ */
 export async function blobSize(repoPath: string, ref: string, filePath: string): Promise<number> {
   const stdout = await git(['cat-file', '-s', `${ref}:${filePath}`], { cwd: repoPath });
   return parseInt(stdout.trim(), 10);
@@ -152,10 +223,21 @@ export async function blobSize(repoPath: string, ref: string, filePath: string):
 
 // ─── Diffs ──────────────────────────────────────────────────
 
+/**
+ *
+ * @param repoPath
+ * @param base
+ * @param head
+ */
 export async function diff(repoPath: string, base: string, head: string): Promise<string> {
   return git(['diff', base, head], { cwd: repoPath });
 }
 
+/**
+ *
+ * @param repoPath
+ * @param sha
+ */
 export async function diffCommit(repoPath: string, sha: string): Promise<string> {
   return git(['diff-tree', '-p', '--root', sha], { cwd: repoPath });
 }
@@ -166,17 +248,26 @@ export interface DiffStat {
   deletions: number;
 }
 
+/**
+ *
+ * @param repoPath
+ * @param base
+ * @param head
+ */
 export async function diffStat(repoPath: string, base: string, head: string): Promise<DiffStat[]> {
   const stdout = await git(['diff', '--numstat', base, head], { cwd: repoPath });
   if (!stdout.trim()) return [];
-  return stdout.trim().split('\n').map((line) => {
-    const [add, del, file] = line.split('\t');
-    return {
-      file,
-      additions: add === '-' ? 0 : parseInt(add, 10),
-      deletions: del === '-' ? 0 : parseInt(del, 10),
-    };
-  });
+  return stdout
+    .trim()
+    .split('\n')
+    .map((line) => {
+      const [add, del, file] = line.split('\t');
+      return {
+        file,
+        additions: add === '-' ? 0 : parseInt(add, 10),
+        deletions: del === '-' ? 0 : parseInt(del, 10),
+      };
+    });
 }
 
 // ─── Blame ──────────────────────────────────────────────────
@@ -189,11 +280,14 @@ export interface BlameLine {
   content: string;
 }
 
+/**
+ *
+ * @param repoPath
+ * @param ref
+ * @param filePath
+ */
 export async function blame(repoPath: string, ref: string, filePath: string): Promise<BlameLine[]> {
-  const stdout = await git(
-    ['blame', '--porcelain', ref, '--', filePath],
-    { cwd: repoPath },
-  );
+  const stdout = await git(['blame', '--porcelain', ref, '--', filePath], { cwd: repoPath });
   if (!stdout.trim()) return [];
 
   const lines = stdout.split('\n');
@@ -233,25 +327,44 @@ export interface TagInfo {
   sha: string;
 }
 
+/**
+ *
+ * @param repoPath
+ */
 export async function listTags(repoPath: string): Promise<TagInfo[]> {
   const stdout = await git(
     ['for-each-ref', '--format=%(refname:short) %(objectname:short)', 'refs/tags/'],
     { cwd: repoPath },
   );
   if (!stdout.trim()) return [];
-  return stdout.trim().split('\n').map((line) => {
-    const [name, sha] = line.split(' ');
-    return { name, sha };
-  });
+  return stdout
+    .trim()
+    .split('\n')
+    .map((line) => {
+      const [name, sha] = line.split(' ');
+      return { name, sha };
+    });
 }
 
 // ─── Merge checks ───────────────────────────────────────────
 
+/**
+ *
+ * @param repoPath
+ * @param a
+ * @param b
+ */
 export async function mergeBase(repoPath: string, a: string, b: string): Promise<string> {
   const stdout = await git(['merge-base', a, b], { cwd: repoPath });
   return stdout.trim();
 }
 
+/**
+ *
+ * @param repoPath
+ * @param source
+ * @param target
+ */
 export async function canMerge(repoPath: string, source: string, target: string): Promise<boolean> {
   try {
     // Use merge-tree to check for conflicts without modifying the repo
@@ -266,11 +379,23 @@ export async function canMerge(repoPath: string, source: string, target: string)
 
 // ─── Refs ───────────────────────────────────────────────────
 
+/**
+ *
+ * @param repoPath
+ * @param ref
+ */
 export async function resolveRef(repoPath: string, ref: string): Promise<string> {
   const stdout = await git(['rev-parse', ref], { cwd: repoPath });
   return stdout.trim();
 }
 
+/**
+ *
+ * @param repoPath
+ * @param tagName
+ * @param sha
+ * @param message
+ */
 export async function createTag(
   repoPath: string,
   tagName: string,
@@ -279,8 +404,18 @@ export async function createTag(
 ): Promise<void> {
   if (message) {
     await git(
-      ['-c', 'user.name=Axiom', '-c', 'user.email=axiom@local',
-       'tag', '-a', tagName, sha, '-m', message],
+      [
+        '-c',
+        'user.name=Axiom',
+        '-c',
+        'user.email=axiom@local',
+        'tag',
+        '-a',
+        tagName,
+        sha,
+        '-m',
+        message,
+      ],
       { cwd: repoPath },
     );
   } else {
@@ -288,6 +423,11 @@ export async function createTag(
   }
 }
 
+/**
+ *
+ * @param repoPath
+ * @param tagName
+ */
 export async function deleteTag(repoPath: string, tagName: string): Promise<void> {
   await git(['tag', '-d', tagName], { cwd: repoPath });
 }

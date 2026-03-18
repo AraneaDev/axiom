@@ -12,8 +12,9 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { execSync } from 'child_process';
-import path from 'path';
+import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 
 const prisma = new PrismaClient();
 
@@ -1247,17 +1248,60 @@ After resolution, create a post-mortem document:
         execSync(`git clone --bare /root/axiom "${selfDiskPath}"`, { stdio: 'pipe' });
         console.log(`        axiom (INTERNAL) — created bare clone at ${selfDiskPath}`);
       } else {
-        execSync(`git -C "${selfDiskPath}" fetch /root/axiom --tags`, { stdio: 'ignore' });
+        execSync(`git -C "${selfDiskPath}" fetch /root/axiom '+refs/heads/*:refs/heads/*' --tags --prune`, { stdio: 'ignore' });
         console.log(`        axiom (INTERNAL) — updated bare clone at ${selfDiskPath}`);
       }
+
+      // Ensure bare repo accepts pushes
+      execSync(`git -C "${selfDiskPath}" config receive.denyCurrentBranch ignore`, { stdio: 'ignore' });
     } else {
       console.log(`        axiom (INTERNAL) — DB record upserted (run scripts/init-self-repo.sh on host after committing)`);
+    }
+
+    // ── Dev API token for git push/pull ──
+    // Use a deterministic token so the local .git/config remote stays valid across re-seeds.
+    const DEV_TOKEN = 'tk_dev_axiom_local_0000000000000000000000000000000000000000000000';
+    const devTokenHash = crypto.createHash('sha256').update(DEV_TOKEN).digest('hex');
+    const devTokenPrefix = DEV_TOKEN.slice(0, 11);
+
+    await prisma.apiToken.upsert({
+      where: { tokenHash: devTokenHash },
+      update: { name: 'dev-git-push' },
+      create: {
+        userId: users['admin'].id,
+        name: 'dev-git-push',
+        tokenHash: devTokenHash,
+        prefix: devTokenPrefix,
+        scopes: ['repo:read', 'repo:write'],
+        expiresAt: null,
+      },
+    });
+
+    // Set up git remote on host so pushes go through the Axiom server
+    if (!isInsideDocker && sourceExists) {
+      const remoteUrl = 'http://localhost:3000/git/axiom/core/axiom.git';
+      try {
+        const existingRemote = execSync('git -C /root/axiom remote get-url axiom 2>/dev/null', { encoding: 'utf8' }).trim();
+        if (existingRemote !== remoteUrl) {
+          execSync(`git -C /root/axiom remote set-url axiom "${remoteUrl}"`, { stdio: 'pipe' });
+        }
+      } catch {
+        execSync(`git -C /root/axiom remote add axiom "${remoteUrl}"`, { stdio: 'pipe' });
+      }
+
+      // Configure git credential for the Axiom server
+      execSync(`git -C /root/axiom config credential."http://localhost:3000".username admin`, { stdio: 'pipe' });
+      execSync(`git -C /root/axiom config credential."http://localhost:3000".helper '!f() { echo "password=${DEV_TOKEN}"; }; f'`, { stdio: 'pipe' });
+
+      console.log(`        dev API token created (deterministic)`);
+      console.log(`        git remote "axiom" -> ${remoteUrl}`);
     }
   }
 
   console.log('\nDemo seed complete!');
   console.log('Login at http://localhost:5173/login');
-  console.log('Credentials: admin / password123\n');
+  console.log('Credentials: admin / password123');
+  console.log('Git push:    git push axiom master\n');
 }
 
 main()

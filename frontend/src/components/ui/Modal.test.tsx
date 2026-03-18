@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+
 import { Modal, ModalFooter } from './Modal';
 
 describe('Modal', () => {
@@ -90,7 +91,11 @@ describe('Modal', () => {
 
 describe('ModalFooter', () => {
   it('renders children', () => {
-    render(<ModalFooter><button>Save</button></ModalFooter>);
+    render(
+      <ModalFooter>
+        <button>Save</button>
+      </ModalFooter>,
+    );
     expect(screen.getByText('Save')).toBeInTheDocument();
   });
 });

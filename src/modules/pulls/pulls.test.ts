@@ -1,12 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
-import bcrypt from 'bcryptjs';
+import { execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
-import { execFile } from 'child_process';
 import { promisify } from 'util';
-import app from '../../index';
+
+import bcrypt from 'bcryptjs';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 const execFileAsync = promisify(execFile);
 const TEST_REPOS_PATH = process.env.REPOS_PATH || '/tmp/axiom-test-repos';
@@ -25,20 +27,30 @@ describe('Pull Requests API', () => {
     await prisma.user.upsert({
       where: { username: 'pruser' },
       update: {},
-      create: { email: 'prtest@axiom.dev', username: 'pruser', displayName: 'PR User', passwordHash },
+      create: {
+        email: 'prtest@axiom.dev',
+        username: 'pruser',
+        displayName: 'PR User',
+        passwordHash,
+      },
     });
-    const loginRes = await request(app).post('/api/auth/login').send({ login: 'pruser', password: 'testpassword123' });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ login: 'pruser', password: 'testpassword123' });
     token = loginRes.body.accessToken;
 
-    const orgRes = await request(app).post('/api/orgs')
+    const orgRes = await request(app)
+      .post('/api/orgs')
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'PR Org', slug: 'pr-org' });
 
-    const teamRes = await request(app).post(`/api/teams/org/${orgRes.body.id}`)
+    const teamRes = await request(app)
+      .post(`/api/teams/org/${orgRes.body.id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'Dev', slug: 'dev' });
 
-    const repoRes = await request(app).post(`/api/repos/team/${teamRes.body.id}`)
+    const repoRes = await request(app)
+      .post(`/api/repos/team/${teamRes.body.id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'PR Test', slug: 'pr-test' });
     repoId = repoRes.body.id;
@@ -50,19 +62,43 @@ describe('Pull Requests API', () => {
 
     await fs.writeFile(path.join(workDir, 'README.md'), '# PR Test');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'Initial commit', '--author', 'Test <t@t.com>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Initial commit',
+      '--author',
+      'Test <t@t.com>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'main']);
 
     await fs.writeFile(path.join(workDir, 'app.ts'), 'const app = "hello";');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'Add app', '--author', 'Test <t@t.com>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Add app',
+      '--author',
+      'Test <t@t.com>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'main']);
 
     // Feature branch
     await execFileAsync('git', ['-C', workDir, 'checkout', '-b', 'feature/login']);
     await fs.writeFile(path.join(workDir, 'login.ts'), 'export function login() { return true; }');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'Add login', '--author', 'Test <t@t.com>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Add login',
+      '--author',
+      'Test <t@t.com>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'feature/login']);
 
     // Another branch for merge test
@@ -70,7 +106,15 @@ describe('Pull Requests API', () => {
     await execFileAsync('git', ['-C', workDir, 'checkout', '-b', 'feature/signup']);
     await fs.writeFile(path.join(workDir, 'signup.ts'), 'export function signup() {}');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'Add signup', '--author', 'Test <t@t.com>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Add signup',
+      '--author',
+      'Test <t@t.com>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'feature/signup']);
 
     await fs.rm(workDir, { recursive: true });
@@ -97,7 +141,12 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .post(`/api/repos/${repoId}/pulls`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'Add login feature', body: 'Implements login', sourceBranch: 'feature/login', targetBranch: 'main' });
+      .send({
+        title: 'Add login feature',
+        body: 'Implements login',
+        sourceBranch: 'feature/login',
+        targetBranch: 'main',
+      });
     expect(res.status).toBe(201);
     expect(res.body.number).toBe(1);
     expect(res.body.title).toBe('Add login feature');

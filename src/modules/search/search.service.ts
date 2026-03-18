@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+
 import { prisma } from '../../config/database';
 
 interface SearchParams {
@@ -10,6 +11,10 @@ interface SearchParams {
   offset: number;
 }
 
+/**
+ *
+ * @param params
+ */
 export async function search(params: SearchParams) {
   const results: { type: string; items: Record<string, unknown>[] }[] = [];
 

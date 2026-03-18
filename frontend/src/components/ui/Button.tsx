@@ -1,4 +1,5 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
+
 import { cn } from '@/lib/utils';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -7,11 +8,14 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants = {
-  primary: 'bg-primary text-text-inverse hover:bg-primary-hover shadow-sm hover:shadow-md active:scale-[0.98]',
-  secondary: 'bg-surface-tertiary text-text border border-border hover:bg-surface-secondary hover:border-border-focus/30',
+  primary:
+    'bg-primary text-text-inverse hover:bg-primary-hover shadow-sm hover:shadow-md active:scale-[0.98]',
+  secondary:
+    'bg-surface-tertiary text-text border border-border hover:bg-surface-secondary hover:border-border-focus/30',
   danger: 'bg-danger text-text-inverse hover:opacity-90 shadow-sm active:scale-[0.98]',
   ghost: 'text-text-secondary hover:text-text hover:bg-surface-tertiary',
-  outline: 'border border-border text-text-secondary hover:text-text hover:border-primary hover:bg-primary-light',
+  outline:
+    'border border-border text-text-secondary hover:text-text hover:border-primary hover:bg-primary-light',
 };
 
 const sizes = {

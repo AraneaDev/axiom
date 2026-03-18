@@ -1,8 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
-import * as wikiService from './wiki.service';
-import { createWikiSpaceSchema, createPageSchema, updatePageSchema } from '../../utils/validation';
-import { param } from '../../utils/params';
 
+import { param } from '../../utils/params';
+import { createWikiSpaceSchema, createPageSchema, updatePageSchema } from '../../utils/validation';
+
+import * as wikiService from './wiki.service';
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function createSpace(req: Request, res: Response, next: NextFunction) {
   try {
     const data = createWikiSpaceSchema.parse(req.body);
@@ -13,6 +21,12 @@ export async function createSpace(req: Request, res: Response, next: NextFunctio
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function getSpace(req: Request, res: Response, next: NextFunction) {
   try {
     const space = await wikiService.getSpace(param(req, 'spaceId'));
@@ -22,6 +36,12 @@ export async function getSpace(req: Request, res: Response, next: NextFunction) 
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function listSpaces(req: Request, res: Response, next: NextFunction) {
   try {
     const spaces = await wikiService.listSpaces(param(req, 'teamId'));
@@ -31,6 +51,12 @@ export async function listSpaces(req: Request, res: Response, next: NextFunction
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function createPage(req: Request, res: Response, next: NextFunction) {
   try {
     const data = createPageSchema.parse(req.body);
@@ -41,6 +67,12 @@ export async function createPage(req: Request, res: Response, next: NextFunction
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function getPage(req: Request, res: Response, next: NextFunction) {
   try {
     const page = await wikiService.getPage(param(req, 'spaceId'), param(req, 'pageSlug'));
@@ -50,16 +82,33 @@ export async function getPage(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function updatePage(req: Request, res: Response, next: NextFunction) {
   try {
     const data = updatePageSchema.parse(req.body);
-    const page = await wikiService.updatePage(param(req, 'spaceId'), param(req, 'pageSlug'), req.userId!, data);
+    const page = await wikiService.updatePage(
+      param(req, 'spaceId'),
+      param(req, 'pageSlug'),
+      req.userId!,
+      data,
+    );
     res.json(page);
   } catch (err) {
     next(err);
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function deletePage(req: Request, res: Response, next: NextFunction) {
   try {
     await wikiService.deletePage(param(req, 'spaceId'), param(req, 'pageSlug'));
@@ -69,15 +118,30 @@ export async function deletePage(req: Request, res: Response, next: NextFunction
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function pageHistory(req: Request, res: Response, next: NextFunction) {
   try {
-    const versions = await wikiService.getPageHistory(param(req, 'spaceId'), param(req, 'pageSlug'));
+    const versions = await wikiService.getPageHistory(
+      param(req, 'spaceId'),
+      param(req, 'pageSlug'),
+    );
     res.json(versions);
   } catch (err) {
     next(err);
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function pageTree(req: Request, res: Response, next: NextFunction) {
   try {
     const tree = await wikiService.getPageTree(param(req, 'spaceId'));

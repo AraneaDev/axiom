@@ -1,7 +1,18 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
-export async function createSpace(teamId: string, data: { name: string; slug: string; description?: string }) {
+/**
+ *
+ * @param teamId
+ * @param data
+ * @param data.name
+ * @param data.slug
+ * @param data.description
+ */
+export async function createSpace(
+  teamId: string,
+  data: { name: string; slug: string; description?: string },
+) {
   const existing = await prisma.wikiSpace.findUnique({
     where: { teamId_slug: { teamId, slug: data.slug } },
   });
@@ -12,6 +23,10 @@ export async function createSpace(teamId: string, data: { name: string; slug: st
   });
 }
 
+/**
+ *
+ * @param spaceId
+ */
 export async function getSpace(spaceId: string) {
   const space = await prisma.wikiSpace.findUnique({
     where: { id: spaceId },
@@ -27,6 +42,10 @@ export async function getSpace(spaceId: string) {
   return space;
 }
 
+/**
+ *
+ * @param teamId
+ */
 export async function listSpaces(teamId: string) {
   return prisma.wikiSpace.findMany({
     where: { teamId },
@@ -35,13 +54,28 @@ export async function listSpaces(teamId: string) {
   });
 }
 
-export async function createPage(spaceId: string, authorId: string, data: {
-  title: string;
-  slug: string;
-  body?: string;
-  parentId?: string;
-  isDraft?: boolean;
-}) {
+/**
+ *
+ * @param spaceId
+ * @param authorId
+ * @param data
+ * @param data.title
+ * @param data.slug
+ * @param data.body
+ * @param data.parentId
+ * @param data.isDraft
+ */
+export async function createPage(
+  spaceId: string,
+  authorId: string,
+  data: {
+    title: string;
+    slug: string;
+    body?: string;
+    parentId?: string;
+    isDraft?: boolean;
+  },
+) {
   const existing = await prisma.page.findUnique({
     where: { spaceId_slug: { spaceId, slug: data.slug } },
   });
@@ -78,6 +112,11 @@ export async function createPage(spaceId: string, authorId: string, data: {
   return page;
 }
 
+/**
+ *
+ * @param spaceId
+ * @param pageSlug
+ */
 export async function getPage(spaceId: string, pageSlug: string) {
   const page = await prisma.page.findUnique({
     where: { spaceId_slug: { spaceId, slug: pageSlug } },
@@ -97,12 +136,28 @@ export async function getPage(spaceId: string, pageSlug: string) {
   return page;
 }
 
-export async function updatePage(spaceId: string, pageSlug: string, authorId: string, data: {
-  title?: string;
-  body?: string;
-  parentId?: string;
-  isDraft?: boolean;
-}) {
+/**
+ *
+ * @param spaceId
+ * @param pageSlug
+ * @param authorId
+ * @param data
+ * @param data.title
+ * @param data.body
+ * @param data.parentId
+ * @param data.isDraft
+ */
+export async function updatePage(
+  spaceId: string,
+  pageSlug: string,
+  authorId: string,
+  data: {
+    title?: string;
+    body?: string;
+    parentId?: string;
+    isDraft?: boolean;
+  },
+) {
   const page = await prisma.page.findUnique({
     where: { spaceId_slug: { spaceId, slug: pageSlug } },
     include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
@@ -131,6 +186,11 @@ export async function updatePage(spaceId: string, pageSlug: string, authorId: st
   });
 }
 
+/**
+ *
+ * @param spaceId
+ * @param pageSlug
+ */
 export async function deletePage(spaceId: string, pageSlug: string) {
   const page = await prisma.page.findUnique({
     where: { spaceId_slug: { spaceId, slug: pageSlug } },
@@ -139,6 +199,11 @@ export async function deletePage(spaceId: string, pageSlug: string) {
   await prisma.page.delete({ where: { id: page.id } });
 }
 
+/**
+ *
+ * @param spaceId
+ * @param pageSlug
+ */
 export async function getPageHistory(spaceId: string, pageSlug: string) {
   const page = await prisma.page.findUnique({
     where: { spaceId_slug: { spaceId, slug: pageSlug } },
@@ -153,6 +218,10 @@ export async function getPageHistory(spaceId: string, pageSlug: string) {
   return page.versions;
 }
 
+/**
+ *
+ * @param spaceId
+ */
 export async function getPageTree(spaceId: string) {
   const pages = await prisma.page.findMany({
     where: { spaceId },
@@ -160,7 +229,7 @@ export async function getPageTree(spaceId: string) {
     orderBy: { position: 'asc' },
   });
 
-  type PageNode = typeof pages[number] & { children: PageNode[] };
+  type PageNode = (typeof pages)[number] & { children: PageNode[] };
 
   // Build tree
   const map = new Map<string | null, typeof pages>();

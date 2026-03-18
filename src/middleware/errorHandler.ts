@@ -5,19 +5,21 @@ export class AppError extends Error {
   constructor(
     public statusCode: number,
     message: string,
-    public code?: string
+    public code?: string,
   ) {
     super(message);
     this.name = 'AppError';
   }
 }
 
-export function errorHandler(
-  err: Error,
-  _req: Request,
-  res: Response,
-  _next: NextFunction
-) {
+/**
+ *
+ * @param err
+ * @param _req
+ * @param res
+ * @param _next
+ */
+export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
       error: { message: err.message, code: err.code },

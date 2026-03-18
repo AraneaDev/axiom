@@ -4,7 +4,11 @@ import { z } from 'zod';
 
 export const registerSchema = z.object({
   email: z.string().email(),
-  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_-]+$/),
+  username: z
+    .string()
+    .min(3)
+    .max(30)
+    .regex(/^[a-zA-Z0-9_-]+$/),
   displayName: z.string().min(1).max(100),
   password: z.string().min(8).max(128),
   inviteCode: z.string().optional(),
@@ -24,7 +28,11 @@ export const refreshSchema = z.object({
 
 export const createOrgSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(2)
+    .max(50)
+    .regex(/^[a-z0-9-]+$/),
   description: z.string().max(500).optional(),
 });
 
@@ -32,7 +40,11 @@ export const createOrgSchema = z.object({
 
 export const createTeamSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(2)
+    .max(50)
+    .regex(/^[a-z0-9-]+$/),
   description: z.string().max(500).optional(),
 });
 
@@ -45,10 +57,20 @@ export const addTeamMemberSchema = z.object({
 
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(2)
+    .max(50)
+    .regex(/^[a-z0-9-]+$/),
   description: z.string().optional(),
-  prefix: z.string().min(2).max(10).regex(/^[A-Z]+$/),
+  prefix: z
+    .string()
+    .min(2)
+    .max(10)
+    .regex(/^[A-Z]+$/),
 });
+
+export const updateProjectSchema = createProjectSchema.partial();
 
 // ─── Issues ─────────────────────────────────────────────────
 
@@ -77,13 +99,21 @@ export const createCommentSchema = z.object({
 
 export const createWikiSpaceSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(2)
+    .max(50)
+    .regex(/^[a-z0-9-]+$/),
   description: z.string().max(500).optional(),
 });
 
 export const createPageSchema = z.object({
   title: z.string().min(1).max(200),
-  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/),
   body: z.string().default(''),
   parentId: z.string().optional(),
   isDraft: z.boolean().default(false),

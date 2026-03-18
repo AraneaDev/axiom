@@ -1,4 +1,5 @@
 import { get, post, patch, del } from './client';
+
 import type { Issue, BoardColumn, Comment } from '@/lib/types';
 
 export const issuesApi = {
@@ -31,35 +32,69 @@ export const issuesApi = {
 
   // Links
   listLinks: (projectId: string, issueNumber: number) =>
-    get<{ id: string; fromId: string; toId: string; type: string; fromKey: string; toKey: string; from: Record<string, unknown>; to: Record<string, unknown> }[]>(
-      `/projects/${projectId}/issues/${issueNumber}/links`
-    ),
-  addLink: (projectId: string, issueNumber: number, data: { targetProjectId: string; targetIssueNumber: number; type: string }) =>
-    post<{ id: string }>(`/projects/${projectId}/issues/${issueNumber}/links`, data),
+    get<
+      {
+        id: string;
+        fromId: string;
+        toId: string;
+        type: string;
+        fromKey: string;
+        toKey: string;
+        from: Record<string, unknown>;
+        to: Record<string, unknown>;
+      }[]
+    >(`/projects/${projectId}/issues/${issueNumber}/links`),
+  addLink: (
+    projectId: string,
+    issueNumber: number,
+    data: { targetProjectId: string; targetIssueNumber: number; type: string },
+  ) => post<{ id: string }>(`/projects/${projectId}/issues/${issueNumber}/links`, data),
   deleteLink: (projectId: string, issueNumber: number, linkId: string) =>
     del(`/projects/${projectId}/issues/${issueNumber}/links/${linkId}`),
 
   // Commits
   listIssueCommits: (projectId: string, issueNumber: number) =>
-    get<{ id: string; sha: string; message: string; authorName: string; committedAt: string; refType: string; repo: { id: string; slug: string; name: string } }[]>(
-      `/projects/${projectId}/issues/${issueNumber}/commits`
-    ),
+    get<
+      {
+        id: string;
+        sha: string;
+        message: string;
+        authorName: string;
+        committedAt: string;
+        refType: string;
+        repo: { id: string; slug: string; name: string };
+      }[]
+    >(`/projects/${projectId}/issues/${issueNumber}/commits`),
 
   // Branches
   listIssueBranches: (projectId: string, issueNumber: number) =>
-    get<{ id: string; branchName: string; repoId: string; repo: { id: string; slug: string; name: string } }[]>(
-      `/projects/${projectId}/issues/${issueNumber}/branches`
-    ),
-  createIssueBranch: (projectId: string, issueNumber: number, data: { repoId: string; branchName: string; startPoint?: string }) =>
+    get<
+      {
+        id: string;
+        branchName: string;
+        repoId: string;
+        repo: { id: string; slug: string; name: string };
+      }[]
+    >(`/projects/${projectId}/issues/${issueNumber}/branches`),
+  createIssueBranch: (
+    projectId: string,
+    issueNumber: number,
+    data: { repoId: string; branchName: string; startPoint?: string },
+  ) =>
     post<{ id: string; branchName: string; repo: { id: string; slug: string; name: string } }>(
-      `/projects/${projectId}/issues/${issueNumber}/branches`, data
+      `/projects/${projectId}/issues/${issueNumber}/branches`,
+      data,
     ),
   suggestBranchName: (projectId: string, issueNumber: number) =>
     get<{ suggestion: string }>(`/projects/${projectId}/issues/${issueNumber}/branches/suggest`),
 
   // Pull Requests linked to issue
   listIssuePRs: (projectId: string, issueNumber: number) =>
-    get<{ id: string; refType: string; pr: { id: string; number: number; title: string; status: string; sourceBranch: string } }[]>(
-      `/projects/${projectId}/issues/${issueNumber}/pull-requests`
-    ),
+    get<
+      {
+        id: string;
+        refType: string;
+        pr: { id: string; number: number; title: string; status: string; sourceBranch: string };
+      }[]
+    >(`/projects/${projectId}/issues/${issueNumber}/pull-requests`),
 };

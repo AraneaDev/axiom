@@ -1,4 +1,5 @@
 import { post } from './client';
+
 import type { AuthResponse } from '@/lib/types';
 
 export const authApi = {

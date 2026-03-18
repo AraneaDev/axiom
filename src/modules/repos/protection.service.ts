@@ -1,14 +1,28 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
-export async function createRule(repoId: string, data: {
-  pattern: string;
-  requiredReviews?: number;
-  requireCI?: boolean;
-  noForcePush?: boolean;
-  noDirectPush?: boolean;
-  requireLinear?: boolean;
-}) {
+/**
+ *
+ * @param repoId
+ * @param data
+ * @param data.pattern
+ * @param data.requiredReviews
+ * @param data.requireCI
+ * @param data.noForcePush
+ * @param data.noDirectPush
+ * @param data.requireLinear
+ */
+export async function createRule(
+  repoId: string,
+  data: {
+    pattern: string;
+    requiredReviews?: number;
+    requireCI?: boolean;
+    noForcePush?: boolean;
+    noDirectPush?: boolean;
+    requireLinear?: boolean;
+  },
+) {
   const existing = await prisma.branchProtection.findUnique({
     where: { repoId_pattern: { repoId, pattern: data.pattern } },
   });
@@ -19,6 +33,10 @@ export async function createRule(repoId: string, data: {
   });
 }
 
+/**
+ *
+ * @param repoId
+ */
 export async function listRules(repoId: string) {
   return prisma.branchProtection.findMany({
     where: { repoId },
@@ -26,24 +44,45 @@ export async function listRules(repoId: string) {
   });
 }
 
+/**
+ *
+ * @param ruleId
+ */
 export async function getRule(ruleId: string) {
   const rule = await prisma.branchProtection.findUnique({ where: { id: ruleId } });
   if (!rule) throw new AppError(404, 'Protection rule not found');
   return rule;
 }
 
-export async function updateRule(ruleId: string, data: {
-  requiredReviews?: number;
-  requireCI?: boolean;
-  noForcePush?: boolean;
-  noDirectPush?: boolean;
-  requireLinear?: boolean;
-}) {
+/**
+ *
+ * @param ruleId
+ * @param data
+ * @param data.requiredReviews
+ * @param data.requireCI
+ * @param data.noForcePush
+ * @param data.noDirectPush
+ * @param data.requireLinear
+ */
+export async function updateRule(
+  ruleId: string,
+  data: {
+    requiredReviews?: number;
+    requireCI?: boolean;
+    noForcePush?: boolean;
+    noDirectPush?: boolean;
+    requireLinear?: boolean;
+  },
+) {
   const rule = await prisma.branchProtection.findUnique({ where: { id: ruleId } });
   if (!rule) throw new AppError(404, 'Protection rule not found');
   return prisma.branchProtection.update({ where: { id: ruleId }, data });
 }
 
+/**
+ *
+ * @param ruleId
+ */
 export async function deleteRule(ruleId: string) {
   const rule = await prisma.branchProtection.findUnique({ where: { id: ruleId } });
   if (!rule) throw new AppError(404, 'Protection rule not found');
@@ -53,6 +92,8 @@ export async function deleteRule(ruleId: string) {
 /**
  * Check if a branch matches any protection rules for a repo.
  * Returns the matching rule or null.
+ * @param repoId
+ * @param branchName
  */
 export async function getMatchingRule(repoId: string, branchName: string) {
   const rules = await prisma.branchProtection.findMany({ where: { repoId } });
@@ -70,6 +111,8 @@ export async function getMatchingRule(repoId: string, branchName: string) {
  * "main" matches "main"
  * "release/*" matches "release/v1.0", "release/hotfix"
  * "*" matches everything
+ * @param pattern
+ * @param branchName
  */
 function matchesPattern(pattern: string, branchName: string): boolean {
   if (pattern === '*') return true;
@@ -84,6 +127,9 @@ function matchesPattern(pattern: string, branchName: string): boolean {
 /**
  * Enforce protection rules before a merge.
  * Throws AppError if any rule is violated.
+ * @param repoId
+ * @param targetBranch
+ * @param prId
  */
 export async function enforceMergeProtection(repoId: string, targetBranch: string, prId: string) {
   const rule = await getMatchingRule(repoId, targetBranch);
@@ -97,7 +143,10 @@ export async function enforceMergeProtection(repoId: string, targetBranch: strin
       },
     });
     if (approvedCount < rule.requiredReviews) {
-      throw new AppError(403, `Requires at least ${rule.requiredReviews} approved review(s), has ${approvedCount}`);
+      throw new AppError(
+        403,
+        `Requires at least ${rule.requiredReviews} approved review(s), has ${approvedCount}`,
+      );
     }
   }
 

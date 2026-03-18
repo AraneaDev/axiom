@@ -1,13 +1,15 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tag, Plus, Trash2, Send } from 'lucide-react';
+import { useState } from 'react';
+
+import CreateReleaseModal from './CreateReleaseModal';
+
 import { releasesApi, type Release } from '@/api/releases.api';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatRelative } from '@/lib/utils';
-import CreateReleaseModal from './CreateReleaseModal';
 
 interface Props {
   repoId: string;
@@ -17,6 +19,12 @@ interface Props {
   defaultBranch: string;
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.repoId
+ * @param root0.defaultBranch
+ */
 export default function ReleasesTab({ repoId, defaultBranch }: Props) {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
@@ -46,8 +54,16 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
           <span className="text-xs font-mono bg-primary-light text-primary px-2 py-0.5 rounded border border-primary/20">
             {release.tagName}
           </span>
-          {release.isDraft && <Badge variant="outline" size="sm">Draft</Badge>}
-          {release.isPrerelease && <Badge variant="outline" size="sm">Pre-release</Badge>}
+          {release.isDraft && (
+            <Badge variant="outline" size="sm">
+              Draft
+            </Badge>
+          )}
+          {release.isPrerelease && (
+            <Badge variant="outline" size="sm">
+              Pre-release
+            </Badge>
+          )}
         </div>
         <h3 className="font-semibold text-sm mb-0.5">{release.title}</h3>
         {release.body && (

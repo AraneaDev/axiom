@@ -1,9 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
-import * as usersService from './users.service';
-import { addSshKeySchema, createApiTokenSchema } from '../../utils/validation';
+
 import { param } from '../../utils/params';
+import { addSshKeySchema, createApiTokenSchema } from '../../utils/validation';
+
+import * as usersService from './users.service';
 
 // Profile
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function getMe(req: Request, res: Response, next: NextFunction) {
   try {
     const user = await usersService.getProfile(req.userId!);
@@ -13,6 +21,12 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function updateMe(req: Request, res: Response, next: NextFunction) {
   try {
     const user = await usersService.updateProfile(req.userId!, req.body);
@@ -23,6 +37,12 @@ export async function updateMe(req: Request, res: Response, next: NextFunction) 
 }
 
 // SSH Keys
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function listSshKeys(req: Request, res: Response, next: NextFunction) {
   try {
     const keys = await usersService.listSshKeys(req.userId!);
@@ -32,6 +52,12 @@ export async function listSshKeys(req: Request, res: Response, next: NextFunctio
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function addSshKey(req: Request, res: Response, next: NextFunction) {
   try {
     const data = addSshKeySchema.parse(req.body);
@@ -42,6 +68,12 @@ export async function addSshKey(req: Request, res: Response, next: NextFunction)
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function deleteSshKey(req: Request, res: Response, next: NextFunction) {
   try {
     await usersService.deleteSshKey(req.userId!, param(req, 'keyId'));
@@ -52,6 +84,12 @@ export async function deleteSshKey(req: Request, res: Response, next: NextFuncti
 }
 
 // API Tokens
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function listApiTokens(req: Request, res: Response, next: NextFunction) {
   try {
     const tokens = await usersService.listApiTokens(req.userId!);
@@ -61,6 +99,12 @@ export async function listApiTokens(req: Request, res: Response, next: NextFunct
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function createApiToken(req: Request, res: Response, next: NextFunction) {
   try {
     const data = createApiTokenSchema.parse(req.body);
@@ -71,6 +115,12 @@ export async function createApiToken(req: Request, res: Response, next: NextFunc
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function deleteApiToken(req: Request, res: Response, next: NextFunction) {
   try {
     await usersService.deleteApiToken(req.userId!, param(req, 'tokenId'));

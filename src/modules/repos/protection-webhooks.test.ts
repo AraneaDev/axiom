@@ -1,12 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
-import bcrypt from 'bcryptjs';
+import { execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
-import { execFile } from 'child_process';
 import { promisify } from 'util';
-import app from '../../index';
+
+import bcrypt from 'bcryptjs';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 const execFileAsync = promisify(execFile);
 const TEST_REPOS_PATH = process.env.REPOS_PATH || '/tmp/axiom-test-repos';
@@ -25,20 +27,30 @@ describe('Branch Protection & Webhooks', () => {
     await prisma.user.upsert({
       where: { username: 'protuser' },
       update: {},
-      create: { email: 'prottest@axiom.dev', username: 'protuser', displayName: 'Prot User', passwordHash },
+      create: {
+        email: 'prottest@axiom.dev',
+        username: 'protuser',
+        displayName: 'Prot User',
+        passwordHash,
+      },
     });
-    const loginRes = await request(app).post('/api/auth/login').send({ login: 'protuser', password: 'testpassword123' });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ login: 'protuser', password: 'testpassword123' });
     token = loginRes.body.accessToken;
 
-    const orgRes = await request(app).post('/api/orgs')
+    const orgRes = await request(app)
+      .post('/api/orgs')
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'Prot Org', slug: 'prot-org' });
 
-    const teamRes = await request(app).post(`/api/teams/org/${orgRes.body.id}`)
+    const teamRes = await request(app)
+      .post(`/api/teams/org/${orgRes.body.id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'Dev', slug: 'dev' });
 
-    const repoRes = await request(app).post(`/api/repos/team/${teamRes.body.id}`)
+    const repoRes = await request(app)
+      .post(`/api/repos/team/${teamRes.body.id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'Protected', slug: 'protected' });
     repoId = repoRes.body.id;
@@ -49,12 +61,28 @@ describe('Branch Protection & Webhooks', () => {
     await execFileAsync('git', ['clone', repo!.diskPath!, workDir]);
     await fs.writeFile(path.join(workDir, 'README.md'), '# Protected');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'init', '--author', 'Test <t@t.com>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'init',
+      '--author',
+      'Test <t@t.com>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'main']);
     await execFileAsync('git', ['-C', workDir, 'checkout', '-b', 'feature/x']);
     await fs.writeFile(path.join(workDir, 'x.ts'), 'export const x = 1;');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'Add x', '--author', 'Test <t@t.com>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Add x',
+      '--author',
+      'Test <t@t.com>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'feature/x']);
     await fs.rm(workDir, { recursive: true });
   });
@@ -192,7 +220,11 @@ describe('Branch Protection & Webhooks', () => {
       const res = await request(app)
         .post(`/api/repos/${repoId}/webhooks`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ url: 'https://example.com/hook', secret: 'my-secret', events: ['push', 'pr:created'] });
+        .send({
+          url: 'https://example.com/hook',
+          secret: 'my-secret',
+          events: ['push', 'pr:created'],
+        });
       expect(res.status).toBe(201);
       expect(res.body.url).toBe('https://example.com/hook');
       expect(res.body.events).toEqual(['push', 'pr:created']);

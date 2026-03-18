@@ -15,6 +15,11 @@ let accessToken: string | null = localStorage.getItem('accessToken');
 let refreshToken: string | null = localStorage.getItem('refreshToken');
 let refreshPromise: Promise<void> | null = null;
 
+/**
+ *
+ * @param access
+ * @param refresh
+ */
 export function setTokens(access: string, refresh: string) {
   accessToken = access;
   refreshToken = refresh;
@@ -22,6 +27,9 @@ export function setTokens(access: string, refresh: string) {
   localStorage.setItem('refreshToken', refresh);
 }
 
+/**
+ *
+ */
 export function clearTokens() {
   accessToken = null;
   refreshToken = null;
@@ -29,6 +37,9 @@ export function clearTokens() {
   localStorage.removeItem('refreshToken');
 }
 
+/**
+ *
+ */
 export function getAccessToken() {
   return accessToken;
 }
@@ -51,9 +62,15 @@ async function refreshAccessToken(): Promise<void> {
   setTokens(data.accessToken, data.refreshToken);
 }
 
-export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+/**
+ *
+ * @param path
+ * @param options
+ */
+export async function api<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
     ...(options.headers as Record<string, string>),
   };
 
@@ -86,9 +103,9 @@ export async function api<T = any>(path: string, options: RequestInit = {}): Pro
 }
 
 // Convenience methods
-export const get = <T = any>(path: string) => api<T>(path);
-export const post = <T = any>(path: string, body: any) =>
+export const get = <T = unknown>(path: string) => api<T>(path);
+export const post = <T = unknown>(path: string, body: unknown) =>
   api<T>(path, { method: 'POST', body: JSON.stringify(body) });
-export const patch = <T = any>(path: string, body: any) =>
+export const patch = <T = unknown>(path: string, body: unknown) =>
   api<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
-export const del = <T = any>(path: string) => api<T>(path, { method: 'DELETE' });
+export const del = <T = unknown>(path: string) => api<T>(path, { method: 'DELETE' });

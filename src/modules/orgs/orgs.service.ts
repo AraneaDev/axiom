@@ -1,7 +1,18 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
-export async function createOrg(userId: string, data: { name: string; slug: string; description?: string }) {
+/**
+ *
+ * @param userId
+ * @param data
+ * @param data.name
+ * @param data.slug
+ * @param data.description
+ */
+export async function createOrg(
+  userId: string,
+  data: { name: string; slug: string; description?: string },
+) {
   const existing = await prisma.organization.findUnique({ where: { slug: data.slug } });
   if (existing) throw new AppError(409, 'Organization slug already taken');
 
@@ -14,12 +25,18 @@ export async function createOrg(userId: string, data: { name: string; slug: stri
         create: { userId, role: 'OWNER' },
       },
     },
-    include: { members: { include: { user: { select: { id: true, username: true, displayName: true } } } } },
+    include: {
+      members: { include: { user: { select: { id: true, username: true, displayName: true } } } },
+    },
   });
 
   return org;
 }
 
+/**
+ *
+ * @param orgId
+ */
 export async function getOrg(orgId: string) {
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
@@ -34,6 +51,10 @@ export async function getOrg(orgId: string) {
   return org;
 }
 
+/**
+ *
+ * @param userId
+ */
 export async function listUserOrgs(userId: string) {
   const memberships = await prisma.orgMembership.findMany({
     where: { userId },
@@ -44,15 +65,36 @@ export async function listUserOrgs(userId: string) {
   return memberships.map((m) => ({ ...m.org, role: m.role }));
 }
 
+/**
+ *
+ * @param orgId
+ * @param data
+ * @param data.name
+ * @param data.description
+ */
 export async function updateOrg(orgId: string, data: { name?: string; description?: string }) {
   return prisma.organization.update({ where: { id: orgId }, data });
 }
 
+/**
+ *
+ * @param orgId
+ */
 export async function deleteOrg(orgId: string) {
   await prisma.organization.delete({ where: { id: orgId } });
 }
 
-export async function addOrgMember(orgId: string, userId: string, role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST' = 'MEMBER') {
+/**
+ *
+ * @param orgId
+ * @param userId
+ * @param role
+ */
+export async function addOrgMember(
+  orgId: string,
+  userId: string,
+  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST' = 'MEMBER',
+) {
   const existing = await prisma.orgMembership.findUnique({
     where: { userId_orgId: { userId, orgId } },
   });
@@ -64,7 +106,17 @@ export async function addOrgMember(orgId: string, userId: string, role: 'OWNER' 
   });
 }
 
-export async function updateOrgMemberRole(orgId: string, memberId: string, role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST') {
+/**
+ *
+ * @param orgId
+ * @param memberId
+ * @param role
+ */
+export async function updateOrgMemberRole(
+  orgId: string,
+  memberId: string,
+  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST',
+) {
   const membership = await prisma.orgMembership.findFirst({
     where: { userId: memberId, orgId },
   });
@@ -76,6 +128,11 @@ export async function updateOrgMemberRole(orgId: string, memberId: string, role:
   });
 }
 
+/**
+ *
+ * @param orgId
+ * @param memberId
+ */
 export async function removeOrgMember(orgId: string, memberId: string) {
   const membership = await prisma.orgMembership.findFirst({
     where: { userId: memberId, orgId },
@@ -92,11 +149,24 @@ export async function removeOrgMember(orgId: string, memberId: string) {
 
 // ─── Invite Links ─────────────────────────────────────────────
 
-export async function createInviteLink(orgId: string, createdBy: string, data: {
-  role?: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST';
-  maxUses?: number;
-  expiresInDays?: number;
-}) {
+/**
+ *
+ * @param orgId
+ * @param createdBy
+ * @param data
+ * @param data.role
+ * @param data.maxUses
+ * @param data.expiresInDays
+ */
+export async function createInviteLink(
+  orgId: string,
+  createdBy: string,
+  data: {
+    role?: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST';
+    maxUses?: number;
+    expiresInDays?: number;
+  },
+) {
   const code = (await import('crypto')).randomBytes(16).toString('hex');
   return prisma.inviteLink.create({
     data: {
@@ -112,6 +182,10 @@ export async function createInviteLink(orgId: string, createdBy: string, data: {
   });
 }
 
+/**
+ *
+ * @param orgId
+ */
 export async function listInviteLinks(orgId: string) {
   return prisma.inviteLink.findMany({
     where: { orgId },
@@ -119,6 +193,10 @@ export async function listInviteLinks(orgId: string) {
   });
 }
 
+/**
+ *
+ * @param inviteId
+ */
 export async function deleteInviteLink(inviteId: string) {
   const invite = await prisma.inviteLink.findUnique({ where: { id: inviteId } });
   if (!invite) throw new AppError(404, 'Invite link not found');

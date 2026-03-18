@@ -150,9 +150,21 @@ export interface SshKey {
   lastUsedAt?: string;
 }
 
+export interface SearchResultItem {
+  id: string;
+  url: string;
+  type?: string;
+  key?: string;
+  title?: string;
+  name?: string;
+  priority?: string;
+  space?: { name: string };
+  slug?: string;
+}
+
 export interface SearchResult {
   type: 'issues' | 'wiki';
-  items: Record<string, unknown>[];
+  items: SearchResultItem[];
 }
 
 export interface AuthResponse {

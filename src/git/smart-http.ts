@@ -1,6 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
 import { spawn } from 'child_process';
 import crypto from 'crypto';
+
+import { Request, Response, NextFunction } from 'express';
+
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
@@ -9,6 +11,7 @@ type GitService = 'git-upload-pack' | 'git-receive-pack';
 /**
  * Authenticate via HTTP Basic Auth using API token as password.
  * Returns userId if valid.
+ * @param req
  */
 async function authenticateGitRequest(req: Request): Promise<string> {
   const authHeader = req.headers.authorization;
@@ -41,6 +44,11 @@ async function authenticateGitRequest(req: Request): Promise<string> {
 
 /**
  * Resolve org/team/repo slugs to a repository record and verify access.
+ * @param orgSlug
+ * @param teamSlug
+ * @param repoSlug
+ * @param userId
+ * @param needsWrite
  */
 async function resolveRepo(
   orgSlug: string,
@@ -88,6 +96,9 @@ function sendAuthChallenge(res: Response) {
 
 /**
  * Handle GET /info/refs?service=git-upload-pack|git-receive-pack
+ * @param req
+ * @param res
+ * @param next
  */
 export async function handleInfoRefs(req: Request, res: Response, next: NextFunction) {
   try {
@@ -118,7 +129,11 @@ export async function handleInfoRefs(req: Request, res: Response, next: NextFunc
     res.write('0000'); // flush-pkt
 
     // Spawn the git service with --advertise-refs
-    const gitProcess = spawn(service, ['--stateless-rpc', '--advertise-refs', repoRecord.diskPath!]);
+    const gitProcess = spawn(service, [
+      '--stateless-rpc',
+      '--advertise-refs',
+      repoRecord.diskPath!,
+    ]);
 
     gitProcess.stdout.pipe(res);
     gitProcess.stderr.on('data', (data) => {
@@ -132,6 +147,9 @@ export async function handleInfoRefs(req: Request, res: Response, next: NextFunc
 
 /**
  * Handle POST /git-upload-pack or /git-receive-pack
+ * @param req
+ * @param res
+ * @param next
  */
 export async function handleServiceRpc(req: Request, res: Response, next: NextFunction) {
   try {

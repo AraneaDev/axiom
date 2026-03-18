@@ -1,13 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router';
-import { useAuthStore } from '@/stores/auth.store';
-import { AuthGuard, GuestGuard } from '@/lib/guards';
+
 import { AppShell } from '@/components/layout/AppShell';
-import { PageLoader } from '@/components/ui/Spinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { PageLoader } from '@/components/ui/Spinner';
 import { ToastProvider } from '@/components/ui/Toast';
 import { useGlobalKeyboard } from '@/hooks/useKeyboard';
-import { lazy, Suspense } from 'react';
+import { AuthGuard, GuestGuard } from '@/lib/guards';
+import { useAuthStore } from '@/stores/auth.store';
 
 // Lazy load pages
 const Login = lazy(() => import('@/pages/auth/Login'));
@@ -115,6 +115,9 @@ function AppWithKeyboard() {
   );
 }
 
+/**
+ *
+ */
 export default function App() {
   const { loadUser, isLoading } = useAuthStore();
 

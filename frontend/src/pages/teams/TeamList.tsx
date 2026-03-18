@@ -1,12 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
+import { Users, Plus, FolderKanban } from 'lucide-react';
 import { Link, useParams } from 'react-router';
-import { Users, Plus, FolderKanban, BookOpen } from 'lucide-react';
-import { teamsApi } from '@/api/teams.api';
+
 import { orgsApi } from '@/api/orgs.api';
+import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 
+/**
+ *
+ */
 export default function TeamList() {
   const { org } = useParams();
 
@@ -26,7 +30,9 @@ export default function TeamList() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Teams</h1>
         <Link to={`/${org}/teams/new`}>
-          <Button size="sm"><Plus className="h-4 w-4" /> New Team</Button>
+          <Button size="sm">
+            <Plus className="h-4 w-4" /> New Team
+          </Button>
         </Link>
       </div>
 
@@ -35,7 +41,13 @@ export default function TeamList() {
           icon={<Users className="h-12 w-12" />}
           title="No teams yet"
           description="Create your first team to start organizing work."
-          action={<Link to={`/${org}/teams/new`}><Button><Plus className="h-4 w-4" /> Create Team</Button></Link>}
+          action={
+            <Link to={`/${org}/teams/new`}>
+              <Button>
+                <Plus className="h-4 w-4" /> Create Team
+              </Button>
+            </Link>
+          }
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -54,10 +66,16 @@ export default function TeamList() {
                   <p className="text-xs text-text-secondary">/{team.slug}</p>
                 </div>
               </div>
-              {team.description && <p className="text-sm text-text-secondary line-clamp-2 mb-3">{team.description}</p>}
+              {team.description && (
+                <p className="text-sm text-text-secondary line-clamp-2 mb-3">{team.description}</p>
+              )}
               <div className="flex gap-4 text-xs text-text-secondary">
-                <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {team._count?.members ?? 0} members</span>
-                <span className="flex items-center gap-1"><FolderKanban className="h-3 w-3" /> {team._count?.projects ?? 0} projects</span>
+                <span className="flex items-center gap-1">
+                  <Users className="h-3 w-3" /> {team._count?.members ?? 0} members
+                </span>
+                <span className="flex items-center gap-1">
+                  <FolderKanban className="h-3 w-3" /> {team._count?.projects ?? 0} projects
+                </span>
               </div>
             </Link>
           ))}

@@ -1,24 +1,29 @@
-import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Check, X, Pencil, MessageSquare, Plus, User } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
-import { Check, X, Pencil, MessageSquare, Plus } from 'lucide-react';
-import { issuesApi } from '@/api/issues.api';
-import { projectsApi } from '@/api/projects.api';
-import { orgsApi } from '@/api/orgs.api';
-import { teamsApi } from '@/api/teams.api';
-import { reposApi } from '@/api/repos.api';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { Avatar } from '@/components/ui/Avatar';
-import { Spinner, PageLoader } from '@/components/ui/Spinner';
-import { PRIORITY_COLORS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
-import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
-import { cn, formatRelative } from '@/lib/utils';
-import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
-import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
+
 import IssueDevelopmentCard from './IssueDevelopmentCard';
 import IssueLinkModal from './IssueLinkModal';
 
+import { issuesApi } from '@/api/issues.api';
+import { orgsApi } from '@/api/orgs.api';
+import { projectsApi } from '@/api/projects.api';
+import { reposApi } from '@/api/repos.api';
+import { teamsApi } from '@/api/teams.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
+import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { PRIORITY_COLORS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
+import { cn, formatRelative } from '@/lib/utils';
+
+/**
+ *
+ */
 export default function IssueDetail() {
   const { org, team: teamSlug, project: projectSlug, num } = useParams();
   const queryClient = useQueryClient();
@@ -69,7 +74,8 @@ export default function IssueDetail() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: Record<string, any>) => issuesApi.update(currentProject!.id, parseInt(num!), data),
+    mutationFn: (data: Record<string, unknown>) =>
+      issuesApi.update(currentProject!.id, parseInt(num!), data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue', currentProject?.id, num] });
       setEditingTitle(false);
@@ -122,15 +128,30 @@ export default function IssueDetail() {
                     ref={titleInputRef}
                     value={titleDraft}
                     onChange={(e) => setTitleDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingTitle(false); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveTitle();
+                      if (e.key === 'Escape') setEditingTitle(false);
+                    }}
                     className="flex-1 text-xl font-bold bg-transparent border-b-2 border-primary outline-none py-0.5"
                   />
-                  <button onClick={saveTitle} className="p-1 rounded hover:bg-surface-tertiary text-success">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={saveTitle}
+                    className="text-success"
+                    title="Save"
+                  >
                     <Check className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => setEditingTitle(false)} className="p-1 rounded hover:bg-surface-tertiary text-text-tertiary">
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setEditingTitle(false)}
+                    className="text-text-tertiary"
+                    title="Cancel"
+                  >
                     <X className="h-4 w-4" />
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <h1 className="text-xl font-bold group cursor-pointer" onClick={startEditTitle}>
@@ -138,7 +159,10 @@ export default function IssueDetail() {
                   <Pencil className="h-3.5 w-3.5 ml-2 inline opacity-0 group-hover:opacity-50 transition-opacity" />
                 </h1>
               )}
-              <p className="text-sm text-text-secondary">{issue.key} &middot; opened {formatRelative(issue.createdAt)} by {issue.creator?.displayName}</p>
+              <p className="text-sm text-text-secondary">
+                {issue.key} &middot; opened {formatRelative(issue.createdAt)} by{' '}
+                {issue.creator?.displayName}
+              </p>
             </div>
           </div>
 
@@ -166,8 +190,12 @@ export default function IssueDetail() {
                   </div>
                   <div className="flex-1 rounded-lg border border-border bg-surface overflow-hidden">
                     <div className="flex items-center gap-2 px-4 py-2 bg-surface-tertiary/50 border-b border-border-light">
-                      <span className="text-sm font-medium text-text">{comment.author.displayName}</span>
-                      <span className="text-xs text-text-tertiary">{formatRelative(comment.createdAt)}</span>
+                      <span className="text-sm font-medium text-text">
+                        {comment.author.displayName}
+                      </span>
+                      <span className="text-xs text-text-tertiary">
+                        {formatRelative(comment.createdAt)}
+                      </span>
                     </div>
                     <div className="px-4 py-3">
                       <MarkdownRenderer content={comment.body} className="text-sm" />
@@ -191,7 +219,13 @@ export default function IssueDetail() {
               disabled={!commentBody.trim() || commentMutation.isPending}
               onClick={() => commentMutation.mutate()}
             >
-              {commentMutation.isPending ? <Spinner className="h-4 w-4" /> : <><MessageSquare className="h-4 w-4" /> Comment</>}
+              {commentMutation.isPending ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <>
+                  <MessageSquare className="h-4 w-4" /> Comment
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -210,16 +244,31 @@ export default function IssueDetail() {
               {editingField === 'type' ? (
                 <div className="flex flex-wrap gap-1">
                   {Object.entries(ISSUE_TYPE_LABELS).map(([key, label]) => (
-                    <button key={key} onClick={() => updateMutation.mutate({ type: key })}
-                      className={cn('text-xs px-2 py-1 rounded-md border transition-colors', issue.type === key ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-primary')}>
+                    <Button
+                      key={key}
+                      variant="outline"
+                      size="xs"
+                      onClick={() => updateMutation.mutate({ type: key })}
+                      className={cn(
+                        issue.type === key
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-text-secondary hover:border-primary',
+                      )}
+                    >
                       <IssueTypeIcon type={key} className="h-3 w-3" /> {label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               ) : (
-                <button onClick={() => setEditingField('type')} className="text-sm hover:text-primary transition-colors">
-                  <IssueTypeIcon type={issue.type} className="h-3.5 w-3.5" /> {ISSUE_TYPE_LABELS[issue.type]}
-                </button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setEditingField('type')}
+                  className="text-sm hover:text-primary"
+                >
+                  <IssueTypeIcon type={issue.type} className="h-3.5 w-3.5" />{' '}
+                  {ISSUE_TYPE_LABELS[issue.type]}
+                </Button>
               )}
             </div>
 
@@ -229,18 +278,41 @@ export default function IssueDetail() {
               {editingField === 'priority' ? (
                 <div className="flex flex-wrap gap-1">
                   {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
-                    <button key={key} onClick={() => updateMutation.mutate({ priority: key })}
-                      className={cn('text-xs px-2 py-1 rounded-md border transition-colors', issue.priority === key ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-primary')}>
+                    <Button
+                      key={key}
+                      variant="outline"
+                      size="xs"
+                      onClick={() => updateMutation.mutate({ priority: key })}
+                      className={cn(
+                        issue.priority === key
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-text-secondary hover:border-primary',
+                      )}
+                    >
+                      <Check
+                        className={cn(
+                          'h-3 w-3',
+                          issue.priority === key ? 'opacity-100' : 'opacity-0',
+                        )}
+                      />{' '}
                       {label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               ) : (
-                <button onClick={() => setEditingField('priority')} className="hover:opacity-80 transition-opacity">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[issue.priority]}`}>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setEditingField('priority')}
+                  className="hover:opacity-80"
+                >
+                  <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" />
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[issue.priority]}`}
+                  >
                     {PRIORITY_LABELS[issue.priority]}
                   </span>
-                </button>
+                </Button>
               )}
             </div>
 
@@ -249,38 +321,67 @@ export default function IssueDetail() {
               <p className="text-xs text-text-secondary uppercase font-semibold mb-1">Assignee</p>
               {editingField === 'assignee' ? (
                 <div className="space-y-1 max-h-40 overflow-y-auto">
-                  <button
+                  <Button
+                    variant="outline"
+                    size="xs"
                     onClick={() => updateMutation.mutate({ assigneeId: null })}
-                    className={cn('w-full text-left text-xs px-2 py-1.5 rounded-md border transition-colors', !issue.assignee ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-primary')}
+                    className={cn(
+                      'w-full justify-start',
+                      !issue.assignee
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-text-secondary hover:border-primary',
+                    )}
                   >
-                    Unassigned
-                  </button>
-                  {teamDetail?.members?.map((m: any) => (
-                    <button key={m.user.id} onClick={() => updateMutation.mutate({ assigneeId: m.user.id })}
-                      className={cn('w-full text-left text-xs px-2 py-1.5 rounded-md border transition-colors flex items-center gap-2', issue.assignee?.id === m.user.id ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-secondary hover:border-primary')}>
+                    <User className="h-3 w-3" /> Unassigned
+                  </Button>
+                  {teamDetail?.members?.map((m: { user: { id: string; displayName: string } }) => (
+                    <Button
+                      key={m.user.id}
+                      variant="outline"
+                      size="xs"
+                      onClick={() => updateMutation.mutate({ assigneeId: m.user.id })}
+                      className={cn(
+                        'w-full justify-start',
+                        issue.assignee?.id === m.user.id
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-text-secondary hover:border-primary',
+                      )}
+                    >
                       <Avatar name={m.user.displayName} size="sm" />
                       {m.user.displayName}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               ) : (
-                <button onClick={() => setEditingField('assignee')} className="hover:opacity-80 transition-opacity">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setEditingField('assignee')}
+                  className="hover:opacity-80"
+                >
                   {issue.assignee ? (
-                    <div className="flex items-center gap-2">
+                    <>
                       <Avatar name={issue.assignee.displayName} size="sm" />
                       <span className="text-sm">{issue.assignee.displayName}</span>
-                    </div>
+                    </>
                   ) : (
-                    <span className="text-sm text-text-secondary hover:text-primary transition-colors">Unassigned</span>
+                    <>
+                      <User className="h-3.5 w-3.5" />
+                      <span className="text-sm text-text-secondary hover:text-primary transition-colors">
+                        Unassigned
+                      </span>
+                    </>
                   )}
-                </button>
+                </Button>
               )}
             </div>
             {issue.labels?.length > 0 && (
               <div>
                 <p className="text-xs text-text-secondary uppercase font-semibold mb-1">Labels</p>
                 <div className="flex flex-wrap gap-1">
-                  {issue.labels.map((l) => <Badge key={l.id}>{l.name}</Badge>)}
+                  {issue.labels.map((l) => (
+                    <Badge key={l.id}>{l.name}</Badge>
+                  ))}
                 </div>
               </div>
             )}
@@ -344,7 +445,9 @@ export default function IssueDetail() {
               issueNumber={issue.number}
               onClose={() => setShowLinkModal(false)}
               onLinked={() => {
-                queryClient.invalidateQueries({ queryKey: ['issue-links', currentProject.id, issue.number] });
+                queryClient.invalidateQueries({
+                  queryKey: ['issue-links', currentProject.id, issue.number],
+                });
                 setShowLinkModal(false);
               }}
             />

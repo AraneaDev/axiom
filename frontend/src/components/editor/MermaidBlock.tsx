@@ -11,6 +11,11 @@ function loadMermaid() {
   return mermaidPromise;
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.code
+ */
 export function MermaidBlock({ code }: { code: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,10 +24,12 @@ export function MermaidBlock({ code }: { code: string }) {
   const rawId = useId();
   const id = `mermaid-${rawId.replace(/[^a-z0-9]/gi, '')}`;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- reset state on code change */
   useEffect(() => {
     let cancelled = false;
     setError(null);
     setLoading(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     loadMermaid()
       .then(async (m) => {
@@ -35,9 +42,9 @@ export function MermaidBlock({ code }: { code: string }) {
           if (!cancelled && containerRef.current) {
             containerRef.current.innerHTML = svg;
           }
-        } catch (e: any) {
+        } catch (e: unknown) {
           document.getElementById(id)?.remove();
-          if (!cancelled) setError(e.message || 'Failed to render diagram');
+          if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to render diagram');
         }
       })
       .catch(() => {

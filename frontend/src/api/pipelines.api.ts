@@ -61,8 +61,7 @@ export const pipelinesApi = {
     post<Pipeline>(`/repos/${repoId}/pipelines`, data),
   update: (repoId: string, pipelineId: string, data: Partial<Pipeline>) =>
     patch<Pipeline>(`/repos/${repoId}/pipelines/${pipelineId}`, data),
-  delete: (repoId: string, pipelineId: string) =>
-    del(`/repos/${repoId}/pipelines/${pipelineId}`),
+  delete: (repoId: string, pipelineId: string) => del(`/repos/${repoId}/pipelines/${pipelineId}`),
   listRuns: (repoId: string, params?: { pipelineId?: string; status?: string; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.pipelineId) q.set('pipelineId', params.pipelineId);

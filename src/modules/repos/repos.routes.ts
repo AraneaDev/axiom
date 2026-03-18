@@ -1,7 +1,9 @@
 import { Router } from 'express';
-import * as reposController from './repos.controller';
+
 import { authenticate } from '../../middleware/auth';
 import { requireTeamPermission } from '../../middleware/rbac';
+
+import * as reposController from './repos.controller';
 
 const router = Router();
 

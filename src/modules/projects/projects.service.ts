@@ -9,12 +9,24 @@ const DEFAULT_COLUMNS = [
   { name: 'Done', position: 4, isDefault: false, isDone: true },
 ];
 
-export async function createProject(teamId: string, data: {
-  name: string;
-  slug: string;
-  description?: string;
-  prefix: string;
-}) {
+/**
+ *
+ * @param teamId
+ * @param data
+ * @param data.name
+ * @param data.slug
+ * @param data.description
+ * @param data.prefix
+ */
+export async function createProject(
+  teamId: string,
+  data: {
+    name: string;
+    slug: string;
+    description?: string;
+    prefix: string;
+  },
+) {
   const existing = await prisma.project.findUnique({
     where: { teamId_slug: { teamId, slug: data.slug } },
   });
@@ -40,6 +52,10 @@ export async function createProject(teamId: string, data: {
   });
 }
 
+/**
+ *
+ * @param projectId
+ */
 export async function getProject(projectId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -53,6 +69,10 @@ export async function getProject(projectId: string) {
   return project;
 }
 
+/**
+ *
+ * @param teamId
+ */
 export async function listProjects(teamId: string) {
   return prisma.project.findMany({
     where: { teamId },
@@ -61,10 +81,24 @@ export async function listProjects(teamId: string) {
   });
 }
 
-export async function updateProject(projectId: string, data: { name?: string; description?: string }) {
+/**
+ *
+ * @param projectId
+ * @param data
+ * @param data.name
+ * @param data.description
+ */
+export async function updateProject(
+  projectId: string,
+  data: { name?: string; description?: string },
+) {
   return prisma.project.update({ where: { id: projectId }, data });
 }
 
+/**
+ *
+ * @param projectId
+ */
 export async function deleteProject(projectId: string) {
   await prisma.project.delete({ where: { id: projectId } });
 }

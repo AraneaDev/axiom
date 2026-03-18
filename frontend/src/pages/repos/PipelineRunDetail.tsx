@@ -1,11 +1,21 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import {
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Clock,
+  ChevronDown,
+  ChevronRight,
+  ArrowLeft,
+  X,
+} from 'lucide-react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router';
-import { CheckCircle2, XCircle, RefreshCw, Clock, ChevronDown, ChevronRight, ArrowLeft, X } from 'lucide-react';
+
 import { pipelinesApi, type RunStatus, type PipelineJob } from '@/api/pipelines.api';
-import { usePipelineLogs } from '@/hooks/usePipelineLogs';
 import { Button } from '@/components/ui/Button';
 import { PageLoader } from '@/components/ui/Spinner';
+import { usePipelineLogs } from '@/hooks/usePipelineLogs';
 import { cn, formatRelative } from '@/lib/utils';
 
 const STATUS_ICON: Record<RunStatus, React.ReactNode> = {
@@ -43,29 +53,47 @@ function JobCard({ job }: JobCardProps) {
 
   return (
     <div className="rounded-lg border border-border bg-surface overflow-hidden">
-      <button
+      <Button
+        variant="ghost"
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 p-3 hover:bg-surface-secondary transition-colors text-left"
+        className="w-full justify-start rounded-none p-3"
       >
         {STATUS_ICON[job.status]}
-        <span className="font-medium text-sm flex-1">{job.name}</span>
-        <span className="text-xs text-text-tertiary">{duration(job.startedAt, job.finishedAt)}</span>
-        {expanded ? <ChevronDown className="h-3.5 w-3.5 text-text-tertiary" /> : <ChevronRight className="h-3.5 w-3.5 text-text-tertiary" />}
-      </button>
+        <span className="font-medium text-sm flex-1 text-left">{job.name}</span>
+        <span className="text-xs text-text-tertiary">
+          {duration(job.startedAt, job.finishedAt)}
+        </span>
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 text-text-tertiary" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-text-tertiary" />
+        )}
+      </Button>
       {expanded && (
         <div className="border-t border-border divide-y divide-border">
-          {job.steps.map(step => (
+          {job.steps.map((step) => (
             <div key={step.id}>
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => setExpandedStep(expandedStep === step.id ? null : step.id)}
-                className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-secondary transition-colors text-left"
+                className="w-full justify-start rounded-none px-4 py-2"
               >
                 {STATUS_ICON[step.status]}
-                <span className="text-sm flex-1">{step.name}</span>
-                <code className="text-xs text-text-tertiary mr-2">{step.command.slice(0, 40)}{step.command.length > 40 ? '...' : ''}</code>
-                <span className="text-xs text-text-tertiary">{duration(step.startedAt, step.finishedAt)}</span>
-                {step.output && (expandedStep === step.id ? <ChevronDown className="h-3 w-3 text-text-tertiary" /> : <ChevronRight className="h-3 w-3 text-text-tertiary" />)}
-              </button>
+                <span className="text-sm flex-1 text-left">{step.name}</span>
+                <code className="text-xs text-text-tertiary mr-2">
+                  {step.command.slice(0, 40)}
+                  {step.command.length > 40 ? '...' : ''}
+                </code>
+                <span className="text-xs text-text-tertiary">
+                  {duration(step.startedAt, step.finishedAt)}
+                </span>
+                {step.output &&
+                  (expandedStep === step.id ? (
+                    <ChevronDown className="h-3 w-3 text-text-tertiary" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3 text-text-tertiary" />
+                  ))}
+              </Button>
               {expandedStep === step.id && step.output && (
                 <pre className="bg-[#0d1117] text-[#e6edf3] text-xs p-4 overflow-x-auto max-h-80 overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap">
                   {step.output}
@@ -79,8 +107,16 @@ function JobCard({ job }: JobCardProps) {
   );
 }
 
+/**
+ *
+ */
 export default function PipelineRunDetail() {
-  const { org, team: teamSlug, repo: repoSlug, runId } = useParams<{ org: string; team: string; repo: string; runId: string }>();
+  const {
+    org,
+    team: teamSlug,
+    repo: repoSlug,
+    runId,
+  } = useParams<{ org: string; team: string; repo: string; runId: string }>();
 
   const { data: run, isLoading } = useQuery({
     queryKey: ['pipeline-run', runId],
@@ -105,14 +141,21 @@ export default function PipelineRunDetail() {
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
-        <Link to={`/${org}/${teamSlug}/repos/${repoSlug}`} className="text-text-tertiary hover:text-text transition-colors">
+        <Link
+          to={`/${org}/${teamSlug}/repos/${repoSlug}`}
+          className="text-text-tertiary hover:text-text transition-colors"
+        >
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-2">
             {STATUS_ICON[run.status]}
             <h1 className="text-xl font-bold">{run.pipeline?.name ?? 'Pipeline Run'}</h1>
-            <span className={cn('text-xs px-2 py-0.5 rounded-full border', STATUS_BADGE[run.status])}>{run.status}</span>
+            <span
+              className={cn('text-xs px-2 py-0.5 rounded-full border', STATUS_BADGE[run.status])}
+            >
+              {run.status}
+            </span>
           </div>
           <div className="flex items-center gap-3 text-xs text-text-tertiary mt-0.5">
             <span>{run.triggerType}</span>
@@ -125,7 +168,9 @@ export default function PipelineRunDetail() {
       </div>
 
       <div className="space-y-3">
-        {displayJobs.map(job => <JobCard key={job.id} job={job} />)}
+        {displayJobs.map((job) => (
+          <JobCard key={job.id} job={job} />
+        ))}
         {!displayJobs.length && (
           <div className="text-center py-8 text-text-tertiary text-sm">
             {run.status === 'PENDING' ? 'Waiting for runner...' : 'No jobs recorded.'}

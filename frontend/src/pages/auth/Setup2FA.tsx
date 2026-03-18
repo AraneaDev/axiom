@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
+
+import { authApi } from '@/api/auth.api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
-import { authApi } from '@/api/auth.api';
 
+/**
+ *
+ */
 export default function Setup2FA() {
   const navigate = useNavigate();
   const [otpauthUrl, setOtpauthUrl] = useState('');
@@ -15,14 +19,17 @@ export default function Setup2FA() {
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
-    authApi.enable2FA().then((res) => {
-      setOtpauthUrl(res.otpauthUrl);
-      setSecret(res.secret);
-      setInitializing(false);
-    }).catch(() => {
-      // 2FA might already be enabled
-      navigate('/');
-    });
+    authApi
+      .enable2FA()
+      .then((res) => {
+        setOtpauthUrl(res.otpauthUrl);
+        setSecret(res.secret);
+        setInitializing(false);
+      })
+      .catch(() => {
+        // 2FA might already be enabled
+        navigate('/');
+      });
   }, [navigate]);
 
   async function handleVerify() {
@@ -31,8 +38,8 @@ export default function Setup2FA() {
     try {
       await authApi.verify2FA(code);
       navigate('/');
-    } catch (err: any) {
-      setError(err.message || 'Invalid code');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Invalid code');
     } finally {
       setLoading(false);
     }
@@ -58,7 +65,9 @@ export default function Setup2FA() {
           </div>
           <div className="text-center">
             <p className="text-xs text-text-secondary mb-1">Or enter this secret manually:</p>
-            <code className="text-sm bg-surface-secondary px-3 py-1 rounded-md font-mono select-all">{secret}</code>
+            <code className="text-sm bg-surface-secondary px-3 py-1 rounded-md font-mono select-all">
+              {secret}
+            </code>
           </div>
         </div>
 

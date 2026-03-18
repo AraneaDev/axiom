@@ -1,12 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
-import bcrypt from 'bcryptjs';
+import { execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
-import { execFile } from 'child_process';
 import { promisify } from 'util';
-import app from '../index';
+
+import bcrypt from 'bcryptjs';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../config/database';
+import app from '../index';
 
 const execFileAsync = promisify(execFile);
 const TEST_REPOS_PATH = process.env.REPOS_PATH || '/tmp/axiom-test-repos';
@@ -27,9 +29,16 @@ describe('Smart HTTP & Hooks', () => {
     await prisma.user.upsert({
       where: { username: 'githttpuser' },
       update: {},
-      create: { email: 'githttp@axiom.dev', username: 'githttpuser', displayName: 'Git HTTP User', passwordHash },
+      create: {
+        email: 'githttp@axiom.dev',
+        username: 'githttpuser',
+        displayName: 'Git HTTP User',
+        passwordHash,
+      },
     });
-    const loginRes = await request(app).post('/api/auth/login').send({ login: 'githttpuser', password: 'testpassword123' });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ login: 'githttpuser', password: 'testpassword123' });
     const jwt = loginRes.body.accessToken;
 
     // Create org
@@ -67,7 +76,15 @@ describe('Smart HTTP & Hooks', () => {
     await execFileAsync('git', ['clone', repo!.diskPath!, workDir]);
     await fs.writeFile(path.join(workDir, 'README.md'), '# HTTP Test');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'init', '--author', 'Test <t@t.com>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'init',
+      '--author',
+      'Test <t@t.com>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'main']);
     await fs.rm(workDir, { recursive: true });
   });
@@ -107,8 +124,9 @@ describe('Smart HTTP & Hooks', () => {
     });
 
     it('should reject without auth', async () => {
-      const res = await request(app)
-        .get(`/git/${orgSlug}/${teamSlug}/${repoSlug}.git/info/refs?service=git-upload-pack`);
+      const res = await request(app).get(
+        `/git/${orgSlug}/${teamSlug}/${repoSlug}.git/info/refs?service=git-upload-pack`,
+      );
       expect(res.status).toBe(401);
     });
 

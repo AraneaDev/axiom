@@ -1,14 +1,18 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Key, Plus, Trash2, X } from 'lucide-react';
+import { useState } from 'react';
+
 import { usersApi } from '@/api/users.api';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
+import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { formatDate } from '@/lib/utils';
 
+/**
+ *
+ */
 export default function SshKeys() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -30,7 +34,8 @@ export default function SshKeys() {
       setTitle('');
       setPublicKey('');
     },
-    onError: (err: any) => setError(err.message),
+    onError: (err: unknown) =>
+      setError(err instanceof Error ? err.message : 'Failed to add SSH key'),
   });
 
   const deleteMutation = useMutation({
@@ -48,32 +53,64 @@ export default function SshKeys() {
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">SSH Keys</h1>
-        <Button size="sm" onClick={() => setShowForm(!showForm)}><Plus className="h-4 w-4" /> Add Key</Button>
+        <Button size="sm" onClick={() => setShowForm(!showForm)}>
+          <Plus className="h-4 w-4" /> Add Key
+        </Button>
       </div>
 
       {showForm && (
         <div className="rounded-lg border border-border bg-surface p-4 mb-6">
-          {error && <div className="mb-3 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">{error}</div>}
+          {error && (
+            <div className="mb-3 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
+              {error}
+            </div>
+          )}
           <div className="space-y-3">
-            <Input id="keyTitle" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="My laptop" />
+            <Input
+              id="keyTitle"
+              label="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="My laptop"
+            />
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-text">Public key</label>
-              <textarea value={publicKey} onChange={(e) => setPublicKey(e.target.value)}
+              <textarea
+                value={publicKey}
+                onChange={(e) => setPublicKey(e.target.value)}
                 className="w-full rounded-md border border-border bg-surface px-3 py-2 text-xs font-mono placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                rows={4} placeholder="ssh-ed25519 AAAA..." />
+                rows={4}
+                placeholder="ssh-ed25519 AAAA..."
+              />
             </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => addMutation.mutate()} disabled={addMutation.isPending || !title || !publicKey}>
-                {addMutation.isPending ? <Spinner className="h-4 w-4" /> : <><Plus className="h-4 w-4" /> Add key</>}
+              <Button
+                size="sm"
+                onClick={() => addMutation.mutate()}
+                disabled={addMutation.isPending || !title || !publicKey}
+              >
+                {addMutation.isPending ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" /> Add key
+                  </>
+                )}
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => setShowForm(false)}><X className="h-4 w-4" /> Cancel</Button>
+              <Button size="sm" variant="secondary" onClick={() => setShowForm(false)}>
+                <X className="h-4 w-4" /> Cancel
+              </Button>
             </div>
           </div>
         </div>
       )}
 
       {!keys?.length ? (
-        <EmptyState icon={<Key className="h-10 w-10" />} title="No SSH keys" description="Add an SSH key to clone repos over SSH." />
+        <EmptyState
+          icon={<Key className="h-10 w-10" />}
+          title="No SSH keys"
+          description="Add an SSH key to clone repos over SSH."
+        />
       ) : (
         <div className="rounded-lg border border-border bg-surface divide-y divide-border">
           {keys.map((k) => (
@@ -95,8 +132,18 @@ export default function SshKeys() {
       <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Confirm Delete" size="sm">
         <p className="text-sm text-text-secondary">Are you sure? This action cannot be undone.</p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setDeleteId(null)}><X className="h-4 w-4" /> Cancel</Button>
-          <Button variant="danger" onClick={() => { handleDelete(deleteId!); setDeleteId(null); }}><Trash2 className="h-4 w-4" /> Delete</Button>
+          <Button variant="secondary" onClick={() => setDeleteId(null)}>
+            <X className="h-4 w-4" /> Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              handleDelete(deleteId!);
+              setDeleteId(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
         </ModalFooter>
       </Modal>
     </div>

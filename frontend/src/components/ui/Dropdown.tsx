@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, forwardRef, type ReactNode } from 'react';
 import { ChevronDown, X } from 'lucide-react';
+import { useState, useRef, useEffect, forwardRef, type ReactNode } from 'react';
+
 import { cn } from '@/lib/utils';
 
 /* ------------------------------------------------------------------ */
@@ -13,6 +14,14 @@ interface DropdownProps {
   className?: string;
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.trigger
+ * @param root0.children
+ * @param root0.align
+ * @param root0.className
+ */
 export function Dropdown({ trigger, children, align = 'left', className }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -51,7 +60,22 @@ interface DropdownItemProps {
   className?: string;
 }
 
-export function DropdownItem({ children, onClick, danger, disabled, className }: DropdownItemProps) {
+/**
+ *
+ * @param root0
+ * @param root0.children
+ * @param root0.onClick
+ * @param root0.danger
+ * @param root0.disabled
+ * @param root0.className
+ */
+export function DropdownItem({
+  children,
+  onClick,
+  danger,
+  disabled,
+  className,
+}: DropdownItemProps) {
   return (
     <button
       type="button"
@@ -59,9 +83,7 @@ export function DropdownItem({ children, onClick, danger, disabled, className }:
       disabled={disabled}
       className={cn(
         'flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors',
-        danger
-          ? 'text-danger hover:bg-danger/10'
-          : 'text-text hover:bg-surface-tertiary',
+        danger ? 'text-danger hover:bg-danger/10' : 'text-text hover:bg-surface-tertiary',
         disabled && 'opacity-40 cursor-not-allowed pointer-events-none',
         className,
       )}
@@ -95,22 +117,42 @@ interface SelectProps {
 }
 
 export const Select = forwardRef<HTMLDivElement, SelectProps>(
-  ({ label, error, hint, id, options, value, onChange, multiple, placeholder = 'Select...', disabled, className }, ref) => {
+  (
+    {
+      label,
+      error,
+      hint,
+      id,
+      options,
+      value,
+      onChange,
+      multiple,
+      placeholder = 'Select...',
+      disabled,
+      className,
+    },
+    ref,
+  ) => {
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
       if (!open) return;
       const handler = (e: MouseEvent) => {
-        if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+        if (containerRef.current && !containerRef.current.contains(e.target as Node))
+          setOpen(false);
       };
       window.addEventListener('mousedown', handler);
       return () => window.removeEventListener('mousedown', handler);
     }, [open]);
 
     const selected = multiple
-      ? Array.isArray(value) ? value : []
-      : typeof value === 'string' ? value : '';
+      ? Array.isArray(value)
+        ? value
+        : []
+      : typeof value === 'string'
+        ? value
+        : '';
 
     const handleSelect = (optionValue: string) => {
       if (!onChange) return;
@@ -132,9 +174,7 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(
       onChange(arr.filter((v) => v !== optionValue));
     };
 
-    const displayLabel = multiple
-      ? null
-      : options.find((o) => o.value === selected)?.label;
+    const displayLabel = multiple ? null : options.find((o) => o.value === selected)?.label;
 
     return (
       <div ref={ref} className="flex flex-col gap-1.5">
@@ -187,7 +227,12 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(
                 {displayLabel ?? placeholder}
               </span>
             )}
-            <ChevronDown className={cn('h-4 w-4 text-text-tertiary transition-transform', open && 'rotate-180')} />
+            <ChevronDown
+              className={cn(
+                'h-4 w-4 text-text-tertiary transition-transform',
+                open && 'rotate-180',
+              )}
+            />
           </button>
 
           {open && (

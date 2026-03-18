@@ -1,9 +1,12 @@
 import { Request } from 'express';
+
 import { AppError } from '../middleware/errorHandler';
 
 /**
  * Safely extract a route param as a string.
  * Express 5 types params as string | string[] — this normalizes.
+ * @param req
+ * @param name
  */
 export function param(req: Request, name: string): string {
   const val = req.params[name];

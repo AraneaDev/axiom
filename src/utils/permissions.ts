@@ -26,28 +26,63 @@ export type Action =
 // Org-level permission matrix
 const orgPermissions: Record<OrgRole, Set<Action>> = {
   OWNER: new Set([
-    'org:manage', 'team:create', 'team:delete', 'team:manage_members',
-    'repo:create', 'repo:delete', 'repo:push', 'repo:read', 'pr:manage',
-    'project:create', 'project:delete', 'issue:create', 'issue:edit', 'issue:view',
-    'wiki:create_space', 'wiki:edit', 'wiki:view',
-    'api_key:manage_own', 'api_key:manage_all', 'audit:view',
+    'org:manage',
+    'team:create',
+    'team:delete',
+    'team:manage_members',
+    'repo:create',
+    'repo:delete',
+    'repo:push',
+    'repo:read',
+    'pr:manage',
+    'project:create',
+    'project:delete',
+    'issue:create',
+    'issue:edit',
+    'issue:view',
+    'wiki:create_space',
+    'wiki:edit',
+    'wiki:view',
+    'api_key:manage_own',
+    'api_key:manage_all',
+    'audit:view',
   ]),
   ADMIN: new Set([
-    'team:create', 'team:delete', 'team:manage_members',
-    'repo:create', 'repo:delete', 'repo:push', 'repo:read', 'pr:manage',
-    'project:create', 'project:delete', 'issue:create', 'issue:edit', 'issue:view',
-    'wiki:create_space', 'wiki:edit', 'wiki:view',
-    'api_key:manage_own', 'api_key:manage_all', 'audit:view',
+    'team:create',
+    'team:delete',
+    'team:manage_members',
+    'repo:create',
+    'repo:delete',
+    'repo:push',
+    'repo:read',
+    'pr:manage',
+    'project:create',
+    'project:delete',
+    'issue:create',
+    'issue:edit',
+    'issue:view',
+    'wiki:create_space',
+    'wiki:edit',
+    'wiki:view',
+    'api_key:manage_own',
+    'api_key:manage_all',
+    'audit:view',
   ]),
   MEMBER: new Set([
-    'repo:create', 'repo:push', 'repo:read', 'pr:manage',
-    'project:create', 'issue:create', 'issue:edit', 'issue:view',
-    'wiki:create_space', 'wiki:edit', 'wiki:view',
+    'repo:create',
+    'repo:push',
+    'repo:read',
+    'pr:manage',
+    'project:create',
+    'issue:create',
+    'issue:edit',
+    'issue:view',
+    'wiki:create_space',
+    'wiki:edit',
+    'wiki:view',
     'api_key:manage_own',
   ]),
-  VIEWER: new Set([
-    'repo:read', 'issue:view', 'wiki:view',
-  ]),
+  VIEWER: new Set(['repo:read', 'issue:view', 'wiki:view']),
   GUEST: new Set([
     // Guest permissions are granted per-resource, not org-wide
   ]),
@@ -57,24 +92,50 @@ const orgPermissions: Record<OrgRole, Set<Action>> = {
 const teamPermissions: Record<TeamRole, Set<Action>> = {
   ADMIN: new Set([
     'team:manage_members',
-    'repo:create', 'repo:delete', 'repo:push', 'repo:read', 'pr:manage',
-    'project:create', 'project:delete', 'issue:create', 'issue:edit', 'issue:view',
-    'wiki:create_space', 'wiki:edit', 'wiki:view',
+    'repo:create',
+    'repo:delete',
+    'repo:push',
+    'repo:read',
+    'pr:manage',
+    'project:create',
+    'project:delete',
+    'issue:create',
+    'issue:edit',
+    'issue:view',
+    'wiki:create_space',
+    'wiki:edit',
+    'wiki:view',
   ]),
   MEMBER: new Set([
-    'repo:create', 'repo:push', 'repo:read', 'pr:manage',
-    'project:create', 'issue:create', 'issue:edit', 'issue:view',
-    'wiki:create_space', 'wiki:edit', 'wiki:view',
+    'repo:create',
+    'repo:push',
+    'repo:read',
+    'pr:manage',
+    'project:create',
+    'issue:create',
+    'issue:edit',
+    'issue:view',
+    'wiki:create_space',
+    'wiki:edit',
+    'wiki:view',
   ]),
-  VIEWER: new Set([
-    'repo:read', 'issue:view', 'wiki:view',
-  ]),
+  VIEWER: new Set(['repo:read', 'issue:view', 'wiki:view']),
 };
 
+/**
+ *
+ * @param role
+ * @param action
+ */
 export function hasOrgPermission(role: OrgRole, action: Action): boolean {
   return orgPermissions[role]?.has(action) ?? false;
 }
 
+/**
+ *
+ * @param role
+ * @param action
+ */
 export function hasTeamPermission(role: TeamRole, action: Action): boolean {
   return teamPermissions[role]?.has(action) ?? false;
 }
@@ -82,11 +143,14 @@ export function hasTeamPermission(role: TeamRole, action: Action): boolean {
 /**
  * Check if a user has permission, considering both org and team roles.
  * Org OWNER/ADMIN always has access. Otherwise, check team role.
+ * @param orgRole
+ * @param teamRole
+ * @param action
  */
 export function hasPermission(
   orgRole: OrgRole,
   teamRole: TeamRole | null,
-  action: Action
+  action: Action,
 ): boolean {
   // Org-level permission always wins
   if (hasOrgPermission(orgRole, action)) return true;

@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
+
 import { useUIStore } from '@/stores/ui.store';
 
+/**
+ *
+ */
 export function useGlobalKeyboard() {
   const { toggleSearch } = useUIStore();
 

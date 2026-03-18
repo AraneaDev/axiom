@@ -48,8 +48,8 @@ export interface PullRequest {
   mergeable?: boolean;
   createdAt: string;
   updatedAt: string;
-  reviews?: any[];
-  comments?: any[];
+  reviews?: { id: string; status: string; body?: string; createdAt: string }[];
+  comments?: { id: string; filePath?: string; line?: number; body: string; createdAt: string }[];
   _count?: { reviews: number; comments: number };
 }
 
@@ -106,7 +106,9 @@ export const reposApi = {
     post(`/repos/${repoId}/pulls/${number}/merge`, { strategy }),
   closePR: (repoId: string, number: number) => post(`/repos/${repoId}/pulls/${number}/close`, {}),
   getPRDiff: (repoId: string, number: number) =>
-    get<{ diff: string; stats: any[] }>(`/repos/${repoId}/pulls/${number}/diff`),
+    get<{ diff: string; stats: { file: string; additions: number; deletions: number }[] }>(
+      `/repos/${repoId}/pulls/${number}/diff`,
+    ),
   getPRCommits: (repoId: string, number: number) =>
     get<CommitInfo[]>(`/repos/${repoId}/pulls/${number}/commits`),
   submitReview: (repoId: string, number: number, data: { status: string; body?: string }) =>
@@ -119,10 +121,11 @@ export const reposApi = {
 
   // Branch protection
   listProtectionRules: (repoId: string) => get(`/repos/${repoId}/branch-protection`),
-  createProtectionRule: (repoId: string, data: any) =>
+  createProtectionRule: (repoId: string, data: Record<string, unknown>) =>
     post(`/repos/${repoId}/branch-protection`, data),
 
   // Webhooks
   listWebhooks: (repoId: string) => get(`/repos/${repoId}/webhooks`),
-  createWebhook: (repoId: string, data: any) => post(`/repos/${repoId}/webhooks`, data),
+  createWebhook: (repoId: string, data: Record<string, unknown>) =>
+    post(`/repos/${repoId}/webhooks`, data),
 };

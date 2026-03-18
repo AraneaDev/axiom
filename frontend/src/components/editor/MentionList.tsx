@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+
 import { Avatar } from '@/components/ui/Avatar';
 
 interface MentionItem {
@@ -19,13 +20,24 @@ export interface MentionListRef {
 const MentionList = forwardRef<MentionListRef, MentionListProps>(({ items, command }, ref) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- reset index when items change */
   useEffect(() => setSelectedIndex(0), [items]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useImperativeHandle(ref, () => ({
     onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-      if (event.key === 'ArrowUp') { setSelectedIndex(i => (i - 1 + items.length) % items.length); return true; }
-      if (event.key === 'ArrowDown') { setSelectedIndex(i => (i + 1) % items.length); return true; }
-      if (event.key === 'Enter') { if (items[selectedIndex]) command(items[selectedIndex]); return true; }
+      if (event.key === 'ArrowUp') {
+        setSelectedIndex((i) => (i - 1 + items.length) % items.length);
+        return true;
+      }
+      if (event.key === 'ArrowDown') {
+        setSelectedIndex((i) => (i + 1) % items.length);
+        return true;
+      }
+      if (event.key === 'Enter') {
+        if (items[selectedIndex]) command(items[selectedIndex]);
+        return true;
+      }
       return false;
     },
   }));

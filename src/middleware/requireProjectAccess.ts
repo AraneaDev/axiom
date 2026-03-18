@@ -1,10 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
+
 import { prisma } from '../config/database';
+
 import { AppError } from './errorHandler';
 
 /**
  * Verifies the authenticated user is a member of the team that owns the project.
  * Expects `req.params.projectId` and `req.userId` (set by `authenticate`).
+ * @param req
+ * @param _res
+ * @param next
  */
 export async function requireProjectAccess(req: Request, _res: Response, next: NextFunction) {
   try {

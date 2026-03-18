@@ -1,13 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router';
-import { wikiApi } from '@/api/wiki.api';
+
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
+import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { PageLoader } from '@/components/ui/Spinner';
 import { formatDate } from '@/lib/utils';
 
+/**
+ *
+ */
 export default function PageHistory() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
 

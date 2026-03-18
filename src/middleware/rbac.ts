@@ -1,11 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
+
 import { prisma } from '../config/database';
-import { Action, hasPermission, hasOrgPermission } from '../utils/permissions';
-import { AppError } from './errorHandler';
 import { param } from '../utils/params';
+import { Action, hasPermission, hasOrgPermission } from '../utils/permissions';
+
+import { AppError } from './errorHandler';
 
 /**
  * Require org-level permission. Expects :orgId in route params.
+ * @param action
  */
 export function requireOrgPermission(action: Action) {
   return async (req: Request, _res: Response, next: NextFunction) => {
@@ -36,6 +39,7 @@ export function requireOrgPermission(action: Action) {
 /**
  * Require team-level permission. Expects :teamId in route params.
  * Also checks org-level permissions as a fallback (org admins/owners bypass team checks).
+ * @param action
  */
 export function requireTeamPermission(action: Action) {
   return async (req: Request, _res: Response, next: NextFunction) => {

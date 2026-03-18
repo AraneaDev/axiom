@@ -1,12 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
-import bcrypt from 'bcryptjs';
+import { execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
-import { execFile } from 'child_process';
 import { promisify } from 'util';
-import app from '../../index';
+
+import bcrypt from 'bcryptjs';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,9 +17,9 @@ const TEST_REPOS_PATH = process.env.REPOS_PATH || '/tmp/axiom-test-repos';
 describe('Repos API', () => {
   let token: string;
   let orgId: string;
-  let orgSlug: string;
+  let _orgSlug: string;
   let teamId: string;
-  let teamSlug: string;
+  let _teamSlug: string;
   let repoId: string;
 
   beforeAll(async () => {
@@ -51,7 +53,7 @@ describe('Repos API', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'Repo Org', slug: 'repo-org' });
     orgId = orgRes.body.id;
-    orgSlug = orgRes.body.slug;
+    _orgSlug = orgRes.body.slug;
 
     // Create team
     const teamRes = await request(app)
@@ -59,7 +61,7 @@ describe('Repos API', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'Dev', slug: 'dev' });
     teamId = teamRes.body.id;
-    teamSlug = teamRes.body.slug;
+    _teamSlug = teamRes.body.slug;
   });
 
   afterAll(async () => {
@@ -133,20 +135,44 @@ describe('Repos API', () => {
     await fs.mkdir(path.join(workDir, 'src'), { recursive: true });
     await fs.writeFile(path.join(workDir, 'src', 'index.ts'), 'console.log("app");');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'Initial commit', '--author', 'Test <test@axiom.dev>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Initial commit',
+      '--author',
+      'Test <test@axiom.dev>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'main']);
 
     // Second commit
     await fs.writeFile(path.join(workDir, 'src', 'utils.ts'), 'export const x = 1;');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'Add utils', '--author', 'Test <test@axiom.dev>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Add utils',
+      '--author',
+      'Test <test@axiom.dev>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'main']);
 
     // Feature branch
     await execFileAsync('git', ['-C', workDir, 'checkout', '-b', 'feat']);
     await fs.writeFile(path.join(workDir, 'src', 'feat.ts'), 'export function feat() {}');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
-    await execFileAsync('git', ['-C', workDir, 'commit', '-m', 'Add feature', '--author', 'Test <test@axiom.dev>']);
+    await execFileAsync('git', [
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Add feature',
+      '--author',
+      'Test <test@axiom.dev>',
+    ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'feat']);
 
     await fs.rm(workDir, { recursive: true });

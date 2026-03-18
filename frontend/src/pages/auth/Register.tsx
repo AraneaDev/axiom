@@ -1,10 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
+
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuthStore } from '@/stores/auth.store';
 
+/**
+ *
+ */
 export default function Register() {
   const navigate = useNavigate();
   const { register } = useAuthStore();
@@ -23,8 +27,8 @@ export default function Register() {
     try {
       await register(form);
       navigate('/setup-2fa');
-    } catch (err: any) {
-      setError(err.message || 'Registration failed');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -43,10 +47,40 @@ export default function Register() {
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Input id="displayName" label="Display name" value={form.displayName} onChange={(e) => update('displayName', e.target.value)} placeholder="Jane Doe" required />
-          <Input id="username" label="Username" value={form.username} onChange={(e) => update('username', e.target.value)} placeholder="janedoe" required />
-          <Input id="email" label="Email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="jane@example.com" required />
-          <Input id="password" label="Password" type="password" value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Min 8 characters" required />
+          <Input
+            id="displayName"
+            label="Display name"
+            value={form.displayName}
+            onChange={(e) => update('displayName', e.target.value)}
+            placeholder="Jane Doe"
+            required
+          />
+          <Input
+            id="username"
+            label="Username"
+            value={form.username}
+            onChange={(e) => update('username', e.target.value)}
+            placeholder="janedoe"
+            required
+          />
+          <Input
+            id="email"
+            label="Email"
+            type="email"
+            value={form.email}
+            onChange={(e) => update('email', e.target.value)}
+            placeholder="jane@example.com"
+            required
+          />
+          <Input
+            id="password"
+            label="Password"
+            type="password"
+            value={form.password}
+            onChange={(e) => update('password', e.target.value)}
+            placeholder="Min 8 characters"
+            required
+          />
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? <Spinner className="h-4 w-4" /> : 'Create account'}
           </Button>
@@ -54,7 +88,9 @@ export default function Register() {
 
         <p className="mt-4 text-center text-sm text-text-secondary">
           Already have an account?{' '}
-          <Link to="/login" className="text-primary hover:underline">Sign in</Link>
+          <Link to="/login" className="text-primary hover:underline">
+            Sign in
+          </Link>
         </p>
       </div>
     </div>

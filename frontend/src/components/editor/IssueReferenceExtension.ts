@@ -25,7 +25,11 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
 
   addAttributes() {
     return {
-      key: { default: null, parseHTML: el => el.getAttribute('data-issue-key'), renderHTML: attrs => ({ 'data-issue-key': attrs.key }) },
+      key: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-issue-key'),
+        renderHTML: (attrs) => ({ 'data-issue-key': attrs.key }),
+      },
     };
   },
 
@@ -34,14 +38,20 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { class: 'issue-ref' }), `${HTMLAttributes['data-issue-key']}`];
+    return [
+      'span',
+      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { class: 'issue-ref' }),
+      `${HTMLAttributes['data-issue-key']}`,
+    ];
   },
 
   addCommands() {
     return {
-      insertIssueReference: (key: string) => ({ commands }) => {
-        return commands.insertContent({ type: this.name, attrs: { key } });
-      },
+      insertIssueReference:
+        (key: string) =>
+        ({ commands }) => {
+          return commands.insertContent({ type: this.name, attrs: { key } });
+        },
     };
   },
 
@@ -53,7 +63,6 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
           const key = match[1];
           const { tr } = state;
           tr.replaceWith(range.from, range.to, state.schema.nodes.issueReference.create({ key }));
-          return tr;
         },
       }),
     ];

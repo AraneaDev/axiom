@@ -1,17 +1,21 @@
-import { Request, Response, NextFunction, Router } from 'express';
-import { prisma } from '../config/database';
-import * as gitCmd from './git-commands';
+import crypto from 'crypto';
+
 import { CommitRefType } from '@prisma/client';
+import { Request, Response, NextFunction, Router } from 'express';
+
+import { prisma } from '../config/database';
+
+import * as gitCmd from './git-commands';
 
 const HOOK_SECRET = process.env.HOOK_SECRET || 'axiom-internal-hook-secret';
 
 const router = Router();
 
 interface PostReceivePayload {
-  repo: string;    // repo ID
-  ref: string;     // e.g., refs/heads/main
-  before: string;  // old SHA
-  after: string;   // new SHA
+  repo: string; // repo ID
+  ref: string; // e.g., refs/heads/main
+  before: string; // old SHA
+  after: string; // new SHA
 }
 
 /**
@@ -85,10 +89,7 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
         where: {
           repoId: repo.id,
           status: 'OPEN',
-          OR: [
-            { sourceBranch: refName },
-            { targetBranch: refName },
-          ],
+          OR: [{ sourceBranch: refName }, { targetBranch: refName }],
         },
         data: { updatedAt: new Date() },
       });
@@ -118,9 +119,11 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
               });
               if (!issue) continue;
 
-              const refType: CommitRefType = keyword?.startsWith('clos') ? 'CLOSES'
-                : keyword?.startsWith('fix') ? 'FIXES'
-                : 'REFS';
+              const refType: CommitRefType = keyword?.startsWith('clos')
+                ? 'CLOSES'
+                : keyword?.startsWith('fix')
+                  ? 'FIXES'
+                  : 'REFS';
 
               await prisma.issueCommit.upsert({
                 where: { issueId_sha: { issueId: issue.id, sha: commit.sha } },
@@ -143,7 +146,10 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
                   where: { projectId: project.id, name: { contains: 'done', mode: 'insensitive' } },
                 });
                 if (doneColumn && issue.columnId !== doneColumn.id) {
-                  await prisma.issue.update({ where: { id: issue.id }, data: { columnId: doneColumn.id } });
+                  await prisma.issue.update({
+                    where: { id: issue.id },
+                    data: { columnId: doneColumn.id },
+                  });
                 }
               }
             }
@@ -162,11 +168,15 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
 
 /**
  * Dispatch a webhook with HMAC-SHA256 signature and retry logic.
+ * @param url
+ * @param secret
+ * @param payload
+ * @param retries
  */
 async function dispatchWebhook(
   url: string,
   secret: string | null,
-  payload: any,
+  payload: Record<string, unknown>,
   retries: number = 3,
 ): Promise<void> {
   const body = JSON.stringify(payload);
@@ -177,10 +187,7 @@ async function dispatchWebhook(
   };
 
   if (secret) {
-    const signature = require('crypto')
-      .createHmac('sha256', secret)
-      .update(body)
-      .digest('hex');
+    const signature = crypto.createHmac('sha256', secret).update(body).digest('hex');
     headers['X-Axiom-Signature'] = `sha256=${signature}`;
   }
 
@@ -212,8 +219,13 @@ async function dispatchWebhook(
 
 /**
  * Generate a post-receive hook script for a repository.
+ * @param repoId
+ * @param apiBaseUrl
  */
-export function generatePostReceiveHook(repoId: string, apiBaseUrl: string = 'http://localhost:3000'): string {
+export function generatePostReceiveHook(
+  repoId: string,
+  apiBaseUrl: string = 'http://localhost:3000',
+): string {
   return `#!/bin/bash
 while read oldrev newrev refname; do
   curl -s -X POST ${apiBaseUrl}/api/internal/hooks/post-receive \\

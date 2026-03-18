@@ -1,9 +1,20 @@
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
+
 import { generateChangelog, type CommitEntry } from './changelog';
 
-export async function listReleases(repoId: string, opts: { draft?: boolean; prerelease?: boolean }) {
+/**
+ *
+ * @param repoId
+ * @param opts
+ * @param opts.draft
+ * @param opts.prerelease
+ */
+export async function listReleases(
+  repoId: string,
+  opts: { draft?: boolean; prerelease?: boolean },
+) {
   return prisma.release.findMany({
     where: {
       repoId,
@@ -15,6 +26,11 @@ export async function listReleases(repoId: string, opts: { draft?: boolean; prer
   });
 }
 
+/**
+ *
+ * @param repoId
+ * @param tagName
+ */
 export async function getRelease(repoId: string, tagName: string) {
   const release = await prisma.release.findUnique({
     where: { repoId_tagName: { repoId, tagName } },
@@ -24,43 +40,72 @@ export async function getRelease(repoId: string, tagName: string) {
 
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
   let commits: CommitEntry[] = [];
-  if (repo?.diskPath && await repoExists(repo.diskPath)) {
+  if (repo?.diskPath && (await repoExists(repo.diskPath))) {
     try {
       // Get commits between previous release and this tag
       const allTags = await gitCmd.listTags(repo.diskPath);
-      const tagNames = allTags.map(t => t.name).sort();
+      const tagNames = allTags.map((t) => t.name).sort();
       const idx = tagNames.indexOf(tagName);
       const base = idx > 0 ? tagNames[idx - 1] : null;
       const rawCommits = await gitCmd.log(repo.diskPath, tagName, 100, 0);
       const baseCommits = base ? await gitCmd.log(repo.diskPath, base, 1000, 0) : [];
-      const baseShas = new Set(baseCommits.map(c => c.sha));
+      const baseShas = new Set(baseCommits.map((c) => c.sha));
       commits = rawCommits
-        .filter(c => !baseShas.has(c.sha))
-        .map(c => ({ sha: c.sha, shortSha: c.shortSha, message: c.message, author: c.author, date: c.date }));
-    } catch {}
+        .filter((c) => !baseShas.has(c.sha))
+        .map((c) => ({
+          sha: c.sha,
+          shortSha: c.shortSha,
+          message: c.message,
+          author: c.author,
+          date: c.date,
+        }));
+    } catch {
+      /* ignored */
+    }
   }
 
   return { ...release, commits };
 }
 
-export async function createRelease(repoId: string, userId: string, data: {
-  tagName: string;
-  title: string;
-  body?: string;
-  isDraft?: boolean;
-  isPrerelease?: boolean;
-  targetBranch: string;
-  commitSha?: string;
-}) {
+/**
+ *
+ * @param repoId
+ * @param userId
+ * @param data
+ * @param data.tagName
+ * @param data.title
+ * @param data.body
+ * @param data.isDraft
+ * @param data.isPrerelease
+ * @param data.targetBranch
+ * @param data.commitSha
+ */
+export async function createRelease(
+  repoId: string,
+  userId: string,
+  data: {
+    tagName: string;
+    title: string;
+    body?: string;
+    isDraft?: boolean;
+    isPrerelease?: boolean;
+    targetBranch: string;
+    commitSha?: string;
+  },
+) {
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
   if (!repo) throw Object.assign(new Error('Repository not found'), { status: 404 });
 
   let sha = data.commitSha;
-  if (!sha && repo.diskPath && await repoExists(repo.diskPath)) {
-    try { sha = await gitCmd.resolveRef(repo.diskPath, data.targetBranch); } catch {}
+  if (!sha && repo.diskPath && (await repoExists(repo.diskPath))) {
+    try {
+      sha = await gitCmd.resolveRef(repo.diskPath, data.targetBranch);
+    } catch {
+      /* ignored */
+    }
   }
 
-  if (!data.isDraft && sha && repo.diskPath && await repoExists(repo.diskPath)) {
+  if (!data.isDraft && sha && repo.diskPath && (await repoExists(repo.diskPath))) {
     await gitCmd.createTag(repo.diskPath, data.tagName, sha, data.title);
   }
 
@@ -81,9 +126,22 @@ export async function createRelease(repoId: string, userId: string, data: {
   });
 }
 
-export async function updateRelease(repoId: string, tagName: string, data: Partial<{
-  title: string; body: string; isDraft: boolean; isPrerelease: boolean;
-}>) {
+/**
+ *
+ * @param repoId
+ * @param tagName
+ * @param data
+ */
+export async function updateRelease(
+  repoId: string,
+  tagName: string,
+  data: Partial<{
+    title: string;
+    body: string;
+    isDraft: boolean;
+    isPrerelease: boolean;
+  }>,
+) {
   return prisma.release.update({
     where: { repoId_tagName: { repoId, tagName } },
     data,
@@ -91,12 +149,19 @@ export async function updateRelease(repoId: string, tagName: string, data: Parti
   });
 }
 
+/**
+ *
+ * @param repoId
+ * @param tagName
+ */
 export async function publishRelease(repoId: string, tagName: string) {
-  const release = await prisma.release.findUnique({ where: { repoId_tagName: { repoId, tagName } } });
+  const release = await prisma.release.findUnique({
+    where: { repoId_tagName: { repoId, tagName } },
+  });
   if (!release) throw Object.assign(new Error('Release not found'), { status: 404 });
 
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (repo?.diskPath && release.commitSha && await repoExists(repo.diskPath)) {
+  if (repo?.diskPath && release.commitSha && (await repoExists(repo.diskPath))) {
     await gitCmd.createTag(repo.diskPath, tagName, release.commitSha, release.title);
   }
 
@@ -107,24 +172,45 @@ export async function publishRelease(repoId: string, tagName: string) {
   });
 }
 
+/**
+ *
+ * @param repoId
+ * @param tagName
+ */
 export async function deleteRelease(repoId: string, tagName: string) {
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (repo?.diskPath && await repoExists(repo.diskPath)) {
-    try { await gitCmd.deleteTag(repo.diskPath, tagName); } catch {}
+  if (repo?.diskPath && (await repoExists(repo.diskPath))) {
+    try {
+      await gitCmd.deleteTag(repo.diskPath, tagName);
+    } catch {
+      /* ignored */
+    }
   }
   await prisma.release.delete({ where: { repoId_tagName: { repoId, tagName } } });
 }
 
+/**
+ *
+ * @param repoId
+ * @param base
+ * @param head
+ */
 export async function compareRelease(repoId: string, base: string, head: string) {
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo?.diskPath || !await repoExists(repo.diskPath)) return { commits: [], changelog: [] };
+  if (!repo?.diskPath || !(await repoExists(repo.diskPath))) return { commits: [], changelog: [] };
 
   const allCommits = await gitCmd.log(repo.diskPath, head, 200, 0);
   const baseCommits = await gitCmd.log(repo.diskPath, base, 1000, 0);
-  const baseShas = new Set(baseCommits.map(c => c.sha));
+  const baseShas = new Set(baseCommits.map((c) => c.sha));
   const commits: CommitEntry[] = allCommits
-    .filter(c => !baseShas.has(c.sha))
-    .map(c => ({ sha: c.sha, shortSha: c.shortSha, message: c.message, author: c.author, date: c.date }));
+    .filter((c) => !baseShas.has(c.sha))
+    .map((c) => ({
+      sha: c.sha,
+      shortSha: c.shortSha,
+      message: c.message,
+      author: c.author,
+      date: c.date,
+    }));
 
   return { commits, changelog: generateChangelog(commits) };
 }

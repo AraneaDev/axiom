@@ -1,6 +1,7 @@
+import { X } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 
 interface ModalProps {
@@ -17,6 +18,15 @@ const sizes = {
   lg: 'max-w-2xl',
 };
 
+/**
+ *
+ * @param root0
+ * @param root0.open
+ * @param root0.onClose
+ * @param root0.title
+ * @param root0.size
+ * @param root0.children
+ */
 export function Modal({ open, onClose, title, size = 'md', children }: ModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -40,10 +50,7 @@ export function Modal({ open, onClose, title, size = 'md', children }: ModalProp
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       {/* Content */}
       <div
         className={cn(
@@ -69,6 +76,11 @@ export function Modal({ open, onClose, title, size = 'md', children }: ModalProp
   );
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.children
+ */
 export function ModalFooter({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-border-light">

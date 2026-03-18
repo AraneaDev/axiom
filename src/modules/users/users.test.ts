@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import app from '../../index';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 describe('Users API', () => {
   let token: string;
@@ -38,9 +39,7 @@ describe('Users API', () => {
 
   // 1. Get /api/users/me
   it('1. should get current user profile', async () => {
-    const res = await request(app)
-      .get('/api/users/me')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/users/me').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.email).toBe('users-test@axiom.dev');
     expect(res.body.username).toBe('users-test-user');
@@ -84,9 +83,7 @@ describe('Users API', () => {
 
   // 5. Use token for auth
   it('5. should use API token to authenticate a request', async () => {
-    const res = await request(app)
-      .get('/api/users/me')
-      .set('Authorization', `Bearer ${apiToken}`);
+    const res = await request(app).get('/api/users/me').set('Authorization', `Bearer ${apiToken}`);
     expect(res.status).toBe(200);
     expect(res.body.username).toBe('users-test-user');
   });
@@ -106,8 +103,7 @@ describe('Users API', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         name: 'Test Key',
-        publicKey:
-          'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC3test+key+data+here== test@example.com',
+        publicKey: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC3test+key+data+here== test@example.com',
       });
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();

@@ -1,5 +1,10 @@
 import { prisma } from '../../config/database';
 
+/**
+ *
+ * @param projectId
+ * @param issueNumber
+ */
 export async function getCommits(projectId: string, issueNumber: number) {
   const issue = await prisma.issue.findUnique({
     where: { projectId_number: { projectId, number: issueNumber } },
@@ -8,7 +13,16 @@ export async function getCommits(projectId: string, issueNumber: number) {
 
   return prisma.issueCommit.findMany({
     where: { issueId: issue.id },
-    include: { repo: { select: { id: true, slug: true, name: true, team: { select: { slug: true, org: { select: { slug: true } } } } } } },
+    include: {
+      repo: {
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          team: { select: { slug: true, org: { select: { slug: true } } } },
+        },
+      },
+    },
     orderBy: { committedAt: 'desc' },
   });
 }

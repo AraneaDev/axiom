@@ -1,12 +1,13 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import app from '../index';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../config/database';
+import app from '../index';
 
 describe('E2E: Full workflow', () => {
   let token: string;
-  let userId: string;
+  let _userId: string;
   let orgId: string;
   let teamId: string;
   let projectId: string;
@@ -17,9 +18,14 @@ describe('E2E: Full workflow', () => {
     const user = await prisma.user.upsert({
       where: { username: 'e2euser' },
       update: {},
-      create: { email: 'e2e@axiom.dev', username: 'e2euser', displayName: 'E2E User', passwordHash },
+      create: {
+        email: 'e2e@axiom.dev',
+        username: 'e2euser',
+        displayName: 'E2E User',
+        passwordHash,
+      },
     });
-    userId = user.id;
+    _userId = user.id;
   });
 
   afterAll(async () => {

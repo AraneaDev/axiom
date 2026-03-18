@@ -1,13 +1,17 @@
-import { useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuthStore } from '@/stores/auth.store';
+import { Check } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
+
 import { usersApi } from '@/api/users.api';
+import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Avatar } from '@/components/ui/Avatar';
 import { Spinner } from '@/components/ui/Spinner';
-import { Check } from 'lucide-react';
+import { useAuthStore } from '@/stores/auth.store';
 
+/**
+ *
+ */
 export default function Profile() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
@@ -46,12 +50,36 @@ export default function Profile() {
       <div className="rounded-lg border border-border bg-surface p-6">
         <h2 className="text-sm font-semibold text-text mb-4">Account details</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input id="displayName" label="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
-          <Input id="email" label="Email" value={user?.email ?? ''} disabled hint="Email cannot be changed" />
-          <Input id="username" label="Username" value={user?.username ?? ''} disabled hint="Username cannot be changed" />
+          <Input
+            id="displayName"
+            label="Display name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+          />
+          <Input
+            id="email"
+            label="Email"
+            value={user?.email ?? ''}
+            disabled
+            hint="Email cannot be changed"
+          />
+          <Input
+            id="username"
+            label="Username"
+            value={user?.username ?? ''}
+            disabled
+            hint="Username cannot be changed"
+          />
           <div className="flex items-center gap-3 pt-2 border-t border-border-light">
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? <Spinner className="h-4 w-4" /> : <><Check className="h-4 w-4" /> Save changes</>}
+              {mutation.isPending ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <>
+                  <Check className="h-4 w-4" /> Save changes
+                </>
+              )}
             </Button>
             {saved && <span className="text-sm text-success">Saved!</span>}
           </div>

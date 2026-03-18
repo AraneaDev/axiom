@@ -23,6 +23,10 @@ export interface ParsedPipeline {
   jobs: Record<string, ParsedJob>;
 }
 
+/**
+ *
+ * @param content
+ */
 export function parsePipelineYaml(content: string): ParsedPipeline {
   const raw = yaml.load(content) as Record<string, unknown>;
 
@@ -57,9 +61,12 @@ export function parsePipelineYaml(content: string): ParsedPipeline {
     const steps: ParsedStep[] = stepsRaw.map((s: Record<string, unknown>, idx: number) => ({
       name: typeof s.name === 'string' ? s.name : `Step ${idx + 1}`,
       run: typeof s.run === 'string' ? s.run : '',
-      env: typeof s.env === 'object' && s.env !== null
-        ? Object.fromEntries(Object.entries(s.env as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
-        : undefined,
+      env:
+        typeof s.env === 'object' && s.env !== null
+          ? Object.fromEntries(
+              Object.entries(s.env as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
+            )
+          : undefined,
     }));
     jobs[jobId] = {
       name: typeof job.name === 'string' ? job.name : jobId,
@@ -71,6 +78,10 @@ export function parsePipelineYaml(content: string): ParsedPipeline {
   return { name, on: triggers, jobs };
 }
 
+/**
+ *
+ * @param parsed
+ */
 export function validatePipeline(parsed: ParsedPipeline): string[] {
   const errors: string[] = [];
   const jobIds = Object.keys(parsed.jobs);
@@ -124,6 +135,10 @@ export function validatePipeline(parsed: ParsedPipeline): string[] {
   return errors;
 }
 
+/**
+ *
+ * @param jobs
+ */
 export function getTopologicalOrder(jobs: Record<string, ParsedJob>): string[][] {
   // Returns jobs grouped by execution wave (parallel within each wave)
   const inDegree: Record<string, number> = {};
@@ -142,7 +157,7 @@ export function getTopologicalOrder(jobs: Record<string, ParsedJob>): string[][]
   }
 
   const waves: string[][] = [];
-  let queue = Object.keys(inDegree).filter(id => inDegree[id] === 0);
+  let queue = Object.keys(inDegree).filter((id) => inDegree[id] === 0);
 
   while (queue.length > 0) {
     waves.push([...queue]);

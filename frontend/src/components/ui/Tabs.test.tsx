@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+
 import { Tabs } from './Tabs';
 
 const tabs = [
@@ -36,9 +37,7 @@ describe('Tabs', () => {
   });
 
   it('renders tab icons when provided', () => {
-    const tabsWithIcons = [
-      { key: 'a', label: 'Tab A', icon: <span data-testid="icon-a">A</span> },
-    ];
+    const tabsWithIcons = [{ key: 'a', label: 'Tab A', icon: <span data-testid="icon-a">A</span> }];
     render(<Tabs tabs={tabsWithIcons} activeKey="a" onChange={vi.fn()} />);
     expect(screen.getByTestId('icon-a')).toBeInTheDocument();
   });

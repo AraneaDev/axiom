@@ -2,7 +2,9 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
 import { prisma } from '../../config/database';
+
 import { parsePipelineYaml, getTopologicalOrder } from './pipeline-parser';
 import type { ParsedStep } from './pipeline-parser';
 
@@ -29,7 +31,7 @@ async function executeStep(
     },
   });
 
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const env = { ...process.env, ...ctx.env, ...(step.env ?? {}) };
     const proc = spawn('sh', ['-c', step.run], {
       cwd: ctx.tmpDir,
@@ -38,39 +40,47 @@ async function executeStep(
     });
 
     let outputBuffer = '';
-    let flushTimer: ReturnType<typeof setInterval>;
     let killed = false;
 
     const flushOutput = async () => {
       if (outputBuffer.length === 0) return;
       const chunk = outputBuffer;
       outputBuffer = '';
-      await prisma.pipelineStep.update({
-        where: { id: dbStep.id },
-        data: { output: { set: await getStepOutput(dbStep.id) + chunk } },
-      }).catch(() => {});
+      await prisma.pipelineStep
+        .update({
+          where: { id: dbStep.id },
+          data: { output: { set: (await getStepOutput(dbStep.id)) + chunk } },
+        })
+        .catch(() => {});
     };
 
     async function getStepOutput(stepId: string): Promise<string> {
-      const s = await prisma.pipelineStep.findUnique({ where: { id: stepId }, select: { output: true } });
+      const s = await prisma.pipelineStep.findUnique({
+        where: { id: stepId },
+        select: { output: true },
+      });
       return s?.output ?? '';
     }
 
-    flushTimer = setInterval(flushOutput, 500);
+    const flushTimer = setInterval(flushOutput, 500);
 
     const timeout = setTimeout(() => {
       killed = true;
       proc.kill('SIGKILL');
     }, STEP_TIMEOUT_MS);
 
-    proc.stdout.on('data', (d: Buffer) => { outputBuffer += d.toString(); });
-    proc.stderr.on('data', (d: Buffer) => { outputBuffer += d.toString(); });
+    proc.stdout.on('data', (d: Buffer) => {
+      outputBuffer += d.toString();
+    });
+    proc.stderr.on('data', (d: Buffer) => {
+      outputBuffer += d.toString();
+    });
 
     proc.on('close', async (code) => {
       clearTimeout(timeout);
       clearInterval(flushTimer);
       await flushOutput();
-      const status = killed ? 'CANCELLED' : (code === 0 ? 'SUCCESS' : 'FAILURE');
+      const status = killed ? 'CANCELLED' : code === 0 ? 'SUCCESS' : 'FAILURE';
       await prisma.pipelineStep.update({
         where: { id: dbStep.id },
         data: { status, exitCode: code ?? -1, finishedAt: new Date() },
@@ -86,7 +96,10 @@ async function executeJob(
   steps: ParsedStep[],
   ctx: RunContext,
 ): Promise<boolean> {
-  await prisma.pipelineJob.update({ where: { id: dbJobId }, data: { status: 'RUNNING', startedAt: new Date() } });
+  await prisma.pipelineJob.update({
+    where: { id: dbJobId },
+    data: { status: 'RUNNING', startedAt: new Date() },
+  });
 
   let success = true;
   for (const step of steps) {
@@ -105,11 +118,29 @@ async function executeJob(
   return success;
 }
 
-export async function runPipeline(runRecord: { id: string; pipelineId: string; commitSha?: string | null; triggerRef: string; repoId: string }): Promise<void> {
+/**
+ *
+ * @param runRecord
+ * @param runRecord.id
+ * @param runRecord.pipelineId
+ * @param runRecord.commitSha
+ * @param runRecord.triggerRef
+ * @param runRecord.repoId
+ */
+export async function runPipeline(runRecord: {
+  id: string;
+  pipelineId: string;
+  commitSha?: string | null;
+  triggerRef: string;
+  repoId: string;
+}): Promise<void> {
   let tmpDir: string | null = null;
 
   try {
-    await prisma.pipelineRun.update({ where: { id: runRecord.id }, data: { status: 'RUNNING', startedAt: new Date() } });
+    await prisma.pipelineRun.update({
+      where: { id: runRecord.id },
+      data: { status: 'RUNNING', startedAt: new Date() },
+    });
 
     // Get pipeline and repo
     const pipeline = await prisma.pipeline.findUnique({ where: { id: runRecord.pipelineId } });
@@ -122,8 +153,12 @@ export async function runPipeline(runRecord: { id: string; pipelineId: string; c
     tmpDir = await mkdtemp(join(tmpdir(), 'axiom-ci-'));
     await new Promise<void>((resolve, reject) => {
       const ref = runRecord.commitSha ?? runRecord.triggerRef;
-      const proc = spawn('git', ['clone', '--depth=1', repo.diskPath!, tmpDir!], { stdio: 'inherit' });
-      proc.on('close', code => code === 0 ? resolve() : reject(new Error(`git clone failed: ${code}`)));
+      const proc = spawn('git', ['clone', '--depth=1', '--branch', ref, repo.diskPath!, tmpDir!], {
+        stdio: 'inherit',
+      });
+      proc.on('close', (code) =>
+        code === 0 ? resolve() : reject(new Error(`git clone failed: ${code}`)),
+      );
     });
 
     const env: Record<string, string> = {
@@ -150,9 +185,9 @@ export async function runPipeline(runRecord: { id: string; pipelineId: string; c
     let runSuccess = true;
     for (const wave of waves) {
       const waveResults = await Promise.all(
-        wave.map(jobId => executeJob(jobId, jobDbIds[jobId], parsed.jobs[jobId].steps, ctx))
+        wave.map((jobId) => executeJob(jobId, jobDbIds[jobId], parsed.jobs[jobId].steps, ctx)),
       );
-      if (waveResults.some(r => !r)) {
+      if (waveResults.some((r) => !r)) {
         runSuccess = false;
         // Mark remaining pending jobs as skipped
         for (const remaining of Object.keys(jobDbIds)) {
@@ -184,10 +219,12 @@ export async function runPipeline(runRecord: { id: string; pipelineId: string; c
     }
   } catch (err) {
     console.error('[pipeline-runner] Error:', err);
-    await prisma.pipelineRun.update({
-      where: { id: runRecord.id },
-      data: { status: 'FAILURE', finishedAt: new Date() },
-    }).catch(() => {});
+    await prisma.pipelineRun
+      .update({
+        where: { id: runRecord.id },
+        data: { status: 'FAILURE', finishedAt: new Date() },
+      })
+      .catch(() => {});
   } finally {
     if (tmpDir) {
       await rm(tmpDir, { recursive: true, force: true }).catch(() => {});

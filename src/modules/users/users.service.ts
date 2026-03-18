@@ -1,9 +1,14 @@
 import crypto from 'crypto';
+
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
 // ─── Profile ────────────────────────────────────────────────
 
+/**
+ *
+ * @param userId
+ */
 export async function getProfile(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -21,7 +26,17 @@ export async function getProfile(userId: string) {
   return user;
 }
 
-export async function updateProfile(userId: string, data: { displayName?: string; avatarUrl?: string }) {
+/**
+ *
+ * @param userId
+ * @param data
+ * @param data.displayName
+ * @param data.avatarUrl
+ */
+export async function updateProfile(
+  userId: string,
+  data: { displayName?: string; avatarUrl?: string },
+) {
   return prisma.user.update({
     where: { id: userId },
     data,
@@ -41,6 +56,10 @@ function parseAndFingerprintKey(publicKey: string): string {
   return `SHA256:${hash.replace(/=+$/, '')}`;
 }
 
+/**
+ *
+ * @param userId
+ */
 export async function listSshKeys(userId: string) {
   return prisma.sshKey.findMany({
     where: { userId },
@@ -49,6 +68,13 @@ export async function listSshKeys(userId: string) {
   });
 }
 
+/**
+ *
+ * @param userId
+ * @param data
+ * @param data.title
+ * @param data.publicKey
+ */
 export async function addSshKey(userId: string, data: { title: string; publicKey: string }) {
   const fingerprint = parseAndFingerprintKey(data.publicKey);
 
@@ -66,6 +92,11 @@ export async function addSshKey(userId: string, data: { title: string; publicKey
   });
 }
 
+/**
+ *
+ * @param userId
+ * @param keyId
+ */
 export async function deleteSshKey(userId: string, keyId: string) {
   const key = await prisma.sshKey.findFirst({ where: { id: keyId, userId } });
   if (!key) throw new AppError(404, 'SSH key not found');
@@ -74,19 +105,42 @@ export async function deleteSshKey(userId: string, keyId: string) {
 
 // ─── API Tokens ─────────────────────────────────────────────
 
+/**
+ *
+ * @param userId
+ */
 export async function listApiTokens(userId: string) {
   return prisma.apiToken.findMany({
     where: { userId },
-    select: { id: true, name: true, prefix: true, scopes: true, createdAt: true, lastUsedAt: true, expiresAt: true },
+    select: {
+      id: true,
+      name: true,
+      prefix: true,
+      scopes: true,
+      createdAt: true,
+      lastUsedAt: true,
+      expiresAt: true,
+    },
     orderBy: { createdAt: 'desc' },
   });
 }
 
-export async function createApiToken(userId: string, data: {
-  name: string;
-  scopes: string[];
-  expiresInDays?: number;
-}) {
+/**
+ *
+ * @param userId
+ * @param data
+ * @param data.name
+ * @param data.scopes
+ * @param data.expiresInDays
+ */
+export async function createApiToken(
+  userId: string,
+  data: {
+    name: string;
+    scopes: string[];
+    expiresInDays?: number;
+  },
+) {
   // Generate token: tk_ prefix + 48 random bytes
   const rawToken = `tk_${crypto.randomBytes(48).toString('hex')}`;
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -110,6 +164,11 @@ export async function createApiToken(userId: string, data: {
   return { ...token, token: rawToken };
 }
 
+/**
+ *
+ * @param userId
+ * @param tokenId
+ */
 export async function deleteApiToken(userId: string, tokenId: string) {
   const token = await prisma.apiToken.findFirst({ where: { id: tokenId, userId } });
   if (!token) throw new AppError(404, 'API token not found');

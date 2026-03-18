@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import * as webhooksController from './webhooks.controller';
+
 import { authenticate } from '../../middleware/auth';
+
+import * as webhooksController from './webhooks.controller';
 
 const router = Router();
 

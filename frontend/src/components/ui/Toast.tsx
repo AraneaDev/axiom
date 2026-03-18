@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
-import { cn } from '@/lib/utils';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { useState, useCallback, createContext, useContext, type ReactNode } from 'react';
+
+import { cn } from '@/lib/utils';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -19,6 +20,9 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | null>(null);
 
+/**
+ *
+ */
 export function useToast() {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error('useToast must be used within ToastProvider');
@@ -32,6 +36,11 @@ const STYLES = {
   info: 'bg-primary-light border-primary/20 text-primary',
 };
 
+/**
+ *
+ * @param root0
+ * @param root0.children
+ */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -39,11 +48,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const addToast = useCallback((message: string, type: ToastType = 'info') => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => removeToast(id), 4000);
-  }, [removeToast]);
+  const addToast = useCallback(
+    (message: string, type: ToastType = 'info') => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(() => removeToast(id), 4000);
+    },
+    [removeToast],
+  );
 
   const ctx: ToastContextType = {
     toast: addToast,
@@ -68,7 +80,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             >
               <Icon className="h-4 w-4 shrink-0" />
               <p className="text-sm flex-1">{t.message}</p>
-              <button onClick={() => removeToast(t.id)} className="shrink-0 hover:opacity-70" title="Dismiss">
+              <button
+                onClick={() => removeToast(t.id)}
+                className="shrink-0 hover:opacity-70"
+                title="Dismiss"
+              >
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>

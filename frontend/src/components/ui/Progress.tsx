@@ -20,19 +20,34 @@ const variants = {
   danger: 'bg-danger',
 };
 
+/**
+ *
+ * @param root0
+ * @param root0.value
+ * @param root0.size
+ * @param root0.variant
+ * @param root0.className
+ */
 export function Progress({ value, size = 'md', variant = 'primary', className }: ProgressProps) {
   const clamped = Math.max(0, Math.min(100, value));
 
   return (
     <div
-      className={cn('w-full rounded-full bg-surface-tertiary overflow-hidden', heights[size], className)}
+      className={cn(
+        'w-full rounded-full bg-surface-tertiary overflow-hidden',
+        heights[size],
+        className,
+      )}
       role="progressbar"
       aria-valuenow={clamped}
       aria-valuemin={0}
       aria-valuemax={100}
     >
       <div
-        className={cn('h-full rounded-full transition-all duration-300 ease-out', variants[variant])}
+        className={cn(
+          'h-full rounded-full transition-all duration-300 ease-out',
+          variants[variant],
+        )}
         style={{ width: `${clamped}%` }}
       />
     </div>

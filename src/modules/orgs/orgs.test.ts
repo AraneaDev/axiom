@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import app from '../../index';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 describe('Orgs API', () => {
   let token: string;
@@ -45,7 +46,9 @@ describe('Orgs API', () => {
 
   afterAll(async () => {
     await prisma.org.deleteMany({ where: { slug: 'orgs-test-org' } });
-    await prisma.user.deleteMany({ where: { username: { in: ['orgs-test-owner', 'orgs-test-member'] } } });
+    await prisma.user.deleteMany({
+      where: { username: { in: ['orgs-test-owner', 'orgs-test-member'] } },
+    });
     await prisma.$disconnect();
   });
 
@@ -73,9 +76,7 @@ describe('Orgs API', () => {
 
   // 3. List orgs for user
   it('3. should list orgs for the current user', async () => {
-    const res = await request(app)
-      .get('/api/orgs')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/orgs').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     const found = res.body.find((o: { id: string }) => o.id === orgId);

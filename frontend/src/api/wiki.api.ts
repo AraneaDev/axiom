@@ -1,4 +1,5 @@
 import { get, post, patch, del } from './client';
+
 import type { WikiSpace, Page, PageTreeNode, PageVersion } from '@/lib/types';
 
 export const wikiApi = {

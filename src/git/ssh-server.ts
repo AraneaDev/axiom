@@ -1,7 +1,9 @@
-import { Server, type Connection, type AuthContext } from 'ssh2';
 import { spawn } from 'child_process';
-import fs from 'fs';
 import crypto from 'crypto';
+import fs from 'fs';
+
+import { Server, type Connection, type AuthContext } from 'ssh2';
+
 import { prisma } from '../config/database';
 
 const SSH_PORT = parseInt(process.env.SSH_PORT || '2222', 10);
@@ -9,6 +11,8 @@ const HOST_KEY_PATH = process.env.SSH_HOST_KEY || '/data/ssh/host_key';
 
 /**
  * Look up an SSH key by its fingerprint and return the associated userId.
+ * @param key
+ * @param key.data
  */
 async function authenticateByKey(key: { data: Buffer }): Promise<string | null> {
   const hash = crypto.createHash('sha256').update(key.data).digest('base64');
@@ -29,6 +33,7 @@ async function authenticateByKey(key: { data: Buffer }): Promise<string | null> 
 /**
  * Parse a git command from the SSH exec request.
  * Expected format: git-upload-pack '/org/team/repo.git' or git-receive-pack '/org/team/repo.git'
+ * @param command
  */
 function parseGitCommand(command: string): {
   service: 'git-upload-pack' | 'git-receive-pack';
@@ -37,7 +42,7 @@ function parseGitCommand(command: string): {
   repoSlug: string;
 } | null {
   const match = command.match(
-    /^(git-upload-pack|git-receive-pack)\s+'?\/?([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?'?$/
+    /^(git-upload-pack|git-receive-pack)\s+'?\/?([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?'?$/,
   );
   if (!match) return null;
   return {
@@ -50,6 +55,11 @@ function parseGitCommand(command: string): {
 
 /**
  * Resolve the repo path and check user permissions.
+ * @param userId
+ * @param orgSlug
+ * @param teamSlug
+ * @param repoSlug
+ * @param needsWrite
  */
 async function resolveAndAuthorize(
   userId: string,
@@ -89,6 +99,9 @@ async function resolveAndAuthorize(
   return repo.diskPath;
 }
 
+/**
+ *
+ */
 export function startSshServer() {
   // Generate host key if it doesn't exist
   const hostKeyDir = HOST_KEY_PATH.substring(0, HOST_KEY_PATH.lastIndexOf('/'));
@@ -169,9 +182,11 @@ export function startSshServer() {
                 channel.exit(1);
                 channel.close();
               });
-            } catch (err: any) {
+            } catch (err: unknown) {
               const channel = accept();
-              channel.stderr.write(`Error: ${err.message}\n`);
+              channel.stderr.write(
+                `Error: ${err instanceof Error ? err.message : 'Unknown error'}\n`,
+              );
               channel.exit(1);
               channel.close();
             }
@@ -186,7 +201,7 @@ export function startSshServer() {
   );
 
   server.listen(SSH_PORT, '0.0.0.0', () => {
-    console.log(`Axiom SSH server listening on port ${SSH_PORT}`);
+    console.warn(`Axiom SSH server listening on port ${SSH_PORT}`);
   });
 
   return server;

@@ -1,17 +1,18 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import app from '../../index';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 describe('Issues API', () => {
   let token: string;
-  let userId: string;
-  let orgId: string;
+  let _userId: string;
+  let _orgId: string;
   let teamId: string;
   let projectId: string;
   let issueNumber: number;
-  let columnId: string;
+  let _columnId: string;
   let secondColumnId: string;
 
   beforeAll(async () => {
@@ -27,7 +28,7 @@ describe('Issues API', () => {
         passwordHash,
       },
     });
-    userId = user.id;
+    _userId = user.id;
 
     const org = await prisma.org.create({
       data: {
@@ -36,7 +37,7 @@ describe('Issues API', () => {
         members: { create: { userId: user.id, role: 'OWNER' } },
       },
     });
-    orgId = org.id;
+    _orgId = org.id;
 
     const team = await prisma.team.create({
       data: {
@@ -66,7 +67,7 @@ describe('Issues API', () => {
       .get(`/api/issues/${projectId}/board`)
       .set('Authorization', `Bearer ${token}`);
     const columns = boardRes.body.columns ?? boardRes.body;
-    columnId = columns[0].id;
+    _columnId = columns[0].id;
     secondColumnId = columns[1].id;
   });
 

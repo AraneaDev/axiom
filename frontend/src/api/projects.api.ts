@@ -1,4 +1,5 @@
 import { get, post, patch, del } from './client';
+
 import type { Project } from '@/lib/types';
 
 export const projectsApi = {

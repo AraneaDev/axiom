@@ -1,15 +1,19 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Plus, Trash2, Copy, X } from 'lucide-react';
+import { useState } from 'react';
+
 import { usersApi } from '@/api/users.api';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
+import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { formatDate } from '@/lib/utils';
 
+/**
+ *
+ */
 export default function ApiTokens() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -25,14 +29,16 @@ export default function ApiTokens() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => usersApi.createApiToken({ name, scopes: scopes.split(',').map((s) => s.trim()) }),
+    mutationFn: () =>
+      usersApi.createApiToken({ name, scopes: scopes.split(',').map((s) => s.trim()) }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['apiTokens'] });
       setNewToken(data.token ?? null);
       setShowForm(false);
       setName('');
     },
-    onError: (err: any) => setError(err.message),
+    onError: (err: unknown) =>
+      setError(err instanceof Error ? err.message : 'Failed to create token'),
   });
 
   const deleteMutation = useMutation({
@@ -50,15 +56,31 @@ export default function ApiTokens() {
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">API Tokens</h1>
-        <Button size="sm" onClick={() => { setShowForm(!showForm); setNewToken(null); }}><Plus className="h-4 w-4" /> New Token</Button>
+        <Button
+          size="sm"
+          onClick={() => {
+            setShowForm(!showForm);
+            setNewToken(null);
+          }}
+        >
+          <Plus className="h-4 w-4" /> New Token
+        </Button>
       </div>
 
       {newToken && (
         <div className="rounded-lg border border-success/20 bg-success-light p-4 mb-6">
-          <p className="text-sm font-medium text-success mb-2">Token created! Copy it now -- you won't see it again.</p>
+          <p className="text-sm font-medium text-success mb-2">
+            Token created! Copy it now -- you won't see it again.
+          </p>
           <div className="flex gap-2">
-            <code className="flex-1 text-xs bg-surface border border-success/20 rounded px-3 py-2 font-mono select-all break-all">{newToken}</code>
-            <Button size="sm" variant="secondary" onClick={() => navigator.clipboard.writeText(newToken)}>
+            <code className="flex-1 text-xs bg-surface border border-success/20 rounded px-3 py-2 font-mono select-all break-all">
+              {newToken}
+            </code>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => navigator.clipboard.writeText(newToken)}
+            >
               <Copy className="h-4 w-4" />
             </Button>
           </div>
@@ -67,22 +89,54 @@ export default function ApiTokens() {
 
       {showForm && (
         <div className="rounded-lg border border-border bg-surface p-4 mb-6">
-          {error && <div className="mb-3 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">{error}</div>}
+          {error && (
+            <div className="mb-3 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
+              {error}
+            </div>
+          )}
           <div className="space-y-3">
-            <Input id="tokenName" label="Token name" value={name} onChange={(e) => setName(e.target.value)} placeholder="CI/CD token" />
-            <Input id="scopes" label="Scopes (comma-separated)" value={scopes} onChange={(e) => setScopes(e.target.value)} placeholder="issues:read,wiki:write" />
+            <Input
+              id="tokenName"
+              label="Token name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="CI/CD token"
+            />
+            <Input
+              id="scopes"
+              label="Scopes (comma-separated)"
+              value={scopes}
+              onChange={(e) => setScopes(e.target.value)}
+              placeholder="issues:read,wiki:write"
+            />
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !name}>
-                {createMutation.isPending ? <Spinner className="h-4 w-4" /> : <><Plus className="h-4 w-4" /> Create token</>}
+              <Button
+                size="sm"
+                onClick={() => createMutation.mutate()}
+                disabled={createMutation.isPending || !name}
+              >
+                {createMutation.isPending ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" /> Create token
+                  </>
+                )}
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => setShowForm(false)}><X className="h-4 w-4" /> Cancel</Button>
+              <Button size="sm" variant="secondary" onClick={() => setShowForm(false)}>
+                <X className="h-4 w-4" /> Cancel
+              </Button>
             </div>
           </div>
         </div>
       )}
 
       {!tokens?.length ? (
-        <EmptyState icon={<KeyRound className="h-10 w-10" />} title="No API tokens" description="Create a token for API and MCP access." />
+        <EmptyState
+          icon={<KeyRound className="h-10 w-10" />}
+          title="No API tokens"
+          description="Create a token for API and MCP access."
+        />
       ) : (
         <div className="rounded-lg border border-border bg-surface divide-y divide-border">
           {tokens.map((t) => (
@@ -93,9 +147,15 @@ export default function ApiTokens() {
                 <p className="text-xs text-text-secondary font-mono">{t.prefix}...</p>
               </div>
               <div className="flex gap-1 flex-wrap">
-                {t.scopes.map((s) => <Badge key={s} className="text-xs">{s}</Badge>)}
+                {t.scopes.map((s) => (
+                  <Badge key={s} className="text-xs">
+                    {s}
+                  </Badge>
+                ))}
               </div>
-              <span className="text-xs text-text-secondary whitespace-nowrap">{formatDate(t.createdAt)}</span>
+              <span className="text-xs text-text-secondary whitespace-nowrap">
+                {formatDate(t.createdAt)}
+              </span>
               <Button variant="ghost" size="sm" onClick={() => setRevokeId(t.id)}>
                 <Trash2 className="h-3.5 w-3.5 text-danger" />
               </Button>
@@ -105,10 +165,23 @@ export default function ApiTokens() {
       )}
 
       <Modal open={!!revokeId} onClose={() => setRevokeId(null)} title="Revoke Token" size="sm">
-        <p className="text-sm text-text-secondary">Are you sure you want to revoke this token? Any applications using it will lose access immediately.</p>
+        <p className="text-sm text-text-secondary">
+          Are you sure you want to revoke this token? Any applications using it will lose access
+          immediately.
+        </p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setRevokeId(null)}><X className="h-4 w-4" /> Cancel</Button>
-          <Button variant="danger" onClick={() => { handleRevoke(revokeId!); setRevokeId(null); }}><Trash2 className="h-4 w-4" /> Revoke</Button>
+          <Button variant="secondary" onClick={() => setRevokeId(null)}>
+            <X className="h-4 w-4" /> Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              handleRevoke(revokeId!);
+              setRevokeId(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Revoke
+          </Button>
         </ModalFooter>
       </Modal>
     </div>

@@ -1,6 +1,9 @@
-import { Link, useLocation } from 'react-router';
 import { ChevronRight, Home } from 'lucide-react';
+import { Link, useLocation } from 'react-router';
 
+/**
+ *
+ */
 export function Breadcrumbs() {
   const { pathname } = useLocation();
   const segments = pathname.split('/').filter(Boolean);
@@ -23,7 +26,9 @@ export function Breadcrumbs() {
           {i === crumbs.length - 1 ? (
             <span className="text-text font-medium">{crumb.label}</span>
           ) : (
-            <Link to={crumb.path} className="hover:text-primary">{crumb.label}</Link>
+            <Link to={crumb.path} className="hover:text-primary">
+              {crumb.label}
+            </Link>
           )}
         </span>
       ))}

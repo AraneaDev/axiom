@@ -1,7 +1,10 @@
+import Mention, { type MentionNodeAttrs } from '@tiptap/extension-mention';
 import { ReactRenderer } from '@tiptap/react';
-import Mention from '@tiptap/extension-mention';
+import type { SuggestionProps } from '@tiptap/suggestion';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
+
 import MentionList, { type MentionListRef } from './MentionList';
+
 import { get } from '@/api/client';
 
 interface UserItem {
@@ -19,7 +22,9 @@ export const MentionExtension = Mention.configure({
     items: async ({ query }: { query: string }): Promise<UserItem[]> => {
       if (!query || query.length < 1) return [];
       try {
-        const data = await get<{ users: UserItem[] }>(`/users?q=${encodeURIComponent(query)}&limit=8`);
+        const data = await get<{ users: UserItem[] }>(
+          `/users?q=${encodeURIComponent(query)}&limit=8`,
+        );
         return data.users ?? [];
       } catch {
         return [];
@@ -30,8 +35,8 @@ export const MentionExtension = Mention.configure({
       let popup: TippyInstance[] | null = null;
 
       return {
-        onStart: (props: Record<string, unknown>) => {
-          component = new ReactRenderer(MentionList, { props, editor: props.editor as never });
+        onStart: (props: SuggestionProps<UserItem, MentionNodeAttrs>) => {
+          component = new ReactRenderer(MentionList, { props, editor: props.editor });
           popup = tippy('body', {
             getReferenceClientRect: props.clientRect as () => DOMRect,
             appendTo: () => document.body,
@@ -42,14 +47,17 @@ export const MentionExtension = Mention.configure({
             placement: 'bottom-start',
           });
         },
-        onUpdate: (props: Record<string, unknown>) => {
+        onUpdate: (props: SuggestionProps<UserItem, MentionNodeAttrs>) => {
           component?.updateProps(props);
           if (popup?.[0]) {
             popup[0].setProps({ getReferenceClientRect: props.clientRect as () => DOMRect });
           }
         },
         onKeyDown: (props: { event: KeyboardEvent }) => {
-          if (props.event.key === 'Escape') { popup?.[0]?.hide(); return true; }
+          if (props.event.key === 'Escape') {
+            popup?.[0]?.hide();
+            return true;
+          }
           return component?.ref?.onKeyDown(props) ?? false;
         },
         onExit: () => {

@@ -1,6 +1,7 @@
-import { z } from 'zod';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+
+import { z } from 'zod';
 
 // Load .env file if present
 try {
@@ -17,7 +18,9 @@ try {
     }
     if (!process.env[key]) process.env[key] = val;
   }
-} catch { /* .env not found, rely on process.env */ }
+} catch {
+  /* .env not found, rely on process.env */
+}
 
 const envSchema = z.object({
   DATABASE_URL: z.string(),

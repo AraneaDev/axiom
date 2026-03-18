@@ -1,15 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import app from '../../index';
+import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 describe('Teams API', () => {
   let token: string;
   let orgId: string;
   let teamId: string;
   let secondUserId: string;
-  let teamMemberId: string;
+  let _teamMemberId: string;
 
   beforeAll(async () => {
     const passwordHash = await bcrypt.hash('testpassword123', 4);
@@ -60,7 +61,9 @@ describe('Teams API', () => {
 
   afterAll(async () => {
     await prisma.org.deleteMany({ where: { slug: 'teams-test-org' } });
-    await prisma.user.deleteMany({ where: { username: { in: ['teams-test-owner', 'teams-test-member'] } } });
+    await prisma.user.deleteMany({
+      where: { username: { in: ['teams-test-owner', 'teams-test-member'] } },
+    });
     await prisma.$disconnect();
   });
 
@@ -114,7 +117,7 @@ describe('Teams API', () => {
       .send({ userId: secondUserId, role: 'MEMBER' });
     expect(res.status).toBe(201);
     expect(res.body.userId).toBe(secondUserId);
-    teamMemberId = res.body.id;
+    _teamMemberId = res.body.id;
   });
 
   // 6. List team members

@@ -1,17 +1,33 @@
 import { execFile } from 'child_process';
-import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
+import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
 const REPOS_BASE = process.env.REPOS_PATH || '/data/repos';
 
+/**
+ *
+ * @param orgSlug
+ * @param teamSlug
+ * @param repoSlug
+ */
 export function getRepoPath(orgSlug: string, teamSlug: string, repoSlug: string): string {
   return path.join(REPOS_BASE, orgSlug, teamSlug, `${repoSlug}.git`);
 }
 
-export async function initBareRepo(repoPath: string, defaultBranch: string = 'main', repoId?: string): Promise<void> {
+/**
+ *
+ * @param repoPath
+ * @param defaultBranch
+ * @param repoId
+ */
+export async function initBareRepo(
+  repoPath: string,
+  defaultBranch: string = 'main',
+  repoId?: string,
+): Promise<void> {
   await fs.mkdir(repoPath, { recursive: true });
   await execFileAsync('git', ['init', '--bare', '--initial-branch', defaultBranch, repoPath]);
 
@@ -21,6 +37,11 @@ export async function initBareRepo(repoPath: string, defaultBranch: string = 'ma
   }
 }
 
+/**
+ *
+ * @param repoPath
+ * @param repoId
+ */
 export async function installPostReceiveHook(repoPath: string, repoId: string): Promise<void> {
   const { generatePostReceiveHook } = await import('./hook-handler');
   const hookDir = path.join(repoPath, 'hooks');
@@ -30,6 +51,10 @@ export async function installPostReceiveHook(repoPath: string, repoId: string): 
   await fs.chmod(hookPath, 0o755);
 }
 
+/**
+ *
+ * @param repoPath
+ */
 export async function deleteRepo(repoPath: string): Promise<void> {
   // Verify it's a git repo before deleting (safety check)
   const headPath = path.join(repoPath, 'HEAD');
@@ -41,11 +66,20 @@ export async function deleteRepo(repoPath: string): Promise<void> {
   await fs.rm(repoPath, { recursive: true, force: true });
 }
 
+/**
+ *
+ * @param sourceRepoPath
+ * @param targetRepoPath
+ */
 export async function forkRepo(sourceRepoPath: string, targetRepoPath: string): Promise<void> {
   await fs.mkdir(path.dirname(targetRepoPath), { recursive: true });
   await execFileAsync('git', ['clone', '--bare', sourceRepoPath, targetRepoPath]);
 }
 
+/**
+ *
+ * @param repoPath
+ */
 export async function repoExists(repoPath: string): Promise<boolean> {
   try {
     await fs.access(path.join(repoPath, 'HEAD'));
@@ -55,6 +89,10 @@ export async function repoExists(repoPath: string): Promise<boolean> {
   }
 }
 
+/**
+ *
+ * @param repoPath
+ */
 export async function getRepoSize(repoPath: string): Promise<number> {
   const { stdout } = await execFileAsync('du', ['-sb', repoPath]);
   return parseInt(stdout.split('\t')[0], 10);

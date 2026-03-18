@@ -1,12 +1,14 @@
 import { execFile } from 'child_process';
-import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
+import { promisify } from 'util';
+
 import { CommitRefType } from '@prisma/client';
+
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
+import { AppError } from '../../middleware/errorHandler';
 import { enforceMergeProtection } from '../repos/protection.service';
 
 const ISSUE_REF_RE = /(?:(closes?|fixes?)\s+)?#(\d+)/gi;
@@ -25,9 +27,11 @@ async function parseAndLinkIssues(prId: string, repoId: string, text: string): P
   for (const match of matches) {
     const keyword = match[1]?.toLowerCase();
     const issueNum = parseInt(match[2]);
-    const refType: CommitRefType = keyword?.startsWith('clos') ? 'CLOSES'
-      : keyword?.startsWith('fix') ? 'FIXES'
-      : 'REFS';
+    const refType: CommitRefType = keyword?.startsWith('clos')
+      ? 'CLOSES'
+      : keyword?.startsWith('fix')
+        ? 'FIXES'
+        : 'REFS';
 
     for (const project of teamProjects) {
       const issue = await prisma.issue.findUnique({
@@ -49,24 +53,38 @@ const execFileAsync = promisify(execFile);
 async function getRepoDisk(repoId: string): Promise<{ diskPath: string; defaultBranch: string }> {
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
   if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
-  if (!await repoExists(repo.diskPath)) throw new AppError(404, 'Repository not on disk');
+  if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
   return { diskPath: repo.diskPath, defaultBranch: repo.defaultBranch };
 }
 
-export async function createPR(repoId: string, authorId: string, data: {
-  title: string;
-  body?: string;
-  sourceBranch: string;
-  targetBranch: string;
-}) {
+/**
+ *
+ * @param repoId
+ * @param authorId
+ * @param data
+ * @param data.title
+ * @param data.body
+ * @param data.sourceBranch
+ * @param data.targetBranch
+ */
+export async function createPR(
+  repoId: string,
+  authorId: string,
+  data: {
+    title: string;
+    body?: string;
+    sourceBranch: string;
+    targetBranch: string;
+  },
+) {
   const { diskPath, defaultBranch } = await getRepoDisk(repoId);
   const target = data.targetBranch || defaultBranch;
 
   // Validate branches exist
-  if (!await gitCmd.branchExists(diskPath, data.sourceBranch)) {
+  if (!(await gitCmd.branchExists(diskPath, data.sourceBranch))) {
     throw new AppError(400, `Source branch '${data.sourceBranch}' not found`);
   }
-  if (!await gitCmd.branchExists(diskPath, target)) {
+  if (!(await gitCmd.branchExists(diskPath, target))) {
     throw new AppError(400, `Target branch '${target}' not found`);
   }
   if (data.sourceBranch === target) {
@@ -105,6 +123,11 @@ export async function createPR(repoId: string, authorId: string, data: {
   return pr;
 }
 
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ */
 export async function getPR(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
@@ -133,8 +156,13 @@ export async function getPR(repoId: string, prNumber: number) {
   return { ...pr, mergeable };
 }
 
+/**
+ *
+ * @param repoId
+ * @param status
+ */
 export async function listPRs(repoId: string, status?: 'OPEN' | 'MERGED' | 'CLOSED') {
-  const where: any = { repoId };
+  const where: Record<string, unknown> = { repoId };
   if (status) where.status = status;
 
   return prisma.pullRequest.findMany({
@@ -146,10 +174,22 @@ export async function listPRs(repoId: string, status?: 'OPEN' | 'MERGED' | 'CLOS
   });
 }
 
-export async function updatePR(repoId: string, prNumber: number, data: {
-  title?: string;
-  body?: string;
-}) {
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ * @param data
+ * @param data.title
+ * @param data.body
+ */
+export async function updatePR(
+  repoId: string,
+  prNumber: number,
+  data: {
+    title?: string;
+    body?: string;
+  },
+) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
   });
@@ -165,6 +205,11 @@ export async function updatePR(repoId: string, prNumber: number, data: {
   return updatedPr;
 }
 
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ */
 export async function closePR(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
@@ -178,7 +223,17 @@ export async function closePR(repoId: string, prNumber: number) {
   });
 }
 
-export async function mergePR(repoId: string, prNumber: number, strategy: 'merge' | 'squash' | 'rebase' = 'merge') {
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ * @param strategy
+ */
+export async function mergePR(
+  repoId: string,
+  prNumber: number,
+  strategy: 'merge' | 'squash' | 'rebase' = 'merge',
+) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
   });
@@ -191,10 +246,10 @@ export async function mergePR(repoId: string, prNumber: number, strategy: 'merge
   });
   if (protection?.requireCI) {
     if (pr.ciStatus !== 'SUCCESS') {
-      throw Object.assign(
-        new Error('CI checks must pass before merging'),
-        { status: 422, code: 'CI_REQUIRED' }
-      );
+      throw Object.assign(new Error('CI checks must pass before merging'), {
+        status: 422,
+        code: 'CI_REQUIRED',
+      });
     }
   }
 
@@ -204,10 +259,10 @@ export async function mergePR(repoId: string, prNumber: number, strategy: 'merge
   const { diskPath } = await getRepoDisk(repoId);
 
   // Verify branches still exist
-  if (!await gitCmd.branchExists(diskPath, pr.sourceBranch)) {
+  if (!(await gitCmd.branchExists(diskPath, pr.sourceBranch))) {
     throw new AppError(400, 'Source branch no longer exists');
   }
-  if (!await gitCmd.branchExists(diskPath, pr.targetBranch)) {
+  if (!(await gitCmd.branchExists(diskPath, pr.targetBranch))) {
     throw new AppError(400, 'Target branch no longer exists');
   }
 
@@ -224,23 +279,47 @@ export async function mergePR(repoId: string, prNumber: number, strategy: 'merge
   const worktreeDir = path.join(diskPath, '..', `_merge_${pr.number}_${Date.now()}`);
   try {
     // Create worktree from target branch
-    await execFileAsync('git', ['worktree', 'add', worktreeDir, pr.targetBranch], { cwd: diskPath });
+    await execFileAsync('git', ['worktree', 'add', worktreeDir, pr.targetBranch], {
+      cwd: diskPath,
+    });
 
     if (strategy === 'merge') {
-      await execFileAsync('git', ['-C', worktreeDir, 'merge', '--no-ff', sourceSha, '-m', `Merge PR #${pr.number}: ${pr.title}`]);
+      await execFileAsync('git', [
+        '-C',
+        worktreeDir,
+        'merge',
+        '--no-ff',
+        sourceSha,
+        '-m',
+        `Merge PR #${pr.number}: ${pr.title}`,
+      ]);
     } else if (strategy === 'squash') {
       await execFileAsync('git', ['-C', worktreeDir, 'merge', '--squash', sourceSha]);
-      await execFileAsync('git', ['-C', worktreeDir, 'commit', '-m', `${pr.title} (#${pr.number})`, '--author', 'Axiom <noreply@axiom.dev>']);
+      await execFileAsync('git', [
+        '-C',
+        worktreeDir,
+        'commit',
+        '-m',
+        `${pr.title} (#${pr.number})`,
+        '--author',
+        'Axiom <noreply@axiom.dev>',
+      ]);
     } else if (strategy === 'rebase') {
       await execFileAsync('git', ['-C', worktreeDir, 'rebase', sourceSha]);
     }
 
     // Update the bare repo's target branch ref to the new HEAD
-    const newHead = (await execFileAsync('git', ['-C', worktreeDir, 'rev-parse', 'HEAD'])).stdout.trim();
-    await execFileAsync('git', ['update-ref', `refs/heads/${pr.targetBranch}`, newHead], { cwd: diskPath });
+    const newHead = (
+      await execFileAsync('git', ['-C', worktreeDir, 'rev-parse', 'HEAD'])
+    ).stdout.trim();
+    await execFileAsync('git', ['update-ref', `refs/heads/${pr.targetBranch}`, newHead], {
+      cwd: diskPath,
+    });
   } finally {
     // Clean up worktree
-    await execFileAsync('git', ['worktree', 'remove', '--force', worktreeDir], { cwd: diskPath }).catch(() => {});
+    await execFileAsync('git', ['worktree', 'remove', '--force', worktreeDir], {
+      cwd: diskPath,
+    }).catch(() => {});
     await fs.rm(worktreeDir, { recursive: true, force: true }).catch(() => {});
   }
 
@@ -269,21 +348,28 @@ export async function mergePR(repoId: string, prNumber: number, strategy: 'merge
         data: { columnId: doneColumn.id },
       });
       // Notify issue creator
-      await prisma.notification.create({
-        data: {
-          userId: link.issue.creatorId,
-          type: 'issue:closed',
-          title: `Issue closed by merged PR`,
-          link: `/issues/${link.issue.id}`,
-          read: false,
-        },
-      }).catch(() => {}); // notification creation is non-critical
+      await prisma.notification
+        .create({
+          data: {
+            userId: link.issue.creatorId,
+            type: 'issue:closed',
+            title: `Issue closed by merged PR`,
+            link: `/issues/${link.issue.id}`,
+            read: false,
+          },
+        })
+        .catch(() => {}); // notification creation is non-critical
     }
   }
 
   return mergedPr;
 }
 
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ */
 export async function getLinkedIssues(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
@@ -297,7 +383,8 @@ export async function getLinkedIssues(repoId: string, prNumber: number) {
         include: {
           project: {
             select: {
-              prefix: true, slug: true,
+              prefix: true,
+              slug: true,
               team: { select: { slug: true, org: { select: { slug: true } } } },
             },
           },
@@ -309,6 +396,11 @@ export async function getLinkedIssues(repoId: string, prNumber: number) {
   });
 }
 
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ */
 export async function getPRDiff(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
@@ -322,6 +414,11 @@ export async function getPRDiff(repoId: string, prNumber: number) {
   return { diff: diffOutput, stats };
 }
 
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ */
 export async function getPRCommits(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
@@ -335,10 +432,24 @@ export async function getPRCommits(repoId: string, prNumber: number) {
 
 // ─── Reviews ────────────────────────────────────────────────
 
-export async function submitReview(repoId: string, prNumber: number, reviewerId: string, data: {
-  status: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED';
-  body?: string;
-}) {
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ * @param reviewerId
+ * @param data
+ * @param data.status
+ * @param data.body
+ */
+export async function submitReview(
+  repoId: string,
+  prNumber: number,
+  reviewerId: string,
+  data: {
+    status: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED';
+    body?: string;
+  },
+) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
   });
@@ -355,6 +466,11 @@ export async function submitReview(repoId: string, prNumber: number, reviewerId:
   });
 }
 
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ */
 export async function listReviews(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
@@ -369,11 +485,26 @@ export async function listReviews(repoId: string, prNumber: number) {
 
 // ─── PR Comments ────────────────────────────────────────────
 
-export async function addPRComment(repoId: string, prNumber: number, authorId: string, data: {
-  body: string;
-  filePath?: string;
-  line?: number;
-}) {
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ * @param authorId
+ * @param data
+ * @param data.body
+ * @param data.filePath
+ * @param data.line
+ */
+export async function addPRComment(
+  repoId: string,
+  prNumber: number,
+  authorId: string,
+  data: {
+    body: string;
+    filePath?: string;
+    line?: number;
+  },
+) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
   });
@@ -390,6 +521,11 @@ export async function addPRComment(repoId: string, prNumber: number, authorId: s
   });
 }
 
+/**
+ *
+ * @param repoId
+ * @param prNumber
+ */
 export async function listPRComments(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },

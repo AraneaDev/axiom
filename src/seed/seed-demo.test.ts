@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'child_process';
+
 import { PrismaClient } from '@prisma/client';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 const prisma = new PrismaClient();
 

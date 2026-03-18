@@ -1,10 +1,18 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+/**
+ *
+ * @param inputs
+ */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ *
+ * @param date
+ */
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
@@ -13,6 +21,10 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date));
 }
 
+/**
+ *
+ * @param date
+ */
 export function formatRelative(date: string | Date): string {
   const now = Date.now();
   const then = new Date(date).getTime();
@@ -29,6 +41,10 @@ export function formatRelative(date: string | Date): string {
   return formatDate(date);
 }
 
+/**
+ *
+ * @param name
+ */
 export function initials(name: string): string {
   return name
     .split(' ')

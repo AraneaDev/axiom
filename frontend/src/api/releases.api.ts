@@ -39,9 +39,13 @@ export const releasesApi = {
     return get<Release[]>(`/repos/${repoId}/releases?${q}`);
   },
   get: (repoId: string, tagName: string) =>
-    get<Release & { commits: CommitEntry[] }>(`/repos/${repoId}/releases/${encodeURIComponent(tagName)}`),
-  create: (repoId: string, data: Partial<Release> & { tagName: string; title: string; targetBranch: string }) =>
-    post<Release>(`/repos/${repoId}/releases`, data),
+    get<Release & { commits: CommitEntry[] }>(
+      `/repos/${repoId}/releases/${encodeURIComponent(tagName)}`,
+    ),
+  create: (
+    repoId: string,
+    data: Partial<Release> & { tagName: string; title: string; targetBranch: string },
+  ) => post<Release>(`/repos/${repoId}/releases`, data),
   update: (repoId: string, tagName: string, data: Partial<Release>) =>
     patch<Release>(`/repos/${repoId}/releases/${encodeURIComponent(tagName)}`, data),
   publish: (repoId: string, tagName: string) =>
@@ -50,6 +54,6 @@ export const releasesApi = {
     del(`/repos/${repoId}/releases/${encodeURIComponent(tagName)}`),
   compare: (repoId: string, base: string, head: string) =>
     get<{ commits: CommitEntry[]; changelog: ChangelogSection[] }>(
-      `/repos/${repoId}/releases/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`
+      `/repos/${repoId}/releases/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`,
     ),
 };

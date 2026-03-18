@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { UserMinus } from 'lucide-react';
 import { useParams } from 'react-router';
-import { Users, Shield, Eye, UserMinus } from 'lucide-react';
-import { teamsApi } from '@/api/teams.api';
+
 import { orgsApi } from '@/api/orgs.api';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { teamsApi } from '@/api/teams.api';
 import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { PageLoader } from '@/components/ui/Spinner';
 
 const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
@@ -14,6 +15,9 @@ const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
   VIEWER: 'warning',
 };
 
+/**
+ *
+ */
 export default function TeamMembers() {
   const { org, team: teamSlug } = useParams();
   const queryClient = useQueryClient();
@@ -54,30 +58,38 @@ export default function TeamMembers() {
       </div>
 
       <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-        {teamDetail?.members?.map((m: any) => (
-          <div key={m.id} className="flex items-center gap-3 p-4">
-            <Avatar name={m.user.displayName} />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm truncate">{m.user.displayName}</p>
-              <p className="text-xs text-text-secondary">@{m.user.username}</p>
+        {teamDetail?.members?.map(
+          (m: {
+            id: string;
+            role: string;
+            user: { id: string; displayName: string; username: string };
+          }) => (
+            <div key={m.id} className="flex items-center gap-3 p-4">
+              <Avatar name={m.user.displayName} />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{m.user.displayName}</p>
+                <p className="text-xs text-text-secondary">@{m.user.username}</p>
+              </div>
+              <Badge variant={ROLE_BADGE[m.role] ?? 'default'}>{m.role}</Badge>
+              <div className="flex gap-1">
+                <select
+                  value={m.role}
+                  onChange={(e) =>
+                    roleMutation.mutate({ memberId: m.user.id, role: e.target.value })
+                  }
+                  className="text-xs border border-border rounded px-2 py-1"
+                >
+                  <option value="ADMIN">Admin</option>
+                  <option value="MEMBER">Member</option>
+                  <option value="VIEWER">Viewer</option>
+                </select>
+                <Button variant="ghost" size="sm" onClick={() => removeMutation.mutate(m.user.id)}>
+                  <UserMinus className="h-3.5 w-3.5 text-danger" />
+                </Button>
+              </div>
             </div>
-            <Badge variant={ROLE_BADGE[m.role] ?? 'default'}>{m.role}</Badge>
-            <div className="flex gap-1">
-              <select
-                value={m.role}
-                onChange={(e) => roleMutation.mutate({ memberId: m.user.id, role: e.target.value })}
-                className="text-xs border border-border rounded px-2 py-1"
-              >
-                <option value="ADMIN">Admin</option>
-                <option value="MEMBER">Member</option>
-                <option value="VIEWER">Viewer</option>
-              </select>
-              <Button variant="ghost" size="sm" onClick={() => removeMutation.mutate(m.user.id)}>
-                <UserMinus className="h-3.5 w-3.5 text-danger" />
-              </Button>
-            </div>
-          </div>
-        ))}
+          ),
+        )}
       </div>
     </div>
   );

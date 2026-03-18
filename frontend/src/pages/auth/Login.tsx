@@ -1,10 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
+
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuthStore } from '@/stores/auth.store';
 
+/**
+ *
+ */
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
@@ -26,8 +30,8 @@ export default function Login() {
       } else {
         navigate('/');
       }
-    } catch (err: any) {
-      const msg = err?.message || 'Login failed';
+    } catch (err: unknown) {
+      const msg = (err instanceof Error ? err.message : null) || 'Login failed';
       setError(
         msg.includes('Invalid credentials')
           ? 'Invalid email/username or password. Please try again.'
@@ -51,9 +55,11 @@ export default function Login() {
             <span className="text-3xl font-bold tracking-tight">Axiom</span>
           </div>
           <h1 className="text-4xl font-bold leading-tight mb-4">
-            Code. Track. Document.<br />All in one place.
+            Code. Track. Document.
+            <br />
+            All in one place.
           </h1>
-          <p className="text-lg text-indigo-200 leading-relaxed">
+          <p className="text-lg text-primary-light leading-relaxed">
             Git hosting, issue tracking, and documentation — unified with built-in AI integration.
           </p>
         </div>
@@ -81,11 +87,37 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {!needs2FA ? (
               <>
-                <Input id="login" label="Email or username" value={loginId} onChange={(e) => setLoginId(e.target.value)} placeholder="admin" autoFocus required />
-                <Input id="password" label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" required />
+                <Input
+                  id="login"
+                  label="Email or username"
+                  value={loginId}
+                  onChange={(e) => setLoginId(e.target.value)}
+                  placeholder="admin"
+                  autoFocus
+                  required
+                />
+                <Input
+                  id="password"
+                  label="Password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  required
+                />
               </>
             ) : (
-              <Input id="twoFactorCode" label="Authentication code" value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} placeholder="000000" hint="Enter the 6-digit code from your authenticator app" maxLength={6} autoFocus required />
+              <Input
+                id="twoFactorCode"
+                label="Authentication code"
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value)}
+                placeholder="000000"
+                hint="Enter the 6-digit code from your authenticator app"
+                maxLength={6}
+                autoFocus
+                required
+              />
             )}
 
             <Button type="submit" disabled={loading} className="w-full mt-2" size="lg">
@@ -95,7 +127,9 @@ export default function Login() {
 
           <p className="mt-6 text-center text-sm text-text-tertiary">
             Don't have an account?{' '}
-            <Link to="/register" className="text-primary hover:text-primary-hover font-medium">Sign up</Link>
+            <Link to="/register" className="text-primary hover:text-primary-hover font-medium">
+              Sign up
+            </Link>
           </p>
         </div>
       </div>
