@@ -136,7 +136,7 @@ export default function IssueDetail() {
 
   return (
     <div>
-      <div className="flex flex-col lg:grid lg:grid-cols-[1fr_320px] gap-8">
+      <div className="flex flex-col lg:grid lg:grid-cols-[1fr_400px] gap-8">
         {/* Main content */}
         <div className="min-w-0">
           <div className="flex items-start gap-3 mb-6">

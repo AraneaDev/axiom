@@ -453,8 +453,8 @@ export default function PageView() {
               <span className="text-text-secondary">{page.versions[0].author?.displayName}</span>
             </p>
           )}
-          <div className="rounded-lg border border-border bg-surface p-8">
-            <div className="prose max-w-3xl leading-relaxed">
+          <div className="rounded-lg border border-border bg-surface p-6">
+            <div className="prose max-w-4xl leading-relaxed">
               <MarkdownRenderer content={page.body} />
             </div>
           </div>

@@ -158,7 +158,7 @@ export default function RepoDetail() {
       </div>
 
       {/* Stats bar */}
-      <div className="flex gap-5 text-sm text-text-secondary border-b border-border pb-4">
+      <div className="flex gap-3 text-sm text-text-secondary border-b border-border pb-4">
         <span className="flex items-center gap-1.5">
           <GitBranch className="h-4 w-4 text-text-tertiary" /> {branches?.length ?? 0} branches
         </span>
