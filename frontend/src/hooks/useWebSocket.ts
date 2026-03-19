@@ -116,7 +116,11 @@ function disconnect(): void {
 
   if (ws) {
     ws.onclose = null;
-    ws.close();
+    ws.onerror = null;
+    // Only close if actually open; avoids "closed before established" warning in dev
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.close();
+    }
     ws = null;
   }
   state = 'disconnected';
