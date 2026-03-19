@@ -6,10 +6,10 @@ import { useNavigate, useParams } from 'react-router';
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
-import { Textarea } from '@/components/ui/Textarea';
 
 /**
  *
@@ -87,14 +87,17 @@ export default function CreateWikiSpace() {
           placeholder="eng-docs"
           required
         />
-        <Textarea
-          id="desc"
-          label="Description (optional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          placeholder="What kind of documentation goes here?"
-        />
+        <div>
+          <label htmlFor="desc" className="block text-sm font-medium text-text mb-1">
+            Description (optional)
+          </label>
+          <MarkdownEditor
+            compact
+            value={description}
+            onChange={setDescription}
+            placeholder="What kind of documentation goes here?"
+          />
+        </div>
         <Button type="submit" disabled={loading}>
           {loading ? (
             <Spinner className="h-4 w-4" />

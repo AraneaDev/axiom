@@ -3,9 +3,10 @@ import { MessageSquare, CheckCircle, Trash2, Send, ChevronDown, ChevronUp } from
 import { useState } from 'react';
 
 import { wikiApi } from '@/api/wiki.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
+import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { cn, formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -59,8 +60,7 @@ export function PageComments({ pageId }: PageCommentsProps) {
   const activeComments = comments.filter((c) => !c.resolved);
   const resolvedComments = comments.filter((c) => c.resolved);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handleSubmit() {
     if (!body.trim()) return;
     addMutation.mutate({ body: body.trim() });
   }
@@ -73,20 +73,14 @@ export function PageComments({ pageId }: PageCommentsProps) {
       </h3>
 
       {/* Add comment form */}
-      <form onSubmit={handleSubmit} className="space-y-2">
-        <Textarea
-          id="page-comment"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Add a comment..."
-          rows={3}
-        />
+      <div className="space-y-2">
+        <MarkdownEditor value={body} onChange={setBody} placeholder="Add a comment..." compact />
         <div className="flex justify-end">
-          <Button type="submit" size="sm" disabled={addMutation.isPending || !body.trim()}>
+          <Button size="sm" disabled={addMutation.isPending || !body.trim()} onClick={handleSubmit}>
             <Send className="h-4 w-4" /> Comment
           </Button>
         </div>
-      </form>
+      </div>
 
       {/* Active comments */}
       <div className="space-y-3">
@@ -129,7 +123,7 @@ export function PageComments({ pageId }: PageCommentsProps) {
                 {comment.anchorText}
               </div>
             )}
-            <p className="text-sm text-text whitespace-pre-wrap">{comment.body}</p>
+            <MarkdownRenderer content={comment.body} className="text-sm" />
           </div>
         ))}
       </div>
@@ -192,7 +186,7 @@ export function PageComments({ pageId }: PageCommentsProps) {
                       )}
                     </div>
                   </div>
-                  <p className="text-sm text-text whitespace-pre-wrap">{comment.body}</p>
+                  <MarkdownRenderer content={comment.body} className="text-sm" />
                 </div>
               ))}
             </div>

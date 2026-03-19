@@ -5,6 +5,7 @@ import { useState } from 'react';
 import CreateReleaseModal from './CreateReleaseModal';
 
 import { releasesApi, type Release } from '@/api/releases.api';
+import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -67,7 +68,9 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
         </div>
         <h3 className="font-semibold text-sm mb-0.5">{release.title}</h3>
         {release.body && (
-          <p className="text-xs text-text-secondary line-clamp-2 mb-1">{release.body}</p>
+          <div className="text-xs text-text-secondary line-clamp-2 mb-1">
+            <MarkdownRenderer content={release.body} />
+          </div>
         )}
         <div className="flex items-center gap-2 text-xs text-text-tertiary">
           <Avatar name={release.author.displayName} size="sm" />

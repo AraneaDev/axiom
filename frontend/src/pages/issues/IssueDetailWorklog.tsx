@@ -3,11 +3,11 @@ import { Check, ChevronDown, ChevronUp, Clock, Timer, User, X } from 'lucide-rea
 import { useState } from 'react';
 
 import { issuesApi } from '@/api/issues.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Progress } from '@/components/ui/Progress';
 import { Spinner } from '@/components/ui/Spinner';
-import { Textarea } from '@/components/ui/Textarea';
 import type { Issue } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 
@@ -243,12 +243,11 @@ export function IssueDetailWorklog({
                 />
               </div>
             </div>
-            <Textarea
+            <MarkdownEditor
+              compact
               value={logWorkDesc}
-              onChange={(e) => setLogWorkDesc(e.target.value)}
+              onChange={setLogWorkDesc}
               placeholder="Description (optional)"
-              className="px-2 py-1 text-xs resize-none"
-              rows={2}
             />
             <div className="flex gap-1">
               <Button

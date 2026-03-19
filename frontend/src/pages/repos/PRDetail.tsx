@@ -19,6 +19,7 @@ import {
   Columns2,
   Rows3,
   ListChecks,
+  Pencil,
 } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useParams } from 'react-router';
@@ -71,6 +72,8 @@ export default function PRDetail() {
   const [diffView, setDiffView] = useState<'unified' | 'split'>('unified');
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
   const [applyingComment, setApplyingComment] = useState<string | null>(null);
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionBody, setDescriptionBody] = useState('');
 
   const toggleSuggestion = useCallback((commentId: string) => {
     setSelectedSuggestions((prev) => {
@@ -185,6 +188,14 @@ export default function PRDetail() {
     },
   });
 
+  const updateDescriptionMutation = useMutation({
+    mutationFn: (body: string) => reposApi.updatePR(currentRepo!.id, prNumber, { body }),
+    onSuccess: () => {
+      setEditingDescription(false);
+      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+    },
+  });
+
   if (isLoading || !pr) return <PageLoader />;
 
   return (
@@ -214,9 +225,42 @@ export default function PRDetail() {
         {/* Main content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Description */}
-          {pr.body && (
+          {(pr.body || editingDescription) && (
             <div className="rounded-lg border border-border bg-surface p-4">
-              <MarkdownRenderer content={pr.body} className="text-sm" />
+              {editingDescription ? (
+                <div className="space-y-2">
+                  <MarkdownEditor value={descriptionBody} onChange={setDescriptionBody} />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={updateDescriptionMutation.isPending}
+                      onClick={() => updateDescriptionMutation.mutate(descriptionBody)}
+                    >
+                      <Check className="h-4 w-4" /> Save
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingDescription(false)}>
+                      <X className="h-4 w-4" /> Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-2">
+                  <MarkdownRenderer content={pr.body ?? ''} className="text-sm flex-1" />
+                  {pr.status === 'OPEN' && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      title="Edit description"
+                      onClick={() => {
+                        setDescriptionBody(pr.body ?? '');
+                        setEditingDescription(true);
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

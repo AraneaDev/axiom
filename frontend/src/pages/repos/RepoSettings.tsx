@@ -6,11 +6,11 @@ import { Link, useNavigate } from 'react-router';
 import WebhooksSettings from './WebhooksSettings';
 
 import { reposApi } from '@/api/repos.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
-import { Textarea } from '@/components/ui/Textarea';
 import { useRepoContext } from '@/hooks/useRepoContext';
 
 /**
@@ -100,12 +100,10 @@ export default function RepoSettings() {
         <h2 className="text-lg font-semibold mb-4">General</h2>
         <div className="space-y-4">
           <Input label="Repository name" value={name} onChange={(e) => setName(e.target.value)} />
-          <Textarea
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-          />
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">Description</label>
+            <MarkdownEditor compact value={description} onChange={setDescription} />
+          </div>
           <Select
             label="Visibility"
             value={visibility}

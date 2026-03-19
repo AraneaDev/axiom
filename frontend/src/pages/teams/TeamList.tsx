@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
+import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
@@ -67,7 +68,9 @@ export default function TeamList() {
                 </div>
               </div>
               {team.description && (
-                <p className="text-sm text-text-secondary line-clamp-2 mb-3">{team.description}</p>
+                <div className="text-sm text-text-secondary line-clamp-2 mb-3">
+                  <MarkdownRenderer content={team.description} />
+                </div>
               )}
               <div className="flex gap-4 text-xs text-text-secondary">
                 <span className="flex items-center gap-1">

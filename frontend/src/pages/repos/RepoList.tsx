@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router';
 import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
+import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -75,7 +76,9 @@ export default function RepoList() {
                     </Badge>
                   </div>
                   {repo.description && (
-                    <p className="text-xs text-text-secondary truncate">{repo.description}</p>
+                    <div className="text-xs text-text-secondary truncate">
+                      <MarkdownRenderer content={repo.description} />
+                    </div>
                   )}
                 </div>
                 <span className="text-xs text-text-secondary">{repo.defaultBranch}</span>

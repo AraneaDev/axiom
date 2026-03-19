@@ -6,10 +6,10 @@ import { useNavigate, useParams } from 'react-router';
 import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
-import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 
 /**
@@ -103,14 +103,17 @@ export default function CreateRepo() {
             <option value="PUBLIC">Public</option>
           </select>
         </div>
-        <Textarea
-          id="desc"
-          label="Description (optional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          placeholder="What is this repository for?"
-        />
+        <div>
+          <label htmlFor="desc" className="block text-sm font-medium text-text mb-1">
+            Description (optional)
+          </label>
+          <MarkdownEditor
+            compact
+            value={description}
+            onChange={setDescription}
+            placeholder="What is this repository for?"
+          />
+        </div>
         <Button type="submit" disabled={loading}>
           {loading ? (
             <Spinner className="h-4 w-4" />

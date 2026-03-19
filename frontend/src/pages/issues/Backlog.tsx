@@ -18,6 +18,8 @@ import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
+import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
@@ -26,7 +28,6 @@ import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Modal } from '@/components/ui/Modal';
 import { PageLoader } from '@/components/ui/Spinner';
-import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { VelocityChart } from '@/components/VelocityChart';
 import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
@@ -258,8 +259,9 @@ function SprintPanel({
 
       {/* Sprint goal */}
       {!collapsed && sprint.goal && (
-        <div className="px-4 py-2 bg-surface-secondary/50 border-b border-border-light">
-          <span className="text-xs text-text-secondary">Goal: {sprint.goal}</span>
+        <div className="px-4 py-2 bg-surface-secondary/50 border-b border-border-light text-xs text-text-secondary">
+          <span>Goal: </span>
+          <MarkdownRenderer content={sprint.goal} className="inline" />
         </div>
       )}
 
@@ -552,12 +554,17 @@ export default function Backlog() {
               onChange={(e) => setNewSprint({ ...newSprint, name: e.target.value })}
               placeholder="Sprint 1"
             />
-            <Textarea
-              label="Sprint Goal (optional)"
-              value={newSprint.goal}
-              onChange={(e) => setNewSprint({ ...newSprint, goal: e.target.value })}
-              placeholder="What do you want to achieve in this sprint?"
-            />
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">
+                Sprint Goal (optional)
+              </label>
+              <MarkdownEditor
+                compact
+                value={newSprint.goal}
+                onChange={(val) => setNewSprint({ ...newSprint, goal: val })}
+                placeholder="What do you want to achieve in this sprint?"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <Input
                 label="Start Date"

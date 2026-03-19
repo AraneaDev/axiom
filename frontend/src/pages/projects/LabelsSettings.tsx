@@ -7,10 +7,11 @@ import { labelsApi, type LabelWithDescription } from '@/api/labels.api';
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
+import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
-import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 
 const PRESET_COLORS = [
@@ -188,14 +189,17 @@ export default function LabelsSettings() {
               </div>
             </div>
           </div>
-          <Textarea
-            id="label-desc"
-            label="Description (optional)"
-            value={formDescription}
-            onChange={(e) => setFormDescription(e.target.value)}
-            placeholder="Short description of this label"
-            rows={2}
-          />
+          <div>
+            <label htmlFor="label-desc" className="block text-sm font-medium text-text mb-1">
+              Description (optional)
+            </label>
+            <MarkdownEditor
+              compact
+              value={formDescription}
+              onChange={setFormDescription}
+              placeholder="Short description of this label"
+            />
+          </div>
           <div className="flex items-center gap-2 pt-1">
             <Button
               size="sm"
@@ -275,13 +279,15 @@ export default function LabelsSettings() {
                       </div>
                     </div>
                   </div>
-                  <Textarea
-                    id={`edit-desc-${label.id}`}
-                    label="Description"
-                    value={formDescription}
-                    onChange={(e) => setFormDescription(e.target.value)}
-                    rows={2}
-                  />
+                  <div>
+                    <label
+                      htmlFor={`edit-desc-${label.id}`}
+                      className="block text-sm font-medium text-text mb-1"
+                    >
+                      Description
+                    </label>
+                    <MarkdownEditor compact value={formDescription} onChange={setFormDescription} />
+                  </div>
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
@@ -312,7 +318,9 @@ export default function LabelsSettings() {
                       </span>
                     </div>
                     {label.description && (
-                      <p className="text-xs text-text-tertiary mt-0.5">{label.description}</p>
+                      <div className="text-xs text-text-tertiary mt-0.5">
+                        <MarkdownRenderer content={label.description} />
+                      </div>
                     )}
                   </div>
                   <Button

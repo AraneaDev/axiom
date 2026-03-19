@@ -21,6 +21,7 @@ import { dashboardApi } from '@/api/dashboard.api';
 import type { DashboardIssue, DashboardPR, DashboardActivity } from '@/api/dashboard.api';
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
+import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -286,7 +287,9 @@ function TeamCard({
         <ArrowRight className="h-4 w-4 text-text-tertiary opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
       </div>
       {team.description && (
-        <p className="text-sm text-text-secondary line-clamp-2 mb-3">{team.description}</p>
+        <div className="text-sm text-text-secondary line-clamp-2 mb-3">
+          <MarkdownRenderer content={team.description} />
+        </div>
       )}
       <div className="flex gap-4 text-xs text-text-tertiary">
         <span className="flex items-center gap-1">
@@ -442,9 +445,9 @@ export default function Dashboard() {
                     </div>
                     <p className="text-xs text-text-tertiary mb-2">/{org.slug}</p>
                     {org.description && (
-                      <p className="text-sm text-text-secondary line-clamp-2 mb-3">
-                        {org.description}
-                      </p>
+                      <div className="text-sm text-text-secondary line-clamp-2 mb-3">
+                        <MarkdownRenderer content={org.description} />
+                      </div>
                     )}
                     <div className="flex items-center text-xs text-text-tertiary group-hover:text-primary transition-colors">
                       <span>Open workspace</span>
