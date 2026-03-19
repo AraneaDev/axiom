@@ -40,6 +40,7 @@ interface MarkdownEditorProps {
   onChange: (md: string) => void;
   placeholder?: string;
   compact?: boolean;
+  projectId?: string;
 }
 
 interface ToolbarButtonProps {
@@ -77,12 +78,14 @@ function ToolbarDivider() {
  * @param root0.onChange
  * @param root0.placeholder
  * @param root0.compact
+ * @param root0.projectId
  */
 export function MarkdownEditor({
   value,
   onChange,
   placeholder,
   compact = false,
+  projectId,
 }: MarkdownEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -107,7 +110,9 @@ export function MarkdownEditor({
         transformCopiedText: true,
       }),
       MentionExtension,
-      IssueReferenceExtension,
+      IssueReferenceExtension.configure({
+        projectId: projectId ?? null,
+      }),
     ],
     content: value || '',
     onUpdate: ({ editor: e }) => {

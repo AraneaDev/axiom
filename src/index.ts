@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
 
+import { prisma } from './config/database';
 import { env } from './config/env';
 import hookRoutes from './git/hook-handler';
 import smartHttpRoutes from './git/smart-http.routes';
@@ -45,6 +46,7 @@ import usersRoutes from './modules/users/users.routes';
 import wikiRoutes from './modules/wiki/wiki.routes';
 import workflowRoutes from './modules/workflows/workflow.routes';
 import { createWebSocketServer } from './realtime/ws-server';
+import { logger } from './utils/logger';
 
 // MCP SDK excluded from typecheck — see https://github.com/modelcontextprotocol/typescript-sdk/issues/985
 
@@ -162,10 +164,34 @@ app.use(errorHandler);
 // Only listen when run directly (not imported by tests)
 if (require.main === module) {
   const server = createServer(app);
+  server.timeout = 30000;
+  server.keepAliveTimeout = 65000;
+
   createWebSocketServer(server);
+
   server.listen(env.PORT, () => {
-    console.warn(`Axiom API running on port ${env.PORT} [${env.NODE_ENV}]`);
+    logger.info('Axiom API running', { port: env.PORT, env: env.NODE_ENV });
+    if (process.env.NODE_ENV === 'production' && process.env.CORS_ORIGIN === '*') {
+      logger.warn('CORS_ORIGIN is set to wildcard in production', { env: 'production' });
+    }
   });
+
+  function gracefulShutdown(signal: string) {
+    logger.info('Graceful shutdown initiated', { signal });
+    server.close(async () => {
+      logger.info('HTTP server closed');
+      await prisma.$disconnect();
+      logger.info('Database disconnected');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      logger.error('Forced exit after timeout');
+      process.exit(1);
+    }, 10000);
+  }
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 export default app;

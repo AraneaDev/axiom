@@ -9,6 +9,8 @@ import {
   getRepoSize,
 } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
+import { logger } from '../../utils/logger';
 
 /**
  *
@@ -30,11 +32,13 @@ export async function createRepo(
     defaultBranch?: string;
   },
 ) {
-  const team = await prisma.team.findUnique({
-    where: { id: teamId },
-    include: { org: { select: { slug: true } } },
-  });
-  if (!team) throw new AppError(404, 'Team not found');
+  const team = await findOrThrow(
+    prisma.team.findUnique({
+      where: { id: teamId },
+      include: { org: { select: { slug: true } } },
+    }),
+    'Team not found',
+  );
 
   const existing = await prisma.repository.findUnique({
     where: { teamId_slug: { teamId, slug: data.slug } },
@@ -64,20 +68,22 @@ export async function createRepo(
  * @param repoId
  */
 export async function getRepo(repoId: string) {
-  const repo = await prisma.repository.findUnique({
-    where: { id: repoId },
-    include: {
-      team: { select: { id: true, name: true, slug: true, orgId: true } },
-    },
-  });
-  if (!repo) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({
+      where: { id: repoId },
+      include: {
+        team: { select: { id: true, name: true, slug: true, orgId: true } },
+      },
+    }),
+    'Repository not found',
+  );
 
   let size: number | undefined;
   if (repo.diskPath && (await repoExists(repo.diskPath))) {
     try {
       size = await getRepoSize(repo.diskPath);
     } catch (err) {
-      console.error('Failed to get repository size', err);
+      logger.error('Failed to get repository size', { repoId }, err as Error);
     }
   }
 
@@ -143,8 +149,10 @@ export async function updateRepoSettings(
     codeOwnersEnabled?: boolean;
   },
 ) {
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo) throw new AppError(404, 'Repository not found');
+  await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
 
   const updateData: Record<string, unknown> = {};
   if (data.defaultMergeStrategy !== undefined) {
@@ -166,8 +174,10 @@ export async function updateRepoSettings(
  * @param repoId
  */
 export async function deleteRepoById(repoId: string) {
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
 
   if (repo.diskPath && (await repoExists(repo.diskPath))) {
     await deleteRepo(repo.diskPath);
@@ -183,17 +193,21 @@ export async function deleteRepoById(repoId: string) {
  * @param newSlug
  */
 export async function forkRepoById(repoId: string, targetTeamId: string, newSlug: string) {
-  const source = await prisma.repository.findUnique({
-    where: { id: repoId },
-    include: { team: { include: { org: { select: { slug: true } } } } },
-  });
-  if (!source) throw new AppError(404, 'Source repository not found');
+  const source = await findOrThrow(
+    prisma.repository.findUnique({
+      where: { id: repoId },
+      include: { team: { include: { org: { select: { slug: true } } } } },
+    }),
+    'Source repository not found',
+  );
 
-  const targetTeam = await prisma.team.findUnique({
-    where: { id: targetTeamId },
-    include: { org: { select: { slug: true } } },
-  });
-  if (!targetTeam) throw new AppError(404, 'Target team not found');
+  const targetTeam = await findOrThrow(
+    prisma.team.findUnique({
+      where: { id: targetTeamId },
+      include: { org: { select: { slug: true } } },
+    }),
+    'Target team not found',
+  );
 
   const targetDiskPath = getRepoPath(targetTeam.org.slug, targetTeam.slug, newSlug);
   await forkRepo(source.diskPath!, targetDiskPath);
@@ -302,7 +316,7 @@ export async function getCommitDetail(repoId: string, sha: string) {
   if (!commit) throw new AppError(404, 'Commit not found');
   const diffOutput = await gitCmd.diffCommit(diskPath, sha);
   const stats = await gitCmd.diffStat(diskPath, `${sha}~1`, sha).catch((err) => {
-    console.error('Failed to get diff stats for commit', err);
+    logger.error('Failed to get diff stats for commit', { repoId, sha }, err as Error);
     return [];
   });
   return { ...commit, diff: diffOutput, stats };

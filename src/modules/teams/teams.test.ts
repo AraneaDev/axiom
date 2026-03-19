@@ -38,7 +38,7 @@ describe('Teams API', () => {
     });
     secondUserId = secondUser.id;
 
-    const org = await prisma.org.create({
+    const org = await prisma.organization.create({
       data: {
         name: 'Teams Test Org',
         slug: 'teams-test-org',
@@ -48,19 +48,22 @@ describe('Teams API', () => {
     orgId = org.id;
 
     // Also add secondUser to org so they can be added to team
-    await prisma.orgMember.create({
+    await prisma.orgMembership.create({
       data: { orgId: org.id, userId: secondUser.id, role: 'MEMBER' },
     });
 
-    const loginRes = await request(app).post('/api/auth/login').send({
-      login: 'teams-test-owner@axiom.dev',
-      password: 'testpassword123',
-    });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({
+        login: 'teams-test-owner@axiom.dev',
+        password: 'testpassword123',
+      });
     token = loginRes.body.accessToken;
   });
 
   afterAll(async () => {
-    await prisma.org.deleteMany({ where: { slug: 'teams-test-org' } });
+    await prisma.organization.deleteMany({ where: { slug: 'teams-test-org' } });
     await prisma.user.deleteMany({
       where: { username: { in: ['teams-test-owner', 'teams-test-member'] } },
     });
@@ -72,6 +75,7 @@ describe('Teams API', () => {
     const res = await request(app)
       .post(`/api/teams/org/${orgId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Teams Test Team', slug: 'teams-test-team' });
     expect(res.status).toBe(201);
     expect(res.body.slug).toBe('teams-test-team');
@@ -85,8 +89,8 @@ describe('Teams API', () => {
       .get(`/api/teams/org/${orgId}`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    const found = res.body.find((t: { id: string }) => t.id === teamId);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    const found = res.body.data.find((t: { id: string }) => t.id === teamId);
     expect(found).toBeDefined();
   });
 
@@ -104,6 +108,7 @@ describe('Teams API', () => {
     const res = await request(app)
       .patch(`/api/teams/${teamId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Teams Test Team Updated' });
     expect(res.status).toBe(200);
     expect(res.body.name).toBe('Teams Test Team Updated');
@@ -114,6 +119,7 @@ describe('Teams API', () => {
     const res = await request(app)
       .post(`/api/teams/${teamId}/members`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ userId: secondUserId, role: 'MEMBER' });
     expect(res.status).toBe(201);
     expect(res.body.userId).toBe(secondUserId);
@@ -136,7 +142,8 @@ describe('Teams API', () => {
     const res = await request(app)
       .post(`/api/projects/team/${teamId}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Teams Test Project', slug: 'teams-test-project', identifier: 'TTP' });
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ name: 'Teams Test Project', slug: 'teams-test-project', prefix: 'TTP' });
     expect(res.status).toBe(201);
     expect(res.body.slug).toBe('teams-test-project');
     expect(res.body.teamId).toBe(teamId);

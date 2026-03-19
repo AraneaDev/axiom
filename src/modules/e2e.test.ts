@@ -47,10 +47,13 @@ describe('E2E: Full workflow', () => {
   });
 
   it('1. login user', async () => {
-    const res = await request(app).post('/api/auth/login').send({
-      login: 'e2euser',
-      password: 'testpassword123',
-    });
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({
+        login: 'e2euser',
+        password: 'testpassword123',
+      });
     expect(res.status).toBe(200);
     token = res.body.accessToken;
   });
@@ -59,6 +62,7 @@ describe('E2E: Full workflow', () => {
     const res = await request(app)
       .post('/api/orgs')
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Axiom Corp', slug: 'axiom-corp' });
     expect(res.status).toBe(201);
     expect(res.body.slug).toBe('axiom-corp');
@@ -69,6 +73,7 @@ describe('E2E: Full workflow', () => {
     const res = await request(app)
       .post(`/api/teams/org/${orgId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Backend', slug: 'backend', description: 'Backend team' });
     expect(res.status).toBe(201);
     expect(res.body.slug).toBe('backend');
@@ -79,6 +84,7 @@ describe('E2E: Full workflow', () => {
     const res = await request(app)
       .post(`/api/projects/team/${teamId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'API', slug: 'api', prefix: 'API', description: 'API project' });
     expect(res.status).toBe(201);
     expect(res.body.columns).toHaveLength(5);
@@ -90,6 +96,7 @@ describe('E2E: Full workflow', () => {
     const res = await request(app)
       .post(`/api/projects/${projectId}/issues`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({
         title: 'Implement auth endpoint',
         body: '## Description\nBuild the auth endpoints',
@@ -105,6 +112,7 @@ describe('E2E: Full workflow', () => {
     await request(app)
       .post(`/api/projects/${projectId}/issues`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ title: 'Fix login bug', type: 'BUG', priority: 'CRITICAL' });
 
     const res = await request(app)
@@ -119,6 +127,7 @@ describe('E2E: Full workflow', () => {
     const res = await request(app)
       .post(`/api/projects/${projectId}/issues/1/comments`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ body: 'Working on this now' });
     expect(res.status).toBe(201);
     expect(res.body.body).toBe('Working on this now');
@@ -131,7 +140,7 @@ describe('E2E: Full workflow', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(5);
     // Issues should be in Backlog (default column)
-    const backlog = res.body.find((c: any) => c.name === 'Backlog');
+    const backlog = res.body.find((c: Record<string, unknown>) => c.name === 'Backlog');
     expect(backlog.issues.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -139,6 +148,7 @@ describe('E2E: Full workflow', () => {
     const res = await request(app)
       .post(`/api/wiki/team/${teamId}/spaces`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Engineering Docs', slug: 'eng-docs' });
     expect(res.status).toBe(201);
     spaceId = res.body.id;
@@ -148,12 +158,14 @@ describe('E2E: Full workflow', () => {
     const parentRes = await request(app)
       .post(`/api/wiki/spaces/${spaceId}/pages`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ title: 'Architecture', slug: 'architecture', body: '# Architecture\nOverview...' });
     expect(parentRes.status).toBe(201);
 
     const childRes = await request(app)
       .post(`/api/wiki/spaces/${spaceId}/pages`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({
         title: 'Database Schema',
         slug: 'database-schema',
@@ -177,6 +189,7 @@ describe('E2E: Full workflow', () => {
     await request(app)
       .patch(`/api/wiki/spaces/${spaceId}/pages/architecture`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ body: '# Architecture v2\nUpdated overview...' });
 
     const histRes = await request(app)
@@ -193,7 +206,7 @@ describe('E2E: Full workflow', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     // Should find the auth issue
-    const issueResults = res.body.find((r: any) => r.type === 'issues');
+    const issueResults = res.body.find((r: Record<string, unknown>) => r.type === 'issues');
     expect(issueResults.items.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -201,6 +214,7 @@ describe('E2E: Full workflow', () => {
     const res = await request(app)
       .post('/api/users/me/tokens')
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'CI Token', scopes: ['issues:read', 'wiki:read'] });
     expect(res.status).toBe(201);
     expect(res.body.token).toMatch(/^tk_/);

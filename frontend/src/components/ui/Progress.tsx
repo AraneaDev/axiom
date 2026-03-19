@@ -1,10 +1,11 @@
+import { forwardRef, type HTMLAttributes } from 'react';
+
 import { cn } from '@/lib/utils';
 
-interface ProgressProps {
+interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
   value: number;
   size?: 'sm' | 'md' | 'lg';
   variant?: 'primary' | 'success' | 'warning' | 'danger';
-  className?: string;
 }
 
 const heights = {
@@ -14,7 +15,7 @@ const heights = {
 };
 
 const variants = {
-  primary: 'bg-primary',
+  primary: 'bg-gradient-to-r from-primary to-primary-hover',
   success: 'bg-success',
   warning: 'bg-warning',
   danger: 'bg-danger',
@@ -27,29 +28,35 @@ const variants = {
  * @param root0.size
  * @param root0.variant
  * @param root0.className
+ * @param ref
  */
-export function Progress({ value, size = 'md', variant = 'primary', className }: ProgressProps) {
-  const clamped = Math.max(0, Math.min(100, value));
+export const Progress = forwardRef<HTMLDivElement, ProgressProps>(
+  ({ value, size = 'md', variant = 'primary', className, ...props }, ref) => {
+    const clamped = Math.max(0, Math.min(100, value));
 
-  return (
-    <div
-      className={cn(
-        'w-full rounded-full bg-surface-tertiary overflow-hidden',
-        heights[size],
-        className,
-      )}
-      role="progressbar"
-      aria-valuenow={clamped}
-      aria-valuemin={0}
-      aria-valuemax={100}
-    >
+    return (
       <div
+        ref={ref}
         className={cn(
-          'h-full rounded-full transition-all duration-300 ease-out',
-          variants[variant],
+          'w-full rounded-full bg-surface-tertiary overflow-hidden',
+          heights[size],
+          className,
         )}
-        style={{ width: `${clamped}%` }}
-      />
-    </div>
-  );
-}
+        role="progressbar"
+        aria-valuenow={clamped}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        {...props}
+      >
+        <div
+          className={cn(
+            'h-full rounded-full transition-all duration-500 ease-out',
+            variants[variant],
+          )}
+          style={{ width: `${clamped}%` }}
+        />
+      </div>
+    );
+  },
+);
+Progress.displayName = 'Progress';

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 
 import { issuesApi } from '@/api/issues.api';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 
 interface Repo {
@@ -85,22 +86,12 @@ export default function CreateBranchModal({
         </div>
         <div className="p-4 space-y-4">
           {repos.length > 1 && (
-            <div>
-              <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
-                Repository
-              </label>
-              <select
-                value={repoId}
-                onChange={(e) => setRepoId(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
-              >
-                {repos.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Repository"
+              value={repoId}
+              onChange={(v) => setRepoId(v as string)}
+              options={repos.map((r) => ({ value: r.id, label: r.name }))}
+            />
           )}
           <Input
             label="Branch Name"

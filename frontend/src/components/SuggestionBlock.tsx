@@ -1,9 +1,9 @@
 import { Check, ListChecks, Loader2 } from 'lucide-react';
 
+import { parseSuggestion } from './suggestion-utils';
+
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
-
-const SUGGESTION_RE = /```suggestion\n([\s\S]*?)```/;
 
 interface SuggestionBlockProps {
   commentId: string;
@@ -13,23 +13,6 @@ interface SuggestionBlockProps {
   isSelected?: boolean;
   onApply: (commentId: string) => void;
   onToggleSelect: (commentId: string) => void;
-}
-
-/**
- *
- * @param body
- */
-export function parseSuggestion(body: string): string | null {
-  const match = body.match(SUGGESTION_RE);
-  return match ? match[1] : null;
-}
-
-/**
- *
- * @param body
- */
-export function hasSuggestion(body: string): boolean {
-  return SUGGESTION_RE.test(body);
 }
 
 /**

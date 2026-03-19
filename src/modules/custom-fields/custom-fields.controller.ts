@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { AppError } from '../../middleware/errorHandler';
 import { param } from '../../utils/params';
 
 import * as customFieldsService from './custom-fields.service';
@@ -15,7 +16,7 @@ export async function createDefinition(req: Request, res: Response, next: NextFu
     const projectId = param(req, 'projectId');
     const { name, type, options, required, position } = req.body;
     if (!name || !type) {
-      return res.status(400).json({ error: { message: 'name and type are required' } });
+      throw new AppError(400, 'name and type are required');
     }
     const definition = await customFieldsService.createFieldDefinition(projectId, {
       name,
@@ -96,7 +97,7 @@ export async function setFieldValue(req: Request, res: Response, next: NextFunct
     const fieldId = param(req, 'fieldId');
     const { value } = req.body;
     if (value === undefined) {
-      return res.status(400).json({ error: { message: 'value is required' } });
+      throw new AppError(400, 'value is required');
     }
     const fieldValue = await customFieldsService.setFieldValue(issueId, fieldId, String(value));
     res.json(fieldValue);

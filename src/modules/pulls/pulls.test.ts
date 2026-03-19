@@ -36,22 +36,26 @@ describe('Pull Requests API', () => {
     });
     const loginRes = await request(app)
       .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ login: 'pruser', password: 'testpassword123' });
     token = loginRes.body.accessToken;
 
     const orgRes = await request(app)
       .post('/api/orgs')
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'PR Org', slug: 'pr-org' });
 
     const teamRes = await request(app)
       .post(`/api/teams/org/${orgRes.body.id}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Dev', slug: 'dev' });
 
     const repoRes = await request(app)
       .post(`/api/repos/team/${teamRes.body.id}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'PR Test', slug: 'pr-test' });
     repoId = repoRes.body.id;
 
@@ -141,6 +145,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .post(`/api/repos/${repoId}/pulls`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({
         title: 'Add login feature',
         body: 'Implements login',
@@ -158,6 +163,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .post(`/api/repos/${repoId}/pulls`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ title: 'Bad PR', sourceBranch: 'main', targetBranch: 'main' });
     expect(res.status).toBe(400);
   });
@@ -166,6 +172,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .post(`/api/repos/${repoId}/pulls`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ title: 'Bad PR', sourceBranch: 'nonexistent', targetBranch: 'main' });
     expect(res.status).toBe(400);
   });
@@ -175,8 +182,8 @@ describe('Pull Requests API', () => {
       .get(`/api/repos/${repoId}/pulls`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.length).toBe(1);
-    expect(res.body[0].number).toBe(1);
+    expect(res.body.data.length).toBe(1);
+    expect(res.body.data[0].number).toBe(1);
   });
 
   it('5. should filter PRs by status', async () => {
@@ -184,7 +191,7 @@ describe('Pull Requests API', () => {
       .get(`/api/repos/${repoId}/pulls?status=MERGED`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.length).toBe(0);
+    expect(res.body.data.length).toBe(0);
   });
 
   it('6. should get PR detail with merge status', async () => {
@@ -200,6 +207,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .patch(`/api/repos/${repoId}/pulls/${prNumber}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ title: 'Add login feature (updated)' });
     expect(res.status).toBe(200);
     expect(res.body.title).toBe('Add login feature (updated)');
@@ -232,6 +240,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .post(`/api/repos/${repoId}/pulls/${prNumber}/reviews`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ status: 'APPROVED', body: 'LGTM!' });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('APPROVED');
@@ -252,6 +261,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .post(`/api/repos/${repoId}/pulls/${prNumber}/comments`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ body: 'Looks good overall' });
     expect(res.status).toBe(201);
     expect(res.body.body).toBe('Looks good overall');
@@ -262,6 +272,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .post(`/api/repos/${repoId}/pulls/${prNumber}/comments`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ body: 'Should validate input here', filePath: 'login.ts', line: 1 });
     expect(res.status).toBe(201);
     expect(res.body.filePath).toBe('login.ts');
@@ -282,6 +293,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .post(`/api/repos/${repoId}/pulls/${prNumber}/merge`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({});
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('MERGED');
@@ -291,6 +303,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .post(`/api/repos/${repoId}/pulls/${prNumber}/merge`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({});
     expect(res.status).toBe(400);
   });
@@ -299,6 +312,7 @@ describe('Pull Requests API', () => {
     const res = await request(app)
       .patch(`/api/repos/${repoId}/pulls/${prNumber}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ title: 'Should fail' });
     expect(res.status).toBe(400);
   });
@@ -310,12 +324,14 @@ describe('Pull Requests API', () => {
     const createRes = await request(app)
       .post(`/api/repos/${repoId}/pulls`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ title: 'Add signup', sourceBranch: 'feature/signup', targetBranch: 'main' });
     expect(createRes.status).toBe(201);
 
     const closeRes = await request(app)
       .post(`/api/repos/${repoId}/pulls/${createRes.body.number}/close`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
     expect(closeRes.status).toBe(200);
     expect(closeRes.body.status).toBe('CLOSED');
   });
@@ -327,7 +343,7 @@ describe('Pull Requests API', () => {
       .get(`/api/repos/${repoId}/pulls?status=OPEN`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.length).toBe(0);
+    expect(res.body.data.length).toBe(0);
   });
 
   it('20. should list all PRs', async () => {
@@ -335,6 +351,6 @@ describe('Pull Requests API', () => {
       .get(`/api/repos/${repoId}/pulls`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.length).toBe(2);
+    expect(res.body.data.length).toBe(2);
   });
 });

@@ -9,6 +9,7 @@ import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
 import { logActivity } from '../activity/activity.service';
 import { createNotification } from '../notifications/notifications.service';
@@ -382,10 +383,10 @@ export async function mergePR(
     await execFileAsync('git', ['worktree', 'remove', '--force', worktreeDir], {
       cwd: diskPath,
     }).catch((err) => {
-      console.error('Failed to remove merge worktree', err);
+      logger.error('Failed to remove merge worktree', undefined, err as Error);
     });
     await fs.rm(worktreeDir, { recursive: true, force: true }).catch((err) => {
-      console.error('Failed to clean up merge worktree directory', err);
+      logger.error('Failed to clean up merge worktree directory', undefined, err as Error);
     });
   }
 
@@ -425,7 +426,11 @@ export async function mergePR(
           },
         })
         .catch((err) => {
-          console.error('Failed to create issue-closed notification', err);
+          logger.error(
+            'Failed to create issue-closed notification',
+            { issueId: link.issue.id },
+            err as Error,
+          );
         });
     }
   }
@@ -555,7 +560,7 @@ export async function submitReview(
           : data.body
         : undefined,
     ).catch((err) => {
-      console.error('Failed to send PR review notification', err);
+      logger.error('Failed to send PR review notification', { prId: pr.id }, err as Error);
     });
   }
 
@@ -622,7 +627,7 @@ export async function addPRComment(
 
   // Notify @mentioned users in the PR comment
   notifyMentions(data.body, authorId).catch((err) => {
-    console.error('Failed to send mention notifications', err);
+    logger.error('Failed to send mention notifications', undefined, err as Error);
   });
 
   return comment;
@@ -892,10 +897,10 @@ async function applyMultiFileChanges(
     await execFileAsync('git', ['worktree', 'remove', '--force', worktreeDir], {
       cwd: diskPath,
     }).catch((err) => {
-      console.error('Failed to remove suggestion worktree', err);
+      logger.error('Failed to remove suggestion worktree', undefined, err as Error);
     });
     await fs.rm(worktreeDir, { recursive: true, force: true }).catch((err) => {
-      console.error('Failed to clean up suggestion worktree directory', err);
+      logger.error('Failed to clean up suggestion worktree directory', undefined, err as Error);
     });
   }
 }

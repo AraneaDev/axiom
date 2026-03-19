@@ -2,7 +2,9 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
+import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 import { evaluateRules } from '../automation/automation.service';
 import { createNotification } from '../notifications/notifications.service';
@@ -72,8 +74,8 @@ export async function createIssue(
         : undefined,
     },
     include: {
-      assignee: { select: { id: true, username: true, displayName: true } },
-      creator: { select: { id: true, username: true, displayName: true } },
+      assignee: { select: USER_BASIC_SELECT },
+      creator: { select: USER_BASIC_SELECT },
       labels: true,
       column: true,
     },
@@ -84,13 +86,17 @@ export async function createIssue(
   // Notify @mentioned users in the issue body
   if (data.body) {
     notifyMentions(data.body, creatorId, `/issues/${issue.id}`).catch((err) => {
-      console.error('Failed to send mention notifications', err);
+      logger.error('Failed to send mention notifications', { issueId: issue.id }, err as Error);
     });
   }
 
   // Fire automation rules (non-blocking)
   evaluateRules(projectId, 'issue:created', { issue }).catch((err) => {
-    console.error('Failed to evaluate automation rules for issue:created', err);
+    logger.error(
+      'Failed to evaluate automation rules for issue:created',
+      { projectId },
+      err as Error,
+    );
   });
 
   return { ...issue, key: `${project.prefix}-${number}` };
@@ -108,14 +114,14 @@ export async function getIssue(projectId: string, issueNumber: number) {
   const issue = await prisma.issue.findUnique({
     where: { projectId_number: { projectId, number: issueNumber } },
     include: {
-      assignee: { select: { id: true, username: true, displayName: true } },
-      creator: { select: { id: true, username: true, displayName: true } },
+      assignee: { select: USER_BASIC_SELECT },
+      creator: { select: USER_BASIC_SELECT },
       labels: true,
       column: true,
       sprint: { select: { id: true, name: true } },
       parent: { select: { id: true, number: true, title: true } },
       comments: {
-        include: { author: { select: { id: true, username: true, displayName: true } } },
+        include: { author: { select: USER_BASIC_SELECT } },
         orderBy: { createdAt: 'asc' },
       },
     },
@@ -169,7 +175,7 @@ export async function listIssues(
     prisma.issue.findMany({
       where,
       include: {
-        assignee: { select: { id: true, username: true, displayName: true } },
+        assignee: { select: USER_BASIC_SELECT },
         labels: true,
         column: { select: { id: true, name: true } },
       },
@@ -271,7 +277,7 @@ export async function updateIssue(
     where: { id: issue.id },
     data: updateData,
     include: {
-      assignee: { select: { id: true, username: true, displayName: true } },
+      assignee: { select: USER_BASIC_SELECT },
       labels: true,
       column: true,
       sprint: { select: { id: true, name: true } },
@@ -308,7 +314,7 @@ export async function updateIssue(
         undefined,
         `/issues/${issue.id}`,
       ).catch((err) => {
-        console.error('Failed to send assignment notification', err);
+        logger.error('Failed to send assignment notification', { issueId: issue.id }, err as Error);
       });
     }
   }
@@ -335,17 +341,29 @@ export async function updateIssue(
       from: issue.columnId,
       to: data.columnId,
     }).catch((err) => {
-      console.error('Failed to evaluate automation rules for issue:status_changed', err);
+      logger.error(
+        'Failed to evaluate automation rules for issue:status_changed',
+        { projectId },
+        err as Error,
+      );
     });
   }
   if (data.assigneeId !== undefined && data.assigneeId !== issue.assigneeId) {
     evaluateRules(projectId, 'issue:assigned', { issue: updated }).catch((err) => {
-      console.error('Failed to evaluate automation rules for issue:assigned', err);
+      logger.error(
+        'Failed to evaluate automation rules for issue:assigned',
+        { projectId },
+        err as Error,
+      );
     });
   }
   if (data.labels !== undefined) {
     evaluateRules(projectId, 'label:added', { issue: updated }).catch((err) => {
-      console.error('Failed to evaluate automation rules for label:added', err);
+      logger.error(
+        'Failed to evaluate automation rules for label:added',
+        { projectId },
+        err as Error,
+      );
     });
   }
 
@@ -381,7 +399,7 @@ export async function deleteIssue(projectId: string, issueNumber: number, userId
 export async function addComment(issueId: string, authorId: string, body: string) {
   const comment = await prisma.comment.create({
     data: { issueId, authorId, body },
-    include: { author: { select: { id: true, username: true, displayName: true } } },
+    include: { author: { select: USER_BASIC_SELECT } },
   });
 
   await logActivity('issue', issueId, 'commented', authorId, { commentId: comment.id });
@@ -399,13 +417,13 @@ export async function addComment(issueId: string, authorId: string, body: string
       body.length > 120 ? body.slice(0, 120) + '...' : body,
       `/issues/${issueId}`,
     ).catch((err) => {
-      console.error('Failed to send comment notification', err);
+      logger.error('Failed to send comment notification', { issueId }, err as Error);
     });
   }
 
   // Notify @mentioned users in the comment
   notifyMentions(body, authorId, `/issues/${issueId}`).catch((err) => {
-    console.error('Failed to send mention notifications', err);
+    logger.error('Failed to send mention notifications', { issueId }, err as Error);
   });
 
   return comment;
@@ -421,7 +439,7 @@ export async function getBoard(projectId: string) {
     include: {
       issues: {
         include: {
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
         },
         orderBy: { position: 'asc' },
@@ -478,7 +496,11 @@ export async function moveIssue(
       from: issue.columnId,
       to: columnId,
     }).catch((err) => {
-      console.error('Failed to evaluate automation rules for issue:status_changed', err);
+      logger.error(
+        'Failed to evaluate automation rules for issue:status_changed',
+        { projectId },
+        err as Error,
+      );
     });
   }
 
@@ -528,7 +550,7 @@ export async function setParent(
       where: { id: issue.id },
       data: { parentId: null },
       include: {
-        assignee: { select: { id: true, username: true, displayName: true } },
+        assignee: { select: USER_BASIC_SELECT },
         labels: true,
         column: true,
       },
@@ -556,7 +578,7 @@ export async function setParent(
     where: { id: issue.id },
     data: { parentId: parent.id },
     include: {
-      assignee: { select: { id: true, username: true, displayName: true } },
+      assignee: { select: USER_BASIC_SELECT },
       labels: true,
       column: true,
     },
@@ -580,7 +602,7 @@ export async function getChildren(projectId: string, issueNumber: number) {
   const children = await prisma.issue.findMany({
     where: { parentId: issue.id },
     include: {
-      assignee: { select: { id: true, username: true, displayName: true } },
+      assignee: { select: USER_BASIC_SELECT },
       labels: true,
       column: { select: { id: true, name: true, isDone: true } },
     },
@@ -630,12 +652,12 @@ export async function getRoadmap(projectId: string) {
   const epics = await prisma.issue.findMany({
     where: { projectId, type: 'EPIC' },
     include: {
-      assignee: { select: { id: true, username: true, displayName: true } },
+      assignee: { select: USER_BASIC_SELECT },
       labels: true,
       column: { select: { id: true, name: true, isDone: true } },
       children: {
         include: {
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
           column: { select: { id: true, name: true, isDone: true } },
         },
@@ -731,7 +753,7 @@ export async function getWorklogs(projectId: string, issueNumber: number) {
 
   const activities = await prisma.activity.findMany({
     where: { resourceType: 'issue', resourceId: issue.id, action: 'time_logged' },
-    include: { user: { select: { id: true, username: true, displayName: true } } },
+    include: { user: { select: USER_BASIC_SELECT } },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -811,7 +833,7 @@ export async function bulkUpdate(
       where: { id: issue.id },
       data: updateData,
       include: {
-        assignee: { select: { id: true, username: true, displayName: true } },
+        assignee: { select: USER_BASIC_SELECT },
         labels: true,
         column: true,
       },

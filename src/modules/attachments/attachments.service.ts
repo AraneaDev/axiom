@@ -1,3 +1,4 @@
+import fs from 'fs/promises';
 import path from 'path';
 
 import { createId } from '@paralleldrive/cuid2';
@@ -37,7 +38,14 @@ export async function uploadAttachment(
   const storageKey = buildStorageKey(file.originalname);
   const storage = getStorage();
 
-  await storage.put(storageKey, file.buffer, file.mimetype);
+  // Support both disk storage (file.path) and memory storage (file.buffer)
+  const fileData = file.path ? await fs.readFile(file.path) : file.buffer;
+  await storage.put(storageKey, fileData, file.mimetype);
+
+  // Clean up temp file from disk storage
+  if (file.path) {
+    await fs.unlink(file.path).catch(() => {});
+  }
 
   const attachment = await prisma.attachment.create({
     data: {
@@ -80,6 +88,7 @@ export async function listAttachments(opts: { issueId?: string; pageId?: string 
   return prisma.attachment.findMany({
     where,
     orderBy: { createdAt: 'desc' },
+    take: 100,
   });
 }
 

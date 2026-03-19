@@ -28,6 +28,7 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Dropdown } from '@/components/ui/Dropdown';
+import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Tabs } from '@/components/ui/Tabs';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -98,10 +99,10 @@ export default function RepoDetail() {
   ];
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{currentRepo.name}</h1>
+          <h1 className="text-2xl font-bold text-text">{currentRepo.name}</h1>
           {currentRepo.description && (
             <p className="text-sm text-text-secondary mt-1">{currentRepo.description}</p>
           )}
@@ -117,9 +118,10 @@ export default function RepoDetail() {
             <div className="p-3 min-w-[320px]">
               <p className="text-xs font-medium text-text-secondary mb-2">HTTPS</p>
               <div className="flex items-center gap-2">
-                <input
+                <Input
                   readOnly
                   value={cloneUrl}
+                  aria-label="Clone URL"
                   className="flex-1 text-xs font-mono bg-surface-secondary border border-border rounded px-2 py-1.5"
                 />
                 <Button
@@ -131,6 +133,7 @@ export default function RepoDetail() {
                     setTimeout(() => setCloneCopied(false), 2000);
                   }}
                   title="Copy clone URL"
+                  aria-label="Copy clone URL"
                 >
                   {cloneCopied ? (
                     <Check className="h-4 w-4 text-success" />
@@ -142,7 +145,12 @@ export default function RepoDetail() {
             </div>
           </Dropdown>
           <Link to={`${basePath}/settings`}>
-            <Button variant="ghost" size="sm" title="Repository settings">
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Repository settings"
+              aria-label="Repository settings"
+            >
               <Settings className="h-4 w-4" />
             </Button>
           </Link>
@@ -150,20 +158,20 @@ export default function RepoDetail() {
       </div>
 
       {/* Stats bar */}
-      <div className="flex gap-4 mb-4 text-sm text-text-secondary">
-        <span className="flex items-center gap-1">
-          <GitBranch className="h-4 w-4" /> {branches?.length ?? 0} branches
+      <div className="flex gap-5 text-sm text-text-secondary border-b border-border pb-4">
+        <span className="flex items-center gap-1.5">
+          <GitBranch className="h-4 w-4 text-text-tertiary" /> {branches?.length ?? 0} branches
         </span>
-        <span className="flex items-center gap-1">
-          <Tag className="h-4 w-4" /> {currentRepo.defaultBranch}
+        <span className="flex items-center gap-1.5">
+          <Tag className="h-4 w-4 text-text-tertiary" /> {currentRepo.defaultBranch}
         </span>
-        <span className="flex items-center gap-1">
-          <GitPullRequest className="h-4 w-4" /> {prs?.length ?? 0} open PRs
+        <span className="flex items-center gap-1.5">
+          <GitPullRequest className="h-4 w-4 text-text-tertiary" /> {prs?.length ?? 0} open PRs
         </span>
       </div>
 
       {/* Tabs */}
-      <Tabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} className="mb-6" />
+      <Tabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
 
       {/* Code tab */}
       {activeTab === 'code' && tree && (
@@ -200,10 +208,10 @@ export default function RepoDetail() {
 
       {/* README */}
       {activeTab === 'code' && readmeBlob?.content && (
-        <div className="mt-4 rounded-lg border border-border bg-surface p-6">
-          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-border">
-            <FileText className="h-4 w-4 text-text-secondary" />
-            <span className="text-sm font-medium">{readmeEntry?.name}</span>
+        <div className="rounded-lg border border-border bg-surface p-6">
+          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
+            <FileText className="h-4 w-4 text-text-tertiary" />
+            <span className="text-sm font-medium text-text-secondary">{readmeEntry?.name}</span>
           </div>
           <div className="prose max-w-none">
             <MarkdownRenderer content={readmeBlob.content} />
@@ -287,14 +295,16 @@ export default function RepoDetail() {
               to={`${basePath}/commits/${c.sha}`}
               className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
             >
-              <GitCommit className="h-4 w-4 text-text-secondary shrink-0" />
+              <GitCommit className="h-4 w-4 text-text-tertiary shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{c.message}</p>
-                <p className="text-xs text-text-secondary">
+                <p className="text-xs text-text-tertiary">
                   {c.author} &middot; {formatRelative(c.date)}
                 </p>
               </div>
-              <code className="text-xs text-text-secondary font-mono">{c.shortSha}</code>
+              <code className="text-xs text-text-tertiary font-mono bg-surface-secondary px-1.5 py-0.5 rounded">
+                {c.shortSha}
+              </code>
             </Link>
           ))}
         </div>

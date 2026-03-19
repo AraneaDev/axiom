@@ -2,6 +2,7 @@ import { LinkType } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { PROJECT_URL_SELECT } from '../../utils/prisma-selects';
 
 /**
  *
@@ -19,24 +20,12 @@ export async function getLinks(projectId: string, issueNumber: number) {
     include: {
       from: {
         include: {
-          project: {
-            select: {
-              prefix: true,
-              slug: true,
-              team: { select: { slug: true, org: { select: { slug: true } } } },
-            },
-          },
+          project: { select: PROJECT_URL_SELECT },
         },
       },
       to: {
         include: {
-          project: {
-            select: {
-              prefix: true,
-              slug: true,
-              team: { select: { slug: true, org: { select: { slug: true } } } },
-            },
-          },
+          project: { select: PROJECT_URL_SELECT },
         },
       },
     },

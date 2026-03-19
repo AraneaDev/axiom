@@ -412,6 +412,8 @@ model Issue {
   watchers          IssueWatcher[]
 
   @@unique([projectId, number])
+  @@index([assigneeId])
+  @@index([creatorId])
   @@map("issues")
 }
 
@@ -463,6 +465,7 @@ model Comment {
 
   attachments Attachment[]
 
+  @@index([issueId])
   @@map("comments")
 }
 
@@ -866,6 +869,7 @@ model Activity {
   details      Json?
   createdAt    DateTime @default(now())
 
+  @@index([userId])
   @@map("activities")
 }
 

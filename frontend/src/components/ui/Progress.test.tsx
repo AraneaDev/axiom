@@ -43,7 +43,7 @@ describe('Progress', () => {
   it('applies primary variant class by default', () => {
     const { container } = render(<Progress value={50} />);
     const inner = container.querySelector('[role="progressbar"] > div');
-    expect(inner?.className).toContain('bg-primary');
+    expect(inner?.className).toContain('from-primary');
   });
 
   it('applies success variant class', () => {

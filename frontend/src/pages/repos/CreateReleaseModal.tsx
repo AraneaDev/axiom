@@ -4,7 +4,10 @@ import { useState } from 'react';
 
 import { releasesApi } from '@/api/releases.api';
 import { reposApi, type BranchInfo } from '@/api/repos.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
+import { Input } from '@/components/ui/Input';
 
 interface Props {
   repoId: string;
@@ -96,47 +99,34 @@ export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onC
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
-                Tag Name
-              </label>
-              <input
+              <Input
+                label="Tag Name"
                 value={tagName}
                 onChange={(e) => setTagName(e.target.value)}
                 required
                 placeholder="v1.0.0"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors font-mono"
+                className="font-mono"
               />
             </div>
-            <div>
-              <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
-                Target Branch
-              </label>
-              <select
-                value={targetBranch}
-                onChange={(e) => setTargetBranch(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
-              >
-                {branches.length > 0 ? (
-                  branches.map((b: BranchInfo) => (
-                    <option key={b.name} value={b.name}>
-                      {b.name}
-                    </option>
-                  ))
-                ) : (
-                  <option value={defaultBranch}>{defaultBranch}</option>
-                )}
-              </select>
-            </div>
+            <Select
+              label="Target Branch"
+              value={targetBranch}
+              onChange={(v) => setTargetBranch(v as string)}
+              options={
+                branches.length > 0
+                  ? branches.map((b: BranchInfo) => ({ value: b.name, label: b.name }))
+                  : [{ value: defaultBranch, label: defaultBranch }]
+              }
+            />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-text-secondary mb-1.5 block">Title</label>
-            <input
+            <Input
+              label="Title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
               placeholder="Release title"
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
             />
           </div>
 
@@ -147,12 +137,10 @@ export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onC
                 <Wand2 className="h-3.5 w-3.5" /> Auto-generate
               </Button>
             </div>
-            <textarea
+            <MarkdownEditor
               value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={8}
+              onChange={setBody}
               placeholder="Describe the changes in this release..."
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors font-mono resize-y"
             />
           </div>
 

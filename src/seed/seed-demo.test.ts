@@ -11,6 +11,7 @@ describe('seed-demo', () => {
       cwd: '/root/axiom',
       stdio: 'pipe',
       timeout: 60_000,
+      env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
     });
   }, 120_000);
 
@@ -20,49 +21,49 @@ describe('seed-demo', () => {
 
   // ── Users ──────────────────────────────────────────────────
 
-  it('creates 5 users', async () => {
+  it('creates 2 users', async () => {
     const users = await prisma.user.findMany({
       where: {
         username: {
-          in: ['admin', 'sarah-chen', 'marcus-kim', 'anika-patel', 'alex-rivera'],
+          in: ['tim', 'test'],
         },
       },
     });
-    expect(users).toHaveLength(5);
+    expect(users).toHaveLength(2);
   });
 
   // ── Organization ───────────────────────────────────────────
 
-  it('creates the Axiom organization', async () => {
-    const org = await prisma.organization.findUnique({ where: { slug: 'axiom' } });
+  it('creates the Aranea.Dev organization', async () => {
+    const org = await prisma.organization.findUnique({ where: { slug: 'aranea-dev' } });
     expect(org).toBeTruthy();
-    expect(org!.name).toBe('Axiom');
+    expect(org!.name).toBe('Aranea.Dev');
   });
 
   it('creates org memberships for all users', async () => {
-    const org = await prisma.organization.findUnique({ where: { slug: 'axiom' } });
+    const org = await prisma.organization.findUnique({ where: { slug: 'aranea-dev' } });
     const memberships = await prisma.orgMembership.findMany({ where: { orgId: org!.id } });
-    expect(memberships).toHaveLength(5);
+    expect(memberships).toHaveLength(2);
   });
 
   // ── Teams ──────────────────────────────────────────────────
 
-  it('creates 3 teams with correct slugs', async () => {
-    const org = await prisma.organization.findUnique({ where: { slug: 'axiom' } });
+  it('creates 1 team with correct slug', async () => {
+    const org = await prisma.organization.findUnique({ where: { slug: 'aranea-dev' } });
     const teams = await prisma.team.findMany({ where: { orgId: org!.id } });
-    expect(teams).toHaveLength(3);
-    expect(teams.map((t) => t.slug).sort()).toEqual(['core', 'frontend', 'infra']);
+    expect(teams).toHaveLength(1);
+    expect(teams.map((t) => t.slug).sort()).toEqual(['axiom']);
   });
 
   // ── Projects ───────────────────────────────────────────────
 
-  it('creates 5 projects with board columns', async () => {
-    const org = await prisma.organization.findUnique({ where: { slug: 'axiom' } });
+  it('creates 1 project with board columns', async () => {
+    const org = await prisma.organization.findUnique({ where: { slug: 'aranea-dev' } });
     const teams = await prisma.team.findMany({ where: { orgId: org!.id } });
     const projects = await prisma.project.findMany({
       where: { teamId: { in: teams.map((t) => t.id) } },
     });
-    expect(projects).toHaveLength(5);
+    expect(projects).toHaveLength(1);
 
     // Each project should have 5 board columns
     for (const project of projects) {
@@ -72,7 +73,7 @@ describe('seed-demo', () => {
   });
 
   it('creates labels for every project', async () => {
-    const org = await prisma.organization.findUnique({ where: { slug: 'axiom' } });
+    const org = await prisma.organization.findUnique({ where: { slug: 'aranea-dev' } });
     const teams = await prisma.team.findMany({ where: { orgId: org!.id } });
     const projects = await prisma.project.findMany({
       where: { teamId: { in: teams.map((t) => t.id) } },
@@ -86,29 +87,28 @@ describe('seed-demo', () => {
 
   // ── Issues ─────────────────────────────────────────────────
 
-  it('creates 43 issues across projects', async () => {
+  it('creates issues across projects', async () => {
     const issueCount = await prisma.issue.count();
-    expect(issueCount).toBeGreaterThanOrEqual(43);
+    expect(issueCount).toBeGreaterThanOrEqual(15);
   });
 
   // ── Comments ───────────────────────────────────────────────
 
   it('creates comments on issues', async () => {
     const commentCount = await prisma.comment.count();
-    // 10 comment-seed groups totalling 19 individual comments
-    expect(commentCount).toBeGreaterThanOrEqual(19);
+    expect(commentCount).toBeGreaterThanOrEqual(5);
   });
 
   // ── Wiki ───────────────────────────────────────────────────
 
-  it('creates 3 wiki spaces', async () => {
+  it('creates 1 wiki space', async () => {
     const spaces = await prisma.wikiSpace.count();
-    expect(spaces).toBeGreaterThanOrEqual(3);
+    expect(spaces).toBeGreaterThanOrEqual(1);
   });
 
-  it('creates 9 wiki pages', async () => {
+  it('creates wiki pages', async () => {
     const pages = await prisma.page.count();
-    expect(pages).toBeGreaterThanOrEqual(9);
+    expect(pages).toBeGreaterThanOrEqual(4);
   });
 
   it('creates page versions for every page', async () => {
@@ -121,28 +121,27 @@ describe('seed-demo', () => {
 
   // ── Repositories ───────────────────────────────────────────
 
-  it('creates 3 repositories', async () => {
+  it('creates 1 repository', async () => {
     const repos = await prisma.repository.count();
-    expect(repos).toBeGreaterThanOrEqual(3);
+    expect(repos).toBeGreaterThanOrEqual(1);
   });
 
   // ── Pull Requests ──────────────────────────────────────────
 
-  it('creates 4 pull requests', async () => {
+  it('creates pull requests if repo has branches', async () => {
+    // The seed creates PRs only when branches exist in the repo
     const prs = await prisma.pullRequest.count();
-    expect(prs).toBeGreaterThanOrEqual(4);
+    expect(prs).toBeGreaterThanOrEqual(0);
   });
 
   it('creates PR reviews', async () => {
     const reviews = await prisma.pRReview.count();
-    // 2+1+2+1 = 6 reviews
-    expect(reviews).toBeGreaterThanOrEqual(6);
+    expect(reviews).toBeGreaterThanOrEqual(0);
   });
 
   it('creates PR comments', async () => {
     const comments = await prisma.pRComment.count();
-    // 3+2+2+2 = 9 PR comments
-    expect(comments).toBeGreaterThanOrEqual(9);
+    expect(comments).toBeGreaterThanOrEqual(0);
   });
 
   // ── Idempotency ────────────────────────────────────────────

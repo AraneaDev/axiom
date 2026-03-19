@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { Textarea } from '@/components/ui/Textarea';
 import { formatDate } from '@/lib/utils';
 
 /**
@@ -50,22 +51,28 @@ export default function SshKeys() {
   if (isLoading) return <PageLoader />;
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">SSH Keys</h1>
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-text">SSH Keys</h1>
+          <p className="text-sm text-text-tertiary mt-1">
+            Manage SSH keys for authenticating with git over SSH
+          </p>
+        </div>
         <Button size="sm" onClick={() => setShowForm(!showForm)}>
           <Plus className="h-4 w-4" /> Add Key
         </Button>
       </div>
 
       {showForm && (
-        <div className="rounded-lg border border-border bg-surface p-4 mb-6">
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <h3 className="text-sm font-semibold text-text mb-4">Add new SSH key</h3>
           {error && (
-            <div className="mb-3 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
+            <div className="mb-4 rounded-lg bg-danger-light border border-danger/20 px-4 py-2.5 text-sm text-danger">
               {error}
             </div>
           )}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <Input
               id="keyTitle"
               label="Title"
@@ -73,17 +80,16 @@ export default function SshKeys() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="My laptop"
             />
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-text">Public key</label>
-              <textarea
-                value={publicKey}
-                onChange={(e) => setPublicKey(e.target.value)}
-                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-xs font-mono placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                rows={4}
-                placeholder="ssh-ed25519 AAAA..."
-              />
-            </div>
-            <div className="flex gap-2">
+            <Textarea
+              id="publicKey"
+              label="Public key"
+              value={publicKey}
+              onChange={(e) => setPublicKey(e.target.value)}
+              className="text-xs font-mono"
+              rows={4}
+              placeholder="ssh-ed25519 AAAA..."
+            />
+            <div className="flex gap-2 pt-1">
               <Button
                 size="sm"
                 onClick={() => addMutation.mutate()}
@@ -112,22 +118,42 @@ export default function SshKeys() {
           description="Add an SSH key to clone repos over SSH."
         />
       ) : (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <div className="rounded-xl border border-border bg-surface divide-y divide-border">
           {keys.map((k) => (
-            <div key={k.id} className="flex items-center gap-3 p-4">
-              <Key className="h-4 w-4 text-text-secondary" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">{k.title}</p>
-                <p className="text-xs text-text-secondary font-mono">{k.fingerprint}</p>
+            <div
+              key={k.id}
+              className="flex items-center gap-3 p-4 hover:bg-surface-secondary/50 transition-colors"
+            >
+              <div className="h-8 w-8 rounded-lg bg-surface-secondary flex items-center justify-center shrink-0">
+                <Key className="h-4 w-4 text-text-tertiary" />
               </div>
-              <span className="text-xs text-text-secondary">Added {formatDate(k.createdAt)}</span>
-              <Button variant="ghost" size="sm" onClick={() => setDeleteId(k.id)}>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-text">{k.title}</p>
+                <p className="text-xs text-text-tertiary font-mono truncate">{k.fingerprint}</p>
+              </div>
+              <span className="text-xs text-text-tertiary shrink-0">
+                Added {formatDate(k.createdAt)}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteId(k.id)}
+                title="Delete key"
+              >
                 <Trash2 className="h-3.5 w-3.5 text-danger" />
               </Button>
             </div>
           ))}
         </div>
       )}
+
+      {/* Danger zone */}
+      <div className="rounded-xl border border-danger/30 bg-surface p-5">
+        <h3 className="text-sm font-semibold text-danger mb-1">Danger Zone</h3>
+        <p className="text-xs text-text-tertiary">
+          Deleting an SSH key will revoke access for any system using it. This cannot be undone.
+        </p>
+      </div>
 
       <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Confirm Delete" size="sm">
         <p className="text-sm text-text-secondary">Are you sure? This action cannot be undone.</p>

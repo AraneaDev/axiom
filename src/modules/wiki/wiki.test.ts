@@ -26,7 +26,7 @@ describe('Wiki API', () => {
       },
     });
 
-    const org = await prisma.org.create({
+    const org = await prisma.organization.create({
       data: {
         name: 'Wiki Test Org',
         slug: 'wiki-test-org',
@@ -39,20 +39,23 @@ describe('Wiki API', () => {
         name: 'Wiki Test Team',
         slug: 'wiki-test-team',
         orgId: org.id,
-        members: { create: { userId: user.id, role: 'OWNER' } },
+        members: { create: { userId: user.id, role: 'ADMIN' } },
       },
     });
     teamId = team.id;
 
-    const loginRes = await request(app).post('/api/auth/login').send({
-      login: 'wiki-test@axiom.dev',
-      password: 'testpassword123',
-    });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({
+        login: 'wiki-test@axiom.dev',
+        password: 'testpassword123',
+      });
     token = loginRes.body.accessToken;
   });
 
   afterAll(async () => {
-    await prisma.org.deleteMany({ where: { slug: 'wiki-test-org' } });
+    await prisma.organization.deleteMany({ where: { slug: 'wiki-test-org' } });
     await prisma.user.deleteMany({ where: { username: 'wiki-test-user' } });
     await prisma.$disconnect();
   });
@@ -62,6 +65,7 @@ describe('Wiki API', () => {
     const res = await request(app)
       .post(`/api/wiki/team/${teamId}/spaces`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Test Wiki Space', slug: 'test-wiki-space' });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('Test Wiki Space');
@@ -74,6 +78,7 @@ describe('Wiki API', () => {
     const res = await request(app)
       .post(`/api/wiki/spaces/${spaceId}/pages`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({
         title: 'Root Page',
         slug: 'root-page',
@@ -95,6 +100,7 @@ describe('Wiki API', () => {
     const res = await request(app)
       .post(`/api/wiki/spaces/${spaceId}/pages`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({
         title: 'Child Page',
         slug: 'child-page',
@@ -127,6 +133,7 @@ describe('Wiki API', () => {
     const res = await request(app)
       .patch(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ content: 'Updated root page content.', title: 'Root Page Updated' });
     expect(res.status).toBe(200);
     expect(res.body.title).toBe('Root Page Updated');
@@ -147,7 +154,8 @@ describe('Wiki API', () => {
   it('7. should delete the child page', async () => {
     const res = await request(app)
       .delete(`/api/wiki/spaces/${spaceId}/pages/${childPageSlug}`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
     expect(res.status).toBe(204);
   });
 });

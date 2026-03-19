@@ -30,7 +30,7 @@ describe('Issues API', () => {
     });
     _userId = user.id;
 
-    const org = await prisma.org.create({
+    const org = await prisma.organization.create({
       data: {
         name: 'Issues Test Org',
         slug: 'issues-test-org',
@@ -44,27 +44,31 @@ describe('Issues API', () => {
         name: 'Issues Test Team',
         slug: 'issues-test-team',
         orgId: org.id,
-        members: { create: { userId: user.id, role: 'OWNER' } },
+        members: { create: { userId: user.id, role: 'ADMIN' } },
       },
     });
     teamId = team.id;
 
-    const loginRes = await request(app).post('/api/auth/login').send({
-      login: 'issues-test@axiom.dev',
-      password: 'testpassword123',
-    });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({
+        login: 'issues-test@axiom.dev',
+        password: 'testpassword123',
+      });
     token = loginRes.body.accessToken;
 
     // Create project via API so default columns are created
     const projectRes = await request(app)
       .post(`/api/projects/team/${teamId}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Issues Test Project', slug: 'issues-test-project', identifier: 'ISS' });
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ name: 'Issues Test Project', slug: 'issues-test-project', prefix: 'ISS' });
     projectId = projectRes.body.id;
 
     // Fetch columns for board tests
     const boardRes = await request(app)
-      .get(`/api/issues/${projectId}/board`)
+      .get(`/api/projects/${projectId}/board`)
       .set('Authorization', `Bearer ${token}`);
     const columns = boardRes.body.columns ?? boardRes.body;
     _columnId = columns[0].id;
@@ -72,7 +76,7 @@ describe('Issues API', () => {
   });
 
   afterAll(async () => {
-    await prisma.org.deleteMany({ where: { slug: 'issues-test-org' } });
+    await prisma.organization.deleteMany({ where: { slug: 'issues-test-org' } });
     await prisma.user.deleteMany({ where: { username: 'issues-test-user' } });
     await prisma.$disconnect();
   });
@@ -80,8 +84,9 @@ describe('Issues API', () => {
   // 1. Create issue
   it('1. should create an issue', async () => {
     const res = await request(app)
-      .post(`/api/issues/${projectId}/issues`)
+      .post(`/api/projects/${projectId}/issues`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({
         title: 'First test issue',
         description: 'A test issue description',
@@ -97,21 +102,21 @@ describe('Issues API', () => {
   // 2. List issues
   it('2. should list issues for a project', async () => {
     const res = await request(app)
-      .get(`/api/issues/${projectId}/issues`)
+      .get(`/api/projects/${projectId}/issues`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBeGreaterThan(0);
+    expect(Array.isArray(res.body.issues)).toBe(true);
+    expect(res.body.issues.length).toBeGreaterThan(0);
   });
 
   // 3. List issues with filter
   it('3. should filter issues by priority', async () => {
     const res = await request(app)
-      .get(`/api/issues/${projectId}/issues?priority=MEDIUM`)
+      .get(`/api/projects/${projectId}/issues?priority=MEDIUM`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    res.body.forEach((issue: { priority: string }) => {
+    expect(Array.isArray(res.body.issues)).toBe(true);
+    res.body.issues.forEach((issue: { priority: string }) => {
       expect(issue.priority).toBe('MEDIUM');
     });
   });
@@ -119,7 +124,7 @@ describe('Issues API', () => {
   // 4. Get issue by number
   it('4. should get an issue by number', async () => {
     const res = await request(app)
-      .get(`/api/issues/${projectId}/issues/${issueNumber}`)
+      .get(`/api/projects/${projectId}/issues/${issueNumber}`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.number).toBe(issueNumber);
@@ -129,8 +134,9 @@ describe('Issues API', () => {
   // 5. Update issue title
   it('5. should update issue title', async () => {
     const res = await request(app)
-      .patch(`/api/issues/${projectId}/issues/${issueNumber}`)
+      .patch(`/api/projects/${projectId}/issues/${issueNumber}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ title: 'Updated test issue' });
     expect(res.status).toBe(200);
     expect(res.body.title).toBe('Updated test issue');
@@ -139,19 +145,21 @@ describe('Issues API', () => {
   // 6. Update issue priority and type
   it('6. should update issue priority and type', async () => {
     const res = await request(app)
-      .patch(`/api/issues/${projectId}/issues/${issueNumber}`)
+      .patch(`/api/projects/${projectId}/issues/${issueNumber}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ priority: 'HIGH', type: 'FEATURE' });
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ priority: 'HIGH', type: 'STORY' });
     expect(res.status).toBe(200);
     expect(res.body.priority).toBe('HIGH');
-    expect(res.body.type).toBe('FEATURE');
+    expect(res.body.type).toBe('STORY');
   });
 
   // 7. Add comment
   it('7. should add a comment to an issue', async () => {
     const res = await request(app)
-      .post(`/api/issues/${projectId}/issues/${issueNumber}/comments`)
+      .post(`/api/projects/${projectId}/issues/${issueNumber}/comments`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ body: 'This is a test comment' });
     expect(res.status).toBe(201);
     expect(res.body.body).toBe('This is a test comment');
@@ -160,7 +168,7 @@ describe('Issues API', () => {
   // 8. Get board view
   it('8. should get the board view', async () => {
     const res = await request(app)
-      .get(`/api/issues/${projectId}/board`)
+      .get(`/api/projects/${projectId}/board`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     const columns = res.body.columns ?? res.body;
@@ -171,8 +179,9 @@ describe('Issues API', () => {
   // 9. Move issue between columns
   it('9. should move an issue to a different column', async () => {
     const res = await request(app)
-      .patch(`/api/issues/${projectId}/issues/${issueNumber}`)
+      .patch(`/api/projects/${projectId}/issues/${issueNumber}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ columnId: secondColumnId });
     expect(res.status).toBe(200);
     expect(res.body.columnId).toBe(secondColumnId);
@@ -181,8 +190,9 @@ describe('Issues API', () => {
   // 10. Delete issue
   it('10. should delete an issue', async () => {
     const res = await request(app)
-      .delete(`/api/issues/${projectId}/issues/${issueNumber}`)
-      .set('Authorization', `Bearer ${token}`);
+      .delete(`/api/projects/${projectId}/issues/${issueNumber}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
     expect(res.status).toBe(204);
   });
 });

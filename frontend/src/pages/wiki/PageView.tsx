@@ -205,6 +205,7 @@ export default function PageView() {
   const [labelInput, setLabelInput] = useState('');
   const [showAddLabel, setShowAddLabel] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [moveTargetParent, setMoveTargetParent] = useState('');
 
   // We need spaceId -- get it from spaces list
@@ -355,7 +356,7 @@ export default function PageView() {
           <Breadcrumbs page={page} basePath={basePath} />
 
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold">{page.title}</h1>
+            <h1 className="text-2xl font-bold text-text">{page.title}</h1>
             <div className="flex gap-2">
               <ExportDropdown spaceId={currentSpace!.id} pageSlug={pageSlug!} />
               <Link to={`${basePath}/${pageSlug}/history`}>
@@ -382,12 +383,7 @@ export default function PageView() {
                 <DropdownItem onClick={() => copyMutation.mutate()}>
                   <Copy className="h-4 w-4" /> Copy
                 </DropdownItem>
-                <DropdownItem
-                  danger
-                  onClick={() => {
-                    if (window.confirm('Delete this page?')) deleteMutation.mutate();
-                  }}
-                >
+                <DropdownItem danger onClick={() => setShowDeleteConfirm(true)}>
                   <Trash2 className="h-4 w-4" /> Delete
                 </DropdownItem>
               </Dropdown>
@@ -421,7 +417,7 @@ export default function PageView() {
                 }}
                 className="flex items-center gap-1"
               >
-                <input
+                <Input
                   type="text"
                   value={labelInput}
                   onChange={(e) => setLabelInput(e.target.value)}
@@ -452,13 +448,15 @@ export default function PageView() {
           </div>
 
           {page.versions?.[0] && (
-            <p className="text-xs text-text-secondary mb-4">
+            <p className="text-xs text-text-tertiary mb-4">
               Last edited {formatRelative(page.versions[0].createdAt)} by{' '}
-              {page.versions[0].author?.displayName}
+              <span className="text-text-secondary">{page.versions[0].author?.displayName}</span>
             </p>
           )}
-          <div className="rounded-lg border border-border bg-surface p-6">
-            <MarkdownRenderer content={page.body} />
+          <div className="rounded-lg border border-border bg-surface p-8">
+            <div className="prose max-w-3xl leading-relaxed">
+              <MarkdownRenderer content={page.body} />
+            </div>
           </div>
 
           {/* Child pages */}
@@ -514,6 +512,34 @@ export default function PageView() {
               disabled={moveMutation.isPending}
             >
               <ArrowRight className="h-4 w-4" /> Move
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        open={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        title="Delete Page"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary">
+            Are you sure you want to delete &quot;{page.title}&quot;? This action cannot be undone.
+          </p>
+          <ModalFooter>
+            <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>
+              <X className="h-4 w-4" /> Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setShowDeleteConfirm(false);
+                deleteMutation.mutate();
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              <Trash2 className="h-4 w-4" /> Delete
             </Button>
           </ModalFooter>
         </div>

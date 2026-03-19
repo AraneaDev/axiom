@@ -2,7 +2,7 @@ import { Paperclip, Download, Trash2 } from 'lucide-react';
 
 import { Button } from './Button';
 
-import { getDownloadUrl } from '@/api/attachments.api';
+import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
 import { getAccessToken } from '@/api/client';
 import { cn } from '@/lib/utils';
@@ -49,7 +49,7 @@ export function AttachmentList({
   if (attachments.length === 0) return null;
 
   const handleDownload = async (attachment: AttachmentMeta) => {
-    const url = getDownloadUrl(attachment.id);
+    const url = attachmentsApi.getDownloadUrl(attachment.id);
     const token = getAccessToken();
     const res = await fetch(url, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -75,7 +75,7 @@ export function AttachmentList({
         >
           {isImage(att.mimeType) ? (
             <img
-              src={getDownloadUrl(att.id)}
+              src={attachmentsApi.getDownloadUrl(att.id)}
               alt={att.originalName}
               className="h-10 w-10 rounded object-cover border border-border-light"
             />

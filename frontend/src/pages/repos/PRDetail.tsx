@@ -31,7 +31,8 @@ import type { StatusCheck, CodeOwnerStatus } from '@/api/status-checks.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
-import { SuggestionBlock, hasSuggestion } from '@/components/SuggestionBlock';
+import { hasSuggestion } from '@/components/suggestion-utils';
+import { SuggestionBlock } from '@/components/SuggestionBlock';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
@@ -187,30 +188,31 @@ export default function PRDetail() {
   if (isLoading || !pr) return <PageLoader />;
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold">{pr.title}</h1>
+      <div className="border-b border-border pb-5">
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-xl font-bold text-text">{pr.title}</h1>
           <Badge variant={STATUS_BADGE[pr.status]}>{pr.status}</Badge>
         </div>
-        <p className="text-sm text-text-secondary">
-          #{pr.number} &middot;{' '}
-          <code className="bg-surface-secondary px-1.5 py-0.5 rounded text-xs">
+        <p className="text-sm text-text-secondary flex items-center gap-1.5 flex-wrap">
+          <span className="text-text-tertiary">#{pr.number}</span>
+          <span className="text-text-tertiary">&middot;</span>
+          <code className="bg-surface-secondary px-1.5 py-0.5 rounded text-xs font-mono">
             {pr.sourceBranch}
           </code>
-          {' → '}
-          <code className="bg-surface-secondary px-1.5 py-0.5 rounded text-xs">
+          <span className="text-text-tertiary">&rarr;</span>
+          <code className="bg-surface-secondary px-1.5 py-0.5 rounded text-xs font-mono">
             {pr.targetBranch}
           </code>
-          {' &middot; '}
-          {formatRelative(pr.createdAt)}
+          <span className="text-text-tertiary">&middot;</span>
+          <span className="text-text-tertiary">{formatRelative(pr.createdAt)}</span>
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main content */}
-        <div className="col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6">
           {/* Description */}
           {pr.body && (
             <div className="rounded-lg border border-border bg-surface p-4">
@@ -534,6 +536,7 @@ export default function PRDetail() {
                           rel="noopener noreferrer"
                           className="text-primary hover:underline"
                           title="View details"
+                          aria-label="View details"
                         >
                           <ExternalLink className="h-3 w-3" />
                         </a>
@@ -583,6 +586,7 @@ export default function PRDetail() {
                       <Button
                         className="rounded-l-none border-l border-l-primary-hover px-2"
                         disabled={!pr.mergeable || (mergeChecks != null && !mergeChecks.canMerge)}
+                        aria-label="Select merge strategy"
                       >
                         <ChevronDown className="h-4 w-4" />
                       </Button>

@@ -9,7 +9,6 @@ describe('Orgs API', () => {
   let token: string;
   let orgId: string;
   let secondUserId: string;
-  let memberId: string;
 
   beforeAll(async () => {
     const passwordHash = await bcrypt.hash('testpassword123', 4);
@@ -37,15 +36,18 @@ describe('Orgs API', () => {
     });
     secondUserId = secondUser.id;
 
-    const loginRes = await request(app).post('/api/auth/login').send({
-      login: 'orgs-test-owner@axiom.dev',
-      password: 'testpassword123',
-    });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({
+        login: 'orgs-test-owner@axiom.dev',
+        password: 'testpassword123',
+      });
     token = loginRes.body.accessToken;
   });
 
   afterAll(async () => {
-    await prisma.org.deleteMany({ where: { slug: 'orgs-test-org' } });
+    await prisma.organization.deleteMany({ where: { slug: 'orgs-test-org' } });
     await prisma.user.deleteMany({
       where: { username: { in: ['orgs-test-owner', 'orgs-test-member'] } },
     });
@@ -57,6 +59,7 @@ describe('Orgs API', () => {
     const res = await request(app)
       .post('/api/orgs')
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Orgs Test Org', slug: 'orgs-test-org' });
     expect(res.status).toBe(201);
     expect(res.body.slug).toBe('orgs-test-org');
@@ -88,6 +91,7 @@ describe('Orgs API', () => {
     const res = await request(app)
       .patch(`/api/orgs/${orgId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Orgs Test Org Updated' });
     expect(res.status).toBe(200);
     expect(res.body.name).toBe('Orgs Test Org Updated');
@@ -98,10 +102,10 @@ describe('Orgs API', () => {
     const res = await request(app)
       .post(`/api/orgs/${orgId}/members`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ userId: secondUserId, role: 'MEMBER' });
     expect(res.status).toBe(201);
     expect(res.body.userId).toBe(secondUserId);
-    memberId = res.body.id;
   });
 
   // 6. List members
@@ -118,8 +122,9 @@ describe('Orgs API', () => {
   // 7. Remove member
   it('7. should remove a member from the org', async () => {
     const res = await request(app)
-      .delete(`/api/orgs/${orgId}/members/${memberId}`)
-      .set('Authorization', `Bearer ${token}`);
+      .delete(`/api/orgs/${orgId}/members/${secondUserId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
     expect(res.status).toBe(204);
   });
 });

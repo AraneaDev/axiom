@@ -11,7 +11,7 @@ import {
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 
-import * as notificationsApi from '@/api/notifications.api';
+import { notificationsApi } from '@/api/notifications.api';
 import type { Notification } from '@/api/notifications.api';
 import { cn } from '@/lib/utils';
 

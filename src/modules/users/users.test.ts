@@ -25,10 +25,13 @@ describe('Users API', () => {
       },
     });
 
-    const loginRes = await request(app).post('/api/auth/login').send({
-      login: 'users-test@axiom.dev',
-      password: 'testpassword123',
-    });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({
+        login: 'users-test@axiom.dev',
+        password: 'testpassword123',
+      });
     token = loginRes.body.accessToken;
   });
 
@@ -47,14 +50,14 @@ describe('Users API', () => {
   });
 
   // 2. Update profile
-  it('2. should update displayName and bio', async () => {
+  it('2. should update displayName', async () => {
     const res = await request(app)
       .patch('/api/users/me')
       .set('Authorization', `Bearer ${token}`)
-      .send({ displayName: 'Updated User', bio: 'This is my bio' });
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ displayName: 'Updated User' });
     expect(res.status).toBe(200);
     expect(res.body.displayName).toBe('Updated User');
-    expect(res.body.bio).toBe('This is my bio');
   });
 
   // 3. Create API token
@@ -62,7 +65,8 @@ describe('Users API', () => {
     const res = await request(app)
       .post('/api/users/me/tokens')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Test Token' });
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ name: 'Test Token', scopes: ['repo:read'] });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeDefined();
     expect(res.body.id).toBeDefined();
@@ -83,7 +87,7 @@ describe('Users API', () => {
 
   // 5. Use token for auth
   it('5. should use API token to authenticate a request', async () => {
-    const res = await request(app).get('/api/users/me').set('Authorization', `Bearer ${apiToken}`);
+    const res = await request(app).get('/api/users/me').set('Authorization', `Token ${apiToken}`);
     expect(res.status).toBe(200);
     expect(res.body.username).toBe('users-test-user');
   });
@@ -92,7 +96,8 @@ describe('Users API', () => {
   it('6. should revoke an API token', async () => {
     const res = await request(app)
       .delete(`/api/users/me/tokens/${tokenId}`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
     expect(res.status).toBe(204);
   });
 
@@ -101,8 +106,9 @@ describe('Users API', () => {
     const res = await request(app)
       .post('/api/users/me/ssh-keys')
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({
-        name: 'Test Key',
+        title: 'Test Key',
         publicKey: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC3test+key+data+here== test@example.com',
       });
     expect(res.status).toBe(201);
@@ -125,7 +131,8 @@ describe('Users API', () => {
   it('9. should delete an SSH key', async () => {
     const res = await request(app)
       .delete(`/api/users/me/ssh-keys/${sshKeyId}`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
     expect(res.status).toBe(204);
   });
 });

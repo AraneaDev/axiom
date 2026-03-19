@@ -41,16 +41,20 @@ describe('Repos API', () => {
     });
 
     // Login to get token
-    const loginRes = await request(app).post('/api/auth/login').send({
-      login: 'repouser',
-      password: 'testpassword123',
-    });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({
+        login: 'repouser',
+        password: 'testpassword123',
+      });
     token = loginRes.body.accessToken;
 
     // Create org
     const orgRes = await request(app)
       .post('/api/orgs')
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Repo Org', slug: 'repo-org' });
     orgId = orgRes.body.id;
     _orgSlug = orgRes.body.slug;
@@ -59,6 +63,7 @@ describe('Repos API', () => {
     const teamRes = await request(app)
       .post(`/api/teams/org/${orgId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Dev', slug: 'dev' });
     teamId = teamRes.body.id;
     _teamSlug = teamRes.body.slug;
@@ -81,6 +86,7 @@ describe('Repos API', () => {
     const res = await request(app)
       .post(`/api/repos/team/${teamId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'My App', slug: 'my-app', description: 'Test repo' });
     expect(res.status).toBe(201);
     expect(res.body.slug).toBe('my-app');
@@ -94,8 +100,8 @@ describe('Repos API', () => {
       .get(`/api/repos/team/${teamId}`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.length).toBe(1);
-    expect(res.body[0].slug).toBe('my-app');
+    expect(res.body.data.length).toBe(1);
+    expect(res.body.data[0].slug).toBe('my-app');
   });
 
   it('3. should get repo detail', async () => {
@@ -111,6 +117,7 @@ describe('Repos API', () => {
     const res = await request(app)
       .patch(`/api/repos/${repoId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ description: 'Updated description' });
     expect(res.status).toBe(200);
     expect(res.body.description).toBe('Updated description');
@@ -120,6 +127,7 @@ describe('Repos API', () => {
     const res = await request(app)
       .post(`/api/repos/team/${teamId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'My App', slug: 'my-app' });
     expect(res.status).toBe(409);
   });
@@ -185,9 +193,9 @@ describe('Repos API', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(2);
-    expect(res.body.find((b: any) => b.name === 'main')).toBeDefined();
-    expect(res.body.find((b: any) => b.name === 'feat')).toBeDefined();
-    expect(res.body.find((b: any) => b.name === 'main').isDefault).toBe(true);
+    expect(res.body.find((b: Record<string, unknown>) => b.name === 'main')).toBeDefined();
+    expect(res.body.find((b: Record<string, unknown>) => b.name === 'feat')).toBeDefined();
+    expect(res.body.find((b: Record<string, unknown>) => b.name === 'main').isDefault).toBe(true);
   });
 
   it('8. should get branch detail', async () => {
@@ -210,12 +218,14 @@ describe('Repos API', () => {
     const createRes = await request(app)
       .post(`/api/repos/${repoId}/branches`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'test-branch', startPoint: sha });
     expect(createRes.status).toBe(201);
 
     const delRes = await request(app)
       .delete(`/api/repos/${repoId}/branches/test-branch`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
     expect(delRes.status).toBe(204);
   });
 
@@ -247,7 +257,7 @@ describe('Repos API', () => {
       .get(`/api/repos/${repoId}/tree/main/`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    const names = res.body.map((e: any) => e.name);
+    const names = res.body.map((e: Record<string, unknown>) => e.name);
     expect(names).toContain('README.md');
     expect(names).toContain('src');
   });
@@ -283,11 +293,13 @@ describe('Repos API', () => {
     const team2Res = await request(app)
       .post(`/api/teams/org/${orgId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'QA', slug: 'qa' });
 
     const res = await request(app)
       .post(`/api/repos/${repoId}/fork`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ targetTeamId: team2Res.body.id, slug: 'my-app-fork' });
     expect(res.status).toBe(201);
     expect(res.body.slug).toBe('my-app-fork');
@@ -305,11 +317,13 @@ describe('Repos API', () => {
     const createRes = await request(app)
       .post(`/api/repos/team/${teamId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'To Delete', slug: 'to-delete' });
 
     const res = await request(app)
       .delete(`/api/repos/${createRes.body.id}`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
     expect(res.status).toBe(204);
 
     // Should be gone

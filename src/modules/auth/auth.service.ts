@@ -9,6 +9,7 @@ import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import type { AuthPayload } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { logAudit } from '../audit/audit.service';
 
 const SALT_ROUNDS = 12;
@@ -236,8 +237,10 @@ export async function logout(userId: string, refreshTokenValue?: string) {
  * @param userId
  */
 export async function enableTwoFactor(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new AppError(404, 'User not found');
+  const user = await findOrThrow(
+    prisma.user.findUnique({ where: { id: userId } }),
+    'User not found',
+  );
   if (user.twoFactorEnabled) throw new AppError(400, '2FA already enabled');
 
   const secret = authenticator.generateSecret();

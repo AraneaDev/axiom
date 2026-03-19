@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { authApi } from '@/api/auth.api';
@@ -11,26 +13,16 @@ import { Spinner, PageLoader } from '@/components/ui/Spinner';
  */
 export default function Setup2FA() {
   const navigate = useNavigate();
-  const [otpauthUrl, setOtpauthUrl] = useState('');
-  const [secret, setSecret] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [initializing, setInitializing] = useState(true);
 
-  useEffect(() => {
-    authApi
-      .enable2FA()
-      .then((res) => {
-        setOtpauthUrl(res.otpauthUrl);
-        setSecret(res.secret);
-        setInitializing(false);
-      })
-      .catch(() => {
-        // 2FA might already be enabled
-        navigate('/');
-      });
-  }, [navigate]);
+  const { data, isLoading } = useQuery({
+    queryKey: ['2fa-setup'],
+    queryFn: () => authApi.enable2FA(),
+    retry: false,
+    meta: { onError: () => navigate('/') },
+  });
 
   async function handleVerify() {
     setError('');
@@ -45,7 +37,7 @@ export default function Setup2FA() {
     }
   }
 
-  if (initializing) return <PageLoader />;
+  if (isLoading || !data) return <PageLoader />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-secondary">
@@ -58,7 +50,7 @@ export default function Setup2FA() {
         <div className="flex flex-col items-center gap-4 mb-6">
           <div className="rounded-lg border border-border p-4 bg-surface">
             <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUrl)}`}
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.otpauthUrl)}`}
               alt="2FA QR Code"
               className="h-48 w-48"
             />
@@ -66,7 +58,7 @@ export default function Setup2FA() {
           <div className="text-center">
             <p className="text-xs text-text-secondary mb-1">Or enter this secret manually:</p>
             <code className="text-sm bg-surface-secondary px-3 py-1 rounded-md font-mono select-all">
-              {secret}
+              {data.secret}
             </code>
           </div>
         </div>
@@ -86,7 +78,13 @@ export default function Setup2FA() {
             className="flex-1"
           />
           <Button onClick={handleVerify} disabled={loading || code.length !== 6}>
-            {loading ? <Spinner className="h-4 w-4" /> : 'Verify'}
+            {loading ? (
+              <Spinner className="h-4 w-4" />
+            ) : (
+              <>
+                <ShieldCheck className="h-4 w-4" /> Verify
+              </>
+            )}
           </Button>
         </div>
       </div>

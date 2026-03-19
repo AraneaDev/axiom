@@ -127,7 +127,7 @@ export function CommandPalette() {
     if (items.length === 0) return null;
     return (
       <div>
-        <div className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+        <div className="flex items-center gap-2 px-4 py-2 text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
           {icon}
           {label}
         </div>
@@ -140,7 +140,7 @@ export function CommandPalette() {
               onClick={() => selectItem(item)}
               onMouseEnter={() => setActiveIndex(globalIdx)}
               className={cn(
-                'flex w-full items-center justify-between px-4 py-2.5 text-sm transition-colors',
+                'flex w-full items-center justify-between mx-2 px-2 py-2.5 text-sm transition-colors rounded-md',
                 globalIdx === activeIndex
                   ? 'bg-primary-light text-primary'
                   : 'text-text hover:bg-surface-tertiary',
@@ -161,19 +161,19 @@ export function CommandPalette() {
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={toggleSearch} />
 
       {/* Palette */}
-      <div className="relative w-full max-w-xl rounded-xl border border-border bg-surface-elevated shadow-2xl animate-fade-in">
+      <div className="relative w-full max-w-xl rounded-xl border border-border bg-surface shadow-2xl animate-scale-in">
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border-light">
-          <Search className="h-4 w-4 text-text-tertiary flex-shrink-0" />
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border-light">
+          <Search className="h-5 w-5 text-text-tertiary flex-shrink-0" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search issues, wiki, repos... (type:bug status:open)"
-            className="flex-1 bg-transparent text-sm text-text placeholder:text-text-tertiary outline-none"
+            className="flex-1 bg-transparent text-base text-text placeholder:text-text-tertiary outline-none"
           />
-          <kbd className="hidden sm:inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary">
+          <kbd className="hidden sm:inline-flex items-center rounded bg-surface-tertiary px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary">
             ESC
           </kbd>
         </div>
@@ -199,15 +199,19 @@ export function CommandPalette() {
 
         {/* Footer hint */}
         {flatItems.length > 0 && (
-          <div className="flex items-center gap-4 border-t border-border-light px-4 py-2 text-[10px] text-text-tertiary">
-            <span>
-              <kbd className="font-semibold">&uarr;&darr;</kbd> navigate
+          <div className="flex items-center gap-3 border-t border-border-light px-4 py-2.5 text-[10px] text-text-tertiary">
+            <span className="flex items-center gap-1">
+              <kbd className="bg-surface-tertiary rounded px-1.5 py-0.5 font-medium">
+                &uarr;&darr;
+              </kbd>{' '}
+              navigate
             </span>
-            <span>
-              <kbd className="font-semibold">&crarr;</kbd> open
+            <span className="flex items-center gap-1">
+              <kbd className="bg-surface-tertiary rounded px-1.5 py-0.5 font-medium">&crarr;</kbd>{' '}
+              open
             </span>
-            <span>
-              <kbd className="font-semibold">esc</kbd> close
+            <span className="flex items-center gap-1">
+              <kbd className="bg-surface-tertiary rounded px-1.5 py-0.5 font-medium">esc</kbd> close
             </span>
           </div>
         )}

@@ -6,12 +6,15 @@ import { orgsApi } from '@/api/orgs.api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { Textarea } from '@/components/ui/Textarea';
+import { useToast } from '@/components/ui/Toast';
 
 /**
  *
  */
 export default function CreateOrg() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
@@ -34,6 +37,7 @@ export default function CreateOrg() {
     setLoading(true);
     try {
       const org = await orgsApi.create({ name, slug, description: description || undefined });
+      toast.success('Organization created');
       navigate(`/${org.slug}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create organization');
@@ -69,19 +73,14 @@ export default function CreateOrg() {
           placeholder="my-company"
           required
         />
-        <div className="flex flex-col gap-1">
-          <label htmlFor="desc" className="text-sm font-medium text-text">
-            Description (optional)
-          </label>
-          <textarea
-            id="desc"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            rows={3}
-            placeholder="What is this organization for?"
-          />
-        </div>
+        <Textarea
+          id="desc"
+          label="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          placeholder="What is this organization for?"
+        />
         <Button type="submit" disabled={loading}>
           {loading ? (
             <Spinner className="h-4 w-4" />

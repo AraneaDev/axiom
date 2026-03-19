@@ -45,7 +45,10 @@ export async function get(req: Request, res: Response, next: NextFunction) {
  */
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const teams = await teamsService.listOrgTeams(param(req, 'orgId'));
+    const teams = await teamsService.listOrgTeams(
+      param(req, 'orgId'),
+      req.query as Record<string, string>,
+    );
     res.json(teams);
   } catch (err) {
     next(err);

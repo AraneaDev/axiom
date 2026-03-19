@@ -3,7 +3,10 @@ import { get, post, patch, del } from './client';
 import type { Team } from '@/lib/types';
 
 export const teamsApi = {
-  listByOrg: (orgId: string) => get<Team[]>(`/teams/org/${orgId}`),
+  listByOrg: async (orgId: string) => {
+    const res = await get<{ data: Team[] }>(`/teams/org/${orgId}`);
+    return res.data;
+  },
   get: (teamId: string) => get<Team>(`/teams/${teamId}`),
   create: (orgId: string, data: { name: string; slug: string; description?: string }) =>
     post<Team>(`/teams/org/${orgId}`, data),

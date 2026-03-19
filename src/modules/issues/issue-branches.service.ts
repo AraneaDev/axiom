@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
+import { REPO_URL_SELECT } from '../../utils/prisma-selects';
 
 /**
  *
@@ -40,14 +41,7 @@ export async function getBranches(projectId: string, issueNumber: number) {
   return prisma.issueBranch.findMany({
     where: { issueId: issue.id },
     include: {
-      repo: {
-        select: {
-          id: true,
-          slug: true,
-          name: true,
-          team: { select: { slug: true, org: { select: { slug: true } } } },
-        },
-      },
+      repo: { select: REPO_URL_SELECT },
     },
     orderBy: { createdAt: 'desc' },
   });

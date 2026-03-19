@@ -1,5 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
+import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
  * Create a new sprint in PLANNING status.
@@ -14,8 +16,7 @@ export async function createSprint(
   projectId: string,
   data: { name: string; goal?: string; startDate: string; endDate: string },
 ) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
   return prisma.sprint.create({
     data: {
@@ -29,7 +30,7 @@ export async function createSprint(
     include: {
       issues: {
         include: {
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
           column: { select: { id: true, name: true } },
         },
@@ -45,8 +46,7 @@ export async function createSprint(
  * @param opts.status
  */
 export async function listSprints(projectId: string, opts?: { status?: string }) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
   const where: Record<string, unknown> = { projectId };
   if (opts?.status) {
@@ -58,7 +58,7 @@ export async function listSprints(projectId: string, opts?: { status?: string })
     include: {
       issues: {
         include: {
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
           column: { select: { id: true, name: true } },
         },
@@ -83,7 +83,7 @@ export async function getSprint(sprintId: string) {
     include: {
       issues: {
         include: {
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
           column: { select: { id: true, name: true } },
         },
@@ -111,8 +111,7 @@ export async function updateSprint(
   sprintId: string,
   data: { name?: string; goal?: string; startDate?: string; endDate?: string },
 ) {
-  const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
-  if (!sprint) throw new AppError(404, 'Sprint not found');
+  await findOrThrow(prisma.sprint.findUnique({ where: { id: sprintId } }), 'Sprint not found');
 
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
@@ -126,7 +125,7 @@ export async function updateSprint(
     include: {
       issues: {
         include: {
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
           column: { select: { id: true, name: true } },
         },
@@ -140,8 +139,10 @@ export async function updateSprint(
  * @param sprintId
  */
 export async function startSprint(sprintId: string) {
-  const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
-  if (!sprint) throw new AppError(404, 'Sprint not found');
+  const sprint = await findOrThrow(
+    prisma.sprint.findUnique({ where: { id: sprintId } }),
+    'Sprint not found',
+  );
   if (sprint.status !== 'PLANNING') {
     throw new AppError(400, 'Only sprints in PLANNING status can be started');
   }
@@ -160,7 +161,7 @@ export async function startSprint(sprintId: string) {
     include: {
       issues: {
         include: {
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
           column: { select: { id: true, name: true } },
         },
@@ -175,20 +176,24 @@ export async function startSprint(sprintId: string) {
  * @param moveToSprintId
  */
 export async function completeSprint(sprintId: string, moveToSprintId?: string) {
-  const sprint = await prisma.sprint.findUnique({
-    where: { id: sprintId },
-    include: {
-      issues: { include: { column: true } },
-    },
-  });
-  if (!sprint) throw new AppError(404, 'Sprint not found');
+  const sprint = await findOrThrow(
+    prisma.sprint.findUnique({
+      where: { id: sprintId },
+      include: {
+        issues: { include: { column: true } },
+      },
+    }),
+    'Sprint not found',
+  );
   if (sprint.status !== 'ACTIVE') {
     throw new AppError(400, 'Only active sprints can be completed');
   }
 
   if (moveToSprintId) {
-    const targetSprint = await prisma.sprint.findUnique({ where: { id: moveToSprintId } });
-    if (!targetSprint) throw new AppError(404, 'Target sprint not found');
+    await findOrThrow(
+      prisma.sprint.findUnique({ where: { id: moveToSprintId } }),
+      'Target sprint not found',
+    );
   }
 
   // Find incomplete issues (not in a "done" column)
@@ -208,7 +213,7 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
     include: {
       issues: {
         include: {
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
           column: { select: { id: true, name: true } },
         },
@@ -223,8 +228,10 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
  * @param issueIds
  */
 export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
-  const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
-  if (!sprint) throw new AppError(404, 'Sprint not found');
+  const sprint = await findOrThrow(
+    prisma.sprint.findUnique({ where: { id: sprintId } }),
+    'Sprint not found',
+  );
 
   await prisma.issue.updateMany({
     where: { id: { in: issueIds }, projectId: sprint.projectId },
@@ -239,8 +246,7 @@ export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
  * @param issueId
  */
 export async function removeIssueFromSprint(issueId: string) {
-  const issue = await prisma.issue.findUnique({ where: { id: issueId } });
-  if (!issue) throw new AppError(404, 'Issue not found');
+  await findOrThrow(prisma.issue.findUnique({ where: { id: issueId } }), 'Issue not found');
 
   return prisma.issue.update({
     where: { id: issueId },
@@ -254,8 +260,7 @@ export async function removeIssueFromSprint(issueId: string) {
  * @param sprintCount
  */
 export async function getVelocity(projectId: string, sprintCount = 5) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
   const completedSprints = await prisma.sprint.findMany({
     where: { projectId, status: 'COMPLETED' },
@@ -286,13 +291,15 @@ export async function getVelocity(projectId: string, sprintCount = 5) {
  * @param projectId
  */
 export async function getBacklog(projectId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  const project = await findOrThrow(
+    prisma.project.findUnique({ where: { id: projectId } }),
+    'Project not found',
+  );
 
   const issues = await prisma.issue.findMany({
     where: { projectId, sprintId: null },
     include: {
-      assignee: { select: { id: true, username: true, displayName: true } },
+      assignee: { select: USER_BASIC_SELECT },
       labels: true,
       column: { select: { id: true, name: true } },
     },

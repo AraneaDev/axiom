@@ -2,6 +2,8 @@ import crypto from 'crypto';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
+import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
 // ─── Profile ────────────────────────────────────────────────
 
@@ -10,20 +12,21 @@ import { AppError } from '../../middleware/errorHandler';
  * @param userId
  */
 export async function getProfile(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      username: true,
-      displayName: true,
-      avatarUrl: true,
-      twoFactorEnabled: true,
-      createdAt: true,
-    },
-  });
-  if (!user) throw new AppError(404, 'User not found');
-  return user;
+  return findOrThrow(
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        displayName: true,
+        avatarUrl: true,
+        twoFactorEnabled: true,
+        createdAt: true,
+      },
+    }),
+    'User not found',
+  );
 }
 
 /**
@@ -57,7 +60,7 @@ export async function searchUsers(query: string, limit = 10) {
         { displayName: { contains: query, mode: 'insensitive' } },
       ],
     },
-    select: { id: true, username: true, displayName: true, avatarUrl: true },
+    select: USER_WITH_AVATAR_SELECT,
     take: limit,
     orderBy: { username: 'asc' },
   });
@@ -211,8 +214,7 @@ export async function addSshKey(userId: string, data: { title: string; publicKey
  * @param keyId
  */
 export async function deleteSshKey(userId: string, keyId: string) {
-  const key = await prisma.sshKey.findFirst({ where: { id: keyId, userId } });
-  if (!key) throw new AppError(404, 'SSH key not found');
+  await findOrThrow(prisma.sshKey.findFirst({ where: { id: keyId, userId } }), 'SSH key not found');
   await prisma.sshKey.delete({ where: { id: keyId } });
 }
 
@@ -283,7 +285,9 @@ export async function createApiToken(
  * @param tokenId
  */
 export async function deleteApiToken(userId: string, tokenId: string) {
-  const token = await prisma.apiToken.findFirst({ where: { id: tokenId, userId } });
-  if (!token) throw new AppError(404, 'API token not found');
+  await findOrThrow(
+    prisma.apiToken.findFirst({ where: { id: tokenId, userId } }),
+    'API token not found',
+  );
   await prisma.apiToken.delete({ where: { id: tokenId } });
 }

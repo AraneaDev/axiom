@@ -24,7 +24,7 @@ describe('Projects API', () => {
       },
     });
 
-    const org = await prisma.org.create({
+    const org = await prisma.organization.create({
       data: {
         name: 'Projects Test Org',
         slug: 'projects-test-org',
@@ -37,20 +37,23 @@ describe('Projects API', () => {
         name: 'Projects Test Team',
         slug: 'projects-test-team',
         orgId: org.id,
-        members: { create: { userId: user.id, role: 'OWNER' } },
+        members: { create: { userId: user.id, role: 'ADMIN' } },
       },
     });
     teamId = team.id;
 
-    const loginRes = await request(app).post('/api/auth/login').send({
-      login: 'projects-test@axiom.dev',
-      password: 'testpassword123',
-    });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({
+        login: 'projects-test@axiom.dev',
+        password: 'testpassword123',
+      });
     token = loginRes.body.accessToken;
   });
 
   afterAll(async () => {
-    await prisma.org.deleteMany({ where: { slug: 'projects-test-org' } });
+    await prisma.organization.deleteMany({ where: { slug: 'projects-test-org' } });
     await prisma.user.deleteMany({ where: { username: 'projects-test-user' } });
     await prisma.$disconnect();
   });
@@ -60,7 +63,8 @@ describe('Projects API', () => {
     const res = await request(app)
       .post(`/api/projects/team/${teamId}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Projects Test Project', slug: 'projects-test-project', identifier: 'PTP' });
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ name: 'Projects Test Project', slug: 'projects-test-project', prefix: 'PTP' });
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();
     expect(res.body.slug).toBe('projects-test-project');
@@ -68,7 +72,7 @@ describe('Projects API', () => {
 
     // Verify via board endpoint that 5 default columns were created
     const boardRes = await request(app)
-      .get(`/api/issues/${projectId}/board`)
+      .get(`/api/projects/${projectId}/board`)
       .set('Authorization', `Bearer ${token}`);
     expect(boardRes.status).toBe(200);
     const columns = boardRes.body.columns ?? boardRes.body;
@@ -101,6 +105,7 @@ describe('Projects API', () => {
     const res = await request(app)
       .patch(`/api/projects/${projectId}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Projects Test Project Updated' });
     expect(res.status).toBe(200);
     expect(res.body.name).toBe('Projects Test Project Updated');
@@ -109,7 +114,7 @@ describe('Projects API', () => {
   // 5. Get board columns
   it('5. should get board columns for a project', async () => {
     const res = await request(app)
-      .get(`/api/issues/${projectId}/board`)
+      .get(`/api/projects/${projectId}/board`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     const columns = res.body.columns ?? res.body;

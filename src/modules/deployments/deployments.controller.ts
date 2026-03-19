@@ -1,6 +1,14 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 
+import { AppError } from '../../middleware/errorHandler';
+import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
+import {
+  validate,
+  createEnvironmentSchema,
+  updateEnvironmentSchema,
+  createDeploymentSchema,
+} from '../../utils/validation';
 
 import * as svc from './deployments.service';
 
@@ -8,105 +16,133 @@ import * as svc from './deployments.service';
  * POST /:repoId/environments
  * @param req
  * @param res
+ * @param next
  */
-export async function createEnvironment(req: Request, res: Response) {
-  const repoId = param(req, 'repoId');
-  const { name, url, protectionRules } = req.body;
-  if (!name) {
-    res.status(400).json({ error: { message: 'name is required' } });
-    return;
+export async function createEnvironment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const repoId = param(req, 'repoId');
+    const body = validate(createEnvironmentSchema, req.body);
+    const env = await svc.createEnvironment(repoId, body);
+    res.status(201).json(env);
+  } catch (err) {
+    next(err);
   }
-  const env = await svc.createEnvironment(repoId, { name, url, protectionRules });
-  res.status(201).json(env);
 }
 
 /**
  * GET /:repoId/environments
  * @param req
  * @param res
+ * @param next
  */
-export async function listEnvironments(req: Request, res: Response) {
-  const repoId = param(req, 'repoId');
-  res.json(await svc.listEnvironments(repoId));
+export async function listEnvironments(req: Request, res: Response, next: NextFunction) {
+  try {
+    const repoId = param(req, 'repoId');
+    res.json(await svc.listEnvironments(repoId));
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**
  * PATCH /:repoId/environments/:envId
  * @param req
  * @param res
+ * @param next
  */
-export async function updateEnvironment(req: Request, res: Response) {
-  const envId = param(req, 'envId');
-  const { name, url, protectionRules } = req.body;
-  res.json(await svc.updateEnvironment(envId, { name, url, protectionRules }));
+export async function updateEnvironment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const envId = param(req, 'envId');
+    const body = validate(updateEnvironmentSchema, req.body);
+    res.json(await svc.updateEnvironment(envId, body));
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**
  * DELETE /:repoId/environments/:envId
  * @param req
  * @param res
+ * @param next
  */
-export async function deleteEnvironment(req: Request, res: Response) {
-  const envId = param(req, 'envId');
-  await svc.deleteEnvironment(envId);
-  res.status(204).end();
+export async function deleteEnvironment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const envId = param(req, 'envId');
+    await svc.deleteEnvironment(envId);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**
  * POST /:repoId/environments/:envId/deployments
  * @param req
  * @param res
+ * @param next
  */
-export async function createDeployment(req: Request, res: Response) {
-  const envId = param(req, 'envId');
-  const { commitSha, pipelineRunId, status } = req.body;
-  if (!commitSha) {
-    res.status(400).json({ error: { message: 'commitSha is required' } });
-    return;
+export async function createDeployment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const envId = param(req, 'envId');
+    const body = validate(createDeploymentSchema, req.body);
+    const deployment = await svc.createDeployment(envId, {
+      ...body,
+      deployedById: req.userId!,
+    });
+    res.status(201).json(deployment);
+  } catch (err) {
+    next(err);
   }
-  const deployment = await svc.createDeployment(envId, {
-    commitSha,
-    pipelineRunId,
-    deployedById: req.userId!,
-    status,
-  });
-  res.status(201).json(deployment);
 }
 
 /**
  * GET /:repoId/environments/:envId/deployments
  * @param req
  * @param res
+ * @param next
  */
-export async function listDeployments(req: Request, res: Response) {
-  const envId = param(req, 'envId');
-  const limit = req.query.limit ? Number(req.query.limit) : undefined;
-  const offset = req.query.offset ? Number(req.query.offset) : undefined;
-  res.json(await svc.listDeployments(envId, { limit, offset }));
+export async function listDeployments(req: Request, res: Response, next: NextFunction) {
+  try {
+    const envId = param(req, 'envId');
+    const { take, skip } = parsePagination(req.query as Record<string, string>);
+    res.json(await svc.listDeployments(envId, { limit: take, offset: skip }));
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**
  * GET /:repoId/environments/:envId/deployments/:deploymentId
  * @param req
  * @param res
+ * @param next
  */
-export async function getDeployment(req: Request, res: Response) {
-  const deploymentId = param(req, 'deploymentId');
-  const deployment = await svc.getDeployment(deploymentId);
-  if (!deployment) {
-    res.status(404).json({ error: { message: 'Deployment not found' } });
-    return;
+export async function getDeployment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const deploymentId = param(req, 'deploymentId');
+    const deployment = await svc.getDeployment(deploymentId);
+    if (!deployment) {
+      throw new AppError(404, 'Deployment not found');
+    }
+    res.json(deployment);
+  } catch (err) {
+    next(err);
   }
-  res.json(deployment);
 }
 
 /**
  * GET /:repoId/commits/:sha/deployments
  * @param req
  * @param res
+ * @param next
  */
-export async function getDeploymentsByCommit(req: Request, res: Response) {
-  const repoId = param(req, 'repoId');
-  const sha = param(req, 'sha');
-  res.json(await svc.getDeploymentsByCommit(repoId, sha));
+export async function getDeploymentsByCommit(req: Request, res: Response, next: NextFunction) {
+  try {
+    const repoId = param(req, 'repoId');
+    const sha = param(req, 'sha');
+    res.json(await svc.getDeploymentsByCommit(repoId, sha));
+  } catch (err) {
+    next(err);
+  }
 }

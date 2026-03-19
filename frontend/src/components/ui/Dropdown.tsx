@@ -41,7 +41,7 @@ export function Dropdown({ trigger, children, align = 'left', className }: Dropd
       {open && (
         <div
           className={cn(
-            'absolute z-40 mt-1 min-w-[10rem] rounded-lg border border-border bg-surface-elevated shadow-lg py-1 animate-fade-in',
+            'absolute z-40 mt-1 min-w-[10rem] rounded-lg border border-border bg-surface-elevated shadow-lg py-1 animate-slide-down',
             align === 'right' ? 'right-0' : 'left-0',
           )}
         >
@@ -236,7 +236,7 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(
           </button>
 
           {open && (
-            <div className="absolute z-40 mt-1 w-full rounded-lg border border-border bg-surface-elevated shadow-lg py-1 max-h-60 overflow-y-auto animate-fade-in">
+            <div className="absolute z-40 mt-1 w-full rounded-lg border border-border bg-surface-elevated shadow-lg py-1 max-h-60 overflow-y-auto animate-slide-down">
               {options.map((opt) => {
                 const isSelected = multiple
                   ? Array.isArray(selected) && selected.includes(opt.value)

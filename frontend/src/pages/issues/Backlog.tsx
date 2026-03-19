@@ -20,6 +20,7 @@ import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -306,23 +307,17 @@ function SprintPanel({
               {sprint.issues.filter((i) => !i.column?.name?.toLowerCase().includes('done')).length}{' '}
               incomplete issues will be moved.
             </p>
-            <div>
-              <label className="block text-sm font-medium mb-1">Move incomplete issues to:</label>
-              <select
-                value={moveToSprintId}
-                onChange={(e) => setMoveToSprintId(e.target.value)}
-                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
-              >
-                <option value="">Backlog (no sprint)</option>
-                {allSprints
+            <Select
+              label="Move incomplete issues to:"
+              value={moveToSprintId}
+              onChange={(v) => setMoveToSprintId(v as string)}
+              options={[
+                { value: '', label: 'Backlog (no sprint)' },
+                ...allSprints
                   .filter((s) => s.id !== sprint.id && s.status !== 'COMPLETED')
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
+                  .map((s) => ({ value: s.id, label: s.name })),
+              ]}
+            />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowCompleteModal(false)}>
                 <Trash2 className="h-4 w-4" /> Cancel

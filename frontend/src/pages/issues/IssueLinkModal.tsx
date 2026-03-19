@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { issuesApi } from '@/api/issues.api';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { PRIORITY_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -79,22 +80,12 @@ export default function IssueLinkModal({ projectId, issueNumber, onClose, onLink
           </Button>
         </div>
         <div className="p-4 space-y-3">
-          <div>
-            <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
-              Relationship
-            </label>
-            <select
-              value={linkType}
-              onChange={(e) => setLinkType(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
-            >
-              {LINK_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Relationship"
+            value={linkType}
+            onChange={(v) => setLinkType(v as string)}
+            options={LINK_TYPES}
+          />
           <Input
             label="Search issues"
             value={search}

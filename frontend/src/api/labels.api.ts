@@ -7,7 +7,10 @@ export interface LabelWithDescription extends Label {
 }
 
 export const labelsApi = {
-  list: (projectId: string) => get<LabelWithDescription[]>(`/projects/${projectId}/labels`),
+  list: async (projectId: string) => {
+    const res = await get<{ data: LabelWithDescription[] }>(`/projects/${projectId}/labels`);
+    return res.data;
+  },
   create: (projectId: string, data: { name: string; color: string; description?: string }) =>
     post<LabelWithDescription>(`/projects/${projectId}/labels`, data),
   update: (

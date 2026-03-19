@@ -329,19 +329,23 @@ export default function Dashboard() {
 
   if (orgsLoading || dashLoading) return <PageLoader />;
 
-  const hour = new Date().getHours();
+  const now = new Date();
+  const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const dateStr = now.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">
             {greeting}, {user?.displayName?.split(' ')[0]}
           </h1>
-          <p className="text-text-secondary text-sm mt-0.5">
-            Here is an overview of your workspace
-          </p>
+          <p className="text-text-tertiary text-sm mt-1">{dateStr}</p>
         </div>
         <Link to="/orgs/new">
           <Button variant="outline" size="sm">
@@ -365,8 +369,49 @@ export default function Dashboard() {
         />
       ) : (
         <>
+          {/* Quick stats */}
+          {dashboardData && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[
+                {
+                  icon: ListChecks,
+                  label: 'Open Issues',
+                  value: dashboardData.assignedIssues?.length ?? 0,
+                },
+                {
+                  icon: GitPullRequest,
+                  label: 'Review Requests',
+                  value: dashboardData.reviewRequests?.length ?? 0,
+                },
+                {
+                  icon: CalendarClock,
+                  label: 'Due Soon',
+                  value: dashboardData.upcomingDueDates?.length ?? 0,
+                },
+                {
+                  icon: Activity,
+                  label: 'Recent Events',
+                  value: dashboardData.recentActivity?.length ?? 0,
+                },
+              ].map(({ icon: StatIcon, label, value }) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-border bg-surface p-4 flex items-center gap-3 hover:border-primary/30 transition-colors"
+                >
+                  <div className="h-9 w-9 rounded-lg bg-primary-light flex items-center justify-center shrink-0">
+                    <StatIcon className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-text leading-none">{value}</p>
+                    <p className="text-xs text-text-tertiary mt-1">{label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Widget grid */}
-          <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 mb-8">
+          <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
             <MyIssuesWidget issues={dashboardData?.assignedIssues ?? []} />
             <ReviewRequestsWidget prs={dashboardData?.reviewRequests ?? []} />
             <UpcomingDueDatesWidget issues={dashboardData?.upcomingDueDates ?? []} />
@@ -374,51 +419,53 @@ export default function Dashboard() {
           </div>
 
           {/* Org cards */}
-          <h2 className="text-lg font-semibold text-text mb-3">Organizations</h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            {orgs.map((org) => (
-              <Link
-                key={org.id}
-                to={`/${org.slug}`}
-                className="group rounded-xl border border-border bg-surface overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-200"
-              >
-                <div className="h-16 bg-primary-light flex items-end px-5 pb-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center shadow-sm -mb-5 ring-2 ring-surface">
-                    <span className="text-white text-sm font-bold">{org.name[0]}</span>
+          <div>
+            <h2 className="text-lg font-semibold text-text mb-3">Organizations</h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {orgs.map((org) => (
+                <Link
+                  key={org.id}
+                  to={`/${org.slug}`}
+                  className="group rounded-xl border border-border bg-surface overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-200"
+                >
+                  <div className="h-16 bg-primary-light flex items-end px-5 pb-3">
+                    <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center shadow-sm -mb-5 ring-2 ring-surface">
+                      <span className="text-white text-sm font-bold">{org.name[0]}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="p-5 pt-7">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-text text-sm truncate">{org.name}</h3>
-                    <Badge variant="outline" size="sm">
-                      {org.role?.toLowerCase()}
-                    </Badge>
+                  <div className="p-5 pt-7">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-text text-sm truncate">{org.name}</h3>
+                      <Badge variant="outline" size="sm">
+                        {org.role?.toLowerCase()}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-text-tertiary mb-2">/{org.slug}</p>
+                    {org.description && (
+                      <p className="text-sm text-text-secondary line-clamp-2 mb-3">
+                        {org.description}
+                      </p>
+                    )}
+                    <div className="flex items-center text-xs text-text-tertiary group-hover:text-primary transition-colors">
+                      <span>Open workspace</span>
+                      <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
                   </div>
-                  <p className="text-xs text-text-tertiary mb-2">/{org.slug}</p>
-                  {org.description && (
-                    <p className="text-sm text-text-secondary line-clamp-2 mb-3">
-                      {org.description}
-                    </p>
-                  )}
-                  <div className="flex items-center text-xs text-text-tertiary group-hover:text-primary transition-colors">
-                    <span>Open workspace</span>
-                    <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              ))}
+            </div>
           </div>
 
           {/* Teams overview */}
           {teams && teams.length > 0 && (
-            <>
+            <div>
               <h2 className="text-lg font-semibold text-text mb-3">Teams</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {teams.map((team) => (
                   <TeamCard key={team.id} team={team} orgSlug={firstOrg!.slug} />
                 ))}
               </div>
-            </>
+            </div>
           )}
         </>
       )}

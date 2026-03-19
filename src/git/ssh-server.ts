@@ -5,6 +5,7 @@ import fs from 'fs';
 import { Server, type Connection, type AuthContext } from 'ssh2';
 
 import { prisma } from '../config/database';
+import { logger } from '../utils/logger';
 
 const SSH_PORT = parseInt(process.env.SSH_PORT || '2222', 10);
 const HOST_KEY_PATH = process.env.SSH_HOST_KEY || '/data/ssh/host_key';
@@ -201,7 +202,7 @@ export function startSshServer() {
   );
 
   server.listen(SSH_PORT, '0.0.0.0', () => {
-    console.warn(`Axiom SSH server listening on port ${SSH_PORT}`);
+    logger.info('Axiom SSH server listening', { port: SSH_PORT });
   });
 
   return server;

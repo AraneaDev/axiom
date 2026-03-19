@@ -31,30 +31,34 @@ type Segment = { type: 'html'; content: string } | { type: 'mermaid'; content: s
 
 const MERMAID_FENCE = /```mermaid\s*\n([\s\S]*?)```/g;
 
-function linkifyMentionsAndRefs(html: string): string {
+function linkifyMentionsAndRefs(html: string, basePath?: string): string {
   // Replace @username with styled link
   let result = html.replace(
     /(^|[\s(>])@([a-zA-Z0-9_-]+)/g,
     '$1<span class="mention-ref" style="color:var(--color-primary);font-weight:500">@$2</span>',
   );
   // Replace #PREFIX-123 with styled badge link
-  result = result.replace(
-    /#([A-Z]+-\d+)/g,
-    '<a href="/issues/$1" class="issue-ref-badge" style="color:var(--color-primary);font-weight:500;text-decoration:none">#$1</a>',
-  );
+  result = result.replace(/#([A-Z]+-(\d+))/g, (_match, key, num) => {
+    const href = basePath ? `${basePath}/issues/${num}` : `/search?q=${key}`;
+    return `<a href="${href}" class="issue-ref-badge" style="color:var(--color-primary);font-weight:500;text-decoration:none">#${key}</a>`;
+  });
   return result;
 }
 
-function sanitize(raw: string) {
+function sanitize(raw: string, basePath?: string) {
   const sanitized = DOMPurify.sanitize(raw, { ADD_ATTR: ['id', 'data-issue-key'] });
   const withIssueKeys = sanitized.replace(
     /<span[^>]*data-issue-key="([^"]+)"[^>]*>([^<]*)<\/span>/g,
-    (_, key) => `<a href="/issues/${key}" class="issue-ref" data-issue-key="${key}">${key}</a>`,
+    (_, key: string) => {
+      const num = key.split('-').pop();
+      const href = basePath ? `${basePath}/issues/${num}` : `/search?q=${key}`;
+      return `<a href="${href}" class="issue-ref" data-issue-key="${key}">${key}</a>`;
+    },
   );
-  return linkifyMentionsAndRefs(withIssueKeys);
+  return linkifyMentionsAndRefs(withIssueKeys, basePath);
 }
 
-function parseMarkdown(markdown: string): Segment[] {
+function parseMarkdown(markdown: string, basePath?: string): Segment[] {
   const segments: Segment[] = [];
   let lastIndex = 0;
 
@@ -62,7 +66,7 @@ function parseMarkdown(markdown: string): Segment[] {
     if (match.index! > lastIndex) {
       const text = markdown.slice(lastIndex, match.index);
       const raw = marked.parse(text, { async: false, gfm: true, breaks: true }) as string;
-      segments.push({ type: 'html', content: sanitize(raw) });
+      segments.push({ type: 'html', content: sanitize(raw, basePath) });
     }
     segments.push({ type: 'mermaid', content: match[1].trim() });
     lastIndex = match.index! + match[0].length;
@@ -71,7 +75,7 @@ function parseMarkdown(markdown: string): Segment[] {
   if (lastIndex < markdown.length) {
     const text = markdown.slice(lastIndex);
     const raw = marked.parse(text, { async: false, gfm: true, breaks: true }) as string;
-    segments.push({ type: 'html', content: sanitize(raw) });
+    segments.push({ type: 'html', content: sanitize(raw, basePath) });
   }
 
   return segments;
@@ -80,6 +84,7 @@ function parseMarkdown(markdown: string): Segment[] {
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  basePath?: string;
 }
 
 /**
@@ -87,9 +92,10 @@ interface MarkdownRendererProps {
  * @param root0
  * @param root0.content
  * @param root0.className
+ * @param root0.basePath
  */
-export function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
-  const segments = useMemo(() => parseMarkdown(content || ''), [content]);
+export function MarkdownRenderer({ content, className = '', basePath }: MarkdownRendererProps) {
+  const segments = useMemo(() => parseMarkdown(content || '', basePath), [content, basePath]);
 
   if (!content) return null;
 

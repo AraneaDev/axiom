@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 import {
   createIssueSchema,
@@ -37,7 +38,7 @@ export async function get(req: Request, res: Response, next: NextFunction) {
   try {
     const issue = await issuesService.getIssue(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
     );
     res.json(issue);
   } catch (err) {
@@ -53,9 +54,8 @@ export async function get(req: Request, res: Response, next: NextFunction) {
  */
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 25;
-    const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
-    const clampedLimit = Math.min(limit, 100);
+    const { take, skip } = parsePagination(req.query as Record<string, string>, { limit: 25 });
+    const clampedLimit = Math.min(take, 100);
     const result = await issuesService.listIssues(param(req, 'projectId'), {
       type: req.query.type as string,
       priority: req.query.priority as string,
@@ -63,9 +63,9 @@ export async function list(req: Request, res: Response, next: NextFunction) {
       columnId: req.query.columnId as string,
       label: req.query.label as string,
       limit: clampedLimit,
-      offset,
+      offset: skip,
     });
-    res.json({ ...result, limit: clampedLimit, offset });
+    res.json({ ...result, limit: clampedLimit, offset: skip });
   } catch (err) {
     next(err);
   }
@@ -82,7 +82,7 @@ export async function update(req: Request, res: Response, next: NextFunction) {
     const data = updateIssueSchema.parse(req.body);
     const issue = await issuesService.updateIssue(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
       data,
       req.userId!,
     );
@@ -102,7 +102,7 @@ export async function remove(req: Request, res: Response, next: NextFunction) {
   try {
     await issuesService.deleteIssue(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
       req.userId!,
     );
     res.status(204).send();
@@ -123,7 +123,7 @@ export async function addComment(req: Request, res: Response, next: NextFunction
     const commentBody = String(parsed.body);
     const issue = await issuesService.getIssue(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
     );
     const comment = await issuesService.addComment(issue.id, req.userId!, commentBody);
     res.status(201).json(comment);
@@ -157,7 +157,7 @@ export async function listPullRequests(req: Request, res: Response, next: NextFu
   try {
     const prs = await issuesService.getIssuePullRequests(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
     );
     res.json(prs);
   } catch (err) {
@@ -176,7 +176,7 @@ export async function moveIssue(req: Request, res: Response, next: NextFunction)
     const { columnId, position } = req.body;
     const issue = await issuesService.moveIssue(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
       columnId,
       position,
     );
@@ -197,9 +197,9 @@ export async function setParent(req: Request, res: Response, next: NextFunction)
     const { parentIssueNumber } = req.body;
     const issue = await issuesService.setParent(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
       parentIssueNumber !== undefined && parentIssueNumber !== null
-        ? parseInt(parentIssueNumber)
+        ? parseInt(parentIssueNumber, 10)
         : null,
     );
     res.json(issue);
@@ -218,7 +218,7 @@ export async function getChildren(req: Request, res: Response, next: NextFunctio
   try {
     const children = await issuesService.getChildren(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
     );
     res.json(children);
   } catch (err) {
@@ -236,7 +236,7 @@ export async function getProgress(req: Request, res: Response, next: NextFunctio
   try {
     const progress = await issuesService.getEpicProgress(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
     );
     res.json(progress);
   } catch (err) {
@@ -270,7 +270,7 @@ export async function logWork(req: Request, res: Response, next: NextFunction) {
     const data = logWorkSchema.parse(req.body);
     const result = await issuesService.logWork(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
       req.userId!,
       data.minutes,
       data.description,
@@ -291,7 +291,7 @@ export async function getWorklogs(req: Request, res: Response, next: NextFunctio
   try {
     const worklogs = await issuesService.getWorklogs(
       param(req, 'projectId'),
-      parseInt(param(req, 'issueNumber')),
+      parseInt(param(req, 'issueNumber'), 10),
     );
     res.json(worklogs);
   } catch (err) {

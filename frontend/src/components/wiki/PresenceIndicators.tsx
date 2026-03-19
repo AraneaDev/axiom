@@ -2,21 +2,6 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/utils';
 
-/**
- * Cursor color palette for collaboration presence.
- * Each connected user gets a distinct color.
- */
-export const COLLAB_COLORS = [
-  '#3b82f6', // blue
-  '#ef4444', // red
-  '#10b981', // green
-  '#f59e0b', // amber
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-  '#06b6d4', // cyan
-  '#f97316', // orange
-];
-
 export interface PresenceUser {
   clientId: number;
   name: string;

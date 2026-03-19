@@ -3,6 +3,8 @@ import { ArrowLeft, Save, Trash2, Settings, AlertTriangle, GitMerge } from 'luci
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
+import WebhooksSettings from './WebhooksSettings';
+
 import { reposApi } from '@/api/repos.api';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
@@ -156,6 +158,11 @@ export default function RepoSettings() {
             <p className="text-sm text-success mt-2">Merge settings saved.</p>
           )}
         </div>
+      </div>
+
+      {/* Webhooks */}
+      <div className="rounded-lg border border-border bg-surface p-6 mb-6">
+        <WebhooksSettings repoId={currentRepo.id} />
       </div>
 
       {/* Danger zone */}

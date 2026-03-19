@@ -1,5 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
+import { parsePagination, paginatedResponse } from '../../utils/pagination';
 
 /**
  * Create a label for a project.
@@ -13,8 +15,7 @@ export async function createLabel(
   projectId: string,
   data: { name: string; color: string; description?: string },
 ) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
   const existing = await prisma.label.findUnique({
     where: { projectId_name: { projectId, name: data.name } },
@@ -34,15 +35,30 @@ export async function createLabel(
 /**
  * List all labels for a project.
  * @param projectId
+ * @param query
+ * @param query.limit
+ * @param query.offset
  */
-export async function listLabels(projectId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+export async function listLabels(
+  projectId: string,
+  query: { limit?: string; offset?: string } = {},
+) {
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
-  return prisma.label.findMany({
-    where: { projectId },
-    orderBy: { name: 'asc' },
-  });
+  const { take, skip } = parsePagination(query, { limit: 50 });
+  const where = { projectId };
+
+  const [labels, total] = await Promise.all([
+    prisma.label.findMany({
+      where,
+      orderBy: { name: 'asc' },
+      take,
+      skip,
+    }),
+    prisma.label.count({ where }),
+  ]);
+
+  return paginatedResponse(labels, total, take, skip);
 }
 
 /**
@@ -59,10 +75,12 @@ export async function updateLabel(
   labelName: string,
   data: { name?: string; color?: string; description?: string },
 ) {
-  const label = await prisma.label.findUnique({
-    where: { projectId_name: { projectId, name: labelName } },
-  });
-  if (!label) throw new AppError(404, 'Label not found');
+  const label = await findOrThrow(
+    prisma.label.findUnique({
+      where: { projectId_name: { projectId, name: labelName } },
+    }),
+    'Label not found',
+  );
 
   // If renaming, check for conflicts
   if (data.name && data.name !== labelName) {
@@ -88,10 +106,12 @@ export async function updateLabel(
  * @param labelName
  */
 export async function deleteLabel(projectId: string, labelName: string) {
-  const label = await prisma.label.findUnique({
-    where: { projectId_name: { projectId, name: labelName } },
-  });
-  if (!label) throw new AppError(404, 'Label not found');
+  const label = await findOrThrow(
+    prisma.label.findUnique({
+      where: { projectId_name: { projectId, name: labelName } },
+    }),
+    'Label not found',
+  );
 
   await prisma.label.delete({ where: { id: label.id } });
 }

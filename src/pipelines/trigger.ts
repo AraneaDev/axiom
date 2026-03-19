@@ -6,6 +6,7 @@
 
 import { prisma } from '../config/database';
 import { runPipeline } from '../modules/pipelines/pipeline-runner';
+import { logger } from '../utils/logger';
 
 import { parsePipelineConfig, matchesTrigger } from './yaml-parser';
 
@@ -50,19 +51,25 @@ export async function triggerPipelineOnPush(
           },
         });
 
-        console.warn(
-          `[trigger] Pipeline "${pipeline.name}" triggered for ${branch}@${commitSha.slice(0, 7)}`,
-        );
+        logger.info('Pipeline triggered', {
+          pipeline: pipeline.name,
+          branch,
+          commit: commitSha.slice(0, 7),
+        });
 
         // Execute the pipeline run asynchronously
         runPipeline(run).catch((err) => {
-          console.error(`[trigger] Pipeline run ${run.id} failed:`, err);
+          logger.error('Pipeline run failed', { runId: run.id }, err as Error);
         });
       } catch (err) {
-        console.error(`[trigger] Failed to evaluate pipeline "${pipeline.name}" for trigger:`, err);
+        logger.error(
+          'Failed to evaluate pipeline for trigger',
+          { pipeline: pipeline.name },
+          err as Error,
+        );
       }
     }
   } catch (err) {
-    console.error('[trigger] Error checking pipeline triggers:', err);
+    logger.error('Error checking pipeline triggers', { repoId, branch }, err as Error);
   }
 }

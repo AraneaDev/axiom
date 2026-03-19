@@ -1,7 +1,7 @@
 import { type Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
  * Create a saved filter for a user.
@@ -37,6 +37,7 @@ export async function list(userId: string, projectId?: string) {
       ...(projectId ? { projectId } : {}),
     },
     orderBy: { createdAt: 'desc' },
+    take: 100,
   });
 }
 
@@ -53,8 +54,10 @@ export async function update(
   filterId: string,
   data: { name?: string; query?: Prisma.InputJsonValue },
 ) {
-  const filter = await prisma.savedFilter.findFirst({ where: { id: filterId, userId } });
-  if (!filter) throw new AppError(404, 'Saved filter not found');
+  await findOrThrow(
+    prisma.savedFilter.findFirst({ where: { id: filterId, userId } }),
+    'Saved filter not found',
+  );
 
   return prisma.savedFilter.update({
     where: { id: filterId },
@@ -68,8 +71,10 @@ export async function update(
  * @param filterId
  */
 export async function remove(userId: string, filterId: string) {
-  const filter = await prisma.savedFilter.findFirst({ where: { id: filterId, userId } });
-  if (!filter) throw new AppError(404, 'Saved filter not found');
+  await findOrThrow(
+    prisma.savedFilter.findFirst({ where: { id: filterId, userId } }),
+    'Saved filter not found',
+  );
 
   await prisma.savedFilter.delete({ where: { id: filterId } });
 }

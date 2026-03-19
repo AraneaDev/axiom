@@ -35,15 +35,15 @@ function NavItem({
       to={to}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-all duration-150',
+          'flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] transition-all duration-150',
           indent && 'ml-2',
           isActive
-            ? 'bg-primary/10 text-primary font-medium'
-            : 'text-text-secondary hover:text-text hover:bg-surface-tertiary',
+            ? 'bg-primary-light text-primary font-medium border-l-2 border-primary'
+            : 'text-text-secondary hover:text-text hover:bg-surface-tertiary border-l-2 border-transparent',
         )
       }
     >
-      <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      <Icon className="h-4 w-4 shrink-0" />
       <span className="truncate">{label}</span>
       {count !== undefined && (
         <span className="ml-auto text-[10px] text-text-tertiary tabular-nums">{count}</span>
@@ -68,7 +68,7 @@ function SectionHeader({
       <button
         type="button"
         onClick={onToggle}
-        className="flex items-center gap-1 text-[10px] font-semibold text-text-tertiary uppercase tracking-widest hover:text-text-secondary transition-colors"
+        className="flex items-center gap-1 text-[11px] font-medium text-text-tertiary uppercase tracking-wider hover:text-text-secondary transition-colors"
       >
         {onToggle && (
           <ChevronDown
@@ -120,7 +120,7 @@ export function Sidebar() {
       />
       <aside
         className={cn(
-          'w-56 border-r border-border bg-surface flex flex-col shrink-0 overflow-y-auto',
+          'w-56 border-r border-border bg-surface flex flex-col shrink-0 overflow-y-auto scrollbar-none',
           'fixed inset-y-0 left-0 z-40 pt-12 lg:pt-0 lg:relative lg:z-auto',
         )}
       >
@@ -151,14 +151,14 @@ export function Sidebar() {
                 to={`/${o.slug}`}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] transition-all duration-150',
+                    'flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] transition-all duration-150',
                     isActive
-                      ? 'bg-surface-tertiary text-text font-medium shadow-sm'
+                      ? 'bg-primary-light text-primary font-medium'
                       : 'text-text-secondary hover:bg-surface-tertiary hover:text-text',
                   )
                 }
               >
-                <div className="h-5 w-5 rounded bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center">
+                <div className="h-5 w-5 rounded bg-primary flex items-center justify-center">
                   <span className="text-[9px] text-white font-bold">{o.name[0]}</span>
                 </div>
                 <span className="truncate">{o.name}</span>

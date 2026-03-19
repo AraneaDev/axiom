@@ -18,16 +18,16 @@ export function Header() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   return (
-    <header className="h-12 border-b border-border bg-surface/80 backdrop-blur-md flex items-center justify-between px-4 shrink-0 sticky top-0 z-30">
+    <header className="h-14 border-b border-border bg-surface/80 backdrop-blur-md flex items-center justify-between px-4 shrink-0 sticky top-0 z-30">
       <div className="flex items-center gap-3">
         <button
           onClick={toggleSidebar}
-          className="p-1 rounded-md hover:bg-surface-tertiary transition-colors"
+          className="p-2 rounded-lg hover:bg-surface-tertiary transition-colors"
         >
           <Menu className="h-4 w-4 text-text-secondary" />
         </button>
         <Link to="/" className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+          <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center">
             <span className="text-white text-xs font-bold">A</span>
           </div>
           <span className="text-sm font-semibold text-text tracking-tight">Axiom</span>
@@ -36,7 +36,7 @@ export function Header() {
 
       <button
         onClick={toggleSearch}
-        className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-tertiary hover:text-text-secondary hover:border-border-focus/30 transition-all w-72 shadow-sm"
+        className="flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-1.5 text-sm text-text-tertiary hover:text-text-secondary transition-all w-72"
       >
         <Search className="h-3.5 w-3.5" />
         <span className="text-xs">Search anything...</span>
@@ -48,7 +48,7 @@ export function Header() {
       <div className="flex items-center gap-1">
         <button
           onClick={toggleDark}
-          className="p-1.5 rounded-md hover:bg-surface-tertiary transition-colors"
+          className="p-2 rounded-lg hover:bg-surface-tertiary transition-colors"
           title="Toggle theme"
         >
           {isDark ? (

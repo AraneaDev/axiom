@@ -17,6 +17,7 @@ import * as Y from 'yjs';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 import type { AuthPayload } from '../middleware/auth';
+import { logger } from '../utils/logger';
 
 import {
   loadPageIntoDoc,
@@ -253,7 +254,7 @@ async function handleMessage(
       }
     }
   } catch (err) {
-    console.error('[collaboration] Error handling message:', err);
+    logger.error('Error handling collaboration message', { pageId: room.pageId }, err as Error);
   }
 }
 

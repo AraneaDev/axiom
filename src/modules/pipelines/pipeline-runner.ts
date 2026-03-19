@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { prisma } from '../../config/database';
 import { broadcastToRoom } from '../../realtime/ws-server';
+import { logger } from '../../utils/logger';
 import { createOrUpdateStatus } from '../status-checks/status-checks.service';
 
 import { parsePipelineYaml, getTopologicalOrder } from './pipeline-parser';
@@ -55,7 +56,11 @@ async function reportCommitStatus(
             : 'Pipeline failed',
     });
   } catch (err) {
-    console.error('[pipeline-runner] Failed to report commit status:', err);
+    logger.error(
+      'Failed to report commit status',
+      { repoId, commitSha, pipelineName },
+      err as Error,
+    );
   }
 }
 
@@ -282,7 +287,7 @@ export async function runPipeline(runRecord: {
       }
     }
   } catch (err) {
-    console.error('[pipeline-runner] Error:', err);
+    logger.error('Pipeline runner error', { runId: runRecord.id }, err as Error);
     await prisma.pipelineRun
       .update({
         where: { id: runRecord.id },

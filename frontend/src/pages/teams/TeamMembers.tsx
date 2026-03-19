@@ -7,6 +7,7 @@ import { teamsApi } from '@/api/teams.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
 import { PageLoader } from '@/components/ui/Spinner';
 
 const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
@@ -72,17 +73,15 @@ export default function TeamMembers() {
               </div>
               <Badge variant={ROLE_BADGE[m.role] ?? 'default'}>{m.role}</Badge>
               <div className="flex gap-1">
-                <select
+                <Select
                   value={m.role}
-                  onChange={(e) =>
-                    roleMutation.mutate({ memberId: m.user.id, role: e.target.value })
-                  }
-                  className="text-xs border border-border rounded px-2 py-1"
-                >
-                  <option value="ADMIN">Admin</option>
-                  <option value="MEMBER">Member</option>
-                  <option value="VIEWER">Viewer</option>
-                </select>
+                  onChange={(v) => roleMutation.mutate({ memberId: m.user.id, role: v as string })}
+                  options={[
+                    { value: 'ADMIN', label: 'Admin' },
+                    { value: 'MEMBER', label: 'Member' },
+                    { value: 'VIEWER', label: 'Viewer' },
+                  ]}
+                />
                 <Button variant="ghost" size="sm" onClick={() => removeMutation.mutate(m.user.id)}>
                   <UserMinus className="h-3.5 w-3.5 text-danger" />
                 </Button>

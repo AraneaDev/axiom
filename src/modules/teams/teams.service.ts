@@ -2,6 +2,9 @@ import { TeamRole } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
+import { parsePagination, paginatedResponse } from '../../utils/pagination';
+import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
  *
@@ -33,7 +36,7 @@ export async function createTeam(
       },
     },
     include: {
-      members: { include: { user: { select: { id: true, username: true, displayName: true } } } },
+      members: { include: { user: { select: USER_BASIC_SELECT } } },
     },
   });
 }
@@ -43,39 +46,53 @@ export async function createTeam(
  * @param teamId
  */
 export async function getTeam(teamId: string) {
-  const team = await prisma.team.findUnique({
-    where: { id: teamId },
-    include: {
-      members: { include: { user: { select: { id: true, username: true, displayName: true } } } },
-      repos: { select: { id: true, name: true, slug: true, visibility: true } },
-      projects: { select: { id: true, name: true, slug: true, prefix: true } },
-      wikiSpaces: { select: { id: true, name: true, slug: true } },
-    },
-  });
-  if (!team) throw new AppError(404, 'Team not found');
-  return team;
+  return findOrThrow(
+    prisma.team.findUnique({
+      where: { id: teamId },
+      include: {
+        members: { include: { user: { select: USER_BASIC_SELECT } } },
+        repos: { select: { id: true, name: true, slug: true, visibility: true } },
+        projects: { select: { id: true, name: true, slug: true, prefix: true } },
+        wikiSpaces: { select: { id: true, name: true, slug: true } },
+      },
+    }),
+    'Team not found',
+  );
 }
 
 /**
  *
  * @param orgId
+ * @param query
+ * @param query.limit
+ * @param query.offset
  */
-export async function listOrgTeams(orgId: string) {
-  return prisma.team.findMany({
-    where: { orgId },
-    include: {
-      _count: { select: { members: true, repos: true, projects: true } },
-      repos: {
-        select: { id: true, name: true, slug: true, visibility: true },
-        orderBy: { name: 'asc' },
+export async function listOrgTeams(orgId: string, query: { limit?: string; offset?: string } = {}) {
+  const { take, skip } = parsePagination(query, { limit: 50 });
+  const where = { orgId };
+
+  const [teams, total] = await Promise.all([
+    prisma.team.findMany({
+      where,
+      include: {
+        _count: { select: { members: true, repos: true, projects: true } },
+        repos: {
+          select: { id: true, name: true, slug: true, visibility: true },
+          orderBy: { name: 'asc' },
+        },
+        wikiSpaces: {
+          select: { id: true, name: true, slug: true, _count: { select: { pages: true } } },
+          orderBy: { name: 'asc' },
+        },
       },
-      wikiSpaces: {
-        select: { id: true, name: true, slug: true, _count: { select: { pages: true } } },
-        orderBy: { name: 'asc' },
-      },
-    },
-    orderBy: { name: 'asc' },
-  });
+      orderBy: { name: 'asc' },
+      take,
+      skip,
+    }),
+    prisma.team.count({ where }),
+  ]);
+
+  return paginatedResponse(teams, total, take, skip);
 }
 
 /**
@@ -114,8 +131,10 @@ export async function addTeamMember(
   if (existing) throw new AppError(409, 'User is already a team member');
 
   // Verify user is in the org
-  const team = await prisma.team.findUnique({ where: { id: teamId } });
-  if (!team) throw new AppError(404, 'Team not found');
+  const team = await findOrThrow(
+    prisma.team.findUnique({ where: { id: teamId } }),
+    'Team not found',
+  );
 
   const orgMember = await prisma.orgMembership.findUnique({
     where: { userId_orgId: { userId, orgId: team.orgId } },
@@ -124,7 +143,7 @@ export async function addTeamMember(
 
   return prisma.teamMembership.create({
     data: { userId, teamId, role },
-    include: { user: { select: { id: true, username: true, displayName: true } } },
+    include: { user: { select: USER_BASIC_SELECT } },
   });
 }
 
@@ -135,10 +154,12 @@ export async function addTeamMember(
  * @param role
  */
 export async function updateTeamMemberRole(teamId: string, memberId: string, role: TeamRole) {
-  const membership = await prisma.teamMembership.findFirst({
-    where: { userId: memberId, teamId },
-  });
-  if (!membership) throw new AppError(404, 'Team membership not found');
+  const membership = await findOrThrow(
+    prisma.teamMembership.findFirst({
+      where: { userId: memberId, teamId },
+    }),
+    'Team membership not found',
+  );
 
   return prisma.teamMembership.update({
     where: { id: membership.id },
@@ -152,9 +173,11 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
  * @param memberId
  */
 export async function removeTeamMember(teamId: string, memberId: string) {
-  const membership = await prisma.teamMembership.findFirst({
-    where: { userId: memberId, teamId },
-  });
-  if (!membership) throw new AppError(404, 'Team membership not found');
+  const membership = await findOrThrow(
+    prisma.teamMembership.findFirst({
+      where: { userId: memberId, teamId },
+    }),
+    'Team membership not found',
+  );
   await prisma.teamMembership.delete({ where: { id: membership.id } });
 }

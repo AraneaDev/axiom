@@ -21,8 +21,9 @@ interface ToastContextType {
 const ToastContext = createContext<ToastContextType | null>(null);
 
 /**
- *
+ * Access the toast notification API from within a ToastProvider.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error('useToast must be used within ToastProvider');
@@ -74,7 +75,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               className={cn(
-                'flex items-center gap-2 rounded-lg border px-4 py-3 shadow-lg animate-in slide-in-from-right duration-200',
+                'flex items-center gap-2 rounded-lg border px-4 py-3 shadow-lg shadow-black/10 animate-in slide-in-from-right duration-200',
                 STYLES[t.type],
               )}
             >

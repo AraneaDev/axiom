@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { AppError } from '../../middleware/errorHandler';
 import { PANDOC_FORMATS, checkPandocInstalled, convertMarkdown } from '../../utils/pandoc';
 import { param } from '../../utils/params';
 import {
+  validate,
   createWikiSpaceSchema,
   createPageSchema,
   updatePageSchema,
@@ -23,7 +25,7 @@ import * as wikiService from './wiki.service';
  */
 export async function createSpace(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = createWikiSpaceSchema.parse(req.body);
+    const data = validate(createWikiSpaceSchema, req.body);
     const space = await wikiService.createSpace(param(req, 'teamId'), data);
     res.status(201).json(space);
   } catch (err) {
@@ -69,7 +71,7 @@ export async function listSpaces(req: Request, res: Response, next: NextFunction
  */
 export async function createPage(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = createPageSchema.parse(req.body);
+    const data = validate(createPageSchema, req.body);
     const page = await wikiService.createPage(param(req, 'spaceId'), req.userId!, data);
     res.status(201).json(page);
   } catch (err) {
@@ -100,7 +102,7 @@ export async function getPage(req: Request, res: Response, next: NextFunction) {
  */
 export async function updatePage(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = updatePageSchema.parse(req.body);
+    const data = validate(updatePageSchema, req.body);
     const page = await wikiService.updatePage(
       param(req, 'spaceId'),
       param(req, 'pageSlug'),
@@ -156,20 +158,15 @@ export async function exportPage(req: Request, res: Response, next: NextFunction
   try {
     const format = (req.query.format as string) || 'html';
     if (!PANDOC_FORMATS[format]) {
-      res
-        .status(400)
-        .json({
-          error: {
-            message: `Unsupported format: ${format}. Supported: ${Object.keys(PANDOC_FORMATS).join(', ')}`,
-          },
-        });
-      return;
+      throw new AppError(
+        400,
+        `Unsupported format: ${format}. Supported: ${Object.keys(PANDOC_FORMATS).join(', ')}`,
+      );
     }
 
     const installed = await checkPandocInstalled();
     if (!installed) {
-      res.status(501).json({ error: { message: 'pandoc is not installed on the server' } });
-      return;
+      throw new AppError(501, 'pandoc is not installed on the server');
     }
 
     const page = await wikiService.getPage(param(req, 'spaceId'), param(req, 'pageSlug'));
@@ -204,7 +201,7 @@ export async function pageTree(req: Request, res: Response, next: NextFunction) 
  */
 export async function createTemplate(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = createPageTemplateSchema.parse(req.body);
+    const data = validate(createPageTemplateSchema, req.body);
     const template = await wikiService.createTemplate(param(req, 'spaceId'), data);
     res.status(201).json(template);
   } catch (err) {
@@ -267,7 +264,7 @@ export async function deleteTemplate(req: Request, res: Response, next: NextFunc
  */
 export async function addPageComment(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = createPageCommentSchema.parse(req.body);
+    const data = validate(createPageCommentSchema, req.body);
     const comment = await wikiService.addPageComment(
       param(req, 'pageId'),
       req.userId!,
@@ -335,7 +332,7 @@ export async function deletePageComment(req: Request, res: Response, next: NextF
  */
 export async function addPageLabel(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = addPageLabelSchema.parse(req.body);
+    const data = validate(addPageLabelSchema, req.body);
     const label = await wikiService.addLabel(param(req, 'pageId'), data.label);
     res.status(201).json(label);
   } catch (err) {
@@ -369,8 +366,7 @@ export async function searchByLabel(req: Request, res: Response, next: NextFunct
   try {
     const label = req.query.label as string;
     if (!label) {
-      res.status(400).json({ error: { message: 'label query parameter required' } });
-      return;
+      throw new AppError(400, 'label query parameter required');
     }
     const pages = await wikiService.searchPagesByLabel(param(req, 'spaceId'), label);
     res.json(pages);
@@ -389,7 +385,7 @@ export async function searchByLabel(req: Request, res: Response, next: NextFunct
  */
 export async function movePage(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = movePageSchema.parse(req.body);
+    const data = validate(movePageSchema, req.body);
     const page = await wikiService.movePage(
       param(req, 'pageId'),
       data.targetSpaceId,
@@ -409,7 +405,7 @@ export async function movePage(req: Request, res: Response, next: NextFunction) 
  */
 export async function copyPage(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = copyPageSchema.parse(req.body);
+    const data = validate(copyPageSchema, req.body);
     const page = await wikiService.copyPage(
       param(req, 'pageId'),
       req.userId!,

@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { auditApi, type AuditLogEntry, type AuditLogFilters } from '@/api/audit.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
@@ -221,44 +222,35 @@ export default function AuditLogs() {
                 }}
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Action</label>
-              <select
-                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text focus:border-border-focus focus:outline-none"
-                value={actionFilter}
-                onChange={(e) => {
-                  setActionFilter(e.target.value);
-                  setFilters((f) => ({ ...f, offset: 0 }));
-                }}
-              >
-                <option value="">All actions</option>
-                {ACTION_OPTIONS.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">
-                Resource Type
-              </label>
-              <select
-                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text focus:border-border-focus focus:outline-none"
-                value={resourceTypeFilter}
-                onChange={(e) => {
-                  setResourceTypeFilter(e.target.value);
-                  setFilters((f) => ({ ...f, offset: 0 }));
-                }}
-              >
-                <option value="">All types</option>
-                {RESOURCE_TYPE_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Action"
+              value={actionFilter}
+              onChange={(v) => {
+                setActionFilter(v as string);
+                setFilters((f) => ({ ...f, offset: 0 }));
+              }}
+              placeholder="All actions"
+              options={[
+                { value: '', label: 'All actions' },
+                ...ACTION_OPTIONS.map((a) => ({ value: a, label: a })),
+              ]}
+            />
+            <Select
+              label="Resource Type"
+              value={resourceTypeFilter}
+              onChange={(v) => {
+                setResourceTypeFilter(v as string);
+                setFilters((f) => ({ ...f, offset: 0 }));
+              }}
+              placeholder="All types"
+              options={[
+                { value: '', label: 'All types' },
+                ...RESOURCE_TYPE_OPTIONS.map((r) => ({
+                  value: r,
+                  label: r.replace(/_/g, ' '),
+                })),
+              ]}
+            />
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1">
                 Start Date

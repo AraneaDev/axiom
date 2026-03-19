@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Plus, ArrowLeft, FileText } from 'lucide-react';
+import { Plus, ArrowLeft } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
@@ -10,6 +10,7 @@ import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
@@ -83,100 +84,90 @@ export default function IssueCreate() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Create Issue</h1>
-      {templates.length > 0 && (
-        <div className="mb-4">
-          <label className="text-sm font-medium text-text">From template</label>
-          <div className="flex items-center gap-2 mt-1">
-            <FileText className="h-4 w-4 text-text-tertiary" />
-            <select
-              onChange={(e) => {
-                const tmpl = templates.find((t) => t.id === e.target.value);
+      <h1 className="text-2xl font-semibold tracking-tight mb-6">Create Issue</h1>
+
+      <div className="rounded-lg border border-border bg-surface p-6">
+        {templates.length > 0 && (
+          <div className="mb-5">
+            <Select
+              label="From template"
+              placeholder="Select a template..."
+              onChange={(v) => {
+                const tmpl = templates.find((t) => t.id === v);
                 if (tmpl) applyTemplate(tmpl);
               }}
-              defaultValue=""
-              className="rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="" disabled>
-                Select a template...
-              </option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.type})
-                </option>
-              ))}
-            </select>
+              options={templates.map((t) => ({
+                value: t.id,
+                label: `${t.name} (${t.type})`,
+              }))}
+            />
           </div>
-        </div>
-      )}
-      {error && (
-        <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
-          {error}
-        </div>
-      )}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <Input
-          id="title"
-          label="Title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="What needs to be done?"
-          required
-        />
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-text">Type</label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="TASK">Task</option>
-              <option value="BUG">Bug</option>
-              <option value="STORY">Story</option>
-              <option value="EPIC">Epic</option>
-            </select>
+        )}
+        {error && (
+          <div className="mb-5 rounded-lg bg-danger-light border border-danger/20 px-4 py-3 text-sm text-danger">
+            {error}
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-text">Priority</label>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-              className="rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="CRITICAL">Critical</option>
-              <option value="HIGH">High</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="LOW">Low</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-text">Description</label>
-          <MarkdownEditor
-            value={body}
-            onChange={setBody}
-            placeholder="Describe the issue in detail..."
+        )}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <Input
+            id="title"
+            label="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="What needs to be done?"
+            required
           />
-        </div>
 
-        <div className="flex gap-3">
-          <Button type="submit" disabled={loading}>
-            {loading ? (
-              <Spinner className="h-4 w-4" />
-            ) : (
-              <>
-                <Plus className="h-4 w-4" /> Create Issue
-              </>
-            )}
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4" /> Cancel
-          </Button>
-        </div>
-      </form>
+          <div className="grid grid-cols-2 gap-4">
+            <Select
+              label="Type"
+              value={type}
+              onChange={(v) => setType(v as string)}
+              options={[
+                { value: 'TASK', label: 'Task' },
+                { value: 'BUG', label: 'Bug' },
+                { value: 'STORY', label: 'Story' },
+                { value: 'EPIC', label: 'Epic' },
+              ]}
+            />
+            <Select
+              label="Priority"
+              value={priority}
+              onChange={(v) => setPriority(v as string)}
+              options={[
+                { value: 'CRITICAL', label: 'Critical' },
+                { value: 'HIGH', label: 'High' },
+                { value: 'MEDIUM', label: 'Medium' },
+                { value: 'LOW', label: 'Low' },
+              ]}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-text">Description</label>
+            <MarkdownEditor
+              value={body}
+              onChange={setBody}
+              placeholder="Describe the issue in detail..."
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2 border-t border-border-light">
+            <Button type="submit" disabled={loading}>
+              {loading ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" /> Create Issue
+                </>
+              )}
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => navigate(-1)}>
+              <ArrowLeft className="h-4 w-4" /> Cancel
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

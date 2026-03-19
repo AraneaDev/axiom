@@ -6,21 +6,23 @@ import {
   LayoutList,
   LayoutGrid,
   LayoutDashboard,
+  LayoutTemplate,
   ChevronDown,
   X,
-  User,
   Search,
   GanttChart,
   Target,
-  CheckSquare,
-  Columns,
-  AlertTriangle,
-  Trash2,
   Bookmark,
   BookmarkCheck,
+  Zap,
+  Tag,
 } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
+
+import { IssueListBulkActions } from './IssueListBulkActions';
+import { IssueListFilters } from './IssueListFilters';
+import { IssueListTable } from './IssueListTable';
 
 import { issuesApi } from '@/api/issues.api';
 import { orgsApi } from '@/api/orgs.api';
@@ -28,17 +30,12 @@ import { projectsApi } from '@/api/projects.api';
 import { savedFiltersApi } from '@/api/saved-filters.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
-import { Avatar } from '@/components/ui/Avatar';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { PageLoader } from '@/components/ui/Spinner';
-import { PRIORITY_COLORS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
-import { cn, formatRelative } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 type SortField = 'createdAt' | 'updatedAt' | 'priority';
 type SortDir = 'asc' | 'desc';
@@ -156,8 +153,8 @@ export default function IssueList() {
   });
 
   const saveFilterMutation = useMutation({
-    mutationFn: (data: { name: string; query: Record<string, string>; projectId?: string }) =>
-      savedFiltersApi.create(data),
+    mutationFn: (d: { name: string; query: Record<string, string>; projectId?: string }) =>
+      savedFiltersApi.create(d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['saved-filters', currentProject?.id] });
       setShowSaveFilterModal(false);
@@ -197,7 +194,7 @@ export default function IssueList() {
   };
 
   const bulkMutation = useMutation({
-    mutationFn: (data: {
+    mutationFn: (d: {
       issueIds: string[];
       updates: {
         status?: string;
@@ -205,7 +202,7 @@ export default function IssueList() {
         priority?: string;
         sprintId?: string | null;
       };
-    }) => issuesApi.bulkUpdate(currentProject!.id, data),
+    }) => issuesApi.bulkUpdate(currentProject!.id, d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issues', currentProject?.id] });
       queryClient.invalidateQueries({ queryKey: ['board', currentProject?.id] });
@@ -216,7 +213,6 @@ export default function IssueList() {
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      // Delete issues one by one using the existing delete endpoint
       const issuesData = data?.issues ?? [];
       for (const id of ids) {
         const issue = issuesData.find((i) => i.id === id);
@@ -232,10 +228,6 @@ export default function IssueList() {
       setShowDeleteConfirm(false);
     },
   });
-
-  const toggleFilter = (arr: string[], val: string, setter: (v: string[]) => void) => {
-    setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
-  };
 
   // Extract unique assignees and labels for filter options
   const allAssignees = useMemo(() => {
@@ -291,16 +283,16 @@ export default function IssueList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold">{currentProject?.name} Issues</h1>
-          <p className="text-sm text-text-secondary">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{currentProject?.name} Issues</h1>
+          <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-xs font-medium text-text-secondary">
             {hasActiveSearch || activeFilterCount > 0
-              ? `${filteredIssues.length} of ${data?.total ?? 0} issues`
-              : `${data?.total ?? 0} issues`}
-          </p>
+              ? `${filteredIssues.length} / ${data?.total ?? 0}`
+              : `${data?.total ?? 0}`}
+          </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Link to={`/${org}/${teamSlug}/${projectSlug}/backlog`}>
             <Button variant="secondary" size="sm">
               <Target className="h-4 w-4" /> Backlog
@@ -316,6 +308,21 @@ export default function IssueList() {
               <GanttChart className="h-4 w-4" /> Roadmap
             </Button>
           </Link>
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/templates`}>
+            <Button variant="secondary" size="sm">
+              <LayoutTemplate className="h-4 w-4" /> Templates
+            </Button>
+          </Link>
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/automation`}>
+            <Button variant="secondary" size="sm">
+              <Zap className="h-4 w-4" /> Automations
+            </Button>
+          </Link>
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/labels`}>
+            <Button variant="secondary" size="sm">
+              <Tag className="h-4 w-4" /> Labels
+            </Button>
+          </Link>
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
             <Button size="sm">
               <Plus className="h-4 w-4" /> New Issue
@@ -325,7 +332,7 @@ export default function IssueList() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 bg-surface rounded-lg border border-border p-2">
         <div className="relative w-64">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-tertiary pointer-events-none" />
           <Input
@@ -495,448 +502,51 @@ export default function IssueList() {
 
       {/* Bulk action toolbar */}
       {hasSelection && (
-        <div className="rounded-lg border border-primary/30 bg-primary-light/10 p-2 mb-4 flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium text-text px-2">
-            <CheckSquare className="h-4 w-4 inline mr-1" />
-            {selectedIds.size} issue{selectedIds.size !== 1 ? 's' : ''} selected
-          </span>
-          <div className="h-4 w-px bg-border mx-1" />
-
-          {/* Set Status */}
-          <div className="relative">
-            <Button
-              variant="secondary"
-              size="xs"
-              onClick={() => setBulkDropdown(bulkDropdown === 'status' ? null : 'status')}
-            >
-              <Columns className="h-3 w-3" /> Set Status <ChevronDown className="h-3 w-3" />
-            </Button>
-            {bulkDropdown === 'status' && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setBulkDropdown(null)} />
-                <div className="absolute left-0 top-full mt-1 w-44 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20">
-                  {boardColumns.map((col) => (
-                    <Button
-                      key={col.id}
-                      variant="ghost"
-                      size="xs"
-                      className="w-full justify-start rounded-none"
-                      onClick={() =>
-                        bulkMutation.mutate({
-                          issueIds: Array.from(selectedIds),
-                          updates: { status: col.id },
-                        })
-                      }
-                    >
-                      <Columns className="h-3 w-3" /> {col.name}
-                    </Button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Assign */}
-          <div className="relative">
-            <Button
-              variant="secondary"
-              size="xs"
-              onClick={() => setBulkDropdown(bulkDropdown === 'assign' ? null : 'assign')}
-            >
-              <User className="h-3 w-3" /> Assign <ChevronDown className="h-3 w-3" />
-            </Button>
-            {bulkDropdown === 'assign' && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setBulkDropdown(null)} />
-                <div className="absolute left-0 top-full mt-1 w-48 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20 max-h-48 overflow-y-auto">
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="w-full justify-start rounded-none"
-                    onClick={() =>
-                      bulkMutation.mutate({
-                        issueIds: Array.from(selectedIds),
-                        updates: { assigneeId: null },
-                      })
-                    }
-                  >
-                    <User className="h-3 w-3" /> Unassigned
-                  </Button>
-                  {teamDetail?.members?.map((m: { user: { id: string; displayName: string } }) => (
-                    <Button
-                      key={m.user.id}
-                      variant="ghost"
-                      size="xs"
-                      className="w-full justify-start rounded-none"
-                      onClick={() =>
-                        bulkMutation.mutate({
-                          issueIds: Array.from(selectedIds),
-                          updates: { assigneeId: m.user.id },
-                        })
-                      }
-                    >
-                      <Avatar name={m.user.displayName} size="sm" /> {m.user.displayName}
-                    </Button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Set Priority */}
-          <div className="relative">
-            <Button
-              variant="secondary"
-              size="xs"
-              onClick={() => setBulkDropdown(bulkDropdown === 'priority' ? null : 'priority')}
-            >
-              <AlertTriangle className="h-3 w-3" /> Priority <ChevronDown className="h-3 w-3" />
-            </Button>
-            {bulkDropdown === 'priority' && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setBulkDropdown(null)} />
-                <div className="absolute left-0 top-full mt-1 w-40 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20">
-                  {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
-                    <Button
-                      key={key}
-                      variant="ghost"
-                      size="xs"
-                      className="w-full justify-start rounded-none"
-                      onClick={() =>
-                        bulkMutation.mutate({
-                          issueIds: Array.from(selectedIds),
-                          updates: { priority: key },
-                        })
-                      }
-                    >
-                      <AlertTriangle className="h-3 w-3" /> {label}
-                    </Button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Move to Sprint */}
-          <div className="relative">
-            <Button
-              variant="secondary"
-              size="xs"
-              onClick={() => setBulkDropdown(bulkDropdown === 'sprint' ? null : 'sprint')}
-            >
-              <Target className="h-3 w-3" /> Sprint <ChevronDown className="h-3 w-3" />
-            </Button>
-            {bulkDropdown === 'sprint' && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setBulkDropdown(null)} />
-                <div className="absolute left-0 top-full mt-1 w-48 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20 max-h-48 overflow-y-auto">
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="w-full justify-start rounded-none"
-                    onClick={() =>
-                      bulkMutation.mutate({
-                        issueIds: Array.from(selectedIds),
-                        updates: { sprintId: null },
-                      })
-                    }
-                  >
-                    <Target className="h-3 w-3" /> Backlog
-                  </Button>
-                  {sprints
-                    .filter((s) => s.status !== 'COMPLETED')
-                    .map((s) => (
-                      <Button
-                        key={s.id}
-                        variant="ghost"
-                        size="xs"
-                        className="w-full justify-start rounded-none"
-                        onClick={() =>
-                          bulkMutation.mutate({
-                            issueIds: Array.from(selectedIds),
-                            updates: { sprintId: s.id },
-                          })
-                        }
-                      >
-                        <Target className="h-3 w-3" /> {s.name}
-                      </Button>
-                    ))}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Delete */}
-          {showDeleteConfirm ? (
-            <div className="flex items-center gap-1 ml-2">
-              <span className="text-xs text-danger">
-                Delete {selectedIds.size} issue{selectedIds.size !== 1 ? 's' : ''}?
-              </span>
-              <Button
-                variant="danger"
-                size="xs"
-                onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
-                disabled={bulkDeleteMutation.isPending}
-              >
-                <Trash2 className="h-3 w-3" /> Confirm
-              </Button>
-              <Button variant="ghost" size="xs" onClick={() => setShowDeleteConfirm(false)}>
-                <X className="h-3 w-3" /> Cancel
-              </Button>
-            </div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => setShowDeleteConfirm(true)}
-              className="text-danger hover:text-danger hover:bg-danger-light ml-2"
-            >
-              <Trash2 className="h-3 w-3" /> Delete
-            </Button>
-          )}
-
-          <div className="ml-auto">
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => {
-                setSelectedIds(new Set());
-                setBulkDropdown(null);
-                setShowDeleteConfirm(false);
-              }}
-              className="text-text-tertiary"
-            >
-              <X className="h-3 w-3" /> Clear selection
-            </Button>
-          </div>
-        </div>
+        <IssueListBulkActions
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
+          bulkDropdown={bulkDropdown}
+          setBulkDropdown={setBulkDropdown}
+          showDeleteConfirm={showDeleteConfirm}
+          setShowDeleteConfirm={setShowDeleteConfirm}
+          boardColumns={boardColumns}
+          teamMembers={teamDetail?.members ?? []}
+          sprints={sprints}
+          onBulkUpdate={(d) => bulkMutation.mutate(d)}
+          onBulkDelete={(ids) => bulkDeleteMutation.mutate(ids)}
+          isBulkDeletePending={bulkDeleteMutation.isPending}
+        />
       )}
 
       {/* Filter bar */}
       {showFilters && (
-        <div className="rounded-lg border border-border bg-surface p-3 mb-4 flex flex-wrap gap-4">
-          <div>
-            <p className="text-xs font-semibold text-text-secondary mb-1.5">Type</p>
-            <div className="flex flex-wrap gap-1">
-              {Object.entries(ISSUE_TYPE_LABELS).map(([key, label]) => (
-                <Button
-                  key={key}
-                  variant="outline"
-                  size="xs"
-                  onClick={() => toggleFilter(typeFilter, key, setTypeFilter)}
-                  className={cn(
-                    typeFilter.includes(key)
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-text-secondary hover:border-border-focus',
-                  )}
-                >
-                  <IssueTypeIcon type={key} className="h-3 w-3" /> {label}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-text-secondary mb-1.5">Priority</p>
-            <div className="flex flex-wrap gap-1">
-              {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
-                <Button
-                  key={key}
-                  variant="outline"
-                  size="xs"
-                  onClick={() => toggleFilter(priorityFilter, key, setPriorityFilter)}
-                  className={cn(
-                    priorityFilter.includes(key)
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-text-secondary hover:border-border-focus',
-                  )}
-                >
-                  <Filter className="h-3 w-3" /> {label}
-                </Button>
-              ))}
-            </div>
-          </div>
-          {allAssignees.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-text-secondary mb-1.5">Assignee</p>
-              <div className="flex flex-wrap gap-1">
-                {allAssignees.map((a) => (
-                  <Button
-                    key={a.id}
-                    variant="outline"
-                    size="xs"
-                    onClick={() => toggleFilter(assigneeFilter, a.id, setAssigneeFilter)}
-                    className={cn(
-                      assigneeFilter.includes(a.id)
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border text-text-secondary hover:border-border-focus',
-                    )}
-                  >
-                    <User className="h-3 w-3" /> {a.displayName}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-          {allLabels.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-text-secondary mb-1.5">Label</p>
-              <div className="flex flex-wrap gap-1">
-                {allLabels.map((l) => (
-                  <Button
-                    key={l.id}
-                    variant="outline"
-                    size="xs"
-                    onClick={() => toggleFilter(labelFilter, l.id, setLabelFilter)}
-                    className={cn(
-                      labelFilter.includes(l.id)
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border text-text-secondary hover:border-border-focus',
-                    )}
-                  >
-                    <Filter className="h-3 w-3" /> {l.name}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-          {activeFilterCount > 0 && (
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => {
-                setTypeFilter([]);
-                setPriorityFilter([]);
-                setAssigneeFilter([]);
-                setLabelFilter([]);
-              }}
-              className="text-text-tertiary hover:text-danger self-end"
-            >
-              <X className="h-3 w-3" /> Clear all
-            </Button>
-          )}
-        </div>
+        <IssueListFilters
+          typeFilter={typeFilter}
+          setTypeFilter={setTypeFilter}
+          priorityFilter={priorityFilter}
+          setPriorityFilter={setPriorityFilter}
+          assigneeFilter={assigneeFilter}
+          setAssigneeFilter={setAssigneeFilter}
+          labelFilter={labelFilter}
+          setLabelFilter={setLabelFilter}
+          allAssignees={allAssignees}
+          allLabels={allLabels}
+          activeFilterCount={activeFilterCount}
+        />
       )}
 
-      {!filteredIssues.length ? (
-        <EmptyState
-          title="No issues found"
-          description={
-            hasActiveSearch
-              ? 'No issues match your search. Try a different query.'
-              : activeFilterCount > 0
-                ? 'Try adjusting your filters.'
-                : 'Create your first issue to get started.'
-          }
-        />
-      ) : viewMode === 'list' ? (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-          {/* Select all header */}
-          <div className="flex items-center gap-3 px-3 py-2 bg-surface-secondary/50">
-            <input
-              type="checkbox"
-              checked={selectedIds.size === filteredIssues.length && filteredIssues.length > 0}
-              onChange={toggleSelectAll}
-              className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
-              title="Select all"
-            />
-            <span className="text-xs text-text-tertiary">
-              {hasSelection ? `${selectedIds.size} selected` : 'Select all'}
-            </span>
-          </div>
-          {filteredIssues.map((issue) => (
-            <div
-              key={issue.id}
-              className={cn(
-                'flex items-center gap-3 p-3 hover:bg-surface-secondary transition-colors',
-                selectedIds.has(issue.id) && 'bg-primary-light/5',
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={selectedIds.has(issue.id)}
-                onClick={(e) => toggleSelect(issue.id, e)}
-                onChange={() => {}}
-                className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer shrink-0"
-              />
-              <Link
-                to={`/${org}/${teamSlug}/${projectSlug}/issues/${issue.number}`}
-                className="flex items-center gap-3 flex-1 min-w-0"
-              >
-                <IssueTypeIcon type={issue.type} className="h-4 w-4" />
-                <span className="text-xs text-text-secondary font-mono w-16">{issue.key}</span>
-                <span className="flex-1 text-sm font-medium truncate">{issue.title}</span>
-                {issue.labels?.map((l) => (
-                  <Badge key={l.id} className="text-xs">
-                    {l.name}
-                  </Badge>
-                ))}
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[issue.priority]}`}
-                >
-                  {issue.priority}
-                </span>
-                {issue.column && (
-                  <span className="text-xs text-text-secondary">{issue.column.name}</span>
-                )}
-                {issue.assignee && <Avatar name={issue.assignee.displayName} size="sm" />}
-                <span className="text-xs text-text-secondary w-16 text-right">
-                  {formatRelative(issue.updatedAt)}
-                </span>
-              </Link>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {filteredIssues.map((issue) => (
-            <div
-              key={issue.id}
-              className={cn(
-                'relative rounded-lg border border-border bg-surface p-4 hover:shadow-sm hover:border-primary/30 transition-all',
-                selectedIds.has(issue.id) && 'border-primary/50 bg-primary-light/5',
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={selectedIds.has(issue.id)}
-                onClick={(e) => toggleSelect(issue.id, e)}
-                onChange={() => {}}
-                className="absolute top-3 right-3 h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
-              />
-              <Link
-                to={`/${org}/${teamSlug}/${projectSlug}/issues/${issue.number}`}
-                className="block"
-              >
-                <div className="flex items-center gap-1.5 mb-2">
-                  <IssueTypeIcon type={issue.type} className="h-4 w-4" />
-                  <span className="text-xs text-text-secondary font-mono">{issue.key}</span>
-                  <span
-                    className={`ml-auto mr-6 text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[issue.priority]}`}
-                  >
-                    {issue.priority}
-                  </span>
-                </div>
-                <p className="text-sm font-medium line-clamp-2 mb-3">{issue.title}</p>
-                <div className="flex items-center justify-between">
-                  <div className="flex gap-1 flex-wrap">
-                    {issue.labels?.slice(0, 2).map((l) => (
-                      <Badge key={l.id} className="text-xs">
-                        {l.name}
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {issue.column && (
-                      <span className="text-xs text-text-tertiary">{issue.column.name}</span>
-                    )}
-                    {issue.assignee && <Avatar name={issue.assignee.displayName} size="sm" />}
-                  </div>
-                </div>
-              </Link>
-            </div>
-          ))}
-        </div>
-      )}
+      <IssueListTable
+        issues={filteredIssues}
+        selectedIds={selectedIds}
+        toggleSelect={toggleSelect}
+        toggleSelectAll={toggleSelectAll}
+        viewMode={viewMode}
+        hasActiveSearch={hasActiveSearch}
+        activeFilterCount={activeFilterCount}
+        org={org!}
+        teamSlug={teamSlug!}
+        projectSlug={projectSlug!}
+      />
 
       {/* Pagination */}
       {(data?.total ?? 0) > 0 && (

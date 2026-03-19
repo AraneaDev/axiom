@@ -9,6 +9,7 @@ import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { Textarea } from '@/components/ui/Textarea';
 
 /**
  *
@@ -86,19 +87,14 @@ export default function CreateWikiSpace() {
           placeholder="eng-docs"
           required
         />
-        <div className="flex flex-col gap-1">
-          <label htmlFor="desc" className="text-sm font-medium text-text">
-            Description (optional)
-          </label>
-          <textarea
-            id="desc"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            rows={3}
-            placeholder="What kind of documentation goes here?"
-          />
-        </div>
+        <Textarea
+          id="desc"
+          label="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          placeholder="What kind of documentation goes here?"
+        />
         <Button type="submit" disabled={loading}>
           {loading ? (
             <Spinner className="h-4 w-4" />

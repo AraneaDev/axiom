@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
+import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
  * Create a deployment environment for a repository.
@@ -27,7 +28,7 @@ export async function createEnvironment(
       deployments: {
         orderBy: { createdAt: 'desc' },
         take: 1,
-        include: { deployedBy: { select: { id: true, username: true, displayName: true } } },
+        include: { deployedBy: { select: USER_BASIC_SELECT } },
       },
     },
   });
@@ -44,7 +45,7 @@ export async function listEnvironments(repoId: string) {
       deployments: {
         orderBy: { createdAt: 'desc' },
         take: 1,
-        include: { deployedBy: { select: { id: true, username: true, displayName: true } } },
+        include: { deployedBy: { select: USER_BASIC_SELECT } },
       },
     },
     orderBy: { createdAt: 'asc' },
@@ -77,7 +78,7 @@ export async function updateEnvironment(
       deployments: {
         orderBy: { createdAt: 'desc' },
         take: 1,
-        include: { deployedBy: { select: { id: true, username: true, displayName: true } } },
+        include: { deployedBy: { select: USER_BASIC_SELECT } },
       },
     },
   });
@@ -119,7 +120,7 @@ export async function createDeployment(
         status: data.status ?? 'PENDING',
       },
       include: {
-        deployedBy: { select: { id: true, username: true, displayName: true } },
+        deployedBy: { select: USER_BASIC_SELECT },
         environment: { select: { id: true, name: true } },
         pipelineRun: { select: { id: true, status: true } },
       },
@@ -146,7 +147,7 @@ export async function listDeployments(
   return prisma.deployment.findMany({
     where: { environmentId: envId },
     include: {
-      deployedBy: { select: { id: true, username: true, displayName: true } },
+      deployedBy: { select: USER_BASIC_SELECT },
       pipelineRun: { select: { id: true, status: true, pipeline: { select: { name: true } } } },
     },
     orderBy: { createdAt: 'desc' },
@@ -163,7 +164,7 @@ export async function getDeployment(deploymentId: string) {
   return prisma.deployment.findUnique({
     where: { id: deploymentId },
     include: {
-      deployedBy: { select: { id: true, username: true, displayName: true } },
+      deployedBy: { select: USER_BASIC_SELECT },
       environment: true,
       pipelineRun: { select: { id: true, status: true, pipeline: { select: { name: true } } } },
     },
@@ -183,7 +184,7 @@ export async function getDeploymentsByCommit(repoId: string, commitSha: string) 
     },
     include: {
       environment: { select: { id: true, name: true, url: true } },
-      deployedBy: { select: { id: true, username: true, displayName: true } },
+      deployedBy: { select: USER_BASIC_SELECT },
     },
     orderBy: { createdAt: 'desc' },
   });

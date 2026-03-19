@@ -5,6 +5,12 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { repoExists } from '../../git/repo-manager';
+import {
+  PROJECT_URL_WITH_NAME_SELECT,
+  SPACE_URL_SELECT,
+  TEAM_ORG_SELECT,
+  USER_WITH_AVATAR_SELECT,
+} from '../../utils/prisma-selects';
 
 const execFileAsync = promisify(execFile);
 
@@ -37,6 +43,12 @@ export interface CodeMatch {
   filePath: string;
   lineNumber: number;
   lineContent: string;
+}
+
+interface SearchResultSection {
+  type: string;
+  items: unknown[];
+  total: number;
 }
 
 // ─── Structured Query Parsing ───────────────────────────────
@@ -100,8 +112,7 @@ function toTsQuery(text: string): string {
  */
 export async function search(params: SearchParams) {
   const { freeText, filters } = parseStructuredQuery(params.q);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const results: { type: string; items: any[]; total: number }[] = [];
+  const results: SearchResultSection[] = [];
 
   if (params.type === 'issues' || params.type === 'all') {
     const issueResults = await searchIssues(freeText, filters, params);
@@ -238,15 +249,8 @@ async function searchIssues(
     prisma.issue.findMany({
       where,
       include: {
-        project: {
-          select: {
-            prefix: true,
-            slug: true,
-            name: true,
-            team: { select: { slug: true, org: { select: { slug: true } } } },
-          },
-        },
-        assignee: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
+        project: { select: PROJECT_URL_WITH_NAME_SELECT },
+        assignee: { select: USER_WITH_AVATAR_SELECT },
         labels: true,
         column: { select: { name: true, isDone: true } },
       },
@@ -318,14 +322,7 @@ async function searchWiki(
         prisma.page.findMany({
           where,
           include: {
-            space: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                team: { select: { slug: true, org: { select: { slug: true } } } },
-              },
-            },
+            space: { select: SPACE_URL_SELECT },
           },
           take: params.limit,
           skip: params.offset,
@@ -405,12 +402,7 @@ async function searchRepos(freeText: string, params: SearchParams) {
     prisma.repository.findMany({
       where,
       include: {
-        team: {
-          select: {
-            slug: true,
-            org: { select: { slug: true } },
-          },
-        },
+        team: { select: TEAM_ORG_SELECT },
       },
       take: params.limit,
       skip: params.offset,
@@ -453,12 +445,7 @@ export async function searchCode(
   const repos = await prisma.repository.findMany({
     where: repoFilter,
     include: {
-      team: {
-        select: {
-          slug: true,
-          org: { select: { slug: true } },
-        },
-      },
+      team: { select: TEAM_ORG_SELECT },
     },
     take: 20, // limit repos to search
   });
@@ -556,6 +543,7 @@ export async function getSavedSearches(userId: string) {
       projectId: null, // global saved searches only
     },
     orderBy: { createdAt: 'desc' },
+    take: 100,
   });
 }
 

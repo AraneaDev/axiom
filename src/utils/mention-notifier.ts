@@ -19,17 +19,25 @@ export async function notifyMentions(
   const usernames = parseMentions(text);
   if (usernames.length === 0) return;
 
-  const users = await prisma.user.findMany({
-    where: { username: { in: usernames } },
-    select: { id: true, username: true },
-  });
+  const [users, author] = await Promise.all([
+    prisma.user.findMany({
+      where: { username: { in: usernames } },
+      select: { id: true, username: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: authorId },
+      select: { username: true },
+    }),
+  ]);
+
+  const authorName = author?.username ?? 'someone';
 
   for (const user of users) {
     if (user.id === authorId) continue;
     await createNotification(
       user.id,
       'mention',
-      `You were mentioned by @${(await prisma.user.findUnique({ where: { id: authorId }, select: { username: true } }))?.username ?? 'someone'}`,
+      `You were mentioned by @${authorName}`,
       undefined,
       resourceUrl,
     );

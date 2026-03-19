@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
 /**
@@ -130,7 +131,7 @@ export async function getPage(spaceId: string, pageSlug: string) {
       versions: {
         orderBy: { version: 'desc' },
         take: 1,
-        include: { author: { select: { id: true, username: true, displayName: true } } },
+        include: { author: { select: USER_BASIC_SELECT } },
       },
     },
   });
@@ -219,7 +220,7 @@ export async function getPageHistory(spaceId: string, pageSlug: string) {
     include: {
       versions: {
         orderBy: { version: 'desc' },
-        include: { author: { select: { id: true, username: true, displayName: true } } },
+        include: { author: { select: USER_BASIC_SELECT } },
       },
     },
   });
@@ -326,7 +327,7 @@ export async function addPageComment(
 
   return prisma.pageComment.create({
     data: { pageId, userId, body, anchorText },
-    include: { user: { select: { id: true, username: true, displayName: true } } },
+    include: { user: { select: USER_BASIC_SELECT } },
   });
 }
 
@@ -337,7 +338,7 @@ export async function addPageComment(
 export async function listPageComments(pageId: string) {
   return prisma.pageComment.findMany({
     where: { pageId },
-    include: { user: { select: { id: true, username: true, displayName: true } } },
+    include: { user: { select: USER_BASIC_SELECT } },
     orderBy: { createdAt: 'asc' },
   });
 }
@@ -353,7 +354,7 @@ export async function resolveComment(commentId: string) {
   return prisma.pageComment.update({
     where: { id: commentId },
     data: { resolved: !comment.resolved },
-    include: { user: { select: { id: true, username: true, displayName: true } } },
+    include: { user: { select: USER_BASIC_SELECT } },
   });
 }
 

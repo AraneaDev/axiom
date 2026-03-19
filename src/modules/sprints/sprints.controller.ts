@@ -1,6 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { param } from '../../utils/params';
+import {
+  validate,
+  createSprintSchema,
+  updateSprintSchema,
+  completeSprintSchema,
+  addSprintIssuesSchema,
+} from '../../utils/validation';
 
 import * as sprintsService from './sprints.service';
 
@@ -12,7 +19,8 @@ import * as sprintsService from './sprints.service';
  */
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
-    const sprint = await sprintsService.createSprint(param(req, 'projectId'), req.body);
+    const body = validate(createSprintSchema, req.body);
+    const sprint = await sprintsService.createSprint(param(req, 'projectId'), body);
     res.status(201).json(sprint);
   } catch (err) {
     next(err);
@@ -59,7 +67,8 @@ export async function get(req: Request, res: Response, next: NextFunction) {
  */
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    const sprint = await sprintsService.updateSprint(param(req, 'sprintId'), req.body);
+    const body = validate(updateSprintSchema, req.body);
+    const sprint = await sprintsService.updateSprint(param(req, 'sprintId'), body);
     res.json(sprint);
   } catch (err) {
     next(err);
@@ -89,10 +98,8 @@ export async function start(req: Request, res: Response, next: NextFunction) {
  */
 export async function complete(req: Request, res: Response, next: NextFunction) {
   try {
-    const sprint = await sprintsService.completeSprint(
-      param(req, 'sprintId'),
-      req.body.moveToSprintId,
-    );
+    const body = validate(completeSprintSchema, req.body);
+    const sprint = await sprintsService.completeSprint(param(req, 'sprintId'), body.moveToSprintId);
     res.json(sprint);
   } catch (err) {
     next(err);
@@ -107,10 +114,8 @@ export async function complete(req: Request, res: Response, next: NextFunction) 
  */
 export async function addIssues(req: Request, res: Response, next: NextFunction) {
   try {
-    const sprint = await sprintsService.addIssuesToSprint(
-      param(req, 'sprintId'),
-      req.body.issueIds,
-    );
+    const body = validate(addSprintIssuesSchema, req.body);
+    const sprint = await sprintsService.addIssuesToSprint(param(req, 'sprintId'), body.issueIds);
     res.json(sprint);
   } catch (err) {
     next(err);
@@ -140,7 +145,7 @@ export async function removeIssue(req: Request, res: Response, next: NextFunctio
  */
 export async function velocity(req: Request, res: Response, next: NextFunction) {
   try {
-    const count = req.query.count ? parseInt(req.query.count as string) : undefined;
+    const count = req.query.count ? parseInt(req.query.count as string, 10) : undefined;
     const data = await sprintsService.getVelocity(param(req, 'projectId'), count);
     res.json(data);
   } catch (err) {

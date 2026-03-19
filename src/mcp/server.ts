@@ -6,6 +6,13 @@ import { z } from 'zod';
 import { prisma } from '../config/database';
 import * as gitCmd from '../git/git-commands';
 import { repoExists } from '../git/repo-manager';
+import * as issuesService from '../modules/issues/issues.service';
+import * as pipelinesService from '../modules/pipelines/pipelines.service';
+import * as pullsService from '../modules/pulls/pulls.service';
+import * as releasesService from '../modules/releases/releases.service';
+import * as sprintsService from '../modules/sprints/sprints.service';
+import * as wikiService from '../modules/wiki/wiki.service';
+import { USER_BASIC_SELECT } from '../utils/prisma-selects';
 
 import { mcpContext } from './context';
 import { assertMcpPermission } from './mcp-permissions';
@@ -33,71 +40,105 @@ function createMcpServer(userId: string) {
     return project?.team?.orgId;
   }
 
+  // Helper to get org ID from repo ID
+  async function getOrgIdFromRepo(repoId: string) {
+    const repo = await prisma.repository.findUnique({
+      where: { id: repoId },
+      include: { team: { select: { orgId: true } } },
+    });
+    return repo?.team?.orgId;
+  }
+
+  // Helper to get org ID from sprint ID
+  async function getOrgIdFromSprint(sprintId: string) {
+    const sprint = await prisma.sprint.findUnique({
+      where: { id: sprintId },
+      include: { project: { include: { team: { select: { orgId: true } } } } },
+    });
+    return sprint?.project?.team?.orgId;
+  }
+
   // ─── Org/Team Tools ─────────────────────────────────────────
 
-  server.tool('list_orgs', 'List organizations the current user belongs to', {}, async () => {
-    const memberships = await prisma.orgMembership.findMany({
-      where: { userId },
-      include: { org: true },
-    });
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(
-            memberships.map((m) => ({ ...m.org, role: m.role })),
-            null,
-            2,
-          ),
-        },
-      ],
-    };
-  });
+  server.tool(
+    'list_orgs',
+    'List organizations the current user belongs to',
+    {
+      cursor: z.string().optional().describe('Cursor for pagination (org ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
+    },
+    async ({ cursor, limit }) => {
+      const take = Math.min(limit, 100);
+      const memberships = await prisma.orgMembership.findMany({
+        where: { userId },
+        include: { org: true },
+        orderBy: { orgId: 'asc' },
+        take: take + 1,
+        ...(cursor ? { cursor: { userId_orgId: { userId, orgId: cursor } }, skip: 1 } : {}),
+      });
+      const hasMore = memberships.length > take;
+      const page = hasMore ? memberships.slice(0, take) : memberships;
+      const result: Record<string, unknown> = {
+        data: page.map((m) => ({ ...m.org, role: m.role })),
+      };
+      if (hasMore) result.next_cursor = page[page.length - 1].orgId;
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
   server.tool(
     'list_teams',
     'List teams in an organization the user is a member of',
-    { orgId: z.string().describe('Organization ID') },
-    async ({ orgId }) => {
+    {
+      orgId: z.string().describe('Organization ID'),
+      cursor: z.string().optional().describe('Cursor for pagination (team ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
+    },
+    async ({ orgId, cursor, limit }) => {
       await assertMcpPermission('list_teams', orgId);
-      const memberships = await prisma.teamMembership.findMany({
-        where: { userId, team: { orgId } },
+      const take = Math.min(limit, 100);
+      const teams = await prisma.team.findMany({
+        where: { orgId, members: { some: { userId } } },
         include: {
-          team: {
-            include: {
-              _count: { select: { members: true, repos: true, projects: true, wikiSpaces: true } },
-            },
-          },
+          _count: { select: { members: true, repos: true, projects: true, wikiSpaces: true } },
         },
+        orderBy: { id: 'asc' },
+        take: take + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(
-              memberships.map((m) => m.team),
-              null,
-              2,
-            ),
-          },
-        ],
-      };
+      const hasMore = teams.length > take;
+      const page = hasMore ? teams.slice(0, take) : teams;
+      const result: Record<string, unknown> = { data: page };
+      if (hasMore) result.next_cursor = page[page.length - 1].id;
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 
   server.tool(
     'list_projects',
     'List projects in a team',
-    { teamId: z.string().describe('Team ID') },
-    async ({ teamId }) => {
+    {
+      teamId: z.string().describe('Team ID'),
+      cursor: z.string().optional().describe('Cursor for pagination (project ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
+    },
+    async ({ teamId, cursor, limit }) => {
       const team = await prisma.team.findUnique({ where: { id: teamId } });
       if (!team) return { content: [{ type: 'text' as const, text: 'Team not found' }] };
       await assertMcpPermission('list_projects', team.orgId);
+      const take = Math.min(limit, 100);
       const projects = await prisma.project.findMany({
         where: { teamId },
         include: { _count: { select: { issues: true } } },
+        orderBy: { id: 'asc' },
+        take: take + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(projects, null, 2) }] };
+      const hasMore = projects.length > take;
+      const page = hasMore ? projects.slice(0, take) : projects;
+      const result: Record<string, unknown> = { data: page };
+      if (hasMore) result.next_cursor = page[page.length - 1].id;
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 
@@ -111,9 +152,10 @@ function createMcpServer(userId: string) {
       type: z.enum(['TASK', 'BUG', 'STORY', 'EPIC']).optional(),
       priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional(),
       assigneeId: z.string().optional(),
-      limit: z.number().default(20),
+      cursor: z.string().optional().describe('Cursor for pagination (issue ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
     },
-    async ({ projectId, type, priority, assigneeId, limit }) => {
+    async ({ projectId, type, priority, assigneeId, cursor, limit }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: 'Project not found' }] };
       await assertMcpPermission('list_issues', orgId);
@@ -121,18 +163,23 @@ function createMcpServer(userId: string) {
       if (type) where.type = type;
       if (priority) where.priority = priority;
       if (assigneeId) where.assigneeId = assigneeId;
+      const take = Math.min(limit, 100);
       const issues = await prisma.issue.findMany({
         where,
         include: {
           project: { select: { prefix: true } },
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
           column: { select: { name: true } },
         },
-        take: limit,
+        take: take + 1,
         orderBy: { updatedAt: 'desc' },
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
-      const result = issues.map((i) => ({
+      const hasMore = issues.length > take;
+      const page = hasMore ? issues.slice(0, take) : issues;
+      const data = page.map((i) => ({
+        id: i.id,
         key: `${i.project.prefix}-${i.number}`,
         title: i.title,
         type: i.type,
@@ -141,6 +188,8 @@ function createMcpServer(userId: string) {
         assignee: i.assignee?.displayName ?? 'Unassigned',
         labels: i.labels.map((l) => l.name),
       }));
+      const result: Record<string, unknown> = { data };
+      if (hasMore) result.next_cursor = page[page.length - 1].id;
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -158,8 +207,8 @@ function createMcpServer(userId: string) {
       const issue = await prisma.issue.findUnique({
         where: { projectId_number: { projectId, number: issueNumber } },
         include: {
-          assignee: { select: { id: true, username: true, displayName: true } },
-          creator: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
+          creator: { select: USER_BASIC_SELECT },
           labels: true,
           column: true,
           comments: {
@@ -258,16 +307,28 @@ function createMcpServer(userId: string) {
   server.tool(
     'list_wiki_spaces',
     'List wiki spaces for a team',
-    { teamId: z.string() },
-    async ({ teamId }) => {
+    {
+      teamId: z.string(),
+      cursor: z.string().optional().describe('Cursor for pagination (space ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
+    },
+    async ({ teamId, cursor, limit }) => {
       const team = await prisma.team.findUnique({ where: { id: teamId } });
       if (!team) return { content: [{ type: 'text' as const, text: 'Team not found' }] };
       await assertMcpPermission('list_wiki_spaces', team.orgId);
+      const take = Math.min(limit, 100);
       const spaces = await prisma.wikiSpace.findMany({
         where: { teamId },
         include: { _count: { select: { pages: true } } },
+        orderBy: { id: 'asc' },
+        take: take + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(spaces, null, 2) }] };
+      const hasMore = spaces.length > take;
+      const page = hasMore ? spaces.slice(0, take) : spaces;
+      const result: Record<string, unknown> = { data: page };
+      if (hasMore) result.next_cursor = page[page.length - 1].id;
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 
@@ -355,11 +416,16 @@ function createMcpServer(userId: string) {
   server.tool(
     'list_repos',
     'List repositories in a team',
-    { teamId: z.string() },
-    async ({ teamId }) => {
+    {
+      teamId: z.string(),
+      cursor: z.string().optional().describe('Cursor for pagination (repo ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
+    },
+    async ({ teamId, cursor, limit }) => {
       const team = await prisma.team.findUnique({ where: { id: teamId } });
       if (!team) return { content: [{ type: 'text' as const, text: 'Team not found' }] };
       await assertMcpPermission('list_repos', team.orgId);
+      const take = Math.min(limit, 100);
       const repos = await prisma.repository.findMany({
         where: { teamId },
         select: {
@@ -370,8 +436,15 @@ function createMcpServer(userId: string) {
           visibility: true,
           defaultBranch: true,
         },
+        orderBy: { id: 'asc' },
+        take: take + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(repos, null, 2) }] };
+      const hasMore = repos.length > take;
+      const page = hasMore ? repos.slice(0, take) : repos;
+      const result: Record<string, unknown> = { data: page };
+      if (hasMore) result.next_cursor = page[page.length - 1].id;
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 
@@ -472,8 +545,13 @@ function createMcpServer(userId: string) {
   server.tool(
     'list_pull_requests',
     'List pull requests in a repository, optionally filtered by status',
-    { repoId: z.string(), status: z.enum(['OPEN', 'MERGED', 'CLOSED']).optional() },
-    async ({ repoId, status }) => {
+    {
+      repoId: z.string(),
+      status: z.enum(['OPEN', 'MERGED', 'CLOSED']).optional(),
+      cursor: z.string().optional().describe('Cursor for pagination (PR ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
+    },
+    async ({ repoId, status, cursor, limit }) => {
       const repo = await prisma.repository.findUnique({
         where: { id: repoId },
         include: { team: true },
@@ -482,10 +560,14 @@ function createMcpServer(userId: string) {
       await assertMcpPermission('list_pull_requests', repo.team.orgId);
       const where: Record<string, unknown> = { repoId };
       if (status) where.status = status;
+      const take = Math.min(limit, 100);
       const prs = await prisma.pullRequest.findMany({
         where,
+        take: take + 1,
         orderBy: { updatedAt: 'desc' },
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
         select: {
+          id: true,
           number: true,
           title: true,
           status: true,
@@ -497,7 +579,11 @@ function createMcpServer(userId: string) {
           _count: { select: { reviews: true, comments: true } },
         },
       });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(prs, null, 2) }] };
+      const hasMore = prs.length > take;
+      const page = hasMore ? prs.slice(0, take) : prs;
+      const result: Record<string, unknown> = { data: page };
+      if (hasMore) result.next_cursor = page[page.length - 1].id;
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 
@@ -565,7 +651,7 @@ function createMcpServer(userId: string) {
         data: updateData,
         include: {
           project: { select: { prefix: true } },
-          assignee: { select: { id: true, username: true, displayName: true } },
+          assignee: { select: USER_BASIC_SELECT },
           labels: true,
           column: { select: { name: true } },
           sprint: { select: { id: true, name: true } },
@@ -802,8 +888,10 @@ function createMcpServer(userId: string) {
         .enum(['PLANNING', 'ACTIVE', 'COMPLETED'])
         .optional()
         .describe('Filter by sprint status'),
+      cursor: z.string().optional().describe('Cursor for pagination (sprint ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
     },
-    async ({ projectId, status }) => {
+    async ({ projectId, status, cursor, limit }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: 'Project not found' }] };
       await assertMcpPermission('list_sprints', orgId);
@@ -811,12 +899,19 @@ function createMcpServer(userId: string) {
       const where: Record<string, unknown> = { projectId };
       if (status) where.status = status;
 
+      const take = Math.min(limit, 100);
       const sprints = await prisma.sprint.findMany({
         where,
+        take: take + 1,
         include: { _count: { select: { issues: true } } },
         orderBy: { startDate: 'desc' },
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(sprints, null, 2) }] };
+      const hasMore = sprints.length > take;
+      const page = hasMore ? sprints.slice(0, take) : sprints;
+      const result: Record<string, unknown> = { data: page };
+      if (hasMore) result.next_cursor = page[page.length - 1].id;
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 
@@ -833,7 +928,7 @@ function createMcpServer(userId: string) {
           project: { select: { prefix: true, team: { select: { orgId: true } } } },
           issues: {
             include: {
-              assignee: { select: { id: true, username: true, displayName: true } },
+              assignee: { select: USER_BASIC_SELECT },
               labels: true,
               column: { select: { id: true, name: true } },
             },
@@ -923,6 +1018,318 @@ function createMcpServer(userId: string) {
         },
       });
       return { content: [{ type: 'text' as const, text: JSON.stringify(updated, null, 2) }] };
+    },
+  );
+
+  // ─── Merge Pull Request Tool ──────────────────────────────
+
+  server.tool(
+    'merge_pull_request',
+    'Merge an open pull request. Supports merge, squash, or rebase strategies.',
+    {
+      repoId: z.string().describe('Repository ID'),
+      prNumber: z.number().describe('Pull request number'),
+      strategy: z
+        .enum(['merge', 'squash', 'rebase'])
+        .optional()
+        .describe('Merge strategy (defaults to repo setting or merge)'),
+    },
+    async ({ repoId, prNumber, strategy }) => {
+      const orgId = await getOrgIdFromRepo(repoId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('merge_pull_request', orgId);
+      try {
+        const merged = await pullsService.mergePR(repoId, prNumber, strategy);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(merged, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Merge failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── Delete Issue Tool ───────────────────────────────────
+
+  server.tool(
+    'delete_issue',
+    'Permanently delete an issue from a project',
+    {
+      projectId: z.string().describe('Project ID'),
+      issueNumber: z.number().describe('Issue number within the project'),
+    },
+    async ({ projectId, issueNumber }) => {
+      const orgId = await getOrgIdFromProject(projectId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Project not found' }] };
+      await assertMcpPermission('delete_issue', orgId);
+      try {
+        await issuesService.deleteIssue(projectId, issueNumber, userId);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({ deleted: true, issueNumber }, null, 2),
+            },
+          ],
+        };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Delete failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── Sprint Write Tools ──────────────────────────────────
+
+  server.tool(
+    'create_sprint',
+    'Create a new sprint in PLANNING status for a project',
+    {
+      projectId: z.string().describe('Project ID'),
+      name: z.string().describe('Sprint name'),
+      goal: z.string().optional().describe('Sprint goal'),
+      startDate: z.string().describe('Start date (ISO 8601)'),
+      endDate: z.string().describe('End date (ISO 8601)'),
+    },
+    async ({ projectId, name, goal, startDate, endDate }) => {
+      const orgId = await getOrgIdFromProject(projectId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Project not found' }] };
+      await assertMcpPermission('create_sprint', orgId);
+      try {
+        const sprint = await sprintsService.createSprint(projectId, {
+          name,
+          goal,
+          startDate,
+          endDate,
+        });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(sprint, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Create sprint failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'start_sprint',
+    'Start a sprint (move from PLANNING to ACTIVE). Only one active sprint per project is allowed.',
+    {
+      sprintId: z.string().describe('Sprint ID'),
+    },
+    async ({ sprintId }) => {
+      const orgId = await getOrgIdFromSprint(sprintId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Sprint not found' }] };
+      await assertMcpPermission('start_sprint', orgId);
+      try {
+        const sprint = await sprintsService.startSprint(sprintId);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(sprint, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Start sprint failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'complete_sprint',
+    'Complete an active sprint. Incomplete issues can be moved to another sprint or backlog.',
+    {
+      sprintId: z.string().describe('Sprint ID'),
+      moveToSprintId: z
+        .string()
+        .optional()
+        .describe('Sprint ID to move incomplete issues to. Omit to move to backlog.'),
+    },
+    async ({ sprintId, moveToSprintId }) => {
+      const orgId = await getOrgIdFromSprint(sprintId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Sprint not found' }] };
+      await assertMcpPermission('complete_sprint', orgId);
+      try {
+        const sprint = await sprintsService.completeSprint(sprintId, moveToSprintId);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(sprint, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Complete sprint failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'add_issues_to_sprint',
+    'Add one or more issues to a sprint by their issue IDs',
+    {
+      sprintId: z.string().describe('Sprint ID'),
+      issueIds: z.array(z.string()).describe('Array of issue IDs to add to the sprint'),
+    },
+    async ({ sprintId, issueIds }) => {
+      const orgId = await getOrgIdFromSprint(sprintId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Sprint not found' }] };
+      await assertMcpPermission('add_issues_to_sprint', orgId);
+      try {
+        const sprint = await sprintsService.addIssuesToSprint(sprintId, issueIds);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(sprint, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Add issues to sprint failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── Delete Wiki Page Tool ───────────────────────────────
+
+  server.tool(
+    'delete_wiki_page',
+    'Permanently delete a wiki page from a space',
+    {
+      spaceId: z.string().describe('Wiki space ID'),
+      pageSlug: z.string().describe('Page slug to delete'),
+    },
+    async ({ spaceId, pageSlug }) => {
+      const space = await prisma.wikiSpace.findUnique({ where: { id: spaceId } });
+      if (!space) return { content: [{ type: 'text' as const, text: 'Space not found' }] };
+      const team = await prisma.team.findUnique({ where: { id: space.teamId } });
+      if (team) await assertMcpPermission('delete_wiki_page', team.orgId);
+      try {
+        await wikiService.deletePage(spaceId, pageSlug, userId);
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify({ deleted: true, pageSlug }, null, 2) },
+          ],
+        };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Delete failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── Pipeline Tools ──────────────────────────────────────
+
+  server.tool(
+    'list_pipelines',
+    'List CI/CD pipelines for a repository',
+    {
+      repoId: z.string().describe('Repository ID'),
+      cursor: z.string().optional().describe('Cursor for pagination (pipeline ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
+    },
+    async ({ repoId, cursor, limit }) => {
+      const orgId = await getOrgIdFromRepo(repoId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('list_pipelines', orgId);
+      try {
+        const allPipelines = await pipelinesService.listPipelines(repoId);
+        // Apply cursor-based pagination over the result
+        const take = Math.min(limit, 100);
+        let startIdx = 0;
+        if (cursor) {
+          const idx = allPipelines.findIndex((p) => p.id === cursor);
+          if (idx >= 0) startIdx = idx + 1;
+        }
+        const page = allPipelines.slice(startIdx, startIdx + take);
+        const hasMore = startIdx + take < allPipelines.length;
+        const result: Record<string, unknown> = { data: page };
+        if (hasMore) result.next_cursor = page[page.length - 1].id;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'List pipelines failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'trigger_pipeline',
+    'Trigger a CI/CD pipeline run on a specific git ref (branch or tag)',
+    {
+      pipelineId: z.string().describe('Pipeline ID'),
+      repoId: z.string().describe('Repository ID'),
+      ref: z.string().describe('Git ref to run the pipeline on (branch name or tag)'),
+    },
+    async ({ pipelineId, repoId, ref }) => {
+      const orgId = await getOrgIdFromRepo(repoId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('trigger_pipeline', orgId);
+      try {
+        const run = await pipelinesService.triggerRun(pipelineId, repoId, userId, ref);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(run, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Trigger pipeline failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  // ─── Release Tools ───────────────────────────────────────
+
+  server.tool(
+    'list_releases',
+    'List releases for a repository, optionally filtered by draft or prerelease status',
+    {
+      repoId: z.string().describe('Repository ID'),
+      draft: z.boolean().optional().describe('Filter by draft status'),
+      prerelease: z.boolean().optional().describe('Filter by prerelease status'),
+      cursor: z.string().optional().describe('Cursor for pagination (release ID to start after)'),
+      limit: z.number().optional().default(20).describe('Max results to return'),
+    },
+    async ({ repoId, draft, prerelease, cursor, limit }) => {
+      const orgId = await getOrgIdFromRepo(repoId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('list_releases', orgId);
+      try {
+        const allReleases = await releasesService.listReleases(repoId, { draft, prerelease });
+        const take = Math.min(limit, 100);
+        let startIdx = 0;
+        if (cursor) {
+          const idx = allReleases.findIndex((r) => r.id === cursor);
+          if (idx >= 0) startIdx = idx + 1;
+        }
+        const page = allReleases.slice(startIdx, startIdx + take);
+        const hasMore = startIdx + take < allReleases.length;
+        const result: Record<string, unknown> = { data: page };
+        if (hasMore) result.next_cursor = page[page.length - 1].id;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'List releases failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'create_release',
+    'Create a new release for a repository with a tag name and target branch',
+    {
+      repoId: z.string().describe('Repository ID'),
+      tagName: z.string().describe('Tag name for the release (e.g. v1.0.0)'),
+      title: z.string().describe('Release title'),
+      body: z.string().optional().default('').describe('Release description (markdown)'),
+      targetBranch: z.string().describe('Branch to create the release from'),
+      isDraft: z.boolean().optional().default(false).describe('Create as draft release'),
+      isPrerelease: z.boolean().optional().default(false).describe('Mark as prerelease'),
+      commitSha: z
+        .string()
+        .optional()
+        .describe('Specific commit SHA to tag (defaults to branch HEAD)'),
+    },
+    async ({ repoId, tagName, title, body, targetBranch, isDraft, isPrerelease, commitSha }) => {
+      const orgId = await getOrgIdFromRepo(repoId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('create_release', orgId);
+      try {
+        const release = await releasesService.createRelease(repoId, userId, {
+          tagName,
+          title,
+          body,
+          targetBranch,
+          isDraft,
+          isPrerelease,
+          commitSha,
+        });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(release, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Create release failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
     },
   );
 

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { AppError } from '../../middleware/errorHandler';
 import { param } from '../../utils/params';
 
 import * as statusChecksService from './status-checks.service';
@@ -14,8 +15,7 @@ export async function createStatus(req: Request, res: Response, next: NextFuncti
   try {
     const { sha, context, state, targetUrl, description } = req.body;
     if (!sha || !context || !state) {
-      res.status(400).json({ error: { message: 'sha, context, and state are required' } });
-      return;
+      throw new AppError(400, 'sha, context, and state are required');
     }
     const status = await statusChecksService.createOrUpdateStatus(param(req, 'repoId'), sha, {
       context,

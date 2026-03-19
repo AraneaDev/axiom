@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { prisma } from '../config/database';
 import { createOrUpdateStatus } from '../modules/status-checks/status-checks.service';
 import { broadcastToRoom } from '../realtime/ws-server';
+import { logger } from '../utils/logger';
 
 import { createLogStreamer, removeLogStreamer } from './log-streamer';
 import { parsePipelineConfig, type Step, type Job } from './yaml-parser';
@@ -166,7 +167,7 @@ export async function executePipelineRun(runId: string): Promise<void> {
 
     streamer.stop();
   } catch (err) {
-    console.error('[executor] Pipeline run error:', err);
+    logger.error('Pipeline run error', { runId }, err as Error);
     await prisma.pipelineRun
       .update({
         where: { id: runId },
@@ -399,6 +400,10 @@ async function reportStatus(
             : 'Pipeline failed',
     });
   } catch (err) {
-    console.error('[executor] Failed to report commit status:', err);
+    logger.error(
+      'Failed to report commit status',
+      { repoId, commitSha, pipelineName },
+      err as Error,
+    );
   }
 }

@@ -15,7 +15,7 @@ interface MentionInputProps {
 }
 
 /**
- * Textarea with @mention autocomplete.
+ * Textarea with `@mention` autocomplete.
  * Shows a dropdown of matching users when the user types @.
  */
 export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(

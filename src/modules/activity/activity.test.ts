@@ -182,6 +182,73 @@ describe('Activity API', () => {
     });
   });
 
+  // ── Issue Activity: Edge Cases ─────────────────────────────
+
+  describe('GET /api/projects/:projectId/issues/:issueNumber/activity - edge cases', () => {
+    it('should return 404 for non-existent issue number', async () => {
+      const res = await request(app)
+        .get(`/api/projects/${projectId}/issues/99999/activity`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(404);
+      expect(res.body.error.message).toBe('Issue not found');
+    });
+  });
+
+  // ── Pagination ───────────────────────────────────────────
+
+  describe('GET /api/projects/:projectId/activity - pagination', () => {
+    it('should support pagination with limit and offset', async () => {
+      const res1 = await request(app)
+        .get(`/api/projects/${projectId}/activity?limit=1&offset=0`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(res1.status).toBe(200);
+      expect(res1.body.activities).toHaveLength(1);
+
+      const res2 = await request(app)
+        .get(`/api/projects/${projectId}/activity?limit=1&offset=1`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(res2.status).toBe(200);
+      expect(res2.body.activities).toHaveLength(1);
+
+      // Different activities
+      expect(res1.body.activities[0].id).not.toBe(res2.body.activities[0].id);
+    });
+  });
+
+  // ── User shape in response ───────────────────────────────
+
+  describe('Activity response includes user with avatar', () => {
+    it('should include user with id, username, displayName, avatarUrl', async () => {
+      const res = await request(app)
+        .get(`/api/projects/${projectId}/activity`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+
+      const activity = res.body.activities[0];
+      expect(activity.user).toBeDefined();
+      expect(activity.user).toHaveProperty('id');
+      expect(activity.user).toHaveProperty('username');
+      expect(activity.user).toHaveProperty('displayName');
+      expect(activity.user).toHaveProperty('avatarUrl');
+    });
+  });
+
+  // ── Activity Service: getIssueIdByNumber ─────────────────
+
+  describe('Activity Service - getIssueIdByNumber', () => {
+    it('should return issue ID for valid project + number', async () => {
+      const { getIssueIdByNumber } = await import('./activity.service');
+      const result = await getIssueIdByNumber(projectId, 700);
+      expect(result).toBe(issueId);
+    });
+
+    it('should return null for non-existent issue', async () => {
+      const { getIssueIdByNumber } = await import('./activity.service');
+      const result = await getIssueIdByNumber(projectId, 99999);
+      expect(result).toBeNull();
+    });
+  });
+
   // ── Unauthenticated Access ─────────────────────────────────
 
   describe('Unauthenticated access', () => {

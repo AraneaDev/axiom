@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
+import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 import { generateChangelog, type CommitEntry } from './changelog';
 
@@ -21,7 +22,7 @@ export async function listReleases(
       ...(opts.draft !== undefined ? { isDraft: opts.draft } : {}),
       ...(opts.prerelease !== undefined ? { isPrerelease: opts.prerelease } : {}),
     },
-    include: { author: { select: { id: true, username: true, displayName: true } } },
+    include: { author: { select: USER_BASIC_SELECT } },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -34,7 +35,7 @@ export async function listReleases(
 export async function getRelease(repoId: string, tagName: string) {
   const release = await prisma.release.findUnique({
     where: { repoId_tagName: { repoId, tagName } },
-    include: { author: { select: { id: true, username: true, displayName: true } } },
+    include: { author: { select: USER_BASIC_SELECT } },
   });
   if (!release) return null;
 
@@ -122,7 +123,7 @@ export async function createRelease(
       authorId: userId,
       publishedAt: data.isDraft ? null : new Date(),
     },
-    include: { author: { select: { id: true, username: true, displayName: true } } },
+    include: { author: { select: USER_BASIC_SELECT } },
   });
 }
 
@@ -145,7 +146,7 @@ export async function updateRelease(
   return prisma.release.update({
     where: { repoId_tagName: { repoId, tagName } },
     data,
-    include: { author: { select: { id: true, username: true, displayName: true } } },
+    include: { author: { select: USER_BASIC_SELECT } },
   });
 }
 
@@ -168,7 +169,7 @@ export async function publishRelease(repoId: string, tagName: string) {
   return prisma.release.update({
     where: { repoId_tagName: { repoId, tagName } },
     data: { isDraft: false, publishedAt: new Date() },
-    include: { author: { select: { id: true, username: true, displayName: true } } },
+    include: { author: { select: USER_BASIC_SELECT } },
   });
 }
 

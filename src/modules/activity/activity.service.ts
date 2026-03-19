@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
+import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
 export type ResourceType = 'issue' | 'pull_request' | 'wiki_page' | 'repository';
 
@@ -53,6 +54,20 @@ export async function logActivity(
 }
 
 /**
+ * Resolve an issue ID from project + issue number.
+ * Used by controllers that need to look up issues before querying activities.
+ * @param projectId
+ * @param issueNumber
+ */
+export async function getIssueIdByNumber(projectId: string, issueNumber: number) {
+  const issue = await prisma.issue.findUnique({
+    where: { projectId_number: { projectId, number: issueNumber } },
+    select: { id: true },
+  });
+  return issue?.id ?? null;
+}
+
+/**
  * List activities with filters.
  * @param opts
  * @param opts.resourceType
@@ -95,7 +110,7 @@ export async function listActivities(opts: {
     prisma.activity.findMany({
       where,
       include: {
-        user: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
+        user: { select: USER_WITH_AVATAR_SELECT },
       },
       orderBy: { createdAt: 'desc' },
       take: opts.limit ?? 50,

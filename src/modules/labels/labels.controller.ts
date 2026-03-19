@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { param } from '../../utils/params';
+import { validate, createLabelSchema, updateLabelSchema } from '../../utils/validation';
 
 import * as labelsService from './labels.service';
 
@@ -12,16 +13,8 @@ import * as labelsService from './labels.service';
  */
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name, color, description } = req.body;
-    if (!name || !color) {
-      res.status(400).json({ error: { message: 'name and color are required' } });
-      return;
-    }
-    const label = await labelsService.createLabel(param(req, 'projectId'), {
-      name,
-      color,
-      description,
-    });
+    const body = validate(createLabelSchema, req.body);
+    const label = await labelsService.createLabel(param(req, 'projectId'), body);
     res.status(201).json(label);
   } catch (err) {
     next(err);
@@ -36,7 +29,10 @@ export async function create(req: Request, res: Response, next: NextFunction) {
  */
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const labels = await labelsService.listLabels(param(req, 'projectId'));
+    const labels = await labelsService.listLabels(
+      param(req, 'projectId'),
+      req.query as Record<string, string>,
+    );
     res.json(labels);
   } catch (err) {
     next(err);
@@ -51,11 +47,11 @@ export async function list(req: Request, res: Response, next: NextFunction) {
  */
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name, color, description } = req.body;
+    const body = validate(updateLabelSchema, req.body);
     const label = await labelsService.updateLabel(
       param(req, 'projectId'),
       decodeURIComponent(param(req, 'labelName')),
-      { name, color, description },
+      body,
     );
     res.json(label);
   } catch (err) {

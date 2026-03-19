@@ -7,6 +7,7 @@
 import * as Y from 'yjs';
 
 import { prisma } from '../config/database';
+import { logger } from '../utils/logger';
 
 const SAVE_DEBOUNCE_MS = 5_000;
 
@@ -92,7 +93,7 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<void> {
       },
     });
   } catch (err) {
-    console.error(`[yjs-persistence] Failed to save page ${pageId}:`, err);
+    logger.error('Failed to save page', { pageId }, err as Error);
   }
 }
 

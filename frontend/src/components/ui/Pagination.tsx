@@ -89,8 +89,8 @@ export const Pagination = forwardRef<HTMLDivElement, PaginationProps>(
             <ChevronLeft className="h-4 w-4" />
           </Button>
 
-          <span className="px-3 text-sm text-text-secondary">
-            Page {currentPage} of {totalPages}
+          <span className="inline-flex items-center justify-center rounded-lg bg-primary text-white px-3 py-1 text-sm font-medium shadow-sm">
+            {currentPage} / {totalPages}
           </span>
 
           <Button

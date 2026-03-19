@@ -137,8 +137,8 @@ describe('Labels API', () => {
         .get(`/api/projects/${projectId}/labels`)
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body.length).toBeGreaterThanOrEqual(2);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -180,7 +180,7 @@ describe('Labels API', () => {
       const listRes = await request(app)
         .get(`/api/projects/${projectId}/labels`)
         .set('Authorization', `Bearer ${token}`);
-      const names = listRes.body.map((l: { name: string }) => l.name);
+      const names = listRes.body.data.map((l: { name: string }) => l.name);
       expect(names).not.toContain('enhancement');
     });
 

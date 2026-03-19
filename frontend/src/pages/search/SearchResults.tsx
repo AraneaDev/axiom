@@ -22,6 +22,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Tabs } from '@/components/ui/Tabs';
@@ -129,7 +130,7 @@ export default function SearchResults() {
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
           <Search className="h-5 w-5 text-text-secondary" />
-          <input
+          <Input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}

@@ -5,6 +5,7 @@ import { Request, Response, NextFunction, Router } from 'express';
 
 import { prisma } from '../config/database';
 import { triggerPipelineOnPush } from '../pipelines/trigger';
+import { logger } from '../utils/logger';
 
 import * as gitCmd from './git-commands';
 
@@ -79,7 +80,7 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
     for (const webhook of repo.webhooks) {
       if (webhook.events.includes(event) || webhook.events.includes('*')) {
         dispatchWebhook(webhook.url, webhook.secret, webhookPayload).catch((err) => {
-          console.error(`Webhook delivery failed for ${webhook.url}:`, err.message);
+          logger.error('Webhook delivery failed', { url: webhook.url }, err as Error);
         });
       }
     }
@@ -99,18 +100,22 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
     // Auto-link commits to issues via commit message references
     if (!isTag && !isDelete) {
       try {
-        const ISSUE_REF_RE = /(?:(closes?|fixes?)\s+)?#(\d+)/gi;
+        const ISSUE_REF_RE = /(?:(closes?|fixes?)\s+)?#(?:([A-Z]+-)?(\d+))/gi;
         const recentCommits = await gitCmd.log(repo.diskPath!, payload.after, 50, 0);
 
         for (const commit of recentCommits) {
           const matches = [...commit.message.matchAll(ISSUE_REF_RE)];
           for (const match of matches) {
             const keyword = match[1]?.toLowerCase();
-            const issueNum = parseInt(match[2]);
+            const prefix = match[2]?.replace(/-$/, ''); // e.g. "AXM" from "AXM-"
+            const issueNum = parseInt(match[3]);
 
             // Find issues in this repo's team's projects
             const teamProjects = await prisma.project.findMany({
-              where: { team: { repos: { some: { id: repo.id } } } },
+              where: {
+                team: { repos: { some: { id: repo.id } } },
+                ...(prefix ? { prefix } : {}),
+              },
               select: { id: true },
             });
 
@@ -157,14 +162,14 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
           }
         }
       } catch (err) {
-        console.error('[hook-handler] commit->issue linking error:', err);
+        logger.error('commit->issue linking error', { repoId: repo.id }, err as Error);
       }
     }
 
     // Trigger CI/CD pipelines on push events
     if (event === 'push' && !isDelete) {
       triggerPipelineOnPush(repo.id, refName, payload.after).catch((err) => {
-        console.error('[hook-handler] pipeline trigger error:', err);
+        logger.error('Pipeline trigger error', { repoId: repo.id, branch: refName }, err as Error);
       });
     }
 

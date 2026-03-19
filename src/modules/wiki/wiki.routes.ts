@@ -1,7 +1,13 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
-import { requireTeamPermission } from '../../middleware/rbac';
+import {
+  requireTeamPermission,
+  requireWikiSpaceAccess,
+  requireWikiPageAccess,
+  requireWikiCommentAccess,
+  requireWikiTemplateAccess,
+} from '../../middleware/rbac';
 
 import * as wikiController from './wiki.controller';
 
@@ -17,37 +23,57 @@ router.post(
 );
 router.get('/team/:teamId/spaces', requireTeamPermission('wiki:view'), wikiController.listSpaces);
 
-// Space operations
-router.get('/spaces/:spaceId', wikiController.getSpace);
-router.get('/spaces/:spaceId/tree', wikiController.pageTree);
+// Space operations (require org membership via space lookup)
+router.get('/spaces/:spaceId', requireWikiSpaceAccess(), wikiController.getSpace);
+router.get('/spaces/:spaceId/tree', requireWikiSpaceAccess(), wikiController.pageTree);
 
-// Pages
-router.post('/spaces/:spaceId/pages', wikiController.createPage);
-router.get('/spaces/:spaceId/pages/:pageSlug', wikiController.getPage);
-router.patch('/spaces/:spaceId/pages/:pageSlug', wikiController.updatePage);
-router.delete('/spaces/:spaceId/pages/:pageSlug', wikiController.deletePage);
-router.get('/spaces/:spaceId/pages/:pageSlug/history', wikiController.pageHistory);
-router.get('/spaces/:spaceId/pages/:pageSlug/export', wikiController.exportPage);
+// Pages (require org membership via space lookup)
+router.post('/spaces/:spaceId/pages', requireWikiSpaceAccess(), wikiController.createPage);
+router.get('/spaces/:spaceId/pages/:pageSlug', requireWikiSpaceAccess(), wikiController.getPage);
+router.patch(
+  '/spaces/:spaceId/pages/:pageSlug',
+  requireWikiSpaceAccess(),
+  wikiController.updatePage,
+);
+router.delete(
+  '/spaces/:spaceId/pages/:pageSlug',
+  requireWikiSpaceAccess(),
+  wikiController.deletePage,
+);
+router.get(
+  '/spaces/:spaceId/pages/:pageSlug/history',
+  requireWikiSpaceAccess(),
+  wikiController.pageHistory,
+);
+router.get(
+  '/spaces/:spaceId/pages/:pageSlug/export',
+  requireWikiSpaceAccess(),
+  wikiController.exportPage,
+);
 
-// Templates
-router.post('/spaces/:spaceId/templates', wikiController.createTemplate);
-router.get('/spaces/:spaceId/templates', wikiController.listTemplates);
-router.get('/templates/:templateId', wikiController.getTemplate);
-router.delete('/templates/:templateId', wikiController.deleteTemplate);
+// Templates (space-scoped require space access, template-scoped require template access)
+router.post('/spaces/:spaceId/templates', requireWikiSpaceAccess(), wikiController.createTemplate);
+router.get('/spaces/:spaceId/templates', requireWikiSpaceAccess(), wikiController.listTemplates);
+router.get('/templates/:templateId', requireWikiTemplateAccess(), wikiController.getTemplate);
+router.delete('/templates/:templateId', requireWikiTemplateAccess(), wikiController.deleteTemplate);
 
-// Page comments
-router.post('/pages/:pageId/comments', wikiController.addPageComment);
-router.get('/pages/:pageId/comments', wikiController.listPageComments);
-router.patch('/comments/:commentId', wikiController.resolveComment);
-router.delete('/comments/:commentId', wikiController.deletePageComment);
+// Page comments (require org membership via page lookup)
+router.post('/pages/:pageId/comments', requireWikiPageAccess(), wikiController.addPageComment);
+router.get('/pages/:pageId/comments', requireWikiPageAccess(), wikiController.listPageComments);
+router.patch('/comments/:commentId', requireWikiCommentAccess(), wikiController.resolveComment);
+router.delete('/comments/:commentId', requireWikiCommentAccess(), wikiController.deletePageComment);
 
-// Page labels
-router.post('/pages/:pageId/labels', wikiController.addPageLabel);
-router.delete('/pages/:pageId/labels/:label', wikiController.removePageLabel);
-router.get('/spaces/:spaceId/labels', wikiController.searchByLabel);
+// Page labels (require org membership via page lookup)
+router.post('/pages/:pageId/labels', requireWikiPageAccess(), wikiController.addPageLabel);
+router.delete(
+  '/pages/:pageId/labels/:label',
+  requireWikiPageAccess(),
+  wikiController.removePageLabel,
+);
+router.get('/spaces/:spaceId/labels', requireWikiSpaceAccess(), wikiController.searchByLabel);
 
-// Move / Copy
-router.post('/pages/:pageId/move', wikiController.movePage);
-router.post('/pages/:pageId/copy', wikiController.copyPage);
+// Move / Copy (require org membership via page lookup)
+router.post('/pages/:pageId/move', requireWikiPageAccess(), wikiController.movePage);
+router.post('/pages/:pageId/copy', requireWikiPageAccess(), wikiController.copyPage);
 
 export default router;

@@ -94,8 +94,8 @@ export function Breadcrumbs() {
   });
 
   return (
-    <nav className="flex items-center gap-1 text-sm text-text-secondary mb-4">
-      <Link to="/" className="hover:text-primary transition-colors">
+    <nav className="flex items-center gap-1 text-sm text-text-tertiary mb-4">
+      <Link to="/" className="hover:text-text transition-colors">
         <Home className="h-3.5 w-3.5" />
       </Link>
       {crumbs.map((crumb, i) => {
@@ -104,7 +104,7 @@ export function Breadcrumbs() {
 
         return (
           <span key={crumb.path} className="flex items-center gap-1">
-            <ChevronRight className="h-3 w-3 text-text-tertiary" />
+            <ChevronRight className="h-3.5 w-3.5 text-text-tertiary" />
             {isLast ? (
               <span className="flex items-center gap-1.5 text-text font-medium">
                 {Icon && <Icon className="h-3.5 w-3.5" />}
@@ -113,7 +113,7 @@ export function Breadcrumbs() {
             ) : (
               <Link
                 to={crumb.path}
-                className="flex items-center gap-1.5 hover:text-primary transition-colors"
+                className="flex items-center gap-1.5 hover:text-text transition-colors"
               >
                 {Icon && <Icon className="h-3.5 w-3.5" />}
                 {crumb.label}

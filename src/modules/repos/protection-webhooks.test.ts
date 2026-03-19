@@ -36,22 +36,26 @@ describe('Branch Protection & Webhooks', () => {
     });
     const loginRes = await request(app)
       .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ login: 'protuser', password: 'testpassword123' });
     token = loginRes.body.accessToken;
 
     const orgRes = await request(app)
       .post('/api/orgs')
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Prot Org', slug: 'prot-org' });
 
     const teamRes = await request(app)
       .post(`/api/teams/org/${orgRes.body.id}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Dev', slug: 'dev' });
 
     const repoRes = await request(app)
       .post(`/api/repos/team/${teamRes.body.id}`)
       .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Protected', slug: 'protected' });
     repoId = repoRes.body.id;
 
@@ -111,6 +115,7 @@ describe('Branch Protection & Webhooks', () => {
       const res = await request(app)
         .post(`/api/repos/${repoId}/branch-protection`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({ pattern: 'main', requiredReviews: 2, noForcePush: true, noDirectPush: true });
       expect(res.status).toBe(201);
       expect(res.body.pattern).toBe('main');
@@ -123,6 +128,7 @@ describe('Branch Protection & Webhooks', () => {
       const res = await request(app)
         .post(`/api/repos/${repoId}/branch-protection`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({ pattern: 'main' });
       expect(res.status).toBe(409);
     });
@@ -131,6 +137,7 @@ describe('Branch Protection & Webhooks', () => {
       const res = await request(app)
         .post(`/api/repos/${repoId}/branch-protection`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({ pattern: 'release/*', requiredReviews: 1 });
       expect(res.status).toBe(201);
       expect(res.body.pattern).toBe('release/*');
@@ -156,6 +163,7 @@ describe('Branch Protection & Webhooks', () => {
       const res = await request(app)
         .patch(`/api/repos/${repoId}/branch-protection/${ruleId}`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({ requiredReviews: 1 });
       expect(res.status).toBe(200);
       expect(res.body.requiredReviews).toBe(1);
@@ -166,6 +174,7 @@ describe('Branch Protection & Webhooks', () => {
       const prRes = await request(app)
         .post(`/api/repos/${repoId}/pulls`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({ title: 'Feature X', sourceBranch: 'feature/x', targetBranch: 'main' });
       expect(prRes.status).toBe(201);
 
@@ -173,6 +182,7 @@ describe('Branch Protection & Webhooks', () => {
       const mergeRes = await request(app)
         .post(`/api/repos/${repoId}/pulls/${prRes.body.number}/merge`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({});
       expect(mergeRes.status).toBe(403);
       expect(mergeRes.body.error.message).toContain('approved review');
@@ -183,12 +193,14 @@ describe('Branch Protection & Webhooks', () => {
       await request(app)
         .post(`/api/repos/${repoId}/pulls/1/reviews`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({ status: 'APPROVED', body: 'LGTM' });
 
       // Now merge should work
       const mergeRes = await request(app)
         .post(`/api/repos/${repoId}/pulls/1/merge`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({});
       expect(mergeRes.status).toBe(200);
       expect(mergeRes.body.status).toBe('MERGED');
@@ -199,11 +211,14 @@ describe('Branch Protection & Webhooks', () => {
       const listRes = await request(app)
         .get(`/api/repos/${repoId}/branch-protection`)
         .set('Authorization', `Bearer ${token}`);
-      const releaseRule = listRes.body.find((r: any) => r.pattern === 'release/*');
+      const releaseRule = listRes.body.find(
+        (r: Record<string, unknown>) => r.pattern === 'release/*',
+      );
 
       const res = await request(app)
         .delete(`/api/repos/${repoId}/branch-protection/${releaseRule.id}`)
-        .set('Authorization', `Bearer ${token}`);
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest');
       expect(res.status).toBe(204);
 
       const listRes2 = await request(app)
@@ -220,6 +235,7 @@ describe('Branch Protection & Webhooks', () => {
       const res = await request(app)
         .post(`/api/repos/${repoId}/webhooks`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({
           url: 'https://example.com/hook',
           secret: 'my-secret',
@@ -254,6 +270,7 @@ describe('Branch Protection & Webhooks', () => {
       const res = await request(app)
         .patch(`/api/repos/${repoId}/webhooks/${webhookId}`)
         .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({ events: ['push', 'pr:created', 'pr:merged'], active: false });
       expect(res.status).toBe(200);
       expect(res.body.events).toHaveLength(3);
@@ -263,7 +280,8 @@ describe('Branch Protection & Webhooks', () => {
     it('should delete webhook', async () => {
       const res = await request(app)
         .delete(`/api/repos/${repoId}/webhooks/${webhookId}`)
-        .set('Authorization', `Bearer ${token}`);
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest');
       expect(res.status).toBe(204);
 
       const listRes = await request(app)

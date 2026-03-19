@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 
 import * as activityService from './activity.service';
@@ -13,10 +14,11 @@ import * as activityService from './activity.service';
 export async function listProjectActivity(req: Request, res: Response, next: NextFunction) {
   try {
     const projectId = param(req, 'projectId');
+    const { take, skip } = parsePagination(req.query as Record<string, string>);
     const result = await activityService.listActivities({
       projectId,
-      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
-      offset: req.query.offset ? parseInt(req.query.offset as string) : undefined,
+      limit: take,
+      offset: skip,
     });
     res.json(result);
   } catch (err) {
@@ -33,23 +35,21 @@ export async function listProjectActivity(req: Request, res: Response, next: Nex
 export async function listIssueActivity(req: Request, res: Response, next: NextFunction) {
   try {
     const projectId = param(req, 'projectId');
-    const issueNumber = parseInt(param(req, 'issueNumber'));
+    const issueNumber = parseInt(param(req, 'issueNumber'), 10);
 
     // Resolve issue ID from project + number
-    const { prisma } = await import('../../config/database');
-    const issue = await prisma.issue.findUnique({
-      where: { projectId_number: { projectId, number: issueNumber } },
-    });
-    if (!issue) {
+    const issueId = await activityService.getIssueIdByNumber(projectId, issueNumber);
+    if (!issueId) {
       res.status(404).json({ error: { message: 'Issue not found' } });
       return;
     }
 
+    const { take, skip } = parsePagination(req.query as Record<string, string>);
     const result = await activityService.listActivities({
       resourceType: 'issue',
-      resourceId: issue.id,
-      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
-      offset: req.query.offset ? parseInt(req.query.offset as string) : undefined,
+      resourceId: issueId,
+      limit: take,
+      offset: skip,
     });
     res.json(result);
   } catch (err) {

@@ -1,6 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
+import {
+  validate,
+  createRepoSchema,
+  updateRepoSchema,
+  forkRepoSchema,
+  createBranchSchema,
+  updateRepoSettingsSchema,
+} from '../../utils/validation';
 
 import * as reposService from './repos.service';
 
@@ -12,7 +21,8 @@ import * as reposService from './repos.service';
  */
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
-    const repo = await reposService.createRepo(param(req, 'teamId'), req.body);
+    const body = validate(createRepoSchema, req.body);
+    const repo = await reposService.createRepo(param(req, 'teamId'), body);
     res.status(201).json(repo);
   } catch (err) {
     next(err);
@@ -42,9 +52,11 @@ export async function get(req: Request, res: Response, next: NextFunction) {
  */
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
-    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
-    const result = await reposService.listRepos(param(req, 'teamId'), { limit, offset });
+    const { take, skip } = parsePagination(req.query as Record<string, string>);
+    const result = await reposService.listRepos(param(req, 'teamId'), {
+      limit: take,
+      offset: skip,
+    });
     res.json(result);
   } catch (err) {
     next(err);
@@ -59,7 +71,8 @@ export async function list(req: Request, res: Response, next: NextFunction) {
  */
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    const repo = await reposService.updateRepo(param(req, 'repoId'), req.body);
+    const body = validate(updateRepoSchema, req.body);
+    const repo = await reposService.updateRepo(param(req, 'repoId'), body);
     res.json(repo);
   } catch (err) {
     next(err);
@@ -89,8 +102,12 @@ export async function remove(req: Request, res: Response, next: NextFunction) {
  */
 export async function fork(req: Request, res: Response, next: NextFunction) {
   try {
-    const { targetTeamId, slug } = req.body;
-    const repo = await reposService.forkRepoById(param(req, 'repoId'), targetTeamId, slug);
+    const body = validate(forkRepoSchema, req.body);
+    const repo = await reposService.forkRepoById(
+      param(req, 'repoId'),
+      body.targetTeamId,
+      body.slug,
+    );
     res.status(201).json(repo);
   } catch (err) {
     next(err);
@@ -106,7 +123,8 @@ export async function fork(req: Request, res: Response, next: NextFunction) {
  */
 export async function updateSettings(req: Request, res: Response, next: NextFunction) {
   try {
-    const repo = await reposService.updateRepoSettings(param(req, 'repoId'), req.body);
+    const body = validate(updateRepoSettingsSchema, req.body);
+    const repo = await reposService.updateRepoSettings(param(req, 'repoId'), body);
     res.json(repo);
   } catch (err) {
     next(err);
@@ -150,10 +168,10 @@ export async function getBranch(req: Request, res: Response, next: NextFunction)
  */
 export async function createBranch(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name, startPoint } = req.body;
+    const body = validate(createBranchSchema, req.body);
     res
       .status(201)
-      .json(await reposService.createRepoBranch(param(req, 'repoId'), name, startPoint));
+      .json(await reposService.createRepoBranch(param(req, 'repoId'), body.name, body.startPoint));
   } catch (err) {
     next(err);
   }
@@ -184,8 +202,8 @@ export async function deleteBranch(req: Request, res: Response, next: NextFuncti
 export async function listCommits(req: Request, res: Response, next: NextFunction) {
   try {
     const ref = (req.query.ref as string) || 'HEAD';
-    const limit = parseInt((req.query.limit as string) || '20');
-    const skip = parseInt((req.query.skip as string) || '0');
+    const limit = parseInt((req.query.limit as string) || '20', 10);
+    const skip = parseInt((req.query.skip as string) || '0', 10);
     const filePath = (req.query.path as string) || undefined;
     res.json(await reposService.getCommits(param(req, 'repoId'), ref, limit, skip, filePath));
   } catch (err) {

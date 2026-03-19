@@ -15,6 +15,7 @@ const TEST_REPOS_PATH = process.env.REPOS_PATH || '/tmp/axiom-test-repos';
 
 describe('Smart HTTP & Hooks', () => {
   let token: string; // raw API token (tk_...)
+  let jwtToken: string; // JWT for Bearer auth
   let orgSlug: string;
   let teamSlug: string;
   let repoSlug: string;
@@ -38,13 +39,16 @@ describe('Smart HTTP & Hooks', () => {
     });
     const loginRes = await request(app)
       .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ login: 'githttpuser', password: 'testpassword123' });
     const jwt = loginRes.body.accessToken;
+    jwtToken = jwt;
 
     // Create org
     const orgRes = await request(app)
       .post('/api/orgs')
       .set('Authorization', `Bearer ${jwt}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Git Org', slug: 'git-org' });
     orgSlug = orgRes.body.slug;
 
@@ -52,6 +56,7 @@ describe('Smart HTTP & Hooks', () => {
     const teamRes = await request(app)
       .post(`/api/teams/org/${orgRes.body.id}`)
       .set('Authorization', `Bearer ${jwt}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Core', slug: 'core' });
     teamSlug = teamRes.body.slug;
 
@@ -59,6 +64,7 @@ describe('Smart HTTP & Hooks', () => {
     const repoRes = await request(app)
       .post(`/api/repos/team/${teamRes.body.id}`)
       .set('Authorization', `Bearer ${jwt}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'HTTP Test', slug: 'http-test' });
     repoSlug = repoRes.body.slug;
     repoId = repoRes.body.id;
@@ -67,6 +73,7 @@ describe('Smart HTTP & Hooks', () => {
     const tokenRes = await request(app)
       .post('/api/users/me/tokens')
       .set('Authorization', `Bearer ${jwt}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Git Token', scopes: ['repo:read', 'repo:write'] });
     token = tokenRes.body.token;
 
@@ -161,7 +168,9 @@ describe('Smart HTTP & Hooks', () => {
     it('should accept valid hook payload', async () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
+        .set('Authorization', `Bearer ${jwtToken}`)
         .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({
           repo: repoId,
           ref: 'refs/heads/main',
@@ -176,7 +185,9 @@ describe('Smart HTTP & Hooks', () => {
     it('should detect push event', async () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
+        .set('Authorization', `Bearer ${jwtToken}`)
         .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({
           repo: repoId,
           ref: 'refs/heads/main',
@@ -190,7 +201,9 @@ describe('Smart HTTP & Hooks', () => {
     it('should detect branch delete event', async () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
+        .set('Authorization', `Bearer ${jwtToken}`)
         .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({
           repo: repoId,
           ref: 'refs/heads/feature',
@@ -204,7 +217,9 @@ describe('Smart HTTP & Hooks', () => {
     it('should detect tag events', async () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
+        .set('Authorization', `Bearer ${jwtToken}`)
         .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({
           repo: repoId,
           ref: 'refs/tags/v1.0.0',
@@ -218,7 +233,9 @@ describe('Smart HTTP & Hooks', () => {
     it('should reject invalid hook secret', async () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
+        .set('Authorization', `Bearer ${jwtToken}`)
         .set('X-Hook-Secret', 'wrong-secret')
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({ repo: repoId, ref: 'refs/heads/main', before: 'a', after: 'b' });
       expect(res.status).toBe(403);
     });
@@ -226,7 +243,9 @@ describe('Smart HTTP & Hooks', () => {
     it('should reject missing payload', async () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
+        .set('Authorization', `Bearer ${jwtToken}`)
         .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({});
       expect(res.status).toBe(400);
     });
@@ -234,7 +253,9 @@ describe('Smart HTTP & Hooks', () => {
     it('should 404 for unknown repo', async () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
+        .set('Authorization', `Bearer ${jwtToken}`)
         .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Requested-With', 'XMLHttpRequest')
         .send({ repo: 'nonexistent', ref: 'refs/heads/main', before: 'a', after: 'b' });
       expect(res.status).toBe(404);
     });

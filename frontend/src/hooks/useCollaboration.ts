@@ -3,7 +3,8 @@ import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
 import { getAccessToken } from '@/api/client';
-import { COLLAB_COLORS, type PresenceUser } from '@/components/wiki/PresenceIndicators';
+import { COLLAB_COLORS } from '@/components/wiki/collab-colors';
+import type { PresenceUser } from '@/components/wiki/PresenceIndicators';
 import { useAuthStore } from '@/stores/auth.store';
 
 interface UseCollaborationOptions {

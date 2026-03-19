@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 
 import * as adminService from './admin.service';
@@ -28,10 +29,9 @@ export async function getStats(_req: Request, res: Response, next: NextFunction)
 export async function listUsers(req: Request, res: Response, next: NextFunction) {
   try {
     const search = req.query.search as string | undefined;
-    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
-    const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
+    const { take, skip } = parsePagination(req.query as Record<string, string>);
 
-    const result = await adminService.listUsers({ search, limit, offset });
+    const result = await adminService.listUsers({ search, limit: take, offset: skip });
     res.json(result);
   } catch (err) {
     next(err);

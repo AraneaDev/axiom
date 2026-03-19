@@ -1,5 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
+import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
  *
@@ -26,7 +28,7 @@ export async function createOrg(
       },
     },
     include: {
-      members: { include: { user: { select: { id: true, username: true, displayName: true } } } },
+      members: { include: { user: { select: USER_BASIC_SELECT } } },
     },
   });
 
@@ -38,17 +40,20 @@ export async function createOrg(
  * @param orgId
  */
 export async function getOrg(orgId: string) {
-  const org = await prisma.organization.findUnique({
-    where: { id: orgId },
-    include: {
-      teams: { select: { id: true, name: true, slug: true } },
-      members: {
-        include: { user: { select: { id: true, username: true, displayName: true, email: true } } },
+  return findOrThrow(
+    prisma.organization.findUnique({
+      where: { id: orgId },
+      include: {
+        teams: { select: { id: true, name: true, slug: true } },
+        members: {
+          include: {
+            user: { select: { id: true, username: true, displayName: true, email: true } },
+          },
+        },
       },
-    },
-  });
-  if (!org) throw new AppError(404, 'Organization not found');
-  return org;
+    }),
+    'Organization not found',
+  );
 }
 
 /**
@@ -102,7 +107,7 @@ export async function addOrgMember(
 
   return prisma.orgMembership.create({
     data: { userId, orgId, role },
-    include: { user: { select: { id: true, username: true, displayName: true } } },
+    include: { user: { select: USER_BASIC_SELECT } },
   });
 }
 
@@ -117,10 +122,12 @@ export async function updateOrgMemberRole(
   memberId: string,
   role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST',
 ) {
-  const membership = await prisma.orgMembership.findFirst({
-    where: { userId: memberId, orgId },
-  });
-  if (!membership) throw new AppError(404, 'Membership not found');
+  const membership = await findOrThrow(
+    prisma.orgMembership.findFirst({
+      where: { userId: memberId, orgId },
+    }),
+    'Membership not found',
+  );
 
   return prisma.orgMembership.update({
     where: { id: membership.id },
@@ -134,10 +141,12 @@ export async function updateOrgMemberRole(
  * @param memberId
  */
 export async function removeOrgMember(orgId: string, memberId: string) {
-  const membership = await prisma.orgMembership.findFirst({
-    where: { userId: memberId, orgId },
-  });
-  if (!membership) throw new AppError(404, 'Membership not found');
+  const membership = await findOrThrow(
+    prisma.orgMembership.findFirst({
+      where: { userId: memberId, orgId },
+    }),
+    'Membership not found',
+  );
   if (membership.role === 'OWNER') {
     const ownerCount = await prisma.orgMembership.count({
       where: { orgId, role: 'OWNER' },
@@ -198,7 +207,9 @@ export async function listInviteLinks(orgId: string) {
  * @param inviteId
  */
 export async function deleteInviteLink(inviteId: string) {
-  const invite = await prisma.inviteLink.findUnique({ where: { id: inviteId } });
-  if (!invite) throw new AppError(404, 'Invite link not found');
+  await findOrThrow(
+    prisma.inviteLink.findUnique({ where: { id: inviteId } }),
+    'Invite link not found',
+  );
   await prisma.inviteLink.delete({ where: { id: inviteId } });
 }
