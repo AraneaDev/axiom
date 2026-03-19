@@ -113,7 +113,7 @@ export function MarkdownEditor({
       }),
       Underline,
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-primary underline' } }),
-      Image.configure({ allowBase64: false }),
+      Image,
       Table.configure({ resizable: false }),
       TableRow,
       TableCell,

@@ -37,10 +37,10 @@ function linkifyMentionsAndRefs(html: string, basePath?: string): string {
     /(^|[\s(>])@([a-zA-Z0-9_-]+)/g,
     '$1<span class="mention-ref" style="color:var(--color-primary);font-weight:500">@$2</span>',
   );
-  // Replace !PREFIX-123 issue references with styled badge link
-  result = result.replace(/!([A-Z]+-(\d+))/g, (_match, key, num) => {
+  // Replace ^PREFIX-123 issue references with styled badge link
+  result = result.replace(/\^([A-Z]+-(\d+))/g, (_match, key, num) => {
     const href = basePath ? `${basePath}/issues/${num}` : `/search?q=${key}`;
-    return `<a href="${href}" class="issue-ref-badge" style="color:var(--color-primary);font-weight:500;text-decoration:none">!${key}</a>`;
+    return `<a href="${href}" class="issue-ref-badge" style="color:var(--color-primary);font-weight:500;text-decoration:none">${key}</a>`;
   });
   return result;
 }

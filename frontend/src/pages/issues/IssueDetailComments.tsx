@@ -183,7 +183,7 @@ export function IssueDetailComments({
         <MarkdownEditor
           value={commentBody}
           onChange={onCommentBodyChange}
-          placeholder="Write a comment... Use @ to mention users, ! to reference issues"
+          placeholder="Write a comment... Use @ to mention users, ^ to reference issues"
           compact
           projectId={projectId}
         />

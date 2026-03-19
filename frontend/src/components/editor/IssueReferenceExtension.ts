@@ -26,10 +26,10 @@ declare module '@tiptap/core' {
 }
 
 /**
- * TipTap extension for inline issue references (e.g. !AXM-123).
+ * TipTap extension for inline issue references (e.g. ^AXM-123).
  * Renders as an inline atom node with a data-issue-key attribute.
- * Provides suggestion-based autocomplete triggered by "!" and an input rule
- * that auto-converts "!PREFIX-123 " into a reference node.
+ * Provides suggestion-based autocomplete triggered by "^" and an input rule
+ * that auto-converts "^PREFIX-123 " into a reference node.
  * Configure with projectId to enable autocomplete against the issues API.
  */
 export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
@@ -82,7 +82,7 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
   addInputRules() {
     return [
       new InputRule({
-        find: /!([A-Z]+-\d+)\s$/,
+        find: /\^([A-Z]+-\d+)\s$/,
         handler: ({ state, range, match }) => {
           const key = match[1];
           const { tr } = state;
@@ -99,7 +99,7 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
     return [
       Suggestion<IssueReferenceItem>({
         editor: this.editor,
-        char: '!',
+        char: '^',
         allowSpaces: false,
         items: async ({ query }): Promise<IssueReferenceItem[]> => {
           // Read projectId dynamically from shared store, fall back to static option

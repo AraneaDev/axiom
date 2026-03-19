@@ -3,14 +3,14 @@ import { Link } from 'react-router';
 import { Badge } from '@/components/ui/Badge';
 
 /**
- * Replace `@username` mentions and !PREFIX-123 issue references in text
+ * Replace `@username` mentions and ^PREFIX-123 issue references in text
  * with styled, interactive elements.
  * Returns a ReactNode array suitable for rendering inline.
  * @param text
  */
 export function renderTextWithMentions(text: string): React.ReactNode[] {
-  // Combined pattern: match @username or !PREFIX-123
-  const pattern = /(@[a-zA-Z0-9_-]+)|(![A-Z]+-\d+)/g;
+  // Combined pattern: match @username or ^PREFIX-123
+  const pattern = /(@[a-zA-Z0-9_-]+)|(\^[A-Z]+-\d+)/g;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -34,8 +34,8 @@ export function renderTextWithMentions(text: string): React.ReactNode[] {
         </span>,
       );
     } else if (match[2]) {
-      // !issue ref
-      const issueKey = match[2].slice(1); // remove !
+      // ^issue ref
+      const issueKey = match[2].slice(1); // remove ^
       parts.push(
         <Badge
           key={`ref-${match.index}`}
