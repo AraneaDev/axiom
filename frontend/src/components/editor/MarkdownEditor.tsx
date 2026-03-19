@@ -27,9 +27,10 @@ import {
   ImageIcon,
   Table as TableIcon,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Markdown } from 'tiptap-markdown';
 
+import { editorProjectIds, nextEditorInstanceId } from './editor-state';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
 
@@ -74,7 +75,7 @@ function ToolbarDivider() {
 /**
  * TipTap-based WYSIWYG markdown editor with toolbar.
  * Supports headings, lists, code blocks, tables, links, images,
- * @-mentions, and !-issue references. Outputs markdown via tiptap-markdown.
+ * user mentions (at-sign), and issue references (exclamation mark). Outputs markdown via tiptap-markdown.
  * @param props - Editor configuration.
  * @param props.value - The current markdown content (controlled).
  * @param props.onChange - Callback fired with updated markdown on every edit.
@@ -89,6 +90,19 @@ export function MarkdownEditor({
   compact = false,
   projectId,
 }: MarkdownEditorProps) {
+  // Each editor instance gets a stable key for the shared mutable store
+  const [instanceId] = useState(() => nextEditorInstanceId());
+
+  // Sync projectId into the mutable store so the extension reads the latest value.
+  // On first render, the static projectId in extension options is used; after mount,
+  // the store takes over so dynamic updates (async data loading) are picked up.
+  useEffect(() => {
+    editorProjectIds[instanceId] = projectId ?? null;
+    return () => {
+      delete editorProjectIds[instanceId];
+    };
+  }, [instanceId, projectId]);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -114,6 +128,7 @@ export function MarkdownEditor({
       MentionExtension,
       IssueReferenceExtension.configure({
         projectId: projectId ?? null,
+        instanceId,
       }),
     ],
     content: value || '',

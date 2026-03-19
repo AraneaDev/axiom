@@ -3,6 +3,7 @@ import { ReactRenderer } from '@tiptap/react';
 import Suggestion, { type SuggestionProps } from '@tiptap/suggestion';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
 
+import { editorProjectIds } from './editor-state';
 import IssueReferenceSuggestionList, {
   type IssueReferenceItem,
   type IssueReferenceSuggestionListRef,
@@ -13,6 +14,7 @@ import { get } from '@/api/client';
 export interface IssueReferenceOptions {
   HTMLAttributes: Record<string, string>;
   projectId: string | null;
+  instanceId: number | null;
 }
 
 declare module '@tiptap/core' {
@@ -41,6 +43,7 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
     return {
       HTMLAttributes: {},
       projectId: null,
+      instanceId: null,
     };
   },
 
@@ -90,7 +93,8 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
   },
 
   addProseMirrorPlugins() {
-    const projectId = this.options.projectId;
+    const instanceId = this.options.instanceId;
+    const staticProjectId = this.options.projectId;
 
     return [
       Suggestion<IssueReferenceItem>({
@@ -99,12 +103,15 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
         allowSpaces: false,
         items: async ({ query }): Promise<IssueReferenceItem[]> => {
           if (!query || query.length < 1) return [];
+          // Read projectId dynamically from shared store, fall back to static option
+          const currentProjectId =
+            (instanceId != null ? editorProjectIds[instanceId] : null) ?? staticProjectId;
           try {
             let issues: IssueReferenceItem[] = [];
-            if (projectId) {
+            if (currentProjectId) {
               // Scoped search within project
               const data = await get<{ issues: IssueReferenceItem[] }>(
-                `/projects/${projectId}/issues?q=${encodeURIComponent(query)}&limit=8`,
+                `/projects/${currentProjectId}/issues?q=${encodeURIComponent(query)}&limit=8`,
               );
               issues = data.issues ?? [];
             } else {
