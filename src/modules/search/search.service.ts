@@ -231,10 +231,14 @@ async function searchIssues(
 
       const ftsIds = rawIssues.map((r) => r.id);
       if (ftsIds.length === 0) {
-        return { type: 'issues', items: [], total: 0 };
+        // FTS found nothing -- fall back to LIKE search
+        where.OR = [
+          { title: { contains: freeText, mode: 'insensitive' } },
+          { body: { contains: freeText, mode: 'insensitive' } },
+        ];
+      } else {
+        where.id = { in: ftsIds };
       }
-
-      where.id = { in: ftsIds };
     } catch {
       // Fallback to LIKE search if FTS fails (e.g., invalid query)
       where.OR = [
