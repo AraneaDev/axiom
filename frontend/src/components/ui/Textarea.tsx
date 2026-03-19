@@ -8,6 +8,14 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   hint?: string;
 }
 
+/**
+ * Multi-line text input with label, hint, and error states.
+ * Follows the same API pattern as the Input component.
+ * @param props - Textarea props extending native textarea attributes.
+ * @param props.label - Optional label displayed above the textarea.
+ * @param props.error - Error message displayed below; applies danger styling.
+ * @param props.hint - Hint text displayed when no error is present.
+ */
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, label, error, hint, id, ...props }, ref) => (
     <div className="flex flex-col gap-1.5">

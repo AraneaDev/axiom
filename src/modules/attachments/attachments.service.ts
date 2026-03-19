@@ -22,13 +22,14 @@ function buildStorageKey(originalName: string): string {
 }
 
 /**
- * Upload a file and create the database record.
- * @param file
- * @param uploaderId
- * @param opts
+ * Upload a file to storage and create the database record linking it to a resource.
+ * @param file - The uploaded file from multer (supports both disk and memory storage)
+ * @param uploaderId - The user uploading the file
+ * @param opts - Optional resource links (issueId, pageId, commentId)
  * @param opts.issueId
  * @param opts.pageId
  * @param opts.commentId
+ * @returns The created attachment record
  */
 export async function uploadAttachment(
   file: Express.Multer.File,
@@ -66,7 +67,9 @@ export async function uploadAttachment(
 
 /**
  * Get attachment metadata by ID.
- * @param id
+ * @param id - The attachment ID
+ * @returns The attachment record
+ * @throws {AppError} 404 if attachment not found
  */
 export async function getAttachment(id: string) {
   const attachment = await prisma.attachment.findUnique({ where: { id } });
@@ -75,10 +78,11 @@ export async function getAttachment(id: string) {
 }
 
 /**
- * List attachments for a given resource.
- * @param opts
+ * List attachments for a given resource (issue or wiki page).
+ * @param opts - Filter options by issueId and/or pageId
  * @param opts.issueId
  * @param opts.pageId
+ * @returns List of attachment records
  */
 export async function listAttachments(opts: { issueId?: string; pageId?: string }) {
   const where: Record<string, string> = {};
@@ -93,10 +97,11 @@ export async function listAttachments(opts: { issueId?: string; pageId?: string 
 }
 
 /**
- * Delete an attachment from storage and DB.
- * Only the uploader or an admin can delete.
- * @param id
- * @param userId
+ * Delete an attachment from storage and database (only the uploader can delete).
+ * @param id - The attachment ID
+ * @param userId - The user attempting the deletion
+ * @throws {AppError} 404 if attachment not found
+ * @throws {AppError} 403 if user is not the uploader
  */
 export async function deleteAttachment(id: string, userId: string) {
   const attachment = await prisma.attachment.findUnique({ where: { id } });
@@ -115,7 +120,9 @@ export async function deleteAttachment(id: string, userId: string) {
 
 /**
  * Get the file buffer for download.
- * @param id
+ * @param id - The attachment ID
+ * @returns Object with attachment metadata and file data buffer
+ * @throws {AppError} 404 if attachment not found
  */
 export async function downloadAttachment(id: string) {
   const attachment = await getAttachment(id);

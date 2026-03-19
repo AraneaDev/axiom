@@ -14,8 +14,9 @@ interface PaginationDefaults {
 
 /**
  * Parse limit/offset query params into Prisma-compatible take/skip values.
- * @param query
- * @param defaults
+ * @param query - The query params object with optional limit and offset strings
+ * @param defaults - Default values for limit and offset
+ * @returns Object with take and skip values clamped to valid ranges
  */
 export function parsePagination(
   query: PaginationQuery,
@@ -30,10 +31,11 @@ export function parsePagination(
 
 /**
  * Wrap a list result with standard pagination metadata.
- * @param data
- * @param total
- * @param take
- * @param skip
+ * @param data - The array of items for the current page
+ * @param total - The total count of matching items
+ * @param take - The page size (limit)
+ * @param skip - The offset
+ * @returns Paginated response with data, total, limit, offset, and hasMore flag
  */
 export function paginatedResponse<T>(
   data: T[],

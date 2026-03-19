@@ -6,12 +6,13 @@ interface EmptyStateProps {
 }
 
 /**
- *
- * @param root0
- * @param root0.icon
- * @param root0.title
- * @param root0.description
- * @param root0.action
+ * Centered placeholder for zero-data states.
+ * Displays an icon, title, optional description, and an optional action button.
+ * @param props - EmptyState configuration.
+ * @param props.icon - Optional Lucide icon node displayed above the title.
+ * @param props.title - Primary message (e.g. "No issues yet").
+ * @param props.description - Optional secondary text with additional context.
+ * @param props.action - Optional action element, typically a Button to create the first item.
  */
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (

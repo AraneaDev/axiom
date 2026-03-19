@@ -13,6 +13,11 @@ interface UserItem {
   username: string;
 }
 
+/**
+ * TipTap extension for @-mention user references.
+ * Configured with suggestion-based autocomplete triggered by "@".
+ * Searches users via the /users API and renders as styled mention nodes.
+ */
 export const MentionExtension = Mention.configure({
   HTMLAttributes: { class: 'mention' },
   renderLabel({ node }) {
@@ -22,10 +27,8 @@ export const MentionExtension = Mention.configure({
     items: async ({ query }: { query: string }): Promise<UserItem[]> => {
       if (!query || query.length < 1) return [];
       try {
-        const data = await get<{ users: UserItem[] }>(
-          `/users?q=${encodeURIComponent(query)}&limit=8`,
-        );
-        return data.users ?? [];
+        const data = await get<UserItem[]>(`/users/search?q=${encodeURIComponent(query)}&limit=8`);
+        return Array.isArray(data) ? data : [];
       } catch {
         return [];
       }

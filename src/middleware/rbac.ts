@@ -9,6 +9,10 @@ import { AppError } from './errorHandler';
 /**
  * Verify the authenticated user is a member of the org that owns the repo.
  * Expects :repoId in route params.
+ * @returns Express middleware that checks org membership for the repo's org
+ * @throws {AppError} 401 if not authenticated
+ * @throws {AppError} 404 if repo not found
+ * @throws {AppError} 403 if user is not an org member
  */
 export function requireRepoAccess() {
   return async (req: Request, _res: Response, next: NextFunction) => {
@@ -40,6 +44,10 @@ export function requireRepoAccess() {
 /**
  * Verify the authenticated user is a member of the org that owns the wiki space.
  * Expects :spaceId in route params.
+ * @returns Express middleware that checks org membership for the space's org
+ * @throws {AppError} 401 if not authenticated
+ * @throws {AppError} 404 if wiki space not found
+ * @throws {AppError} 403 if user is not an org member
  */
 export function requireWikiSpaceAccess() {
   return async (req: Request, _res: Response, next: NextFunction) => {
@@ -71,6 +79,10 @@ export function requireWikiSpaceAccess() {
 /**
  * Verify the authenticated user is a member of the org that owns the wiki page.
  * Expects :pageId in route params.
+ * @returns Express middleware that checks org membership for the page's org
+ * @throws {AppError} 401 if not authenticated
+ * @throws {AppError} 404 if wiki page not found
+ * @throws {AppError} 403 if user is not an org member
  */
 export function requireWikiPageAccess() {
   return async (req: Request, _res: Response, next: NextFunction) => {
@@ -102,6 +114,10 @@ export function requireWikiPageAccess() {
 /**
  * Verify the authenticated user is a member of the org that owns the wiki comment.
  * Expects :commentId in route params.
+ * @returns Express middleware that checks org membership for the comment's org
+ * @throws {AppError} 401 if not authenticated
+ * @throws {AppError} 404 if comment not found
+ * @throws {AppError} 403 if user is not an org member
  */
 export function requireWikiCommentAccess() {
   return async (req: Request, _res: Response, next: NextFunction) => {
@@ -133,6 +149,10 @@ export function requireWikiCommentAccess() {
 /**
  * Verify the authenticated user is a member of the org that owns the wiki template.
  * Expects :templateId in route params.
+ * @returns Express middleware that checks org membership for the template's org
+ * @throws {AppError} 401 if not authenticated
+ * @throws {AppError} 404 if template not found
+ * @throws {AppError} 403 if user is not an org member
  */
 export function requireWikiTemplateAccess() {
   return async (req: Request, _res: Response, next: NextFunction) => {
@@ -163,7 +183,10 @@ export function requireWikiTemplateAccess() {
 
 /**
  * Require org-level permission. Expects :orgId in route params.
- * @param action
+ * @param action - The permission action to check (e.g., 'manage_members', 'delete')
+ * @returns Express middleware that checks org-level permissions
+ * @throws {AppError} 401 if not authenticated
+ * @throws {AppError} 403 if user lacks the required org permission
  */
 export function requireOrgPermission(action: Action) {
   return async (req: Request, _res: Response, next: NextFunction) => {
@@ -194,7 +217,11 @@ export function requireOrgPermission(action: Action) {
 /**
  * Require team-level permission. Expects :teamId in route params.
  * Also checks org-level permissions as a fallback (org admins/owners bypass team checks).
- * @param action
+ * @param action - The permission action to check
+ * @returns Express middleware that checks team-level permissions with org fallback
+ * @throws {AppError} 401 if not authenticated
+ * @throws {AppError} 404 if team not found
+ * @throws {AppError} 403 if user lacks the required permission at both team and org level
  */
 export function requireTeamPermission(action: Action) {
   return async (req: Request, _res: Response, next: NextFunction) => {

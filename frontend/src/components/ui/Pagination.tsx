@@ -14,6 +14,17 @@ interface PaginationProps extends HTMLAttributes<HTMLDivElement> {
   pageSizeOptions?: number[];
 }
 
+/**
+ * Offset-based pagination control with page navigation and optional page size selector.
+ * Displays "Showing X-Y of Z" summary and first/prev/next/last page buttons.
+ * @param props - Pagination configuration.
+ * @param props.total - Total number of items across all pages.
+ * @param props.limit - Number of items per page.
+ * @param props.offset - Zero-based offset of the current page.
+ * @param props.onPageChange - Callback fired with the new offset when navigating.
+ * @param props.onLimitChange - Optional callback to change page size; renders a size selector when provided.
+ * @param props.pageSizeOptions - Available page sizes for the selector. Defaults to [10, 25, 50, 100].
+ */
 export const Pagination = forwardRef<HTMLDivElement, PaginationProps>(
   (
     {

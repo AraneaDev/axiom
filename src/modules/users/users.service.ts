@@ -8,8 +8,10 @@ import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 // ─── Profile ────────────────────────────────────────────────
 
 /**
- *
- * @param userId
+ * Get a user's profile information.
+ * @param userId - The user ID
+ * @returns User profile with email, username, display name, avatar, 2FA status, and creation date
+ * @throws {AppError} 404 if user not found
  */
 export async function getProfile(userId: string) {
   return findOrThrow(
@@ -30,11 +32,12 @@ export async function getProfile(userId: string) {
 }
 
 /**
- *
- * @param userId
- * @param data
+ * Update a user's display name or avatar URL.
+ * @param userId - The user ID
+ * @param data - Partial update data for displayName and/or avatarUrl
  * @param data.displayName
  * @param data.avatarUrl
+ * @returns The updated user profile
  */
 export async function updateProfile(
   userId: string,
@@ -48,9 +51,10 @@ export async function updateProfile(
 }
 
 /**
- * Search users by username or display name.
- * @param query
- * @param limit
+ * Search users by username or display name (case-insensitive).
+ * @param query - The search string to match against username or display name
+ * @param limit - Maximum number of results to return (defaults to 10)
+ * @returns List of matching users with basic profile info
  */
 export async function searchUsers(query: string, limit = 10) {
   return prisma.user.findMany({
@@ -69,8 +73,9 @@ export async function searchUsers(query: string, limit = 10) {
 // ─── Dashboard ──────────────────────────────────────────────
 
 /**
- * Get aggregated dashboard data for the current user.
- * @param userId
+ * Get aggregated dashboard data for the current user including assigned issues, review requests, and upcoming due dates.
+ * @param userId - The user ID
+ * @returns Dashboard data with assignedIssues, reviewRequests, recentActivity, and upcomingDueDates
  */
 export async function getDashboard(userId: string) {
   const now = new Date();
@@ -173,8 +178,9 @@ function parseAndFingerprintKey(publicKey: string): string {
 }
 
 /**
- *
- * @param userId
+ * List all SSH keys for a user.
+ * @param userId - The user ID
+ * @returns List of SSH keys with id, title, fingerprint, and timestamps
  */
 export async function listSshKeys(userId: string) {
   return prisma.sshKey.findMany({
@@ -185,11 +191,14 @@ export async function listSshKeys(userId: string) {
 }
 
 /**
- *
- * @param userId
- * @param data
+ * Add an SSH public key to a user's account after computing its fingerprint.
+ * @param userId - The user ID
+ * @param data - SSH key data including title and public key string
  * @param data.title
  * @param data.publicKey
+ * @returns The created SSH key record
+ * @throws {AppError} 409 if SSH key fingerprint already registered
+ * @throws {AppError} 400 if public key format is invalid
  */
 export async function addSshKey(userId: string, data: { title: string; publicKey: string }) {
   const fingerprint = parseAndFingerprintKey(data.publicKey);
@@ -209,9 +218,10 @@ export async function addSshKey(userId: string, data: { title: string; publicKey
 }
 
 /**
- *
- * @param userId
- * @param keyId
+ * Delete an SSH key belonging to a user.
+ * @param userId - The user ID
+ * @param keyId - The SSH key ID to delete
+ * @throws {AppError} 404 if SSH key not found
  */
 export async function deleteSshKey(userId: string, keyId: string) {
   await findOrThrow(prisma.sshKey.findFirst({ where: { id: keyId, userId } }), 'SSH key not found');
@@ -221,8 +231,9 @@ export async function deleteSshKey(userId: string, keyId: string) {
 // ─── API Tokens ─────────────────────────────────────────────
 
 /**
- *
- * @param userId
+ * List all API tokens for a user (token values are never returned).
+ * @param userId - The user ID
+ * @returns List of API token metadata including name, prefix, scopes, and timestamps
  */
 export async function listApiTokens(userId: string) {
   return prisma.apiToken.findMany({
@@ -241,12 +252,13 @@ export async function listApiTokens(userId: string) {
 }
 
 /**
- *
- * @param userId
- * @param data
+ * Create a new API token. The raw token is returned only on creation and never stored.
+ * @param userId - The user ID
+ * @param data - Token creation data including name, scopes, and optional expiry in days
  * @param data.name
  * @param data.scopes
  * @param data.expiresInDays
+ * @returns The created token metadata plus the raw token string (one-time only)
  */
 export async function createApiToken(
   userId: string,
@@ -280,9 +292,10 @@ export async function createApiToken(
 }
 
 /**
- *
- * @param userId
- * @param tokenId
+ * Delete an API token belonging to a user.
+ * @param userId - The user ID
+ * @param tokenId - The API token ID to delete
+ * @throws {AppError} 404 if API token not found
  */
 export async function deleteApiToken(userId: string, tokenId: string) {
   await findOrThrow(

@@ -2,12 +2,13 @@ import { prisma } from '../../config/database';
 import { broadcastToUser } from '../../realtime/broadcast';
 
 /**
- * Create a notification and broadcast it via WebSocket.
- * @param userId
- * @param type
- * @param title
- * @param body
- * @param link
+ * Create a notification and broadcast it to the user via WebSocket.
+ * @param userId - The user to notify
+ * @param type - Notification type (e.g., 'issue:assigned', 'pr:reviewed')
+ * @param title - Notification title text
+ * @param body - Optional notification body text
+ * @param link - Optional link to the relevant resource
+ * @returns The created notification record
  */
 export async function createNotification(
   userId: string,
@@ -30,12 +31,13 @@ export async function createNotification(
 }
 
 /**
- * List notifications for a user with optional filters.
- * @param userId
- * @param opts
+ * List notifications for a user with optional unread filter and pagination.
+ * @param userId - The user ID
+ * @param opts - Optional filters for unreadOnly, limit, and offset
  * @param opts.unreadOnly
  * @param opts.limit
  * @param opts.offset
+ * @returns Paginated notifications with total count
  */
 export async function listNotifications(
   userId: string,
@@ -59,8 +61,9 @@ export async function listNotifications(
 
 /**
  * Mark a single notification as read.
- * @param id
- * @param userId
+ * @param id - The notification ID
+ * @param userId - The user ID (ownership check)
+ * @returns Update result
  */
 export async function markRead(id: string, userId: string) {
   return prisma.notification.updateMany({
@@ -70,8 +73,9 @@ export async function markRead(id: string, userId: string) {
 }
 
 /**
- * Mark all notifications as read for a user.
- * @param userId
+ * Mark all unread notifications as read for a user.
+ * @param userId - The user ID
+ * @returns Update result
  */
 export async function markAllRead(userId: string) {
   return prisma.notification.updateMany({
@@ -82,7 +86,8 @@ export async function markAllRead(userId: string) {
 
 /**
  * Get unread notification count for a user.
- * @param userId
+ * @param userId - The user ID
+ * @returns The count of unread notifications
  */
 export async function getUnreadCount(userId: string) {
   return prisma.notification.count({

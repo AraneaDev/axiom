@@ -25,11 +25,12 @@ const arrows = {
 };
 
 /**
- *
- * @param root0
- * @param root0.content
- * @param root0.side
- * @param root0.children
+ * Hover-triggered tooltip that displays a text hint near the wrapped element.
+ * Uses CSS group-hover for zero-JS show/hide behavior.
+ * @param props - Tooltip configuration.
+ * @param props.content - Text to display inside the tooltip.
+ * @param props.side - Tooltip placement relative to the trigger: top, bottom, left, right. Defaults to top.
+ * @param props.children - The element that triggers the tooltip on hover.
  */
 export function Tooltip({ content, side = 'top', children }: TooltipProps) {
   return (

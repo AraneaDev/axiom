@@ -5,12 +5,14 @@ import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
  * Create a new sprint in PLANNING status.
- * @param projectId
- * @param data
+ * @param projectId - The project to create the sprint in
+ * @param data - Sprint creation data including name, optional goal, start date, and end date
  * @param data.name
  * @param data.goal
  * @param data.startDate
  * @param data.endDate
+ * @returns The created sprint with issues
+ * @throws {AppError} 404 if project not found
  */
 export async function createSprint(
   projectId: string,
@@ -40,10 +42,12 @@ export async function createSprint(
 }
 
 /**
- * List sprints for a project, optionally filtered by status.
- * @param projectId
- * @param opts
+ * List sprints for a project, optionally filtered by status, with computed story points.
+ * @param projectId - The project to list sprints for
+ * @param opts - Optional filter options (status)
  * @param opts.status
+ * @returns List of sprints with issues and computed story point totals
+ * @throws {AppError} 404 if project not found
  */
 export async function listSprints(projectId: string, opts?: { status?: string }) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
@@ -74,8 +78,10 @@ export async function listSprints(projectId: string, opts?: { status?: string })
 }
 
 /**
- * Get a single sprint with its issues.
- * @param sprintId
+ * Get a single sprint with its issues and computed story points.
+ * @param sprintId - The sprint ID
+ * @returns The sprint with issues and computed story point total
+ * @throws {AppError} 404 if sprint not found
  */
 export async function getSprint(sprintId: string) {
   const sprint = await prisma.sprint.findUnique({
@@ -99,13 +105,15 @@ export async function getSprint(sprintId: string) {
 }
 
 /**
- * Update sprint fields.
- * @param sprintId
- * @param data
+ * Update sprint fields (name, goal, start date, end date).
+ * @param sprintId - The sprint ID
+ * @param data - Partial update data for the sprint
  * @param data.name
  * @param data.goal
  * @param data.startDate
  * @param data.endDate
+ * @returns The updated sprint with issues
+ * @throws {AppError} 404 if sprint not found
  */
 export async function updateSprint(
   sprintId: string,
@@ -135,8 +143,12 @@ export async function updateSprint(
 }
 
 /**
- * Start a sprint. Only one active sprint per project is allowed.
- * @param sprintId
+ * Start a sprint, transitioning it from PLANNING to ACTIVE. Only one active sprint per project is allowed.
+ * @param sprintId - The sprint ID
+ * @returns The activated sprint with issues
+ * @throws {AppError} 404 if sprint not found
+ * @throws {AppError} 400 if sprint is not in PLANNING status
+ * @throws {AppError} 409 if another sprint is already active in the project
  */
 export async function startSprint(sprintId: string) {
   const sprint = await findOrThrow(
@@ -171,9 +183,12 @@ export async function startSprint(sprintId: string) {
 }
 
 /**
- * Complete a sprint. Move incomplete issues to another sprint or backlog.
- * @param sprintId
- * @param moveToSprintId
+ * Complete a sprint, moving incomplete issues to another sprint or backlog.
+ * @param sprintId - The sprint ID to complete
+ * @param moveToSprintId - Optional target sprint for incomplete issues (null moves to backlog)
+ * @returns The completed sprint with issues
+ * @throws {AppError} 404 if sprint or target sprint not found
+ * @throws {AppError} 400 if sprint is not active
  */
 export async function completeSprint(sprintId: string, moveToSprintId?: string) {
   const sprint = await findOrThrow(
@@ -223,9 +238,11 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
 }
 
 /**
- * Add issues to a sprint.
- * @param sprintId
- * @param issueIds
+ * Add issues to a sprint (only issues in the same project are affected).
+ * @param sprintId - The sprint ID
+ * @param issueIds - Array of issue IDs to add to the sprint
+ * @returns The updated sprint with all issues
+ * @throws {AppError} 404 if sprint not found
  */
 export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
   const sprint = await findOrThrow(
@@ -243,7 +260,9 @@ export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
 
 /**
  * Remove an issue from its sprint (move to backlog).
- * @param issueId
+ * @param issueId - The issue ID to remove from its sprint
+ * @returns The updated issue with sprintId set to null
+ * @throws {AppError} 404 if issue not found
  */
 export async function removeIssueFromSprint(issueId: string) {
   await findOrThrow(prisma.issue.findUnique({ where: { id: issueId } }), 'Issue not found');
@@ -255,9 +274,11 @@ export async function removeIssueFromSprint(issueId: string) {
 }
 
 /**
- * Calculate velocity: story points completed per sprint for last N sprints.
- * @param projectId
- * @param sprintCount
+ * Calculate velocity: story points completed per sprint for the last N completed sprints.
+ * @param projectId - The project to calculate velocity for
+ * @param sprintCount - Number of recent completed sprints to include (defaults to 5)
+ * @returns Chronologically ordered list of sprints with completed points and issue counts
+ * @throws {AppError} 404 if project not found
  */
 export async function getVelocity(projectId: string, sprintCount = 5) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
@@ -287,8 +308,10 @@ export async function getVelocity(projectId: string, sprintCount = 5) {
 }
 
 /**
- * Get backlog issues (issues with no sprint assigned).
- * @param projectId
+ * Get backlog issues (issues with no sprint assigned) for a project.
+ * @param projectId - The project to get backlog issues for
+ * @returns List of unassigned issues with computed keys
+ * @throws {AppError} 404 if project not found
  */
 export async function getBacklog(projectId: string) {
   const project = await findOrThrow(

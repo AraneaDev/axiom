@@ -88,11 +88,13 @@ interface MarkdownRendererProps {
 }
 
 /**
- *
- * @param root0
- * @param root0.content
- * @param root0.className
- * @param root0.basePath
+ * Renders markdown content as sanitized HTML with mermaid diagram support.
+ * Parses @mentions and !ISSUE-123 references into styled links.
+ * Mermaid code fences are rendered as interactive diagram blocks.
+ * @param props - Renderer configuration.
+ * @param props.content - Raw markdown string to render.
+ * @param props.className - Additional CSS classes for the wrapper div.
+ * @param props.basePath - Base URL path for generating issue reference links (e.g. "/org/team/project").
  */
 export function MarkdownRenderer({ content, className = '', basePath }: MarkdownRendererProps) {
   const segments = useMemo(() => parseMarkdown(content || '', basePath), [content, basePath]);

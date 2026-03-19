@@ -72,13 +72,15 @@ function ToolbarDivider() {
 }
 
 /**
- *
- * @param root0
- * @param root0.value
- * @param root0.onChange
- * @param root0.placeholder
- * @param root0.compact
- * @param root0.projectId
+ * TipTap-based WYSIWYG markdown editor with toolbar.
+ * Supports headings, lists, code blocks, tables, links, images,
+ * @-mentions, and !-issue references. Outputs markdown via tiptap-markdown.
+ * @param props - Editor configuration.
+ * @param props.value - The current markdown content (controlled).
+ * @param props.onChange - Callback fired with updated markdown on every edit.
+ * @param props.placeholder - Placeholder text when the editor is empty.
+ * @param props.compact - Reduces minimum height and hides advanced toolbar buttons when true.
+ * @param props.projectId - Project ID used for issue reference autocomplete suggestions.
  */
 export function MarkdownEditor({
   value,

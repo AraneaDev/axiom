@@ -16,7 +16,16 @@ export interface AttachmentMeta {
   createdAt: string;
 }
 
+/** Attachments API client for uploading, listing, downloading, and removing file attachments. Uses raw fetch for multipart uploads. */
 export const attachmentsApi = {
+  /**
+   * Upload a file attachment, optionally linked to an issue, page, or comment.
+   * @param file
+   * @param opts
+   * @param opts.issueId
+   * @param opts.pageId
+   * @param opts.commentId
+   */
   upload: async (
     file: File,
     opts: { issueId?: string; pageId?: string; commentId?: string } = {},
@@ -50,6 +59,12 @@ export const attachmentsApi = {
     return res.json();
   },
 
+  /**
+   * List attachments filtered by issue or page.
+   * @param opts
+   * @param opts.issueId
+   * @param opts.pageId
+   */
   list: async (opts: { issueId?: string; pageId?: string } = {}): Promise<AttachmentMeta[]> => {
     const params = new URLSearchParams();
     if (opts.issueId) params.set('issueId', opts.issueId);
@@ -74,10 +89,18 @@ export const attachmentsApi = {
     return res.json();
   },
 
+  /**
+   * Get the download URL for an attachment.
+   * @param id
+   */
   getDownloadUrl: (id: string): string => {
     return `${API_BASE}/${id}`;
   },
 
+  /**
+   * Delete an attachment by ID.
+   * @param id
+   */
   remove: async (id: string): Promise<void> => {
     const headers: Record<string, string> = {
       'X-Requested-With': 'XMLHttpRequest',

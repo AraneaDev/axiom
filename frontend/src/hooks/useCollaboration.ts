@@ -30,12 +30,14 @@ interface UseCollaborationReturn {
 }
 
 /**
- * Hook to manage Yjs collaboration for wiki page editing.
+ * Hook to manage real-time collaborative editing for wiki pages.
  * Creates a Yjs document and connects via y-websocket to the server.
+ * Manages user awareness (presence indicators) and connection state.
  * Falls back gracefully if the WebSocket connection fails.
- * @param root0
- * @param root0.pageId
- * @param root0.enabled
+ * @param options - Collaboration configuration.
+ * @param options.pageId - The wiki page ID to collaborate on.
+ * @param options.enabled - Whether collaboration should be active. Defaults to true.
+ * @returns Yjs document, provider, connection/sync state, presence users, and fragment name.
  */
 export function useCollaboration({
   pageId,

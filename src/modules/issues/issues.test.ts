@@ -14,6 +14,8 @@ describe('Issues API', () => {
   let issueNumber: number;
   let _columnId: string;
   let secondColumnId: string;
+  let secondToken: string;
+  let commentId: string;
 
   beforeAll(async () => {
     const passwordHash = await bcrypt.hash('testpassword123', 4);
@@ -58,6 +60,29 @@ describe('Issues API', () => {
       });
     token = loginRes.body.accessToken;
 
+    // Second user for ownership tests
+    const user2 = await prisma.user.upsert({
+      where: { username: 'issues-test-user2' },
+      update: {},
+      create: {
+        email: 'issues-test2@axiom.dev',
+        username: 'issues-test-user2',
+        displayName: 'Issues Test User 2',
+        passwordHash,
+      },
+    });
+    await prisma.teamMembership.create({
+      data: { userId: user2.id, teamId: team.id, role: 'MEMBER' },
+    });
+    await prisma.orgMembership.create({
+      data: { userId: user2.id, orgId: org.id, role: 'MEMBER' },
+    });
+    const login2 = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ login: 'issues-test2@axiom.dev', password: 'testpassword123' });
+    secondToken = login2.body.accessToken;
+
     // Create project via API so default columns are created
     const projectRes = await request(app)
       .post(`/api/projects/team/${teamId}`)
@@ -77,7 +102,9 @@ describe('Issues API', () => {
 
   afterAll(async () => {
     await prisma.organization.deleteMany({ where: { slug: 'issues-test-org' } });
-    await prisma.user.deleteMany({ where: { username: 'issues-test-user' } });
+    await prisma.user.deleteMany({
+      where: { username: { in: ['issues-test-user', 'issues-test-user2'] } },
+    });
     await prisma.$disconnect();
   });
 
@@ -163,6 +190,66 @@ describe('Issues API', () => {
       .send({ body: 'This is a test comment' });
     expect(res.status).toBe(201);
     expect(res.body.body).toBe('This is a test comment');
+    commentId = res.body.id;
+  });
+
+  // 7a. Update comment
+  it('7a. should update a comment body', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${projectId}/comments/${commentId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Updated comment body' });
+    expect(res.status).toBe(200);
+    expect(res.body.body).toBe('Updated comment body');
+  });
+
+  // 7b. Update comment as different user -- expect 403
+  it('7b. should reject comment update from non-author', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${projectId}/comments/${commentId}`)
+      .set('Authorization', `Bearer ${secondToken}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Unauthorized edit' });
+    expect(res.status).toBe(403);
+  });
+
+  // 7c. Update non-existent comment -- expect 404
+  it('7c. should return 404 for non-existent comment update', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${projectId}/comments/nonexistent-id`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Does not matter' });
+    expect(res.status).toBe(404);
+  });
+
+  // 7d. Delete comment as different user -- expect 403
+  it('7d. should reject comment delete from non-author', async () => {
+    const res = await request(app)
+      .delete(`/api/projects/${projectId}/comments/${commentId}`)
+      .set('Authorization', `Bearer ${secondToken}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
+    expect(res.status).toBe(403);
+  });
+
+  // 7e. Delete own comment
+  it('7e. should delete own comment', async () => {
+    const res = await request(app)
+      .delete(`/api/projects/${projectId}/comments/${commentId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
+    expect(res.status).toBe(204);
+  });
+
+  // 7f. Verify comment is gone
+  it('7f. should confirm comment no longer exists after delete', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${projectId}/comments/${commentId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Should not work' });
+    expect(res.status).toBe(404);
   });
 
   // 8. Get board view

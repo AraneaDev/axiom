@@ -23,6 +23,13 @@ declare module '@tiptap/core' {
   }
 }
 
+/**
+ * TipTap extension for inline issue references (e.g. !AXM-123).
+ * Renders as an inline atom node with a data-issue-key attribute.
+ * Provides suggestion-based autocomplete triggered by "!" and an input rule
+ * that auto-converts "!PREFIX-123 " into a reference node.
+ * Configure with projectId to enable autocomplete against the issues API.
+ */
 export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
   name: 'issueReference',
   group: 'inline',
@@ -92,12 +99,25 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
         allowSpaces: false,
         items: async ({ query }): Promise<IssueReferenceItem[]> => {
           if (!query || query.length < 1) return [];
-          if (!projectId) return [];
           try {
-            const data = await get<{ issues: IssueReferenceItem[] }>(
-              `/projects/${projectId}/issues?q=${encodeURIComponent(query)}&limit=8`,
-            );
-            return (data.issues ?? []).map((issue) => ({
+            let issues: IssueReferenceItem[] = [];
+            if (projectId) {
+              // Scoped search within project
+              const data = await get<{ issues: IssueReferenceItem[] }>(
+                `/projects/${projectId}/issues?q=${encodeURIComponent(query)}&limit=8`,
+              );
+              issues = data.issues ?? [];
+            } else {
+              // Global search across all accessible issues
+              const data = await get<Array<{ type: string; items: IssueReferenceItem[] }>>(
+                `/search?q=${encodeURIComponent(query)}&type=issues&limit=8`,
+              );
+              const issueGroup = Array.isArray(data)
+                ? data.find((r) => r.type === 'issues')
+                : undefined;
+              issues = issueGroup?.items ?? [];
+            }
+            return issues.map((issue) => ({
               id: issue.id,
               number: issue.number,
               title: issue.title,

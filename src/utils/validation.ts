@@ -3,9 +3,11 @@ import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler';
 
 /**
- *
- * @param schema
- * @param data
+ * Validate data against a Zod schema, throwing a 400 AppError with formatted messages on failure.
+ * @param schema - The Zod schema to validate against
+ * @param data - The data to validate
+ * @returns The parsed and validated data
+ * @throws {AppError} 400 if validation fails
  */
 export function validate<T extends z.ZodTypeAny>(schema: T, data: unknown): z.output<T> {
   const result = schema.safeParse(data);

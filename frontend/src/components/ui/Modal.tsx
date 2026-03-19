@@ -22,13 +22,14 @@ const sizes = {
 };
 
 /**
- *
- * @param root0
- * @param root0.open
- * @param root0.onClose
- * @param root0.title
- * @param root0.size
- * @param root0.children
+ * Accessible overlay dialog rendered via createPortal.
+ * Manages focus trapping, Escape key dismissal, and scroll locking.
+ * @param props - Modal configuration.
+ * @param props.open - Whether the modal is visible.
+ * @param props.onClose - Callback fired when the modal should close (backdrop click or Escape).
+ * @param props.title - Optional header title; also used as aria-label.
+ * @param props.size - Width constraint: sm, md, lg. Defaults to md.
+ * @param props.children - Modal body content.
  */
 export function Modal({ open, onClose, title, size = 'md', children }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -127,9 +128,9 @@ export function Modal({ open, onClose, title, size = 'md', children }: ModalProp
 }
 
 /**
- *
- * @param root0
- * @param root0.children
+ * Footer section for Modal dialogs with right-aligned action buttons.
+ * @param props - Footer props.
+ * @param props.children - Typically Button components for confirm/cancel actions.
  */
 export function ModalFooter({ children }: { children: ReactNode }) {
   return (

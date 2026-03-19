@@ -62,14 +62,17 @@ async function getRepoDisk(repoId: string): Promise<{ diskPath: string; defaultB
 }
 
 /**
- *
- * @param repoId
- * @param authorId
- * @param data
+ * Create a new pull request, validating branches exist and have diverging commits.
+ * @param repoId - The repository to create the PR in
+ * @param authorId - The user creating the PR
+ * @param data - PR creation data including title, body, source and target branches
  * @param data.title
  * @param data.body
  * @param data.sourceBranch
  * @param data.targetBranch
+ * @returns The created pull request record
+ * @throws {AppError} 400 if branches are invalid, identical, or have no new commits
+ * @throws {AppError} 404 if repository not found
  */
 export async function createPR(
   repoId: string,
@@ -129,9 +132,11 @@ export async function createPR(
 }
 
 /**
- *
- * @param repoId
- * @param prNumber
+ * Retrieve a pull request by repo and PR number, including reviews, comments, and merge status.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @returns The PR with reviews, comments, and mergeable status
+ * @throws {AppError} 404 if PR not found
  */
 export async function getPR(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
@@ -162,12 +167,13 @@ export async function getPR(repoId: string, prNumber: number) {
 }
 
 /**
- *
- * @param repoId
- * @param status
- * @param opts
+ * List pull requests for a repository with optional status filter and pagination.
+ * @param repoId - The repository to list PRs for
+ * @param status - Optional filter by PR status (OPEN, MERGED, CLOSED)
+ * @param opts - Pagination options (limit, offset)
  * @param opts.limit
  * @param opts.offset
+ * @returns Paginated list of PRs with review and comment counts
  */
 export async function listPRs(
   repoId: string,
@@ -197,12 +203,15 @@ export async function listPRs(
 }
 
 /**
- *
- * @param repoId
- * @param prNumber
- * @param data
+ * Update an open pull request's title or body, re-parsing issue references.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @param data - Partial update data for title and/or body
  * @param data.title
  * @param data.body
+ * @returns The updated pull request record
+ * @throws {AppError} 404 if PR not found
+ * @throws {AppError} 400 if PR is not open
  */
 export async function updatePR(
   repoId: string,
@@ -228,9 +237,12 @@ export async function updatePR(
 }
 
 /**
- *
- * @param repoId
- * @param prNumber
+ * Close an open pull request without merging.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @returns The closed pull request record
+ * @throws {AppError} 404 if PR not found
+ * @throws {AppError} 400 if PR is not open
  */
 export async function closePR(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
@@ -248,9 +260,11 @@ export async function closePR(repoId: string, prNumber: number) {
 }
 
 /**
- * Get merge check status for a PR (review requirements, CI, conflicts).
- * @param repoId
- * @param prNumber
+ * Get merge check status for a PR including review requirements, CI status, and merge eligibility.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @returns Merge check status with required/approved reviews, CI pass status, and canMerge flag
+ * @throws {AppError} 404 if PR not found
  */
 export async function getMergeChecks(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
@@ -289,10 +303,15 @@ export async function getMergeChecks(repoId: string, prNumber: number) {
 }
 
 /**
- *
- * @param repoId
- * @param prNumber
- * @param strategy
+ * Merge a pull request using the specified strategy, enforcing branch protection and CI gates.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @param strategy - Merge strategy (merge, squash, or rebase); defaults to repo setting or 'merge'
+ * @returns The merged pull request record
+ * @throws {AppError} 404 if PR not found
+ * @throws {AppError} 400 if PR is not open or branches no longer exist
+ * @throws {AppError} 409 if PR has merge conflicts
+ * @throws {AppError} 422 if CI checks have not passed
  */
 export async function mergePR(
   repoId: string,
@@ -443,9 +462,11 @@ export async function mergePR(
 }
 
 /**
- *
- * @param repoId
- * @param prNumber
+ * Get issues linked to a pull request via commit/PR body references.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @returns List of linked issues with project, column, and assignee details
+ * @throws {AppError} 404 if PR not found
  */
 export async function getLinkedIssues(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
@@ -474,9 +495,11 @@ export async function getLinkedIssues(repoId: string, prNumber: number) {
 }
 
 /**
- *
- * @param repoId
- * @param prNumber
+ * Get the diff output and file stats between a PR's source and target branches.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @returns Object with raw diff text and per-file stats
+ * @throws {AppError} 404 if PR not found
  */
 export async function getPRDiff(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
@@ -492,9 +515,11 @@ export async function getPRDiff(repoId: string, prNumber: number) {
 }
 
 /**
- *
- * @param repoId
- * @param prNumber
+ * Get the list of commits in a PR (between merge base and source branch head).
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @returns List of commits unique to the source branch
+ * @throws {AppError} 404 if PR not found
  */
 export async function getPRCommits(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
@@ -510,13 +535,16 @@ export async function getPRCommits(repoId: string, prNumber: number) {
 // ─── Reviews ────────────────────────────────────────────────
 
 /**
- *
- * @param repoId
- * @param prNumber
- * @param reviewerId
- * @param data
+ * Submit a review on an open pull request and notify the PR author.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @param reviewerId - The user submitting the review
+ * @param data - Review data including status (APPROVED, CHANGES_REQUESTED, COMMENTED) and optional body
  * @param data.status
  * @param data.body
+ * @returns The created review record
+ * @throws {AppError} 404 if PR not found
+ * @throws {AppError} 400 if PR is not open
  */
 export async function submitReview(
   repoId: string,
@@ -572,9 +600,11 @@ export async function submitReview(
 }
 
 /**
- *
- * @param repoId
- * @param prNumber
+ * List all reviews for a pull request, ordered by most recent first.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @returns List of review records
+ * @throws {AppError} 404 if PR not found
  */
 export async function listReviews(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
@@ -591,14 +621,16 @@ export async function listReviews(repoId: string, prNumber: number) {
 // ─── PR Comments ────────────────────────────────────────────
 
 /**
- *
- * @param repoId
- * @param prNumber
- * @param authorId
- * @param data
+ * Add a comment to a pull request, optionally anchored to a file and line.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @param authorId - The user authoring the comment
+ * @param data - Comment data including body, optional filePath and line number
  * @param data.body
  * @param data.filePath
  * @param data.line
+ * @returns The created PR comment record
+ * @throws {AppError} 404 if PR not found
  */
 export async function addPRComment(
   repoId: string,
@@ -634,9 +666,11 @@ export async function addPRComment(
 }
 
 /**
- *
- * @param repoId
- * @param prNumber
+ * List all comments on a pull request, ordered chronologically.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @returns List of PR comment records
+ * @throws {AppError} 404 if PR not found
  */
 export async function listPRComments(repoId: string, prNumber: number) {
   const pr = await prisma.pullRequest.findUnique({
@@ -651,10 +685,13 @@ export async function listPRComments(repoId: string, prNumber: number) {
 }
 
 /**
- *
- * @param commentId
- * @param userId
- * @param body
+ * Update a PR comment (only the author may edit).
+ * @param commentId - The comment to update
+ * @param userId - The user attempting the update
+ * @param body - The new comment body text
+ * @returns The updated PR comment record
+ * @throws {AppError} 404 if comment not found
+ * @throws {AppError} 403 if user is not the comment author
  */
 export async function updatePRComment(commentId: string, userId: string, body: string) {
   const comment = await prisma.pRComment.findUnique({ where: { id: commentId } });
@@ -668,9 +705,11 @@ export async function updatePRComment(commentId: string, userId: string, body: s
 }
 
 /**
- *
- * @param commentId
- * @param userId
+ * Delete a PR comment (only the author may delete).
+ * @param commentId - The comment to delete
+ * @param userId - The user attempting the deletion
+ * @throws {AppError} 404 if comment not found
+ * @throws {AppError} 403 if user is not the comment author
  */
 export async function deletePRComment(commentId: string, userId: string) {
   const comment = await prisma.pRComment.findUnique({ where: { id: commentId } });
@@ -690,13 +729,14 @@ function extractSuggestion(body: string): string | null {
 }
 
 /**
- * Apply a single code suggestion from a PR comment.
- * Reads the suggestion block, replaces the relevant lines in the file,
- * and creates a commit on the source branch.
- * @param repoId
- * @param prNumber
- * @param commentId
- * @param userId
+ * Apply a single code suggestion from a PR comment by replacing lines and committing to the source branch.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @param commentId - The comment containing the suggestion block
+ * @param userId - The user applying the suggestion
+ * @returns Object indicating the suggestion was applied
+ * @throws {AppError} 404 if PR or comment not found
+ * @throws {AppError} 400 if PR is not open, comment has no file reference, or no suggestion block
  */
 export async function applySuggestion(
   repoId: string,
@@ -766,11 +806,14 @@ export async function applySuggestion(
 }
 
 /**
- * Apply multiple code suggestions from PR comments as a single commit.
- * @param repoId
- * @param prNumber
- * @param commentIds
- * @param userId
+ * Apply multiple code suggestions from PR comments as a single commit on the source branch.
+ * @param repoId - The repository the PR belongs to
+ * @param prNumber - The PR number within the repository
+ * @param commentIds - Array of comment IDs containing suggestion blocks
+ * @param userId - The user applying the suggestions
+ * @returns Object with applied flag and count of suggestions applied
+ * @throws {AppError} 404 if PR or any comment not found
+ * @throws {AppError} 400 if PR is not open, any comment lacks a file reference or suggestion block
  */
 export async function batchApplySuggestions(
   repoId: string,

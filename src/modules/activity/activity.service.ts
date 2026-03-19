@@ -22,14 +22,12 @@ export type ActivityAction =
   | 'deleted';
 
 /**
- * Log an activity event.
- * @param resourceType
- * @param resourceId
- * @param action
- * @param userId
- * @param details - Flexible JSON payload for activity metadata. Kept as Record<string, unknown>
- *   because each action type stores a different shape (e.g., { title } for created, { from, to }
- *   for status_changed, { minutes, description } for time_logged). Serialized to Prisma JSON column.
+ * Log an activity event. Non-critical -- silently catches errors to avoid breaking the main flow.
+ * @param resourceType - The type of resource (issue, pull_request, wiki_page, repository)
+ * @param resourceId - The ID of the resource
+ * @param action - The action performed (created, updated, status_changed, etc.)
+ * @param userId - The user who performed the action
+ * @param details - Flexible JSON payload for activity metadata, shape varies by action type
  */
 export async function logActivity(
   resourceType: ResourceType,
@@ -54,10 +52,10 @@ export async function logActivity(
 }
 
 /**
- * Resolve an issue ID from project + issue number.
- * Used by controllers that need to look up issues before querying activities.
- * @param projectId
- * @param issueNumber
+ * Resolve an issue ID from project and issue number, used by controllers before querying activities.
+ * @param projectId - The project ID
+ * @param issueNumber - The issue number within the project
+ * @returns The issue ID or null if not found
  */
 export async function getIssueIdByNumber(projectId: string, issueNumber: number) {
   const issue = await prisma.issue.findUnique({
@@ -68,14 +66,15 @@ export async function getIssueIdByNumber(projectId: string, issueNumber: number)
 }
 
 /**
- * List activities with filters.
- * @param opts
+ * List activity events with optional filters by resource, project, user, and pagination.
+ * @param opts - Filter options including resourceType, resourceId, projectId, userId, limit, and offset
  * @param opts.resourceType
  * @param opts.resourceId
  * @param opts.projectId
  * @param opts.userId
  * @param opts.limit
  * @param opts.offset
+ * @returns Paginated list of activities with user details and total count
  */
 export async function listActivities(opts: {
   resourceType?: ResourceType;

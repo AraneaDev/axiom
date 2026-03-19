@@ -10,7 +10,8 @@ type EventCallback = (event: RealtimeEvent) => void;
 
 /**
  * Singleton WebSocket manager.
- * One shared connection across all hook consumers.
+ * Maintains one shared connection across all hook consumers.
+ * Handles automatic reconnection with exponential backoff (max 30s).
  */
 let ws: WebSocket | null = null;
 let state: ConnectionState = 'disconnected';
@@ -159,9 +160,10 @@ export function getConnectionState(): ConnectionState {
 }
 
 /**
- * React hook that manages the WebSocket lifecycle.
- * Call once near the top of the component tree (after auth).
- * Connects on mount, disconnects on unmount / logout.
+ * React hook that manages the singleton WebSocket lifecycle.
+ * Should be called once near the top of the component tree (after auth).
+ * Connects on mount when authenticated, disconnects on logout.
+ * @returns Object with subscribe, unsubscribe, onEvent functions and connection state.
  */
 export function useWebSocket(): {
   subscribe: typeof subscribe;

@@ -4,12 +4,13 @@ import { prisma } from '../../config/database';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
- * Create a saved filter for a user.
- * @param userId
- * @param data
+ * Create a saved filter for a user, optionally scoped to a project.
+ * @param userId - The user ID
+ * @param data - Filter creation data including name, query JSON, and optional projectId
  * @param data.name
  * @param data.query
  * @param data.projectId
+ * @returns The created saved filter record
  */
 export async function create(
   userId: string,
@@ -27,8 +28,9 @@ export async function create(
 
 /**
  * List saved filters for a user, optionally scoped to a project.
- * @param userId
- * @param projectId
+ * @param userId - The user ID
+ * @param projectId - Optional project ID to scope results
+ * @returns List of saved filter records
  */
 export async function list(userId: string, projectId?: string) {
   return prisma.savedFilter.findMany({
@@ -42,12 +44,14 @@ export async function list(userId: string, projectId?: string) {
 }
 
 /**
- * Update a saved filter (name or query).
- * @param userId
- * @param filterId
- * @param data
+ * Update a saved filter's name or query.
+ * @param userId - The user ID (ownership check)
+ * @param filterId - The saved filter ID
+ * @param data - Partial update data for name and/or query
  * @param data.name
  * @param data.query
+ * @returns The updated saved filter record
+ * @throws {AppError} 404 if saved filter not found
  */
 export async function update(
   userId: string,
@@ -67,8 +71,9 @@ export async function update(
 
 /**
  * Delete a saved filter.
- * @param userId
- * @param filterId
+ * @param userId - The user ID (ownership check)
+ * @param filterId - The saved filter ID
+ * @throws {AppError} 404 if saved filter not found
  */
 export async function remove(userId: string, filterId: string) {
   await findOrThrow(

@@ -25,6 +25,13 @@ const sizes = {
   lg: 'px-5 py-2.5 text-sm gap-2',
 };
 
+/**
+ * Reusable button component with variant and size support.
+ * Uses forwardRef for DOM access and supports all native button attributes.
+ * @param props - Button props including variant, size, disabled, and children.
+ * @param props.variant - Visual style: primary, secondary, danger, ghost, outline. Defaults to primary.
+ * @param props.size - Button size: xs, sm, md, lg. Defaults to md.
+ */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', disabled, ...props }, ref) => (
     <button

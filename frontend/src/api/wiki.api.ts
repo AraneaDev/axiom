@@ -10,61 +10,195 @@ import type {
   PageLabel,
 } from '@/lib/types';
 
+/** Wiki API client for spaces, pages, templates, comments, labels, and export. */
 export const wikiApi = {
+  /**
+   * List all wiki spaces for a team.
+   * @param teamId
+   */
   listSpaces: (teamId: string) => get<WikiSpace[]>(`/wiki/team/${teamId}/spaces`),
+  /**
+   * Create a new wiki space within a team.
+   * @param teamId
+   * @param data
+   * @param data.name
+   * @param data.slug
+   * @param data.description
+   */
   createSpace: (teamId: string, data: { name: string; slug: string; description?: string }) =>
     post<WikiSpace>(`/wiki/team/${teamId}/spaces`, data),
+  /**
+   * Get a wiki space by ID.
+   * @param spaceId
+   */
   getSpace: (spaceId: string) => get<WikiSpace>(`/wiki/spaces/${spaceId}`),
+  /**
+   * Get the hierarchical page tree for a space.
+   * @param spaceId
+   */
   getPageTree: (spaceId: string) => get<PageTreeNode[]>(`/wiki/spaces/${spaceId}/tree`),
+  /**
+   * Get a single wiki page by its slug within a space.
+   * @param spaceId
+   * @param pageSlug
+   */
   getPage: (spaceId: string, pageSlug: string) =>
     get<Page>(`/wiki/spaces/${spaceId}/pages/${pageSlug}`),
+  /**
+   * Create a new wiki page in a space.
+   * @param spaceId
+   * @param data
+   * @param data.title
+   * @param data.slug
+   * @param data.body
+   * @param data.parentId
+   * @param data.isDraft
+   */
   createPage: (
     spaceId: string,
     data: { title: string; slug: string; body?: string; parentId?: string; isDraft?: boolean },
   ) => post<Page>(`/wiki/spaces/${spaceId}/pages`, data),
+  /**
+   * Update an existing wiki page's title, body, or draft status.
+   * @param spaceId
+   * @param pageSlug
+   * @param data
+   * @param data.title
+   * @param data.body
+   * @param data.isDraft
+   */
   updatePage: (
     spaceId: string,
     pageSlug: string,
     data: { title?: string; body?: string; isDraft?: boolean },
   ) => patch<Page>(`/wiki/spaces/${spaceId}/pages/${pageSlug}`, data),
+  /**
+   * Delete a wiki page by slug.
+   * @param spaceId
+   * @param pageSlug
+   */
   deletePage: (spaceId: string, pageSlug: string) =>
     del(`/wiki/spaces/${spaceId}/pages/${pageSlug}`),
+  /**
+   * Get the version history for a wiki page.
+   * @param spaceId
+   * @param pageSlug
+   */
   getPageHistory: (spaceId: string, pageSlug: string) =>
     get<PageVersion[]>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/history`),
 
-  // Templates
+  /**
+   * List page templates for a space.
+   * @param spaceId
+   */
   listTemplates: (spaceId: string) => get<PageTemplate[]>(`/wiki/spaces/${spaceId}/templates`),
+  /**
+   * Create a new page template in a space.
+   * @param spaceId
+   * @param data
+   * @param data.name
+   * @param data.body
+   * @param data.description
+   */
   createTemplate: (spaceId: string, data: { name: string; body: string; description?: string }) =>
     post<PageTemplate>(`/wiki/spaces/${spaceId}/templates`, data),
+  /**
+   * Get a template by ID.
+   * @param templateId
+   */
   getTemplate: (templateId: string) => get<PageTemplate>(`/wiki/templates/${templateId}`),
+  /**
+   * Delete a template.
+   * @param templateId
+   */
   deleteTemplate: (templateId: string) => del(`/wiki/templates/${templateId}`),
 
-  // Page comments
+  /**
+   * List comments on a wiki page.
+   * @param pageId
+   */
   listPageComments: (pageId: string) => get<PageComment[]>(`/wiki/pages/${pageId}/comments`),
+  /**
+   * Add a comment to a wiki page, optionally anchored to highlighted text.
+   * @param pageId
+   * @param data
+   * @param data.body
+   * @param data.anchorText
+   */
   addPageComment: (pageId: string, data: { body: string; anchorText?: string }) =>
     post<PageComment>(`/wiki/pages/${pageId}/comments`, data),
+  /**
+   * Resolve (mark as done) a page comment.
+   * @param commentId
+   */
   resolveComment: (commentId: string) => patch<PageComment>(`/wiki/comments/${commentId}`, {}),
+  /**
+   * Update the body of a page comment.
+   * @param commentId
+   * @param body
+   */
   updatePageComment: (commentId: string, body: string) =>
     patch<PageComment>(`/wiki/comments/${commentId}`, { body }),
+  /**
+   * Delete a page comment.
+   * @param commentId
+   */
   deletePageComment: (commentId: string) => del(`/wiki/comments/${commentId}`),
 
-  // Page labels
+  /**
+   * List labels attached to a wiki page.
+   * @param pageId
+   */
   listPageLabels: (pageId: string) => get<PageLabel[]>(`/wiki/pages/${pageId}/labels`),
+  /**
+   * Add a label to a wiki page.
+   * @param pageId
+   * @param label
+   */
   addPageLabel: (pageId: string, label: string) =>
     post<PageLabel>(`/wiki/pages/${pageId}/labels`, { label }),
+  /**
+   * Remove a label from a wiki page.
+   * @param pageId
+   * @param label
+   */
   removePageLabel: (pageId: string, label: string) =>
     del(`/wiki/pages/${pageId}/labels/${encodeURIComponent(label)}`),
+  /**
+   * Search pages in a space by label.
+   * @param spaceId
+   * @param label
+   */
   searchByLabel: (spaceId: string, label: string) =>
     get<{ id: string; title: string; slug: string }[]>(
       `/wiki/spaces/${spaceId}/labels?label=${encodeURIComponent(label)}`,
     ),
 
-  // Move / Copy
+  /**
+   * Move a page to a different space or parent.
+   * @param pageId
+   * @param data
+   * @param data.targetSpaceId
+   * @param data.targetParentId
+   */
   movePage: (pageId: string, data: { targetSpaceId?: string; targetParentId?: string | null }) =>
     post<Page>(`/wiki/pages/${pageId}/move`, data),
+  /**
+   * Copy a page, optionally to a different space with a new slug.
+   * @param pageId
+   * @param data
+   * @param data.targetSpaceId
+   * @param data.newSlug
+   */
   copyPage: (pageId: string, data: { targetSpaceId?: string; newSlug?: string }) =>
     post<Page>(`/wiki/pages/${pageId}/copy`, data),
 
+  /**
+   * Export a wiki page as a downloadable file (HTML, DOCX, PDF, etc.). Uses raw fetch for blob download.
+   * @param spaceId
+   * @param pageSlug
+   * @param format
+   */
   exportPage: async (spaceId: string, pageSlug: string, format: string) => {
     const token = localStorage.getItem('accessToken');
     const res = await fetch(

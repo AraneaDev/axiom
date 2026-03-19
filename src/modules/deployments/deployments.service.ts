@@ -5,11 +5,12 @@ import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
  * Create a deployment environment for a repository.
- * @param repoId
- * @param data
+ * @param repoId - The repository ID
+ * @param data - Environment creation data including name, optional URL, and optional protection rules
  * @param data.name
  * @param data.url
  * @param data.protectionRules
+ * @returns The created environment with latest deployment info
  */
 export async function createEnvironment(
   repoId: string,
@@ -36,7 +37,8 @@ export async function createEnvironment(
 
 /**
  * List all environments for a repository, with latest deployment info.
- * @param repoId
+ * @param repoId - The repository ID
+ * @returns List of environments with their most recent deployment
  */
 export async function listEnvironments(repoId: string) {
   return prisma.deploymentEnvironment.findMany({
@@ -53,12 +55,13 @@ export async function listEnvironments(repoId: string) {
 }
 
 /**
- * Update an environment's settings.
- * @param envId
- * @param data
+ * Update an environment's settings (name, URL, protection rules).
+ * @param envId - The environment ID
+ * @param data - Partial update data for name, URL, and/or protection rules
  * @param data.name
  * @param data.url
  * @param data.protectionRules
+ * @returns The updated environment with latest deployment info
  */
 export async function updateEnvironment(
   envId: string,
@@ -86,20 +89,21 @@ export async function updateEnvironment(
 
 /**
  * Delete an environment and all its deployments.
- * @param envId
+ * @param envId - The environment ID
  */
 export async function deleteEnvironment(envId: string) {
   await prisma.deploymentEnvironment.delete({ where: { id: envId } });
 }
 
 /**
- * Record a new deployment and update the environment's lastDeployedAt.
- * @param envId
- * @param data
+ * Record a new deployment and update the environment's lastDeployedAt timestamp.
+ * @param envId - The environment ID
+ * @param data - Deployment data including commitSha, optional pipelineRunId, deployedById, and optional status
  * @param data.commitSha
  * @param data.pipelineRunId
  * @param data.deployedById
  * @param data.status
+ * @returns The created deployment with user, environment, and pipeline run details
  */
 export async function createDeployment(
   envId: string,
@@ -135,10 +139,11 @@ export async function createDeployment(
 
 /**
  * List deployments for an environment with pagination.
- * @param envId
- * @param opts
+ * @param envId - The environment ID
+ * @param opts - Pagination options (limit, offset)
  * @param opts.limit
  * @param opts.offset
+ * @returns List of deployments with user and pipeline run details
  */
 export async function listDeployments(
   envId: string,
@@ -157,8 +162,9 @@ export async function listDeployments(
 }
 
 /**
- * Get a single deployment by ID.
- * @param deploymentId
+ * Get a single deployment by ID with full details.
+ * @param deploymentId - The deployment ID
+ * @returns The deployment with user, environment, and pipeline run details, or null
  */
 export async function getDeployment(deploymentId: string) {
   return prisma.deployment.findUnique({
@@ -172,9 +178,10 @@ export async function getDeployment(deploymentId: string) {
 }
 
 /**
- * Find deployments by commit SHA across all environments of a repo.
- * @param repoId
- * @param commitSha
+ * Find deployments by commit SHA across all environments of a repository.
+ * @param repoId - The repository ID
+ * @param commitSha - The commit SHA to search for
+ * @returns List of deployments matching the commit SHA with environment and user details
  */
 export async function getDeploymentsByCommit(repoId: string, commitSha: string) {
   return prisma.deployment.findMany({

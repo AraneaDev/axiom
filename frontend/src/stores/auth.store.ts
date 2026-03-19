@@ -25,6 +25,11 @@ interface AuthState {
   loadUser: () => Promise<void>;
 }
 
+/**
+ * Authentication store managing user session state.
+ * Provides register, login, logout, and loadUser actions.
+ * Tokens are persisted in localStorage and refreshed automatically by the API client.
+ */
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,

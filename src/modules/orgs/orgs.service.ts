@@ -4,12 +4,14 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
- *
- * @param userId
- * @param data
+ * Create a new organization, adding the creator as owner.
+ * @param userId - The user creating the org (becomes owner)
+ * @param data - Org creation data including name, slug, and optional description
  * @param data.name
  * @param data.slug
  * @param data.description
+ * @returns The created organization with members
+ * @throws {AppError} 409 if organization slug already taken
  */
 export async function createOrg(
   userId: string,
@@ -36,8 +38,10 @@ export async function createOrg(
 }
 
 /**
- *
- * @param orgId
+ * Retrieve an organization by ID with teams and members.
+ * @param orgId - The organization ID
+ * @returns The organization with teams and member details
+ * @throws {AppError} 404 if organization not found
  */
 export async function getOrg(orgId: string) {
   return findOrThrow(
@@ -57,8 +61,9 @@ export async function getOrg(orgId: string) {
 }
 
 /**
- *
- * @param userId
+ * List all organizations a user is a member of with their roles.
+ * @param userId - The user ID
+ * @returns List of organizations with the user's role in each
  */
 export async function listUserOrgs(userId: string) {
   const memberships = await prisma.orgMembership.findMany({
@@ -71,29 +76,32 @@ export async function listUserOrgs(userId: string) {
 }
 
 /**
- *
- * @param orgId
- * @param data
+ * Update an organization's name or description.
+ * @param orgId - The organization ID
+ * @param data - Partial update data for name and/or description
  * @param data.name
  * @param data.description
+ * @returns The updated organization record
  */
 export async function updateOrg(orgId: string, data: { name?: string; description?: string }) {
   return prisma.organization.update({ where: { id: orgId }, data });
 }
 
 /**
- *
- * @param orgId
+ * Delete an organization and all its associated data.
+ * @param orgId - The organization ID
  */
 export async function deleteOrg(orgId: string) {
   await prisma.organization.delete({ where: { id: orgId } });
 }
 
 /**
- *
- * @param orgId
- * @param userId
- * @param role
+ * Add a user as a member of an organization.
+ * @param orgId - The organization ID
+ * @param userId - The user to add
+ * @param role - The org role to assign (defaults to MEMBER)
+ * @returns The created org membership with user details
+ * @throws {AppError} 409 if user is already a member
  */
 export async function addOrgMember(
   orgId: string,
@@ -112,10 +120,12 @@ export async function addOrgMember(
 }
 
 /**
- *
- * @param orgId
- * @param memberId
- * @param role
+ * Update an org member's role.
+ * @param orgId - The organization ID
+ * @param memberId - The user whose role to update
+ * @param role - The new organization role
+ * @returns The updated org membership record
+ * @throws {AppError} 404 if membership not found
  */
 export async function updateOrgMemberRole(
   orgId: string,
@@ -136,9 +146,11 @@ export async function updateOrgMemberRole(
 }
 
 /**
- *
- * @param orgId
- * @param memberId
+ * Remove a member from an organization (cannot remove the last owner).
+ * @param orgId - The organization ID
+ * @param memberId - The user to remove
+ * @throws {AppError} 404 if membership not found
+ * @throws {AppError} 400 if attempting to remove the last owner
  */
 export async function removeOrgMember(orgId: string, memberId: string) {
   const membership = await findOrThrow(
@@ -159,13 +171,14 @@ export async function removeOrgMember(orgId: string, memberId: string) {
 // ─── Invite Links ─────────────────────────────────────────────
 
 /**
- *
- * @param orgId
- * @param createdBy
- * @param data
+ * Create a new invite link for an organization with configurable role, max uses, and expiry.
+ * @param orgId - The organization ID
+ * @param createdBy - The user creating the invite link
+ * @param data - Invite options including role, max uses, and expiry in days
  * @param data.role
  * @param data.maxUses
  * @param data.expiresInDays
+ * @returns The created invite link record with code
  */
 export async function createInviteLink(
   orgId: string,
@@ -192,8 +205,9 @@ export async function createInviteLink(
 }
 
 /**
- *
- * @param orgId
+ * List all invite links for an organization.
+ * @param orgId - The organization ID
+ * @returns List of invite link records ordered by creation date
  */
 export async function listInviteLinks(orgId: string) {
   return prisma.inviteLink.findMany({
@@ -203,8 +217,9 @@ export async function listInviteLinks(orgId: string) {
 }
 
 /**
- *
- * @param inviteId
+ * Delete an invite link.
+ * @param inviteId - The invite link ID
+ * @throws {AppError} 404 if invite link not found
  */
 export async function deleteInviteLink(inviteId: string) {
   await findOrThrow(

@@ -2,12 +2,13 @@
 
 A self-hosted project management platform with integrated Git hosting, CI/CD, and real-time collaboration.
 
-![Tests](https://img.shields.io/badge/tests-405%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-454%20passing-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
 ![Backend](https://img.shields.io/badge/backend-zero%20errors-brightgreen)
 ![Frontend](https://img.shields.io/badge/frontend-zero%20errors-brightgreen)
 ![E2E](https://img.shields.io/badge/E2E-12%20specs-blue)
-![Modules](https://img.shields.io/badge/modules-28%20tested-brightgreen)
+![JSDoc](https://img.shields.io/badge/JSDoc-100%25%20coverage-brightgreen)
+![Modules](https://img.shields.io/badge/modules-40%20tested-brightgreen)
 ![License](https://img.shields.io/badge/license-proprietary-lightgrey)
 
 ---
@@ -69,7 +70,7 @@ cd frontend && npx tsc --noEmit  # Frontend typecheck only
 
 | Suite | Command | Count |
 |-------|---------|-------|
-| Unit / Integration | `npm run test` | 405 tests across 35 files |
+| Unit / Integration | `npm run test` | 454 tests across 40 files |
 | E2E | `npm run e2e` | 12 specs |
 | Frontend Components | `cd frontend && npm run test` | 16 component test files |
 | Full Check | `npm run check` | typecheck + lint + format + test |

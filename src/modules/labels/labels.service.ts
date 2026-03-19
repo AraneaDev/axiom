@@ -5,11 +5,14 @@ import { parsePagination, paginatedResponse } from '../../utils/pagination';
 
 /**
  * Create a label for a project.
- * @param projectId
- * @param data
+ * @param projectId - The project to create the label in
+ * @param data - Label creation data including name, color, and optional description
  * @param data.name
  * @param data.color
  * @param data.description
+ * @returns The created label record
+ * @throws {AppError} 404 if project not found
+ * @throws {AppError} 409 if label name already exists in the project
  */
 export async function createLabel(
   projectId: string,
@@ -33,11 +36,13 @@ export async function createLabel(
 }
 
 /**
- * List all labels for a project.
- * @param projectId
- * @param query
+ * List all labels for a project with pagination.
+ * @param projectId - The project to list labels for
+ * @param query - Pagination query params (limit, offset)
  * @param query.limit
  * @param query.offset
+ * @returns Paginated list of labels with total count
+ * @throws {AppError} 404 if project not found
  */
 export async function listLabels(
   projectId: string,
@@ -62,13 +67,16 @@ export async function listLabels(
 }
 
 /**
- * Update a label by name within a project.
- * @param projectId
- * @param labelName
- * @param data
+ * Update a label by name within a project, checking for name conflicts on rename.
+ * @param projectId - The project the label belongs to
+ * @param labelName - The current label name
+ * @param data - Partial update data for name, color, and/or description
  * @param data.name
  * @param data.color
  * @param data.description
+ * @returns The updated label record
+ * @throws {AppError} 404 if label not found
+ * @throws {AppError} 409 if new label name conflicts with an existing label
  */
 export async function updateLabel(
   projectId: string,
@@ -101,9 +109,10 @@ export async function updateLabel(
 }
 
 /**
- * Delete a label by name. Removes it from all issues automatically (many-to-many disconnect).
- * @param projectId
- * @param labelName
+ * Delete a label by name, automatically removing it from all issues.
+ * @param projectId - The project the label belongs to
+ * @param labelName - The label name to delete
+ * @throws {AppError} 404 if label not found
  */
 export async function deleteLabel(projectId: string, labelName: string) {
   const label = await findOrThrow(

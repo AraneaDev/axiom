@@ -9,6 +9,15 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   success?: boolean;
 }
 
+/**
+ * Text input component with label, hint, error, and success states.
+ * Follows the shared UI component pattern with forwardRef and cn() merging.
+ * @param props - Input props extending native input attributes.
+ * @param props.label - Optional label displayed above the input.
+ * @param props.error - Error message displayed below the input; applies danger styling.
+ * @param props.hint - Hint text displayed below the input when no error is present.
+ * @param props.success - Applies success border styling when true.
+ */
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, hint, success, id, ...props }, ref) => (
     <div className="flex flex-col gap-1.5">

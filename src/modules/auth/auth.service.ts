@@ -25,13 +25,16 @@ function generateTokens(userId: string) {
 }
 
 /**
- *
- * @param data
+ * Register a new user account. Requires an invite code unless this is the first user (admin bootstrap).
+ * @param data - Registration data including email, username, displayName, password, and optional inviteCode
  * @param data.email
  * @param data.username
  * @param data.displayName
  * @param data.password
  * @param data.inviteCode
+ * @returns The created user with access and refresh tokens
+ * @throws {AppError} 403 if invite code is missing, invalid, expired, or exhausted
+ * @throws {AppError} 409 if email or username already taken
  */
 export async function register(data: {
   email: string;
@@ -111,11 +114,13 @@ export async function register(data: {
 }
 
 /**
- *
- * @param data
+ * Authenticate a user by email/username and password, with optional 2FA verification.
+ * @param data - Login credentials including login (email or username), password, and optional twoFactorCode
  * @param data.login
  * @param data.password
  * @param data.twoFactorCode
+ * @returns The authenticated user with access and refresh tokens
+ * @throws {AppError} 401 if credentials invalid, 2FA code required, or 2FA code invalid
  */
 export async function login(data: { login: string; password: string; twoFactorCode?: string }) {
   const user = await prisma.user.findFirst({
@@ -180,8 +185,10 @@ export async function login(data: { login: string; password: string; twoFactorCo
 }
 
 /**
- *
- * @param refreshTokenValue
+ * Rotate a refresh token, issuing a new access/refresh token pair and invalidating the old one.
+ * @param refreshTokenValue - The current refresh token to rotate
+ * @returns New access and refresh tokens
+ * @throws {AppError} 401 if refresh token is invalid or expired
  */
 export async function refresh(refreshTokenValue: string) {
   const tokenHash = crypto.createHash('sha256').update(refreshTokenValue).digest('hex');
@@ -209,9 +216,10 @@ export async function refresh(refreshTokenValue: string) {
 }
 
 /**
- * Log out by deleting the refresh token and recording the event.
- * @param userId
- * @param refreshTokenValue
+ * Log out by deleting the refresh token and recording an audit event.
+ * @param userId - The user logging out
+ * @param refreshTokenValue - Optional refresh token to invalidate
+ * @returns Success indicator
  */
 export async function logout(userId: string, refreshTokenValue?: string) {
   if (refreshTokenValue) {
@@ -233,8 +241,11 @@ export async function logout(userId: string, refreshTokenValue?: string) {
 }
 
 /**
- *
- * @param userId
+ * Begin 2FA setup by generating a TOTP secret and otpauth URL for QR code display.
+ * @param userId - The user ID
+ * @returns The TOTP secret and otpauth URL for authenticator app enrollment
+ * @throws {AppError} 404 if user not found
+ * @throws {AppError} 400 if 2FA is already enabled
  */
 export async function enableTwoFactor(userId: string) {
   const user = await findOrThrow(
@@ -256,9 +267,11 @@ export async function enableTwoFactor(userId: string) {
 }
 
 /**
- *
- * @param userId
- * @param code
+ * Verify a TOTP code and activate 2FA on the user's account.
+ * @param userId - The user ID
+ * @param code - The TOTP code from the authenticator app
+ * @returns Object indicating 2FA is now enabled
+ * @throws {AppError} 400 if enable-2fa was not called first or code is invalid
  */
 export async function verifyAndActivateTwoFactor(userId: string, code: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -278,9 +291,12 @@ export async function verifyAndActivateTwoFactor(userId: string, code: string) {
 }
 
 /**
- *
- * @param userId
- * @param code
+ * Disable 2FA on a user's account after verifying a valid TOTP code.
+ * @param userId - The user ID
+ * @param code - The TOTP code to verify before disabling
+ * @returns Object indicating 2FA is now disabled
+ * @throws {AppError} 400 if 2FA is not enabled
+ * @throws {AppError} 401 if TOTP code is invalid
  */
 export async function disableTwoFactor(userId: string, code: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });

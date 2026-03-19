@@ -11,10 +11,10 @@ import { createNotification } from '../notifications/notifications.service';
 import { validateTransition } from '../workflows/workflow.service';
 
 /**
- *
- * @param projectId
- * @param creatorId
- * @param data
+ * Create a new issue in the specified project.
+ * @param projectId - The project to create the issue in
+ * @param creatorId - The user creating the issue
+ * @param data - Issue creation data including title, body, type, priority, assignee, labels, and due date
  * @param data.title
  * @param data.body
  * @param data.type
@@ -22,6 +22,8 @@ import { validateTransition } from '../workflows/workflow.service';
  * @param data.assigneeId
  * @param data.labels
  * @param data.dueDate
+ * @returns The created issue with assignee, creator, labels, column relations and computed key
+ * @throws {AppError} 404 if project not found
  */
 export async function createIssue(
   projectId: string,
@@ -103,9 +105,11 @@ export async function createIssue(
 }
 
 /**
- *
- * @param projectId
- * @param issueNumber
+ * Retrieve a single issue by project and issue number, including comments and relations.
+ * @param projectId - The project the issue belongs to
+ * @param issueNumber - The issue number within the project
+ * @returns The issue with assignee, creator, labels, column, sprint, parent, comments, and computed key
+ * @throws {AppError} 404 if project or issue not found
  */
 export async function getIssue(projectId: string, issueNumber: number) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -138,9 +142,10 @@ export async function getIssue(projectId: string, issueNumber: number) {
 }
 
 /**
- *
- * @param projectId
- * @param filters
+ * List issues in a project with optional filtering and pagination.
+ * @param projectId - The project to list issues from
+ * @param filters - Optional filters for type, priority, assignee, column, label, and pagination
+ * @param filters.q
  * @param filters.type
  * @param filters.priority
  * @param filters.assigneeId
@@ -148,10 +153,13 @@ export async function getIssue(projectId: string, issueNumber: number) {
  * @param filters.label
  * @param filters.limit
  * @param filters.offset
+ * @returns Paginated list of issues with computed keys and total count
+ * @throws {AppError} 404 if project not found
  */
 export async function listIssues(
   projectId: string,
   filters?: {
+    q?: string;
     type?: string;
     priority?: string;
     assigneeId?: string;
@@ -165,6 +173,16 @@ export async function listIssues(
   if (!project) throw new AppError(404, 'Project not found');
 
   const where: Prisma.IssueWhereInput = { projectId };
+  if (filters?.q) {
+    const q = filters.q;
+    // Search by number (if numeric) or title (contains)
+    const num = parseInt(q, 10);
+    if (!isNaN(num)) {
+      where.OR = [{ number: num }, { title: { contains: q, mode: 'insensitive' } }];
+    } else {
+      where.title = { contains: q, mode: 'insensitive' };
+    }
+  }
   if (filters?.type) where.type = filters.type as Prisma.IssueWhereInput['type'];
   if (filters?.priority) where.priority = filters.priority as Prisma.IssueWhereInput['priority'];
   if (filters?.assigneeId) where.assigneeId = filters.assigneeId;
@@ -196,10 +214,10 @@ export async function listIssues(
 }
 
 /**
- *
- * @param projectId
- * @param issueNumber
- * @param data
+ * Update an existing issue with partial data, logging granular activity events and firing automation rules.
+ * @param projectId - The project the issue belongs to
+ * @param issueNumber - The issue number within the project
+ * @param data - Partial update data for the issue fields
  * @param data.title
  * @param data.body
  * @param data.type
@@ -213,7 +231,10 @@ export async function listIssues(
  * @param data.sprintId
  * @param data.timeEstimate
  * @param data.timeSpent
- * @param userId
+ * @param userId - The user performing the update (used for activity logging)
+ * @returns The updated issue with assignee, labels, column, and sprint relations
+ * @throws {AppError} 404 if issue not found
+ * @throws {AppError} 400 if workflow transition is invalid
  */
 export async function updateIssue(
   projectId: string,
@@ -371,10 +392,11 @@ export async function updateIssue(
 }
 
 /**
- *
- * @param projectId
- * @param issueNumber
- * @param userId
+ * Delete an issue by project and issue number.
+ * @param projectId - The project the issue belongs to
+ * @param issueNumber - The issue number within the project
+ * @param userId - The user performing the deletion (optional, used for activity logging)
+ * @throws {AppError} 404 if issue not found
  */
 export async function deleteIssue(projectId: string, issueNumber: number, userId?: string) {
   const issue = await prisma.issue.findUnique({
@@ -391,10 +413,11 @@ export async function deleteIssue(projectId: string, issueNumber: number, userId
 }
 
 /**
- *
- * @param issueId
- * @param authorId
- * @param body
+ * Add a comment to an issue, notifying the assignee and any mentioned users.
+ * @param issueId - The issue to comment on
+ * @param authorId - The user authoring the comment
+ * @param body - The comment body text
+ * @returns The created comment with author relation
  */
 export async function addComment(issueId: string, authorId: string, body: string) {
   const comment = await prisma.comment.create({
@@ -430,10 +453,13 @@ export async function addComment(issueId: string, authorId: string, body: string
 }
 
 /**
- *
- * @param commentId
- * @param userId
- * @param body
+ * Update an existing issue comment (only the author may edit).
+ * @param commentId - The comment to update
+ * @param userId - The user attempting the update
+ * @param body - The new comment body text
+ * @returns The updated comment with author relation
+ * @throws {AppError} 404 if comment not found
+ * @throws {AppError} 403 if user is not the comment author
  */
 export async function updateComment(commentId: string, userId: string, body: string) {
   const comment = await prisma.comment.findUnique({ where: { id: commentId } });
@@ -448,9 +474,11 @@ export async function updateComment(commentId: string, userId: string, body: str
 }
 
 /**
- *
- * @param commentId
- * @param userId
+ * Delete an issue comment (only the author may delete).
+ * @param commentId - The comment to delete
+ * @param userId - The user attempting the deletion
+ * @throws {AppError} 404 if comment not found
+ * @throws {AppError} 403 if user is not the comment author
  */
 export async function deleteComment(commentId: string, userId: string) {
   const comment = await prisma.comment.findUnique({ where: { id: commentId } });
@@ -461,8 +489,9 @@ export async function deleteComment(commentId: string, userId: string) {
 }
 
 /**
- *
- * @param projectId
+ * Get the kanban board for a project, returning columns with their issues.
+ * @param projectId - The project to get the board for
+ * @returns Board columns with issues, each issue having a computed key
  */
 export async function getBoard(projectId: string) {
   const columns = await prisma.boardColumn.findMany({
@@ -490,16 +519,14 @@ export async function getBoard(projectId: string) {
 }
 
 /**
- *
- * @param projectId
- * @param issueNumber
- */
-/**
- *
- * @param projectId
- * @param issueNumber
- * @param columnId
- * @param position
+ * Move an issue to a different board column and position, validating workflow transitions.
+ * @param projectId - The project the issue belongs to
+ * @param issueNumber - The issue number within the project
+ * @param columnId - The target column to move the issue to
+ * @param position - The position within the target column
+ * @returns The updated issue
+ * @throws {AppError} 404 if issue not found
+ * @throws {AppError} 400 if workflow transition is invalid
  */
 export async function moveIssue(
   projectId: string,
@@ -539,9 +566,11 @@ export async function moveIssue(
 }
 
 /**
- *
- * @param projectId
- * @param issueNumber
+ * Get pull requests linked to an issue.
+ * @param projectId - The project the issue belongs to
+ * @param issueNumber - The issue number within the project
+ * @returns List of linked pull requests with basic PR details
+ * @throws {AppError} 404 if issue not found
  */
 export async function getIssuePullRequests(projectId: string, issueNumber: number) {
   const issue = await prisma.issue.findFirst({
@@ -560,11 +589,13 @@ export async function getIssuePullRequests(projectId: string, issueNumber: numbe
 }
 
 /**
- * Set the parent of an issue (for epic hierarchy).
- * Validates same project and no circular references.
- * @param projectId
- * @param issueNumber
- * @param parentIssueNumber
+ * Set the parent of an issue for epic hierarchy, validating against circular references.
+ * @param projectId - The project both issues belong to
+ * @param issueNumber - The child issue number
+ * @param parentIssueNumber - The parent issue number, or null to remove the parent
+ * @returns The updated issue with assignee, labels, and column relations
+ * @throws {AppError} 404 if issue or parent not found
+ * @throws {AppError} 400 if circular reference detected or self-reference
  */
 export async function setParent(
   projectId: string,
@@ -618,8 +649,10 @@ export async function setParent(
 
 /**
  * Get child issues of a given issue.
- * @param projectId
- * @param issueNumber
+ * @param projectId - The project the parent issue belongs to
+ * @param issueNumber - The parent issue number
+ * @returns List of child issues with computed keys
+ * @throws {AppError} 404 if project or issue not found
  */
 export async function getChildren(projectId: string, issueNumber: number) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -647,9 +680,11 @@ export async function getChildren(projectId: string, issueNumber: number) {
 }
 
 /**
- * Get progress stats for an issue's children.
- * @param projectId
- * @param issueNumber
+ * Get progress stats for an epic's child issues (total, completed, in-progress, percentage).
+ * @param projectId - The project the epic belongs to
+ * @param issueNumber - The epic issue number
+ * @returns Progress object with total, completed, inProgress, and percentage fields
+ * @throws {AppError} 404 if issue not found
  */
 export async function getEpicProgress(projectId: string, issueNumber: number) {
   const issue = await prisma.issue.findUnique({
@@ -673,8 +708,10 @@ export async function getEpicProgress(projectId: string, issueNumber: number) {
 }
 
 /**
- * Get roadmap data: epics with children, grouped for timeline display.
- * @param projectId
+ * Get roadmap data: epics with children grouped for timeline display, including progress and date ranges.
+ * @param projectId - The project to build the roadmap for
+ * @returns List of epics with children, progress stats, and computed start/end dates
+ * @throws {AppError} 404 if project not found
  */
 export async function getRoadmap(projectId: string) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -738,12 +775,14 @@ export async function getRoadmap(projectId: string) {
 }
 
 /**
- * Log work against an issue. Increments timeSpent and records an activity entry.
- * @param projectId
- * @param issueNumber
- * @param userId
- * @param minutes
- * @param description
+ * Log work against an issue, incrementing timeSpent and recording an activity entry.
+ * @param projectId - The project the issue belongs to
+ * @param issueNumber - The issue number within the project
+ * @param userId - The user logging the work
+ * @param minutes - Number of minutes to log
+ * @param description - Optional description of the work performed
+ * @returns Object with updated timeSpent and logged minutes
+ * @throws {AppError} 404 if issue not found
  */
 export async function logWork(
   projectId: string,
@@ -772,9 +811,11 @@ export async function logWork(
 }
 
 /**
- * Get work log entries for an issue (activity records with action='time_logged').
- * @param projectId
- * @param issueNumber
+ * Get work log entries for an issue from activity records with action='time_logged'.
+ * @param projectId - The project the issue belongs to
+ * @param issueNumber - The issue number within the project
+ * @returns List of work log entries with user, minutes, description, and timestamp
+ * @throws {AppError} 404 if issue not found
  */
 export async function getWorklogs(projectId: string, issueNumber: number) {
   const issue = await prisma.issue.findUnique({
@@ -799,16 +840,18 @@ export async function getWorklogs(projectId: string, issueNumber: number) {
 }
 
 /**
- * Bulk update multiple issues at once.
- * @param projectId
- * @param issueIds
- * @param updates
+ * Bulk update multiple issues at once with shared field values.
+ * @param projectId - The project the issues belong to
+ * @param issueIds - Array of issue IDs to update
+ * @param updates - Fields to update across all issues (status, assignee, priority, sprint, labels)
  * @param updates.status
  * @param updates.assigneeId
  * @param updates.priority
  * @param updates.sprintId
  * @param updates.labels
- * @param userId
+ * @param userId - The user performing the bulk update
+ * @returns Object with count of updated issues and the updated issue records
+ * @throws {AppError} 404 if project not found or no matching issues
  */
 export async function bulkUpdate(
   projectId: string,

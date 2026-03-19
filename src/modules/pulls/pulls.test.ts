@@ -15,8 +15,10 @@ const TEST_REPOS_PATH = process.env.REPOS_PATH || '/tmp/axiom-test-repos';
 
 describe('Pull Requests API', () => {
   let token: string;
+  let secondToken: string;
   let repoId: string;
   let prNumber: number;
+  let commentId: string;
 
   beforeAll(async () => {
     await fs.rm(TEST_REPOS_PATH, { recursive: true, force: true });
@@ -51,6 +53,26 @@ describe('Pull Requests API', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('X-Requested-With', 'XMLHttpRequest')
       .send({ name: 'Dev', slug: 'dev' });
+
+    // Second user for ownership tests -- must be in same org for repo access
+    const user2 = await prisma.user.upsert({
+      where: { username: 'pruser2' },
+      update: {},
+      create: {
+        email: 'prtest2@axiom.dev',
+        username: 'pruser2',
+        displayName: 'PR User 2',
+        passwordHash,
+      },
+    });
+    await prisma.orgMembership.create({
+      data: { userId: user2.id, orgId: orgRes.body.id, role: 'MEMBER' },
+    });
+    const login2 = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ login: 'pruser2', password: 'testpassword123' });
+    secondToken = login2.body.accessToken;
 
     const repoRes = await request(app)
       .post(`/api/repos/team/${teamRes.body.id}`)
@@ -266,6 +288,7 @@ describe('Pull Requests API', () => {
     expect(res.status).toBe(201);
     expect(res.body.body).toBe('Looks good overall');
     expect(res.body.filePath).toBeNull();
+    commentId = res.body.id;
   });
 
   it('13. should add an inline comment', async () => {
@@ -285,6 +308,43 @@ describe('Pull Requests API', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(2);
+  });
+
+  // ─── Comment Update / Delete ────────────────────────────────
+
+  it('14a. should update a PR comment body', async () => {
+    const res = await request(app)
+      .patch(`/api/repos/${repoId}/comments/${commentId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Updated PR comment' });
+    expect(res.status).toBe(200);
+    expect(res.body.body).toBe('Updated PR comment');
+  });
+
+  it('14b. should reject PR comment update from non-author', async () => {
+    const res = await request(app)
+      .patch(`/api/repos/${repoId}/comments/${commentId}`)
+      .set('Authorization', `Bearer ${secondToken}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Unauthorized edit' });
+    expect(res.status).toBe(403);
+  });
+
+  it('14c. should reject PR comment delete from non-author', async () => {
+    const res = await request(app)
+      .delete(`/api/repos/${repoId}/comments/${commentId}`)
+      .set('Authorization', `Bearer ${secondToken}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
+    expect(res.status).toBe(403);
+  });
+
+  it('14d. should delete own PR comment', async () => {
+    const res = await request(app)
+      .delete(`/api/repos/${repoId}/comments/${commentId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
+    expect(res.status).toBe(204);
   });
 
   // ─── Merge ────────────────────────────────────────────────

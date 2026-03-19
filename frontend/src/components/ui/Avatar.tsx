@@ -17,13 +17,13 @@ const sizes = {
 };
 
 /**
- *
- * @param root0
- * @param root0.name
- * @param root0.src
- * @param root0.size
- * @param root0.className
- * @param ref
+ * User avatar component displaying an image or initials fallback.
+ * Shows the user's image when src is provided, otherwise renders
+ * computed initials on a colored background.
+ * @param props - Avatar configuration.
+ * @param props.name - User's display name; used for alt text and initials fallback.
+ * @param props.src - Optional image URL for the avatar.
+ * @param props.size - Avatar dimensions: xs, sm, md, lg, xl. Defaults to md.
  */
 export const Avatar = forwardRef<HTMLDivElement, AvatarProps>(
   ({ name, src, size = 'md', className, ...props }, ref) => {

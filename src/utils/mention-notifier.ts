@@ -4,12 +4,11 @@ import { createNotification } from '../modules/notifications/notifications.servi
 import { parseMentions } from './mentions';
 
 /**
- * Parse `@mentions` from text, look up user IDs by username,
- * and create a notification for each mentioned user (skipping the author).
- * Fire-and-forget -- callers should `.catch(() => {})`.
- * @param text
- * @param authorId
- * @param resourceUrl
+ * Parse @mentions from text, look up users by username, and create notifications for each (skipping the author).
+ * Intended for fire-and-forget usage -- callers should .catch() to avoid unhandled rejections.
+ * @param text - The text to scan for @mentions
+ * @param authorId - The ID of the user who authored the text (excluded from notifications)
+ * @param resourceUrl - Optional URL to the resource for the notification link
  */
 export async function notifyMentions(
   text: string,

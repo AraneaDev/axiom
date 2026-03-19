@@ -15,12 +15,13 @@ interface DropdownProps {
 }
 
 /**
- *
- * @param root0
- * @param root0.trigger
- * @param root0.children
- * @param root0.align
- * @param root0.className
+ * Generic dropdown menu with a custom trigger element.
+ * Renders a floating panel that closes on outside click.
+ * @param props - Dropdown configuration.
+ * @param props.trigger - The element that toggles the menu on click.
+ * @param props.children - Menu content, typically DropdownItem components.
+ * @param props.align - Horizontal alignment of the panel: left or right. Defaults to left.
+ * @param props.className - Additional CSS classes for the wrapper.
  */
 export function Dropdown({ trigger, children, align = 'left', className }: DropdownProps) {
   const [open, setOpen] = useState(false);
@@ -61,13 +62,14 @@ interface DropdownItemProps {
 }
 
 /**
- *
- * @param root0
- * @param root0.children
- * @param root0.onClick
- * @param root0.danger
- * @param root0.disabled
- * @param root0.className
+ * Individual menu item within a Dropdown.
+ * Supports danger styling and disabled state.
+ * @param props - Item configuration.
+ * @param props.children - Item content (text and optional icon).
+ * @param props.onClick - Click handler for the item action.
+ * @param props.danger - Applies danger/destructive styling when true.
+ * @param props.disabled - Disables the item interaction when true.
+ * @param props.className
  */
 export function DropdownItem({
   children,
@@ -116,6 +118,20 @@ interface SelectProps {
   className?: string;
 }
 
+/**
+ * Form select component matching the Input API pattern.
+ * Supports single and multi-select modes with chip display for multi-select.
+ * @param props - Select configuration.
+ * @param props.label - Optional label displayed above the select.
+ * @param props.error - Error message; applies danger styling.
+ * @param props.hint - Hint text displayed when no error is present.
+ * @param props.options - Array of value/label pairs to choose from.
+ * @param props.value - Current selection (string for single, string[] for multi).
+ * @param props.onChange - Callback with the new selection value.
+ * @param props.multiple - Enables multi-select mode with removable chips.
+ * @param props.placeholder - Placeholder text when no selection is made. Defaults to "Select...".
+ * @param props.disabled - Disables the select when true.
+ */
 export const Select = forwardRef<HTMLDivElement, SelectProps>(
   (
     {

@@ -7,13 +7,15 @@ import { parsePagination, paginatedResponse } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
- *
- * @param orgId
- * @param userId
- * @param data
+ * Create a new team within an organization, adding the creator as admin.
+ * @param orgId - The organization to create the team in
+ * @param userId - The user creating the team (becomes team admin)
+ * @param data - Team creation data including name, slug, and optional description
  * @param data.name
  * @param data.slug
  * @param data.description
+ * @returns The created team with members
+ * @throws {AppError} 409 if team slug already taken in this org
  */
 export async function createTeam(
   orgId: string,
@@ -42,8 +44,10 @@ export async function createTeam(
 }
 
 /**
- *
- * @param teamId
+ * Retrieve a team by ID with members, repos, projects, and wiki spaces.
+ * @param teamId - The team ID
+ * @returns The team with all related resources
+ * @throws {AppError} 404 if team not found
  */
 export async function getTeam(teamId: string) {
   return findOrThrow(
@@ -61,11 +65,12 @@ export async function getTeam(teamId: string) {
 }
 
 /**
- *
- * @param orgId
- * @param query
+ * List all teams in an organization with member/repo/project counts and pagination.
+ * @param orgId - The organization ID
+ * @param query - Pagination query params (limit, offset)
  * @param query.limit
  * @param query.offset
+ * @returns Paginated list of teams with counts, repos, and wiki spaces
  */
 export async function listOrgTeams(orgId: string, query: { limit?: string; offset?: string } = {}) {
   const { take, skip } = parsePagination(query, { limit: 50 });
@@ -96,29 +101,34 @@ export async function listOrgTeams(orgId: string, query: { limit?: string; offse
 }
 
 /**
- *
- * @param teamId
- * @param data
+ * Update a team's name or description.
+ * @param teamId - The team ID
+ * @param data - Partial update data for name and/or description
  * @param data.name
  * @param data.description
+ * @returns The updated team record
  */
 export async function updateTeam(teamId: string, data: { name?: string; description?: string }) {
   return prisma.team.update({ where: { id: teamId }, data });
 }
 
 /**
- *
- * @param teamId
+ * Delete a team and all its associated data.
+ * @param teamId - The team ID
  */
 export async function deleteTeam(teamId: string) {
   await prisma.team.delete({ where: { id: teamId } });
 }
 
 /**
- *
- * @param teamId
- * @param userId
- * @param role
+ * Add a user to a team, requiring they are already an org member.
+ * @param teamId - The team ID
+ * @param userId - The user to add
+ * @param role - The team role to assign (defaults to MEMBER)
+ * @returns The created team membership with user details
+ * @throws {AppError} 409 if user is already a team member
+ * @throws {AppError} 400 if user is not an org member
+ * @throws {AppError} 404 if team not found
  */
 export async function addTeamMember(
   teamId: string,
@@ -148,10 +158,12 @@ export async function addTeamMember(
 }
 
 /**
- *
- * @param teamId
- * @param memberId
- * @param role
+ * Update a team member's role.
+ * @param teamId - The team ID
+ * @param memberId - The user whose role to update
+ * @param role - The new team role
+ * @returns The updated team membership record
+ * @throws {AppError} 404 if team membership not found
  */
 export async function updateTeamMemberRole(teamId: string, memberId: string, role: TeamRole) {
   const membership = await findOrThrow(
@@ -168,9 +180,10 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
 }
 
 /**
- *
- * @param teamId
- * @param memberId
+ * Remove a member from a team.
+ * @param teamId - The team ID
+ * @param memberId - The user to remove
+ * @throws {AppError} 404 if team membership not found
  */
 export async function removeTeamMember(teamId: string, memberId: string) {
   const membership = await findOrThrow(

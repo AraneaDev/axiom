@@ -3,7 +3,9 @@ import { useEffect } from 'react';
 import { useUIStore } from '@/stores/ui.store';
 
 /**
- *
+ * Global keyboard shortcut handler.
+ * Registers Cmd/Ctrl+K to toggle the command palette search.
+ * Should be called once near the top of the component tree.
  */
 export function useGlobalKeyboard() {
   const { toggleSearch } = useUIStore();

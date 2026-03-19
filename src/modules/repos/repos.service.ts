@@ -13,14 +13,17 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 
 /**
- *
- * @param teamId
- * @param data
+ * Create a new git repository with a bare repo on disk.
+ * @param teamId - The team to create the repository in
+ * @param data - Repository creation data including name, slug, description, visibility, and default branch
  * @param data.name
  * @param data.slug
  * @param data.description
  * @param data.visibility
  * @param data.defaultBranch
+ * @returns The created repository record
+ * @throws {AppError} 409 if repository slug already taken
+ * @throws {AppError} 404 if team not found
  */
 export async function createRepo(
   teamId: string,
@@ -64,8 +67,10 @@ export async function createRepo(
 }
 
 /**
- *
- * @param repoId
+ * Retrieve a repository by ID, including team relation and on-disk size.
+ * @param repoId - The repository ID
+ * @returns The repository with team details and optional size in bytes
+ * @throws {AppError} 404 if repository not found
  */
 export async function getRepo(repoId: string) {
   const repo = await findOrThrow(
@@ -91,11 +96,12 @@ export async function getRepo(repoId: string) {
 }
 
 /**
- *
- * @param teamId
- * @param opts
+ * List repositories for a team with pagination.
+ * @param teamId - The team to list repositories for
+ * @param opts - Pagination options (limit, offset)
  * @param opts.limit
  * @param opts.offset
+ * @returns Paginated list of repositories with total count
  */
 export async function listRepos(teamId: string, opts?: { limit?: number; offset?: number }) {
   const limit = Math.min(opts?.limit ?? 25, 100);
@@ -115,13 +121,14 @@ export async function listRepos(teamId: string, opts?: { limit?: number; offset?
 }
 
 /**
- *
- * @param repoId
- * @param data
+ * Update repository metadata (name, description, visibility, default branch).
+ * @param repoId - The repository ID
+ * @param data - Partial update data for the repository
  * @param data.name
  * @param data.description
  * @param data.visibility
  * @param data.defaultBranch
+ * @returns The updated repository record
  */
 export async function updateRepo(
   repoId: string,
@@ -136,11 +143,14 @@ export async function updateRepo(
 }
 
 /**
- * Update repository settings like defaultMergeStrategy and codeOwnersEnabled.
- * @param repoId
- * @param data
+ * Update repository settings like default merge strategy and code owners toggle.
+ * @param repoId - The repository ID
+ * @param data - Settings to update (defaultMergeStrategy, codeOwnersEnabled)
  * @param data.defaultMergeStrategy
  * @param data.codeOwnersEnabled
+ * @returns The updated repository record
+ * @throws {AppError} 404 if repository not found
+ * @throws {AppError} 400 if merge strategy is invalid
  */
 export async function updateRepoSettings(
   repoId: string,
@@ -170,8 +180,9 @@ export async function updateRepoSettings(
 }
 
 /**
- *
- * @param repoId
+ * Delete a repository, removing both the database record and the on-disk bare repo.
+ * @param repoId - The repository ID
+ * @throws {AppError} 404 if repository not found
  */
 export async function deleteRepoById(repoId: string) {
   const repo = await findOrThrow(
@@ -187,10 +198,12 @@ export async function deleteRepoById(repoId: string) {
 }
 
 /**
- *
- * @param repoId
- * @param targetTeamId
- * @param newSlug
+ * Fork a repository into another team, cloning the bare repo on disk.
+ * @param repoId - The source repository ID
+ * @param targetTeamId - The team to fork into
+ * @param newSlug - The slug for the forked repository
+ * @returns The newly created forked repository record
+ * @throws {AppError} 404 if source repository or target team not found
  */
 export async function forkRepoById(repoId: string, targetTeamId: string, newSlug: string) {
   const source = await findOrThrow(
@@ -241,8 +254,10 @@ async function getRepoWithDefault(repoId: string) {
 }
 
 /**
- *
- * @param repoId
+ * List all branches in a repository.
+ * @param repoId - The repository ID
+ * @returns List of branch objects with name and head info
+ * @throws {AppError} 404 if repository not found
  */
 export async function getBranches(repoId: string) {
   const repo = await getRepoWithDefault(repoId);
@@ -250,9 +265,11 @@ export async function getBranches(repoId: string) {
 }
 
 /**
- *
- * @param repoId
- * @param branchName
+ * Get detailed information about a specific branch including latest commit and commit count.
+ * @param repoId - The repository ID
+ * @param branchName - The branch name to inspect
+ * @returns Branch details with name, latest commit, and total commit count
+ * @throws {AppError} 404 if repository or branch not found
  */
 export async function getBranchDetail(repoId: string, branchName: string) {
   const diskPath = await getRepoDiskPath(repoId);
@@ -264,10 +281,12 @@ export async function getBranchDetail(repoId: string, branchName: string) {
 }
 
 /**
- *
- * @param repoId
- * @param name
- * @param startPoint
+ * Create a new branch in a repository from a given start point.
+ * @param repoId - The repository ID
+ * @param name - The new branch name
+ * @param startPoint - The ref to branch from (commit SHA or branch name)
+ * @returns Object with the branch name and start point
+ * @throws {AppError} 404 if repository not found
  */
 export async function createRepoBranch(repoId: string, name: string, startPoint: string) {
   const diskPath = await getRepoDiskPath(repoId);
@@ -276,9 +295,11 @@ export async function createRepoBranch(repoId: string, name: string, startPoint:
 }
 
 /**
- *
- * @param repoId
- * @param name
+ * Delete a branch from a repository (cannot delete the default branch).
+ * @param repoId - The repository ID
+ * @param name - The branch name to delete
+ * @throws {AppError} 404 if repository not found
+ * @throws {AppError} 400 if attempting to delete the default branch
  */
 export async function deleteRepoBranch(repoId: string, name: string) {
   const repo = await getRepoWithDefault(repoId);
@@ -287,12 +308,14 @@ export async function deleteRepoBranch(repoId: string, name: string) {
 }
 
 /**
- *
- * @param repoId
- * @param ref
- * @param limit
- * @param skip
- * @param filePath
+ * Get commit history for a repository ref, optionally filtered by file path.
+ * @param repoId - The repository ID
+ * @param ref - The git ref to list commits from (defaults to HEAD)
+ * @param limit - Maximum number of commits to return (defaults to 20)
+ * @param skip - Number of commits to skip for pagination (defaults to 0)
+ * @param filePath - Optional file path to filter commits by
+ * @returns List of commit objects
+ * @throws {AppError} 404 if repository not found
  */
 export async function getCommits(
   repoId: string,
@@ -306,9 +329,11 @@ export async function getCommits(
 }
 
 /**
- *
- * @param repoId
- * @param sha
+ * Get detailed commit information including diff output and file stats.
+ * @param repoId - The repository ID
+ * @param sha - The commit SHA to inspect
+ * @returns Commit details with diff and per-file stats
+ * @throws {AppError} 404 if repository or commit not found
  */
 export async function getCommitDetail(repoId: string, sha: string) {
   const diskPath = await getRepoDiskPath(repoId);
@@ -323,10 +348,12 @@ export async function getCommitDetail(repoId: string, sha: string) {
 }
 
 /**
- *
- * @param repoId
- * @param ref
- * @param treePath
+ * List the contents of a directory (tree) in the repository at a given ref.
+ * @param repoId - The repository ID
+ * @param ref - The git ref to read the tree from
+ * @param treePath - The path within the repository (defaults to root)
+ * @returns List of tree entries (files and directories)
+ * @throws {AppError} 404 if repository not found
  */
 export async function getTree(repoId: string, ref: string, treePath: string = '') {
   const diskPath = await getRepoDiskPath(repoId);
@@ -334,10 +361,12 @@ export async function getTree(repoId: string, ref: string, treePath: string = ''
 }
 
 /**
- *
- * @param repoId
- * @param ref
- * @param filePath
+ * Get the content and size of a file (blob) at a given ref.
+ * @param repoId - The repository ID
+ * @param ref - The git ref to read the file from
+ * @param filePath - The file path within the repository
+ * @returns Object with file content, size, and path
+ * @throws {AppError} 404 if repository not found
  */
 export async function getBlob(repoId: string, ref: string, filePath: string) {
   const diskPath = await getRepoDiskPath(repoId);
@@ -347,10 +376,12 @@ export async function getBlob(repoId: string, ref: string, filePath: string) {
 }
 
 /**
- *
- * @param repoId
- * @param ref
- * @param filePath
+ * Get git blame information for a file at a given ref.
+ * @param repoId - The repository ID
+ * @param ref - The git ref to blame from
+ * @param filePath - The file path within the repository
+ * @returns Blame data with per-line author and commit information
+ * @throws {AppError} 404 if repository not found
  */
 export async function getBlame(repoId: string, ref: string, filePath: string) {
   const diskPath = await getRepoDiskPath(repoId);
@@ -358,8 +389,10 @@ export async function getBlame(repoId: string, ref: string, filePath: string) {
 }
 
 /**
- *
- * @param repoId
+ * List all tags in a repository.
+ * @param repoId - The repository ID
+ * @returns List of tag objects
+ * @throws {AppError} 404 if repository not found
  */
 export async function getTags(repoId: string) {
   const diskPath = await getRepoDiskPath(repoId);

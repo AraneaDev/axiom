@@ -16,7 +16,15 @@ interface ListResult {
   total: number;
 }
 
+/** Notifications API client for listing, reading, and managing user notifications. */
 export const notificationsApi = {
+  /**
+   * List notifications with optional filters for unread status and pagination.
+   * @param opts
+   * @param opts.unreadOnly
+   * @param opts.limit
+   * @param opts.offset
+   */
   list: (opts?: { unreadOnly?: boolean; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();
     if (opts?.unreadOnly) params.set('unreadOnly', 'true');
@@ -25,7 +33,13 @@ export const notificationsApi = {
     const qs = params.toString();
     return get<ListResult>(`/notifications${qs ? `?${qs}` : ''}`);
   },
+  /**
+   * Mark a single notification as read.
+   * @param id
+   */
   markRead: (id: string) => patch<{ success: boolean }>(`/notifications/${id}/read`, {}),
+  /** Mark all notifications as read. */
   markAllRead: () => post<{ success: boolean }>('/notifications/read-all', {}),
+  /** Get the count of unread notifications. */
   getUnreadCount: () => get<{ count: number }>('/notifications/unread-count'),
 };

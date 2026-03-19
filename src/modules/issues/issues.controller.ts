@@ -57,6 +57,7 @@ export async function list(req: Request, res: Response, next: NextFunction) {
     const { take, skip } = parsePagination(req.query as Record<string, string>, { limit: 25 });
     const clampedLimit = Math.min(take, 100);
     const result = await issuesService.listIssues(param(req, 'projectId'), {
+      q: req.query.q as string,
       type: req.query.type as string,
       priority: req.query.priority as string,
       assigneeId: req.query.assigneeId as string,

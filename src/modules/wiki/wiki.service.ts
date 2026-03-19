@@ -4,12 +4,14 @@ import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
 /**
- *
- * @param teamId
- * @param data
+ * Create a new wiki space within a team.
+ * @param teamId - The team to create the space in
+ * @param data - Space creation data including name, slug, and optional description
  * @param data.name
  * @param data.slug
  * @param data.description
+ * @returns The created wiki space record
+ * @throws {AppError} 409 if wiki space slug already taken
  */
 export async function createSpace(
   teamId: string,
@@ -26,8 +28,10 @@ export async function createSpace(
 }
 
 /**
- *
- * @param spaceId
+ * Retrieve a wiki space by ID, including root pages and their children.
+ * @param spaceId - The wiki space ID
+ * @returns The wiki space with nested page tree
+ * @throws {AppError} 404 if wiki space not found
  */
 export async function getSpace(spaceId: string) {
   const space = await prisma.wikiSpace.findUnique({
@@ -45,8 +49,9 @@ export async function getSpace(spaceId: string) {
 }
 
 /**
- *
- * @param teamId
+ * List all wiki spaces for a team with page counts.
+ * @param teamId - The team to list wiki spaces for
+ * @returns List of wiki spaces with page counts
  */
 export async function listSpaces(teamId: string) {
   return prisma.wikiSpace.findMany({
@@ -57,15 +62,17 @@ export async function listSpaces(teamId: string) {
 }
 
 /**
- *
- * @param spaceId
- * @param authorId
- * @param data
+ * Create a new wiki page in a space, with an initial version record.
+ * @param spaceId - The wiki space to create the page in
+ * @param authorId - The user creating the page
+ * @param data - Page creation data including title, slug, body, optional parentId and isDraft
  * @param data.title
  * @param data.slug
  * @param data.body
  * @param data.parentId
  * @param data.isDraft
+ * @returns The created page with version history
+ * @throws {AppError} 409 if page slug already taken in this space
  */
 export async function createPage(
   spaceId: string,
@@ -116,9 +123,11 @@ export async function createPage(
 }
 
 /**
- *
- * @param spaceId
- * @param pageSlug
+ * Retrieve a wiki page by space and slug, including children and latest version.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @returns The page with children and latest version with author
+ * @throws {AppError} 404 if page not found
  */
 export async function getPage(spaceId: string, pageSlug: string) {
   const page = await prisma.page.findUnique({
@@ -140,15 +149,17 @@ export async function getPage(spaceId: string, pageSlug: string) {
 }
 
 /**
- *
- * @param spaceId
- * @param pageSlug
- * @param authorId
- * @param data
+ * Update a wiki page's content or metadata, creating a new version record.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @param authorId - The user performing the update
+ * @param data - Partial update data for title, body, parentId, or isDraft
  * @param data.title
  * @param data.body
  * @param data.parentId
  * @param data.isDraft
+ * @returns The updated page with latest version
+ * @throws {AppError} 404 if page not found
  */
 export async function updatePage(
   spaceId: string,
@@ -193,10 +204,11 @@ export async function updatePage(
 }
 
 /**
- *
- * @param spaceId
- * @param pageSlug
- * @param userId
+ * Delete a wiki page by space and slug.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @param userId - Optional user ID for activity logging
+ * @throws {AppError} 404 if page not found
  */
 export async function deletePage(spaceId: string, pageSlug: string, userId?: string) {
   const page = await prisma.page.findUnique({
@@ -210,9 +222,11 @@ export async function deletePage(spaceId: string, pageSlug: string, userId?: str
 }
 
 /**
- *
- * @param spaceId
- * @param pageSlug
+ * Get the version history of a wiki page, ordered newest first.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @returns List of page versions with author details
+ * @throws {AppError} 404 if page not found
  */
 export async function getPageHistory(spaceId: string, pageSlug: string) {
   const page = await prisma.page.findUnique({
@@ -229,8 +243,9 @@ export async function getPageHistory(spaceId: string, pageSlug: string) {
 }
 
 /**
- *
- * @param spaceId
+ * Build a hierarchical tree of all pages in a wiki space.
+ * @param spaceId - The wiki space ID
+ * @returns Nested tree of pages with id, title, slug, and children
  */
 export async function getPageTree(spaceId: string) {
   const pages = await prisma.page.findMany({
@@ -260,12 +275,13 @@ export async function getPageTree(spaceId: string) {
 // ─── Templates ──────────────────────────────────────────────
 
 /**
- *
- * @param spaceId
- * @param data
+ * Create a page template in a wiki space.
+ * @param spaceId - The wiki space ID
+ * @param data - Template data including name, body, and optional description
  * @param data.name
  * @param data.body
  * @param data.description
+ * @returns The created template record
  */
 export async function createTemplate(
   spaceId: string,
@@ -277,8 +293,9 @@ export async function createTemplate(
 }
 
 /**
- *
- * @param spaceId
+ * List all page templates in a wiki space.
+ * @param spaceId - The wiki space ID
+ * @returns List of template records ordered by creation date
  */
 export async function listTemplates(spaceId: string) {
   return prisma.pageTemplate.findMany({
@@ -288,8 +305,10 @@ export async function listTemplates(spaceId: string) {
 }
 
 /**
- *
- * @param id
+ * Retrieve a page template by ID.
+ * @param id - The template ID
+ * @returns The template record
+ * @throws {AppError} 404 if template not found
  */
 export async function getTemplate(id: string) {
   const template = await prisma.pageTemplate.findUnique({ where: { id } });
@@ -298,8 +317,9 @@ export async function getTemplate(id: string) {
 }
 
 /**
- *
- * @param id
+ * Delete a page template by ID.
+ * @param id - The template ID
+ * @throws {AppError} 404 if template not found
  */
 export async function deleteTemplate(id: string) {
   const template = await prisma.pageTemplate.findUnique({ where: { id } });
@@ -310,11 +330,13 @@ export async function deleteTemplate(id: string) {
 // ─── Page Comments ──────────────────────────────────────────
 
 /**
- *
- * @param pageId
- * @param userId
- * @param body
- * @param anchorText
+ * Add a comment to a wiki page, optionally anchored to specific text.
+ * @param pageId - The page to comment on
+ * @param userId - The user authoring the comment
+ * @param body - The comment body text
+ * @param anchorText - Optional text selection the comment is anchored to
+ * @returns The created comment with user relation
+ * @throws {AppError} 404 if page not found
  */
 export async function addPageComment(
   pageId: string,
@@ -332,8 +354,9 @@ export async function addPageComment(
 }
 
 /**
- *
- * @param pageId
+ * List all comments on a wiki page, ordered chronologically.
+ * @param pageId - The page to list comments for
+ * @returns List of comment records with user relations
  */
 export async function listPageComments(pageId: string) {
   return prisma.pageComment.findMany({
@@ -344,10 +367,13 @@ export async function listPageComments(pageId: string) {
 }
 
 /**
- *
- * @param commentId
- * @param userId
- * @param body
+ * Update a wiki page comment (only the author may edit).
+ * @param commentId - The comment to update
+ * @param userId - The user attempting the update
+ * @param body - The new comment body text
+ * @returns The updated comment with user relation
+ * @throws {AppError} 404 if comment not found
+ * @throws {AppError} 403 if user is not the comment author
  */
 export async function updatePageComment(commentId: string, userId: string, body: string) {
   const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
@@ -362,8 +388,10 @@ export async function updatePageComment(commentId: string, userId: string, body:
 }
 
 /**
- *
- * @param commentId
+ * Toggle the resolved status of a wiki page comment.
+ * @param commentId - The comment to resolve/unresolve
+ * @returns The updated comment with user relation
+ * @throws {AppError} 404 if comment not found
  */
 export async function resolveComment(commentId: string) {
   const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
@@ -377,8 +405,9 @@ export async function resolveComment(commentId: string) {
 }
 
 /**
- *
- * @param commentId
+ * Delete a wiki page comment.
+ * @param commentId - The comment to delete
+ * @throws {AppError} 404 if comment not found
  */
 export async function deletePageComment(commentId: string) {
   const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
@@ -389,9 +418,11 @@ export async function deletePageComment(commentId: string) {
 // ─── Page Labels ────────────────────────────────────────────
 
 /**
- *
- * @param pageId
- * @param label
+ * Add a label to a wiki page.
+ * @param pageId - The page to add the label to
+ * @param label - The label text
+ * @returns The created page label record
+ * @throws {AppError} 404 if page not found
  */
 export async function addLabel(pageId: string, label: string) {
   const page = await prisma.page.findUnique({ where: { id: pageId } });
@@ -403,9 +434,10 @@ export async function addLabel(pageId: string, label: string) {
 }
 
 /**
- *
- * @param pageId
- * @param label
+ * Remove a label from a wiki page.
+ * @param pageId - The page to remove the label from
+ * @param label - The label text to remove
+ * @throws {AppError} 404 if label not found on the page
  */
 export async function removeLabel(pageId: string, label: string) {
   const existing = await prisma.pageLabel.findUnique({
@@ -416,8 +448,9 @@ export async function removeLabel(pageId: string, label: string) {
 }
 
 /**
- *
- * @param pageId
+ * List all labels on a wiki page.
+ * @param pageId - The page to list labels for
+ * @returns List of page label records ordered alphabetically
  */
 export async function listLabels(pageId: string) {
   return prisma.pageLabel.findMany({
@@ -427,9 +460,10 @@ export async function listLabels(pageId: string) {
 }
 
 /**
- *
- * @param spaceId
- * @param label
+ * Search for pages in a wiki space by label.
+ * @param spaceId - The wiki space to search in
+ * @param label - The label to filter pages by
+ * @returns List of matching pages with id, title, and slug
  */
 export async function searchPagesByLabel(spaceId: string, label: string) {
   return prisma.page.findMany({
@@ -445,10 +479,14 @@ export async function searchPagesByLabel(spaceId: string, label: string) {
 // ─── Page Move / Copy ───────────────────────────────────────
 
 /**
- *
- * @param pageId
- * @param targetSpaceId
- * @param targetParentId
+ * Move a wiki page to a different space or parent, checking slug uniqueness and circular references.
+ * @param pageId - The page to move
+ * @param targetSpaceId - Optional target wiki space ID (defaults to current space)
+ * @param targetParentId - Optional new parent page ID, or null to make root-level
+ * @returns The updated page record
+ * @throws {AppError} 404 if page not found
+ * @throws {AppError} 409 if page slug already taken in target space
+ * @throws {AppError} 400 if attempting to set page as its own parent
  */
 export async function movePage(
   pageId: string,
@@ -483,11 +521,14 @@ export async function movePage(
 }
 
 /**
- *
- * @param pageId
- * @param authorId
- * @param targetSpaceId
- * @param newSlug
+ * Copy a wiki page to the same or different space with a new slug.
+ * @param pageId - The source page to copy
+ * @param authorId - The user performing the copy
+ * @param targetSpaceId - Optional target wiki space ID (defaults to current space)
+ * @param newSlug - Optional slug for the copy (defaults to original-slug-copy)
+ * @returns The newly created page copy with version history
+ * @throws {AppError} 404 if page not found
+ * @throws {AppError} 409 if page slug already taken in target space
  */
 export async function copyPage(
   pageId: string,

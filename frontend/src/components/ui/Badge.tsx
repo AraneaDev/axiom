@@ -22,13 +22,11 @@ const sizes = {
 };
 
 /**
- *
- * @param root0
- * @param root0.children
- * @param root0.variant
- * @param root0.size
- * @param root0.className
- * @param ref
+ * Inline status or label chip with color variants.
+ * Renders as a rounded pill with icon and text support.
+ * @param props - Badge props extending native span attributes.
+ * @param props.variant - Color scheme: default, primary, danger, warning, success, outline. Defaults to default.
+ * @param props.size - Badge size: sm, md. Defaults to md.
  */
 export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
   ({ children, variant = 'default', size = 'md', className, ...props }, ref) => {

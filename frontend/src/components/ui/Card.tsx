@@ -22,6 +22,16 @@ const sizes = {
   lg: 'p-6',
 };
 
+/**
+ * Container card component with optional header and footer sections.
+ * Supports elevation variants and hover-lift interaction.
+ * @param props - Card props extending native div attributes.
+ * @param props.variant - Visual style: default (bordered), elevated (shadow), ghost (subtle background). Defaults to default.
+ * @param props.size - Internal padding: sm, md, lg. Defaults to md.
+ * @param props.hover - Enables hover-lift animation and pointer cursor when true.
+ * @param props.header - Optional content rendered above children with a bottom border.
+ * @param props.footer - Optional content rendered below children with a top border.
+ */
 export const Card = forwardRef<HTMLDivElement, CardProps>(
   (
     { className, variant = 'default', size = 'md', hover, header, footer, children, ...props },

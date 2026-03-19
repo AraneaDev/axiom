@@ -64,9 +64,9 @@ const STRUCTURED_FIELDS = new Set([
 ]);
 
 /**
- * Parse a query string like "type:bug status:open fix login" into
- * structured filters and remaining free text.
- * @param raw
+ * Parse a query string like "type:bug status:open fix login" into structured filters and remaining free text.
+ * @param raw - The raw query string to parse
+ * @returns Parsed query with freeText and structured filters map
  */
 function parseStructuredQuery(raw: string): StructuredQuery {
   const filters: Record<string, string> = {};
@@ -90,9 +90,9 @@ function parseStructuredQuery(raw: string): StructuredQuery {
 }
 
 /**
- * Convert a free-text string into a tsquery-safe string.
- * Splits on whitespace, strips non-alphanumeric chars, joins with &.
- * @param text
+ * Convert a free-text string into a PostgreSQL tsquery-safe string with prefix matching on the last word.
+ * @param text - The free-text search string
+ * @returns A tsquery-formatted string or empty string if no valid words
  */
 function toTsQuery(text: string): string {
   const words = text
@@ -108,7 +108,9 @@ function toTsQuery(text: string): string {
 // ─── Main Search ────────────────────────────────────────────
 
 /**
- * @param params
+ * Perform a cross-resource search across issues, wiki pages, repos, and code.
+ * @param params - Search parameters including query, type filter, team/project scope, and pagination
+ * @returns Array of result sections by resource type with items and totals
  */
 export async function search(params: SearchParams) {
   const { freeText, filters } = parseStructuredQuery(params.q);
@@ -432,7 +434,9 @@ async function searchRepos(freeText: string, params: SearchParams) {
 const MAX_MATCHES_PER_REPO = 10;
 
 /**
- * @param params
+ * Search code across repositories using git grep, returning matching lines with file paths.
+ * @param params - Code search parameters including query, optional repo IDs filter, and limit
+ * @returns Search results with matching code lines, file paths, and line numbers
  */
 export async function searchCode(
   params: CodeSearchParams,
@@ -514,10 +518,12 @@ export async function searchCode(
 // ─── Saved Searches ─────────────────────────────────────────
 
 /**
- * @param userId
- * @param data
+ * Create a global saved search for a user.
+ * @param userId - The user ID
+ * @param data - Saved search data including name and query object
  * @param data.name
  * @param data.query
+ * @returns The created saved search record
  */
 export async function createSavedSearch(
   userId: string,
@@ -534,7 +540,9 @@ export async function createSavedSearch(
 }
 
 /**
- * @param userId
+ * Get all global saved searches for a user.
+ * @param userId - The user ID
+ * @returns List of saved search records ordered by creation date
  */
 export async function getSavedSearches(userId: string) {
   return prisma.savedFilter.findMany({
@@ -548,8 +556,10 @@ export async function getSavedSearches(userId: string) {
 }
 
 /**
- * @param id
- * @param userId
+ * Delete a global saved search belonging to a user.
+ * @param id - The saved search ID
+ * @param userId - The user ID (ownership check)
+ * @returns Delete result
  */
 export async function deleteSavedSearch(id: string, userId: string) {
   return prisma.savedFilter.deleteMany({

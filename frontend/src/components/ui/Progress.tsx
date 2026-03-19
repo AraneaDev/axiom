@@ -22,13 +22,13 @@ const variants = {
 };
 
 /**
- *
- * @param root0
- * @param root0.value
- * @param root0.size
- * @param root0.variant
- * @param root0.className
- * @param ref
+ * Horizontal progress bar with configurable size and color variant.
+ * Renders an accessible progressbar role with aria attributes.
+ * The value is clamped between 0 and 100.
+ * @param props - Progress bar configuration.
+ * @param props.value - Completion percentage (0-100).
+ * @param props.size - Bar height: sm, md, lg. Defaults to md.
+ * @param props.variant - Color scheme: primary, success, warning, danger. Defaults to primary.
  */
 export const Progress = forwardRef<HTMLDivElement, ProgressProps>(
   ({ value, size = 'md', variant = 'primary', className, ...props }, ref) => {

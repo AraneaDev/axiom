@@ -13,6 +13,11 @@ interface UIState {
   setCurrentTeam: (teamId: string | null) => void;
 }
 
+/**
+ * Global UI state store for sidebar, search, and active navigation context.
+ * Provides toggle and setter actions for sidebar visibility,
+ * command palette search, and current org/team selection.
+ */
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
   searchOpen: false,

@@ -6,7 +6,9 @@ import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
 
 /**
- *
+ * Resolves the current repository context from URL parameters.
+ * Fetches org, team, and repo data via React Query based on route params.
+ * @returns The resolved org, team, repo objects, URL slugs, and a computed basePath for links.
  */
 export function useRepoContext() {
   const { org, team: teamSlug, repo: repoSlug } = useParams();

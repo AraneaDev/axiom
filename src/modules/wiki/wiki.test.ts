@@ -11,6 +11,9 @@ describe('Wiki API', () => {
   let spaceId: string;
   let rootPageSlug: string;
   let childPageSlug: string;
+  let secondToken: string;
+  let rootPageId: string;
+  let commentId: string;
 
   beforeAll(async () => {
     const passwordHash = await bcrypt.hash('testpassword123', 4);
@@ -52,11 +55,36 @@ describe('Wiki API', () => {
         password: 'testpassword123',
       });
     token = loginRes.body.accessToken;
+
+    // Second user for ownership tests
+    const user2 = await prisma.user.upsert({
+      where: { username: 'wiki-test-user2' },
+      update: {},
+      create: {
+        email: 'wiki-test2@axiom.dev',
+        username: 'wiki-test-user2',
+        displayName: 'Wiki Test User 2',
+        passwordHash,
+      },
+    });
+    await prisma.orgMembership.create({
+      data: { userId: user2.id, orgId: org.id, role: 'MEMBER' },
+    });
+    await prisma.teamMembership.create({
+      data: { userId: user2.id, teamId: team.id, role: 'MEMBER' },
+    });
+    const login2 = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ login: 'wiki-test2@axiom.dev', password: 'testpassword123' });
+    secondToken = login2.body.accessToken;
   });
 
   afterAll(async () => {
     await prisma.organization.deleteMany({ where: { slug: 'wiki-test-org' } });
-    await prisma.user.deleteMany({ where: { username: 'wiki-test-user' } });
+    await prisma.user.deleteMany({
+      where: { username: { in: ['wiki-test-user', 'wiki-test-user2'] } },
+    });
     await prisma.$disconnect();
   });
 
@@ -88,6 +116,7 @@ describe('Wiki API', () => {
     expect(res.body.title).toBe('Root Page');
     expect(res.body.slug).toBeDefined();
     rootPageSlug = res.body.slug;
+    rootPageId = res.body.id;
   });
 
   // 3. Create child page
@@ -148,6 +177,41 @@ describe('Wiki API', () => {
     const versions = res.body.versions ?? res.body;
     expect(Array.isArray(versions)).toBe(true);
     expect(versions.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // ─── Page Comments ──────────────────────────────────────────
+
+  // 7a. Add comment to page
+  it('7a. should add a comment to a page', async () => {
+    const res = await request(app)
+      .post(`/api/wiki/pages/${rootPageId}/comments`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'This is a wiki comment' });
+    expect(res.status).toBe(201);
+    expect(res.body.body).toBe('This is a wiki comment');
+    commentId = res.body.id;
+  });
+
+  // 7b. Update comment body
+  it('7b. should update a wiki page comment body', async () => {
+    const res = await request(app)
+      .patch(`/api/wiki/comments/${commentId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Updated wiki comment' });
+    expect(res.status).toBe(200);
+    expect(res.body.body).toBe('Updated wiki comment');
+  });
+
+  // 7c. Update comment as different user -- expect 403
+  it('7c. should reject wiki comment update from non-author', async () => {
+    const res = await request(app)
+      .patch(`/api/wiki/comments/${commentId}`)
+      .set('Authorization', `Bearer ${secondToken}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Unauthorized edit' });
+    expect(res.status).toBe(403);
   });
 
   // 7. Delete page

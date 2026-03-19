@@ -22,6 +22,8 @@ const ToastContext = createContext<ToastContextType | null>(null);
 
 /**
  * Access the toast notification API from within a ToastProvider.
+ * @returns Object with toast(), success(), error(), and info() methods.
+ * @throws Error if called outside of a ToastProvider.
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
@@ -38,9 +40,11 @@ const STYLES = {
 };
 
 /**
- *
- * @param root0
- * @param root0.children
+ * Context provider that manages toast notification state.
+ * Wrap the application tree with this provider to enable useToast().
+ * Toasts auto-dismiss after 4 seconds and render in the bottom-right corner.
+ * @param props - Provider props.
+ * @param props.children - Application tree that can access the toast API.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);

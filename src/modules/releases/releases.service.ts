@@ -6,11 +6,12 @@ import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { generateChangelog, type CommitEntry } from './changelog';
 
 /**
- *
- * @param repoId
- * @param opts
+ * List releases for a repository with optional draft/prerelease filters.
+ * @param repoId - The repository ID
+ * @param opts - Optional filters for draft and prerelease status
  * @param opts.draft
  * @param opts.prerelease
+ * @returns List of releases with author details
  */
 export async function listReleases(
   repoId: string,
@@ -28,9 +29,10 @@ export async function listReleases(
 }
 
 /**
- *
- * @param repoId
- * @param tagName
+ * Get a release by tag name, including commits since the previous release.
+ * @param repoId - The repository ID
+ * @param tagName - The release tag name
+ * @returns The release with author and associated commits, or null if not found
  */
 export async function getRelease(repoId: string, tagName: string) {
   const release = await prisma.release.findUnique({
@@ -69,10 +71,10 @@ export async function getRelease(repoId: string, tagName: string) {
 }
 
 /**
- *
- * @param repoId
- * @param userId
- * @param data
+ * Create a release, optionally creating a git tag on the repository.
+ * @param repoId - The repository ID
+ * @param userId - The user creating the release
+ * @param data - Release creation data including tagName, title, body, draft/prerelease flags, target branch, and optional commit SHA
  * @param data.tagName
  * @param data.title
  * @param data.body
@@ -80,6 +82,8 @@ export async function getRelease(repoId: string, tagName: string) {
  * @param data.isPrerelease
  * @param data.targetBranch
  * @param data.commitSha
+ * @returns The created release with author details
+ * @throws {Error} 404 if repository not found
  */
 export async function createRelease(
   repoId: string,
@@ -128,10 +132,11 @@ export async function createRelease(
 }
 
 /**
- *
- * @param repoId
- * @param tagName
- * @param data
+ * Update a release's metadata (title, body, draft/prerelease flags).
+ * @param repoId - The repository ID
+ * @param tagName - The release tag name
+ * @param data - Partial update data for the release
+ * @returns The updated release with author details
  */
 export async function updateRelease(
   repoId: string,
@@ -151,9 +156,11 @@ export async function updateRelease(
 }
 
 /**
- *
- * @param repoId
- * @param tagName
+ * Publish a draft release by creating the git tag and marking it as published.
+ * @param repoId - The repository ID
+ * @param tagName - The release tag name
+ * @returns The published release with author details
+ * @throws {Error} 404 if release not found
  */
 export async function publishRelease(repoId: string, tagName: string) {
   const release = await prisma.release.findUnique({
@@ -174,9 +181,9 @@ export async function publishRelease(repoId: string, tagName: string) {
 }
 
 /**
- *
- * @param repoId
- * @param tagName
+ * Delete a release and its associated git tag from the repository.
+ * @param repoId - The repository ID
+ * @param tagName - The release tag name to delete
  */
 export async function deleteRelease(repoId: string, tagName: string) {
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
@@ -191,10 +198,11 @@ export async function deleteRelease(repoId: string, tagName: string) {
 }
 
 /**
- *
- * @param repoId
- * @param base
- * @param head
+ * Compare two refs and generate a changelog of commits between them.
+ * @param repoId - The repository ID
+ * @param base - The base ref (tag or branch) to compare from
+ * @param head - The head ref (tag or branch) to compare to
+ * @returns Object with commits between the refs and generated changelog
  */
 export async function compareRelease(repoId: string, base: string, head: string) {
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });

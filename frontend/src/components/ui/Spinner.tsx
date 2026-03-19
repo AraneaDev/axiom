@@ -7,10 +7,10 @@ const spinnerSizes = {
 };
 
 /**
- *
- * @param root0
- * @param root0.className
- * @param root0.size
+ * Animated loading spinner rendered as a spinning border circle.
+ * @param props - Spinner configuration.
+ * @param props.size - Spinner dimensions: sm, md, lg. Defaults to md.
+ * @param props.className - Additional CSS classes.
  */
 export function Spinner({
   className,
@@ -31,7 +31,8 @@ export function Spinner({
 }
 
 /**
- *
+ * Full-page centered loading indicator using a large Spinner.
+ * Takes up at least 50vh to center vertically within the viewport.
  */
 export function PageLoader() {
   return (

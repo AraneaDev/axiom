@@ -40,6 +40,16 @@ interface FileUploadProps {
   accept?: string;
 }
 
+/**
+ * Drag-and-drop file upload component with validation.
+ * Supports click-to-browse and drag-over interactions.
+ * Validates file type against an allowed list and enforces a 25 MB size limit.
+ * @param props - FileUpload configuration.
+ * @param props.onUpload - Callback fired with the upload result after a successful upload.
+ * @param props.uploadFn - Async function that handles the actual file upload.
+ * @param props.className - Additional CSS classes.
+ * @param props.accept - Optional accept attribute for the hidden file input.
+ */
 export const FileUpload = forwardRef<HTMLDivElement, FileUploadProps>(
   ({ onUpload, uploadFn, className, accept }, ref) => {
     const [isDragging, setIsDragging] = useState(false);

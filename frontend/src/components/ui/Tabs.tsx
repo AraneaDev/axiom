@@ -16,12 +16,13 @@ interface TabsProps {
 }
 
 /**
- *
- * @param root0
- * @param root0.tabs
- * @param root0.activeKey
- * @param root0.onChange
- * @param root0.className
+ * Horizontal tab bar navigation with active indicator.
+ * Each tab can include an optional icon alongside its label.
+ * @param props - Tabs configuration.
+ * @param props.tabs - Array of tab definitions with key, label, and optional icon.
+ * @param props.activeKey - The key of the currently active tab.
+ * @param props.onChange - Callback fired with the new tab key when a tab is clicked.
+ * @param props.className - Additional CSS classes for the tab container.
  */
 export function Tabs({ tabs, activeKey, onChange, className }: TabsProps) {
   return (
