@@ -109,6 +109,7 @@ function AppWithKeyboard() {
           <Route path="/:org/:team/repos/:repo/blob/:ref/*" element={<FileView />} />
           <Route path="/:org/:team/repos/:repo/pulls" element={<PRList />} />
           <Route path="/:org/:team/repos/:repo/pulls/:number" element={<PRDetail />} />
+          <Route path="/:org/:team/repos/:repo/commits" element={<Navigate to=".." replace />} />
           <Route path="/:org/:team/repos/:repo/commits/:sha" element={<CommitDetail />} />
           <Route path="/:org/:team/repos/:repo/blame/:ref/*" element={<BlameView />} />
           <Route path="/:org/:team/repos/:repo/history/:ref/*" element={<FileHistory />} />
