@@ -84,14 +84,15 @@ describe('notifyMentions', () => {
     });
   });
 
-  it('should skip the author when mentioned', async () => {
+  it('should notify the author when they mention themselves (reminder)', async () => {
     await notifyMentions('Note to self @mention-author', authorId);
 
     const notifications = await prisma.notification.findMany({
       where: { userId: authorId, type: 'mention' },
     });
 
-    expect(notifications).toHaveLength(0);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].title).toContain('reminder');
   });
 
   it('should handle non-existent usernames gracefully', async () => {

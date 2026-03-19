@@ -405,14 +405,17 @@ export function IssueDetailSidebar({
         </div>
 
         {/* Due date */}
-        {issue.dueDate && (
-          <div>
-            <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
-              Due date
-            </p>
-            <span className="text-sm">{new Date(issue.dueDate).toLocaleDateString()}</span>
-          </div>
-        )}
+        <div>
+          <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+            Due date
+          </p>
+          <input
+            type="date"
+            value={issue.dueDate ? new Date(issue.dueDate).toISOString().split('T')[0] : ''}
+            onChange={(e) => onUpdate({ dueDate: e.target.value || null })}
+            className="text-sm bg-transparent border border-border rounded-md px-2 py-1 w-full text-text focus:border-border-focus focus:outline-none transition-colors"
+          />
+        </div>
 
         {/* Time Tracking */}
         <IssueDetailWorklog

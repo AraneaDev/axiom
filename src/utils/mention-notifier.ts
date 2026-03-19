@@ -32,13 +32,10 @@ export async function notifyMentions(
   const authorName = author?.username ?? 'someone';
 
   for (const user of users) {
-    if (user.id === authorId) continue;
-    await createNotification(
-      user.id,
-      'mention',
-      `You were mentioned by @${authorName}`,
-      undefined,
-      resourceUrl,
-    );
+    const message =
+      user.id === authorId
+        ? 'You mentioned yourself (reminder)'
+        : `You were mentioned by @${authorName}`;
+    await createNotification(user.id, 'mention', message, undefined, resourceUrl);
   }
 }
