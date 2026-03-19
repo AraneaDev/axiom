@@ -1,5 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquare, CheckCircle, Trash2, Send, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  MessageSquare,
+  CheckCircle,
+  Trash2,
+  Send,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  Check,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import { wikiApi } from '@/api/wiki.api';
@@ -26,6 +36,8 @@ export function PageComments({ pageId }: PageCommentsProps) {
   const user = useAuthStore((s) => s.user);
   const [body, setBody] = useState('');
   const [showResolved, setShowResolved] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentBody, setEditCommentBody] = useState('');
 
   const { data: comments = [] } = useQuery({
     queryKey: ['pageComments', pageId],
@@ -55,6 +67,18 @@ export function PageComments({ pageId }: PageCommentsProps) {
       queryClient.invalidateQueries({ queryKey: ['pageComments', pageId] });
       toast.success('Comment deleted');
     },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ commentId, body }: { commentId: string; body: string }) =>
+      wikiApi.updatePageComment(commentId, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pageComments', pageId] });
+      setEditingCommentId(null);
+      toast.success('Comment updated');
+    },
+    onError: (err: unknown) =>
+      toast.error(err instanceof Error ? err.message : 'Failed to update comment'),
   });
 
   const activeComments = comments.filter((c) => !c.resolved);
@@ -107,14 +131,27 @@ export function PageComments({ pageId }: PageCommentsProps) {
                   <CheckCircle className="h-3.5 w-3.5" />
                 </Button>
                 {user?.id === comment.userId && (
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    title="Delete"
-                    onClick={() => deleteMutation.mutate(comment.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-danger" />
-                  </Button>
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      title="Edit"
+                      onClick={() => {
+                        setEditCommentBody(comment.body);
+                        setEditingCommentId(comment.id);
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      title="Delete"
+                      onClick={() => deleteMutation.mutate(comment.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-danger" />
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -123,7 +160,27 @@ export function PageComments({ pageId }: PageCommentsProps) {
                 {comment.anchorText}
               </div>
             )}
-            <MarkdownRenderer content={comment.body} className="text-sm" />
+            {editingCommentId === comment.id ? (
+              <div className="space-y-2">
+                <MarkdownEditor value={editCommentBody} onChange={setEditCommentBody} compact />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={!editCommentBody.trim() || updateMutation.isPending}
+                    onClick={() =>
+                      updateMutation.mutate({ commentId: comment.id, body: editCommentBody })
+                    }
+                  >
+                    <Check className="h-4 w-4" /> Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)}>
+                    <X className="h-4 w-4" /> Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <MarkdownRenderer content={comment.body} className="text-sm" />
+            )}
           </div>
         ))}
       </div>

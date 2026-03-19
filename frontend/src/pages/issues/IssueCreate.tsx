@@ -149,6 +149,7 @@ export default function IssueCreate() {
               value={body}
               onChange={setBody}
               placeholder="Describe the issue in detail..."
+              projectId={currentProject?.id}
             />
           </div>
 

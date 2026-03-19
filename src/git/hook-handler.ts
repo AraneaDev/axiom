@@ -100,7 +100,7 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
     // Auto-link commits to issues via commit message references
     if (!isTag && !isDelete) {
       try {
-        const ISSUE_REF_RE = /(?:(closes?|fixes?)\s+)?#(?:([A-Z]+-)?(\d+))/gi;
+        const ISSUE_REF_RE = /(?:(closes?|fixes?)\s+)?[#!](?:([A-Z]+-)?(\d+))/gi;
         const recentCommits = await gitCmd.log(repo.diskPath!, payload.after, 50, 0);
 
         for (const commit of recentCommits) {

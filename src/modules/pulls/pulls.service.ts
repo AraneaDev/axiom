@@ -650,6 +650,36 @@ export async function listPRComments(repoId: string, prNumber: number) {
   });
 }
 
+/**
+ *
+ * @param commentId
+ * @param userId
+ * @param body
+ */
+export async function updatePRComment(commentId: string, userId: string, body: string) {
+  const comment = await prisma.pRComment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new AppError(404, 'Comment not found');
+  if (comment.authorId !== userId) throw new AppError(403, 'You can only edit your own comments');
+
+  return prisma.pRComment.update({
+    where: { id: commentId },
+    data: { body },
+  });
+}
+
+/**
+ *
+ * @param commentId
+ * @param userId
+ */
+export async function deletePRComment(commentId: string, userId: string) {
+  const comment = await prisma.pRComment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new AppError(404, 'Comment not found');
+  if (comment.authorId !== userId) throw new AppError(403, 'You can only delete your own comments');
+
+  await prisma.pRComment.delete({ where: { id: commentId } });
+}
+
 // ─── Suggestions ────────────────────────────────────────────
 
 const SUGGESTION_RE = /```suggestion\n([\s\S]*?)```/;

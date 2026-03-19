@@ -1,16 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Tag, Plus, Trash2, Send } from 'lucide-react';
+import { Tag, Plus, Trash2, Send, Pencil, Check, X } from 'lucide-react';
 import { useState } from 'react';
 
 import CreateReleaseModal from './CreateReleaseModal';
 
 import { releasesApi, type Release } from '@/api/releases.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatRelative } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth.store';
 
 interface Props {
   repoId: string;
@@ -29,6 +31,9 @@ interface Props {
 export default function ReleasesTab({ repoId, defaultBranch }: Props) {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
+  const [editingTag, setEditingTag] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState('');
+  const { user } = useAuthStore();
 
   const { data: releases = [] } = useQuery({
     queryKey: ['releases', repoId],
@@ -43,6 +48,15 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
   const deleteMutation = useMutation({
     mutationFn: (tagName: string) => releasesApi.delete(repoId, tagName),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['releases', repoId] }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ tagName, body }: { tagName: string; body: string }) =>
+      releasesApi.update(repoId, tagName, { body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['releases', repoId] });
+      setEditingTag(null);
+    },
   });
 
   const published = releases.filter((r) => !r.isDraft);
@@ -67,11 +81,27 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
           )}
         </div>
         <h3 className="font-semibold text-sm mb-0.5">{release.title}</h3>
-        {release.body && (
+        {editingTag === release.tagName ? (
+          <div className="space-y-2 mb-1">
+            <MarkdownEditor value={editBody} onChange={setEditBody} compact />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                disabled={updateMutation.isPending}
+                onClick={() => updateMutation.mutate({ tagName: release.tagName, body: editBody })}
+              >
+                <Check className="h-4 w-4" /> Save
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditingTag(null)}>
+                <X className="h-4 w-4" /> Cancel
+              </Button>
+            </div>
+          </div>
+        ) : release.body ? (
           <div className="text-xs text-text-secondary line-clamp-2 mb-1">
             <MarkdownRenderer content={release.body} />
           </div>
-        )}
+        ) : null}
         <div className="flex items-center gap-2 text-xs text-text-tertiary">
           <Avatar name={release.author.displayName} size="sm" />
           <span>{release.author.displayName}</span>
@@ -82,6 +112,19 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
+        {user?.id === release.authorId && editingTag !== release.tagName && (
+          <Button
+            variant="ghost"
+            size="sm"
+            title="Edit release notes"
+            onClick={() => {
+              setEditBody(release.body ?? '');
+              setEditingTag(release.tagName);
+            }}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </Button>
+        )}
         {release.isDraft && (
           <Button
             variant="ghost"

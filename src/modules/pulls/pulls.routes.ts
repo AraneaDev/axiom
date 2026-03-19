@@ -32,6 +32,8 @@ router.get('/:repoId/pulls/:number/reviews', requireRepoAccess(), pullsControlle
 // PR Comments (general + inline)
 router.post('/:repoId/pulls/:number/comments', requireRepoAccess(), pullsController.addComment);
 router.get('/:repoId/pulls/:number/comments', requireRepoAccess(), pullsController.listComments);
+router.patch('/:repoId/comments/:commentId', requireRepoAccess(), pullsController.updateComment);
+router.delete('/:repoId/comments/:commentId', requireRepoAccess(), pullsController.deleteComment);
 
 // Suggestions
 router.post(

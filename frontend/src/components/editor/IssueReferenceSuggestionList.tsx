@@ -1,4 +1,4 @@
-import { Hash } from 'lucide-react';
+import { CircleAlert } from 'lucide-react';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 
 import { Badge } from '@/components/ui/Badge';
@@ -61,7 +61,7 @@ const IssueReferenceSuggestionList = forwardRef<
             idx === selectedIndex ? 'bg-surface-tertiary' : ''
           }`}
         >
-          <Hash className="h-3.5 w-3.5 text-text-tertiary shrink-0" />
+          <CircleAlert className="h-3.5 w-3.5 text-text-tertiary shrink-0" />
           <span className="font-medium text-primary shrink-0">{item.key}</span>
           <span className="text-text truncate">{item.title}</span>
           {item.status && (

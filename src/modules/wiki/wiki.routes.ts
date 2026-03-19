@@ -60,7 +60,7 @@ router.delete('/templates/:templateId', requireWikiTemplateAccess(), wikiControl
 // Page comments (require org membership via page lookup)
 router.post('/pages/:pageId/comments', requireWikiPageAccess(), wikiController.addPageComment);
 router.get('/pages/:pageId/comments', requireWikiPageAccess(), wikiController.listPageComments);
-router.patch('/comments/:commentId', requireWikiCommentAccess(), wikiController.resolveComment);
+router.patch('/comments/:commentId', requireWikiCommentAccess(), wikiController.patchComment);
 router.delete('/comments/:commentId', requireWikiCommentAccess(), wikiController.deletePageComment);
 
 // Page labels (require org membership via page lookup)

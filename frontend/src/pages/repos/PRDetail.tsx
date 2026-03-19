@@ -20,6 +20,7 @@ import {
   Rows3,
   ListChecks,
   Pencil,
+  Trash2,
 } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useParams } from 'react-router';
@@ -39,6 +40,7 @@ import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { formatRelative } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth.store';
 
 const STRATEGY_LABELS: Record<string, { label: string; icon: React.ReactNode }> = {
   merge: {
@@ -74,6 +76,9 @@ export default function PRDetail() {
   const [applyingComment, setApplyingComment] = useState<string | null>(null);
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionBody, setDescriptionBody] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentBody, setEditCommentBody] = useState('');
+  const { user } = useAuthStore();
 
   const toggleSuggestion = useCallback((commentId: string) => {
     setSelectedSuggestions((prev) => {
@@ -194,6 +199,20 @@ export default function PRDetail() {
       setEditingDescription(false);
       queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
     },
+  });
+
+  const updateCommentMutation = useMutation({
+    mutationFn: ({ commentId, body }: { commentId: string; body: string }) =>
+      reposApi.updatePRComment(currentRepo!.id, commentId, body),
+    onSuccess: () => {
+      setEditingCommentId(null);
+      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+    },
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: (commentId: string) => reposApi.deletePRComment(currentRepo!.id, commentId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] }),
   });
 
   if (isLoading || !pr) return <PageLoader />;
@@ -407,31 +426,95 @@ export default function PRDetail() {
                 {pr.comments.map(
                   (c: {
                     id: string;
+                    authorId: string;
                     filePath?: string;
                     line?: number;
                     body: string;
                     createdAt: string;
                   }) => (
-                    <div key={c.id} className="rounded-lg border border-border bg-surface p-3">
+                    <div
+                      key={c.id}
+                      className="rounded-lg border border-border bg-surface p-3 group"
+                    >
                       {c.filePath && (
                         <p className="text-xs font-mono text-text-secondary mb-1">
                           {c.filePath}:{c.line}
                         </p>
                       )}
-                      <MarkdownRenderer content={c.body} className="text-sm" />
-                      {pr.status === 'OPEN' && hasSuggestion(c.body) && (
-                        <SuggestionBlock
-                          commentId={c.id}
-                          body={c.body}
-                          isApplying={applyingComment === c.id}
-                          isSelected={selectedSuggestions.has(c.id)}
-                          onApply={(id) => applySuggestionMutation.mutate(id)}
-                          onToggleSelect={toggleSuggestion}
-                        />
+                      {editingCommentId === c.id ? (
+                        <div className="space-y-2">
+                          <MarkdownEditor
+                            value={editCommentBody}
+                            onChange={setEditCommentBody}
+                            compact
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              disabled={!editCommentBody.trim() || updateCommentMutation.isPending}
+                              onClick={() =>
+                                updateCommentMutation.mutate({
+                                  commentId: c.id,
+                                  body: editCommentBody,
+                                })
+                              }
+                            >
+                              <Check className="h-4 w-4" /> Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditingCommentId(null)}
+                            >
+                              <X className="h-4 w-4" /> Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <MarkdownRenderer content={c.body} className="text-sm" />
+                          {pr.status === 'OPEN' && hasSuggestion(c.body) && (
+                            <SuggestionBlock
+                              commentId={c.id}
+                              body={c.body}
+                              isApplying={applyingComment === c.id}
+                              isSelected={selectedSuggestions.has(c.id)}
+                              onApply={(id) => applySuggestionMutation.mutate(id)}
+                              onToggleSelect={toggleSuggestion}
+                            />
+                          )}
+                        </>
                       )}
-                      <p className="text-xs text-text-secondary mt-1">
-                        {formatRelative(c.createdAt)}
-                      </p>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-xs text-text-secondary">{formatRelative(c.createdAt)}</p>
+                        {user?.id === c.authorId && editingCommentId !== c.id && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              title="Edit comment"
+                              onClick={() => {
+                                setEditCommentBody(c.body);
+                                setEditingCommentId(c.id);
+                              }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              title="Delete comment"
+                              onClick={() => {
+                                if (confirm('Delete this comment?')) {
+                                  deleteCommentMutation.mutate(c.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3 text-danger" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ),
                 )}

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Pencil, Trash2, Check, X } from 'lucide-react';
+import { useState } from 'react';
 
 import { type ActivityEvent } from '@/api/activity.api';
 import { issuesApi } from '@/api/issues.api';
@@ -11,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import type { Issue } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth.store';
 
 interface IssueDetailCommentsProps {
   issue: Issue;
@@ -43,15 +45,41 @@ export function IssueDetailComments({
   basePath,
 }: IssueDetailCommentsProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentBody, setEditCommentBody] = useState('');
+
+  const invalidateIssue = () => {
+    queryClient.invalidateQueries({ queryKey: ['issue', projectId, num] });
+    queryClient.invalidateQueries({ queryKey: ['activity', projectId, num] });
+  };
 
   const commentMutation = useMutation({
     mutationFn: () => issuesApi.addComment(projectId, parseInt(num), commentBody),
     onSuccess: () => {
       onCommentBodyChange('');
-      queryClient.invalidateQueries({ queryKey: ['issue', projectId, num] });
-      queryClient.invalidateQueries({ queryKey: ['activity', projectId, num] });
+      invalidateIssue();
     },
   });
+
+  const updateCommentMutation = useMutation({
+    mutationFn: ({ commentId, body }: { commentId: string; body: string }) =>
+      issuesApi.updateComment(projectId, commentId, body),
+    onSuccess: () => {
+      setEditingCommentId(null);
+      invalidateIssue();
+    },
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: (commentId: string) => issuesApi.deleteComment(projectId, commentId),
+    onSuccess: () => invalidateIssue(),
+  });
+
+  function startEditComment(commentId: string, body: string) {
+    setEditCommentBody(body);
+    setEditingCommentId(commentId);
+  }
 
   return (
     <>
@@ -69,7 +97,7 @@ export function IssueDetailComments({
         )}
         <div className="space-y-4">
           {issue.comments?.map((comment) => (
-            <div key={comment.id} className="relative flex gap-3">
+            <div key={comment.id} className="relative flex gap-3 group">
               <div className="relative z-10 shrink-0">
                 <Avatar name={comment.author.displayName} size="sm" />
               </div>
@@ -81,13 +109,68 @@ export function IssueDetailComments({
                   <span className="text-xs text-text-tertiary">
                     {formatRelative(comment.createdAt)}
                   </span>
+                  {comment.updatedAt !== comment.createdAt && (
+                    <span className="text-xs text-text-tertiary italic">(edited)</span>
+                  )}
+                  {user?.id === comment.author.id && (
+                    <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        title="Edit comment"
+                        onClick={() => startEditComment(comment.id, comment.body)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        title="Delete comment"
+                        onClick={() => {
+                          if (confirm('Delete this comment?')) {
+                            deleteCommentMutation.mutate(comment.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3 text-danger" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="px-4 py-3">
-                  <MarkdownRenderer
-                    content={comment.body}
-                    className="text-sm"
-                    basePath={basePath}
-                  />
+                  {editingCommentId === comment.id ? (
+                    <div className="space-y-2">
+                      <MarkdownEditor
+                        value={editCommentBody}
+                        onChange={setEditCommentBody}
+                        compact
+                        projectId={projectId}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          disabled={!editCommentBody.trim() || updateCommentMutation.isPending}
+                          onClick={() =>
+                            updateCommentMutation.mutate({
+                              commentId: comment.id,
+                              body: editCommentBody,
+                            })
+                          }
+                        >
+                          <Check className="h-4 w-4" /> Save
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)}>
+                          <X className="h-4 w-4" /> Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <MarkdownRenderer
+                      content={comment.body}
+                      className="text-sm"
+                      basePath={basePath}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -100,8 +183,9 @@ export function IssueDetailComments({
         <MarkdownEditor
           value={commentBody}
           onChange={onCommentBodyChange}
-          placeholder="Write a comment... Use @ to mention users, # to reference issues"
+          placeholder="Write a comment... Use @ to mention users, ! to reference issues"
           compact
+          projectId={projectId}
         />
         <Button
           size="sm"

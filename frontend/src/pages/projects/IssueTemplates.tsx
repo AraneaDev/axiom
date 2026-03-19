@@ -197,7 +197,12 @@ export default function IssueTemplates() {
 
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-text">Body (Markdown)</label>
-        <MarkdownEditor value={formBody} onChange={setFormBody} placeholder="Template content..." />
+        <MarkdownEditor
+          value={formBody}
+          onChange={setFormBody}
+          placeholder="Template content..."
+          projectId={currentProject?.id}
+        />
       </div>
 
       {projectLabels.length > 0 && (

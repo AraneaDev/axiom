@@ -198,6 +198,7 @@ export default function LabelsSettings() {
               value={formDescription}
               onChange={setFormDescription}
               placeholder="Short description of this label"
+              projectId={currentProject?.id}
             />
           </div>
           <div className="flex items-center gap-2 pt-1">
@@ -286,7 +287,12 @@ export default function LabelsSettings() {
                     >
                       Description
                     </label>
-                    <MarkdownEditor compact value={formDescription} onChange={setFormDescription} />
+                    <MarkdownEditor
+                      compact
+                      value={formDescription}
+                      onChange={setFormDescription}
+                      projectId={currentProject?.id}
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <Button

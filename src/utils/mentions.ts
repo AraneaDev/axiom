@@ -14,12 +14,12 @@ export function parseMentions(text: string): string[] {
 }
 
 /**
- * Parse #PREFIX-123 issue references from text.
+ * Parse !PREFIX-123 (or legacy #PREFIX-123) issue references from text.
  * Returns an array of { prefix, number } objects.
  * @param text
  */
 export function parseIssueRefs(text: string): Array<{ prefix: string; number: number }> {
-  const re = /#([A-Z]+-\d+)/g;
+  const re = /[#!]([A-Z]+-\d+)/g;
   const seen = new Set<string>();
   const refs: Array<{ prefix: string; number: number }> = [];
   let match: RegExpExecArray | null;

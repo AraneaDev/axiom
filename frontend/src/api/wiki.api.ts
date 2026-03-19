@@ -44,6 +44,8 @@ export const wikiApi = {
   addPageComment: (pageId: string, data: { body: string; anchorText?: string }) =>
     post<PageComment>(`/wiki/pages/${pageId}/comments`, data),
   resolveComment: (commentId: string) => patch<PageComment>(`/wiki/comments/${commentId}`, {}),
+  updatePageComment: (commentId: string, body: string) =>
+    patch<PageComment>(`/wiki/comments/${commentId}`, { body }),
   deletePageComment: (commentId: string) => del(`/wiki/comments/${commentId}`),
 
   // Page labels

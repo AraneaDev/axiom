@@ -255,6 +255,41 @@ export async function listComments(req: Request, res: Response, next: NextFuncti
   }
 }
 
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function updateComment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { body } = req.body;
+    if (!body || typeof body !== 'string') {
+      res.status(400).json({ error: { message: 'body is required' } });
+      return;
+    }
+    const comment = await pullsService.updatePRComment(param(req, 'commentId'), req.userId!, body);
+    res.json(comment);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function deleteComment(req: Request, res: Response, next: NextFunction) {
+  try {
+    await pullsService.deletePRComment(param(req, 'commentId'), req.userId!);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Suggestions
 /**
  *

@@ -346,6 +346,24 @@ export async function listPageComments(pageId: string) {
 /**
  *
  * @param commentId
+ * @param userId
+ * @param body
+ */
+export async function updatePageComment(commentId: string, userId: string, body: string) {
+  const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new AppError(404, 'Comment not found');
+  if (comment.userId !== userId) throw new AppError(403, 'You can only edit your own comments');
+
+  return prisma.pageComment.update({
+    where: { id: commentId },
+    data: { body },
+    include: { user: { select: USER_BASIC_SELECT } },
+  });
+}
+
+/**
+ *
+ * @param commentId
  */
 export async function resolveComment(commentId: string) {
   const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });

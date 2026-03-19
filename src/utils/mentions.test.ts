@@ -34,19 +34,19 @@ describe('parseMentions', () => {
 });
 
 describe('parseIssueRefs', () => {
-  it('should parse a single issue ref', () => {
-    expect(parseIssueRefs('See #AXM-123')).toEqual([{ prefix: 'AXM', number: 123 }]);
+  it('should parse a single issue ref with !', () => {
+    expect(parseIssueRefs('See !AXM-123')).toEqual([{ prefix: 'AXM', number: 123 }]);
   });
 
   it('should parse multiple issue refs', () => {
-    expect(parseIssueRefs('#AXM-1 and #FOO-42')).toEqual([
+    expect(parseIssueRefs('!AXM-1 and !FOO-42')).toEqual([
       { prefix: 'AXM', number: 1 },
       { prefix: 'FOO', number: 42 },
     ]);
   });
 
   it('should deduplicate issue refs', () => {
-    expect(parseIssueRefs('#AXM-1 #AXM-1')).toEqual([{ prefix: 'AXM', number: 1 }]);
+    expect(parseIssueRefs('!AXM-1 !AXM-1')).toEqual([{ prefix: 'AXM', number: 1 }]);
   });
 
   it('should return empty array for no refs', () => {
@@ -58,6 +58,10 @@ describe('parseIssueRefs', () => {
   });
 
   it('should not match lowercase prefixes', () => {
-    expect(parseIssueRefs('#axm-123')).toEqual([]);
+    expect(parseIssueRefs('!axm-123')).toEqual([]);
+  });
+
+  it('should still match legacy # references for backwards compat', () => {
+    expect(parseIssueRefs('See #AXM-123')).toEqual([{ prefix: 'AXM', number: 123 }]);
   });
 });

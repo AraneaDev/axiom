@@ -10,6 +10,9 @@ import {
   ArrowRight,
   Trash2,
   GripVertical,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
@@ -162,6 +165,8 @@ function SprintPanel({
   const [collapsed, setCollapsed] = useState(sprint.status === 'COMPLETED');
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [moveToSprintId, setMoveToSprintId] = useState<string>('');
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalDraft, setGoalDraft] = useState('');
 
   const startMutation = useMutation({
     mutationFn: () => sprintsApi.start(projectId, sprint.id),
@@ -197,6 +202,14 @@ function SprintPanel({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
       queryClient.invalidateQueries({ queryKey: ['backlog', projectId] });
+    },
+  });
+
+  const updateGoalMutation = useMutation({
+    mutationFn: (goal: string) => sprintsApi.update(projectId, sprint.id, { goal }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
+      setEditingGoal(false);
     },
   });
 
@@ -258,10 +271,42 @@ function SprintPanel({
       </div>
 
       {/* Sprint goal */}
-      {!collapsed && sprint.goal && (
+      {!collapsed && (editingGoal || sprint.goal) && (
         <div className="px-4 py-2 bg-surface-secondary/50 border-b border-border-light text-xs text-text-secondary">
-          <span>Goal: </span>
-          <MarkdownRenderer content={sprint.goal} className="inline" />
+          {editingGoal ? (
+            <div className="space-y-2">
+              <MarkdownEditor value={goalDraft} onChange={setGoalDraft} compact />
+              <div className="flex gap-2">
+                <Button
+                  size="xs"
+                  disabled={updateGoalMutation.isPending}
+                  onClick={() => updateGoalMutation.mutate(goalDraft)}
+                >
+                  <Check className="h-3 w-3" /> Save
+                </Button>
+                <Button size="xs" variant="ghost" onClick={() => setEditingGoal(false)}>
+                  <X className="h-3 w-3" /> Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="group flex items-start gap-1">
+              <span>Goal: </span>
+              <MarkdownRenderer content={sprint.goal!} className="inline" />
+              <Button
+                variant="ghost"
+                size="xs"
+                className="opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                title="Edit goal"
+                onClick={() => {
+                  setGoalDraft(sprint.goal ?? '');
+                  setEditingGoal(true);
+                }}
+              >
+                <Pencil className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -563,6 +608,7 @@ export default function Backlog() {
                 value={newSprint.goal}
                 onChange={(val) => setNewSprint({ ...newSprint, goal: val })}
                 placeholder="What do you want to achieve in this sprint?"
+                projectId={currentProject?.id}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">

@@ -431,6 +431,37 @@ export async function addComment(issueId: string, authorId: string, body: string
 
 /**
  *
+ * @param commentId
+ * @param userId
+ * @param body
+ */
+export async function updateComment(commentId: string, userId: string, body: string) {
+  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new AppError(404, 'Comment not found');
+  if (comment.authorId !== userId) throw new AppError(403, 'You can only edit your own comments');
+
+  return prisma.comment.update({
+    where: { id: commentId },
+    data: { body },
+    include: { author: { select: USER_BASIC_SELECT } },
+  });
+}
+
+/**
+ *
+ * @param commentId
+ * @param userId
+ */
+export async function deleteComment(commentId: string, userId: string) {
+  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new AppError(404, 'Comment not found');
+  if (comment.authorId !== userId) throw new AppError(403, 'You can only delete your own comments');
+
+  await prisma.comment.delete({ where: { id: commentId } });
+}
+
+/**
+ *
  * @param projectId
  */
 export async function getBoard(projectId: string) {

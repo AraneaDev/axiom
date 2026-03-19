@@ -28,6 +28,8 @@ router.delete('/:projectId/issues/:issueNumber', issuesController.remove);
 
 // Comments
 router.post('/:projectId/issues/:issueNumber/comments', issuesController.addComment);
+router.patch('/:projectId/comments/:commentId', issuesController.updateComment);
+router.delete('/:projectId/comments/:commentId', issuesController.deleteComment);
 
 // Worklogs (time tracking)
 router.post('/:projectId/issues/:issueNumber/worklogs', issuesController.logWork);

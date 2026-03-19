@@ -248,6 +248,7 @@ export function IssueDetailWorklog({
               value={logWorkDesc}
               onChange={setLogWorkDesc}
               placeholder="Description (optional)"
+              projectId={projectId}
             />
             <div className="flex gap-1">
               <Button

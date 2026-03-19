@@ -13,6 +13,7 @@ import { projectsApi } from '@/api/projects.api';
 import { reposApi } from '@/api/repos.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
+import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -29,6 +30,8 @@ export default function IssueDetail() {
   const [commentBody, setCommentBody] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
+  const [editingBody, setEditingBody] = useState(false);
+  const [bodyDraft, setBodyDraft] = useState('');
   const [editingField, setEditingField] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -187,13 +190,51 @@ export default function IssueDetail() {
 
           {/* Body */}
           <div className="rounded-lg border border-border bg-surface p-5 mb-8">
-            {issue.body ? (
-              <MarkdownRenderer
-                content={issue.body}
-                basePath={`/${org}/${teamSlug}/${projectSlug}`}
-              />
+            {editingBody ? (
+              <div className="space-y-2">
+                <MarkdownEditor
+                  value={bodyDraft}
+                  onChange={setBodyDraft}
+                  projectId={currentProject?.id}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      updateMutation.mutate({ body: bodyDraft });
+                      setEditingBody(false);
+                    }}
+                  >
+                    <Check className="h-4 w-4" /> Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingBody(false)}>
+                    <X className="h-4 w-4" /> Cancel
+                  </Button>
+                </div>
+              </div>
             ) : (
-              <p className="text-text-tertiary italic text-sm">No description provided.</p>
+              <div className="group relative">
+                {issue.body ? (
+                  <MarkdownRenderer
+                    content={issue.body}
+                    basePath={`/${org}/${teamSlug}/${projectSlug}`}
+                  />
+                ) : (
+                  <p className="text-text-tertiary italic text-sm">No description provided.</p>
+                )}
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  className="opacity-0 group-hover:opacity-100 absolute top-0 right-0 transition-opacity"
+                  title="Edit description"
+                  onClick={() => {
+                    setBodyDraft(issue.body ?? '');
+                    setEditingBody(true);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             )}
           </div>
 

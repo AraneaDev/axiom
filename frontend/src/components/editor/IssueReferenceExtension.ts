@@ -72,7 +72,7 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
   addInputRules() {
     return [
       new InputRule({
-        find: /#([A-Z]+-\d+)\s$/,
+        find: /!([A-Z]+-\d+)\s$/,
         handler: ({ state, range, match }) => {
           const key = match[1];
           const { tr } = state;
@@ -88,7 +88,7 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
     return [
       Suggestion<IssueReferenceItem>({
         editor: this.editor,
-        char: '#',
+        char: '!',
         allowSpaces: false,
         items: async ({ query }): Promise<IssueReferenceItem[]> => {
           if (!query || query.length < 1) return [];

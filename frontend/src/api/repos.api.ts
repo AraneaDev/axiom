@@ -52,7 +52,14 @@ export interface PullRequest {
   createdAt: string;
   updatedAt: string;
   reviews?: { id: string; status: string; body?: string; createdAt: string }[];
-  comments?: { id: string; filePath?: string; line?: number; body: string; createdAt: string }[];
+  comments?: {
+    id: string;
+    authorId: string;
+    filePath?: string;
+    line?: number;
+    body: string;
+    createdAt: string;
+  }[];
   _count?: { reviews: number; comments: number };
 }
 
@@ -164,6 +171,10 @@ export const reposApi = {
     number: number,
     data: { body: string; filePath?: string; line?: number },
   ) => post(`/repos/${repoId}/pulls/${number}/comments`, data),
+  updatePRComment: (repoId: string, commentId: string, body: string) =>
+    patch(`/repos/${repoId}/comments/${commentId}`, { body }),
+  deletePRComment: (repoId: string, commentId: string) =>
+    del(`/repos/${repoId}/comments/${commentId}`),
   applySuggestion: (repoId: string, number: number, commentId: string) =>
     post<{ applied: boolean; commentId: string }>(
       `/repos/${repoId}/pulls/${number}/suggestions/apply`,

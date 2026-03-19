@@ -138,6 +138,41 @@ export async function addComment(req: Request, res: Response, next: NextFunction
  * @param res
  * @param next
  */
+export async function updateComment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { body } = req.body;
+    if (!body || typeof body !== 'string') {
+      res.status(400).json({ error: { message: 'body is required' } });
+      return;
+    }
+    const comment = await issuesService.updateComment(param(req, 'commentId'), req.userId!, body);
+    res.json(comment);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function deleteComment(req: Request, res: Response, next: NextFunction) {
+  try {
+    await issuesService.deleteComment(param(req, 'commentId'), req.userId!);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function board(req: Request, res: Response, next: NextFunction) {
   try {
     const columns = await issuesService.getBoard(param(req, 'projectId'));

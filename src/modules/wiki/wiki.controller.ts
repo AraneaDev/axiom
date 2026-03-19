@@ -293,15 +293,25 @@ export async function listPageComments(req: Request, res: Response, next: NextFu
 }
 
 /**
- *
+ * Unified PATCH handler for wiki comments: update body or toggle resolved.
  * @param req
  * @param res
  * @param next
  */
-export async function resolveComment(req: Request, res: Response, next: NextFunction) {
+export async function patchComment(req: Request, res: Response, next: NextFunction) {
   try {
-    const comment = await wikiService.resolveComment(param(req, 'commentId'));
-    res.json(comment);
+    const { body } = req.body;
+    if (body && typeof body === 'string') {
+      const comment = await wikiService.updatePageComment(
+        param(req, 'commentId'),
+        req.userId!,
+        body,
+      );
+      res.json(comment);
+    } else {
+      const comment = await wikiService.resolveComment(param(req, 'commentId'));
+      res.json(comment);
+    }
   } catch (err) {
     next(err);
   }

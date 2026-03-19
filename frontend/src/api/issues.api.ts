@@ -26,6 +26,10 @@ export const issuesApi = {
     del(`/projects/${projectId}/issues/${issueNumber}`),
   addComment: (projectId: string, issueNumber: number, body: string) =>
     post<Comment>(`/projects/${projectId}/issues/${issueNumber}/comments`, { body }),
+  updateComment: (projectId: string, commentId: string, body: string) =>
+    patch<Comment>(`/projects/${projectId}/comments/${commentId}`, { body }),
+  deleteComment: (projectId: string, commentId: string) =>
+    del(`/projects/${projectId}/comments/${commentId}`),
   getBoard: (projectId: string) => get<BoardColumn[]>(`/projects/${projectId}/board`),
   moveIssue: (
     projectId: string,
