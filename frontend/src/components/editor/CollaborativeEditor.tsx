@@ -35,11 +35,12 @@ import {
   ImageIcon,
   Table as TableIcon,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Markdown } from 'tiptap-markdown';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 
+import { editorProjectIds, nextEditorInstanceId } from './editor-state';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
 
@@ -51,6 +52,7 @@ interface CollaborativeEditorProps {
   fragmentName: string;
   onChange?: (md: string) => void;
   placeholder?: string;
+  projectId?: string;
 }
 
 interface ToolbarButtonProps {
@@ -89,6 +91,7 @@ function ToolbarDivider() {
  * @param root0.fragmentName
  * @param root0.onChange
  * @param root0.placeholder
+ * @param root0.projectId
  */
 export function CollaborativeEditor({
   ydoc,
@@ -96,7 +99,17 @@ export function CollaborativeEditor({
   fragmentName,
   onChange,
   placeholder,
+  projectId,
 }: CollaborativeEditorProps) {
+  const [instanceId] = useState(() => nextEditorInstanceId());
+
+  useEffect(() => {
+    editorProjectIds[instanceId] = projectId ?? null;
+    return () => {
+      delete editorProjectIds[instanceId];
+    };
+  }, [instanceId, projectId]);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -120,7 +133,10 @@ export function CollaborativeEditor({
         transformCopiedText: true,
       }),
       MentionExtension,
-      IssueReferenceExtension,
+      IssueReferenceExtension.configure({
+        projectId: projectId ?? null,
+        instanceId,
+      }),
       // Yjs collaboration
       Collaboration.configure({
         document: ydoc,

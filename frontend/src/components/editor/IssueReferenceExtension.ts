@@ -124,14 +124,20 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
                 : undefined;
               issues = issueGroup?.items ?? [];
             }
-            return issues.map((issue) => ({
-              id: issue.id,
-              number: issue.number,
-              title: issue.title,
-              key: issue.key,
-              type: issue.type,
-              status: (issue as unknown as { column?: { name?: string } }).column?.name,
-            }));
+            return issues.map((issue) => {
+              // Handle both project-scoped (has column.name) and search (has status string) formats
+              const raw = issue as unknown as Record<string, unknown>;
+              const status =
+                (raw.status as string) ?? (raw.column as { name?: string } | undefined)?.name;
+              return {
+                id: issue.id,
+                number: issue.number,
+                title: issue.title,
+                key: issue.key,
+                type: issue.type,
+                status,
+              };
+            });
           } catch {
             return [];
           }
