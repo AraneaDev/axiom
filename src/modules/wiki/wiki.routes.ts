@@ -64,6 +64,7 @@ router.patch('/comments/:commentId', requireWikiCommentAccess(), wikiController.
 router.delete('/comments/:commentId', requireWikiCommentAccess(), wikiController.deletePageComment);
 
 // Page labels (require org membership via page lookup)
+router.get('/pages/:pageId/labels', requireWikiPageAccess(), wikiController.listPageLabels);
 router.post('/pages/:pageId/labels', requireWikiPageAccess(), wikiController.addPageLabel);
 router.delete(
   '/pages/:pageId/labels/:label',

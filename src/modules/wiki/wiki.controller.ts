@@ -340,6 +340,21 @@ export async function deletePageComment(req: Request, res: Response, next: NextF
  * @param res
  * @param next
  */
+export async function listPageLabels(req: Request, res: Response, next: NextFunction) {
+  try {
+    const labels = await wikiService.listPageLabels(param(req, 'pageId'));
+    res.json(labels);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function addPageLabel(req: Request, res: Response, next: NextFunction) {
   try {
     const data = validate(addPageLabelSchema, req.body);

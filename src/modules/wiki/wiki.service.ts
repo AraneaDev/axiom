@@ -424,6 +424,18 @@ export async function deletePageComment(commentId: string) {
  * @returns The created page label record
  * @throws {AppError} 404 if page not found
  */
+export async function listPageLabels(pageId: string) {
+  return prisma.pageLabel.findMany({
+    where: { pageId },
+    orderBy: { label: 'asc' },
+  });
+}
+
+/**
+ *
+ * @param pageId
+ * @param label
+ */
 export async function addLabel(pageId: string, label: string) {
   const page = await prisma.page.findUnique({ where: { id: pageId } });
   if (!page) throw new AppError(404, 'Page not found');
