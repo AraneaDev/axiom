@@ -2,14 +2,7 @@
 
 A self-hosted project management platform with integrated Git hosting, CI/CD, and real-time collaboration.
 
-![Tests](https://img.shields.io/badge/tests-454%20passing-brightgreen)
-![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
-![Backend](https://img.shields.io/badge/backend-zero%20errors-brightgreen)
-![Frontend](https://img.shields.io/badge/frontend-zero%20errors-brightgreen)
-![E2E](https://img.shields.io/badge/E2E-12%20specs-blue)
-![JSDoc](https://img.shields.io/badge/JSDoc-100%25%20coverage-brightgreen)
-![Modules](https://img.shields.io/badge/modules-40%20tested-brightgreen)
-![License](https://img.shields.io/badge/license-proprietary-lightgrey)
+![Tests](https://img.shields.io/badge/tests-454%20passing-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) ![Backend](https://img.shields.io/badge/backend-zero%20errors-brightgreen) ![Frontend](https://img.shields.io/badge/frontend-zero%20errors-brightgreen) ![ESLint](https://img.shields.io/badge/ESLint-zero%20warnings-brightgreen) ![E2E](https://img.shields.io/badge/E2E-12%20specs-blue) ![UI Tests](https://img.shields.io/badge/UI%20tests-140%20passing-brightgreen) ![Modules](https://img.shields.io/badge/modules-40%20tested-brightgreen) ![License](https://img.shields.io/badge/license-proprietary-lightgrey)
 
 ---
 
@@ -72,7 +65,7 @@ cd frontend && npx tsc --noEmit  # Frontend typecheck only
 |-------|---------|-------|
 | Unit / Integration | `npm run test` | 454 tests across 40 files |
 | E2E | `npm run e2e` | 12 specs |
-| Frontend Components | `cd frontend && npm run test` | 16 component test files |
+| Frontend Components | `cd frontend && npm run test` | 140 tests across 16 files |
 | Full Check | `npm run check` | typecheck + lint + format + test |
 
 All backend tests run against a real PostgreSQL instance -- no mocked databases.

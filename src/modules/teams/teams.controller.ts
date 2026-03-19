@@ -63,7 +63,16 @@ export async function list(req: Request, res: Response, next: NextFunction) {
  */
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    const team = await teamsService.updateTeam(param(req, 'teamId'), req.body);
+    const { name, description } = req.body;
+    if (name !== undefined && typeof name !== 'string') {
+      res.status(400).json({ error: { message: 'name must be a string' } });
+      return;
+    }
+    if (description !== undefined && typeof description !== 'string') {
+      res.status(400).json({ error: { message: 'description must be a string' } });
+      return;
+    }
+    const team = await teamsService.updateTeam(param(req, 'teamId'), { name, description });
     res.json(team);
   } catch (err) {
     next(err);

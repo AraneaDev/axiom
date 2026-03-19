@@ -418,11 +418,9 @@ export async function deletePageComment(commentId: string) {
 // ─── Page Labels ────────────────────────────────────────────
 
 /**
- * Add a label to a wiki page.
- * @param pageId - The page to add the label to
- * @param label - The label text
- * @returns The created page label record
- * @throws {AppError} 404 if page not found
+ * List all labels for a wiki page.
+ * @param pageId - The page to list labels for
+ * @returns Array of page label records
  */
 export async function listPageLabels(pageId: string) {
   return prisma.pageLabel.findMany({

@@ -202,8 +202,11 @@ export async function deleteBranch(req: Request, res: Response, next: NextFuncti
 export async function listCommits(req: Request, res: Response, next: NextFunction) {
   try {
     const ref = (req.query.ref as string) || 'HEAD';
-    const limit = parseInt((req.query.limit as string) || '20', 10);
-    const skip = parseInt((req.query.skip as string) || '0', 10);
+    const limit = Math.max(
+      1,
+      Math.min(parseInt((req.query.limit as string) || '20', 10) || 20, 100),
+    );
+    const skip = Math.max(0, parseInt((req.query.skip as string) || '0', 10) || 0);
     const filePath = (req.query.path as string) || undefined;
     res.json(await reposService.getCommits(param(req, 'repoId'), ref, limit, skip, filePath));
   } catch (err) {

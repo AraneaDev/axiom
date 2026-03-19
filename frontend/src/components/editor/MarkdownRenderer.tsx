@@ -45,6 +45,22 @@ function linkifyMentionsAndRefs(html: string, basePath?: string): string {
   return result;
 }
 
+/**
+ * Collapse consecutive image-only paragraphs into a single inline row.
+ * This prevents badge/shield images from rendering on separate lines.
+ * @param html - The HTML string to process
+ * @returns The processed HTML with collapsed image paragraphs
+ */
+function collapseImageParagraphs(html: string): string {
+  return html.replace(
+    /(<p>\s*(?:<a[^>]*>)?\s*<img[^>]*>\s*(?:<\/a>)?\s*<\/p>\s*){2,}/g,
+    (match) => {
+      const images = match.replace(/<\/?p>/g, '').trim();
+      return `<div class="badge-row">${images}</div>\n`;
+    },
+  );
+}
+
 function sanitize(raw: string, basePath?: string) {
   const sanitized = DOMPurify.sanitize(raw, { ADD_ATTR: ['id', 'data-issue-key'] });
   const withIssueKeys = sanitized.replace(
@@ -55,7 +71,7 @@ function sanitize(raw: string, basePath?: string) {
       return `<a href="${href}" class="issue-ref" data-issue-key="${key}">${key}</a>`;
     },
   );
-  return linkifyMentionsAndRefs(withIssueKeys, basePath);
+  return collapseImageParagraphs(linkifyMentionsAndRefs(withIssueKeys, basePath));
 }
 
 function parseMarkdown(markdown: string, basePath?: string): Segment[] {
@@ -89,7 +105,7 @@ interface MarkdownRendererProps {
 
 /**
  * Renders markdown content as sanitized HTML with mermaid diagram support.
- * Parses @mentions and !ISSUE-123 references into styled links.
+ * Parses `@mentions` and !ISSUE-123 references into styled links.
  * Mermaid code fences are rendered as interactive diagram blocks.
  * @param props - Renderer configuration.
  * @param props.content - Raw markdown string to render.
