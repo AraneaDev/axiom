@@ -301,12 +301,16 @@ textarea {
 .prose a:hover {
   text-decoration: underline;
 }
-/* Consecutive image-only paragraphs (e.g. badge/shield rows) flow inline */
+/* Badges/shields: override prose block img styles so images flow inline */
 .prose .badge-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25em;
   margin-bottom: 1em;
+}
+.prose .badge-row img {
+  display: inline;
+  margin: 0;
 }
 
 /* Tiptap editor styles */

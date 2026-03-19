@@ -46,17 +46,20 @@ function linkifyMentionsAndRefs(html: string, basePath?: string): string {
 }
 
 /**
- * Collapse consecutive image-only paragraphs into a single inline row.
- * This prevents badge/shield images from rendering on separate lines.
+ * Convert image-only paragraphs into inline badge rows.
+ * Matches any paragraph whose content is exclusively images
+ * (optionally wrapped in links) and replaces the wrapping
+ * p tag with a flex div so prose block-img styles don't apply.
  * @param html - The HTML string to process
- * @returns The processed HTML with collapsed image paragraphs
+ * @returns The processed HTML with inline badge rows
  */
 function collapseImageParagraphs(html: string): string {
   return html.replace(
-    /(<p>\s*(?:<a[^>]*>)?\s*<img[^>]*>\s*(?:<\/a>)?\s*<\/p>\s*){2,}/g,
-    (match) => {
-      const images = match.replace(/<\/?p>/g, '').trim();
-      return `<div class="badge-row">${images}</div>\n`;
+    /<p>((?:\s*(?:<a[^>]*>)?\s*<img[^>]*?>\s*(?:<\/a>)?\s*)+)<\/p>/g,
+    (match, inner: string) => {
+      const imgCount = (inner.match(/<img/g) || []).length;
+      if (imgCount < 2) return match;
+      return `<div class="badge-row">${inner.trim()}</div>`;
     },
   );
 }
