@@ -21,8 +21,11 @@ interface UserItem {
  */
 export const MentionExtension = Mention.configure({
   HTMLAttributes: { class: 'mention' },
-  renderLabel({ node }) {
+  renderText({ node }) {
     return `@${node.attrs.label ?? node.attrs.id}`;
+  },
+  renderHTML({ node }) {
+    return ['span', { class: 'mention' }, `@${node.attrs.label ?? node.attrs.id}`];
   },
   suggestion: {
     items: async ({ query }: { query: string }): Promise<UserItem[]> => {
