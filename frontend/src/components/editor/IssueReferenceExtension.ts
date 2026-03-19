@@ -102,20 +102,20 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
         char: '!',
         allowSpaces: false,
         items: async ({ query }): Promise<IssueReferenceItem[]> => {
-          if (!query || query.length < 1) return [];
           // Read projectId dynamically from shared store, fall back to static option
           const currentProjectId =
             (instanceId != null ? editorProjectIds[instanceId] : null) ?? staticProjectId;
           try {
             let issues: IssueReferenceItem[] = [];
             if (currentProjectId) {
-              // Scoped search within project
+              // Scoped search within project -- show recent issues even with empty query
+              const qParam = query ? `q=${encodeURIComponent(query)}&` : '';
               const data = await get<{ issues: IssueReferenceItem[] }>(
-                `/projects/${currentProjectId}/issues?q=${encodeURIComponent(query)}&limit=8`,
+                `/projects/${currentProjectId}/issues?${qParam}limit=8`,
               );
               issues = data.issues ?? [];
-            } else {
-              // Global search across all accessible issues
+            } else if (query && query.length >= 1) {
+              // Global search -- requires at least 1 character
               const data = await get<Array<{ type: string; items: IssueReferenceItem[] }>>(
                 `/search?q=${encodeURIComponent(query)}&type=issues&limit=8`,
               );

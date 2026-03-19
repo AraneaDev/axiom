@@ -9,6 +9,7 @@ import { get } from '@/api/client';
 
 interface UserItem {
   id: string;
+  label: string;
   displayName: string;
   username: string;
 }
@@ -27,8 +28,16 @@ export const MentionExtension = Mention.configure({
     items: async ({ query }: { query: string }): Promise<UserItem[]> => {
       if (!query || query.length < 1) return [];
       try {
-        const data = await get<UserItem[]>(`/users/search?q=${encodeURIComponent(query)}&limit=8`);
-        return Array.isArray(data) ? data : [];
+        const data = await get<Array<{ id: string; displayName: string; username: string }>>(
+          `/users/search?q=${encodeURIComponent(query)}&limit=8`,
+        );
+        if (!Array.isArray(data)) return [];
+        return data.map((u) => ({
+          id: u.username,
+          label: u.displayName,
+          displayName: u.displayName,
+          username: u.username,
+        }));
       } catch {
         return [];
       }
