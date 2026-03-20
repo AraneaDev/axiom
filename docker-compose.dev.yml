@@ -22,6 +22,11 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   api:
     build:
@@ -38,11 +43,17 @@ services:
       STORAGE_PATH: /data/uploads
       NODE_ENV: development
       REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
@@ -64,7 +75,7 @@ services:
       - ./frontend/public:/app/public
       - ./frontend/index.html:/app/index.html
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7000/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7000"]
       interval: 30s
       timeout: 5s
       retries: 3

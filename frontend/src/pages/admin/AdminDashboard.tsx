@@ -1,12 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import {
+  Activity,
   Users,
   Building2,
+  Database,
   GitFork,
   CircleDot,
+  Cpu,
   FileText,
   HardDrive,
+  Server,
   Settings,
   UserCog,
 } from 'lucide-react';
@@ -14,6 +18,9 @@ import { Link } from 'react-router';
 
 import { adminApi } from '@/api/admin.api';
 import type { SystemStats } from '@/api/admin.api';
+import { healthApi } from '@/api/health.api';
+import type { HealthStatus } from '@/api/health.api';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { PageLoader } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
@@ -26,6 +33,157 @@ function formatBytes(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   const value = bytes / Math.pow(1024, i);
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+// ─── Uptime Formatter ────────────────────────────────────────
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m ${seconds % 60}s`;
+}
+
+// ─── Health Panel ────────────────────────────────────────────
+
+function HealthSkeleton() {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-5 animate-pulse">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="h-4 w-4 rounded bg-surface-tertiary" />
+        <div className="h-4 w-32 rounded bg-surface-tertiary" />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="rounded-lg bg-surface-secondary p-4">
+            <div className="h-4 w-20 rounded bg-surface-tertiary mb-2" />
+            <div className="h-5 w-16 rounded bg-surface-tertiary" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function serviceStatusVariant(status: string): 'success' | 'danger' | 'warning' {
+  if (status === 'up') return 'success';
+  if (status === 'not_configured') return 'warning';
+  return 'danger';
+}
+
+function serviceStatusLabel(status: string): string {
+  if (status === 'up') return 'Up';
+  if (status === 'not_configured') return 'N/A';
+  return 'Down';
+}
+
+function overallStatusVariant(status: HealthStatus['status']): 'success' | 'warning' | 'danger' {
+  if (status === 'healthy') return 'success';
+  if (status === 'degraded') return 'warning';
+  return 'danger';
+}
+
+function overallStatusLabel(status: HealthStatus['status']): string {
+  if (status === 'healthy') return 'Healthy';
+  if (status === 'degraded') return 'Degraded';
+  return 'Unhealthy';
+}
+
+function HealthPanel() {
+  const {
+    data: health,
+    isLoading,
+    isError,
+  } = useQuery<HealthStatus>({
+    queryKey: ['health'],
+    queryFn: healthApi.check,
+    refetchInterval: 30000,
+  });
+
+  if (isLoading) return <HealthSkeleton />;
+
+  if (isError || !health) {
+    return (
+      <div className="rounded-xl border border-danger bg-danger-light p-5">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-danger" />
+          <span className="text-sm font-semibold text-danger">
+            System health check failed -- API may be unreachable
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const services: {
+    icon: LucideIcon;
+    name: string;
+    status: string;
+    latencyMs: number;
+  }[] = [
+    {
+      icon: Database,
+      name: 'Database',
+      status: health.services.database.status,
+      latencyMs: health.services.database.latencyMs,
+    },
+    {
+      icon: Cpu,
+      name: 'Redis',
+      status: health.services.redis.status,
+      latencyMs: health.services.redis.latencyMs,
+    },
+  ];
+
+  return (
+    <div className="rounded-xl border border-border bg-surface p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-primary" />
+          <h3 className="font-semibold text-sm text-text">System Health</h3>
+        </div>
+        <Badge variant={overallStatusVariant(health.status)}>
+          {overallStatusLabel(health.status)}
+        </Badge>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {services.map((svc) => (
+          <div
+            key={svc.name}
+            className="rounded-lg bg-surface-secondary p-4 flex items-center gap-3"
+          >
+            <div className="rounded-md bg-surface-tertiary p-2">
+              <svc.icon className="h-4 w-4 text-text-secondary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-text-tertiary">{svc.name}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <Badge variant={serviceStatusVariant(svc.status)} size="sm">
+                  {serviceStatusLabel(svc.status)}
+                </Badge>
+                {svc.status === 'up' && (
+                  <span className="text-xs text-text-tertiary tabular-nums">{svc.latencyMs}ms</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="rounded-lg bg-surface-secondary p-4 flex items-center gap-3">
+          <div className="rounded-md bg-surface-tertiary p-2">
+            <Server className="h-4 w-4 text-text-secondary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-text-tertiary">API Uptime</p>
+            <p className="text-sm font-semibold text-text mt-0.5 tabular-nums">
+              {formatUptime(health.uptime)}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Stat Card ──────────────────────────────────────────────
@@ -93,6 +251,9 @@ export default function AdminDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* System Health */}
+      <HealthPanel />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -24,6 +24,7 @@ import codeOwnersRoutes from './modules/code-owners/code-owners.routes';
 import customFieldsDirectRoutes from './modules/custom-fields/custom-fields-direct.routes';
 import customFieldsRoutes from './modules/custom-fields/custom-fields.routes';
 import deploymentsRoutes from './modules/deployments/deployments.routes';
+import healthRoutes from './modules/health/health.routes';
 import issueTemplatesRoutes from './modules/issue-templates/issue-templates.routes';
 import issuesRoutes from './modules/issues/issues.routes';
 import labelsRoutes from './modules/labels/labels.routes';
@@ -108,7 +109,8 @@ app.use('/api/auth/register', authLimiter);
 // CSRF protection: require X-Requested-With header on state-changing requests
 app.use('/api', csrfGuard);
 
-// Health check
+// Health check (public, no auth required)
+app.use('/api/health', healthRoutes);
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', version: '0.1.0-alpha', name: 'axiom' });
 });
