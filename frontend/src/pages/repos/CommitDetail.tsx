@@ -5,6 +5,7 @@ import {
   FilePlus,
   FileMinus,
   FileEdit,
+  FileText,
   Plus,
   Minus,
   CheckCircle2,
@@ -13,8 +14,13 @@ import {
   Loader2,
   ExternalLink,
   Rocket,
+  ChevronUp,
+  ChevronDown,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { deploymentsApi } from '@/api/deployments.api';
@@ -101,6 +107,41 @@ export default function CommitDetail() {
     enabled: !!currentRepo?.id && !!sha,
   });
 
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [fileTreeOpen, setFileTreeOpen] = useState(true);
+  const fileRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const statsData = data?.stats ?? [];
+
+  const scrollToFile = useCallback((index: number) => {
+    setActiveFileIndex(index);
+    fileRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const goToPrevFile = useCallback(() => {
+    if (activeFileIndex > 0) scrollToFile(activeFileIndex - 1);
+  }, [activeFileIndex, scrollToFile]);
+
+  const goToNextFile = useCallback(() => {
+    if (activeFileIndex < statsData.length - 1) scrollToFile(activeFileIndex + 1);
+  }, [activeFileIndex, statsData.length, scrollToFile]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (activeFileIndex < statsData.length - 1) scrollToFile(activeFileIndex + 1);
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (activeFileIndex > 0) scrollToFile(activeFileIndex - 1);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeFileIndex, statsData.length, scrollToFile]);
+
   if (isLoading || !currentRepo) return <DetailSkeleton />;
 
   if (isError || !data) {
@@ -126,6 +167,20 @@ export default function CommitDetail() {
   const files = parseDiff(diffOutput);
   const totalAdditions = stats.reduce((s, f) => s + f.additions, 0);
   const totalDeletions = stats.reduce((s, f) => s + f.deletions, 0);
+
+  function getFileIcon(s: { additions: number; deletions: number }) {
+    if (s.additions > 0 && s.deletions > 0)
+      return <FileEdit className="h-3.5 w-3.5 text-warning shrink-0" />;
+    if (s.additions > 0) return <FilePlus className="h-3.5 w-3.5 text-success shrink-0" />;
+    return <FileMinus className="h-3.5 w-3.5 text-danger shrink-0" />;
+  }
+
+  function getChangeType(s: { additions: number; deletions: number }) {
+    if (s.additions > 0 && s.deletions > 0) return 'Modified';
+    if (s.additions > 0 && s.deletions === 0) return 'Added';
+    if (s.deletions > 0 && s.additions === 0) return 'Deleted';
+    return 'Modified';
+  }
 
   return (
     <div>
@@ -237,31 +292,104 @@ export default function CommitDetail() {
         </div>
       )}
 
-      {/* File stats list */}
+      {/* File navigation bar */}
       {stats.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface mb-4 divide-y divide-border">
-          {stats.map((s) => (
-            <div key={s.file} className="flex items-center gap-3 px-4 py-2 text-sm">
-              {s.additions > 0 && s.deletions > 0 ? (
-                <FileEdit className="h-4 w-4 text-warning shrink-0" />
-              ) : s.additions > 0 ? (
-                <FilePlus className="h-4 w-4 text-success shrink-0" />
+        <div className="rounded-lg border border-border bg-surface mb-4 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2 bg-surface-secondary border-b border-border">
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setFileTreeOpen(!fileTreeOpen)}
+              title={fileTreeOpen ? 'Collapse file list' : 'Expand file list'}
+            >
+              {fileTreeOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
               ) : (
-                <FileMinus className="h-4 w-4 text-danger shrink-0" />
+                <PanelLeft className="h-4 w-4" />
               )}
-              <span className="font-mono text-xs flex-1 truncate">{s.file}</span>
-              <span className="text-success text-xs">+{s.additions}</span>
-              <span className="text-danger text-xs">-{s.deletions}</span>
+            </Button>
+            <FileText className="h-4 w-4 text-text-tertiary" />
+            <span className="text-sm font-medium text-text-secondary">
+              File {activeFileIndex + 1} of {stats.length}
+            </span>
+            <div className="ml-auto flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={goToPrevFile}
+                disabled={activeFileIndex === 0}
+                title="Previous file (k)"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={goToNextFile}
+                disabled={activeFileIndex === stats.length - 1}
+                title="Next file (j)"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
             </div>
-          ))}
+          </div>
+          {fileTreeOpen && (
+            <div className="max-h-64 overflow-y-auto divide-y divide-border">
+              {stats.map((s, i) => (
+                <button
+                  key={s.file}
+                  onClick={() => scrollToFile(i)}
+                  className={`flex items-center gap-2 px-4 py-1.5 text-sm w-full text-left hover:bg-surface-secondary transition-colors ${
+                    i === activeFileIndex ? 'bg-primary-light' : ''
+                  }`}
+                >
+                  {i === activeFileIndex && (
+                    <ChevronRight className="h-3 w-3 text-primary shrink-0" />
+                  )}
+                  {getFileIcon(s)}
+                  <span className="font-mono text-xs flex-1 truncate">{s.file}</span>
+                  <Badge
+                    variant={
+                      getChangeType(s) === 'Added'
+                        ? 'success'
+                        : getChangeType(s) === 'Deleted'
+                          ? 'danger'
+                          : 'warning'
+                    }
+                    size="sm"
+                  >
+                    {getChangeType(s)}
+                  </Badge>
+                  <span className="text-success text-xs">+{s.additions}</span>
+                  <span className="text-danger text-xs">-{s.deletions}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* Diff */}
       {files.map((file, fi) => (
-        <div key={fi} className="rounded-lg border border-border bg-surface mb-4 overflow-hidden">
-          <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono">
-            {file.newFile?.replace('b/', '') || file.oldFile?.replace('a/', '')}
+        <div
+          key={fi}
+          id={`diff-file-${fi}`}
+          ref={(el) => {
+            fileRefs.current[fi] = el;
+          }}
+          className="rounded-lg border border-border bg-surface mb-4 overflow-hidden scroll-mt-4"
+        >
+          <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
+            {stats[fi] && getFileIcon(stats[fi])}
+            <span className="flex-1 truncate">
+              {file.newFile?.replace('b/', '') || file.oldFile?.replace('a/', '')}
+            </span>
+            {stats[fi] && (
+              <span className="flex items-center gap-2 text-xs shrink-0">
+                <span className="text-success">+{stats[fi].additions}</span>
+                <span className="text-danger">-{stats[fi].deletions}</span>
+              </span>
+            )}
           </div>
           <div className="overflow-x-auto">
             <pre className="text-xs font-mono m-0 p-0">

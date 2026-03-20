@@ -14,8 +14,9 @@ import {
   ChevronDown,
   BarChart3,
   Rocket,
+  Loader2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import EnvironmentsTab from './EnvironmentsTab';
@@ -23,7 +24,7 @@ import InsightsTab from './InsightsTab';
 import PipelinesTab from './PipelinesTab';
 import ReleasesTab from './ReleasesTab';
 
-import { reposApi } from '@/api/repos.api';
+import { reposApi, type CommitInfo } from '@/api/repos.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -57,11 +58,45 @@ export default function RepoDetail() {
     enabled: !!currentRepo?.id,
   });
 
+  const COMMITS_PAGE_SIZE = 30;
+  const [extraCommits, setExtraCommits] = useState<CommitInfo[]>([]);
+  const [hasMoreCommits, setHasMoreCommits] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [commitsSkip, setCommitsSkip] = useState(COMMITS_PAGE_SIZE);
+
   const { data: commits } = useQuery({
     queryKey: ['commits', currentRepo?.id, activeBranch],
-    queryFn: () => reposApi.listCommits(currentRepo!.id, activeBranch, 5),
+    queryFn: () => reposApi.listCommits(currentRepo!.id, activeBranch, COMMITS_PAGE_SIZE),
     enabled: !!currentRepo?.id,
   });
+
+  // Reset extra commits when branch changes
+  useEffect(() => {
+    setExtraCommits([]);
+    setCommitsSkip(COMMITS_PAGE_SIZE);
+    setHasMoreCommits(true);
+  }, [activeBranch]);
+
+  const allCommits = commits ? [...commits, ...extraCommits] : [];
+  const commitsHasMore = commits ? commits.length >= COMMITS_PAGE_SIZE && hasMoreCommits : false;
+
+  const loadMoreCommits = useCallback(async () => {
+    if (!currentRepo?.id || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const more = await reposApi.listCommits(
+        currentRepo.id,
+        activeBranch,
+        COMMITS_PAGE_SIZE,
+        commitsSkip,
+      );
+      setExtraCommits((prev) => [...prev, ...more]);
+      setCommitsSkip((prev) => prev + COMMITS_PAGE_SIZE);
+      setHasMoreCommits(more.length >= COMMITS_PAGE_SIZE);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [currentRepo?.id, activeBranch, commitsSkip, loadingMore]);
 
   const { data: prs } = useQuery({
     queryKey: ['prs', currentRepo?.id],
@@ -357,26 +392,60 @@ export default function RepoDetail() {
       {activeTab === 'insights' && currentRepo && <InsightsTab repoId={currentRepo.id} />}
 
       {/* Commits tab */}
-      {activeTab === 'commits' && commits && commits.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-          {commits.map((c) => (
-            <Link
-              key={c.sha}
-              to={`${basePath}/commits/${c.sha}`}
-              className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
-            >
-              <GitCommit className="h-4 w-4 text-text-tertiary shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{c.message}</p>
-                <p className="text-xs text-text-tertiary">
-                  {c.author} &middot; {formatRelative(c.date)}
-                </p>
-              </div>
-              <code className="text-xs text-text-tertiary font-mono bg-surface-secondary px-1.5 py-0.5 rounded">
-                {c.shortSha}
-              </code>
-            </Link>
-          ))}
+      {activeTab === 'commits' && (
+        <div>
+          {allCommits.length > 0 && (
+            <div className="flex items-center gap-2 mb-3">
+              <GitCommit className="h-4 w-4 text-text-tertiary" />
+              <span className="text-sm text-text-secondary font-medium">
+                {allCommits.length}
+                {commitsHasMore ? '+' : ''} commits on {activeBranch}
+              </span>
+            </div>
+          )}
+          {allCommits.length > 0 ? (
+            <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+              {allCommits.map((c) => (
+                <Link
+                  key={c.sha}
+                  to={`${basePath}/commits/${c.sha}`}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
+                >
+                  <GitCommit className="h-4 w-4 text-text-tertiary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{c.message}</p>
+                    <p className="text-xs text-text-tertiary">
+                      {c.author} &middot; {formatRelative(c.date)}
+                    </p>
+                  </div>
+                  <code className="text-xs text-text-tertiary font-mono bg-surface-secondary px-1.5 py-0.5 rounded">
+                    {c.shortSha}
+                  </code>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            commits && (
+              <p className="text-sm text-text-secondary text-center py-8">No commits found.</p>
+            )
+          )}
+          {commitsHasMore && allCommits.length > 0 && (
+            <div className="flex justify-center mt-4">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={loadMoreCommits}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <GitCommit className="h-4 w-4" />
+                )}
+                {loadingMore ? 'Loading...' : 'Load more commits'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

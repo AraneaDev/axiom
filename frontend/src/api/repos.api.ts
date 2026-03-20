@@ -164,11 +164,13 @@ export const reposApi = {
    * @param repoId
    * @param ref
    * @param limit
+   * @param skip
    */
-  listCommits: (repoId: string, ref?: string, limit?: number) => {
+  listCommits: (repoId: string, ref?: string, limit?: number, skip?: number) => {
     const params = new URLSearchParams();
     if (ref) params.set('ref', ref);
     if (limit) params.set('limit', String(limit));
+    if (skip) params.set('skip', String(skip));
     return get<CommitInfo[]>(`/repos/${repoId}/commits?${params}`);
   },
   /**
