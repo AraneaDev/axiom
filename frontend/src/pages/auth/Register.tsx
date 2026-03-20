@@ -1,3 +1,4 @@
+import { UserPlus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 
@@ -82,7 +83,13 @@ export default function Register() {
             required
           />
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? <Spinner className="h-4 w-4" /> : 'Create account'}
+            {loading ? (
+              <Spinner className="h-4 w-4" />
+            ) : (
+              <>
+                <UserPlus className="h-4 w-4" /> Create account
+              </>
+            )}
           </Button>
         </form>
 

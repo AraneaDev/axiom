@@ -13,6 +13,22 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 
 /**
+ * Validate a file path to prevent directory traversal and null byte injection.
+ * @param filePath - The file path to validate
+ * @throws {AppError} 400 if the path is invalid
+ */
+function validateFilePath(filePath: string): void {
+  if (
+    !filePath ||
+    filePath.startsWith('/') ||
+    filePath.includes('\0') ||
+    filePath.split('/').some((seg) => seg === '..')
+  ) {
+    throw new AppError(400, 'Invalid file path');
+  }
+}
+
+/**
  * Create a new git repository with a bare repo on disk.
  * @param teamId - The team to create the repository in
  * @param data - Repository creation data including name, slug, description, visibility, and default branch
@@ -190,11 +206,14 @@ export async function deleteRepoById(repoId: string) {
     'Repository not found',
   );
 
+  // Delete disk first (harder to undo), then DB inside a transaction
   if (repo.diskPath && (await repoExists(repo.diskPath))) {
     await deleteRepo(repo.diskPath);
   }
 
-  await prisma.repository.delete({ where: { id: repoId } });
+  await prisma.$transaction(async (tx) => {
+    await tx.repository.delete({ where: { id: repoId } });
+  });
 }
 
 /**
@@ -223,19 +242,37 @@ export async function forkRepoById(repoId: string, targetTeamId: string, newSlug
   );
 
   const targetDiskPath = getRepoPath(targetTeam.org.slug, targetTeam.slug, newSlug);
-  await forkRepo(source.diskPath!, targetDiskPath);
 
-  return prisma.repository.create({
-    data: {
-      teamId: targetTeamId,
-      name: source.name,
-      slug: newSlug,
-      description: `Forked from ${source.team.org.slug}/${source.team.slug}/${source.slug}`,
-      visibility: source.visibility,
-      defaultBranch: source.defaultBranch,
-      diskPath: targetDiskPath,
-    },
+  // DB first inside transaction, then clone on disk
+  const forkedRepo = await prisma.$transaction(async (tx) => {
+    return tx.repository.create({
+      data: {
+        teamId: targetTeamId,
+        name: source.name,
+        slug: newSlug,
+        description: `Forked from ${source.team.org.slug}/${source.team.slug}/${source.slug}`,
+        visibility: source.visibility,
+        defaultBranch: source.defaultBranch,
+        diskPath: targetDiskPath,
+      },
+    });
   });
+
+  try {
+    await forkRepo(source.diskPath!, targetDiskPath);
+  } catch (err) {
+    // Disk clone failed -- roll back the DB record
+    await prisma.repository.delete({ where: { id: forkedRepo.id } }).catch((delErr) => {
+      logger.error(
+        'Failed to clean up forked repo record after disk error',
+        { repoId: forkedRepo.id },
+        delErr as Error,
+      );
+    });
+    throw err;
+  }
+
+  return forkedRepo;
 }
 
 // ─── Git operations (proxied through service) ───────────────
@@ -356,6 +393,7 @@ export async function getCommitDetail(repoId: string, sha: string) {
  * @throws {AppError} 404 if repository not found
  */
 export async function getTree(repoId: string, ref: string, treePath: string = '') {
+  if (treePath) validateFilePath(treePath);
   const diskPath = await getRepoDiskPath(repoId);
   return gitCmd.lsTree(diskPath, ref, treePath);
 }
@@ -369,6 +407,7 @@ export async function getTree(repoId: string, ref: string, treePath: string = ''
  * @throws {AppError} 404 if repository not found
  */
 export async function getBlob(repoId: string, ref: string, filePath: string) {
+  validateFilePath(filePath);
   const diskPath = await getRepoDiskPath(repoId);
   const content = await gitCmd.showBlob(diskPath, ref, filePath);
   const size = await gitCmd.blobSize(diskPath, ref, filePath);
@@ -384,6 +423,7 @@ export async function getBlob(repoId: string, ref: string, filePath: string) {
  * @throws {AppError} 404 if repository not found
  */
 export async function getBlame(repoId: string, ref: string, filePath: string) {
+  validateFilePath(filePath);
   const diskPath = await getRepoDiskPath(repoId);
   return gitCmd.blame(diskPath, ref, filePath);
 }

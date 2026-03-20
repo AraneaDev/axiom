@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { requireProjectAccess } from '../../middleware/requireProjectAccess';
 
+import * as boardColumnsCtrl from './board-columns.controller';
 import * as branchesCtrl from './issue-branches.controller';
 import * as commitsCtrl from './issue-commits.controller';
 import * as linksCtrl from './issue-links.controller';
@@ -20,6 +21,12 @@ router.use('/:projectId/board', requireProjectAccess);
 router.post('/:projectId/issues', issuesController.create);
 router.get('/:projectId/issues', issuesController.list);
 router.get('/:projectId/board', issuesController.board);
+
+// Board column management
+router.post('/:projectId/board/columns', boardColumnsCtrl.create);
+router.patch('/:projectId/board/columns/reorder', boardColumnsCtrl.reorder);
+router.patch('/:projectId/board/columns/:columnId', boardColumnsCtrl.update);
+router.delete('/:projectId/board/columns/:columnId', boardColumnsCtrl.remove);
 
 // Bulk operations (must come before :issueNumber routes)
 router.patch('/:projectId/issues/bulk', issuesController.bulkUpdate);

@@ -111,6 +111,70 @@ describe('Projects API', () => {
     expect(res.body.name).toBe('Projects Test Project Updated');
   });
 
+  // RBAC: user NOT in the team should get 403
+  describe('RBAC -- non-team-member access', () => {
+    let outsiderToken: string;
+
+    beforeAll(async () => {
+      const passwordHash = await bcrypt.hash('testpassword123', 4);
+
+      const outsider = await prisma.user.upsert({
+        where: { username: 'projects-outsider-user' },
+        update: {},
+        create: {
+          email: 'projects-outsider@axiom.dev',
+          username: 'projects-outsider-user',
+          displayName: 'Projects Outsider',
+          passwordHash,
+        },
+      });
+
+      // Put outsider in a different org so they exist but are NOT in the test team
+      await prisma.organization.create({
+        data: {
+          name: 'Outsider Org',
+          slug: 'projects-outsider-org',
+          members: { create: { userId: outsider.id, role: 'OWNER' } },
+        },
+      });
+
+      const loginRes = await request(app)
+        .post('/api/auth/login')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ login: 'projects-outsider@axiom.dev', password: 'testpassword123' });
+      outsiderToken = loginRes.body.accessToken;
+    });
+
+    afterAll(async () => {
+      await prisma.organization.deleteMany({ where: { slug: 'projects-outsider-org' } });
+      await prisma.user.deleteMany({ where: { username: 'projects-outsider-user' } });
+    });
+
+    it('should return 403 for GET /api/projects/:projectId', async () => {
+      const res = await request(app)
+        .get(`/api/projects/${projectId}`)
+        .set('Authorization', `Bearer ${outsiderToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('should return 403 for PATCH /api/projects/:projectId', async () => {
+      const res = await request(app)
+        .patch(`/api/projects/${projectId}`)
+        .set('Authorization', `Bearer ${outsiderToken}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ name: 'Hacked Name' });
+      expect(res.status).toBe(403);
+    });
+
+    it('should return 403 for DELETE /api/projects/:projectId', async () => {
+      const res = await request(app)
+        .delete(`/api/projects/${projectId}`)
+        .set('Authorization', `Bearer ${outsiderToken}`)
+        .set('X-Requested-With', 'XMLHttpRequest');
+      expect(res.status).toBe(403);
+    });
+  });
+
   // 5. Get board columns
   it('5. should get board columns for a project', async () => {
     const res = await request(app)

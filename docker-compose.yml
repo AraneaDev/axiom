@@ -28,6 +28,7 @@ services:
       PORT: 3000
       REPOS_PATH: /data/repos
       NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:7000}
     depends_on:
       db:
         condition: service_healthy
@@ -42,6 +43,11 @@ services:
       - "7000:80"
     depends_on:
       - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   pgdata:

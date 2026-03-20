@@ -121,6 +121,7 @@ export function IssueListTable({
           {issues.map((issue) => (
             <div
               key={issue.id}
+              data-issue-row
               className={cn(
                 'flex items-center gap-3 px-4 py-2.5 border-l-2 hover:bg-surface-tertiary transition-colors duration-100 cursor-pointer',
                 PRIORITY_BORDER_COLORS[issue.priority] ?? 'border-l-transparent',
@@ -177,6 +178,7 @@ export function IssueListTable({
       {issues.map((issue) => (
         <div
           key={issue.id}
+          data-issue-row
           className={cn(
             'relative rounded-lg border border-border bg-surface p-4 hover:shadow-md hover:-translate-y-px hover:border-primary/30 transition-all duration-150',
             selectedIds.has(issue.id) && 'border-primary/50 bg-primary-light/5',

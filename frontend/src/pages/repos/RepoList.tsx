@@ -9,7 +9,7 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { PageLoader } from '@/components/ui/Spinner';
+import { ListSkeleton } from '@/components/ui/Skeleton';
 
 const VIS_ICON = { PRIVATE: Lock, INTERNAL: Building2, PUBLIC: Globe };
 const VIS_BADGE: Record<string, 'default' | 'warning' | 'success'> = {
@@ -38,7 +38,15 @@ export default function RepoList() {
     enabled: !!currentTeam?.id,
   });
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">Repositories</h1>
+        </div>
+        <ListSkeleton rows={6} />
+      </div>
+    );
 
   return (
     <div>

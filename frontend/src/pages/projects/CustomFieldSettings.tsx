@@ -212,6 +212,7 @@ export default function CustomFieldSettings() {
               type="button"
               onClick={() => setFormRequired(!formRequired)}
               className="text-text-secondary hover:text-primary transition-colors"
+              title={formRequired ? 'Mark as optional' : 'Mark as required'}
             >
               {formRequired ? (
                 <ToggleRight className="h-5 w-5 text-primary" />
@@ -282,6 +283,7 @@ export default function CustomFieldSettings() {
                       type="button"
                       onClick={() => setFormRequired(!formRequired)}
                       className="text-text-secondary hover:text-primary transition-colors"
+                      title={formRequired ? 'Mark as optional' : 'Mark as required'}
                     >
                       {formRequired ? (
                         <ToggleRight className="h-5 w-5 text-primary" />

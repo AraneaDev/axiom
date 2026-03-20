@@ -23,6 +23,8 @@ interface SearchParams {
   projectId?: string;
   limit: number;
   offset: number;
+  userId?: string;
+  orgIds?: string[];
 }
 
 interface StructuredQuery {
@@ -34,6 +36,7 @@ interface CodeSearchParams {
   q: string;
   repoIds?: string;
   limit: number;
+  userId?: string;
 }
 
 export interface CodeMatch {
@@ -132,7 +135,11 @@ export async function search(params: SearchParams) {
   }
 
   if (params.type === 'code') {
-    const codeResults = await searchCode({ q: freeText || params.q, limit: params.limit });
+    const codeResults = await searchCode({
+      q: freeText || params.q,
+      limit: params.limit,
+      userId: params.userId,
+    });
     results.push(codeResults);
   }
 
@@ -152,6 +159,10 @@ async function searchIssues(
   // Build where clause with structured filters
   const where: Prisma.IssueWhereInput = {};
   const andClauses: Prisma.IssueWhereInput[] = [];
+
+  if (params.orgIds && params.orgIds.length > 0) {
+    where.project = { team: { orgId: { in: params.orgIds } } };
+  }
 
   if (params.projectId) {
     where.projectId = params.projectId;
@@ -294,6 +305,10 @@ async function searchWiki(
   const tsq = toTsQuery(freeText);
   const where: Prisma.PageWhereInput = {};
 
+  if (params.orgIds && params.orgIds.length > 0) {
+    where.space = { team: { orgId: { in: params.orgIds } } };
+  }
+
   if (tsq) {
     try {
       const rawPages = await prisma.$queryRaw<
@@ -402,6 +417,9 @@ async function searchRepos(freeText: string, params: SearchParams) {
       { name: { contains: freeText, mode: 'insensitive' } },
       { description: { contains: freeText, mode: 'insensitive' } },
     ],
+    ...(params.orgIds && params.orgIds.length > 0
+      ? { team: { orgId: { in: params.orgIds } } }
+      : {}),
   };
 
   const [repos, total] = await Promise.all([
@@ -448,6 +466,12 @@ export async function searchCode(
   const repoFilter: Prisma.RepositoryWhereInput = {};
   if (params.repoIds) {
     repoFilter.id = { in: params.repoIds.split(',').map((s) => s.trim()) };
+  }
+  // Scope to repos the user has access to via team membership
+  if (params.userId) {
+    repoFilter.team = {
+      members: { some: { userId: params.userId } },
+    };
   }
 
   const repos = await prisma.repository.findMany({

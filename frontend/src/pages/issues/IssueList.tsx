@@ -34,7 +34,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
-import { PageLoader } from '@/components/ui/Spinner';
+import { ListSkeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
 
 type SortField = 'createdAt' | 'updatedAt' | 'priority';
@@ -279,7 +279,15 @@ export default function IssueList() {
   const hasActiveSearch = searchQuery.trim().length > 0;
   const hasSelection = selectedIds.size > 0;
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">Issues</h1>
+        </div>
+        <ListSkeleton rows={8} />
+      </div>
+    );
 
   return (
     <div>

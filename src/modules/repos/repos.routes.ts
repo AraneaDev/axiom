@@ -11,7 +11,7 @@ router.use(authenticate);
 
 // Team-scoped repo routes
 router.post('/team/:teamId', requireTeamPermission('repo:create'), reposController.create);
-router.get('/team/:teamId', reposController.list);
+router.get('/team/:teamId', requireTeamPermission('repo:read'), reposController.list);
 
 // Repo-specific routes (require org membership via repo lookup)
 router.get('/:repoId', requireRepoAccess(), reposController.get);

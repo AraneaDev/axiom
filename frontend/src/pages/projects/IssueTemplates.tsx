@@ -225,6 +225,11 @@ export default function IssueTemplates() {
                   backgroundColor: label.color + '20',
                   color: label.color,
                 }}
+                title={
+                  formLabels.includes(label.name)
+                    ? `Remove ${label.name} label`
+                    : `Add ${label.name} label`
+                }
               >
                 {label.name}
               </button>

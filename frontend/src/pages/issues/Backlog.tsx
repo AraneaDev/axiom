@@ -21,6 +21,7 @@ import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
+import { BurndownChart } from '@/components/BurndownChart';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
@@ -556,6 +557,15 @@ export default function Backlog() {
           <div className="rounded-lg border border-border bg-surface p-4">
             <VelocityChart data={velocityData} />
           </div>
+
+          {/* Burndown chart for active sprint */}
+          {sortedSprints
+            .filter((s) => s.status === 'ACTIVE')
+            .map((s) => (
+              <div key={s.id} className="rounded-lg border border-border bg-surface p-4">
+                <BurndownChart sprint={s} />
+              </div>
+            ))}
 
           {/* Sprint summary */}
           <div className="rounded-lg border border-border bg-surface p-4 space-y-2">

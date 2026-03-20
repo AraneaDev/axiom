@@ -1,3 +1,4 @@
+import { LogIn, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 
@@ -121,7 +122,17 @@ export default function Login() {
             )}
 
             <Button type="submit" disabled={loading} className="w-full mt-2" size="lg">
-              {loading ? <Spinner className="h-4 w-4" /> : needs2FA ? 'Verify' : 'Sign in'}
+              {loading ? (
+                <Spinner className="h-4 w-4" />
+              ) : needs2FA ? (
+                <>
+                  <ShieldCheck className="h-4 w-4" /> Verify
+                </>
+              ) : (
+                <>
+                  <LogIn className="h-4 w-4" /> Sign in
+                </>
+              )}
             </Button>
           </form>
 

@@ -82,7 +82,12 @@ export default function TeamMembers() {
                     { value: 'VIEWER', label: 'Viewer' },
                   ]}
                 />
-                <Button variant="ghost" size="sm" onClick={() => removeMutation.mutate(m.user.id)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeMutation.mutate(m.user.id)}
+                  title="Remove member"
+                >
                   <UserMinus className="h-3.5 w-3.5 text-danger" />
                 </Button>
               </div>

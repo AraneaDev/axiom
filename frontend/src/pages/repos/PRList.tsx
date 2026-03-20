@@ -62,16 +62,19 @@ export default function PRList() {
       </div>
 
       <div className="flex gap-2 mb-4">
-        {['OPEN', 'MERGED', 'CLOSED', ''].map((s) => (
-          <Button
-            key={s}
-            variant={statusFilter === s ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setStatusFilter(s)}
-          >
-            {s || 'All'}
-          </Button>
-        ))}
+        {(['OPEN', 'MERGED', 'CLOSED', ''] as const).map((s) => {
+          const Icon = s ? STATUS_ICON[s] : GitPullRequest;
+          return (
+            <Button
+              key={s}
+              variant={statusFilter === s ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setStatusFilter(s)}
+            >
+              <Icon className="h-4 w-4" /> {s || 'All'}
+            </Button>
+          );
+        })}
       </div>
 
       {!prs?.length ? (

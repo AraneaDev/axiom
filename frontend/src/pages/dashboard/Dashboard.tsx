@@ -26,7 +26,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { PRIORITY_COLORS } from '@/lib/constants';
 import type { Team } from '@/lib/types';
 import { cn, formatRelative } from '@/lib/utils';
@@ -330,7 +330,27 @@ export default function Dashboard() {
     enabled: !!firstOrg?.id,
   });
 
-  if (orgsLoading || dashLoading) return <PageLoader />;
+  if (orgsLoading || dashLoading)
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-64 mb-2" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+    );
 
   const now = new Date();
   const hour = now.getHours();

@@ -311,4 +311,16 @@ export const issuesApi = {
       }[];
       watching: boolean;
     }>(`/projects/${projectId}/issues/${issueNumber}/watchers`),
+
+  createColumn: (projectId: string, data: { name: string; position?: number; isDone?: boolean }) =>
+    post<BoardColumn>(`/projects/${projectId}/board/columns`, data),
+
+  updateColumn: (projectId: string, columnId: string, data: { name?: string; isDone?: boolean }) =>
+    patch<BoardColumn>(`/projects/${projectId}/board/columns/${columnId}`, data),
+
+  deleteColumn: (projectId: string, columnId: string) =>
+    del(`/projects/${projectId}/board/columns/${columnId}`),
+
+  reorderColumns: (projectId: string, positions: { id: string; position: number }[]) =>
+    patch<BoardColumn[]>(`/projects/${projectId}/board/columns/reorder`, { positions }),
 };
