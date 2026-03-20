@@ -96,6 +96,19 @@ export async function deleteOrg(orgId: string) {
 }
 
 /**
+ * List all members of an organization.
+ * @param orgId - The organization ID
+ * @returns List of org memberships with user details
+ */
+export async function listOrgMembers(orgId: string) {
+  return prisma.orgMembership.findMany({
+    where: { orgId },
+    include: { user: { select: USER_BASIC_SELECT } },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+/**
  * Add a user as a member of an organization.
  * @param orgId - The organization ID
  * @param userId - The user to add

@@ -108,8 +108,20 @@ describe('Orgs API', () => {
     expect(res.body.userId).toBe(secondUserId);
   });
 
-  // 6. List members
-  it('6. should list members of the org', async () => {
+  // 6. List members via dedicated endpoint
+  it('6. should list org members via dedicated endpoint', async () => {
+    const res = await request(app)
+      .get(`/api/orgs/${orgId}/members`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    const found = res.body.find((m: { userId: string }) => m.userId === secondUserId);
+    expect(found).toBeDefined();
+    expect(found.user).toBeDefined();
+  });
+
+  // 7. List members via org detail
+  it('7. should list members of the org', async () => {
     const res = await request(app)
       .get(`/api/orgs/${orgId}`)
       .set('Authorization', `Bearer ${token}`);
@@ -119,8 +131,8 @@ describe('Orgs API', () => {
     expect(found).toBeDefined();
   });
 
-  // 7. Remove member
-  it('7. should remove a member from the org', async () => {
+  // 8. Remove member
+  it('8. should remove a member from the org', async () => {
     const res = await request(app)
       .delete(`/api/orgs/${orgId}/members/${secondUserId}`)
       .set('Authorization', `Bearer ${token}`)

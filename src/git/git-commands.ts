@@ -1,8 +1,37 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
+import { AppError } from '../middleware/errorHandler';
+
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB
+
+// ─── Validation Helpers ─────────────────────────────────────
+
+const VALID_REF_RE = /^[a-zA-Z0-9._/~^@{}-]+$/;
+const VALID_SHA_RE = /^[a-fA-F0-9]{4,40}$/;
+
+/**
+ * Validate a git ref name (branch, tag, etc.).
+ * @param ref - The ref string to validate
+ * @throws {AppError} 400 if the ref contains invalid characters
+ */
+export function validateRef(ref: string): void {
+  if (!ref || !VALID_REF_RE.test(ref)) {
+    throw new AppError(400, 'Invalid ref');
+  }
+}
+
+/**
+ * Validate a git SHA (full or abbreviated).
+ * @param sha - The SHA string to validate
+ * @throws {AppError} 400 if the SHA is not valid hex of 4-40 chars
+ */
+export function validateSha(sha: string): void {
+  if (!sha || !VALID_SHA_RE.test(sha)) {
+    throw new AppError(400, 'Invalid ref');
+  }
+}
 
 interface ExecOptions {
   cwd: string;
@@ -108,6 +137,7 @@ export async function log(
   skip: number = 0,
   filePath?: string,
 ): Promise<CommitInfo[]> {
+  validateRef(ref);
   const format = '%H%n%h%n%an%n%ae%n%aI%n%s';
   const args = ['log', `--format=${format}`, `--skip=${skip}`, `-n`, `${limit}`, ref, '--'];
   if (filePath) args.push(filePath);
@@ -134,6 +164,7 @@ export async function log(
  * @param sha
  */
 export async function getCommit(repoPath: string, sha: string): Promise<CommitInfo | null> {
+  validateSha(sha);
   try {
     const commits = await log(repoPath, sha, 1);
     return commits[0] ?? null;
@@ -148,6 +179,7 @@ export async function getCommit(repoPath: string, sha: string): Promise<CommitIn
  * @param ref
  */
 export async function commitCount(repoPath: string, ref: string = 'HEAD'): Promise<number> {
+  validateRef(ref);
   try {
     const stdout = await git(['rev-list', '--count', ref], { cwd: repoPath });
     return parseInt(stdout.trim(), 10);
@@ -177,6 +209,7 @@ export async function lsTree(
   ref: string,
   treePath: string = '',
 ): Promise<TreeEntry[]> {
+  validateRef(ref);
   const args = ['ls-tree', '-l', ref];
   if (treePath) args.push('--', treePath.endsWith('/') ? treePath : treePath + '/');
 
@@ -208,6 +241,7 @@ export async function lsTree(
  * @param filePath
  */
 export async function showBlob(repoPath: string, ref: string, filePath: string): Promise<string> {
+  validateRef(ref);
   return git(['show', `${ref}:${filePath}`], { cwd: repoPath });
 }
 
@@ -218,6 +252,7 @@ export async function showBlob(repoPath: string, ref: string, filePath: string):
  * @param filePath
  */
 export async function blobSize(repoPath: string, ref: string, filePath: string): Promise<number> {
+  validateRef(ref);
   const stdout = await git(['cat-file', '-s', `${ref}:${filePath}`], { cwd: repoPath });
   return parseInt(stdout.trim(), 10);
 }
@@ -231,6 +266,8 @@ export async function blobSize(repoPath: string, ref: string, filePath: string):
  * @param head
  */
 export async function diff(repoPath: string, base: string, head: string): Promise<string> {
+  validateRef(base);
+  validateRef(head);
   return git(['diff', base, head], { cwd: repoPath });
 }
 
@@ -240,6 +277,7 @@ export async function diff(repoPath: string, base: string, head: string): Promis
  * @param sha
  */
 export async function diffCommit(repoPath: string, sha: string): Promise<string> {
+  validateSha(sha);
   return git(['diff-tree', '-p', '--root', sha], { cwd: repoPath });
 }
 
@@ -256,6 +294,8 @@ export interface DiffStat {
  * @param head
  */
 export async function diffStat(repoPath: string, base: string, head: string): Promise<DiffStat[]> {
+  validateRef(base);
+  validateRef(head);
   const stdout = await git(['diff', '--numstat', base, head], { cwd: repoPath });
   if (!stdout.trim()) return [];
   return stdout
@@ -288,6 +328,7 @@ export interface BlameLine {
  * @param filePath
  */
 export async function blame(repoPath: string, ref: string, filePath: string): Promise<BlameLine[]> {
+  validateRef(ref);
   const stdout = await git(['blame', '--porcelain', ref, '--', filePath], { cwd: repoPath });
   if (!stdout.trim()) return [];
 
@@ -356,6 +397,8 @@ export async function listTags(repoPath: string): Promise<TagInfo[]> {
  * @param b
  */
 export async function mergeBase(repoPath: string, a: string, b: string): Promise<string> {
+  validateRef(a);
+  validateRef(b);
   const stdout = await git(['merge-base', a, b], { cwd: repoPath });
   return stdout.trim();
 }
@@ -446,6 +489,7 @@ export async function rebaseMerge(worktreeDir: string, sourceSha: string): Promi
  * @param ref
  */
 export async function resolveRef(repoPath: string, ref: string): Promise<string> {
+  validateRef(ref);
   const stdout = await git(['rev-parse', ref], { cwd: repoPath });
   return stdout.trim();
 }

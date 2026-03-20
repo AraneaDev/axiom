@@ -87,6 +87,21 @@ export async function remove(req: Request, res: Response, next: NextFunction) {
  * @param res
  * @param next
  */
+export async function listMembers(req: Request, res: Response, next: NextFunction) {
+  try {
+    const members = await orgsService.listOrgMembers(param(req, 'orgId'));
+    res.json(members);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 export async function addMember(req: Request, res: Response, next: NextFunction) {
   try {
     const { userId, role } = req.body;

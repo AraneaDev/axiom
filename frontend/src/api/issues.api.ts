@@ -132,15 +132,6 @@ export const issuesApi = {
     data: { targetProjectId: string; targetIssueNumber: number; type: string },
   ) => post<{ id: string }>(`/projects/${projectId}/issues/${issueNumber}/links`, data),
   /**
-   * Remove a link between two issues.
-   * @param projectId
-   * @param issueNumber
-   * @param linkId
-   */
-  deleteLink: (projectId: string, issueNumber: number, linkId: string) =>
-    del(`/projects/${projectId}/issues/${issueNumber}/links/${linkId}`),
-
-  /**
    * List git commits associated with an issue.
    * @param projectId
    * @param issueNumber
@@ -300,4 +291,24 @@ export const issuesApi = {
       };
     },
   ) => patch<{ updated: number }>(`/projects/${projectId}/issues/bulk`, data),
+
+  toggleVote: (projectId: string, issueNumber: number) =>
+    post<{ voted: boolean }>(`/projects/${projectId}/issues/${issueNumber}/votes/toggle`, {}),
+
+  getVotes: (projectId: string, issueNumber: number) =>
+    get<{ count: number; voted: boolean }>(`/projects/${projectId}/issues/${issueNumber}/votes`),
+
+  toggleWatch: (projectId: string, issueNumber: number) =>
+    post<{ watching: boolean }>(`/projects/${projectId}/issues/${issueNumber}/watchers/toggle`, {}),
+
+  getWatchers: (projectId: string, issueNumber: number) =>
+    get<{
+      watchers: {
+        id: string;
+        userId: string;
+        user: { id: string; username: string; displayName: string; avatarUrl: string | null };
+        createdAt: string;
+      }[];
+      watching: boolean;
+    }>(`/projects/${projectId}/issues/${issueNumber}/watchers`),
 };

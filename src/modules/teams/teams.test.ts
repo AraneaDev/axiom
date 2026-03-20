@@ -126,8 +126,20 @@ describe('Teams API', () => {
     _teamMemberId = res.body.id;
   });
 
-  // 6. List team members
-  it('6. should list team members', async () => {
+  // 6. List team members via dedicated endpoint
+  it('6. should list team members via dedicated endpoint', async () => {
+    const res = await request(app)
+      .get(`/api/teams/${teamId}/members`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    const found = res.body.find((m: { userId: string }) => m.userId === secondUserId);
+    expect(found).toBeDefined();
+    expect(found.user).toBeDefined();
+  });
+
+  // 7. List team members via team detail
+  it('7. should list team members', async () => {
     const res = await request(app)
       .get(`/api/teams/${teamId}`)
       .set('Authorization', `Bearer ${token}`);
@@ -137,8 +149,8 @@ describe('Teams API', () => {
     expect(found).toBeDefined();
   });
 
-  // 7. Create project in team
-  it('7. should create a project in the team', async () => {
+  // 8. Create project in team
+  it('8. should create a project in the team', async () => {
     const res = await request(app)
       .post(`/api/projects/team/${teamId}`)
       .set('Authorization', `Bearer ${token}`)

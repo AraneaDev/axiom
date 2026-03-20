@@ -71,6 +71,7 @@ describe('Notifications API', () => {
   });
 
   afterAll(async () => {
+    await prisma.notificationPreference.deleteMany({ where: { userId } });
     await prisma.notification.deleteMany({ where: { userId } });
     await prisma.refreshToken.deleteMany({ where: { userId } });
     await prisma.user.deleteMany({ where: { id: userId } });
@@ -155,5 +156,84 @@ describe('Notifications API', () => {
       const res = await request(app).get('/api/notifications');
       expect(res.status).toBe(401);
     }, 15000);
+  });
+
+  // ── Notification Preferences ──────────────────────────────
+
+  describe('GET /api/notifications/preferences', () => {
+    it('should return default preferences for all 5 event types', async () => {
+      const res = await request(app)
+        .get('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('preferences');
+      expect(res.body.preferences).toHaveLength(5);
+
+      const eventTypes = res.body.preferences.map((p: { eventType: string }) => p.eventType);
+      expect(eventTypes).toContain('issue_assigned');
+      expect(eventTypes).toContain('issue_commented');
+      expect(eventTypes).toContain('pr_review_requested');
+      expect(eventTypes).toContain('pr_merged');
+      expect(eventTypes).toContain('mention');
+
+      for (const pref of res.body.preferences) {
+        expect(pref.inApp).toBe(true);
+        expect(pref.email).toBe(false);
+      }
+    });
+  });
+
+  describe('PATCH /api/notifications/preferences', () => {
+    it('should update a single preference (disable inApp for mention)', async () => {
+      const res = await request(app)
+        .patch('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ eventType: 'mention', inApp: false });
+      expect(res.status).toBe(200);
+      expect(res.body.preference.eventType).toBe('mention');
+      expect(res.body.preference.inApp).toBe(false);
+    });
+
+    it('should reflect the updated inApp value on GET', async () => {
+      const res = await request(app)
+        .get('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+
+      const mentionPref = res.body.preferences.find(
+        (p: { eventType: string }) => p.eventType === 'mention',
+      );
+      expect(mentionPref.inApp).toBe(false);
+      expect(mentionPref.email).toBe(false);
+    });
+
+    it('should enable email for an event type', async () => {
+      const res = await request(app)
+        .patch('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ eventType: 'issue_assigned', email: true });
+      expect(res.status).toBe(200);
+      expect(res.body.preference.eventType).toBe('issue_assigned');
+      expect(res.body.preference.email).toBe(true);
+    });
+
+    it('should show both changes persisted on GET', async () => {
+      const res = await request(app)
+        .get('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+
+      const mentionPref = res.body.preferences.find(
+        (p: { eventType: string }) => p.eventType === 'mention',
+      );
+      expect(mentionPref.inApp).toBe(false);
+
+      const assignedPref = res.body.preferences.find(
+        (p: { eventType: string }) => p.eventType === 'issue_assigned',
+      );
+      expect(assignedPref.email).toBe(true);
+    });
   });
 });

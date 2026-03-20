@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Pencil, X } from 'lucide-react';
+import { ArrowUp, Check, Eye, EyeOff, Pencil, X } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
 
@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageLoader } from '@/components/ui/Spinner';
-import { formatRelative } from '@/lib/utils';
+import { cn, formatRelative } from '@/lib/utils';
 
 /**
  *
@@ -54,6 +54,32 @@ export default function IssueDetail() {
     queryKey: ['issue', currentProject?.id, num],
     queryFn: () => issuesApi.get(currentProject!.id, parseInt(num!)),
     enabled: !!currentProject?.id && !!num,
+  });
+
+  const { data: voteData } = useQuery({
+    queryKey: ['issue-votes', currentProject?.id, num],
+    queryFn: () => issuesApi.getVotes(currentProject!.id, parseInt(num!)),
+    enabled: !!currentProject?.id && !!num,
+  });
+
+  const voteMutation = useMutation({
+    mutationFn: () => issuesApi.toggleVote(currentProject!.id, parseInt(num!)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['issue-votes', currentProject?.id, num] });
+    },
+  });
+
+  const { data: watcherData } = useQuery({
+    queryKey: ['issue-watchers', currentProject?.id, num],
+    queryFn: () => issuesApi.getWatchers(currentProject!.id, parseInt(num!)),
+    enabled: !!currentProject?.id && !!num,
+  });
+
+  const watchMutation = useMutation({
+    mutationFn: () => issuesApi.toggleWatch(currentProject!.id, parseInt(num!)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['issue-watchers', currentProject?.id, num] });
+    },
   });
 
   const { data: repos = [] } = useQuery({
@@ -181,10 +207,42 @@ export default function IssueDetail() {
                   <Pencil className="h-3.5 w-3.5 ml-2 inline opacity-0 group-hover:opacity-40 transition-opacity" />
                 </h1>
               )}
-              <p className="text-sm text-text-tertiary mt-1">
-                {issue.key} &middot; opened {formatRelative(issue.createdAt)} by{' '}
-                {issue.creator?.displayName}
-              </p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-sm text-text-tertiary">
+                  {issue.key} &middot; opened {formatRelative(issue.createdAt)} by{' '}
+                  {issue.creator?.displayName}
+                </p>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => voteMutation.mutate()}
+                  className={cn(
+                    'ml-2 gap-1',
+                    voteData?.voted && 'border-primary bg-primary/10 text-primary',
+                  )}
+                  title={voteData?.voted ? 'Remove vote' : 'Vote for this issue'}
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                  {voteData?.count ?? 0}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => watchMutation.mutate()}
+                  className={cn(
+                    'gap-1',
+                    watcherData?.watching && 'border-primary bg-primary/10 text-primary',
+                  )}
+                  title={watcherData?.watching ? 'Stop watching this issue' : 'Watch this issue'}
+                >
+                  {watcherData?.watching ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
+                  {watcherData?.watchers?.length ?? 0}
+                </Button>
+              </div>
             </div>
           </div>
 

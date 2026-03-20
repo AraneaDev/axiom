@@ -19,6 +19,7 @@ router.patch('/:teamId', requireTeamPermission('team:manage_members'), teamsCont
 router.delete('/:teamId', requireTeamPermission('team:delete'), teamsController.remove);
 
 // Team members
+router.get('/:teamId/members', teamsController.listMembers);
 router.post(
   '/:teamId/members',
   requireTeamPermission('team:manage_members'),

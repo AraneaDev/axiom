@@ -134,7 +134,36 @@ describe('Workflows API', () => {
     expect(res.body.length).toBe(2);
   });
 
-  it('7. should delete a workflow rule', async () => {
+  it('7. should update a workflow rule', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${projectId}/workflow-rules/${ruleId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set(XHR)
+      .send({ fromColumnId: columnBId, toColumnId: columnCId });
+    expect(res.status).toBe(200);
+    expect(res.body.fromColumn.id).toBe(columnBId);
+    expect(res.body.toColumn.id).toBe(columnCId);
+  });
+
+  it('8. should reject update to same from/to', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${projectId}/workflow-rules/${ruleId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set(XHR)
+      .send({ fromColumnId: columnAId, toColumnId: columnAId });
+    expect(res.status).toBe(400);
+  });
+
+  it('9. should 404 when updating nonexistent rule', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${projectId}/workflow-rules/00000000-0000-0000-0000-000000000000`)
+      .set('Authorization', `Bearer ${token}`)
+      .set(XHR)
+      .send({ toColumnId: columnCId });
+    expect(res.status).toBe(404);
+  });
+
+  it('10. should delete a workflow rule', async () => {
     const res = await request(app)
       .delete(`/api/projects/${projectId}/workflow-rules/${ruleId}`)
       .set('Authorization', `Bearer ${token}`)
@@ -142,7 +171,7 @@ describe('Workflows API', () => {
     expect(res.status).toBe(204);
   });
 
-  it('8. should return 404 when deleting nonexistent rule', async () => {
+  it('11. should return 404 when deleting nonexistent rule', async () => {
     const res = await request(app)
       .delete(`/api/projects/${projectId}/workflow-rules/${ruleId}`)
       .set('Authorization', `Bearer ${token}`)

@@ -16,6 +16,20 @@ interface ListResult {
   total: number;
 }
 
+export interface NotificationPreference {
+  eventType: string;
+  inApp: boolean;
+  email: boolean;
+}
+
+interface PreferencesResult {
+  preferences: NotificationPreference[];
+}
+
+interface PreferenceUpdateResult {
+  preference: NotificationPreference;
+}
+
 /** Notifications API client for listing, reading, and managing user notifications. */
 export const notificationsApi = {
   /**
@@ -42,4 +56,15 @@ export const notificationsApi = {
   markAllRead: () => post<{ success: boolean }>('/notifications/read-all', {}),
   /** Get the count of unread notifications. */
   getUnreadCount: () => get<{ count: number }>('/notifications/unread-count'),
+  /** Get notification preferences for the current user. */
+  getPreferences: () => get<PreferencesResult>('/notifications/preferences'),
+  /**
+   * Update a single notification preference.
+   * @param eventType
+   * @param settings
+   * @param settings.inApp
+   * @param settings.email
+   */
+  updatePreference: (eventType: string, settings: { inApp?: boolean; email?: boolean }) =>
+    patch<PreferenceUpdateResult>('/notifications/preferences', { eventType, ...settings }),
 };

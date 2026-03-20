@@ -41,12 +41,12 @@ model User {
   triggeredRuns           PipelineRun[]            @relation("TriggeredRuns")
   attachments             Attachment[]
   activities              Activity[]
-  notificationPreferences NotificationPreference[]
   pageComments            PageComment[]
   savedFilters            SavedFilter[]
-  issueVotes              IssueVote[]
-  issueWatchers           IssueWatcher[]
   deployments             Deployment[]             @relation("DeployedBy")
+  issueVotes              IssueVote[]
+  notificationPreferences NotificationPreference[]
+  watchedIssues           IssueWatcher[]
 
   @@map("users")
 }
@@ -269,6 +269,7 @@ model PRReview {
   body       String? // markdown
   createdAt  DateTime     @default(now())
 
+  @@index([prId])
   @@map("pr_reviews")
 }
 
@@ -289,6 +290,7 @@ model PRComment {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
+  @@index([prId])
   @@map("pr_comments")
 }
 
@@ -350,6 +352,7 @@ model BoardColumn {
   workflowRulesFrom WorkflowRule[] @relation("fromColumn")
   workflowRulesTo   WorkflowRule[] @relation("toColumn")
 
+  @@index([projectId])
   @@map("board_columns")
 }
 
@@ -548,6 +551,21 @@ model Notification {
   @@map("notifications")
 }
 
+model NotificationPreference {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventType String // e.g. "issue_assigned", "issue_commented", "pr_review_requested", "pr_merged", "mention"
+  inApp     Boolean @default(true)
+  email     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, eventType])
+  @@map("notification_preferences")
+}
+
 // ─── Branch Protection ──────────────────────────────────────
 
 model BranchProtection {
@@ -696,6 +714,8 @@ model PipelineRun {
   jobs          PipelineJob[]
   deployments   Deployment[]
 
+  @@index([pipelineId])
+  @@index([repoId])
   @@map("pipeline_runs")
 }
 
@@ -780,6 +800,7 @@ model Sprint {
 
   issues Issue[]
 
+  @@index([projectId])
   @@map("sprints")
 }
 
@@ -873,17 +894,6 @@ model Activity {
   @@map("activities")
 }
 
-model NotificationPreference {
-  id           String  @id @default(cuid())
-  userId       String
-  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  eventType    String
-  emailEnabled Boolean @default(true)
-  inAppEnabled Boolean @default(true)
-
-  @@unique([userId, eventType])
-  @@map("notification_preferences")
-}
 
 model CommitStatus {
   id          String            @id @default(cuid())
@@ -911,6 +921,7 @@ model PageComment {
   resolved   Boolean  @default(false)
   createdAt  DateTime @default(now())
 
+  @@index([pageId])
   @@map("page_comments")
 }
 
@@ -949,29 +960,7 @@ model SavedFilter {
   @@map("saved_filters")
 }
 
-model IssueVote {
-  id        String   @id @default(cuid())
-  issueId   String
-  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
 
-  @@unique([issueId, userId])
-  @@map("issue_votes")
-}
-
-model IssueWatcher {
-  id        String   @id @default(cuid())
-  issueId   String
-  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@unique([issueId, userId])
-  @@map("issue_watchers")
-}
 
 model DeploymentEnvironment {
   id              String     @id @default(cuid())
@@ -1001,4 +990,32 @@ model Deployment {
   createdAt     DateTime              @default(now())
 
   @@map("deployments")
+}
+
+// ─── Issue Votes ────────────────────────────────────────────
+
+model IssueVote {
+  id        String   @id @default(cuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([issueId, userId])
+  @@map("issue_votes")
+}
+
+// ─── Issue Watchers ─────────────────────────────────────────
+
+model IssueWatcher {
+  id        String   @id @default(cuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([issueId, userId])
+  @@map("issue_watchers")
 }

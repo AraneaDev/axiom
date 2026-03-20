@@ -1,0 +1,155 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Bell, Mail, Monitor } from 'lucide-react';
+
+import { notificationsApi, type NotificationPreference } from '@/api/notifications.api';
+import { PageLoader } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
+
+const EVENT_TYPE_LABELS: Record<string, { label: string; description: string }> = {
+  issue_assigned: {
+    label: 'Issue assigned',
+    description: 'When an issue is assigned to you',
+  },
+  issue_commented: {
+    label: 'Issue commented',
+    description: 'When someone comments on an issue you are involved in',
+  },
+  pr_review_requested: {
+    label: 'Review requested',
+    description: 'When someone requests your review on a pull request',
+  },
+  pr_merged: {
+    label: 'Pull request merged',
+    description: 'When a pull request you authored or reviewed is merged',
+  },
+  mention: {
+    label: 'Mentions',
+    description: 'When someone mentions you in a comment or description',
+  },
+};
+
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (val: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
+        disabled
+          ? 'opacity-40 cursor-not-allowed bg-surface-tertiary'
+          : checked
+            ? 'bg-primary'
+            : 'bg-surface-tertiary'
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition-transform ${
+          checked ? 'translate-x-4' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
+}
+
+/**
+ *
+ */
+export default function NotificationSettings() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['notificationPreferences'],
+    queryFn: notificationsApi.getPreferences,
+  });
+
+  const mutation = useMutation({
+    mutationFn: ({
+      eventType,
+      settings,
+    }: {
+      eventType: string;
+      settings: { inApp?: boolean; email?: boolean };
+    }) => notificationsApi.updatePreference(eventType, settings),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notificationPreferences'] });
+    },
+    onError: () => {
+      toast.error('Failed to update preference');
+    },
+  });
+
+  function handleToggle(pref: NotificationPreference, field: 'inApp' | 'email', value: boolean) {
+    mutation.mutate({ eventType: pref.eventType, settings: { [field]: value } });
+  }
+
+  if (isLoading) return <PageLoader />;
+
+  const preferences = data?.preferences ?? [];
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">Notification Settings</h1>
+        <p className="text-sm text-text-secondary mt-1">
+          Choose how you want to be notified about activity.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-surface">
+        <div className="grid grid-cols-[1fr_80px_80px] items-center gap-4 px-4 py-3 border-b border-border bg-surface-secondary text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <span>Event</span>
+          <span className="text-center flex items-center justify-center gap-1">
+            <Monitor className="h-3.5 w-3.5" /> In-app
+          </span>
+          <span className="text-center flex items-center justify-center gap-1 text-text-tertiary">
+            <Mail className="h-3.5 w-3.5" /> Email
+          </span>
+        </div>
+
+        {preferences.map((pref) => {
+          const meta = EVENT_TYPE_LABELS[pref.eventType];
+          return (
+            <div
+              key={pref.eventType}
+              className="grid grid-cols-[1fr_80px_80px] items-center gap-4 px-4 py-3 border-b border-border-light last:border-b-0"
+            >
+              <div>
+                <p className="text-sm font-medium text-text">{meta?.label ?? pref.eventType}</p>
+                {meta?.description && (
+                  <p className="text-xs text-text-tertiary mt-0.5">{meta.description}</p>
+                )}
+              </div>
+              <div className="flex justify-center">
+                <ToggleSwitch
+                  checked={pref.inApp}
+                  onChange={(val) => handleToggle(pref, 'inApp', val)}
+                />
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <ToggleSwitch checked={pref.email} onChange={() => {}} disabled />
+                <span className="text-[10px] text-text-tertiary">Coming soon</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-xs text-text-tertiary mt-4 flex items-center gap-1.5">
+        <Bell className="h-3.5 w-3.5" />
+        Email notifications are not yet available. This setting will take effect once email delivery
+        is configured.
+      </p>
+    </div>
+  );
+}

@@ -12,5 +12,7 @@ router.get('/', ctrl.list);
 router.get('/unread-count', ctrl.getCount);
 router.patch('/:id/read', ctrl.markRead);
 router.post('/read-all', ctrl.markAllRead);
+router.get('/preferences', ctrl.getPreferences);
+router.patch('/preferences', ctrl.updatePreference);
 
 export default router;

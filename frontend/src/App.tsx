@@ -42,6 +42,7 @@ const Profile = lazy(() => import('@/pages/settings/Profile'));
 const Security = lazy(() => import('@/pages/settings/Security'));
 const SshKeys = lazy(() => import('@/pages/settings/SshKeys'));
 const ApiTokens = lazy(() => import('@/pages/settings/ApiTokens'));
+const NotificationSettings = lazy(() => import('@/pages/settings/NotificationSettings'));
 const SearchResults = lazy(() => import('@/pages/search/SearchResults'));
 const PipelineRunDetail = lazy(() => import('@/pages/repos/PipelineRunDetail'));
 const CommitDetail = lazy(() => import('@/pages/repos/CommitDetail'));
@@ -145,6 +146,7 @@ function AppWithKeyboard() {
           <Route path="/settings/security" element={<Security />} />
           <Route path="/settings/ssh-keys" element={<SshKeys />} />
           <Route path="/settings/tokens" element={<ApiTokens />} />
+          <Route path="/settings/notifications" element={<NotificationSettings />} />
 
           {/* Admin */}
           <Route path="/admin" element={<AdminDashboard />} />

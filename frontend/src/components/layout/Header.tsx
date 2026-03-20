@@ -1,4 +1,4 @@
-import { Search, Menu, Moon, Sun, Settings, LogOut, User, Shield } from 'lucide-react';
+import { Search, Menu, Moon, Sun, Settings, LogOut, User, Shield, Bell } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -93,6 +93,13 @@ export function Header() {
                     className="flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text hover:bg-surface-tertiary transition-colors"
                   >
                     <Shield className="h-3.5 w-3.5" /> Security
+                  </Link>
+                  <Link
+                    to="/settings/notifications"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text hover:bg-surface-tertiary transition-colors"
+                  >
+                    <Bell className="h-3.5 w-3.5" /> Notifications
                   </Link>
                   <Link
                     to="/settings/tokens"

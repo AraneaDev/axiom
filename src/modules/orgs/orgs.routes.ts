@@ -16,6 +16,7 @@ router.patch('/:orgId', requireOrgPermission('org:manage'), orgsController.updat
 router.delete('/:orgId', requireOrgPermission('org:manage'), orgsController.remove);
 
 // Members
+router.get('/:orgId/members', orgsController.listMembers);
 router.post(
   '/:orgId/members',
   requireOrgPermission('team:manage_members'),

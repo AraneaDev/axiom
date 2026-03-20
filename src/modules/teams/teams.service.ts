@@ -121,6 +121,22 @@ export async function deleteTeam(teamId: string) {
 }
 
 /**
+ * List all members of a team with user details.
+ * @param teamId - The team ID
+ * @returns Array of team memberships with user details
+ * @throws {AppError} 404 if team not found
+ */
+export async function listTeamMembers(teamId: string) {
+  await findOrThrow(prisma.team.findUnique({ where: { id: teamId } }), 'Team not found');
+
+  return prisma.teamMembership.findMany({
+    where: { teamId },
+    include: { user: { select: USER_BASIC_SELECT } },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+/**
  * Add a user to a team, requiring they are already an org member.
  * @param teamId - The team ID
  * @param userId - The user to add

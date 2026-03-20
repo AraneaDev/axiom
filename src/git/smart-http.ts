@@ -34,11 +34,13 @@ async function authenticateGitRequest(req: Request): Promise<string> {
     throw new AppError(401, 'Token expired');
   }
 
-  // Update last used
-  await prisma.apiToken.update({
-    where: { id: apiToken.id },
-    data: { lastUsedAt: new Date() },
-  });
+  // Update last used (throttle to once per 5 minutes)
+  if (!apiToken.lastUsedAt || Date.now() - apiToken.lastUsedAt.getTime() > 5 * 60 * 1000) {
+    await prisma.apiToken.update({
+      where: { id: apiToken.id },
+      data: { lastUsedAt: new Date() },
+    });
+  }
 
   return apiToken.userId;
 }

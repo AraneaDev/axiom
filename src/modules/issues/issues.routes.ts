@@ -6,6 +6,8 @@ import { requireProjectAccess } from '../../middleware/requireProjectAccess';
 import * as branchesCtrl from './issue-branches.controller';
 import * as commitsCtrl from './issue-commits.controller';
 import * as linksCtrl from './issue-links.controller';
+import * as votesCtrl from './issue-votes.controller';
+import * as watchersCtrl from './issue-watchers.controller';
 import * as issuesController from './issues.controller';
 
 const router = Router();
@@ -50,6 +52,14 @@ router.post('/:projectId/issues/:issueNumber/branches', branchesCtrl.createBranc
 
 // Issue pull requests
 router.get('/:projectId/issues/:issueNumber/pull-requests', issuesController.listPullRequests);
+
+// Issue votes
+router.post('/:projectId/issues/:issueNumber/votes/toggle', votesCtrl.toggle);
+router.get('/:projectId/issues/:issueNumber/votes', votesCtrl.getVotes);
+
+// Issue watchers
+router.post('/:projectId/issues/:issueNumber/watchers/toggle', watchersCtrl.toggleWatch);
+router.get('/:projectId/issues/:issueNumber/watchers', watchersCtrl.getWatchers);
 
 // Board move
 router.patch('/:projectId/issues/:issueNumber/move', issuesController.moveIssue);

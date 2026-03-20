@@ -94,3 +94,64 @@ export async function getUnreadCount(userId: string) {
     where: { userId, read: false },
   });
 }
+
+// ─── Notification Preferences ──────────────────────────────
+
+const DEFAULT_EVENT_TYPES = [
+  'issue_assigned',
+  'issue_commented',
+  'pr_review_requested',
+  'pr_merged',
+  'mention',
+] as const;
+
+/**
+ * Get all notification preferences for a user, filling in defaults for
+ * any event types that don't have explicit preferences stored yet.
+ * @param userId
+ */
+export async function getPreferences(userId: string) {
+  const stored = await prisma.notificationPreference.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const byEvent = new Map(stored.map((p) => [p.eventType, p]));
+
+  return DEFAULT_EVENT_TYPES.map((eventType) => {
+    const existing = byEvent.get(eventType);
+    return {
+      eventType,
+      inApp: existing?.inApp ?? true,
+      email: existing?.email ?? false,
+    };
+  });
+}
+
+/**
+ * Upsert a single notification preference for a user.
+ * @param userId
+ * @param eventType
+ * @param data
+ * @param data.inApp
+ * @param data.email
+ */
+export async function updatePreference(
+  userId: string,
+  eventType: string,
+  data: { inApp?: boolean; email?: boolean },
+) {
+  return prisma.notificationPreference.upsert({
+    where: { userId_eventType: { userId, eventType } },
+    create: {
+      userId,
+      eventType,
+      inApp: data.inApp ?? true,
+      email: data.email ?? false,
+    },
+    update: {
+      ...(data.inApp !== undefined && { inApp: data.inApp }),
+      ...(data.email !== undefined && { email: data.email }),
+    },
+  });
+}

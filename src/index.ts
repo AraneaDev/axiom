@@ -103,6 +103,7 @@ const authLimiter = rateLimit({
 app.use(globalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
+app.use('/api/auth/register', authLimiter);
 
 // CSRF protection: require X-Requested-With header on state-changing requests
 app.use('/api', csrfGuard);

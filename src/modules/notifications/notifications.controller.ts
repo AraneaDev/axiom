@@ -75,3 +75,39 @@ export async function getCount(req: Request, res: Response, next: NextFunction) 
     next(err);
   }
 }
+
+/**
+ * GET /api/notifications/preferences
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function getPreferences(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.userId!;
+    const preferences = await notificationsService.getPreferences(userId);
+    res.json({ preferences });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PATCH /api/notifications/preferences
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function updatePreference(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.userId!;
+    const { eventType, inApp, email } = req.body;
+    const preference = await notificationsService.updatePreference(userId, eventType, {
+      inApp,
+      email,
+    });
+    res.json({ preference });
+  } catch (err) {
+    next(err);
+  }
+}
