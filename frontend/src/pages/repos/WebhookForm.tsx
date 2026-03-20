@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { webhooksApi, WEBHOOK_EVENTS, type Webhook as WebhookType } from '@/api/webhooks.api';
 import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
@@ -114,12 +115,10 @@ export function WebhookFormModal({
                 key={ev.value}
                 className="flex items-center gap-2 px-3 py-2 rounded-md border border-border hover:bg-surface-secondary cursor-pointer transition-colors text-sm"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={events.includes('*') || events.includes(ev.value)}
                   onChange={() => toggleEvent(ev.value)}
                   disabled={ev.value !== '*' && events.includes('*')}
-                  className="rounded border-border text-primary focus:ring-primary"
                 />
                 <span>{ev.label}</span>
               </label>
@@ -129,12 +128,7 @@ export function WebhookFormModal({
 
         {isEdit && (
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={active}
-              onChange={(e) => setActive(e.target.checked)}
-              className="rounded border-border text-primary focus:ring-primary"
-            />
+            <Checkbox checked={active} onChange={(e) => setActive(e.target.checked)} />
             <span>Active</span>
             <Shield className="h-3.5 w-3.5 text-text-tertiary" />
           </label>

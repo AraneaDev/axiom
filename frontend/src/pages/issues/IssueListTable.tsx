@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { cn, formatRelative } from '@/lib/utils';
@@ -106,11 +107,9 @@ export function IssueListTable({
       <div className="rounded-lg border border-border bg-surface overflow-hidden">
         {/* Select all header */}
         <div className="flex items-center gap-3 px-4 py-2 bg-surface-secondary/50 border-b border-border">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={selectedIds.size === issues.length && issues.length > 0}
             onChange={toggleSelectAll}
-            className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
             title="Select all"
           />
           <span className="text-xs text-text-tertiary font-medium">
@@ -128,12 +127,11 @@ export function IssueListTable({
                 selectedIds.has(issue.id) && 'bg-primary-light/5',
               )}
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={selectedIds.has(issue.id)}
                 onClick={(e) => toggleSelect(issue.id, e)}
                 onChange={() => {}}
-                className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer shrink-0"
+                className="shrink-0"
               />
               <Link
                 to={`/${org}/${teamSlug}/${projectSlug}/issues/${issue.number}`}
@@ -184,12 +182,11 @@ export function IssueListTable({
             selectedIds.has(issue.id) && 'border-primary/50 bg-primary-light/5',
           )}
         >
-          <input
-            type="checkbox"
+          <Checkbox
             checked={selectedIds.has(issue.id)}
             onClick={(e) => toggleSelect(issue.id, e)}
             onChange={() => {}}
-            className="absolute top-3 right-3 h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
+            className="absolute top-3 right-3"
           />
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/${issue.number}`} className="block">
             <div className="flex items-center gap-1.5 mb-2">

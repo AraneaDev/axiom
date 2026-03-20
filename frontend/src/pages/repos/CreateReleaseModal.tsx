@@ -6,6 +6,7 @@ import { releasesApi } from '@/api/releases.api';
 import { reposApi, type BranchInfo } from '@/api/repos.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
@@ -137,21 +138,11 @@ export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onC
 
         <div className="flex gap-4">
           <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isDraft}
-              onChange={(e) => setIsDraft(e.target.checked)}
-              className="rounded"
-            />
+            <Checkbox checked={isDraft} onChange={(e) => setIsDraft(e.target.checked)} />
             Save as draft
           </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isPrerelease}
-              onChange={(e) => setIsPrerelease(e.target.checked)}
-              className="rounded"
-            />
+            <Checkbox checked={isPrerelease} onChange={(e) => setIsPrerelease(e.target.checked)} />
             Pre-release
           </label>
         </div>

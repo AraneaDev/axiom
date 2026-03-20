@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 
 import { issuesApi } from '@/api/issues.api';
 import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
@@ -287,12 +288,7 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
           />
         </div>
         <label className="flex items-center gap-1.5 text-xs text-text-secondary pb-2 cursor-pointer shrink-0">
-          <input
-            type="checkbox"
-            checked={newIsDone}
-            onChange={(e) => setNewIsDone(e.target.checked)}
-            className="accent-primary"
-          />
+          <Checkbox checked={newIsDone} onChange={(e) => setNewIsDone(e.target.checked)} />
           Done
         </label>
         <div className="pb-0.5">

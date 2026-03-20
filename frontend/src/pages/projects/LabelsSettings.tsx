@@ -272,17 +272,20 @@ export default function LabelsSettings() {
                       </label>
                       <div className="flex items-center gap-1.5">
                         {PRESET_COLORS.map((c) => (
-                          <button
+                          <Button
                             key={c}
-                            type="button"
+                            variant="ghost"
+                            size="xs"
                             onClick={() => setFormColor(c)}
-                            className="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110"
+                            className="w-6 h-6 rounded-full border-2 p-0 transition-transform hover:scale-110"
                             style={{
                               backgroundColor: c,
                               borderColor: formColor === c ? 'var(--color-text)' : 'transparent',
                             }}
                             title={c}
-                          />
+                          >
+                            <Tag className="h-0 w-0" />
+                          </Button>
                         ))}
                         <Input
                           id="label-color-hex"

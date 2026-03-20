@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
@@ -286,12 +287,7 @@ function ProtectionRuleFormModal({
           <label className="block text-sm font-medium text-text">Restrictions</label>
 
           <label className="flex items-center gap-3 px-3 py-2 rounded-md border border-border hover:bg-surface-secondary cursor-pointer transition-colors">
-            <input
-              type="checkbox"
-              checked={requireCI}
-              onChange={(e) => setRequireCI(e.target.checked)}
-              className="rounded border-border text-primary focus:ring-primary"
-            />
+            <Checkbox checked={requireCI} onChange={(e) => setRequireCI(e.target.checked)} />
             <div>
               <span className="text-sm font-medium">Require status checks to pass</span>
               <p className="text-xs text-text-tertiary">
@@ -301,12 +297,7 @@ function ProtectionRuleFormModal({
           </label>
 
           <label className="flex items-center gap-3 px-3 py-2 rounded-md border border-border hover:bg-surface-secondary cursor-pointer transition-colors">
-            <input
-              type="checkbox"
-              checked={noForcePush}
-              onChange={(e) => setNoForcePush(e.target.checked)}
-              className="rounded border-border text-primary focus:ring-primary"
-            />
+            <Checkbox checked={noForcePush} onChange={(e) => setNoForcePush(e.target.checked)} />
             <div>
               <span className="text-sm font-medium">Prevent force pushes</span>
               <p className="text-xs text-text-tertiary">
@@ -316,12 +307,7 @@ function ProtectionRuleFormModal({
           </label>
 
           <label className="flex items-center gap-3 px-3 py-2 rounded-md border border-border hover:bg-surface-secondary cursor-pointer transition-colors">
-            <input
-              type="checkbox"
-              checked={noDirectPush}
-              onChange={(e) => setNoDirectPush(e.target.checked)}
-              className="rounded border-border text-primary focus:ring-primary"
-            />
+            <Checkbox checked={noDirectPush} onChange={(e) => setNoDirectPush(e.target.checked)} />
             <div>
               <span className="text-sm font-medium">Prevent direct pushes</span>
               <p className="text-xs text-text-tertiary">
@@ -331,11 +317,9 @@ function ProtectionRuleFormModal({
           </label>
 
           <label className="flex items-center gap-3 px-3 py-2 rounded-md border border-border hover:bg-surface-secondary cursor-pointer transition-colors">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={requireLinear}
               onChange={(e) => setRequireLinear(e.target.checked)}
-              className="rounded border-border text-primary focus:ring-primary"
             />
             <div>
               <span className="text-sm font-medium">Require linear history</span>
