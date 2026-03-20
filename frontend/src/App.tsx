@@ -64,6 +64,7 @@ const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'));
 const UserManagement = lazy(() => import('@/pages/admin/UserManagement'));
 const SystemSettings = lazy(() => import('@/pages/admin/SystemSettings'));
 const AuditLogs = lazy(() => import('@/pages/admin/AuditLogs'));
+const NotificationInbox = lazy(() => import('@/pages/notifications/NotificationInbox'));
 
 function SuspenseLoader({ children }: { children: React.ReactNode }) {
   return (
@@ -402,6 +403,16 @@ function AppWithKeyboard() {
               element={
                 <ErrorBoundary>
                   <PageHistory />
+                </ErrorBoundary>
+              }
+            />
+
+            {/* Notifications */}
+            <Route
+              path="/notifications"
+              element={
+                <ErrorBoundary>
+                  <NotificationInbox />
                 </ErrorBoundary>
               }
             />

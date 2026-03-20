@@ -146,23 +146,41 @@ function ReviewRequestsWidget({ prs }: { prs: DashboardPR[] }) {
         <div className="p-6 text-center text-sm text-text-tertiary">No pending review requests</div>
       ) : (
         <div className="divide-y divide-border">
-          {prs.map((pr) => (
-            <div
-              key={pr.id}
-              className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-secondary transition-colors"
-            >
-              <GitPullRequest className="h-4 w-4 text-success shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{pr.title}</p>
-                <p className="text-xs text-text-tertiary">
-                  {pr.repo.name} #{pr.number} by {pr.author.displayName}
-                </p>
+          {prs.map((pr) => {
+            const prLink = pr.repo.team
+              ? `/${pr.repo.team.org.slug}/${pr.repo.team.slug}/repos/${pr.repo.slug}/pulls/${pr.number}`
+              : null;
+            const content = (
+              <>
+                <GitPullRequest className="h-4 w-4 text-success shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{pr.title}</p>
+                  <p className="text-xs text-text-tertiary">
+                    {pr.repo.name} #{pr.number} by {pr.author.displayName}
+                  </p>
+                </div>
+                <span className="text-xs text-text-tertiary shrink-0 flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> {formatRelative(pr.createdAt)}
+                </span>
+              </>
+            );
+            return prLink ? (
+              <Link
+                key={pr.id}
+                to={prLink}
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-secondary transition-colors"
+              >
+                {content}
+              </Link>
+            ) : (
+              <div
+                key={pr.id}
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-secondary transition-colors"
+              >
+                {content}
               </div>
-              <span className="text-xs text-text-tertiary shrink-0 flex items-center gap-1">
-                <Clock className="h-3 w-3" /> {formatRelative(pr.createdAt)}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Widget>

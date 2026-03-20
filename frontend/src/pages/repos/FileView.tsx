@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { common, createLowlight } from 'lowlight';
-import { ChevronRight, Copy, Clock, FileWarning, GitBranch } from 'lucide-react';
+import { ChevronRight, ChevronDown, Copy, Clock, FileWarning, GitBranch } from 'lucide-react';
 import React from 'react';
-import { Link, Navigate, useParams } from 'react-router';
+import { Link, Navigate, useParams, useNavigate } from 'react-router';
 
 import { reposApi } from '@/api/repos.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -105,6 +107,13 @@ function flattenToLineNodes(children: HastNode[]): React.ReactNode[][] {
 export default function FileView() {
   const { ref, '*': filePath } = useParams();
   const { currentRepo, basePath, repoSlug } = useRepoContext();
+  const navigate = useNavigate();
+
+  const { data: branches } = useQuery({
+    queryKey: ['branches', currentRepo?.id],
+    queryFn: () => reposApi.listBranches(currentRepo!.id),
+    enabled: !!currentRepo?.id,
+  });
 
   const {
     data: blob,
@@ -147,6 +156,35 @@ export default function FileView() {
 
   return (
     <div>
+      {/* Branch switcher */}
+      <div className="flex items-center gap-3 mb-4">
+        <Dropdown
+          trigger={
+            <Button variant="secondary" size="sm">
+              <GitBranch className="h-4 w-4" /> {ref} <ChevronDown className="h-3 w-3" />
+            </Button>
+          }
+        >
+          <div className="max-h-64 overflow-y-auto py-1">
+            {branches?.map((branch) => (
+              <DropdownItem
+                key={branch.name}
+                onClick={() => navigate(`${basePath}/blob/${branch.name}/${filePath}`)}
+                className={branch.name === ref ? 'bg-surface-tertiary font-medium' : ''}
+              >
+                <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{branch.name}</span>
+                {branch.name === currentRepo?.defaultBranch && (
+                  <Badge variant="primary" size="sm" className="ml-auto">
+                    default
+                  </Badge>
+                )}
+              </DropdownItem>
+            ))}
+          </div>
+        </Dropdown>
+      </div>
+
       {/* Breadcrumbs */}
       <div className="flex items-center gap-1 mb-4 text-sm flex-wrap">
         <Link to={basePath} className="text-primary hover:underline">

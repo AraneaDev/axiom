@@ -228,10 +228,14 @@ export const reposApi = {
    * List pull requests, optionally filtered by status.
    * @param repoId
    * @param status
+   * @param reviewerId
    */
-  listPRs: (repoId: string, status?: string) => {
-    const q = status ? `?status=${status}` : '';
-    return get<PullRequest[]>(`/repos/${repoId}/pulls${q}`);
+  listPRs: (repoId: string, status?: string, reviewerId?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (reviewerId) params.set('reviewerId', reviewerId);
+    const q = params.toString();
+    return get<PullRequest[]>(`/repos/${repoId}/pulls${q ? `?${q}` : ''}`);
   },
   /**
    * Get a single pull request by number.

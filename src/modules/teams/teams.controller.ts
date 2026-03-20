@@ -162,3 +162,18 @@ export async function removeMember(req: Request, res: Response, next: NextFuncti
     next(err);
   }
 }
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function listOpenPRs(req: Request, res: Response, next: NextFunction) {
+  try {
+    const prs = await teamsService.listTeamOpenPRs(param(req, 'teamId'));
+    res.json(prs);
+  } catch (err) {
+    next(err);
+  }
+}

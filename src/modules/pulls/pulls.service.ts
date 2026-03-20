@@ -173,15 +173,19 @@ export async function getPR(repoId: string, prNumber: number) {
  * @param opts - Pagination options (limit, offset)
  * @param opts.limit
  * @param opts.offset
+ * @param opts.reviewerId
  * @returns Paginated list of PRs with review and comment counts
  */
 export async function listPRs(
   repoId: string,
   status?: 'OPEN' | 'MERGED' | 'CLOSED',
-  opts?: { limit?: number; offset?: number },
+  opts?: { limit?: number; offset?: number; reviewerId?: string },
 ) {
   const where: Record<string, unknown> = { repoId };
   if (status) where.status = status;
+  if (opts?.reviewerId) {
+    where.reviews = { some: { reviewerId: opts.reviewerId } };
+  }
 
   const limit = Math.min(opts?.limit ?? 25, 100);
   const offset = opts?.offset ?? 0;

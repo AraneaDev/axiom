@@ -54,9 +54,14 @@ export async function get(req: Request, res: Response, next: NextFunction) {
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
     const status = req.query.status as 'OPEN' | 'MERGED' | 'CLOSED' | undefined;
+    const reviewerId = req.query.reviewerId as string | undefined;
     const { take, skip } = parsePagination(req.query as Record<string, string>);
     res.json(
-      await pullsService.listPRs(param(req, 'repoId'), status, { limit: take, offset: skip }),
+      await pullsService.listPRs(param(req, 'repoId'), status, {
+        limit: take,
+        offset: skip,
+        reviewerId,
+      }),
     );
   } catch (err) {
     next(err);

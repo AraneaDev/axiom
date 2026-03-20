@@ -104,7 +104,14 @@ export async function getDashboard(userId: string) {
         status: 'OPEN',
       },
       include: {
-        repo: { select: { id: true, name: true, slug: true } },
+        repo: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            team: { select: { slug: true, org: { select: { slug: true } } } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 20,

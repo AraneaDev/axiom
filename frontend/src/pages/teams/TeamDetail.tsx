@@ -1,5 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { FolderKanban, BookOpen, Users, Plus, GitBranch } from 'lucide-react';
+import {
+  FolderKanban,
+  BookOpen,
+  Users,
+  Plus,
+  GitBranch,
+  GitPullRequest,
+  Clock,
+} from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
@@ -8,9 +16,11 @@ import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
+import { formatRelative } from '@/lib/utils';
 
 /**
  *
@@ -49,6 +59,12 @@ export default function TeamDetail() {
   const { data: teamDetail } = useQuery({
     queryKey: ['team', currentTeam?.id],
     queryFn: () => teamsApi.get(currentTeam!.id),
+    enabled: !!currentTeam?.id,
+  });
+
+  const { data: openPRs } = useQuery({
+    queryKey: ['team-open-prs', currentTeam?.id],
+    queryFn: () => teamsApi.listOpenPRs(currentTeam!.id),
     enabled: !!currentTeam?.id,
   });
 
@@ -183,6 +199,52 @@ export default function TeamDetail() {
                 {r.description && (
                   <p className="text-sm text-text-secondary line-clamp-1">{r.description}</p>
                 )}
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Open Pull Requests */}
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Open Pull Requests</h2>
+          {openPRs && openPRs.length > 0 && (
+            <Badge variant="default" size="sm">
+              {openPRs.length}
+            </Badge>
+          )}
+        </div>
+        {!openPRs?.length ? (
+          <EmptyState
+            icon={<GitPullRequest className="h-10 w-10" />}
+            title="No open pull requests"
+            description="Open PRs across team repos will appear here."
+          />
+        ) : (
+          <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+            {openPRs.map((pr) => (
+              <Link
+                key={pr.id}
+                to={`/${org}/${teamSlug}/repos/${pr.repo.slug}/pulls/${pr.number}`}
+                className="flex items-center gap-3 p-4 hover:bg-surface-secondary transition-colors"
+              >
+                <GitPullRequest className="h-5 w-5 text-primary shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{pr.title}</span>
+                    <Badge variant="outline" size="sm">
+                      {pr.repo.name}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-text-secondary">
+                    #{pr.number} by {pr.author.displayName} &middot; {pr.sourceBranch} →{' '}
+                    {pr.targetBranch}
+                  </p>
+                </div>
+                <span className="text-xs text-text-tertiary shrink-0 flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> {formatRelative(pr.createdAt)}
+                </span>
               </Link>
             ))}
           </div>

@@ -9,7 +9,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 
 import { notificationsApi } from '@/api/notifications.api';
 import type { Notification } from '@/api/notifications.api';
@@ -181,6 +181,17 @@ export function NotificationCenter() {
                 );
               })
             )}
+          </div>
+
+          <div className="border-t border-border-light px-4 py-2.5">
+            <Link
+              to="/notifications"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-center gap-1.5 text-xs font-medium text-primary hover:text-primary-hover transition-colors"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              View all notifications
+            </Link>
           </div>
         </div>
       )}

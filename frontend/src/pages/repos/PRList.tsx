@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { GitPullRequest, Plus, GitMerge, XCircle } from 'lucide-react';
+import { Eye, GitPullRequest, Plus, GitMerge, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { formatRelative } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth.store';
 
 const STATUS_BADGE: Record<string, 'success' | 'primary' | 'default'> = {
   OPEN: 'primary',
@@ -26,6 +27,8 @@ const STATUS_ICON = { OPEN: GitPullRequest, MERGED: GitMerge, CLOSED: XCircle };
 export default function PRList() {
   const { org, team: teamSlug, repo: repoSlug } = useParams();
   const [statusFilter, setStatusFilter] = useState<string>('OPEN');
+  const [myReviews, setMyReviews] = useState(false);
+  const { user } = useAuthStore();
 
   const { data: orgs } = useQuery({
     queryKey: ['orgs'],
@@ -49,8 +52,13 @@ export default function PRList() {
   const currentRepo = repos?.find((r) => r.slug === repoSlug);
 
   const { data: prs, isLoading } = useQuery({
-    queryKey: ['prs', currentRepo?.id, statusFilter],
-    queryFn: () => reposApi.listPRs(currentRepo!.id, statusFilter || undefined),
+    queryKey: ['prs', currentRepo?.id, statusFilter, myReviews ? user?.id : null],
+    queryFn: () =>
+      reposApi.listPRs(
+        currentRepo!.id,
+        statusFilter || undefined,
+        myReviews ? user?.id : undefined,
+      ),
     enabled: !!currentRepo?.id,
   });
 
@@ -96,6 +104,15 @@ export default function PRList() {
             </Button>
           );
         })}
+        <div className="ml-auto">
+          <Button
+            variant={myReviews ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => setMyReviews(!myReviews)}
+          >
+            <Eye className="h-4 w-4" /> My Reviews
+          </Button>
+        </div>
       </div>
 
       {!prs?.length ? (

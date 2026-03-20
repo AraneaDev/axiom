@@ -196,6 +196,47 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
 }
 
 /**
+ * List open pull requests across all repositories in a team.
+ * @param teamId - The team ID
+ * @returns List of open PRs with repo and author info
+ */
+export async function listTeamOpenPRs(teamId: string) {
+  const prs = await prisma.pullRequest.findMany({
+    where: {
+      status: 'OPEN',
+      repo: { teamId },
+    },
+    include: {
+      repo: { select: { id: true, name: true, slug: true } },
+      _count: { select: { reviews: true, comments: true } },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 25,
+  });
+
+  // Fetch author info
+  const authorIds = [...new Set(prs.map((pr) => pr.authorId))];
+  const authors =
+    authorIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: authorIds } },
+          select: USER_BASIC_SELECT,
+        })
+      : [];
+  const authorMap = new Map(authors.map((a) => [a.id, a]));
+
+  return prs.map((pr) => ({
+    ...pr,
+    author: authorMap.get(pr.authorId) ?? {
+      id: pr.authorId,
+      displayName: 'Unknown',
+      username: 'unknown',
+      avatarUrl: null,
+    },
+  }));
+}
+
+/**
  * Remove a member from a team.
  * @param teamId - The team ID
  * @param memberId - The user to remove

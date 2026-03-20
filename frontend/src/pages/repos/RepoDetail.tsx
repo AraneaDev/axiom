@@ -27,7 +27,7 @@ import { reposApi } from '@/api/repos.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Dropdown } from '@/components/ui/Dropdown';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { RepoSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
@@ -40,7 +40,10 @@ import { formatRelative } from '@/lib/utils';
 export default function RepoDetail() {
   const { org, team: teamSlug, repo: repoSlug } = useParams();
   const [activeTab, setActiveTab] = useState('code');
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const { currentRepo, basePath } = useRepoContext();
+
+  const activeBranch = selectedBranch ?? currentRepo?.defaultBranch ?? 'main';
 
   const { data: branches } = useQuery({
     queryKey: ['branches', currentRepo?.id],
@@ -49,14 +52,14 @@ export default function RepoDetail() {
   });
 
   const { data: tree } = useQuery({
-    queryKey: ['tree', currentRepo?.id, currentRepo?.defaultBranch],
-    queryFn: () => reposApi.getTree(currentRepo!.id, currentRepo!.defaultBranch),
+    queryKey: ['tree', currentRepo?.id, activeBranch],
+    queryFn: () => reposApi.getTree(currentRepo!.id, activeBranch),
     enabled: !!currentRepo?.id,
   });
 
   const { data: commits } = useQuery({
-    queryKey: ['commits', currentRepo?.id],
-    queryFn: () => reposApi.listCommits(currentRepo!.id, currentRepo!.defaultBranch, 5),
+    queryKey: ['commits', currentRepo?.id, activeBranch],
+    queryFn: () => reposApi.listCommits(currentRepo!.id, activeBranch, 5),
     enabled: !!currentRepo?.id,
   });
 
@@ -69,8 +72,8 @@ export default function RepoDetail() {
   // Find README in tree and fetch its content
   const readmeEntry = tree?.find((e) => /^readme\.md$/i.test(e.name));
   const { data: readmeBlob } = useQuery({
-    queryKey: ['blob', currentRepo?.id, currentRepo?.defaultBranch, readmeEntry?.name],
-    queryFn: () => reposApi.getBlob(currentRepo!.id, currentRepo!.defaultBranch, readmeEntry!.name),
+    queryKey: ['blob', currentRepo?.id, activeBranch, readmeEntry?.name],
+    queryFn: () => reposApi.getBlob(currentRepo!.id, activeBranch, readmeEntry!.name),
     enabled: !!currentRepo?.id && !!readmeEntry,
   });
 
@@ -174,36 +177,72 @@ export default function RepoDetail() {
       <Tabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
 
       {/* Code tab */}
-      {activeTab === 'code' && tree && (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-          {tree
-            .sort((a, b) =>
-              a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'tree' ? -1 : 1,
-            )
-            .map((entry) => (
-              <Link
-                key={entry.sha + entry.name}
-                to={
-                  entry.type === 'tree'
-                    ? `${basePath}/tree/${currentRepo.defaultBranch}/${entry.name}`
-                    : `${basePath}/blob/${currentRepo.defaultBranch}/${entry.name}`
-                }
-                className="flex items-center gap-3 px-4 py-2 hover:bg-surface-secondary transition-colors"
-              >
-                {entry.type === 'tree' ? (
-                  <FolderOpen className="h-4 w-4 text-primary" />
-                ) : (
-                  <FileText className="h-4 w-4 text-text-secondary" />
-                )}
-                <span className="text-sm">{entry.name}</span>
-                {entry.size !== undefined && (
-                  <span className="ml-auto text-xs text-text-secondary">
-                    {(entry.size / 1024).toFixed(1)} KB
-                  </span>
-                )}
-              </Link>
-            ))}
-        </div>
+      {activeTab === 'code' && (
+        <>
+          {/* Branch switcher */}
+          <div className="flex items-center gap-3">
+            <Dropdown
+              trigger={
+                <Button variant="secondary" size="sm">
+                  <GitBranch className="h-4 w-4" /> {activeBranch}{' '}
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              }
+            >
+              <div className="max-h-64 overflow-y-auto py-1">
+                {branches?.map((branch) => (
+                  <DropdownItem
+                    key={branch.name}
+                    onClick={() => setSelectedBranch(branch.name)}
+                    className={
+                      branch.name === activeBranch ? 'bg-surface-tertiary font-medium' : ''
+                    }
+                  >
+                    <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{branch.name}</span>
+                    {branch.name === currentRepo.defaultBranch && (
+                      <Badge variant="primary" size="sm" className="ml-auto">
+                        default
+                      </Badge>
+                    )}
+                  </DropdownItem>
+                ))}
+              </div>
+            </Dropdown>
+          </div>
+
+          {tree && (
+            <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+              {tree
+                .sort((a, b) =>
+                  a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'tree' ? -1 : 1,
+                )
+                .map((entry) => (
+                  <Link
+                    key={entry.sha + entry.name}
+                    to={
+                      entry.type === 'tree'
+                        ? `${basePath}/tree/${activeBranch}/${entry.name}`
+                        : `${basePath}/blob/${activeBranch}/${entry.name}`
+                    }
+                    className="flex items-center gap-3 px-4 py-2 hover:bg-surface-secondary transition-colors"
+                  >
+                    {entry.type === 'tree' ? (
+                      <FolderOpen className="h-4 w-4 text-primary" />
+                    ) : (
+                      <FileText className="h-4 w-4 text-text-secondary" />
+                    )}
+                    <span className="text-sm">{entry.name}</span>
+                    {entry.size !== undefined && (
+                      <span className="ml-auto text-xs text-text-secondary">
+                        {(entry.size / 1024).toFixed(1)} KB
+                      </span>
+                    )}
+                  </Link>
+                ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* README */}

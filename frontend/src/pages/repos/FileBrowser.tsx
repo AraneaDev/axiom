@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, FileText, ChevronRight } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { FolderOpen, FileText, ChevronRight, GitBranch, ChevronDown } from 'lucide-react';
+import { Link, useParams, useNavigate } from 'react-router';
 
 import { reposApi } from '@/api/repos.api';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useRepoContext } from '@/hooks/useRepoContext';
 
@@ -13,6 +16,13 @@ export default function FileBrowser() {
   const { ref, '*': filePath } = useParams();
   const path = filePath || '';
   const { currentRepo, basePath, repoSlug } = useRepoContext();
+  const navigate = useNavigate();
+
+  const { data: branches } = useQuery({
+    queryKey: ['branches', currentRepo?.id],
+    queryFn: () => reposApi.listBranches(currentRepo!.id),
+    enabled: !!currentRepo?.id,
+  });
 
   const { data: tree, isLoading } = useQuery({
     queryKey: ['tree', currentRepo?.id, ref, path],
@@ -31,6 +41,35 @@ export default function FileBrowser() {
 
   return (
     <div>
+      {/* Branch switcher */}
+      <div className="flex items-center gap-3 mb-4">
+        <Dropdown
+          trigger={
+            <Button variant="secondary" size="sm">
+              <GitBranch className="h-4 w-4" /> {ref} <ChevronDown className="h-3 w-3" />
+            </Button>
+          }
+        >
+          <div className="max-h-64 overflow-y-auto py-1">
+            {branches?.map((branch) => (
+              <DropdownItem
+                key={branch.name}
+                onClick={() => navigate(`${basePath}/tree/${branch.name}/${path}`)}
+                className={branch.name === ref ? 'bg-surface-tertiary font-medium' : ''}
+              >
+                <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{branch.name}</span>
+                {branch.name === currentRepo.defaultBranch && (
+                  <Badge variant="primary" size="sm" className="ml-auto">
+                    default
+                  </Badge>
+                )}
+              </DropdownItem>
+            ))}
+          </div>
+        </Dropdown>
+      </div>
+
       <div className="flex items-center gap-1 mb-4 text-sm">
         <Link to={`${basePath}`} className="text-primary hover:underline">
           {repoSlug}

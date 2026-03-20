@@ -18,6 +18,9 @@ router.get('/:teamId', teamsController.get);
 router.patch('/:teamId', requireTeamPermission('team:manage_members'), teamsController.update);
 router.delete('/:teamId', requireTeamPermission('team:delete'), teamsController.remove);
 
+// Team open PRs
+router.get('/:teamId/open-prs', teamsController.listOpenPRs);
+
 // Team members
 router.get('/:teamId/members', teamsController.listMembers);
 router.post(

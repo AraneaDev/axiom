@@ -31,7 +31,12 @@ export interface DashboardPR {
   title: string;
   status: string;
   createdAt: string;
-  repo: { id: string; name: string; slug: string };
+  repo: {
+    id: string;
+    name: string;
+    slug: string;
+    team?: { slug: string; org: { slug: string } };
+  };
   author: { id: string; displayName: string; username: string; avatarUrl: string | null };
 }
 
