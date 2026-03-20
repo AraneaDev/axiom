@@ -177,3 +177,36 @@ export async function listOpenPRs(req: Request, res: Response, next: NextFunctio
     next(err);
   }
 }
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function getActivity(req: Request, res: Response, next: NextFunction) {
+  try {
+    const activity = await teamsService.getTeamActivity(param(req, 'teamId'));
+    res.json(activity);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function getMemberProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    const profile = await teamsService.getTeamMemberProfile(
+      param(req, 'teamId'),
+      param(req, 'username'),
+    );
+    res.json(profile);
+  } catch (err) {
+    next(err);
+  }
+}

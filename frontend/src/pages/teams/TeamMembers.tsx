@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserMinus } from 'lucide-react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
@@ -85,10 +85,13 @@ export default function TeamMembers() {
             }) => (
               <div key={m.id} className="flex items-center gap-3 p-4">
                 <Avatar name={m.user.displayName} />
-                <div className="flex-1 min-w-0">
+                <Link
+                  to={`/${org}/${teamSlug}/members/${m.user.username}`}
+                  className="flex-1 min-w-0 hover:text-primary transition-colors"
+                >
                   <p className="font-medium text-sm truncate">{m.user.displayName}</p>
                   <p className="text-xs text-text-secondary">@{m.user.username}</p>
-                </div>
+                </Link>
                 <Badge variant={ROLE_BADGE[m.role] ?? 'default'}>{m.role}</Badge>
                 <div className="flex gap-1">
                   <Select

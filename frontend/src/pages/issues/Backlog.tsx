@@ -590,28 +590,80 @@ export default function Backlog() {
             ))}
 
           {/* Sprint summary */}
-          <div className="rounded-lg border border-border bg-surface p-4 space-y-2">
+          <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
             <h3 className="text-sm font-semibold">Sprint Summary</h3>
             {sortedSprints.filter((s) => s.status !== 'COMPLETED').length === 0 ? (
               <p className="text-xs text-text-tertiary">No active or planned sprints.</p>
             ) : (
               sortedSprints
                 .filter((s) => s.status !== 'COMPLETED')
-                .map((s) => (
-                  <div key={s.id} className="flex items-center justify-between text-xs">
-                    <span className="text-text truncate">{s.name}</span>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={STATUS_BADGE[s.status]} className="text-[9px]">
-                        {s.status}
-                      </Badge>
-                      <span className="text-text-tertiary tabular-nums">
-                        {s._storyPoints ??
-                          s.issues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0)}{' '}
-                        pts
-                      </span>
+                .map((s) => {
+                  const total = s.issues.length;
+                  const done = s.issues.filter((i) => i.column?.isDone).length;
+                  const inProgress = s.issues.filter((i) => i.column && !i.column.isDone).length;
+                  const todo = total - done - inProgress;
+                  const donePct = total > 0 ? (done / total) * 100 : 0;
+                  const inProgressPct = total > 0 ? (inProgress / total) * 100 : 0;
+                  const todoPct = total > 0 ? (todo / total) * 100 : 0;
+
+                  return (
+                    <div key={s.id} className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-text truncate font-medium">{s.name}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={STATUS_BADGE[s.status]} className="text-[9px]">
+                            {s.status}
+                          </Badge>
+                          <span className="text-text-tertiary tabular-nums">
+                            {s._storyPoints ??
+                              s.issues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0)}{' '}
+                            pts
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      {total > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="flex h-2 rounded-full overflow-hidden bg-surface-tertiary">
+                            {donePct > 0 && (
+                              <div
+                                className="bg-success transition-all"
+                                style={{ width: `${donePct}%` }}
+                              />
+                            )}
+                            {inProgressPct > 0 && (
+                              <div
+                                className="bg-primary transition-all"
+                                style={{ width: `${inProgressPct}%` }}
+                              />
+                            )}
+                            {todoPct > 0 && (
+                              <div
+                                className="bg-border transition-all"
+                                style={{ width: `${todoPct}%` }}
+                              />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] text-text-tertiary">
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-2 w-2 rounded-full bg-success" />
+                              Done {done}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-2 w-2 rounded-full bg-primary" />
+                              In Progress {inProgress}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-2 w-2 rounded-full bg-border" />
+                              To Do {todo}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
             )}
           </div>
         </div>

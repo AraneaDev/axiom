@@ -4,7 +4,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parsePagination, paginatedResponse } from '../../utils/pagination';
-import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
 /**
  * Create a new team within an organization, adding the creator as admin.
@@ -250,4 +250,103 @@ export async function removeTeamMember(teamId: string, memberId: string) {
     'Team membership not found',
   );
   await prisma.teamMembership.delete({ where: { id: membership.id } });
+}
+
+/**
+ * Get recent activity across a team's projects and repos.
+ * @param teamId - The team ID
+ * @param limit - Max results (default 20)
+ * @returns List of recent activity entries with user info
+ */
+export async function getTeamActivity(teamId: string, limit = 20) {
+  // Get all member user IDs for this team
+  const members = await prisma.teamMembership.findMany({
+    where: { teamId },
+    select: { userId: true },
+  });
+  const memberIds = members.map((m) => m.userId);
+
+  if (memberIds.length === 0) return [];
+
+  return prisma.activity.findMany({
+    where: { userId: { in: memberIds } },
+    include: {
+      user: { select: USER_WITH_AVATAR_SELECT },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+}
+
+/**
+ * Get a member's profile with stats scoped to a team.
+ * @param teamId - The team ID
+ * @param username - The member's username
+ * @returns Profile info with assigned issues count, open PRs, and recent activity
+ * @throws {AppError} 404 if user not found or not a team member
+ */
+export async function getTeamMemberProfile(teamId: string, username: string) {
+  const user = await prisma.user.findUnique({
+    where: { username },
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      displayName: true,
+      avatarUrl: true,
+      createdAt: true,
+    },
+  });
+  if (!user) throw new AppError(404, 'User not found');
+
+  const membership = await prisma.teamMembership.findFirst({
+    where: { teamId, userId: user.id },
+  });
+  if (!membership) throw new AppError(404, 'User is not a member of this team');
+
+  // Get team's projects and repos for scoped stats
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: {
+      projects: { select: { id: true } },
+      repos: { select: { id: true } },
+    },
+  });
+
+  const projectIds = team?.projects.map((p) => p.id) ?? [];
+  const repoIds = team?.repos.map((r) => r.id) ?? [];
+
+  const [assignedIssuesCount, openPRsCount, recentActivity] = await Promise.all([
+    prisma.issue.count({
+      where: {
+        assigneeId: user.id,
+        projectId: { in: projectIds },
+        OR: [{ column: { isDone: false } }, { columnId: null }],
+      },
+    }),
+    prisma.pullRequest.count({
+      where: {
+        authorId: user.id,
+        repoId: { in: repoIds },
+        status: 'OPEN',
+      },
+    }),
+    prisma.activity.findMany({
+      where: { userId: user.id },
+      include: {
+        user: { select: USER_WITH_AVATAR_SELECT },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    }),
+  ]);
+
+  return {
+    ...user,
+    role: membership.role,
+    joinedAt: membership.createdAt,
+    assignedIssuesCount,
+    openPRsCount,
+    recentActivity,
+  };
 }

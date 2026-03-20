@@ -24,6 +24,7 @@ const TeamList = lazy(() => import('@/pages/teams/TeamList'));
 const CreateTeam = lazy(() => import('@/pages/teams/CreateTeam'));
 const TeamDetail = lazy(() => import('@/pages/teams/TeamDetail'));
 const TeamMembers = lazy(() => import('@/pages/teams/TeamMembers'));
+const MemberProfile = lazy(() => import('@/pages/teams/MemberProfile'));
 const CreateProject = lazy(() => import('@/pages/projects/CreateProject'));
 const Backlog = lazy(() => import('@/pages/issues/Backlog'));
 const Board = lazy(() => import('@/pages/issues/Board'));
@@ -155,6 +156,14 @@ function AppWithKeyboard() {
               element={
                 <ErrorBoundary>
                   <TeamMembers />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/members/:username"
+              element={
+                <ErrorBoundary>
+                  <MemberProfile />
                 </ErrorBoundary>
               }
             />

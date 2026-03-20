@@ -7,6 +7,7 @@ import {
   GitBranch,
   GitPullRequest,
   Clock,
+  Activity,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -65,6 +66,12 @@ export default function TeamDetail() {
   const { data: openPRs } = useQuery({
     queryKey: ['team-open-prs', currentTeam?.id],
     queryFn: () => teamsApi.listOpenPRs(currentTeam!.id),
+    enabled: !!currentTeam?.id,
+  });
+
+  const { data: activity } = useQuery({
+    queryKey: ['team-activity', currentTeam?.id],
+    queryFn: () => teamsApi.getActivity(currentTeam!.id),
     enabled: !!currentTeam?.id,
   });
 
@@ -251,6 +258,48 @@ export default function TeamDetail() {
         )}
       </section>
 
+      {/* Activity Feed */}
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Recent Activity</h2>
+          {activity && activity.length > 0 && (
+            <Badge variant="default" size="sm">
+              {activity.length}
+            </Badge>
+          )}
+        </div>
+        {!activity?.length ? (
+          <EmptyState
+            icon={<Activity className="h-10 w-10" />}
+            title="No recent activity"
+            description="Activity from team members will appear here."
+          />
+        ) : (
+          <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+            {activity.map((a) => (
+              <div key={a.id} className="flex items-start gap-3 px-4 py-2.5">
+                <Avatar
+                  name={a.user.displayName}
+                  src={a.user.avatarUrl ?? undefined}
+                  size="sm"
+                  className="mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm">
+                    <span className="font-medium">{a.user.displayName}</span>{' '}
+                    <span className="text-text-secondary">{a.action}</span>{' '}
+                    <span className="text-text-secondary">{a.resourceType?.toLowerCase()}</span>
+                  </p>
+                </div>
+                <span className="text-xs text-text-tertiary shrink-0 flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> {formatRelative(a.createdAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Members preview */}
       {teamDetail?.members && (
         <section>
@@ -260,14 +309,15 @@ export default function TeamDetail() {
           <div className="flex flex-wrap gap-2">
             {teamDetail.members
               .slice(0, 10)
-              .map((m: { id: string; user: { displayName: string } }) => (
-                <div
+              .map((m: { id: string; user: { displayName: string; username: string } }) => (
+                <Link
                   key={m.id}
-                  className="flex items-center gap-2 rounded-full border border-border bg-surface pl-1 pr-3 py-1"
+                  to={`/${org}/${teamSlug}/members/${m.user.username}`}
+                  className="flex items-center gap-2 rounded-full border border-border bg-surface pl-1 pr-3 py-1 hover:border-primary/50 transition-colors"
                 >
                   <Avatar name={m.user.displayName} size="sm" />
                   <span className="text-sm">{m.user.displayName}</span>
-                </div>
+                </Link>
               ))}
           </div>
         </section>

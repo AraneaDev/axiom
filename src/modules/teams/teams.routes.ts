@@ -21,6 +21,12 @@ router.delete('/:teamId', requireTeamPermission('team:delete'), teamsController.
 // Team open PRs
 router.get('/:teamId/open-prs', teamsController.listOpenPRs);
 
+// Team activity feed
+router.get('/:teamId/activity', teamsController.getActivity);
+
+// Team member profile
+router.get('/:teamId/members/profile/:username', teamsController.getMemberProfile);
+
 // Team members
 router.get('/:teamId/members', teamsController.listMembers);
 router.post(

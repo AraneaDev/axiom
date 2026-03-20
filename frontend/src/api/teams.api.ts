@@ -83,4 +83,47 @@ export const teamsApi = {
         _count?: { reviews: number; comments: number };
       }[]
     >(`/teams/${teamId}/open-prs`),
+  /**
+   * Get team activity feed.
+   * @param teamId
+   */
+  getActivity: (teamId: string) =>
+    get<
+      {
+        id: string;
+        action: string;
+        resourceType: string;
+        resourceId: string;
+        details: Record<string, unknown> | null;
+        createdAt: string;
+        user: { id: string; displayName: string; username: string; avatarUrl: string | null };
+      }[]
+    >(`/teams/${teamId}/activity`),
+  /**
+   * Get a team member's profile with stats.
+   * @param teamId
+   * @param username
+   */
+  getMemberProfile: (teamId: string, username: string) =>
+    get<{
+      id: string;
+      email: string;
+      username: string;
+      displayName: string;
+      avatarUrl: string | null;
+      createdAt: string;
+      role: string;
+      joinedAt: string;
+      assignedIssuesCount: number;
+      openPRsCount: number;
+      recentActivity: {
+        id: string;
+        action: string;
+        resourceType: string;
+        resourceId: string;
+        details: Record<string, unknown> | null;
+        createdAt: string;
+        user: { id: string; displayName: string; username: string; avatarUrl: string | null };
+      }[];
+    }>(`/teams/${teamId}/members/profile/${username}`),
 };

@@ -1,0 +1,170 @@
+import { useQuery } from '@tanstack/react-query';
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  GitPullRequest,
+  ListChecks,
+  Mail,
+  Shield,
+  User,
+} from 'lucide-react';
+import { Link, useParams } from 'react-router';
+
+import { orgsApi } from '@/api/orgs.api';
+import { teamsApi } from '@/api/teams.api';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { DetailSkeleton } from '@/components/ui/Skeleton';
+import { formatDate, formatRelative } from '@/lib/utils';
+
+const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
+  ADMIN: 'primary',
+  MEMBER: 'default',
+  VIEWER: 'warning',
+};
+
+/**
+ *
+ */
+export default function MemberProfile() {
+  const { org, team: teamSlug, username } = useParams();
+
+  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const currentOrg = orgs?.find((o) => o.slug === org);
+
+  const { data: teams } = useQuery({
+    queryKey: ['teams', currentOrg?.id],
+    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
+    enabled: !!currentOrg?.id,
+  });
+  const currentTeam = teams?.find((t) => t.slug === teamSlug);
+
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ['member-profile', currentTeam?.id, username],
+    queryFn: () => teamsApi.getMemberProfile(currentTeam!.id, username!),
+    enabled: !!currentTeam?.id && !!username,
+  });
+
+  if (isLoading) return <DetailSkeleton />;
+
+  if (!profile) return null;
+
+  return (
+    <div className="max-w-4xl">
+      <div className="mb-6">
+        <Link to={`/${org}/${teamSlug}/members`}>
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4" /> Back to Members
+          </Button>
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        {/* Main content */}
+        <div className="space-y-6">
+          {/* Profile header */}
+          <div className="rounded-lg border border-border bg-surface p-6">
+            <div className="flex items-center gap-4">
+              <Avatar name={profile.displayName} src={profile.avatarUrl ?? undefined} size="lg" />
+              <div>
+                <h1 className="text-xl font-bold">{profile.displayName}</h1>
+                <p className="text-sm text-text-secondary">@{profile.username}</p>
+              </div>
+              <div className="ml-auto">
+                <Badge variant={ROLE_BADGE[profile.role] ?? 'default'}>{profile.role}</Badge>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Activity */}
+          <div className="rounded-lg border border-border bg-surface">
+            <div className="px-4 py-3 border-b border-border-light">
+              <h2 className="text-sm font-semibold">Recent Activity</h2>
+            </div>
+            {!profile.recentActivity?.length ? (
+              <EmptyState
+                title="No recent activity"
+                description="This member has no recorded activity yet."
+              />
+            ) : (
+              <div className="divide-y divide-border">
+                {profile.recentActivity.map((a) => (
+                  <div key={a.id} className="flex items-start gap-3 px-4 py-2.5">
+                    <Avatar
+                      name={a.user.displayName}
+                      src={a.user.avatarUrl ?? undefined}
+                      size="sm"
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm">
+                        <span className="font-medium">{a.user.displayName}</span>{' '}
+                        <span className="text-text-secondary">{a.action}</span>{' '}
+                        <span className="text-text-secondary">{a.resourceType?.toLowerCase()}</span>
+                      </p>
+                    </div>
+                    <span className="text-xs text-text-tertiary shrink-0 flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> {formatRelative(a.createdAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-4">
+          {/* Stats */}
+          <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+            <p className="text-xs text-text-secondary uppercase font-semibold">Stats</p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary flex items-center gap-2">
+                <ListChecks className="h-4 w-4" /> Assigned Issues
+              </span>
+              <span className="text-sm font-semibold">{profile.assignedIssuesCount}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary flex items-center gap-2">
+                <GitPullRequest className="h-4 w-4" /> Open PRs
+              </span>
+              <span className="text-sm font-semibold">{profile.openPRsCount}</span>
+            </div>
+          </div>
+
+          {/* Details */}
+          <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+            <p className="text-xs text-text-secondary uppercase font-semibold">Details</p>
+            <div className="flex items-center gap-2 text-sm">
+              <Mail className="h-4 w-4 text-text-tertiary" />
+              <span className="text-text-secondary">{profile.email}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <User className="h-4 w-4 text-text-tertiary" />
+              <span className="text-text-secondary">@{profile.username}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Shield className="h-4 w-4 text-text-tertiary" />
+              <Badge variant={ROLE_BADGE[profile.role] ?? 'default'} size="sm">
+                {profile.role}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Calendar className="h-4 w-4 text-text-tertiary" />
+              <span className="text-text-secondary">Joined {formatDate(profile.joinedAt)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="h-4 w-4 text-text-tertiary" />
+              <span className="text-text-secondary">
+                Account created {formatDate(profile.createdAt)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

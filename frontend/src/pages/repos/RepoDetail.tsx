@@ -77,10 +77,11 @@ export default function RepoDetail() {
     enabled: !!currentRepo?.id && !!readmeEntry,
   });
 
-  const [cloneCopied, setCloneCopied] = useState(false);
+  const [cloneCopied, setCloneCopied] = useState<'http' | 'ssh' | null>(null);
 
   if (!currentRepo) return <RepoSkeleton />;
-  const cloneUrl = `${window.location.origin}/git/${org}/${teamSlug}/${repoSlug}.git`;
+  const httpCloneUrl = `${window.location.origin}/git/${org}/${teamSlug}/${repoSlug}.git`;
+  const sshCloneUrl = `git@${window.location.hostname}:${org}/${teamSlug}/${repoSlug}.git`;
 
   const tabs = [
     { key: 'code', label: 'Code', icon: <Code className="h-4 w-4" /> },
@@ -118,32 +119,62 @@ export default function RepoDetail() {
               </Button>
             }
           >
-            <div className="p-3 min-w-[320px]">
-              <p className="text-xs font-medium text-text-secondary mb-2">HTTPS</p>
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={cloneUrl}
-                  aria-label="Clone URL"
-                  className="flex-1 text-xs font-mono bg-surface-secondary border border-border rounded px-2 py-1.5"
-                />
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => {
-                    navigator.clipboard.writeText(cloneUrl);
-                    setCloneCopied(true);
-                    setTimeout(() => setCloneCopied(false), 2000);
-                  }}
-                  title="Copy clone URL"
-                  aria-label="Copy clone URL"
-                >
-                  {cloneCopied ? (
-                    <Check className="h-4 w-4 text-success" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
+            <div className="p-3 min-w-[340px] space-y-3">
+              <div>
+                <p className="text-xs font-medium text-text-secondary mb-1.5">HTTP</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={httpCloneUrl}
+                    aria-label="HTTP clone URL"
+                    className="flex-1 text-xs font-mono bg-surface-secondary border border-border rounded px-2 py-1.5"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => {
+                      navigator.clipboard.writeText(httpCloneUrl);
+                      setCloneCopied('http');
+                      setTimeout(() => setCloneCopied(null), 2000);
+                    }}
+                    title="Copy HTTP URL"
+                    aria-label="Copy HTTP URL"
+                  >
+                    {cloneCopied === 'http' ? (
+                      <Check className="h-4 w-4 text-success" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-text-secondary mb-1.5">SSH</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={sshCloneUrl}
+                    aria-label="SSH clone URL"
+                    className="flex-1 text-xs font-mono bg-surface-secondary border border-border rounded px-2 py-1.5"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => {
+                      navigator.clipboard.writeText(sshCloneUrl);
+                      setCloneCopied('ssh');
+                      setTimeout(() => setCloneCopied(null), 2000);
+                    }}
+                    title="Copy SSH URL"
+                    aria-label="Copy SSH URL"
+                  >
+                    {cloneCopied === 'ssh' ? (
+                      <Check className="h-4 w-4 text-success" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </Dropdown>
