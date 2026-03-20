@@ -1,12 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, CheckCircle2, Circle, Clock, ListChecks, Timer, Users } from 'lucide-react';
+import {
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Download,
+  ListChecks,
+  Timer,
+  Users,
+} from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
 import { Avatar } from '@/components/ui/Avatar';
-import { Progress } from '@/components/ui/Progress';
+import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -97,6 +107,27 @@ export default function ProjectAnalytics() {
     queryFn: () => projectsApi.analytics(currentProject!.id),
     enabled: !!currentProject?.id,
   });
+
+  function handleExportAnalytics() {
+    if (!analytics) return;
+    const rows = [
+      ['Member', 'Assigned', 'In Progress', 'Completed'],
+      ...analytics.memberWorkload.map((m) => [
+        m.displayName,
+        m.assignedCount.toString(),
+        m.inProgressCount.toString(),
+        m.completedCount.toString(),
+      ]),
+    ];
+    const csv = rows.map((r) => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentProject?.name ?? 'project'}-analytics.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (isLoading || !analytics) return <AnalyticsSkeleton />;
 
@@ -287,10 +318,15 @@ export default function ProjectAnalytics() {
 
       {/* Team workload */}
       <div className="rounded-lg border border-border bg-surface p-5">
-        <h2 className="text-sm font-semibold text-text mb-4 flex items-center gap-2">
-          <Users className="h-4 w-4 text-text-secondary" />
-          Team Workload
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-text flex items-center gap-2">
+            <Users className="h-4 w-4 text-text-secondary" />
+            Team Workload
+          </h2>
+          <Button variant="secondary" size="xs" onClick={handleExportAnalytics}>
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </Button>
+        </div>
         {analytics.memberWorkload.length === 0 ? (
           <p className="text-sm text-text-tertiary">No assigned issues</p>
         ) : (
@@ -300,43 +336,85 @@ export default function ProjectAnalytics() {
                 <tr className="border-b border-border text-text-secondary text-left">
                   <th className="pb-2 font-medium">Member</th>
                   <th className="pb-2 font-medium text-right">Assigned</th>
+                  <th className="pb-2 font-medium text-right">In Progress</th>
                   <th className="pb-2 font-medium text-right">Completed</th>
-                  <th className="pb-2 font-medium w-48">Completion</th>
+                  <th className="pb-2 font-medium w-56">Load Distribution</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-light">
                 {analytics.memberWorkload.map((member) => {
-                  const rate =
-                    member.assignedCount > 0
-                      ? Math.round((member.completedCount / member.assignedCount) * 100)
-                      : 0;
+                  const openCount =
+                    member.assignedCount - member.inProgressCount - member.completedCount;
+                  const isOverloaded = member.assignedCount - member.completedCount >= 10;
                   return (
                     <tr key={member.userId}>
                       <td className="py-2.5">
                         <div className="flex items-center gap-2">
                           <Avatar name={member.displayName} size="sm" />
                           <span className="font-medium text-text">{member.displayName}</span>
+                          {isOverloaded && (
+                            <span title="High workload">
+                              <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="py-2.5 text-right tabular-nums">{member.assignedCount}</td>
+                      <td className="py-2.5 text-right tabular-nums">{member.inProgressCount}</td>
                       <td className="py-2.5 text-right tabular-nums">{member.completedCount}</td>
                       <td className="py-2.5">
-                        <div className="flex items-center gap-2">
-                          <Progress
-                            value={rate}
-                            size="sm"
-                            variant={rate >= 75 ? 'success' : rate >= 40 ? 'primary' : 'warning'}
-                          />
-                          <span className="text-xs text-text-secondary tabular-nums w-8 text-right">
-                            {rate}%
-                          </span>
-                        </div>
+                        {member.assignedCount > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 flex h-3 rounded-full overflow-hidden bg-surface-tertiary">
+                              <div
+                                className="bg-success transition-all"
+                                style={{
+                                  width: `${(member.completedCount / member.assignedCount) * 100}%`,
+                                }}
+                                title={`Completed: ${member.completedCount}`}
+                              />
+                              <div
+                                className="bg-primary transition-all"
+                                style={{
+                                  width: `${(member.inProgressCount / member.assignedCount) * 100}%`,
+                                }}
+                                title={`In Progress: ${member.inProgressCount}`}
+                              />
+                              <div
+                                className={cn(
+                                  'transition-all',
+                                  isOverloaded ? 'bg-warning' : 'bg-border',
+                                )}
+                                style={{
+                                  width: `${(openCount / member.assignedCount) * 100}%`,
+                                }}
+                                title={`Open: ${openCount}`}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-text-tertiary">--</span>
+                        )}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            <div className="flex items-center gap-4 mt-3 text-xs text-text-secondary">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-sm bg-success" /> Completed
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-sm bg-primary" /> In Progress
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-sm bg-border" /> Open
+              </span>
+              <span className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3 w-3 text-warning" /> 10+ active issues
+              </span>
+            </div>
           </div>
         )}
       </div>

@@ -355,3 +355,35 @@ export async function bulkUpdate(req: Request, res: Response, next: NextFunction
     next(err);
   }
 }
+
+/**
+ * Get time report for a project.
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function getTimeReport(req: Request, res: Response, next: NextFunction) {
+  try {
+    const report = await issuesService.getTimeReport(param(req, 'projectId'));
+    res.json(report);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Export issues as CSV.
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function exportCsv(req: Request, res: Response, next: NextFunction) {
+  try {
+    const csv = await issuesService.exportIssuesCsv(param(req, 'projectId'));
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="issues.csv"');
+    res.send(csv);
+  } catch (err) {
+    next(err);
+  }
+}

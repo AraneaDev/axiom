@@ -51,6 +51,7 @@ model User {
   notificationPreferences NotificationPreference[]
   watchedIssues           IssueWatcher[]
   sentInvitations         Invitation[]
+  timeEntries             TimeEntry[]
 
   @@map("users")
 }
@@ -458,11 +459,28 @@ model Issue {
   attachments       Attachment[]
   votes             IssueVote[]
   watchers          IssueWatcher[]
+  timeEntries       TimeEntry[]
 
   @@unique([projectId, number])
   @@index([assigneeId])
   @@index([creatorId])
   @@map("issues")
+}
+
+model TimeEntry {
+  id          String   @id @default(cuid())
+  issueId     String
+  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  minutes     Int
+  description String?
+  loggedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([issueId])
+  @@index([userId])
+  @@map("time_entries")
 }
 
 model Label {

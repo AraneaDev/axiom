@@ -159,12 +159,7 @@ export default function PipelineRunDetail() {
     queryKey: ['pipeline-run', runId],
     queryFn: () => pipelinesApi.getRun('', runId!),
     enabled: !!runId,
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return 3000;
-      const terminal = ['SUCCESS', 'FAILURE', 'CANCELLED'];
-      return terminal.includes(data.status) ? false : 2000;
-    },
+    staleTime: 10_000,
   });
 
   const isTerminal = ['SUCCESS', 'FAILURE', 'CANCELLED'].includes(run?.status ?? '');

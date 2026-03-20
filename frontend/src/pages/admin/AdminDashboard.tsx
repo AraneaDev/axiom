@@ -99,7 +99,7 @@ function HealthPanel() {
   } = useQuery<HealthStatus>({
     queryKey: ['health'],
     queryFn: healthApi.check,
-    refetchInterval: 30000,
+    staleTime: 60_000,
   });
 
   if (isLoading) return <HealthSkeleton />;

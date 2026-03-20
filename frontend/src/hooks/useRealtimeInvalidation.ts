@@ -115,6 +115,7 @@ export function useRealtimeInvalidation(): void {
         case 'pipeline:updated':
           queryClient.invalidateQueries({ queryKey: ['pipeline', event.repoId] });
           queryClient.invalidateQueries({ queryKey: ['pipelines', event.repoId] });
+          queryClient.invalidateQueries({ queryKey: ['pipeline-runs', event.repoId] });
           queryClient.invalidateQueries({ queryKey: ['pipeline-run', event.runId] });
           queryClient.invalidateQueries({ queryKey: ['pipeline-run'] });
           break;

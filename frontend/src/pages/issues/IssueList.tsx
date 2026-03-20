@@ -8,6 +8,8 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   ChevronDown,
+  Clock,
+  Download,
   X,
   Search,
   GanttChart,
@@ -25,6 +27,7 @@ import { IssueListBulkActions } from './IssueListBulkActions';
 import { IssueListFilters } from './IssueListFilters';
 import { IssueListTable } from './IssueListTable';
 
+import { getAccessToken } from '@/api/client';
 import { issuesApi } from '@/api/issues.api';
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
@@ -338,11 +341,35 @@ export default function IssueList() {
               <Zap className="h-4 w-4" /> Automations
             </Button>
           </Link>
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/time-report`}>
+            <Button variant="secondary" size="sm">
+              <Clock className="h-4 w-4" /> Time Report
+            </Button>
+          </Link>
           <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/labels`}>
             <Button variant="secondary" size="sm">
               <Tag className="h-4 w-4" /> Labels
             </Button>
           </Link>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={async () => {
+              const token = getAccessToken();
+              const res = await fetch(`/api/projects/${currentProject!.id}/issues/export`, {
+                headers: { Authorization: `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
+              });
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'issues.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
             <Button size="sm">
               <Plus className="h-4 w-4" /> New Issue

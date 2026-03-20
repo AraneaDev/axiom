@@ -9,6 +9,7 @@ import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
+import { broadcastToRoom } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
 import { logActivity } from '../activity/activity.service';
@@ -128,6 +129,9 @@ export async function createPR(
 
   await parseAndLinkIssues(pr.id, repoId, `${data.title}\n${data.body ?? ''}`);
   await logActivity('pull_request', pr.id, 'created', authorId, { title: data.title, number });
+
+  broadcastToRoom(`repo:${repoId}`, { type: 'pr:updated', repoId, prId: pr.id });
+
   return pr;
 }
 
@@ -237,6 +241,9 @@ export async function updatePR(
   });
 
   await parseAndLinkIssues(pr.id, pr.repoId, `${updatedPr.title}\n${updatedPr.body ?? ''}`);
+
+  broadcastToRoom(`repo:${repoId}`, { type: 'pr:updated', repoId, prId: pr.id });
+
   return updatedPr;
 }
 
@@ -260,6 +267,9 @@ export async function closePR(repoId: string, prNumber: number) {
     data: { status: 'CLOSED' },
   });
   await logActivity('pull_request', pr.id, 'closed', pr.authorId, { number: prNumber });
+
+  broadcastToRoom(`repo:${repoId}`, { type: 'pr:updated', repoId, prId: pr.id });
+
   return closed;
 }
 
@@ -462,6 +472,9 @@ export async function mergePR(
     number: prNumber,
     strategy: effectiveStrategy,
   });
+
+  broadcastToRoom(`repo:${repoId}`, { type: 'pr:merged', repoId, prId: pr.id });
+
   return mergedPr;
 }
 

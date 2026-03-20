@@ -57,6 +57,7 @@ const BranchCompare = lazy(() => import('@/pages/repos/BranchCompare'));
 const RepoSettings = lazy(() => import('@/pages/repos/RepoSettings'));
 const Roadmap = lazy(() => import('@/pages/issues/Roadmap'));
 const ProjectAnalytics = lazy(() => import('@/pages/projects/ProjectAnalytics'));
+const TimeReport = lazy(() => import('@/pages/projects/TimeReport'));
 const CustomFieldSettings = lazy(() => import('@/pages/projects/CustomFieldSettings'));
 const WorkflowEditor = lazy(() => import('@/pages/projects/WorkflowEditor'));
 const AutomationRules = lazy(() => import('@/pages/projects/AutomationRules'));
@@ -349,6 +350,14 @@ function AppWithKeyboard() {
               element={
                 <ErrorBoundary>
                   <ProjectAnalytics />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/time-report"
+              element={
+                <ErrorBoundary>
+                  <TimeReport />
                 </ErrorBoundary>
               }
             />

@@ -16,6 +16,7 @@ const router = Router();
 router.use(authenticate);
 router.use('/:projectId/issues', requireProjectAccess);
 router.use('/:projectId/board', requireProjectAccess);
+router.use('/:projectId/time-report', requireProjectAccess);
 
 // All routes are scoped to a project
 router.post('/:projectId/issues', issuesController.create);
@@ -27,6 +28,10 @@ router.post('/:projectId/board/columns', boardColumnsCtrl.create);
 router.patch('/:projectId/board/columns/reorder', boardColumnsCtrl.reorder);
 router.patch('/:projectId/board/columns/:columnId', boardColumnsCtrl.update);
 router.delete('/:projectId/board/columns/:columnId', boardColumnsCtrl.remove);
+
+// Time report and CSV export (must come before :issueNumber routes)
+router.get('/:projectId/time-report', issuesController.getTimeReport);
+router.get('/:projectId/issues/export', issuesController.exportCsv);
 
 // Bulk operations (must come before :issueNumber routes)
 router.patch('/:projectId/issues/bulk', issuesController.bulkUpdate);

@@ -207,30 +207,46 @@ export async function getProjectAnalytics(projectId: string) {
   }
 
   // Member workload
+  // "In progress" = columns that are not default (Backlog) and not done
+  const inProgressColumnIds = new Set(
+    project.columns.filter((c) => !c.isDefault && !c.isDone).map((c) => c.id),
+  );
+
   const allIssues = await prisma.issue.findMany({
     where: { projectId, assigneeId: { not: null } },
     select: {
       assigneeId: true,
       columnId: true,
-      assignee: { select: { id: true, displayName: true } },
+      assignee: { select: { id: true, displayName: true, username: true } },
     },
   });
 
   const workloadMap = new Map<
     string,
-    { userId: string; displayName: string; assignedCount: number; completedCount: number }
+    {
+      userId: string;
+      displayName: string;
+      username: string;
+      assignedCount: number;
+      inProgressCount: number;
+      completedCount: number;
+    }
   >();
   for (const issue of allIssues) {
     if (!issue.assigneeId || !issue.assignee) continue;
     const existing = workloadMap.get(issue.assigneeId) ?? {
       userId: issue.assigneeId,
       displayName: issue.assignee.displayName,
+      username: issue.assignee.username,
       assignedCount: 0,
+      inProgressCount: 0,
       completedCount: 0,
     };
     existing.assignedCount++;
     if (issue.columnId && doneColumnIds.has(issue.columnId)) {
       existing.completedCount++;
+    } else if (issue.columnId && inProgressColumnIds.has(issue.columnId)) {
+      existing.inProgressCount++;
     }
     workloadMap.set(issue.assigneeId, existing);
   }

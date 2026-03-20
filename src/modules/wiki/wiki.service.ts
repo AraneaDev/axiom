@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
+import { broadcastToRoom } from '../../realtime/broadcast';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
@@ -121,6 +122,9 @@ export async function createPage(
 
   await cacheInvalidate(`wiki:tree:${spaceId}`);
   await logActivity('wiki_page', page.id, 'created', authorId, { title: data.title });
+
+  broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
+
   return page;
 }
 
@@ -203,6 +207,9 @@ export async function updatePage(
 
   await cacheInvalidate(`wiki:tree:${spaceId}`);
   await logActivity('wiki_page', page.id, 'updated', authorId, { title: updated.title });
+
+  broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
+
   return updated;
 }
 
@@ -223,6 +230,8 @@ export async function deletePage(spaceId: string, pageSlug: string, userId?: str
   if (userId) {
     await logActivity('wiki_page', page.id, 'deleted', userId, { title: page.title });
   }
+
+  broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
 }
 
 /**

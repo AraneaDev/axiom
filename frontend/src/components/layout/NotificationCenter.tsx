@@ -57,7 +57,6 @@ export function NotificationCenter() {
   const { data: countData } = useQuery({
     queryKey: ['notifications', 'unread-count'],
     queryFn: () => notificationsApi.getUnreadCount(),
-    refetchInterval: 30_000,
   });
 
   const { data: listData, isLoading } = useQuery({

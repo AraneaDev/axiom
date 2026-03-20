@@ -163,7 +163,6 @@ export default function PipelinesTab({ repoId }: Props) {
   const { data: recentRuns = [] } = useQuery({
     queryKey: ['pipeline-runs', repoId],
     queryFn: () => pipelinesApi.listRuns(repoId, { limit: 10 }),
-    refetchInterval: 5000,
   });
 
   const deleteMutation = useMutation({

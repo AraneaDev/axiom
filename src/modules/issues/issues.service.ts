@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
+import { broadcastToRoom } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
@@ -118,6 +119,8 @@ export async function createIssue(
       err as Error,
     );
   });
+
+  broadcastToRoom(`project:${projectId}`, { type: 'issue:created', projectId, issueId: issue.id });
 
   return { ...issue, key: `${project.prefix}-${issue.number}` };
 }
@@ -411,6 +414,8 @@ export async function updateIssue(
     });
   }
 
+  broadcastToRoom(`project:${projectId}`, { type: 'issue:updated', projectId, issueId: issue.id });
+
   return updated;
 }
 
@@ -434,6 +439,8 @@ export async function deleteIssue(projectId: string, issueNumber: number, userId
       number: issueNumber,
     });
   }
+
+  broadcastToRoom(`project:${projectId}`, { type: 'issue:updated', projectId, issueId: issue.id });
 }
 
 /**
@@ -472,6 +479,19 @@ export async function addComment(issueId: string, authorId: string, body: string
   notifyMentions(body, authorId, `/issues/${issueId}`).catch((err) => {
     logger.error('Failed to send mention notifications', { issueId }, err as Error);
   });
+
+  // Broadcast to project room -- look up projectId from the issue
+  const issueForBroadcast = await prisma.issue.findUnique({
+    where: { id: issueId },
+    select: { projectId: true },
+  });
+  if (issueForBroadcast) {
+    broadcastToRoom(`project:${issueForBroadcast.projectId}`, {
+      type: 'comment:added',
+      projectId: issueForBroadcast.projectId,
+      issueId,
+    });
+  }
 
   return comment;
 }
@@ -589,6 +609,8 @@ export async function moveIssue(
       );
     });
   }
+
+  broadcastToRoom(`project:${projectId}`, { type: 'board:moved', projectId, issueId: issue.id });
 
   return updated;
 }
@@ -824,10 +846,20 @@ export async function logWork(
   });
   if (!issue) throw new AppError(404, 'Issue not found');
 
-  const updated = await prisma.issue.update({
-    where: { id: issue.id },
-    data: { timeSpent: (issue.timeSpent ?? 0) + minutes },
-  });
+  const [updated] = await prisma.$transaction([
+    prisma.issue.update({
+      where: { id: issue.id },
+      data: { timeSpent: (issue.timeSpent ?? 0) + minutes },
+    }),
+    prisma.timeEntry.create({
+      data: {
+        issueId: issue.id,
+        userId,
+        minutes,
+        description: description ?? null,
+      },
+    }),
+  ]);
 
   await logActivity('issue', issue.id, 'time_logged', userId, {
     minutes,
@@ -839,7 +871,7 @@ export async function logWork(
 }
 
 /**
- * Get work log entries for an issue from activity records with action='time_logged'.
+ * Get work log entries for an issue.
  * @param projectId - The project the issue belongs to
  * @param issueNumber - The issue number within the project
  * @returns List of work log entries with user, minutes, description, and timestamp
@@ -851,20 +883,166 @@ export async function getWorklogs(projectId: string, issueNumber: number) {
   });
   if (!issue) throw new AppError(404, 'Issue not found');
 
-  const activities = await prisma.activity.findMany({
-    where: { resourceType: 'issue', resourceId: issue.id, action: 'time_logged' },
+  const entries = await prisma.timeEntry.findMany({
+    where: { issueId: issue.id },
     include: { user: { select: USER_BASIC_SELECT } },
     orderBy: { createdAt: 'desc' },
   });
 
-  return activities.map((a: (typeof activities)[number]) => ({
-    id: a.id,
-    userId: a.userId,
-    user: a.user,
-    minutes: (a.details as Record<string, unknown>)?.minutes as number,
-    description: (a.details as Record<string, unknown>)?.description as string,
-    createdAt: a.createdAt,
+  return entries.map((e) => ({
+    id: e.id,
+    userId: e.userId,
+    user: e.user,
+    minutes: e.minutes,
+    description: e.description,
+    createdAt: e.createdAt,
   }));
+}
+
+/**
+ * Get time report for a project: aggregated time per member and per issue.
+ * @param projectId - The project ID
+ * @returns Time report with per-member and per-issue breakdown
+ */
+export async function getTimeReport(projectId: string) {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) throw new AppError(404, 'Project not found');
+
+  const entries = await prisma.timeEntry.findMany({
+    where: { issue: { projectId } },
+    include: {
+      user: { select: USER_BASIC_SELECT },
+      issue: {
+        select: {
+          id: true,
+          number: true,
+          title: true,
+          timeEstimate: true,
+          sprintId: true,
+          sprint: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+
+  const memberMap = new Map<
+    string,
+    { userId: string; displayName: string; username: string; totalMinutes: number }
+  >();
+
+  for (const entry of entries) {
+    const existing = memberMap.get(entry.userId) ?? {
+      userId: entry.userId,
+      displayName: entry.user.displayName,
+      username: entry.user.username,
+      totalMinutes: 0,
+    };
+    existing.totalMinutes += entry.minutes;
+    memberMap.set(entry.userId, existing);
+  }
+
+  const issueMap = new Map<
+    string,
+    {
+      issueId: string;
+      number: number;
+      title: string;
+      estimateMinutes: number | null;
+      loggedMinutes: number;
+      sprintId: string | null;
+      sprintName: string | null;
+    }
+  >();
+
+  for (const entry of entries) {
+    const existing = issueMap.get(entry.issueId) ?? {
+      issueId: entry.issueId,
+      number: entry.issue.number,
+      title: entry.issue.title,
+      estimateMinutes: entry.issue.timeEstimate,
+      loggedMinutes: 0,
+      sprintId: entry.issue.sprintId,
+      sprintName: entry.issue.sprint?.name ?? null,
+    };
+    existing.loggedMinutes += entry.minutes;
+    issueMap.set(entry.issueId, existing);
+  }
+
+  // Estimated time from all issues in the project (not just those with entries)
+  const allIssues = await prisma.issue.findMany({
+    where: { projectId, timeEstimate: { not: null } },
+    select: { assigneeId: true, timeEstimate: true },
+  });
+  const memberEstimates = new Map<string, number>();
+  for (const issue of allIssues) {
+    if (issue.assigneeId && issue.timeEstimate) {
+      memberEstimates.set(
+        issue.assigneeId,
+        (memberEstimates.get(issue.assigneeId) ?? 0) + issue.timeEstimate,
+      );
+    }
+  }
+
+  const members = Array.from(memberMap.values())
+    .map((m) => ({
+      ...m,
+      estimateMinutes: memberEstimates.get(m.userId) ?? 0,
+    }))
+    .sort((a, b) => b.totalMinutes - a.totalMinutes);
+
+  return {
+    members,
+    issues: Array.from(issueMap.values()).sort((a, b) => b.loggedMinutes - a.loggedMinutes),
+  };
+}
+
+/**
+ * Export issues as CSV.
+ * @param projectId - The project ID
+ * @returns CSV string
+ */
+export async function exportIssuesCsv(projectId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { columns: true },
+  });
+  if (!project) throw new AppError(404, 'Project not found');
+
+  const columnMap = new Map(project.columns.map((c) => [c.id, c.name]));
+
+  const issues = await prisma.issue.findMany({
+    where: { projectId },
+    include: {
+      assignee: { select: USER_BASIC_SELECT },
+      creator: { select: USER_BASIC_SELECT },
+    },
+    orderBy: { number: 'asc' },
+  });
+
+  const header = [
+    'Key',
+    'Title',
+    'Status',
+    'Priority',
+    'Type',
+    'Assignee',
+    'Created',
+    'Estimate (min)',
+    'Logged (min)',
+  ];
+  const rows = issues.map((issue) => [
+    `${project.prefix}-${issue.number}`,
+    `"${issue.title.replace(/"/g, '""')}"`,
+    issue.columnId ? (columnMap.get(issue.columnId) ?? '') : '',
+    issue.priority,
+    issue.type,
+    issue.assignee?.displayName ?? '',
+    issue.createdAt.toISOString().slice(0, 10),
+    issue.timeEstimate?.toString() ?? '',
+    issue.timeSpent?.toString() ?? '',
+  ]);
+
+  return [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
 }
 
 /**

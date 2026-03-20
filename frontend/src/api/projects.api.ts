@@ -1,6 +1,6 @@
 import { get, post, patch, del } from './client';
 
-import type { Project, ProjectAnalytics } from '@/lib/types';
+import type { Project, ProjectAnalytics, TimeReport } from '@/lib/types';
 
 /** Projects API client for project CRUD within a team. */
 export const projectsApi = {
@@ -46,4 +46,5 @@ export const projectsApi = {
    * @param projectId
    */
   analytics: (projectId: string) => get<ProjectAnalytics>(`/projects/${projectId}/analytics`),
+  timeReport: (projectId: string) => get<TimeReport>(`/projects/${projectId}/time-report`),
 };

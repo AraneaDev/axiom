@@ -60,8 +60,29 @@ export interface ProjectAnalytics {
   memberWorkload: {
     userId: string;
     displayName: string;
+    username: string;
     assignedCount: number;
+    inProgressCount: number;
     completedCount: number;
+  }[];
+}
+
+export interface TimeReport {
+  members: {
+    userId: string;
+    displayName: string;
+    username: string;
+    totalMinutes: number;
+    estimateMinutes: number;
+  }[];
+  issues: {
+    issueId: string;
+    number: number;
+    title: string;
+    estimateMinutes: number | null;
+    loggedMinutes: number;
+    sprintId: string | null;
+    sprintName: string | null;
   }[];
 }
 
