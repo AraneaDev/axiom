@@ -1,19 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Plus,
-  List,
-  Filter,
-  Users,
-  Layers,
-  X,
-  ChevronDown,
-  ChevronRight,
-  User,
-  Settings,
-} from 'lucide-react';
-import { useState, useCallback, useMemo } from 'react';
+import { Plus, List, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link, useParams } from 'react-router';
 
+import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
+import type { Filters, GroupBy } from './BoardFilters';
 import { ColumnManager } from './ColumnManager';
 
 import { issuesApi } from '@/api/issues.api';
@@ -24,29 +15,10 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { BoardSkeleton } from '@/components/ui/Skeleton';
-import {
-  PRIORITY_COLORS,
-  PRIORITY_LABELS,
-  ISSUE_TYPE_LABELS,
-  STABLE_STALE_TIME,
-} from '@/lib/constants';
+import { PRIORITY_COLORS, PRIORITY_LABELS, STABLE_STALE_TIME } from '@/lib/constants';
 import type { BoardColumn, Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
-
-type GroupBy = 'none' | 'assignee' | 'priority' | 'epic';
-
-interface Filters {
-  assignee: string[];
-  priority: string[];
-  label: string[];
-  type: string[];
-}
-
-const EMPTY_FILTERS: Filters = { assignee: [], priority: [], label: [], type: [] };
-
-function toggleFilter(arr: string[], val: string): string[] {
-  return arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val];
-}
+import { useUIStore } from '@/stores/ui.store';
 
 function applyFilters(issues: Issue[], filters: Filters): Issue[] {
   let result = issues;
@@ -169,14 +141,16 @@ function SwimLaneSection({
 
   return (
     <div className="mb-2">
-      <button
+      <Button
+        variant="ghost"
+        size="xs"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1 px-1 hover:text-text transition-colors w-full text-left"
+        className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1 px-1 hover:text-text w-full justify-start"
       >
         {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         {lane.label}
         <span className="text-text-tertiary font-normal ml-1">({lane.issues.length})</span>
-      </button>
+      </Button>
       {open && <div className="space-y-2">{children}</div>}
     </div>
   );
@@ -250,77 +224,19 @@ function Column({
   );
 }
 
-function FilterDropdown({
-  label,
-  icon,
-  options,
-  selected,
-  onToggle,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  options: { value: string; label: string }[];
-  selected: string[];
-  onToggle: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="relative">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => setOpen((o) => !o)}
-        className={cn(selected.length > 0 && 'border-primary text-primary')}
-      >
-        {icon} {label}
-        {selected.length > 0 && (
-          <span className="ml-1 bg-primary text-white text-[10px] rounded-full px-1.5 py-0.5">
-            {selected.length}
-          </span>
-        )}
-        <ChevronDown className="h-3 w-3" />
-      </Button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 w-48 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20 max-h-60 overflow-y-auto">
-            {options.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-text-tertiary">No options</p>
-            ) : (
-              options.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => onToggle(opt.value)}
-                  className={cn(
-                    'flex w-full items-center px-3 py-1.5 text-sm transition-colors',
-                    selected.includes(opt.value)
-                      ? 'bg-primary-light text-primary font-medium'
-                      : 'text-text hover:bg-surface-tertiary',
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 /**
  *
  */
 export default function Board() {
   const { org, team: teamSlug, project: projectSlug } = useParams();
   const queryClient = useQueryClient();
+  const setPreferredView = useUIStore((s) => s.setPreferredProjectView);
+  useEffect(() => {
+    setPreferredView('board');
+  }, [setPreferredView]);
   const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
-  const [showGroupMenu, setShowGroupMenu] = useState(false);
   const [showColumnManager, setShowColumnManager] = useState(false);
 
   const { data: orgs } = useQuery({
@@ -367,9 +283,6 @@ export default function Board() {
     }
     return Array.from(map.values());
   }, [allIssues]);
-
-  const activeFilterCount =
-    filters.assignee.length + filters.priority.length + filters.label.length + filters.type.length;
 
   const moveMutation = useMutation({
     mutationFn: ({
@@ -466,101 +379,14 @@ export default function Board() {
         </div>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex items-center gap-2 mb-4 bg-surface rounded-lg border border-border p-2 flex-wrap">
-        <FilterDropdown
-          label="Assignee"
-          icon={<Users className="h-3.5 w-3.5" />}
-          options={allAssignees.map((a) => ({ value: a.id, label: a.displayName }))}
-          selected={filters.assignee}
-          onToggle={(v) => setFilters((f) => ({ ...f, assignee: toggleFilter(f.assignee, v) }))}
-        />
-        <FilterDropdown
-          label="Priority"
-          icon={<Filter className="h-3.5 w-3.5" />}
-          options={Object.entries(PRIORITY_LABELS).map(([k, l]) => ({ value: k, label: l }))}
-          selected={filters.priority}
-          onToggle={(v) => setFilters((f) => ({ ...f, priority: toggleFilter(f.priority, v) }))}
-        />
-        <FilterDropdown
-          label="Label"
-          icon={<Filter className="h-3.5 w-3.5" />}
-          options={allLabels.map((l) => ({ value: l.id, label: l.name }))}
-          selected={filters.label}
-          onToggle={(v) => setFilters((f) => ({ ...f, label: toggleFilter(f.label, v) }))}
-        />
-        <FilterDropdown
-          label="Type"
-          icon={<Filter className="h-3.5 w-3.5" />}
-          options={Object.entries(ISSUE_TYPE_LABELS).map(([k, l]) => ({ value: k, label: l }))}
-          selected={filters.type}
-          onToggle={(v) => setFilters((f) => ({ ...f, type: toggleFilter(f.type, v) }))}
-        />
-
-        {activeFilterCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setFilters(EMPTY_FILTERS)}
-            className="text-text-tertiary hover:text-danger"
-          >
-            <X className="h-3.5 w-3.5" /> Clear filters
-          </Button>
-        )}
-
-        <div className="ml-auto relative">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowGroupMenu((o) => !o)}
-            className={cn(groupBy !== 'none' && 'border-primary text-primary')}
-          >
-            <Layers className="h-3.5 w-3.5" /> Group by
-            {groupBy !== 'none' && (
-              <span className="ml-1 text-xs font-medium">
-                {groupBy === 'assignee' ? 'Assignee' : groupBy === 'priority' ? 'Priority' : 'Epic'}
-              </span>
-            )}
-            <ChevronDown className="h-3 w-3" />
-          </Button>
-          {showGroupMenu && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowGroupMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 w-44 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20">
-                {(
-                  [
-                    ['none', 'None'],
-                    ['assignee', 'Assignee'],
-                    ['priority', 'Priority'],
-                    ['epic', 'Epic'],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => {
-                      setGroupBy(value);
-                      setShowGroupMenu(false);
-                    }}
-                    className={cn(
-                      'flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors',
-                      groupBy === value
-                        ? 'bg-primary-light text-primary font-medium'
-                        : 'text-text hover:bg-surface-tertiary',
-                    )}
-                  >
-                    {value === 'none' && <X className="h-3.5 w-3.5" />}
-                    {value === 'assignee' && <User className="h-3.5 w-3.5" />}
-                    {value === 'priority' && <Filter className="h-3.5 w-3.5" />}
-                    {value === 'epic' && <Layers className="h-3.5 w-3.5" />}
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      <BoardFilters
+        filters={filters}
+        onFiltersChange={setFilters}
+        groupBy={groupBy}
+        onGroupByChange={setGroupBy}
+        allAssignees={allAssignees}
+        allLabels={allLabels}
+      />
 
       <div
         className="flex gap-4 overflow-x-auto pb-4"

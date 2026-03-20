@@ -14,7 +14,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link } from 'react-router';
 
 import { notificationsApi } from '@/api/notifications.api';
 import type { Notification } from '@/api/notifications.api';
@@ -75,7 +75,6 @@ const FILTER_TABS = [
 export default function NotificationInbox() {
   const [filter, setFilter] = useState<FilterTab>('all');
   const [page, setPage] = useState(0);
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const unreadOnly = filter === 'unread';
@@ -119,15 +118,6 @@ export default function NotificationInbox() {
     if (a.read !== b.read) return a.read ? 1 : -1;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
-
-  function handleNotificationClick(notification: Notification) {
-    if (!notification.read) {
-      markReadMutation.mutate(notification.id);
-    }
-    if (notification.link) {
-      navigate(notification.link);
-    }
-  }
 
   function handleMarkRead(e: React.MouseEvent, id: string) {
     e.stopPropagation();
@@ -180,15 +170,13 @@ export default function NotificationInbox() {
           <div className="rounded-lg border border-border bg-surface divide-y divide-border">
             {sorted.map((notification) => {
               const Icon = notificationIcon(notification.type);
-              return (
-                <button
-                  key={notification.id}
-                  onClick={() => handleNotificationClick(notification)}
-                  className={cn(
-                    'flex items-center gap-4 w-full px-4 py-3 text-left hover:bg-surface-tertiary transition-colors',
-                    !notification.read && 'bg-primary-light/20',
-                  )}
-                >
+              const rowClass = cn(
+                'flex items-center gap-4 w-full px-4 py-3 text-left hover:bg-surface-tertiary transition-colors',
+                !notification.read && 'bg-primary-light/20',
+              );
+
+              const content = (
+                <>
                   <div
                     className={cn(
                       'flex-shrink-0 rounded-md p-2',
@@ -228,17 +216,36 @@ export default function NotificationInbox() {
                   </span>
 
                   {!notification.read && (
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="xs"
                       onClick={(e) => handleMarkRead(e, notification.id)}
-                      className="flex-shrink-0 p-1.5 rounded-md hover:bg-surface-secondary transition-colors"
+                      className="flex-shrink-0 p-1.5"
                       title="Mark as read"
                     >
                       <Check className="h-4 w-4 text-text-tertiary hover:text-primary" />
-                    </button>
+                    </Button>
                   )}
 
                   {notification.read && <div className="w-[30px] flex-shrink-0" />}
-                </button>
+                </>
+              );
+
+              return notification.link ? (
+                <Link
+                  key={notification.id}
+                  to={notification.link}
+                  onClick={() => {
+                    if (!notification.read) markReadMutation.mutate(notification.id);
+                  }}
+                  className={rowClass}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div key={notification.id} className={rowClass}>
+                  {content}
+                </div>
               );
             })}
           </div>

@@ -2,6 +2,8 @@ import { CircleAlert } from 'lucide-react';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { cn } from '@/lib/utils';
 
 export interface IssueReferenceItem {
   id: string;
@@ -54,12 +56,15 @@ const IssueReferenceSuggestionList = forwardRef<
   return (
     <div className="bg-surface-elevated border border-border rounded-lg shadow-lg overflow-hidden min-w-[260px] max-w-[400px]">
       {items.map((item, idx) => (
-        <button
+        <Button
           key={item.id}
+          variant="ghost"
+          size="sm"
           onClick={() => command(item)}
-          className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary transition-colors ${
-            idx === selectedIndex ? 'bg-surface-tertiary' : ''
-          }`}
+          className={cn(
+            'w-full justify-start rounded-none px-3 py-2',
+            idx === selectedIndex ? 'bg-surface-tertiary' : '',
+          )}
         >
           <CircleAlert className="h-3.5 w-3.5 text-text-tertiary shrink-0" />
           <span className="font-medium text-primary shrink-0">{item.key}</span>
@@ -69,7 +74,7 @@ const IssueReferenceSuggestionList = forwardRef<
               {item.status}
             </Badge>
           )}
-        </button>
+        </Button>
       ))}
     </div>
   );

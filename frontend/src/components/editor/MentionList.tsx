@@ -1,6 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 
 import { Avatar } from '@/components/ui/Avatar';
+import { Button } from '@/components/ui/Button';
+import { cn } from '@/lib/utils';
 
 interface MentionItem {
   id: string;
@@ -47,15 +49,20 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(({ items, comma
   return (
     <div className="bg-surface-elevated border border-border rounded-lg shadow-lg overflow-hidden min-w-[180px]">
       {items.map((item, idx) => (
-        <button
+        <Button
           key={item.id}
+          variant="ghost"
+          size="sm"
           onClick={() => command(item)}
-          className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-secondary transition-colors ${idx === selectedIndex ? 'bg-surface-secondary' : ''}`}
+          className={cn(
+            'w-full justify-start rounded-none px-3 py-2',
+            idx === selectedIndex ? 'bg-surface-secondary' : '',
+          )}
         >
           <Avatar name={item.displayName} size="sm" />
           <span className="font-medium">{item.displayName}</span>
           <span className="text-text-tertiary text-xs">@{item.username}</span>
-        </button>
+        </Button>
       ))}
     </div>
   );

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Clock, Download, Timer, Users } from 'lucide-react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
@@ -145,7 +145,12 @@ export default function TimeReport() {
                       <td className="py-2.5">
                         <div className="flex items-center gap-2">
                           <Avatar name={member.displayName} size="sm" />
-                          <span className="font-medium text-text">{member.displayName}</span>
+                          <Link
+                            to={`/${org}/${teamSlug}/members/${member.username}`}
+                            className="font-medium text-text hover:text-primary hover:underline"
+                          >
+                            {member.displayName}
+                          </Link>
                         </div>
                       </td>
                       <td className="py-2.5 text-right tabular-nums font-medium">

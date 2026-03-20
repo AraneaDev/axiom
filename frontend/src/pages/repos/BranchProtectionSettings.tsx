@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
@@ -81,13 +82,16 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
       {isLoading && <ListSkeleton rows={3} />}
 
       {!isLoading && rules.length === 0 && (
-        <div className="rounded-lg border border-border bg-surface p-8 text-center">
-          <ShieldOff className="h-8 w-8 text-text-tertiary mx-auto mb-2" />
-          <p className="text-sm text-text-secondary">No branch protection rules configured.</p>
-          <p className="text-xs text-text-tertiary mt-1">
-            Add a rule to enforce review and merge policies on specific branches.
-          </p>
-        </div>
+        <EmptyState
+          icon={<ShieldOff />}
+          title="No branch protection rules"
+          description="Add a rule to enforce review and merge policies on specific branches."
+          action={
+            <Button size="sm" onClick={() => setShowForm(true)}>
+              <Plus className="h-4 w-4" /> Add rule
+            </Button>
+          }
+        />
       )}
 
       {rules.length > 0 && (

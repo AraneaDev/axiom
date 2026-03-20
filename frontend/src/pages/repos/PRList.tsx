@@ -140,7 +140,21 @@ export default function PRList() {
                     <Badge variant={STATUS_BADGE[pr.status]}>{pr.status}</Badge>
                   </div>
                   <p className="text-xs text-text-secondary">
-                    #{pr.number} &middot; {pr.sourceBranch} → {pr.targetBranch} &middot;{' '}
+                    #{pr.number}
+                    {pr.author && (
+                      <>
+                        {' '}
+                        &middot;{' '}
+                        <Link
+                          to={`/${org}/${teamSlug}/members/${pr.author.username}`}
+                          className="hover:text-primary hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {pr.author.displayName}
+                        </Link>
+                      </>
+                    )}{' '}
+                    &middot; {pr.sourceBranch} → {pr.targetBranch} &middot;{' '}
                     {formatRelative(pr.createdAt)}
                   </p>
                 </div>

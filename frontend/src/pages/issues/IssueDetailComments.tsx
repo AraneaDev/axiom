@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { MessageSquare, Pencil, Trash2, Check, X } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 
 import { type ActivityEvent } from '@/api/activity.api';
 import { issuesApi } from '@/api/issues.api';
@@ -23,6 +24,8 @@ interface IssueDetailCommentsProps {
   commentBody: string;
   onCommentBodyChange: (value: string) => void;
   basePath?: string;
+  orgSlug?: string;
+  teamSlug?: string;
 }
 
 /**
@@ -35,6 +38,8 @@ interface IssueDetailCommentsProps {
  * @param root0.commentBody
  * @param root0.onCommentBodyChange
  * @param root0.basePath
+ * @param root0.orgSlug
+ * @param root0.teamSlug
  */
 export function IssueDetailComments({
   issue,
@@ -44,6 +49,8 @@ export function IssueDetailComments({
   commentBody,
   onCommentBodyChange,
   basePath,
+  orgSlug,
+  teamSlug,
 }: IssueDetailCommentsProps) {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -105,9 +112,18 @@ export function IssueDetailComments({
               </div>
               <div className="flex-1 rounded-lg border border-border bg-surface overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2 bg-surface-secondary/40 border-b border-border-light">
-                  <span className="text-sm font-medium text-text">
-                    {comment.author.displayName}
-                  </span>
+                  {orgSlug && teamSlug ? (
+                    <Link
+                      to={`/${orgSlug}/${teamSlug}/members/${comment.author.username}`}
+                      className="text-sm font-medium text-text hover:text-primary transition-colors"
+                    >
+                      {comment.author.displayName}
+                    </Link>
+                  ) : (
+                    <span className="text-sm font-medium text-text">
+                      {comment.author.displayName}
+                    </span>
+                  )}
                   <span className="text-xs text-text-tertiary">
                     {formatRelative(comment.createdAt)}
                   </span>

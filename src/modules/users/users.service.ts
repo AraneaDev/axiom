@@ -164,10 +164,96 @@ export async function getDashboard(userId: string) {
     },
   }));
 
+  // Hydrate activities with resource titles and links
+  const issueActivityIds = recentActivity
+    .filter((a) => a.resourceType === 'issue')
+    .map((a) => a.resourceId);
+  const prActivityIds = recentActivity
+    .filter((a) => a.resourceType === 'pull_request')
+    .map((a) => a.resourceId);
+  const wikiActivityIds = recentActivity
+    .filter((a) => a.resourceType === 'wiki_page')
+    .map((a) => a.resourceId);
+
+  const teamOrgSelect = { slug: true, org: { select: { slug: true } } } as const;
+
+  const activityIssues =
+    issueActivityIds.length > 0
+      ? await prisma.issue.findMany({
+          where: { id: { in: issueActivityIds } },
+          select: {
+            id: true,
+            number: true,
+            title: true,
+            project: { select: { slug: true, prefix: true, team: { select: teamOrgSelect } } },
+          },
+        })
+      : [];
+
+  const activityPRs =
+    prActivityIds.length > 0
+      ? await prisma.pullRequest.findMany({
+          where: { id: { in: prActivityIds } },
+          select: {
+            id: true,
+            number: true,
+            title: true,
+            repo: { select: { slug: true, team: { select: teamOrgSelect } } },
+          },
+        })
+      : [];
+
+  const activityWikiPages =
+    wikiActivityIds.length > 0
+      ? await prisma.page.findMany({
+          where: { id: { in: wikiActivityIds } },
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            space: { select: { slug: true, team: { select: teamOrgSelect } } },
+          },
+        })
+      : [];
+
+  const issueMap = new Map(activityIssues.map((i) => [i.id, i]));
+  const prMap = new Map(activityPRs.map((p) => [p.id, p]));
+  const wikiMap = new Map(activityWikiPages.map((w) => [w.id, w]));
+
+  const enrichedActivity = recentActivity.map((a) => {
+    let resourceTitle: string | null = null;
+    let resourceLink: string | null = null;
+    let resourceKey: string | null = null;
+
+    if (a.resourceType === 'issue') {
+      const issue = issueMap.get(a.resourceId);
+      if (issue) {
+        resourceTitle = issue.title;
+        resourceKey = `${issue.project.prefix}-${issue.number}`;
+        resourceLink = `/${issue.project.team.org.slug}/${issue.project.team.slug}/${issue.project.slug}/issues/${issue.number}`;
+      }
+    } else if (a.resourceType === 'pull_request') {
+      const pr = prMap.get(a.resourceId);
+      if (pr) {
+        resourceTitle = pr.title;
+        resourceKey = `#${pr.number}`;
+        resourceLink = `/${pr.repo.team?.org.slug}/${pr.repo.team?.slug}/repos/${pr.repo.slug}/pulls/${pr.number}`;
+      }
+    } else if (a.resourceType === 'wiki_page') {
+      const page = wikiMap.get(a.resourceId);
+      if (page) {
+        resourceTitle = page.title;
+        resourceLink = `/${page.space.team.org.slug}/${page.space.team.slug}/wiki/${page.space.slug}/${page.slug}`;
+      }
+    }
+
+    return { ...a, resourceTitle, resourceLink, resourceKey };
+  });
+
   return {
     assignedIssues,
     reviewRequests: reviewRequestsWithAuthors,
-    recentActivity,
+    recentActivity: enrichedActivity,
     upcomingDueDates,
   };
 }

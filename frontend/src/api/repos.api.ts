@@ -44,6 +44,7 @@ export interface PullRequest {
   title: string;
   body: string;
   authorId: string;
+  author?: { id: string; username: string; displayName: string };
   sourceBranch: string;
   targetBranch: string;
   status: 'OPEN' | 'MERGED' | 'CLOSED';

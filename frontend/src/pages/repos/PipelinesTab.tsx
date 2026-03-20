@@ -80,58 +80,52 @@ function PipelineEditorModal({ repoId, pipeline, onClose, onSaved }: PipelineEdi
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-surface-elevated rounded-xl border border-border shadow-xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="font-semibold flex items-center gap-2">
-            <Workflow className="h-4 w-4" /> {pipeline ? 'Edit Pipeline' : 'New Pipeline'}
-          </h2>
-          <Button variant="ghost" size="xs" onClick={onClose} title="Close">
-            <X className="h-4 w-4" />
-          </Button>
+    <Modal
+      open={true}
+      onClose={onClose}
+      title={pipeline ? 'Edit Pipeline' : 'New Pipeline'}
+      size="lg"
+    >
+      <div className="space-y-3">
+        <div>
+          <Input
+            label="Pipeline Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="CI"
+          />
         </div>
-        <div className="p-4 space-y-3 flex-1 overflow-y-auto">
-          <div>
-            <Input
-              label="Pipeline Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="CI"
-            />
+        <div>
+          <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
+            YAML Configuration
+          </label>
+          <Textarea
+            value={yaml}
+            onChange={(e) => setYaml(e.target.value)}
+            rows={20}
+            className="font-mono resize-y text-xs"
+            spellCheck={false}
+          />
+        </div>
+        {errors.length > 0 && (
+          <div className="bg-danger-light border border-danger/20 rounded-lg p-3">
+            {errors.map((e, i) => (
+              <p key={i} className="text-sm text-danger">
+                {e}
+              </p>
+            ))}
           </div>
-          <div>
-            <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
-              YAML Configuration
-            </label>
-            <Textarea
-              value={yaml}
-              onChange={(e) => setYaml(e.target.value)}
-              rows={20}
-              className="font-mono resize-y text-xs"
-              spellCheck={false}
-            />
-          </div>
-          {errors.length > 0 && (
-            <div className="bg-danger-light border border-danger/20 rounded-lg p-3">
-              {errors.map((e, i) => (
-                <p key={i} className="text-sm text-danger">
-                  {e}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="flex justify-end gap-2 p-4 border-t border-border">
-          <Button variant="secondary" onClick={onClose}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!name || loading}>
-            <Workflow className="h-4 w-4" /> {loading ? 'Saving...' : 'Save Pipeline'}
-          </Button>
-        </div>
+        )}
       </div>
-    </div>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose}>
+          <X className="h-4 w-4" /> Cancel
+        </Button>
+        <Button onClick={handleSave} disabled={!name || loading}>
+          <Workflow className="h-4 w-4" /> {loading ? 'Saving...' : 'Save Pipeline'}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
@@ -279,9 +273,15 @@ export default function PipelinesTab({ repoId }: Props) {
                       <span className="text-sm flex-1">{run.pipeline?.name}</span>
                       <span className="text-xs text-text-tertiary font-mono">{run.triggerRef}</span>
                       {run.commitSha && (
-                        <code className="text-xs text-text-tertiary">
-                          {run.commitSha.slice(0, 7)}
-                        </code>
+                        <Link
+                          to={`/${org}/${teamSlug}/repos/${repoSlug}/commits/${run.commitSha}`}
+                          className="hover:text-primary transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <code className="text-xs text-text-tertiary hover:text-primary">
+                            {run.commitSha.slice(0, 7)}
+                          </code>
+                        </Link>
                       )}
                       <span className="text-xs text-text-tertiary">
                         {formatRelative(run.createdAt)}

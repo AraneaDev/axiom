@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-r
 import { forwardRef, type HTMLAttributes } from 'react';
 
 import { Button } from './Button';
+import { Select } from './Dropdown';
 
 import { cn } from '@/lib/utils';
 
@@ -63,20 +64,18 @@ export const Pagination = forwardRef<HTMLDivElement, PaginationProps>(
             Showing {startItem}-{endItem} of {total}
           </span>
           {onLimitChange && (
-            <select
-              value={limit}
-              onChange={(e) => {
-                onLimitChange(parseInt(e.target.value));
+            <Select
+              value={String(limit)}
+              onChange={(v) => {
+                onLimitChange(parseInt(v as string));
                 onPageChange(0);
               }}
-              className="ml-2 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text focus:border-border-focus focus:outline-none"
-            >
-              {pageSizeOptions.map((size) => (
-                <option key={size} value={size}>
-                  {size} / page
-                </option>
-              ))}
-            </select>
+              options={pageSizeOptions.map((size) => ({
+                value: String(size),
+                label: `${size} / page`,
+              }))}
+              className="ml-2"
+            />
           )}
         </div>
 

@@ -10,7 +10,6 @@ import {
   Trash2,
   Eye,
   Lock,
-  ChevronDown,
   Info,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
@@ -21,6 +20,7 @@ import type { SearchType } from '@/api/search.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -46,7 +46,6 @@ export default function SearchResults() {
   const query = searchParams.get('q') || '';
   const activeType = (searchParams.get('type') || 'all') as SearchType;
   const [inputValue, setInputValue] = useState(query);
-  const [savedDropdownOpen, setSavedDropdownOpen] = useState(false);
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -112,7 +111,6 @@ export default function SearchResults() {
   }
 
   function loadSavedSearch(saved: SavedSearch) {
-    setSavedDropdownOpen(false);
     setInputValue(saved.query.q);
     setSearchParams({ q: saved.query.q, type: saved.query.type || 'all' });
   }
@@ -147,50 +145,44 @@ export default function SearchResults() {
                 <BookmarkPlus className="h-4 w-4" /> Save
               </Button>
             )}
-            <div className="relative">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSavedDropdownOpen(!savedDropdownOpen)}
-              >
-                <Bookmark className="h-4 w-4" /> Saved
-                <ChevronDown className="h-3 w-3" />
-              </Button>
-              {savedDropdownOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setSavedDropdownOpen(false)} />
-                  <div className="absolute right-0 top-full mt-1 w-72 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-50">
-                    {!savedSearches?.length ? (
-                      <p className="px-3 py-4 text-sm text-text-tertiary text-center">
-                        No saved searches yet
-                      </p>
-                    ) : (
-                      savedSearches.map((s: SavedSearch) => (
-                        <div
-                          key={s.id}
-                          className="flex items-center gap-2 px-3 py-2 hover:bg-surface-secondary transition-colors group"
-                        >
-                          <button
-                            className="flex-1 text-left text-sm text-text truncate"
-                            onClick={() => loadSavedSearch(s)}
-                          >
-                            <Bookmark className="h-3 w-3 inline mr-1.5 text-text-tertiary" />
-                            {s.name}
-                          </button>
-                          <button
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-danger-light transition-all"
-                            onClick={() => deleteSavedMutation.mutate(s.id)}
-                            title="Delete saved search"
-                          >
-                            <Trash2 className="h-3 w-3 text-danger" />
-                          </button>
-                        </div>
-                      ))
-                    )}
+            <Dropdown
+              align="right"
+              trigger={
+                <Button size="sm" variant="ghost">
+                  <Bookmark className="h-4 w-4" /> Saved
+                </Button>
+              }
+            >
+              {!savedSearches?.length ? (
+                <p className="px-3 py-4 text-sm text-text-tertiary text-center">
+                  No saved searches yet
+                </p>
+              ) : (
+                savedSearches.map((s: SavedSearch) => (
+                  <div key={s.id} className="flex items-center group">
+                    <DropdownItem
+                      onClick={() => loadSavedSearch(s)}
+                      className="flex-1 justify-start"
+                    >
+                      <Bookmark className="h-3 w-3 text-text-tertiary" />
+                      {s.name}
+                    </DropdownItem>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="px-2 py-1 opacity-0 group-hover:opacity-100 text-danger hover:bg-danger-light transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteSavedMutation.mutate(s.id);
+                      }}
+                      title="Delete saved search"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
                   </div>
-                </>
+                ))
               )}
-            </div>
+            </Dropdown>
           </div>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-text-tertiary">

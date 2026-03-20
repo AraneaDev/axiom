@@ -188,10 +188,11 @@ export function PageComments({ pageId }: PageCommentsProps) {
       {/* Resolved comments */}
       {resolvedComments.length > 0 && (
         <div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={() => setShowResolved(!showResolved)}
-            className="flex items-center gap-1 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+            className="text-text-tertiary hover:text-text-secondary"
           >
             {showResolved ? (
               <ChevronUp className="h-3.5 w-3.5" />
@@ -199,7 +200,7 @@ export function PageComments({ pageId }: PageCommentsProps) {
               <ChevronDown className="h-3.5 w-3.5" />
             )}
             {resolvedComments.length} resolved comment{resolvedComments.length !== 1 ? 's' : ''}
-          </button>
+          </Button>
           {showResolved && (
             <div className="space-y-2 mt-2">
               {resolvedComments.map((comment) => (

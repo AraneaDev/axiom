@@ -316,6 +316,8 @@ export default function IssueDetail() {
             commentBody={commentBody}
             onCommentBodyChange={setCommentBody}
             basePath={`/${org}/${teamSlug}/${projectSlug}`}
+            orgSlug={org}
+            teamSlug={teamSlug}
           />
         </div>
 

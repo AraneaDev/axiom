@@ -10,6 +10,7 @@ import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
@@ -174,23 +175,25 @@ export default function LabelsSettings() {
               <label className="block text-xs text-text-secondary font-semibold mb-1">Color</label>
               <div className="flex items-center gap-1.5">
                 {PRESET_COLORS.map((c) => (
-                  <button
+                  <Button
                     key={c}
-                    type="button"
+                    variant="ghost"
+                    size="xs"
                     onClick={() => setFormColor(c)}
-                    className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
+                    className="w-6 h-6 rounded-full border-2 p-0 transition-transform hover:scale-110"
                     style={{
                       backgroundColor: c,
                       borderColor: formColor === c ? 'var(--color-text)' : 'transparent',
                     }}
                     title={c}
-                  />
+                  >
+                    <Tag className="h-0 w-0" />
+                  </Button>
                 ))}
-                <input
-                  type="text"
+                <Input
                   value={formColor}
                   onChange={(e) => setFormColor(e.target.value)}
-                  className="w-20 rounded border border-border bg-surface px-2 py-1 text-xs font-mono focus:border-border-focus focus:outline-none"
+                  className="w-20 px-2 py-1 text-xs font-mono"
                   placeholder="#hex"
                 />
               </div>
@@ -234,13 +237,16 @@ export default function LabelsSettings() {
 
       {/* Label list */}
       {labels.length === 0 && !showAddForm ? (
-        <div className="rounded-lg border border-border bg-surface p-8 text-center">
-          <Tag className="h-8 w-8 text-text-tertiary mx-auto mb-2" />
-          <p className="text-text-secondary">No labels defined yet.</p>
-          <p className="text-sm text-text-tertiary mt-1">
-            Create labels to categorize and filter issues.
-          </p>
-        </div>
+        <EmptyState
+          icon={<Tag />}
+          title="No labels defined"
+          description="Create labels to categorize and filter issues."
+          action={
+            <Button onClick={() => setShowAddForm(true)}>
+              <Plus className="h-4 w-4" /> New Label
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-2">
           {labels.map((label) => (
@@ -278,11 +284,12 @@ export default function LabelsSettings() {
                             title={c}
                           />
                         ))}
-                        <input
+                        <Input
+                          id="label-color-hex"
                           type="text"
                           value={formColor}
                           onChange={(e) => setFormColor(e.target.value)}
-                          className="w-20 rounded border border-border bg-surface px-2 py-1 text-xs font-mono focus:border-border-focus focus:outline-none"
+                          className="w-20 text-xs font-mono"
                         />
                       </div>
                     </div>

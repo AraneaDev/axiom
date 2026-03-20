@@ -6,6 +6,7 @@ import { issuesApi } from '@/api/issues.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { Progress } from '@/components/ui/Progress';
 import { Spinner } from '@/components/ui/Spinner';
 import type { Issue } from '@/lib/types';
@@ -96,18 +97,19 @@ export function IssueDetailWorklog({
           <span className="text-xs text-text-tertiary">Estimate</span>
           {editingField === 'timeEstimate' ? (
             <div className="flex items-center gap-1">
-              <input
+              <Input
                 type="number"
                 min={0}
                 placeholder="hrs"
                 defaultValue={issue.timeEstimate ? Math.floor(issue.timeEstimate / 60) : ''}
-                className="w-12 rounded border border-border bg-surface px-1.5 py-0.5 text-xs text-right"
+                className="w-12 px-1.5 py-0.5 text-xs text-right"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     const hrs = parseInt((e.target as HTMLInputElement).value) || 0;
-                    const minsEl = (e.target as HTMLInputElement).nextElementSibling
-                      ?.nextElementSibling as HTMLInputElement;
+                    const minsEl = (e.target as HTMLInputElement)
+                      .closest('.flex')
+                      ?.querySelector('input:last-of-type') as HTMLInputElement;
                     const mins = parseInt(minsEl?.value) || 0;
                     onUpdate({ timeEstimate: hrs * 60 + mins || null });
                   }
@@ -115,18 +117,19 @@ export function IssueDetailWorklog({
                 }}
               />
               <span className="text-xs text-text-tertiary">h</span>
-              <input
+              <Input
                 type="number"
                 min={0}
                 max={59}
                 placeholder="min"
                 defaultValue={issue.timeEstimate ? issue.timeEstimate % 60 : ''}
-                className="w-12 rounded border border-border bg-surface px-1.5 py-0.5 text-xs text-right"
+                className="w-12 px-1.5 py-0.5 text-xs text-right"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     const mins = parseInt((e.target as HTMLInputElement).value) || 0;
-                    const hrsEl = (e.target as HTMLInputElement).previousElementSibling
-                      ?.previousElementSibling as HTMLInputElement;
+                    const hrsEl = (e.target as HTMLInputElement)
+                      .closest('.flex')
+                      ?.querySelector('input:first-of-type') as HTMLInputElement;
                     const hrs = parseInt(hrsEl?.value) || 0;
                     onUpdate({ timeEstimate: hrs * 60 + mins || null });
                   }
@@ -134,8 +137,9 @@ export function IssueDetailWorklog({
                 }}
                 onBlur={(e) => {
                   const mins = parseInt(e.target.value) || 0;
-                  const hrsEl = e.target.previousElementSibling
-                    ?.previousElementSibling as HTMLInputElement;
+                  const hrsEl = (e.target as HTMLInputElement)
+                    .closest('.flex')
+                    ?.querySelector('input:first-of-type') as HTMLInputElement;
                   const hrs = parseInt(hrsEl?.value) || 0;
                   onUpdate({ timeEstimate: hrs * 60 + mins || null });
                 }}
@@ -178,9 +182,12 @@ export function IssueDetailWorklog({
         {/* Worklog entries */}
         {worklogs.length > 0 && (
           <div>
-            <button
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => setShowEntries(!showEntries)}
-              className="flex items-center gap-1 text-[11px] text-text-tertiary hover:text-text transition-colors w-full"
+              className="text-[11px] text-text-tertiary hover:text-text w-full justify-start px-0"
+              title={showEntries ? 'Hide log entries' : 'Show log entries'}
             >
               {showEntries ? (
                 <ChevronUp className="h-3 w-3" />
@@ -189,7 +196,7 @@ export function IssueDetailWorklog({
               )}
               <User className="h-3 w-3" />
               {worklogs.length} log entr{worklogs.length === 1 ? 'y' : 'ies'}
-            </button>
+            </Button>
             {showEntries && (
               <div className="mt-1.5 space-y-1.5 max-h-40 overflow-y-auto">
                 {worklogs.map((w) => (
@@ -219,26 +226,26 @@ export function IssueDetailWorklog({
           <div className="space-y-2 border border-border rounded-lg p-2">
             <div className="flex items-center gap-2">
               <div>
-                <label className="text-[10px] text-text-tertiary">Hours</label>
-                <input
+                <Input
+                  label="Hours"
                   type="number"
                   min={0}
                   value={logWorkHours}
                   onChange={(e) => setLogWorkHours(e.target.value)}
-                  className="w-14 rounded border border-border bg-surface px-1.5 py-1 text-xs"
+                  className="w-14 px-1.5 py-1 text-xs"
                   placeholder="0"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="text-[10px] text-text-tertiary">Minutes</label>
-                <input
+                <Input
+                  label="Minutes"
                   type="number"
                   min={0}
                   max={59}
                   value={logWorkMinutes}
                   onChange={(e) => setLogWorkMinutes(e.target.value)}
-                  className="w-14 rounded border border-border bg-surface px-1.5 py-1 text-xs"
+                  className="w-14 px-1.5 py-1 text-xs"
                   placeholder="0"
                 />
               </div>

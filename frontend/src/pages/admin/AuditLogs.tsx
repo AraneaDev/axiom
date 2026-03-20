@@ -15,6 +15,7 @@ import { auditApi, type AuditLogEntry, type AuditLogFilters } from '@/api/audit.
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
@@ -252,12 +253,10 @@ export default function AuditLogs() {
               ]}
             />
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">
-                Start Date
-              </label>
-              <input
+              <Input
+                id="start-date"
                 type="date"
-                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text focus:border-border-focus focus:outline-none"
+                label="Start Date"
                 value={startDate}
                 onChange={(e) => {
                   setStartDate(e.target.value);
@@ -266,10 +265,10 @@ export default function AuditLogs() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">End Date</label>
-              <input
+              <Input
+                id="end-date"
                 type="date"
-                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text focus:border-border-focus focus:outline-none"
+                label="End Date"
                 value={endDate}
                 onChange={(e) => {
                   setEndDate(e.target.value);
@@ -315,8 +314,12 @@ export default function AuditLogs() {
                   </tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-text-tertiary text-sm">
-                      No audit logs found matching the current filters.
+                    <td colSpan={6}>
+                      <EmptyState
+                        icon={<ScrollText />}
+                        title="No audit logs found"
+                        description="No logs match the current filters. Try adjusting your criteria."
+                      />
                     </td>
                   </tr>
                 ) : (

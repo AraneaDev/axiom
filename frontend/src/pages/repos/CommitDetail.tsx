@@ -33,7 +33,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useRepoContext } from '@/hooks/useRepoContext';
-import { formatRelative } from '@/lib/utils';
+import { cn, formatRelative } from '@/lib/utils';
 
 function parseDiff(raw: string) {
   const files: {
@@ -322,12 +322,15 @@ export default function CommitDetail() {
           {fileTreeOpen && (
             <div className="max-h-64 overflow-y-auto divide-y divide-border">
               {stats.map((s, i) => (
-                <button
+                <Button
                   key={s.file}
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setActiveFileIndex(i)}
-                  className={`flex items-center gap-2 px-4 py-1.5 text-sm w-full text-left hover:bg-surface-secondary transition-colors ${
-                    i === activeFileIndex ? 'bg-primary-light' : ''
-                  }`}
+                  className={cn(
+                    'w-full justify-start rounded-none px-4 py-1.5',
+                    i === activeFileIndex ? 'bg-primary-light' : '',
+                  )}
                 >
                   {i === activeFileIndex && (
                     <ChevronRight className="h-3 w-3 text-primary shrink-0" />
@@ -348,7 +351,7 @@ export default function CommitDetail() {
                   </Badge>
                   <span className="text-success text-xs">+{s.additions}</span>
                   <span className="text-danger text-xs">-{s.deletions}</span>
-                </button>
+                </Button>
               ))}
             </div>
           )}

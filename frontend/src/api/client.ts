@@ -87,10 +87,23 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
         refreshPromise = null;
       });
     }
-    await refreshPromise;
+    try {
+      await refreshPromise;
+    } catch {
+      // Refresh failed -- redirect to login
+      window.location.href = '/login';
+      throw new ApiError(401, 'Session expired');
+    }
 
     headers['Authorization'] = `Bearer ${accessToken}`;
     res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  }
+
+  // No refresh token and still 401 -- redirect to login
+  if (res.status === 401 && !refreshToken) {
+    clearTokens();
+    window.location.href = '/login';
+    throw new ApiError(401, 'Session expired');
   }
 
   if (!res.ok) {

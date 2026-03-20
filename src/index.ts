@@ -174,6 +174,16 @@ if (require.main === module) {
 
   createWebSocketServer(server);
 
+  if (process.env.SMTP_HOST) {
+    import('./email/queue')
+      .then(({ startEmailWorker }) => {
+        startEmailWorker();
+      })
+      .catch((err) => {
+        logger.warn('Failed to start email worker', { error: String(err) });
+      });
+  }
+
   server.listen(env.PORT, () => {
     logger.info('Axiom API running', { port: env.PORT, env: env.NODE_ENV });
     if (process.env.NODE_ENV === 'production' && process.env.CORS_ORIGIN === '*') {

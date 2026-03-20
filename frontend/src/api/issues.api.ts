@@ -113,8 +113,18 @@ export const issuesApi = {
         type: string;
         fromKey: string;
         toKey: string;
-        from: Record<string, unknown>;
-        to: Record<string, unknown>;
+        from: {
+          id: string;
+          number: number;
+          title: string;
+          project: { slug: string; prefix: string; team: { slug: string; org: { slug: string } } };
+        };
+        to: {
+          id: string;
+          number: number;
+          title: string;
+          project: { slug: string; prefix: string; team: { slug: string; org: { slug: string } } };
+        };
       }[]
     >(`/projects/${projectId}/issues/${issueNumber}/links`),
   /**
@@ -199,7 +209,14 @@ export const issuesApi = {
       {
         id: string;
         refType: string;
-        pr: { id: string; number: number; title: string; status: string; sourceBranch: string };
+        pr: {
+          id: string;
+          number: number;
+          title: string;
+          status: string;
+          sourceBranch: string;
+          repo: { id: string; slug: string; name: string };
+        };
       }[]
     >(`/projects/${projectId}/issues/${issueNumber}/pull-requests`),
 

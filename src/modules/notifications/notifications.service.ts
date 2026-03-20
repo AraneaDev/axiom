@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { broadcastToUser } from '../../realtime/broadcast';
+import { logger } from '../../utils/logger';
 
 /**
  * Create a notification and broadcast it to the user via WebSocket.
@@ -26,6 +27,37 @@ export async function createNotification(
     userId,
     notificationId: notification.id,
   });
+
+  // Enqueue email if user has email preference enabled for this event type
+  try {
+    if (process.env.SMTP_HOST) {
+      const pref = await prisma.notificationPreference.findUnique({
+        where: { userId_eventType: { userId, eventType: type } },
+      });
+      const emailEnabled = pref?.email ?? false;
+
+      if (emailEnabled) {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { email: true, displayName: true, username: true },
+        });
+
+        if (user?.email) {
+          const { emailQueue } = await import('../../email/queue');
+          await emailQueue.add('send', {
+            to: user.email,
+            recipientName: user.displayName || user.username,
+            type,
+            title,
+            body,
+            link,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn('Failed to enqueue email notification', { userId, type, error: String(err) });
+  }
 
   return notification;
 }

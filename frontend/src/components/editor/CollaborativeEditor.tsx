@@ -44,6 +44,9 @@ import { editorProjectIds, nextEditorInstanceId } from './editor-state';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
 
+import { Button } from '@/components/ui/Button';
+import { cn } from '@/lib/utils';
+
 const lowlight = createLowlight(common);
 
 interface CollaborativeEditorProps {
@@ -64,18 +67,20 @@ interface ToolbarButtonProps {
 
 function ToolbarButton({ onClick, active, children, title }: ToolbarButtonProps) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="xs"
       onClick={onClick}
       title={title}
-      className={`p-1.5 rounded transition-colors ${
+      className={cn(
+        'p-1.5',
         active
           ? 'bg-primary/15 text-primary'
-          : 'text-text-secondary hover:bg-surface-tertiary hover:text-text'
-      }`}
+          : 'text-text-secondary hover:bg-surface-tertiary hover:text-text',
+      )}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 

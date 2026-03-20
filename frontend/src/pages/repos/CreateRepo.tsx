@@ -8,6 +8,7 @@ import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
@@ -91,18 +92,16 @@ export default function CreateRepo() {
           placeholder="my-app"
           required
         />
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-text">Visibility</label>
-          <select
-            value={visibility}
-            onChange={(e) => setVisibility(e.target.value)}
-            className="rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-          >
-            <option value="PRIVATE">Private</option>
-            <option value="INTERNAL">Internal (org-visible)</option>
-            <option value="PUBLIC">Public</option>
-          </select>
-        </div>
+        <Select
+          label="Visibility"
+          value={visibility}
+          onChange={(v) => setVisibility(v as string)}
+          options={[
+            { value: 'PRIVATE', label: 'Private' },
+            { value: 'INTERNAL', label: 'Internal (org-visible)' },
+            { value: 'PUBLIC', label: 'Public' },
+          ]}
+        />
         <div>
           <label htmlFor="desc" className="block text-sm font-medium text-text mb-1">
             Description (optional)

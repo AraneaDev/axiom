@@ -1,4 +1,5 @@
 import { prisma } from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 import type { Action } from '../utils/permissions';
 import { hasPermission } from '../utils/permissions';
 
@@ -38,7 +39,7 @@ export const MCP_TOOL_PERMISSIONS: Record<string, Action> = {
  */
 export async function assertMcpPermission(toolName: string, orgId: string): Promise<void> {
   const ctx = mcpContext.getStore();
-  if (!ctx) throw new Error('No MCP context');
+  if (!ctx) throw new AppError(401, 'No MCP context');
   const action = MCP_TOOL_PERMISSIONS[toolName];
   if (!action) return; // unknown tool, allow
 
@@ -46,7 +47,7 @@ export async function assertMcpPermission(toolName: string, orgId: string): Prom
     where: { orgId_userId: { orgId, userId: ctx.userId } },
   });
   if (!orgMembership) {
-    throw Object.assign(new Error('Forbidden'), { status: 403, code: 'FORBIDDEN' });
+    throw new AppError(403, 'Forbidden');
   }
 
   const teamMembership = await prisma.teamMembership.findFirst({
@@ -55,6 +56,6 @@ export async function assertMcpPermission(toolName: string, orgId: string): Prom
 
   const allowed = hasPermission(orgMembership.role, teamMembership?.role ?? null, action);
   if (!allowed) {
-    throw Object.assign(new Error('Forbidden'), { status: 403, code: 'FORBIDDEN' });
+    throw new AppError(403, 'Forbidden');
   }
 }

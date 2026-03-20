@@ -7,7 +7,6 @@ import {
   LayoutGrid,
   LayoutDashboard,
   LayoutTemplate,
-  ChevronDown,
   Clock,
   Download,
   X,
@@ -20,7 +19,7 @@ import {
   Tag,
   BarChart3,
 } from 'lucide-react';
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 import { IssueListBulkActions } from './IssueListBulkActions';
@@ -35,18 +34,15 @@ import { savedFiltersApi } from '@/api/saved-filters.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { ListSkeleton } from '@/components/ui/Skeleton';
+import { useIssueListFilters } from '@/hooks/useIssueListFilters';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
-
-type SortField = 'createdAt' | 'updatedAt' | 'priority';
-type SortDir = 'asc' | 'desc';
-type ViewMode = 'list' | 'grid';
-
-const PRIORITY_ORDER: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 };
+import { useUIStore } from '@/stores/ui.store';
 
 /**
  *
@@ -55,6 +51,10 @@ export default function IssueList() {
   const { org, team: teamSlug, project: projectSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const setPreferredView = useUIStore((s) => s.setPreferredProjectView);
+  useEffect(() => {
+    setPreferredView('issues');
+  }, [setPreferredView]);
 
   const { data: orgs } = useQuery({
     queryKey: ['orgs'],
@@ -110,51 +110,37 @@ export default function IssueList() {
     enabled: !!currentProject?.id,
   });
 
-  // Filter state
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
-  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
-  const [labelFilter, setLabelFilter] = useState<string[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
-
-  // Sort state
-  const [sortField, setSortField] = useState<SortField>('createdAt');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [showSort, setShowSort] = useState(false);
-
-  // View mode with localStorage
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    try {
-      return (localStorage.getItem('issueListView') as ViewMode) || 'list';
-    } catch {
-      return 'list';
-    }
-  });
-  useEffect(() => {
-    localStorage.setItem('issueListView', viewMode);
-  }, [viewMode]);
-
-  // Search state with debounce
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchInput(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setSearchQuery(value), 250);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
+  // Use extracted filter/sort/search hook
+  const {
+    typeFilter,
+    setTypeFilter,
+    priorityFilter,
+    setPriorityFilter,
+    assigneeFilter,
+    setAssigneeFilter,
+    labelFilter,
+    setLabelFilter,
+    showFilters,
+    setShowFilters,
+    sortField,
+    sortDir,
+    toggleSort,
+    viewMode,
+    setViewMode,
+    searchInput,
+    searchQuery,
+    handleSearchChange,
+    clearSearch,
+    hasActiveSearch,
+    filteredIssues,
+    activeFilterCount,
+    allAssignees,
+    allLabels,
+  } = useIssueListFilters(data?.issues ?? []);
 
   // Saved filters
   const [showSaveFilterModal, setShowSaveFilterModal] = useState(false);
   const [saveFilterName, setSaveFilterName] = useState('');
-  const [showSavedFilters, setShowSavedFilters] = useState(false);
 
   const { data: savedFilters = [] } = useQuery({
     queryKey: ['saved-filters', currentProject?.id],
@@ -181,7 +167,6 @@ export default function IssueList() {
 
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkDropdown, setBulkDropdown] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const toggleSelect = (id: string, e: React.MouseEvent) => {
@@ -217,7 +202,6 @@ export default function IssueList() {
       queryClient.invalidateQueries({ queryKey: ['issues', currentProject?.id] });
       queryClient.invalidateQueries({ queryKey: ['board', currentProject?.id] });
       setSelectedIds(new Set());
-      setBulkDropdown(null);
     },
   });
 
@@ -239,54 +223,6 @@ export default function IssueList() {
     },
   });
 
-  // Extract unique assignees and labels for filter options
-  const allAssignees = useMemo(() => {
-    const map = new Map<string, { id: string; displayName: string }>();
-    for (const issue of data?.issues ?? []) {
-      if (issue.assignee) map.set(issue.assignee.id, issue.assignee);
-    }
-    return Array.from(map.values());
-  }, [data?.issues]);
-
-  const allLabels = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }>();
-    for (const issue of data?.issues ?? []) {
-      for (const label of issue.labels ?? []) map.set(label.id, label);
-    }
-    return Array.from(map.values());
-  }, [data?.issues]);
-
-  // Filtered and sorted issues
-  let filteredIssues = data?.issues ?? [];
-  if (searchQuery.trim()) {
-    const q = searchQuery.trim().toLowerCase();
-    filteredIssues = filteredIssues.filter(
-      (i) => i.title.toLowerCase().includes(q) || i.key.toLowerCase().includes(q),
-    );
-  }
-  if (typeFilter.length > 0)
-    filteredIssues = filteredIssues.filter((i) => typeFilter.includes(i.type));
-  if (priorityFilter.length > 0)
-    filteredIssues = filteredIssues.filter((i) => priorityFilter.includes(i.priority));
-  if (assigneeFilter.length > 0)
-    filteredIssues = filteredIssues.filter(
-      (i) => i.assignee && assigneeFilter.includes(i.assignee.id),
-    );
-  if (labelFilter.length > 0)
-    filteredIssues = filteredIssues.filter((i) =>
-      i.labels?.some((l) => labelFilter.includes(l.id)),
-    );
-  filteredIssues = [...filteredIssues].sort((a, b) => {
-    const cmp =
-      sortField === 'priority'
-        ? (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4)
-        : new Date(a[sortField]).getTime() - new Date(b[sortField]).getTime();
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
-
-  const activeFilterCount =
-    typeFilter.length + priorityFilter.length + assigneeFilter.length + labelFilter.length;
-  const hasActiveSearch = searchQuery.trim().length > 0;
   const hasSelection = selectedIds.size > 0;
 
   if (isLoading)
@@ -389,16 +325,15 @@ export default function IssueList() {
             className="pl-8 py-1.5 text-sm h-8"
           />
           {hasActiveSearch && (
-            <button
-              onClick={() => {
-                setSearchInput('');
-                setSearchQuery('');
-              }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text"
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text p-0.5"
               title="Clear search"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           )}
         </div>
 
@@ -412,101 +347,77 @@ export default function IssueList() {
         </Button>
 
         {/* Sort dropdown */}
-        <div className="relative">
-          <Button variant="secondary" size="sm" onClick={() => setShowSort(!showSort)}>
-            <ArrowUpDown className="h-3.5 w-3.5" /> Sort
-            <ChevronDown className="h-3 w-3" />
-          </Button>
-          {showSort && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowSort(false)} />
-              <div className="absolute left-0 top-full mt-1 w-48 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20">
-                {(
-                  [
-                    ['createdAt', 'Created'],
-                    ['updatedAt', 'Updated'],
-                    ['priority', 'Priority'],
-                  ] as const
-                ).map(([field, label]) => (
-                  <Button
-                    key={field}
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (sortField === field) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-                      else {
-                        setSortField(field);
-                        setSortDir('desc');
-                      }
-                      setShowSort(false);
-                    }}
-                    className={cn(
-                      'w-full justify-between rounded-none',
-                      sortField === field && 'text-primary font-medium',
-                    )}
-                  >
-                    <ArrowUpDown className="h-3 w-3" /> {label}
-                    {sortField === field && (
-                      <span className="text-xs">{sortDir === 'asc' ? 'Asc' : 'Desc'}</span>
-                    )}
-                  </Button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        <Dropdown
+          trigger={
+            <Button variant="secondary" size="sm">
+              <ArrowUpDown className="h-3.5 w-3.5" /> Sort
+            </Button>
+          }
+        >
+          {(
+            [
+              ['createdAt', 'Created'],
+              ['updatedAt', 'Updated'],
+              ['priority', 'Priority'],
+            ] as const
+          ).map(([field, label]) => (
+            <DropdownItem
+              key={field}
+              onClick={() => toggleSort(field)}
+              className={cn('justify-between', sortField === field && 'text-primary font-medium')}
+            >
+              <ArrowUpDown className="h-3 w-3" /> {label}
+              {sortField === field && (
+                <span className="text-xs">{sortDir === 'asc' ? 'Asc' : 'Desc'}</span>
+              )}
+            </DropdownItem>
+          ))}
+        </Dropdown>
 
         {/* Saved filters dropdown */}
-        <div className="relative">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowSavedFilters(!showSavedFilters)}
-          >
-            <BookmarkCheck className="h-3.5 w-3.5" /> Saved
-            {savedFilters.length > 0 && (
-              <span className="ml-1 bg-surface-tertiary text-text-secondary text-[10px] rounded-full px-1.5 py-0.5">
-                {savedFilters.length}
-              </span>
-            )}
-          </Button>
-          {showSavedFilters && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowSavedFilters(false)} />
-              <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20 max-h-64 overflow-y-auto">
-                {savedFilters.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-text-tertiary">No saved filters</p>
-                ) : (
-                  savedFilters.map((sf) => (
-                    <div key={sf.id} className="flex items-center group">
-                      <button
-                        className="flex-1 text-left px-3 py-2 text-sm hover:bg-surface-secondary transition-colors flex items-center gap-2"
-                        onClick={() => {
-                          const params = new URLSearchParams(sf.query as Record<string, string>);
-                          setSearchParams(params);
-                          setShowSavedFilters(false);
-                        }}
-                      >
-                        <Bookmark className="h-3 w-3 text-primary shrink-0" />
-                        <span className="truncate">{sf.name}</span>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteFilterMutation.mutate(sf.id);
-                        }}
-                        className="px-2 py-1 text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Delete saved filter"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))
-                )}
+        <Dropdown
+          trigger={
+            <Button variant="secondary" size="sm">
+              <BookmarkCheck className="h-3.5 w-3.5" /> Saved
+              {savedFilters.length > 0 && (
+                <span className="ml-1 bg-surface-tertiary text-text-secondary text-[10px] rounded-full px-1.5 py-0.5">
+                  {savedFilters.length}
+                </span>
+              )}
+            </Button>
+          }
+        >
+          {savedFilters.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-text-tertiary">No saved filters</p>
+          ) : (
+            savedFilters.map((sf) => (
+              <div key={sf.id} className="flex items-center group">
+                <DropdownItem
+                  onClick={() => {
+                    const params = new URLSearchParams(sf.query as Record<string, string>);
+                    setSearchParams(params);
+                  }}
+                  className="flex-1 justify-start"
+                >
+                  <Bookmark className="h-3 w-3 text-primary shrink-0" />
+                  <span className="truncate">{sf.name}</span>
+                </DropdownItem>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteFilterMutation.mutate(sf.id);
+                  }}
+                  className="px-2 py-1 text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Delete saved filter"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
               </div>
-            </>
+            ))
           )}
-        </div>
+        </Dropdown>
 
         {/* Save current filter */}
         {(activeFilterCount > 0 || hasActiveSearch) && (
@@ -552,8 +463,6 @@ export default function IssueList() {
         <IssueListBulkActions
           selectedIds={selectedIds}
           setSelectedIds={setSelectedIds}
-          bulkDropdown={bulkDropdown}
-          setBulkDropdown={setBulkDropdown}
           showDeleteConfirm={showDeleteConfirm}
           setShowDeleteConfirm={setShowDeleteConfirm}
           boardColumns={boardColumns}

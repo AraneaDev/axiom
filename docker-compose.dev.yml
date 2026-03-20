@@ -28,6 +28,31 @@ services:
       timeout: 3s
       retries: 3
 
+  mailserver:
+    image: ghcr.io/docker-mailserver/docker-mailserver:latest
+    hostname: mail.axiom.local
+    environment:
+      SMTP_ONLY: 1
+      PERMIT_DOCKER: network
+      OVERRIDE_HOSTNAME: mail.axiom.local
+      ONE_DIR: 1
+      ENABLE_SPAMASSASSIN: 0
+      ENABLE_CLAMAV: 0
+      ENABLE_FAIL2BAN: 0
+      ENABLE_POSTGREY: 0
+      SSL_TYPE:
+      POSTFIX_INET_PROTOCOLS: ipv4
+    volumes:
+      - maildata:/var/lib/mail
+      - mailstate:/var/mail-state
+      - ./docker/mailserver/config/:/tmp/docker-mailserver/
+    healthcheck:
+      test: ["CMD-SHELL", "ss -tlnp | grep -q ':25 '"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
   api:
     build:
       context: .
@@ -43,6 +68,9 @@ services:
       STORAGE_PATH: /data/uploads
       NODE_ENV: development
       REDIS_URL: redis://redis:6379
+      SMTP_HOST: mailserver
+      SMTP_PORT: 25
+      SMTP_FROM: "Axiom <noreply@mail.axiom.local>"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
@@ -53,6 +81,8 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      mailserver:
         condition: service_healthy
     volumes:
       - ./src:/app/src
@@ -83,3 +113,5 @@ services:
 volumes:
   pgdata:
   redis-data:
+  maildata:
+  mailstate:

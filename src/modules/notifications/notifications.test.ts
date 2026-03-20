@@ -184,6 +184,54 @@ describe('Notifications API', () => {
   });
 
   describe('PATCH /api/notifications/preferences', () => {
+    it('should enable email preference and persist it', async () => {
+      const res = await request(app)
+        .patch('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ eventType: 'pr_review_requested', email: true });
+      expect(res.status).toBe(200);
+      expect(res.body.preference.email).toBe(true);
+      expect(res.body.preference.eventType).toBe('pr_review_requested');
+
+      // Verify it persists
+      const getRes = await request(app)
+        .get('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`);
+      const pref = getRes.body.preferences.find(
+        (p: { eventType: string }) => p.eventType === 'pr_review_requested',
+      );
+      expect(pref.email).toBe(true);
+    });
+
+    it('should disable email preference', async () => {
+      const res = await request(app)
+        .patch('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ eventType: 'pr_review_requested', email: false });
+      expect(res.status).toBe(200);
+      expect(res.body.preference.email).toBe(false);
+    });
+
+    it('should toggle both inApp and email in single request', async () => {
+      const res = await request(app)
+        .patch('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ eventType: 'pr_merged', inApp: false, email: true });
+      expect(res.status).toBe(200);
+      expect(res.body.preference.inApp).toBe(false);
+      expect(res.body.preference.email).toBe(true);
+
+      // Reset
+      await request(app)
+        .patch('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ eventType: 'pr_merged', inApp: true, email: false });
+    });
+
     it('should update a single preference (disable inApp for mention)', async () => {
       const res = await request(app)
         .patch('/api/notifications/preferences')

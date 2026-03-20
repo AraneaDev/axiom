@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Save, X, Pencil, Trash2, FileText } from 'lucide-react';
+import { Plus, Save, X, Pencil, Trash2, FileText, Tag } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 
@@ -11,10 +11,13 @@ import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { cn } from '@/lib/utils';
 
 const ISSUE_TYPES = [
   { value: 'TASK', label: 'Task' },
@@ -178,20 +181,12 @@ export default function IssueTemplates() {
           placeholder="e.g., Bug Report"
           autoFocus
         />
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-text">Type</label>
-          <select
-            value={formType}
-            onChange={(e) => setFormType(e.target.value as 'TASK' | 'BUG' | 'STORY' | 'EPIC')}
-            className="rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-          >
-            {ISSUE_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select
+          label="Type"
+          value={formType}
+          onChange={(v) => setFormType(v as 'TASK' | 'BUG' | 'STORY' | 'EPIC')}
+          options={ISSUE_TYPES}
+        />
       </div>
 
       <Input
@@ -219,15 +214,17 @@ export default function IssueTemplates() {
           </label>
           <div className="flex flex-wrap gap-1.5">
             {projectLabels.map((label) => (
-              <button
+              <Button
                 key={label.id}
-                type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => toggleLabel(label.name)}
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity ${
+                className={cn(
+                  'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity',
                   formLabels.includes(label.name)
                     ? 'opacity-100 ring-2 ring-border-focus'
-                    : 'opacity-50 hover:opacity-75'
-                }`}
+                    : 'opacity-50 hover:opacity-75',
+                )}
                 style={{
                   backgroundColor: label.color + '20',
                   color: label.color,
@@ -238,8 +235,8 @@ export default function IssueTemplates() {
                     : `Add ${label.name} label`
                 }
               >
-                {label.name}
-              </button>
+                <Tag className="h-3 w-3" /> {label.name}
+              </Button>
             ))}
           </div>
         </div>
@@ -282,13 +279,16 @@ export default function IssueTemplates() {
 
       {/* Template list */}
       {templates.length === 0 && !showAddForm ? (
-        <div className="rounded-lg border border-border bg-surface p-8 text-center">
-          <FileText className="h-8 w-8 text-text-tertiary mx-auto mb-2" />
-          <p className="text-text-secondary">No issue templates yet.</p>
-          <p className="text-sm text-text-tertiary mt-1">
-            Templates help your team create consistent, well-structured issues.
-          </p>
-        </div>
+        <EmptyState
+          icon={<FileText />}
+          title="No issue templates"
+          description="Templates help your team create consistent, well-structured issues."
+          action={
+            <Button onClick={() => setShowAddForm(true)}>
+              <Plus className="h-4 w-4" /> New Template
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-2">
           {templates.map((template) => (

@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { prisma } from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 import { createOrUpdateStatus } from '../modules/status-checks/status-checks.service';
 import { broadcastToRoom } from '../realtime/ws-server';
 import { logger } from '../utils/logger';
@@ -50,7 +51,7 @@ export async function executePipelineRun(runId: string): Promise<void> {
     });
 
     if (!run || !run.pipeline || !run.repo) {
-      throw new Error(`Pipeline run ${runId} not found or missing pipeline/repo`);
+      throw new AppError(404, `Pipeline run ${runId} not found or missing pipeline/repo`);
     }
 
     // Update log streamer with correct repoId

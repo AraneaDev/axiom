@@ -10,7 +10,7 @@ import {
   Timer,
   Users,
 } from 'lucide-react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
@@ -351,7 +351,12 @@ export default function ProjectAnalytics() {
                       <td className="py-2.5">
                         <div className="flex items-center gap-2">
                           <Avatar name={member.displayName} size="sm" />
-                          <span className="font-medium text-text">{member.displayName}</span>
+                          <Link
+                            to={`/${org}/${teamSlug}/members/${member.username}`}
+                            className="font-medium text-text hover:text-primary hover:underline"
+                          >
+                            {member.displayName}
+                          </Link>
                           {isOverloaded && (
                             <span title="High workload">
                               <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />

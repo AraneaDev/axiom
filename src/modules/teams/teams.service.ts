@@ -268,13 +268,95 @@ export async function getTeamActivity(teamId: string, limit = 20) {
 
   if (memberIds.length === 0) return [];
 
-  return prisma.activity.findMany({
+  const activities = await prisma.activity.findMany({
     where: { userId: { in: memberIds } },
     include: {
       user: { select: USER_WITH_AVATAR_SELECT },
     },
     orderBy: { createdAt: 'desc' },
     take: limit,
+  });
+
+  // Hydrate with resource titles and links
+  const teamOrgSelect = { slug: true, org: { select: { slug: true } } } as const;
+
+  const issueIds = activities.filter((a) => a.resourceType === 'issue').map((a) => a.resourceId);
+  const prIds = activities
+    .filter((a) => a.resourceType === 'pull_request')
+    .map((a) => a.resourceId);
+  const wikiIds = activities.filter((a) => a.resourceType === 'wiki_page').map((a) => a.resourceId);
+
+  const issues =
+    issueIds.length > 0
+      ? await prisma.issue.findMany({
+          where: { id: { in: issueIds } },
+          select: {
+            id: true,
+            number: true,
+            title: true,
+            project: { select: { slug: true, prefix: true, team: { select: teamOrgSelect } } },
+          },
+        })
+      : [];
+
+  const prs =
+    prIds.length > 0
+      ? await prisma.pullRequest.findMany({
+          where: { id: { in: prIds } },
+          select: {
+            id: true,
+            number: true,
+            title: true,
+            repo: { select: { slug: true, team: { select: teamOrgSelect } } },
+          },
+        })
+      : [];
+
+  const wikiPages =
+    wikiIds.length > 0
+      ? await prisma.page.findMany({
+          where: { id: { in: wikiIds } },
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            space: { select: { slug: true, team: { select: teamOrgSelect } } },
+          },
+        })
+      : [];
+
+  const issueMap = new Map(issues.map((i) => [i.id, i]));
+  const prMap = new Map(prs.map((p) => [p.id, p]));
+  const wikiMap = new Map(wikiPages.map((w) => [w.id, w]));
+
+  return activities.map((a) => {
+    let resourceTitle: string | null = null;
+    let resourceLink: string | null = null;
+    let resourceKey: string | null = null;
+
+    if (a.resourceType === 'issue') {
+      const issue = issueMap.get(a.resourceId);
+      if (issue) {
+        resourceTitle = issue.title;
+        resourceKey = `${issue.project.prefix}-${issue.number}`;
+        resourceLink = `/${issue.project.team.org.slug}/${issue.project.team.slug}/${issue.project.slug}/issues/${issue.number}`;
+      }
+    } else if (a.resourceType === 'pull_request') {
+      const pr = prMap.get(a.resourceId);
+      if (pr) {
+        resourceTitle = pr.title;
+        resourceKey = `#${pr.number}`;
+        resourceLink = `/${pr.repo.team?.org.slug}/${pr.repo.team?.slug}/repos/${pr.repo.slug}/pulls/${pr.number}`;
+      }
+    } else if (a.resourceType === 'wiki_page') {
+      const page = wikiMap.get(a.resourceId);
+      if (page) {
+        resourceTitle = page.title;
+        resourceLink = `/${page.space.team.org.slug}/${page.space.team.slug}/wiki/${page.space.slug}/${page.slug}`;
+      }
+    }
+
+    return { ...a, resourceTitle, resourceLink, resourceKey };
   });
 }
 

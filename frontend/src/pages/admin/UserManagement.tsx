@@ -19,6 +19,7 @@ import type { AdminUser } from '@/api/admin.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { TableSkeleton } from '@/components/ui/Skeleton';
@@ -215,7 +216,7 @@ export default function UserManagement() {
           <div>
             <h1 className="text-2xl font-bold text-text">User Management</h1>
             <p className="text-sm text-text-secondary mt-1">
-              {data ? `${data.total} users total` : 'Loading...'}
+              {data ? `${data.total} users total` : ''}
             </p>
           </div>
         </div>
@@ -313,9 +314,12 @@ export default function UserManagement() {
               ))}
               {data?.users.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-text-tertiary">
-                    <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    No users found
+                  <td colSpan={5}>
+                    <EmptyState
+                      icon={<Users />}
+                      title="No users found"
+                      description="Try adjusting your search query."
+                    />
                   </td>
                 </tr>
               )}

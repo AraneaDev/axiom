@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
+import { validate, adminUpdateUserSchema } from '../../utils/validation';
 
 import * as adminService from './admin.service';
 
@@ -63,7 +64,8 @@ export async function getUser(req: Request, res: Response, next: NextFunction) {
 export async function updateUser(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = param(req, 'userId');
-    const user = await adminService.updateUser(userId, req.body);
+    const body = validate(adminUpdateUserSchema, req.body);
+    const user = await adminService.updateUser(userId, body);
     res.json(user);
   } catch (err) {
     next(err);

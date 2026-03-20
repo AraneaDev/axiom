@@ -13,6 +13,7 @@ import { useNavigate, Link } from 'react-router';
 
 import { notificationsApi } from '@/api/notifications.api';
 import type { Notification } from '@/api/notifications.api';
+import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 
 function timeAgo(dateStr: string): string {
@@ -94,9 +95,11 @@ export function NotificationCenter() {
 
   return (
     <div ref={ref} className="relative">
-      <button
+      <Button
+        variant="ghost"
+        size="xs"
         onClick={() => setOpen(!open)}
-        className="p-1.5 rounded-md hover:bg-surface-tertiary transition-colors relative"
+        className="p-1.5 relative"
         title="Notifications"
       >
         <Bell className="h-4 w-4 text-text-tertiary" />
@@ -105,21 +108,23 @@ export function NotificationCenter() {
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
-      </button>
+      </Button>
 
       {open && (
         <div className="absolute right-0 top-full mt-2 w-96 rounded-xl border border-border bg-surface-elevated shadow-lg z-50 animate-fade-in overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
             <h3 className="text-sm font-semibold text-text">Notifications</h3>
             {unreadCount > 0 && (
-              <button
+              <Button
+                variant="ghost"
+                size="xs"
                 onClick={() => markAllReadMutation.mutate()}
-                className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-hover transition-colors"
+                className="text-primary hover:text-primary-hover"
                 title="Mark all as read"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
                 Mark all read
-              </button>
+              </Button>
             )}
           </div>
 
@@ -137,11 +142,13 @@ export function NotificationCenter() {
               notifications.map((notification) => {
                 const Icon = notificationIcon(notification.type);
                 return (
-                  <button
+                  <Button
                     key={notification.id}
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handleNotificationClick(notification)}
                     className={cn(
-                      'flex items-start gap-3 w-full px-4 py-3 text-left hover:bg-surface-tertiary transition-colors border-b border-border-light last:border-b-0',
+                      'flex items-start gap-3 w-full px-4 py-3 text-left justify-start rounded-none h-auto border-b border-border-light last:border-b-0',
                       !notification.read && 'bg-primary-light/30',
                     )}
                   >
@@ -176,7 +183,7 @@ export function NotificationCenter() {
                     {!notification.read && (
                       <span className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-primary" />
                     )}
-                  </button>
+                  </Button>
                 );
               })
             )}

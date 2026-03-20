@@ -1,16 +1,8 @@
-import {
-  AlertTriangle,
-  CheckSquare,
-  ChevronDown,
-  Columns,
-  Target,
-  Trash2,
-  User,
-  X,
-} from 'lucide-react';
+import { AlertTriangle, CheckSquare, Columns, Target, Trash2, User, X } from 'lucide-react';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { PRIORITY_LABELS } from '@/lib/constants';
 
 interface BoardColumn {
@@ -31,8 +23,6 @@ interface Sprint {
 interface IssueListBulkActionsProps {
   selectedIds: Set<string>;
   setSelectedIds: (ids: Set<string>) => void;
-  bulkDropdown: string | null;
-  setBulkDropdown: (v: string | null) => void;
   showDeleteConfirm: boolean;
   setShowDeleteConfirm: (v: boolean) => void;
   boardColumns: BoardColumn[];
@@ -56,8 +46,6 @@ interface IssueListBulkActionsProps {
  * @param root0
  * @param root0.selectedIds
  * @param root0.setSelectedIds
- * @param root0.bulkDropdown
- * @param root0.setBulkDropdown
  * @param root0.showDeleteConfirm
  * @param root0.setShowDeleteConfirm
  * @param root0.boardColumns
@@ -70,8 +58,6 @@ interface IssueListBulkActionsProps {
 export function IssueListBulkActions({
   selectedIds,
   setSelectedIds,
-  bulkDropdown,
-  setBulkDropdown,
   showDeleteConfirm,
   setShowDeleteConfirm,
   boardColumns,
@@ -92,140 +78,86 @@ export function IssueListBulkActions({
       <div className="h-4 w-px bg-border mx-1" />
 
       {/* Set Status */}
-      <div className="relative">
-        <Button
-          variant="secondary"
-          size="xs"
-          onClick={() => setBulkDropdown(bulkDropdown === 'status' ? null : 'status')}
-        >
-          <Columns className="h-3 w-3" /> Set Status <ChevronDown className="h-3 w-3" />
-        </Button>
-        {bulkDropdown === 'status' && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setBulkDropdown(null)} />
-            <div className="absolute left-0 top-full mt-1 w-44 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20">
-              {boardColumns.map((col) => (
-                <Button
-                  key={col.id}
-                  variant="ghost"
-                  size="xs"
-                  className="w-full justify-start rounded-none"
-                  onClick={() => onBulkUpdate({ issueIds: ids, updates: { status: col.id } })}
-                >
-                  <Columns className="h-3 w-3" /> {col.name}
-                </Button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      <Dropdown
+        trigger={
+          <Button variant="secondary" size="xs">
+            <Columns className="h-3 w-3" /> Set Status
+          </Button>
+        }
+      >
+        {boardColumns.map((col) => (
+          <DropdownItem
+            key={col.id}
+            onClick={() => onBulkUpdate({ issueIds: ids, updates: { status: col.id } })}
+          >
+            <Columns className="h-3 w-3" /> {col.name}
+          </DropdownItem>
+        ))}
+      </Dropdown>
 
       {/* Assign */}
-      <div className="relative">
-        <Button
-          variant="secondary"
-          size="xs"
-          onClick={() => setBulkDropdown(bulkDropdown === 'assign' ? null : 'assign')}
+      <Dropdown
+        trigger={
+          <Button variant="secondary" size="xs">
+            <User className="h-3 w-3" /> Assign
+          </Button>
+        }
+      >
+        <DropdownItem
+          onClick={() => onBulkUpdate({ issueIds: ids, updates: { assigneeId: null } })}
         >
-          <User className="h-3 w-3" /> Assign <ChevronDown className="h-3 w-3" />
-        </Button>
-        {bulkDropdown === 'assign' && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setBulkDropdown(null)} />
-            <div className="absolute left-0 top-full mt-1 w-48 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20 max-h-48 overflow-y-auto">
-              <Button
-                variant="ghost"
-                size="xs"
-                className="w-full justify-start rounded-none"
-                onClick={() => onBulkUpdate({ issueIds: ids, updates: { assigneeId: null } })}
-              >
-                <User className="h-3 w-3" /> Unassigned
-              </Button>
-              {teamMembers.map((m) => (
-                <Button
-                  key={m.user.id}
-                  variant="ghost"
-                  size="xs"
-                  className="w-full justify-start rounded-none"
-                  onClick={() =>
-                    onBulkUpdate({ issueIds: ids, updates: { assigneeId: m.user.id } })
-                  }
-                >
-                  <Avatar name={m.user.displayName} size="sm" /> {m.user.displayName}
-                </Button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+          <User className="h-3 w-3" /> Unassigned
+        </DropdownItem>
+        {teamMembers.map((m) => (
+          <DropdownItem
+            key={m.user.id}
+            onClick={() => onBulkUpdate({ issueIds: ids, updates: { assigneeId: m.user.id } })}
+          >
+            <Avatar name={m.user.displayName} size="sm" /> {m.user.displayName}
+          </DropdownItem>
+        ))}
+      </Dropdown>
 
       {/* Set Priority */}
-      <div className="relative">
-        <Button
-          variant="secondary"
-          size="xs"
-          onClick={() => setBulkDropdown(bulkDropdown === 'priority' ? null : 'priority')}
-        >
-          <AlertTriangle className="h-3 w-3" /> Priority <ChevronDown className="h-3 w-3" />
-        </Button>
-        {bulkDropdown === 'priority' && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setBulkDropdown(null)} />
-            <div className="absolute left-0 top-full mt-1 w-40 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20">
-              {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
-                <Button
-                  key={key}
-                  variant="ghost"
-                  size="xs"
-                  className="w-full justify-start rounded-none"
-                  onClick={() => onBulkUpdate({ issueIds: ids, updates: { priority: key } })}
-                >
-                  <AlertTriangle className="h-3 w-3" /> {label}
-                </Button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      <Dropdown
+        trigger={
+          <Button variant="secondary" size="xs">
+            <AlertTriangle className="h-3 w-3" /> Priority
+          </Button>
+        }
+      >
+        {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
+          <DropdownItem
+            key={key}
+            onClick={() => onBulkUpdate({ issueIds: ids, updates: { priority: key } })}
+          >
+            <AlertTriangle className="h-3 w-3" /> {label}
+          </DropdownItem>
+        ))}
+      </Dropdown>
 
       {/* Move to Sprint */}
-      <div className="relative">
-        <Button
-          variant="secondary"
-          size="xs"
-          onClick={() => setBulkDropdown(bulkDropdown === 'sprint' ? null : 'sprint')}
-        >
-          <Target className="h-3 w-3" /> Sprint <ChevronDown className="h-3 w-3" />
-        </Button>
-        {bulkDropdown === 'sprint' && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setBulkDropdown(null)} />
-            <div className="absolute left-0 top-full mt-1 w-48 rounded-lg border border-border bg-surface-elevated shadow-lg py-1 z-20 max-h-48 overflow-y-auto">
-              <Button
-                variant="ghost"
-                size="xs"
-                className="w-full justify-start rounded-none"
-                onClick={() => onBulkUpdate({ issueIds: ids, updates: { sprintId: null } })}
-              >
-                <Target className="h-3 w-3" /> Backlog
-              </Button>
-              {sprints
-                .filter((s) => s.status !== 'COMPLETED')
-                .map((s) => (
-                  <Button
-                    key={s.id}
-                    variant="ghost"
-                    size="xs"
-                    className="w-full justify-start rounded-none"
-                    onClick={() => onBulkUpdate({ issueIds: ids, updates: { sprintId: s.id } })}
-                  >
-                    <Target className="h-3 w-3" /> {s.name}
-                  </Button>
-                ))}
-            </div>
-          </>
-        )}
-      </div>
+      <Dropdown
+        trigger={
+          <Button variant="secondary" size="xs">
+            <Target className="h-3 w-3" /> Sprint
+          </Button>
+        }
+      >
+        <DropdownItem onClick={() => onBulkUpdate({ issueIds: ids, updates: { sprintId: null } })}>
+          <Target className="h-3 w-3" /> Backlog
+        </DropdownItem>
+        {sprints
+          .filter((s) => s.status !== 'COMPLETED')
+          .map((s) => (
+            <DropdownItem
+              key={s.id}
+              onClick={() => onBulkUpdate({ issueIds: ids, updates: { sprintId: s.id } })}
+            >
+              <Target className="h-3 w-3" /> {s.name}
+            </DropdownItem>
+          ))}
+      </Dropdown>
 
       {/* Delete */}
       {showDeleteConfirm ? (
@@ -262,7 +194,6 @@ export function IssueListBulkActions({
           size="xs"
           onClick={() => {
             setSelectedIds(new Set());
-            setBulkDropdown(null);
             setShowDeleteConfirm(false);
           }}
           className="text-text-tertiary"

@@ -5,6 +5,7 @@ import fs from 'fs';
 import { Server, type Connection, type AuthContext } from 'ssh2';
 
 import { prisma } from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
 const SSH_PORT = parseInt(process.env.SSH_PORT || '2222', 10);
@@ -70,17 +71,17 @@ async function resolveAndAuthorize(
   needsWrite: boolean,
 ): Promise<string> {
   const org = await prisma.organization.findUnique({ where: { slug: orgSlug } });
-  if (!org) throw new Error('Repository not found');
+  if (!org) throw new AppError(404, 'Repository not found');
 
   const team = await prisma.team.findUnique({
     where: { orgId_slug: { orgId: org.id, slug: teamSlug } },
   });
-  if (!team) throw new Error('Repository not found');
+  if (!team) throw new AppError(404, 'Repository not found');
 
   const repo = await prisma.repository.findUnique({
     where: { teamId_slug: { teamId: team.id, slug: repoSlug } },
   });
-  if (!repo || !repo.diskPath) throw new Error('Repository not found');
+  if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
 
   // Check permissions
   const orgMembership = await prisma.orgMembership.findUnique({
@@ -88,12 +89,12 @@ async function resolveAndAuthorize(
   });
 
   if (!orgMembership && repo.visibility === 'PRIVATE') {
-    throw new Error('Access denied');
+    throw new AppError(403, 'Access denied');
   }
 
   if (needsWrite) {
     if (!orgMembership || orgMembership.role === 'VIEWER' || orgMembership.role === 'GUEST') {
-      throw new Error('Write access denied');
+      throw new AppError(403, 'Write access denied');
     }
   }
 

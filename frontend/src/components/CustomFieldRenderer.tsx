@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { CustomFieldDefinition } from '@/api/custom-fields.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
 
 interface CustomFieldRendererProps {
@@ -56,8 +57,9 @@ export function CustomFieldRenderer({
   if (definition.type === 'TEXT') {
     if (editing) {
       return (
-        <input
+        <Input
           ref={inputRef}
+          id={`cf-text-${definition.id}`}
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -66,7 +68,6 @@ export function CustomFieldRenderer({
             if (e.key === 'Escape') setEditing(false);
           }}
           onBlur={() => save(draft)}
-          className="w-full rounded border border-border bg-surface px-2 py-1 text-sm focus:border-border-focus focus:outline-none"
         />
       );
     }
@@ -92,8 +93,9 @@ export function CustomFieldRenderer({
   if (definition.type === 'NUMBER') {
     if (editing) {
       return (
-        <input
+        <Input
           ref={inputRef}
+          id={`cf-num-${definition.id}`}
           type="number"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -102,7 +104,6 @@ export function CustomFieldRenderer({
             if (e.key === 'Escape') setEditing(false);
           }}
           onBlur={() => save(draft)}
-          className="w-full rounded border border-border bg-surface px-2 py-1 text-sm focus:border-border-focus focus:outline-none"
         />
       );
     }
@@ -129,11 +130,11 @@ export function CustomFieldRenderer({
     return (
       <div className="flex items-center gap-1">
         <Icon className="h-3.5 w-3.5 text-text-tertiary shrink-0" />
-        <input
+        <Input
+          id={`cf-date-${definition.id}`}
           type="date"
           value={value ?? ''}
           onChange={(e) => onChange(e.target.value)}
-          className="flex-1 rounded border border-border bg-surface px-2 py-1 text-sm focus:border-border-focus focus:outline-none"
         />
       </div>
     );

@@ -3,6 +3,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
 
+import { AppError } from '../middleware/errorHandler';
+
 const execFileAsync = promisify(execFile);
 
 const REPOS_BASE = process.env.REPOS_PATH || '/data/repos';
@@ -61,7 +63,7 @@ export async function deleteRepo(repoPath: string): Promise<void> {
   try {
     await fs.access(headPath);
   } catch {
-    throw new Error(`Not a git repository: ${repoPath}`);
+    throw new AppError(400, `Not a git repository: ${repoPath}`);
   }
   await fs.rm(repoPath, { recursive: true, force: true });
 }

@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
-import { PANDOC_FORMATS, checkPandocInstalled, convertMarkdown } from '../../utils/pandoc';
 import { param } from '../../utils/params';
 import {
   validate,
@@ -15,6 +14,7 @@ import {
   copyPageSchema,
 } from '../../utils/validation';
 
+import * as wikiExportService from './wiki-export.service';
 import * as wikiService from './wiki.service';
 
 /**
@@ -157,20 +157,7 @@ export async function pageHistory(req: Request, res: Response, next: NextFunctio
 export async function exportPage(req: Request, res: Response, next: NextFunction) {
   try {
     const format = (req.query.format as string) || 'html';
-    if (!PANDOC_FORMATS[format]) {
-      throw new AppError(
-        400,
-        `Unsupported format: ${format}. Supported: ${Object.keys(PANDOC_FORMATS).join(', ')}`,
-      );
-    }
-
-    const installed = await checkPandocInstalled();
-    if (!installed) {
-      throw new AppError(501, 'pandoc is not installed on the server');
-    }
-
-    const page = await wikiService.getPage(param(req, 'spaceId'), param(req, 'pageSlug'));
-    await convertMarkdown(page.body ?? '', page.title, format, res);
+    await wikiExportService.exportPage(param(req, 'spaceId'), param(req, 'pageSlug'), format, res);
   } catch (err) {
     next(err);
   }

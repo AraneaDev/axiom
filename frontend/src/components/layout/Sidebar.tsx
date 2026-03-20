@@ -14,6 +14,7 @@ import { NavLink, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
+import { Button } from '@/components/ui/Button';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
@@ -66,10 +67,12 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-center justify-between px-2.5 mb-1">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="xs"
         onClick={onToggle}
-        className="flex items-center gap-1 text-[11px] font-medium text-text-tertiary uppercase tracking-wider hover:text-text-secondary transition-colors"
+        className="flex items-center gap-1 text-[11px] font-medium text-text-tertiary uppercase tracking-wider hover:text-text-secondary px-0"
+        title={collapsed ? `Expand ${label}` : `Collapse ${label}`}
       >
         {onToggle && (
           <ChevronDown
@@ -77,7 +80,7 @@ function SectionHeader({
           />
         )}
         {label}
-      </button>
+      </Button>
       {action}
     </div>
   );

@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 
+type ProjectView = 'board' | 'issues' | 'backlog';
+
 interface UIState {
   sidebarOpen: boolean;
   searchOpen: boolean;
   shortcutHelpOpen: boolean;
   currentOrgId: string | null;
   currentTeamId: string | null;
+  preferredProjectView: ProjectView;
 
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
@@ -14,6 +17,7 @@ interface UIState {
   setShortcutHelpOpen: (open: boolean) => void;
   setCurrentOrg: (orgId: string | null) => void;
   setCurrentTeam: (teamId: string | null) => void;
+  setPreferredProjectView: (view: ProjectView) => void;
 }
 
 /**
@@ -27,6 +31,7 @@ export const useUIStore = create<UIState>((set) => ({
   shortcutHelpOpen: false,
   currentOrgId: null,
   currentTeamId: null,
+  preferredProjectView: (localStorage.getItem('preferredProjectView') as ProjectView) || 'board',
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -35,4 +40,8 @@ export const useUIStore = create<UIState>((set) => ({
   setShortcutHelpOpen: (open) => set({ shortcutHelpOpen: open }),
   setCurrentOrg: (orgId) => set({ currentOrgId: orgId }),
   setCurrentTeam: (teamId) => set({ currentTeamId: teamId }),
+  setPreferredProjectView: (view) => {
+    localStorage.setItem('preferredProjectView', view);
+    set({ preferredProjectView: view });
+  },
 }));

@@ -8,6 +8,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 
 import CreateBranchModal from './CreateBranchModal';
 
@@ -42,9 +43,17 @@ const PR_STATUS_COLORS: Record<string, string> = {
  * @param root0
  * @param root0.projectId
  * @param root0.issueNumber
+ * @param root0.org
+ * @param root0.teamSlug
  * @param root0.repos
  */
-export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: Props) {
+export default function IssueDevelopmentCard({
+  projectId,
+  issueNumber,
+  org,
+  teamSlug,
+  repos,
+}: Props) {
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     branches: true,
@@ -100,11 +109,15 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
         {expanded.branches && (
           <div className="space-y-1">
             {branches.map((b) => (
-              <div key={b.id} className="flex items-center gap-2 text-xs py-0.5">
+              <Link
+                key={b.id}
+                to={`/${org}/${teamSlug}/repos/${b.repo.slug}/tree/${b.branchName}`}
+                className="flex items-center gap-2 text-xs py-0.5 hover:bg-surface-secondary rounded px-1 -mx-1 transition-colors"
+              >
                 <GitBranch className="h-3 w-3 text-text-tertiary flex-shrink-0" />
-                <span className="font-mono text-text truncate">{b.branchName}</span>
+                <span className="font-mono text-primary truncate">{b.branchName}</span>
                 <span className="text-text-tertiary ml-auto flex-shrink-0">{b.repo.name}</span>
-              </div>
+              </Link>
             ))}
             <Button
               variant="ghost"
@@ -147,9 +160,13 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
           {expanded.prs && (
             <div className="space-y-1">
               {prs.map((p) => (
-                <div key={p.id} className="flex items-center gap-2 text-xs py-0.5">
+                <Link
+                  key={p.id}
+                  to={`/${org}/${teamSlug}/repos/${p.pr.repo.slug}/pulls/${p.pr.number}`}
+                  className="flex items-center gap-2 text-xs py-0.5 hover:bg-surface-secondary rounded px-1 -mx-1 transition-colors"
+                >
                   <GitPullRequest className="h-3 w-3 text-text-tertiary flex-shrink-0" />
-                  <span className="text-text truncate flex-1">{p.pr.title}</span>
+                  <span className="text-primary truncate flex-1">{p.pr.title}</span>
                   <span
                     className={cn(
                       'px-1.5 py-0.5 rounded-full border text-[10px]',
@@ -158,7 +175,7 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
                   >
                     {p.pr.status}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           )}
@@ -184,13 +201,17 @@ export default function IssueDevelopmentCard({ projectId, issueNumber, repos }: 
           {expanded.commits && (
             <div className="space-y-1">
               {commits.slice(0, 5).map((c) => (
-                <div key={c.id} className="flex items-center gap-2 text-xs py-0.5">
+                <Link
+                  key={c.id}
+                  to={`/${org}/${teamSlug}/repos/${c.repo.slug}/commit/${c.sha}`}
+                  className="flex items-center gap-2 text-xs py-0.5 hover:bg-surface-secondary rounded px-1 -mx-1 transition-colors"
+                >
                   <GitCommit className="h-3 w-3 text-text-tertiary flex-shrink-0" />
-                  <code className="text-text-tertiary flex-shrink-0">{c.sha.slice(0, 7)}</code>
+                  <code className="text-primary flex-shrink-0">{c.sha.slice(0, 7)}</code>
                   <span className="text-text truncate flex-1">
                     {c.message.split('\n')[0].slice(0, 60)}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           )}

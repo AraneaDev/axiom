@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { prisma } from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/ws-server';
 import { logger } from '../../utils/logger';
 import { createOrUpdateStatus } from '../status-checks/status-checks.service';
@@ -202,7 +203,7 @@ export async function runPipeline(runRecord: {
     // Get pipeline and repo
     const pipeline = await prisma.pipeline.findUnique({ where: { id: runRecord.pipelineId } });
     const repo = await prisma.repository.findUnique({ where: { id: runRecord.repoId } });
-    if (!pipeline || !repo?.diskPath) throw new Error('Pipeline or repo not found');
+    if (!pipeline || !repo?.diskPath) throw new AppError(404, 'Pipeline or repo not found');
 
     const parsed = parsePipelineYaml(pipeline.yamlContent);
 

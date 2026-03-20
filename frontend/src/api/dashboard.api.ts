@@ -48,6 +48,9 @@ export interface DashboardActivity {
   details: Record<string, unknown> | null;
   createdAt: string;
   user: { id: string; displayName: string; username: string; avatarUrl: string | null };
+  resourceTitle: string | null;
+  resourceLink: string | null;
+  resourceKey: string | null;
 }
 
 export interface DashboardData {

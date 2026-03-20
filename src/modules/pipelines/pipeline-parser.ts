@@ -1,5 +1,7 @@
 import yaml from 'js-yaml';
 
+import { AppError } from '../../middleware/errorHandler';
+
 export interface ParsedStep {
   name: string;
   run: string;
@@ -31,7 +33,7 @@ export function parsePipelineYaml(content: string): ParsedPipeline {
   const raw = yaml.load(content) as Record<string, unknown>;
 
   if (!raw || typeof raw !== 'object') {
-    throw new Error('Invalid YAML: expected an object');
+    throw new AppError(400, 'Invalid YAML: expected an object');
   }
 
   const name = typeof raw.name === 'string' ? raw.name : 'Pipeline';
@@ -51,7 +53,7 @@ export function parsePipelineYaml(content: string): ParsedPipeline {
   // Parse jobs
   const jobsRaw = raw.jobs as Record<string, unknown> | undefined;
   if (!jobsRaw || typeof jobsRaw !== 'object') {
-    throw new Error('Invalid pipeline: missing "jobs"');
+    throw new AppError(400, 'Invalid pipeline: missing "jobs"');
   }
 
   const jobs: Record<string, ParsedJob> = {};

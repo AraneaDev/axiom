@@ -6,6 +6,7 @@ import { issuesApi } from '@/api/issues.api';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
 
 interface Repo {
   id: string;
@@ -73,50 +74,39 @@ export default function CreateBranchModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-surface-elevated rounded-xl border border-border shadow-xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="font-semibold flex items-center gap-2">
-            <GitBranch className="h-4 w-4" /> Create Branch
-          </h2>
-          <Button variant="ghost" size="xs" onClick={onClose} title="Close">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="p-4 space-y-4">
-          {repos.length > 1 && (
-            <Select
-              label="Repository"
-              value={repoId}
-              onChange={(v) => setRepoId(v as string)}
-              options={repos.map((r) => ({ value: r.id, label: r.name }))}
-            />
-          )}
-          <Input
-            label="Branch Name"
-            value={branchName}
-            onChange={(e) => setBranchName(e.target.value)}
-            placeholder="feature/..."
-            className="font-mono"
+    <Modal open={true} onClose={onClose} title="Create Branch" size="md">
+      <div className="space-y-4">
+        {repos.length > 1 && (
+          <Select
+            label="Repository"
+            value={repoId}
+            onChange={(v) => setRepoId(v as string)}
+            options={repos.map((r) => ({ value: r.id, label: r.name }))}
           />
-          <Input
-            label="Start Point"
-            value={startPoint}
-            onChange={(e) => setStartPoint(e.target.value)}
-            placeholder={selectedRepo?.defaultBranch ?? 'main'}
-          />
-          {error && <p className="text-sm text-danger bg-danger-light p-2 rounded">{error}</p>}
-        </div>
-        <div className="flex justify-end gap-2 p-4 border-t border-border">
-          <Button variant="secondary" onClick={onClose}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button onClick={() => mutation.mutate()} disabled={!branchName || mutation.isPending}>
-            <GitBranch className="h-4 w-4" /> {mutation.isPending ? 'Creating...' : 'Create Branch'}
-          </Button>
-        </div>
+        )}
+        <Input
+          label="Branch Name"
+          value={branchName}
+          onChange={(e) => setBranchName(e.target.value)}
+          placeholder="feature/..."
+          className="font-mono"
+        />
+        <Input
+          label="Start Point"
+          value={startPoint}
+          onChange={(e) => setStartPoint(e.target.value)}
+          placeholder={selectedRepo?.defaultBranch ?? 'main'}
+        />
+        {error && <p className="text-sm text-danger bg-danger-light p-2 rounded">{error}</p>}
       </div>
-    </div>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose}>
+          <X className="h-4 w-4" /> Cancel
+        </Button>
+        <Button onClick={() => mutation.mutate()} disabled={!branchName || mutation.isPending}>
+          <GitBranch className="h-4 w-4" /> {mutation.isPending ? 'Creating...' : 'Create Branch'}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }

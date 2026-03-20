@@ -139,6 +139,7 @@ export async function getPage(spaceId: string, pageSlug: string) {
   const page = await prisma.page.findUnique({
     where: { spaceId_slug: { spaceId, slug: pageSlug } },
     include: {
+      space: { include: { team: { include: { org: true } } } },
       children: {
         select: { id: true, title: true, slug: true, position: true },
         orderBy: { position: 'asc' },
@@ -245,6 +246,7 @@ export async function getPageHistory(spaceId: string, pageSlug: string) {
   const page = await prisma.page.findUnique({
     where: { spaceId_slug: { spaceId, slug: pageSlug } },
     include: {
+      space: { include: { team: { include: { org: true } } } },
       versions: {
         orderBy: { version: 'desc' },
         include: { author: { select: USER_BASIC_SELECT } },

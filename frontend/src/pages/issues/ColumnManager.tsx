@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, GripVertical, Save, Check, X } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Save, Check, X, Pencil } from 'lucide-react';
 import { useState, useRef, useCallback } from 'react';
 
 import { issuesApi } from '@/api/issues.api';
@@ -171,7 +171,7 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
             <GripVertical className="h-4 w-4 text-text-tertiary shrink-0" />
 
             {editingId === row.id ? (
-              <input
+              <Input
                 value={editingName}
                 onChange={(e) => setEditingName(e.target.value)}
                 onKeyDown={(e) => {
@@ -182,35 +182,43 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
                 autoFocus
               />
             ) : (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => handleStartEdit(row)}
-                className="flex-1 text-left text-sm text-text truncate"
+                className="flex-1 text-left text-sm text-text truncate justify-start"
                 title="Click to edit name"
               >
-                {row.name}
-              </button>
+                <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" /> {row.name}
+              </Button>
             )}
 
             {editingId === row.id ? (
               <div className="flex gap-1">
-                <button
+                <Button
+                  variant="ghost"
+                  size="xs"
                   onClick={() => handleSaveEdit(row)}
-                  className="p-1 rounded text-success hover:bg-surface-tertiary"
+                  className="p-1 text-success"
                   title="Save"
                 >
                   <Check className="h-3.5 w-3.5" />
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
                   onClick={() => setEditingId(null)}
-                  className="p-1 rounded text-text-tertiary hover:bg-surface-tertiary"
+                  className="p-1 text-text-tertiary"
                   title="Cancel"
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </div>
             ) : (
               <>
-                <button
+                <Button
+                  variant="ghost"
+                  size="xs"
                   onClick={() => handleToggleDone(row)}
                   className={cn(
                     'text-xs px-1.5 py-0.5 rounded-full border shrink-0',
@@ -220,8 +228,16 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
                   )}
                   title={row.isDone ? 'Marks issues as done' : 'Click to mark as done column'}
                 >
-                  {row.isDone ? 'Done' : 'Active'}
-                </button>
+                  {row.isDone ? (
+                    <>
+                      <Check className="h-3 w-3" /> Done
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-3 w-3" /> Active
+                    </>
+                  )}
+                </Button>
 
                 {row.isDefault && (
                   <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary-light text-primary shrink-0">
@@ -231,13 +247,15 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
 
                 <span className="text-xs text-text-tertiary shrink-0">{row.issueCount}</span>
 
-                <button
+                <Button
+                  variant="ghost"
+                  size="xs"
                   onClick={() => deleteMutation.mutate(row.id)}
                   disabled={row.isDefault || row.issueCount > 0}
                   className={cn(
-                    'p-1 rounded shrink-0',
+                    'p-1 shrink-0',
                     row.isDefault || row.issueCount > 0
-                      ? 'text-text-tertiary/30 cursor-not-allowed'
+                      ? 'text-text-tertiary/30'
                       : 'text-danger hover:bg-danger-light',
                   )}
                   title={
@@ -249,7 +267,7 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
                   }
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </>
             )}
           </div>

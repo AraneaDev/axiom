@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, Mail, Monitor } from 'lucide-react';
+import { Mail, Monitor } from 'lucide-react';
 
 import { notificationsApi, type NotificationPreference } from '@/api/notifications.api';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -159,9 +159,11 @@ export default function NotificationSettings() {
                   onChange={(val) => handleToggle(pref, 'inApp', val)}
                 />
               </div>
-              <div className="flex flex-col items-center gap-1">
-                <ToggleSwitch checked={pref.email} onChange={() => {}} disabled />
-                <span className="text-[10px] text-text-tertiary">Coming soon</span>
+              <div className="flex justify-center">
+                <ToggleSwitch
+                  checked={pref.email}
+                  onChange={(val) => handleToggle(pref, 'email', val)}
+                />
               </div>
             </div>
           );
@@ -169,9 +171,8 @@ export default function NotificationSettings() {
       </div>
 
       <p className="text-xs text-text-tertiary mt-4 flex items-center gap-1.5">
-        <Bell className="h-3.5 w-3.5" />
-        Email notifications are not yet available. This setting will take effect once email delivery
-        is configured.
+        <Mail className="h-3.5 w-3.5" />
+        Email notifications are delivered to your account email address.
       </p>
     </div>
   );
