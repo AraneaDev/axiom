@@ -17,6 +17,8 @@ import {
   Copy,
   Trash2,
   MoreVertical,
+  Library,
+  Files,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
@@ -33,6 +35,13 @@ import { useToast } from '@/components/ui/Toast';
 import { PageComments } from '@/components/wiki/PageComments';
 import type { PageTreeNode } from '@/lib/types';
 import { cn, formatRelative } from '@/lib/utils';
+
+function countTreePages(nodes: PageTreeNode[]): number {
+  return nodes.reduce(
+    (sum, node) => sum + 1 + (node.children ? countTreePages(node.children) : 0),
+    0,
+  );
+}
 
 interface TocEntry {
   level: number;
@@ -296,20 +305,50 @@ export default function PageView() {
       toast.error(err instanceof Error ? err.message : 'Failed to move page'),
   });
 
+  // Fetch first page content for welcome preview
+  const firstPageSlug = tree?.[0]?.slug;
+  const { data: welcomePage } = useQuery({
+    queryKey: ['page', currentSpace?.id, firstPageSlug],
+    queryFn: () => wikiApi.getPage(currentSpace!.id, firstPageSlug!),
+    enabled: !!currentSpace?.id && !!firstPageSlug && !pageSlug,
+  });
+
   if (isLoading) return <PageLoader />;
 
-  // If no page slug, show the space overview with tree
+  // If no page slug, show the space overview
   if (!pageSlug) {
     return (
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">{currentSpace?.name ?? 'Wiki'}</h1>
-          <Link to={`${basePath}/new`}>
-            <Button size="sm">
-              <Plus className="h-4 w-4" /> New Page
-            </Button>
-          </Link>
+      <div className="max-w-5xl mx-auto">
+        {/* Hero section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary-light flex items-center justify-center">
+                <Library className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-text">{currentSpace?.name ?? 'Wiki'}</h1>
+                {currentSpace?.description && (
+                  <p className="text-sm text-text-secondary mt-0.5">{currentSpace.description}</p>
+                )}
+              </div>
+            </div>
+            <Link to={`${basePath}/new`}>
+              <Button size="sm">
+                <Plus className="h-4 w-4" /> New Page
+              </Button>
+            </Link>
+          </div>
+          {tree && tree.length > 0 && (
+            <div className="flex items-center gap-4 mt-3 text-xs text-text-tertiary">
+              <span className="flex items-center gap-1">
+                <Files className="h-3.5 w-3.5" />
+                {countTreePages(tree)} pages
+              </span>
+            </div>
+          )}
         </div>
+
         {!tree?.length ? (
           <EmptyState
             icon={<FileText className="h-10 w-10" />}
@@ -317,11 +356,64 @@ export default function PageView() {
             description="Create your first page."
           />
         ) : (
-          <div className="rounded-lg border border-border bg-surface p-2">
-            {tree.map((node) => (
-              <TreeNode key={node.id} node={node} basePath={basePath} />
-            ))}
-          </div>
+          <>
+            {/* Welcome page preview (first page rendered inline) */}
+            {welcomePage?.body && (
+              <div className="mb-8">
+                <Link
+                  to={`${basePath}/${welcomePage.slug}`}
+                  className="group block rounded-xl border border-border bg-surface overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all"
+                >
+                  <div className="px-6 py-4 border-b border-border-light bg-surface-secondary/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-semibold text-text">{welcomePage.title}</span>
+                    </div>
+                    <span className="text-xs text-text-tertiary group-hover:text-primary transition-colors flex items-center gap-1">
+                      Read more <ArrowRight className="h-3 w-3" />
+                    </span>
+                  </div>
+                  <div className="px-6 py-5 max-h-64 overflow-hidden relative">
+                    <div className="prose max-w-none text-sm leading-relaxed pointer-events-none">
+                      <MarkdownRenderer content={welcomePage.body} />
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-surface to-transparent" />
+                  </div>
+                </Link>
+              </div>
+            )}
+
+            {/* Page index as cards */}
+            <div>
+              <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-3">
+                All Pages
+              </h2>
+              <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+                {tree.map((node) => (
+                  <Link
+                    key={node.id}
+                    to={`${basePath}/${node.slug}`}
+                    className="group flex items-start gap-3 p-4 rounded-lg border border-border bg-surface hover:border-primary/40 hover:shadow-sm transition-all"
+                  >
+                    <div className="h-8 w-8 rounded-md bg-primary-light flex items-center justify-center shrink-0 mt-0.5">
+                      <FileText className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-semibold text-text group-hover:text-primary transition-colors truncate">
+                        {node.title}
+                      </h3>
+                      {node.children && node.children.length > 0 && (
+                        <p className="text-xs text-text-tertiary mt-1">
+                          {node.children.length} sub-page{node.children.length !== 1 ? 's' : ''}
+                        </p>
+                      )}
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-text-tertiary group-hover:text-primary shrink-0 mt-1 transition-colors" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </>
         )}
       </div>
     );
