@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { cacheable } from '../../config/redis';
 import * as gitCmd from '../../git/git-commands';
 import {
   initBareRepo,
@@ -394,8 +395,10 @@ export async function getCommitDetail(repoId: string, sha: string) {
  */
 export async function getTree(repoId: string, ref: string, treePath: string = '') {
   if (treePath) validateFilePath(treePath);
-  const diskPath = await getRepoDiskPath(repoId);
-  return gitCmd.lsTree(diskPath, ref, treePath);
+  return cacheable(`repo:${repoId}:tree:${ref}:${treePath}`, 120, async () => {
+    const diskPath = await getRepoDiskPath(repoId);
+    return gitCmd.lsTree(diskPath, ref, treePath);
+  });
 }
 
 /**

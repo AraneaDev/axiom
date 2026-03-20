@@ -29,7 +29,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Dropdown } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
-import { PageLoader } from '@/components/ui/Spinner';
+import { RepoSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { useRepoContext } from '@/hooks/useRepoContext';
 import { formatRelative } from '@/lib/utils';
@@ -76,7 +76,7 @@ export default function RepoDetail() {
 
   const [cloneCopied, setCloneCopied] = useState(false);
 
-  if (!currentRepo) return <PageLoader />;
+  if (!currentRepo) return <RepoSkeleton />;
   const cloneUrl = `${window.location.origin}/git/${org}/${teamSlug}/${repoSlug}.git`;
 
   const tabs = [

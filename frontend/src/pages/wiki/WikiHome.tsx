@@ -7,7 +7,7 @@ import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Skeleton, CardGridSkeleton } from '@/components/ui/Skeleton';
 
 /**
  *
@@ -30,7 +30,16 @@ export default function WikiHome() {
     enabled: !!currentTeam?.id,
   });
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div className="max-w-5xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <Skeleton className="h-7 w-24" />
+          <Skeleton className="h-8 w-28 rounded-md" />
+        </div>
+        <CardGridSkeleton />
+      </div>
+    );
 
   return (
     <div className="max-w-5xl mx-auto">

@@ -10,7 +10,7 @@ import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { PRIORITY_COLORS } from '@/lib/constants';
 import type { RoadmapEpic, Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -263,7 +263,41 @@ export default function Roadmap() {
     return pct >= 0 && pct <= 100 ? pct : null;
   }, [timelineStart, totalDays]);
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <Skeleton className="h-7 w-48 mb-2" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-8 w-20 rounded-md" />
+            <Skeleton className="h-8 w-20 rounded-md" />
+            <Skeleton className="h-8 w-28 rounded-md" />
+          </div>
+        </div>
+        <div className="rounded-lg border border-border bg-surface overflow-hidden">
+          <div className="flex border-b border-border bg-surface-secondary">
+            <Skeleton className="w-72 h-10 shrink-0" />
+            <Skeleton className="flex-1 h-10" />
+          </div>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex border-b border-border-light">
+              <div className="w-72 shrink-0 px-3 py-3">
+                <Skeleton className="h-4 w-48" />
+              </div>
+              <div className="flex-1 py-3 px-4">
+                <div
+                  className="h-6 animate-pulse rounded-full bg-surface-tertiary"
+                  style={{ width: `${40 + i * 12}%`, marginLeft: `${i * 8}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
 
   return (
     <div>

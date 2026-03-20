@@ -18,7 +18,7 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
-import { PageLoader } from '@/components/ui/Spinner';
+import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn, formatRelative } from '@/lib/utils';
 
@@ -155,7 +155,7 @@ export default function IssueDetail() {
     }
   }, [editingTitle]);
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <DetailSkeleton />;
   if (!issue) return <div className="text-center py-16 text-text-secondary">Issue not found</div>;
 
   function startEditTitle() {

@@ -31,7 +31,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Modal } from '@/components/ui/Modal';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { VelocityChart } from '@/components/VelocityChart';
 import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
@@ -451,7 +451,29 @@ export default function Backlog() {
   });
 
   const isLoading = sprintsLoading || backlogLoading;
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <Skeleton className="h-7 w-32 mb-2" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+          <Skeleton className="h-9 w-36 rounded-md" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <ListSkeleton rows={4} />
+            <ListSkeleton rows={6} />
+          </div>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <Skeleton className="h-40 w-full rounded-md" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
 
   // Sort sprints: active first, then planning, then completed
   const statusOrder: Record<string, number> = { ACTIVE: 0, PLANNING: 1, COMPLETED: 2 };

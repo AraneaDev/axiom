@@ -4,6 +4,7 @@ import { CommitRefType } from '@prisma/client';
 import { Request, Response, NextFunction, Router } from 'express';
 
 import { prisma } from '../config/database';
+import { cacheInvalidate } from '../config/redis';
 import { triggerPipelineOnPush } from '../pipelines/trigger';
 import { logger } from '../utils/logger';
 
@@ -84,6 +85,9 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
         });
       }
     }
+
+    // Invalidate repo file tree cache
+    cacheInvalidate(`repo:${repo.id}:*`).catch(() => {});
 
     // Update any open PRs that involve this branch
     if (!isTag && !isDelete) {

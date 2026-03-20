@@ -8,7 +8,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 
 const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
   ADMIN: 'primary',
@@ -50,7 +50,15 @@ export default function TeamMembers() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['team', currentTeam?.id] }),
   });
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <Skeleton className="h-7 w-40" />
+        </div>
+        <ListSkeleton rows={5} />
+      </div>
+    );
 
   return (
     <div>

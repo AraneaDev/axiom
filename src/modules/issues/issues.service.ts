@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
+import { cacheable, cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
@@ -99,6 +100,7 @@ export async function createIssue(
 
   if (!issue) throw new AppError(500, 'Failed to create issue');
 
+  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
   await logActivity('issue', issue.id, 'created', creatorId, { title: data.title });
 
   // Notify @mentioned users in the issue body
@@ -188,45 +190,48 @@ export async function listIssues(
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new AppError(404, 'Project not found');
 
-  const where: Prisma.IssueWhereInput = { projectId };
-  if (filters?.q) {
-    const q = filters.q;
-    // Search by number (if numeric) or title (contains)
-    const num = parseInt(q, 10);
-    if (!isNaN(num)) {
-      where.OR = [{ number: num }, { title: { contains: q, mode: 'insensitive' } }];
-    } else {
-      where.title = { contains: q, mode: 'insensitive' };
+  const cacheKey = `issues:${projectId}:${filters?.offset ?? 0}:${filters?.q || ''}:${filters?.type || ''}:${filters?.priority || ''}:${filters?.assigneeId || ''}:${filters?.columnId || ''}:${filters?.label || ''}`;
+  return cacheable(cacheKey, 30, async () => {
+    const where: Prisma.IssueWhereInput = { projectId };
+    if (filters?.q) {
+      const q = filters.q;
+      // Search by number (if numeric) or title (contains)
+      const num = parseInt(q, 10);
+      if (!isNaN(num)) {
+        where.OR = [{ number: num }, { title: { contains: q, mode: 'insensitive' } }];
+      } else {
+        where.title = { contains: q, mode: 'insensitive' };
+      }
     }
-  }
-  if (filters?.type) where.type = filters.type as Prisma.IssueWhereInput['type'];
-  if (filters?.priority) where.priority = filters.priority as Prisma.IssueWhereInput['priority'];
-  if (filters?.assigneeId) where.assigneeId = filters.assigneeId;
-  if (filters?.columnId) where.columnId = filters.columnId;
-  if (filters?.label) where.labels = { some: { name: filters.label } };
+    if (filters?.type) where.type = filters.type as Prisma.IssueWhereInput['type'];
+    if (filters?.priority) where.priority = filters.priority as Prisma.IssueWhereInput['priority'];
+    if (filters?.assigneeId) where.assigneeId = filters.assigneeId;
+    if (filters?.columnId) where.columnId = filters.columnId;
+    if (filters?.label) where.labels = { some: { name: filters.label } };
 
-  const [issues, total] = await Promise.all([
-    prisma.issue.findMany({
-      where,
-      include: {
-        assignee: { select: USER_BASIC_SELECT },
-        labels: true,
-        column: { select: { id: true, name: true } },
-      },
-      orderBy: [{ column: { position: 'asc' } }, { position: 'asc' }],
-      take: filters?.limit ?? 50,
-      skip: filters?.offset ?? 0,
-    }),
-    prisma.issue.count({ where }),
-  ]);
+    const [issues, total] = await Promise.all([
+      prisma.issue.findMany({
+        where,
+        include: {
+          assignee: { select: USER_BASIC_SELECT },
+          labels: true,
+          column: { select: { id: true, name: true } },
+        },
+        orderBy: [{ column: { position: 'asc' } }, { position: 'asc' }],
+        take: filters?.limit ?? 50,
+        skip: filters?.offset ?? 0,
+      }),
+      prisma.issue.count({ where }),
+    ]);
 
-  return {
-    issues: issues.map((i: (typeof issues)[number]) => ({
-      ...i,
-      key: `${project.prefix}-${i.number}`,
-    })),
-    total,
-  };
+    return {
+      issues: issues.map((i: (typeof issues)[number]) => ({
+        ...i,
+        key: `${project.prefix}-${i.number}`,
+      })),
+      total,
+    };
+  }); // end cacheable
 }
 
 /**
@@ -320,6 +325,8 @@ export async function updateIssue(
       sprint: { select: { id: true, name: true } },
     },
   });
+
+  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
 
   // Log granular activity events
   // We need a userId -- pull it from the issue's last updater context
@@ -420,6 +427,7 @@ export async function deleteIssue(projectId: string, issueNumber: number, userId
   });
   if (!issue) throw new AppError(404, 'Issue not found');
   await prisma.issue.delete({ where: { id: issue.id } });
+  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
   if (userId) {
     await logActivity('issue', issue.id, 'deleted', userId, {
       title: issue.title,
@@ -510,28 +518,30 @@ export async function deleteComment(commentId: string, userId: string) {
  * @returns Board columns with issues, each issue having a computed key
  */
 export async function getBoard(projectId: string) {
-  const columns = await prisma.boardColumn.findMany({
-    where: { projectId },
-    include: {
-      issues: {
-        include: {
-          assignee: { select: USER_BASIC_SELECT },
-          labels: true,
+  return cacheable(`board:${projectId}`, 30, async () => {
+    const columns = await prisma.boardColumn.findMany({
+      where: { projectId },
+      include: {
+        issues: {
+          include: {
+            assignee: { select: USER_BASIC_SELECT },
+            labels: true,
+          },
+          orderBy: { position: 'asc' },
         },
-        orderBy: { position: 'asc' },
       },
-    },
-    orderBy: { position: 'asc' },
-  });
+      orderBy: { position: 'asc' },
+    });
 
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  return columns.map((col: (typeof columns)[number]) => ({
-    ...col,
-    issues: col.issues.map((i: (typeof col.issues)[number]) => ({
-      ...i,
-      key: `${project!.prefix}-${i.number}`,
-    })),
-  }));
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    return columns.map((col: (typeof columns)[number]) => ({
+      ...col,
+      issues: col.issues.map((i: (typeof col.issues)[number]) => ({
+        ...i,
+        key: `${project!.prefix}-${i.number}`,
+      })),
+    }));
+  }); // end cacheable
 }
 
 /**
@@ -562,6 +572,8 @@ export async function moveIssue(
     where: { id: issue.id },
     data: { columnId, position },
   });
+
+  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
 
   // Fire automation rules (non-blocking)
   if (columnId !== issue.columnId) {
@@ -939,5 +951,6 @@ export async function bulkUpdate(
     results.push(updated);
   }
 
+  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
   return { updated: results.length, issues: results };
 }

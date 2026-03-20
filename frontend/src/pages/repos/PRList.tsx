@@ -9,7 +9,7 @@ import { teamsApi } from '@/api/teams.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { formatRelative } from '@/lib/utils';
 
@@ -54,7 +54,21 @@ export default function PRList() {
     enabled: !!currentRepo?.id,
   });
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-8 w-24 rounded-md" />
+        </div>
+        <div className="flex gap-2 mb-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-20 rounded-md" />
+          ))}
+        </div>
+        <ListSkeleton rows={5} />
+      </div>
+    );
   const basePath = `/${org}/${teamSlug}/repos/${repoSlug}`;
 
   return (

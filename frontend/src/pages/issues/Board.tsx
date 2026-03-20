@@ -23,7 +23,7 @@ import { teamsApi } from '@/api/teams.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
-import { PageLoader } from '@/components/ui/Spinner';
+import { BoardSkeleton } from '@/components/ui/Skeleton';
 import {
   PRIORITY_COLORS,
   PRIORITY_LABELS,
@@ -440,7 +440,7 @@ export default function Board() {
     [currentProject, queryClient, moveMutation],
   );
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <BoardSkeleton />;
 
   return (
     <div>

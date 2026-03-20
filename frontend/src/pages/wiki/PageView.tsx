@@ -30,7 +30,8 @@ import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { DetailSkeleton } from '@/components/ui/Skeleton';
+import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { PageComments } from '@/components/wiki/PageComments';
 import type { PageTreeNode } from '@/lib/types';
@@ -313,7 +314,7 @@ export default function PageView() {
     enabled: !!currentSpace?.id && !!firstPageSlug && !pageSlug,
   });
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <DetailSkeleton />;
 
   // If no page slug, show the space overview
   if (!pageSlug) {

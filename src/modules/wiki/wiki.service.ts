@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { cacheable, cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
@@ -118,6 +119,7 @@ export async function createPage(
     include: { versions: true },
   });
 
+  await cacheInvalidate(`wiki:tree:${spaceId}`);
   await logActivity('wiki_page', page.id, 'created', authorId, { title: data.title });
   return page;
 }
@@ -199,6 +201,7 @@ export async function updatePage(
     include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
   });
 
+  await cacheInvalidate(`wiki:tree:${spaceId}`);
   await logActivity('wiki_page', page.id, 'updated', authorId, { title: updated.title });
   return updated;
 }
@@ -216,6 +219,7 @@ export async function deletePage(spaceId: string, pageSlug: string, userId?: str
   });
   if (!page) throw new AppError(404, 'Page not found');
   await prisma.page.delete({ where: { id: page.id } });
+  await cacheInvalidate(`wiki:tree:${spaceId}`);
   if (userId) {
     await logActivity('wiki_page', page.id, 'deleted', userId, { title: page.title });
   }
@@ -248,28 +252,30 @@ export async function getPageHistory(spaceId: string, pageSlug: string) {
  * @returns Nested tree of pages with id, title, slug, and children
  */
 export async function getPageTree(spaceId: string) {
-  const pages = await prisma.page.findMany({
-    where: { spaceId },
-    select: { id: true, title: true, slug: true, parentId: true, position: true, isDraft: true },
-    orderBy: { position: 'asc' },
-  });
+  return cacheable(`wiki:tree:${spaceId}`, 120, async () => {
+    const pages = await prisma.page.findMany({
+      where: { spaceId },
+      select: { id: true, title: true, slug: true, parentId: true, position: true, isDraft: true },
+      orderBy: { position: 'asc' },
+    });
 
-  type PageNode = (typeof pages)[number] & { children: PageNode[] };
+    type PageNode = (typeof pages)[number] & { children: PageNode[] };
 
-  // Build tree
-  const map = new Map<string | null, typeof pages>();
-  for (const page of pages) {
-    const parentKey = page.parentId ?? null;
-    if (!map.has(parentKey)) map.set(parentKey, []);
-    map.get(parentKey)!.push(page);
-  }
+    // Build tree
+    const map = new Map<string | null, typeof pages>();
+    for (const page of pages) {
+      const parentKey = page.parentId ?? null;
+      if (!map.has(parentKey)) map.set(parentKey, []);
+      map.get(parentKey)!.push(page);
+    }
 
-  function buildTree(parentId: string | null): PageNode[] {
-    const children = map.get(parentId) ?? [];
-    return children.map((p: (typeof children)[number]) => ({ ...p, children: buildTree(p.id) }));
-  }
+    function buildTree(parentId: string | null): PageNode[] {
+      const children = map.get(parentId) ?? [];
+      return children.map((p: (typeof children)[number]) => ({ ...p, children: buildTree(p.id) }));
+    }
 
-  return buildTree(null);
+    return buildTree(null);
+  }); // end cacheable
 }
 
 // ─── Templates ──────────────────────────────────────────────
