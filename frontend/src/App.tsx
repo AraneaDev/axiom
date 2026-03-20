@@ -211,6 +211,54 @@ function AppWithKeyboard() {
                 </ErrorBoundary>
               }
             />
+            <Route
+              path="/:org/:team/repos/:repo/branches"
+              element={
+                <ErrorBoundary>
+                  <RepoDetail />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/commits"
+              element={
+                <ErrorBoundary>
+                  <RepoDetail />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/releases"
+              element={
+                <ErrorBoundary>
+                  <RepoDetail />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/pipelines"
+              element={
+                <ErrorBoundary>
+                  <RepoDetail />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/environments"
+              element={
+                <ErrorBoundary>
+                  <RepoDetail />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/insights"
+              element={
+                <ErrorBoundary>
+                  <RepoDetail />
+                </ErrorBoundary>
+              }
+            />
             <Route path="/:org/:team/repos/:repo/tree" element={<Navigate to=".." replace />} />
             <Route
               path="/:org/:team/repos/:repo/tree/:ref/*"
@@ -245,7 +293,6 @@ function AppWithKeyboard() {
                 </ErrorBoundary>
               }
             />
-            <Route path="/:org/:team/repos/:repo/commits" element={<Navigate to=".." replace />} />
             <Route
               path="/:org/:team/repos/:repo/commits/:sha"
               element={

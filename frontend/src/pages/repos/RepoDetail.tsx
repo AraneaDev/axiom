@@ -17,7 +17,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import EnvironmentsTab from './EnvironmentsTab';
 import InsightsTab from './InsightsTab';
@@ -40,9 +40,15 @@ import { formatRelative } from '@/lib/utils';
  */
 export default function RepoDetail() {
   const { org, team: teamSlug, repo: repoSlug } = useParams();
-  const [activeTab, setActiveTab] = useState('code');
+  const location = useLocation();
+  const navigate = useNavigate();
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const { currentRepo, basePath } = useRepoContext();
+
+  const TAB_SLUGS = ['branches', 'commits', 'releases', 'pipelines', 'environments', 'insights'];
+  const pathParts = location.pathname.split('/');
+  const lastSegment = pathParts[pathParts.length - 1];
+  const activeTab = TAB_SLUGS.includes(lastSegment) ? lastSegment : 'code';
 
   const activeBranch = selectedBranch ?? currentRepo?.defaultBranch ?? 'main';
 
@@ -240,7 +246,19 @@ export default function RepoDetail() {
       </div>
 
       {/* Tabs */}
-      <Tabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
+      <Tabs
+        tabs={tabs}
+        activeKey={activeTab}
+        onChange={(tab) => {
+          if (tab === 'prs') {
+            navigate(`${basePath}/pulls`);
+          } else if (tab === 'code') {
+            navigate(basePath);
+          } else {
+            navigate(`${basePath}/${tab}`);
+          }
+        }}
+      />
 
       {/* Code tab */}
       {activeTab === 'code' && (
