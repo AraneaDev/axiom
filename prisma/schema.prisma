@@ -329,10 +329,29 @@ model Webhook {
   events String[] // e.g. ["push", "pr:created", "pr:merged"]
   active Boolean    @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  deliveries WebhookDelivery[]
 
   @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id           String   @id @default(cuid())
+  webhookId    String
+  webhook      Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event        String
+  url          String
+  statusCode   Int?
+  success      Boolean
+  duration     Int // ms
+  requestBody  String?  @db.Text
+  responseBody String?  @db.Text
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([webhookId, createdAt])
+  @@map("webhook_deliveries")
 }
 
 // ─── Projects & Issues ──────────────────────────────────────
@@ -701,6 +720,8 @@ model Release {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  deployments  Deployment[]
+
   @@unique([repoId, tagName])
   @@map("releases")
 }
@@ -999,6 +1020,7 @@ model DeploymentEnvironment {
   createdAt       DateTime   @default(now())
 
   deployments Deployment[]
+  variables   EnvironmentVariable[]
 
   @@map("deployment_environments")
 }
@@ -1010,12 +1032,30 @@ model Deployment {
   commitSha     String
   pipelineRunId String?
   pipelineRun   PipelineRun?          @relation(fields: [pipelineRunId], references: [id])
+  releaseId     String?
+  release       Release?              @relation(fields: [releaseId], references: [id])
   status        DeploymentStatus      @default(PENDING)
   deployedById  String
   deployedBy    User                  @relation("DeployedBy", fields: [deployedById], references: [id])
   createdAt     DateTime              @default(now())
 
   @@map("deployments")
+}
+
+// ─── Environment Variables (Secrets) ────────────────────────
+
+model EnvironmentVariable {
+  id              String                @id @default(cuid())
+  environmentId   String
+  environment     DeploymentEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  name            String
+  encryptedValue  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([environmentId, name])
+  @@map("environment_variables")
 }
 
 // ─── Issue Votes ────────────────────────────────────────────

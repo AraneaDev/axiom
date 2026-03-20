@@ -1,7 +1,31 @@
+import crypto from 'crypto';
+
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+
+const ENCRYPTION_KEY =
+  process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-env-key-must-be-32-chars!';
+
+function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16);
+  const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return iv.toString('hex') + ':' + encrypted;
+}
+
+function _decrypt(encrypted: string): string {
+  const [ivHex, data] = encrypted.split(':');
+  const iv = Buffer.from(ivHex, 'hex');
+  const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  let decrypted = decipher.update(data, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
 
 /**
  * Create a deployment environment for a repository.
@@ -195,4 +219,56 @@ export async function getDeploymentsByCommit(repoId: string, commitSha: string) 
     },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+// ─── Environment Variables ──────────────────────────────────
+
+/**
+ * List environment variables (values are masked).
+ * @param envId - The environment ID
+ * @returns List of variables with masked values
+ */
+export async function listEnvVariables(envId: string) {
+  const variables = await prisma.environmentVariable.findMany({
+    where: { environmentId: envId },
+    orderBy: { name: 'asc' },
+  });
+  return variables.map((v) => ({
+    id: v.id,
+    name: v.name,
+    value: '****',
+    createdAt: v.createdAt,
+    updatedAt: v.updatedAt,
+  }));
+}
+
+/**
+ * Create or update an environment variable.
+ * @param envId - The environment ID
+ * @param name - Variable name
+ * @param value - Variable value (will be encrypted)
+ * @returns The created/updated variable with masked value
+ */
+export async function upsertEnvVariable(envId: string, name: string, value: string) {
+  const encryptedValue = encrypt(value);
+  const variable = await prisma.environmentVariable.upsert({
+    where: { environmentId_name: { environmentId: envId, name } },
+    create: { environmentId: envId, name, encryptedValue },
+    update: { encryptedValue },
+  });
+  return {
+    id: variable.id,
+    name: variable.name,
+    value: '****',
+    createdAt: variable.createdAt,
+    updatedAt: variable.updatedAt,
+  };
+}
+
+/**
+ * Delete an environment variable.
+ * @param variableId - The variable ID
+ */
+export async function deleteEnvVariable(variableId: string) {
+  await prisma.environmentVariable.delete({ where: { id: variableId } });
 }

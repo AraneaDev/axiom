@@ -223,3 +223,75 @@ export async function compareRelease(repoId: string, base: string, head: string)
 
   return { commits, changelog: generateChangelog(commits) };
 }
+
+/**
+ * Deploy a release to an environment.
+ * @param repoId - The repository ID
+ * @param tagName - The release tag name
+ * @param environmentId - The target environment ID
+ * @param userId - The user triggering the deployment
+ * @returns The created deployment record
+ */
+export async function deployRelease(
+  repoId: string,
+  tagName: string,
+  environmentId: string,
+  userId: string,
+) {
+  const release = await prisma.release.findUnique({
+    where: { repoId_tagName: { repoId, tagName } },
+  });
+  if (!release) throw Object.assign(new Error('Release not found'), { status: 404 });
+
+  const env = await prisma.deploymentEnvironment.findFirst({
+    where: { id: environmentId, repoId },
+  });
+  if (!env) throw Object.assign(new Error('Environment not found'), { status: 404 });
+
+  const commitSha = release.commitSha ?? '';
+
+  const [deployment] = await prisma.$transaction([
+    prisma.deployment.create({
+      data: {
+        environmentId,
+        commitSha,
+        releaseId: release.id,
+        deployedById: userId,
+        status: 'PENDING',
+      },
+      include: {
+        deployedBy: { select: USER_BASIC_SELECT },
+        environment: { select: { id: true, name: true, url: true } },
+        release: { select: { id: true, tagName: true, title: true } },
+      },
+    }),
+    prisma.deploymentEnvironment.update({
+      where: { id: environmentId },
+      data: { lastDeployedAt: new Date() },
+    }),
+  ]);
+
+  return deployment;
+}
+
+/**
+ * List deployments for a specific release.
+ * @param repoId - The repository ID
+ * @param tagName - The release tag name
+ * @returns List of deployments with environment and user details
+ */
+export async function listReleaseDeployments(repoId: string, tagName: string) {
+  const release = await prisma.release.findUnique({
+    where: { repoId_tagName: { repoId, tagName } },
+  });
+  if (!release) throw Object.assign(new Error('Release not found'), { status: 404 });
+
+  return prisma.deployment.findMany({
+    where: { releaseId: release.id },
+    include: {
+      deployedBy: { select: USER_BASIC_SELECT },
+      environment: { select: { id: true, name: true, url: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}

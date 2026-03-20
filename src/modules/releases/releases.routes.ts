@@ -14,5 +14,11 @@ router.get('/:repoId/releases/:tagName', authenticate, asyncHandler(ctrl.getRele
 router.patch('/:repoId/releases/:tagName', authenticate, asyncHandler(ctrl.updateRelease));
 router.delete('/:repoId/releases/:tagName', authenticate, asyncHandler(ctrl.deleteRelease));
 router.post('/:repoId/releases/:tagName/publish', authenticate, asyncHandler(ctrl.publishRelease));
+router.post('/:repoId/releases/:tagName/deploy', authenticate, asyncHandler(ctrl.deployRelease));
+router.get(
+  '/:repoId/releases/:tagName/deployments',
+  authenticate,
+  asyncHandler(ctrl.listReleaseDeployments),
+);
 
 export default router;

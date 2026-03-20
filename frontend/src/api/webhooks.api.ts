@@ -11,6 +11,20 @@ export interface Webhook {
   updatedAt: string;
 }
 
+export interface WebhookDelivery {
+  id: string;
+  webhookId: string;
+  event: string;
+  url: string;
+  statusCode: number | null;
+  success: boolean;
+  duration: number;
+  requestBody: string | null;
+  responseBody: string | null;
+  error: string | null;
+  createdAt: string;
+}
+
 export const WEBHOOK_EVENTS = [
   { value: 'push', label: 'Push' },
   { value: 'pr:created', label: 'Pull request created' },
@@ -66,4 +80,8 @@ export const webhooksApi = {
    * @param webhookId
    */
   delete: (repoId: string, webhookId: string) => del(`/repos/${repoId}/webhooks/${webhookId}`),
+  listDeliveries: (repoId: string, webhookId: string) =>
+    get<WebhookDelivery[]>(`/repos/${repoId}/webhooks/${webhookId}/deliveries`),
+  redeliver: (repoId: string, webhookId: string, deliveryId: string) =>
+    post<{ ok: boolean }>(`/repos/${repoId}/webhooks/${webhookId}/redeliver/${deliveryId}`, {}),
 };

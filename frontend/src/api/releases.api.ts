@@ -31,6 +31,18 @@ export interface ChangelogSection {
   commits: CommitEntry[];
 }
 
+export interface ReleaseDeployment {
+  id: string;
+  environmentId: string;
+  commitSha: string;
+  releaseId: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'SUCCESS' | 'FAILURE';
+  deployedBy: { id: string; username: string; displayName: string };
+  environment: { id: string; name: string; url?: string | null };
+  release?: { id: string; tagName: string; title: string };
+  createdAt: string;
+}
+
 export const releasesApi = {
   list: (repoId: string, params?: { draft?: boolean; prerelease?: boolean }) => {
     const q = new URLSearchParams();
@@ -55,5 +67,13 @@ export const releasesApi = {
   compare: (repoId: string, base: string, head: string) =>
     get<{ commits: CommitEntry[]; changelog: ChangelogSection[] }>(
       `/repos/${repoId}/releases/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`,
+    ),
+  deploy: (repoId: string, tagName: string, environmentId: string) =>
+    post<ReleaseDeployment>(`/repos/${repoId}/releases/${encodeURIComponent(tagName)}/deploy`, {
+      environmentId,
+    }),
+  listDeployments: (repoId: string, tagName: string) =>
+    get<ReleaseDeployment[]>(
+      `/repos/${repoId}/releases/${encodeURIComponent(tagName)}/deployments`,
     ),
 };

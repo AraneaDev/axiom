@@ -37,4 +37,26 @@ router.get(
   asyncHandler(ctrl.getDeploymentsByCommit),
 );
 
+// Environment Variables
+router.get(
+  '/:repoId/environments/:envId/variables',
+  authenticate,
+  asyncHandler(ctrl.listEnvVariables),
+);
+router.post(
+  '/:repoId/environments/:envId/variables',
+  authenticate,
+  asyncHandler(ctrl.createEnvVariable),
+);
+router.patch(
+  '/:repoId/environments/:envId/variables/:variableId',
+  authenticate,
+  asyncHandler(ctrl.updateEnvVariable),
+);
+router.delete(
+  '/:repoId/environments/:envId/variables/:variableId',
+  authenticate,
+  asyncHandler(ctrl.deleteEnvVariable),
+);
+
 export default router;

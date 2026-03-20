@@ -1,17 +1,33 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Tag, Plus, Trash2, Send, Pencil, Check, X } from 'lucide-react';
+import {
+  Tag,
+  Plus,
+  Trash2,
+  Send,
+  Pencil,
+  Check,
+  X,
+  Rocket,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import CreateReleaseModal from './CreateReleaseModal';
 
-import { releasesApi, type Release } from '@/api/releases.api';
+import { deploymentsApi } from '@/api/deployments.api';
+import type { DeploymentEnvironment } from '@/api/deployments.api';
+import { releasesApi, type Release, type ReleaseDeployment } from '@/api/releases.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -23,6 +39,20 @@ interface Props {
   defaultBranch: string;
 }
 
+function deployStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'default' {
+  switch (status) {
+    case 'SUCCESS':
+      return 'success';
+    case 'FAILURE':
+      return 'danger';
+    case 'IN_PROGRESS':
+      return 'warning';
+    case 'PENDING':
+    default:
+      return 'default';
+  }
+}
+
 /**
  *
  * @param root0
@@ -31,15 +61,22 @@ interface Props {
  */
 export default function ReleasesTab({ repoId, defaultBranch }: Props) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [showCreate, setShowCreate] = useState(false);
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [editBody, setEditBody] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [expandedDeployments, setExpandedDeployments] = useState<string | null>(null);
   const { user } = useAuthStore();
 
   const { data: releases = [] } = useQuery({
     queryKey: ['releases', repoId],
     queryFn: () => releasesApi.list(repoId),
+  });
+
+  const { data: environments = [] } = useQuery({
+    queryKey: ['environments', repoId],
+    queryFn: () => deploymentsApi.listEnvironments(repoId),
   });
 
   const publishMutation = useMutation({
@@ -61,94 +98,201 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
     },
   });
 
+  const deployMutation = useMutation({
+    mutationFn: ({ tagName, environmentId }: { tagName: string; environmentId: string }) =>
+      releasesApi.deploy(repoId, tagName, environmentId),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['releases', repoId] });
+      qc.invalidateQueries({ queryKey: ['environments', repoId] });
+      qc.invalidateQueries({
+        queryKey: ['release-deployments', repoId, variables.tagName],
+      });
+      toast.success('Deployment initiated');
+    },
+    onError: () => toast.error('Failed to deploy release'),
+  });
+
   const published = releases.filter((r) => !r.isDraft);
   const drafts = releases.filter((r) => r.isDraft);
 
-  const ReleaseRow = ({ release }: { release: Release }) => (
-    <div className="flex items-start gap-4 p-4 hover:bg-surface-secondary transition-colors">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-mono bg-primary-light text-primary px-2 py-0.5 rounded border border-primary/20">
-            {release.tagName}
-          </span>
-          {release.isDraft && (
-            <Badge variant="outline" size="sm">
-              Draft
-            </Badge>
-          )}
-          {release.isPrerelease && (
-            <Badge variant="outline" size="sm">
-              Pre-release
-            </Badge>
-          )}
-        </div>
-        <h3 className="font-semibold text-sm mb-0.5">{release.title}</h3>
-        {editingTag === release.tagName ? (
-          <div className="space-y-2 mb-1">
-            <MarkdownEditor value={editBody} onChange={setEditBody} compact />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                disabled={updateMutation.isPending}
-                onClick={() => updateMutation.mutate({ tagName: release.tagName, body: editBody })}
-              >
-                <Check className="h-4 w-4" /> Save
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setEditingTag(null)}>
-                <X className="h-4 w-4" /> Cancel
-              </Button>
+  const DeploymentHistory = ({ tagName }: { tagName: string }) => {
+    const { data: deployments = [] } = useQuery({
+      queryKey: ['release-deployments', repoId, tagName],
+      queryFn: () => releasesApi.listDeployments(repoId, tagName),
+    });
+
+    if (deployments.length === 0) {
+      return <p className="text-xs text-text-tertiary px-4 py-2">No deployments yet.</p>;
+    }
+
+    return (
+      <div className="border-t border-border bg-surface-secondary">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th className="px-4 py-1.5 font-medium text-text-secondary">Environment</th>
+              <th className="px-4 py-1.5 font-medium text-text-secondary">Status</th>
+              <th className="px-4 py-1.5 font-medium text-text-secondary">Deployed By</th>
+              <th className="px-4 py-1.5 font-medium text-text-secondary">Time</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {deployments.map((d: ReleaseDeployment) => (
+              <tr key={d.id}>
+                <td className="px-4 py-1.5 text-text">{d.environment?.name}</td>
+                <td className="px-4 py-1.5">
+                  <Badge variant={deployStatusVariant(d.status)} size="sm">
+                    {d.status.toLowerCase().replace('_', ' ')}
+                  </Badge>
+                </td>
+                <td className="px-4 py-1.5 text-text-secondary">
+                  {d.deployedBy?.displayName || d.deployedBy?.username}
+                </td>
+                <td className="px-4 py-1.5 text-text-tertiary flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {formatRelative(d.createdAt)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const ReleaseRow = ({ release }: { release: Release }) => {
+    const isExpanded = expandedDeployments === release.tagName;
+
+    return (
+      <div>
+        <div className="flex items-start gap-4 p-4 hover:bg-surface-secondary transition-colors">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-mono bg-primary-light text-primary px-2 py-0.5 rounded border border-primary/20">
+                {release.tagName}
+              </span>
+              {release.isDraft && (
+                <Badge variant="outline" size="sm">
+                  Draft
+                </Badge>
+              )}
+              {release.isPrerelease && (
+                <Badge variant="outline" size="sm">
+                  Pre-release
+                </Badge>
+              )}
+            </div>
+            <h3 className="font-semibold text-sm mb-0.5">{release.title}</h3>
+            {editingTag === release.tagName ? (
+              <div className="space-y-2 mb-1">
+                <MarkdownEditor value={editBody} onChange={setEditBody} compact />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={updateMutation.isPending}
+                    onClick={() =>
+                      updateMutation.mutate({
+                        tagName: release.tagName,
+                        body: editBody,
+                      })
+                    }
+                  >
+                    <Check className="h-4 w-4" /> Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingTag(null)}>
+                    <X className="h-4 w-4" /> Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : release.body ? (
+              <div className="text-xs text-text-secondary line-clamp-2 mb-1">
+                <MarkdownRenderer content={release.body} />
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2 text-xs text-text-tertiary">
+              <Avatar name={release.author.displayName} size="sm" />
+              <span>{release.author.displayName}</span>
+              <span>·</span>
+              <span>{formatRelative(release.createdAt)}</span>
+              <span>·</span>
+              <span>{release.targetBranch}</span>
             </div>
           </div>
-        ) : release.body ? (
-          <div className="text-xs text-text-secondary line-clamp-2 mb-1">
-            <MarkdownRenderer content={release.body} />
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {!release.isDraft && environments.length > 0 && (
+              <Dropdown
+                align="right"
+                trigger={
+                  <Button variant="ghost" size="sm" disabled={deployMutation.isPending}>
+                    <Rocket className="h-3.5 w-3.5" /> Deploy
+                  </Button>
+                }
+              >
+                {environments.map((env: DeploymentEnvironment) => (
+                  <DropdownItem
+                    key={env.id}
+                    onClick={() =>
+                      deployMutation.mutate({
+                        tagName: release.tagName,
+                        environmentId: env.id,
+                      })
+                    }
+                  >
+                    <Rocket className="h-3.5 w-3.5" /> {env.name}
+                  </DropdownItem>
+                ))}
+              </Dropdown>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Deployment history"
+              onClick={() => setExpandedDeployments(isExpanded ? null : release.tagName)}
+            >
+              {isExpanded ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </Button>
+            {user?.id === release.authorId && editingTag !== release.tagName && (
+              <Button
+                variant="ghost"
+                size="sm"
+                title="Edit release notes"
+                onClick={() => {
+                  setEditBody(release.body ?? '');
+                  setEditingTag(release.tagName);
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </Button>
+            )}
+            {release.isDraft && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => publishMutation.mutate(release.tagName)}
+                disabled={publishMutation.isPending}
+              >
+                <Send className="h-3.5 w-3.5" /> Publish
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              title={`Delete release ${release.tagName}`}
+              onClick={() => setDeleteTarget(release.tagName)}
+              disabled={deleteMutation.isPending}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           </div>
-        ) : null}
-        <div className="flex items-center gap-2 text-xs text-text-tertiary">
-          <Avatar name={release.author.displayName} size="sm" />
-          <span>{release.author.displayName}</span>
-          <span>·</span>
-          <span>{formatRelative(release.createdAt)}</span>
-          <span>·</span>
-          <span>{release.targetBranch}</span>
         </div>
+        {isExpanded && <DeploymentHistory tagName={release.tagName} />}
       </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {user?.id === release.authorId && editingTag !== release.tagName && (
-          <Button
-            variant="ghost"
-            size="sm"
-            title="Edit release notes"
-            onClick={() => {
-              setEditBody(release.body ?? '');
-              setEditingTag(release.tagName);
-            }}
-          >
-            <Pencil className="h-3.5 w-3.5" /> Edit
-          </Button>
-        )}
-        {release.isDraft && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => publishMutation.mutate(release.tagName)}
-            disabled={publishMutation.isPending}
-          >
-            <Send className="h-3.5 w-3.5" /> Publish
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          title={`Delete release ${release.tagName}`}
-          onClick={() => setDeleteTarget(release.tagName)}
-          disabled={deleteMutation.isPending}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div>

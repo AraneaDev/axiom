@@ -1,5 +1,13 @@
 import { get, post, patch, del } from './client';
 
+export interface EnvironmentVariable {
+  id: string;
+  name: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DeploymentEnvironment {
   id: string;
   repoId: string;
@@ -68,4 +76,25 @@ export const deploymentsApi = {
   // Deployments by commit
   getDeploymentsByCommit: (repoId: string, commitSha: string) =>
     get<Deployment[]>(`/repos/${repoId}/commits/${commitSha}/deployments`),
+
+  // Environment Variables
+  listEnvVariables: (repoId: string, envId: string) =>
+    get<EnvironmentVariable[]>(`/repos/${repoId}/environments/${envId}/variables`),
+
+  createEnvVariable: (repoId: string, envId: string, data: { name: string; value: string }) =>
+    post<EnvironmentVariable>(`/repos/${repoId}/environments/${envId}/variables`, data),
+
+  updateEnvVariable: (
+    repoId: string,
+    envId: string,
+    variableId: string,
+    data: { name: string; value: string },
+  ) =>
+    patch<EnvironmentVariable>(
+      `/repos/${repoId}/environments/${envId}/variables/${variableId}`,
+      data,
+    ),
+
+  deleteEnvVariable: (repoId: string, envId: string, variableId: string) =>
+    del(`/repos/${repoId}/environments/${envId}/variables/${variableId}`),
 };

@@ -75,3 +75,33 @@ export async function remove(req: Request, res: Response, next: NextFunction) {
     next(err);
   }
 }
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function listDeliveries(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await webhooksService.listDeliveries(param(req, 'webhookId')));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function redeliver(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(
+      await webhooksService.redeliverWebhook(param(req, 'webhookId'), param(req, 'deliveryId')),
+    );
+  } catch (err) {
+    next(err);
+  }
+}

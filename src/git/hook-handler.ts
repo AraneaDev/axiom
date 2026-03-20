@@ -80,7 +80,7 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
     // Dispatch to matching webhooks
     for (const webhook of repo.webhooks) {
       if (webhook.events.includes(event) || webhook.events.includes('*')) {
-        dispatchWebhook(webhook.url, webhook.secret, webhookPayload).catch((err) => {
+        dispatchWebhook(webhook.id, webhook.url, webhook.secret, webhookPayload).catch((err) => {
           logger.error('Webhook delivery failed', { url: webhook.url }, err as Error);
         });
       }
@@ -185,12 +185,15 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
 
 /**
  * Dispatch a webhook with HMAC-SHA256 signature and retry logic.
+ * Logs delivery results to the WebhookDelivery table.
+ * @param webhookId
  * @param url
  * @param secret
  * @param payload
  * @param retries
  */
-async function dispatchWebhook(
+export async function dispatchWebhook(
+  webhookId: string,
   url: string,
   secret: string | null,
   payload: Record<string, unknown>,
@@ -208,6 +211,12 @@ async function dispatchWebhook(
     headers['X-Axiom-Signature'] = `sha256=${signature}`;
   }
 
+  const start = Date.now();
+  let statusCode: number | null = null;
+  let responseBody: string | null = null;
+  let errorMessage: string | null = null;
+  let success = false;
+
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const controller = new AbortController();
@@ -221,10 +230,16 @@ async function dispatchWebhook(
       });
 
       clearTimeout(timeout);
+      statusCode = res.status;
+      responseBody = await res.text().catch(() => null);
 
-      if (res.ok || res.status < 500) return; // Success or client error (don't retry)
-    } catch {
-      // Network error or timeout — retry
+      if (res.ok) {
+        success = true;
+        break;
+      }
+      if (res.status < 500) break; // Client error — don't retry
+    } catch (err) {
+      errorMessage = err instanceof Error ? err.message : 'Unknown error';
     }
 
     // Exponential backoff: 1s, 2s, 4s
@@ -232,6 +247,27 @@ async function dispatchWebhook(
       await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
     }
   }
+
+  const duration = Date.now() - start;
+
+  // Log delivery to database
+  await prisma.webhookDelivery
+    .create({
+      data: {
+        webhookId,
+        event: (payload.event as string) ?? 'unknown',
+        url,
+        statusCode,
+        success,
+        duration,
+        requestBody: body,
+        responseBody: responseBody?.slice(0, 10_000) ?? null,
+        error: errorMessage,
+      },
+    })
+    .catch((err) => {
+      logger.error('Failed to log webhook delivery', { webhookId }, err as Error);
+    });
 }
 
 /**

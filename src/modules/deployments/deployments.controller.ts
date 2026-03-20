@@ -146,3 +146,72 @@ export async function getDeploymentsByCommit(req: Request, res: Response, next: 
     next(err);
   }
 }
+
+// ─── Environment Variables ──────────────────────────────────
+
+/**
+ * GET /:repoId/environments/:envId/variables
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function listEnvVariables(req: Request, res: Response, next: NextFunction) {
+  try {
+    const envId = param(req, 'envId');
+    res.json(await svc.listEnvVariables(envId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /:repoId/environments/:envId/variables
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function createEnvVariable(req: Request, res: Response, next: NextFunction) {
+  try {
+    const envId = param(req, 'envId');
+    const { name, value } = req.body;
+    if (!name || !value) throw new AppError(400, 'name and value are required');
+    const variable = await svc.upsertEnvVariable(envId, name, value);
+    res.status(201).json(variable);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PUT /:repoId/environments/:envId/variables/:variableId
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function updateEnvVariable(req: Request, res: Response, next: NextFunction) {
+  try {
+    const envId = param(req, 'envId');
+    const { name, value } = req.body;
+    if (!name || !value) throw new AppError(400, 'name and value are required');
+    const variable = await svc.upsertEnvVariable(envId, name, value);
+    res.json(variable);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * DELETE /:repoId/environments/:envId/variables/:variableId
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function deleteEnvVariable(req: Request, res: Response, next: NextFunction) {
+  try {
+    const variableId = param(req, 'variableId');
+    await svc.deleteEnvVariable(variableId);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}

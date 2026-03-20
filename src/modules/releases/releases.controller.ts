@@ -126,3 +126,38 @@ export async function compareRelease(req: Request, res: Response, next: NextFunc
     next(err);
   }
 }
+
+/**
+ * POST /:repoId/releases/:tagName/deploy
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function deployRelease(req: Request, res: Response, next: NextFunction) {
+  try {
+    const repoId = param(req, 'repoId');
+    const tagName = param(req, 'tagName');
+    const { environmentId } = req.body;
+    if (!environmentId) throw new AppError(400, 'environmentId is required');
+    const deployment = await svc.deployRelease(repoId, tagName, environmentId, req.userId!);
+    res.status(201).json(deployment);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /:repoId/releases/:tagName/deployments
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function listReleaseDeployments(req: Request, res: Response, next: NextFunction) {
+  try {
+    const repoId = param(req, 'repoId');
+    const tagName = param(req, 'tagName');
+    res.json(await svc.listReleaseDeployments(repoId, tagName));
+  } catch (err) {
+    next(err);
+  }
+}
