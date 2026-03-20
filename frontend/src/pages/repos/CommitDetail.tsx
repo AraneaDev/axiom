@@ -20,7 +20,7 @@ import {
   PanelLeftClose,
   PanelLeft,
 } from 'lucide-react';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { deploymentsApi } from '@/api/deployments.api';
@@ -109,22 +109,8 @@ export default function CommitDetail() {
 
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
-  const fileRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  const statsData = data?.stats ?? [];
-
-  const scrollToFile = useCallback((index: number) => {
-    setActiveFileIndex(index);
-    fileRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
-
-  const goToPrevFile = useCallback(() => {
-    if (activeFileIndex > 0) scrollToFile(activeFileIndex - 1);
-  }, [activeFileIndex, scrollToFile]);
-
-  const goToNextFile = useCallback(() => {
-    if (activeFileIndex < statsData.length - 1) scrollToFile(activeFileIndex + 1);
-  }, [activeFileIndex, statsData.length, scrollToFile]);
+  const fileCount = data?.stats?.length ?? 0;
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -132,15 +118,15 @@ export default function CommitDetail() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.key === 'j' || e.key === 'ArrowDown') {
         e.preventDefault();
-        if (activeFileIndex < statsData.length - 1) scrollToFile(activeFileIndex + 1);
+        setActiveFileIndex((prev) => (prev < fileCount - 1 ? prev + 1 : prev));
       } else if (e.key === 'k' || e.key === 'ArrowUp') {
         e.preventDefault();
-        if (activeFileIndex > 0) scrollToFile(activeFileIndex - 1);
+        setActiveFileIndex((prev) => (prev > 0 ? prev - 1 : prev));
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeFileIndex, statsData.length, scrollToFile]);
+  }, [fileCount]);
 
   if (isLoading || !currentRepo) return <DetailSkeleton />;
 
@@ -316,7 +302,7 @@ export default function CommitDetail() {
               <Button
                 variant="ghost"
                 size="xs"
-                onClick={goToPrevFile}
+                onClick={() => setActiveFileIndex((p) => Math.max(0, p - 1))}
                 disabled={activeFileIndex === 0}
                 title="Previous file (k)"
               >
@@ -325,7 +311,7 @@ export default function CommitDetail() {
               <Button
                 variant="ghost"
                 size="xs"
-                onClick={goToNextFile}
+                onClick={() => setActiveFileIndex((p) => Math.min(stats.length - 1, p + 1))}
                 disabled={activeFileIndex === stats.length - 1}
                 title="Next file (j)"
               >
@@ -338,7 +324,7 @@ export default function CommitDetail() {
               {stats.map((s, i) => (
                 <button
                   key={s.file}
-                  onClick={() => scrollToFile(i)}
+                  onClick={() => setActiveFileIndex(i)}
                   className={`flex items-center gap-2 px-4 py-1.5 text-sm w-full text-left hover:bg-surface-secondary transition-colors ${
                     i === activeFileIndex ? 'bg-primary-light' : ''
                   }`}
@@ -369,67 +355,76 @@ export default function CommitDetail() {
         </div>
       )}
 
-      {/* Diff */}
-      {files.map((file, fi) => (
-        <div
-          key={fi}
-          id={`diff-file-${fi}`}
-          ref={(el) => {
-            fileRefs.current[fi] = el;
-          }}
-          className="rounded-lg border border-border bg-surface mb-4 overflow-hidden scroll-mt-4"
-        >
-          <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
-            {stats[fi] && getFileIcon(stats[fi])}
-            <span className="flex-1 truncate">
-              {file.newFile?.replace('b/', '') || file.oldFile?.replace('a/', '')}
-            </span>
-            {stats[fi] && (
-              <span className="flex items-center gap-2 text-xs shrink-0">
-                <span className="text-success">+{stats[fi].additions}</span>
-                <span className="text-danger">-{stats[fi].deletions}</span>
-              </span>
-            )}
-          </div>
-          <div className="overflow-x-auto">
-            <pre className="text-xs font-mono m-0 p-0">
-              <table className="w-full border-collapse">
-                <tbody>
-                  {file.hunks.map((hunk, hi) => (
-                    <React.Fragment key={`hunk-${hi}`}>
-                      <tr>
-                        <td
-                          colSpan={3}
-                          className="px-4 py-1 text-text-tertiary bg-primary-light text-xs"
-                        >
-                          {hunk.header}
-                        </td>
-                      </tr>
-                      {hunk.lines.map((line, li) => (
-                        <tr
-                          key={`${hi}-${li}`}
-                          className={
-                            line.type === 'add'
-                              ? 'bg-success/10'
-                              : line.type === 'del'
-                                ? 'bg-danger/10'
-                                : ''
-                          }
-                        >
-                          <td className="w-6 text-center text-text-tertiary select-none px-1">
-                            {line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}
-                          </td>
-                          <td className="pl-2 whitespace-pre leading-5">{line.content || ' '}</td>
-                        </tr>
+      {/* Diff -- carousel: show only active file */}
+      {stats[activeFileIndex] &&
+        (() => {
+          const activeStat = stats[activeFileIndex];
+          const activeFile = files.find(
+            (f) =>
+              f.newFile?.replace('b/', '') === activeStat.file ||
+              f.oldFile?.replace('a/', '') === activeStat.file,
+          );
+          if (!activeFile)
+            return (
+              <div className="rounded-lg border border-border bg-surface p-8 text-center text-text-secondary text-sm">
+                No diff available for this file.
+              </div>
+            );
+          return (
+            <div
+              key={activeFileIndex}
+              className="rounded-lg border border-border bg-surface mb-4 overflow-hidden"
+            >
+              <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
+                {getFileIcon(activeStat)}
+                <span className="flex-1 truncate">{activeStat.file}</span>
+                <span className="flex items-center gap-2 text-xs shrink-0">
+                  <span className="text-success">+{activeStat.additions}</span>
+                  <span className="text-danger">-{activeStat.deletions}</span>
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <pre className="text-xs font-mono m-0 p-0">
+                  <table className="w-full border-collapse">
+                    <tbody>
+                      {activeFile.hunks.map((hunk, hi) => (
+                        <React.Fragment key={`hunk-${hi}`}>
+                          <tr>
+                            <td
+                              colSpan={3}
+                              className="px-4 py-1 text-text-tertiary bg-primary-light text-xs"
+                            >
+                              {hunk.header}
+                            </td>
+                          </tr>
+                          {hunk.lines.map((line, li) => (
+                            <tr
+                              key={`${hi}-${li}`}
+                              className={
+                                line.type === 'add'
+                                  ? 'bg-success/10'
+                                  : line.type === 'del'
+                                    ? 'bg-danger/10'
+                                    : ''
+                              }
+                            >
+                              <td className="w-6 text-center text-text-tertiary select-none px-1">
+                                {line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}
+                              </td>
+                              <td className="pl-2 whitespace-pre leading-5">
+                                {line.content || ' '}
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
                       ))}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </pre>
-          </div>
-        </div>
-      ))}
+                    </tbody>
+                  </table>
+                </pre>
+              </div>
+            </div>
+          );
+        })()}
 
       {!diffOutput && (
         <div className="text-sm text-text-secondary text-center py-8">
