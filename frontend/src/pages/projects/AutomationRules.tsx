@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Bot, Plus, Trash2, Power, PowerOff, Save, X, PlusCircle } from 'lucide-react';
+import { Bot, Plus, Trash2, Power, PowerOff, Save, X, PlusCircle } from 'lucide-react';
 import { useState } from 'react';
-import { useParams, Link } from 'react-router';
+import { useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { PageLoader } from '@/components/ui/Spinner';
+import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 
 const TRIGGER_OPTIONS = [
@@ -343,24 +343,21 @@ export default function AutomationRules() {
   const triggerLabel = (trigger: string) =>
     TRIGGER_OPTIONS.find((t) => t.value === trigger)?.label ?? trigger;
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <ListSkeleton rows={4} />
+      </div>
+    );
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
+    <div>
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Link
-            to={`/${org}/${teamSlug}/${projectSlug}/issues`}
-            className="text-text-secondary hover:text-text transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold">Automation Rules</h1>
-            <p className="text-sm text-text-secondary">
-              Automate actions in {currentProject?.name}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-xl font-bold">Automation Rules</h1>
+          <p className="text-sm text-text-secondary mt-1">
+            Automate actions in {currentProject?.name}
+          </p>
         </div>
         {!showForm && !editingRule && (
           <Button onClick={() => setShowForm(true)}>

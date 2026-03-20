@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Plus, Trash2, ArrowLeft, Workflow } from 'lucide-react';
+import { ArrowRight, Plus, Trash2, Workflow } from 'lucide-react';
 import { useState } from 'react';
-import { useParams, Link } from 'react-router';
+import { useParams } from 'react-router';
 
 import { issuesApi } from '@/api/issues.api';
 import { orgsApi } from '@/api/orgs.api';
@@ -11,7 +11,7 @@ import { workflowsApi } from '@/api/workflows.api';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { PageLoader } from '@/components/ui/Spinner';
+import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import type { BoardColumn } from '@/lib/types';
 
@@ -93,20 +93,19 @@ export default function WorkflowEditor() {
     createMutation.mutate({ fromColumnId, toColumnId });
   };
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <ListSkeleton rows={4} />
+      </div>
+    );
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
-      <div className="flex items-center gap-3 mb-6">
-        <Link
-          to={`/${org}/${teamSlug}/${projectSlug}/issues`}
-          className="text-text-secondary hover:text-text transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
+    <div>
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Workflow Rules</h1>
-          <p className="text-sm text-text-secondary">
+          <h1 className="text-xl font-bold">Workflow Rules</h1>
+          <p className="text-sm text-text-secondary mt-1">
             Define allowed column transitions for {currentProject?.name}
           </p>
         </div>

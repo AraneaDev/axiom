@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
+import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { formatDate } from '@/lib/utils';
 
@@ -56,7 +57,16 @@ export default function ApiTokens() {
     deleteMutation.mutate(tokenId);
   }
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <Skeleton className="h-7 w-36" />
+          <Skeleton className="h-8 w-28 rounded-md" />
+        </div>
+        <ListSkeleton rows={3} />
+      </div>
+    );
 
   return (
     <div className="max-w-3xl mx-auto">

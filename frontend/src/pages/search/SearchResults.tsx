@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
-import { PageLoader } from '@/components/ui/Spinner';
+import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 import { PRIORITY_COLORS } from '@/lib/constants';
@@ -207,7 +207,7 @@ export default function SearchResults() {
         className="mb-6"
       />
 
-      {isLoading && <PageLoader />}
+      {isLoading && <ListSkeleton rows={6} />}
 
       {/* Results */}
       {displayResults.map((group: SearchResult) => (

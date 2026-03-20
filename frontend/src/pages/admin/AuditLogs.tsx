@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
-import { Spinner } from '@/components/ui/Spinner';
+import { TableSkeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
 
 const ACTION_OPTIONS = [
@@ -187,7 +187,7 @@ export default function AuditLogs() {
 
   return (
     <div className="flex-1 overflow-auto p-6">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -309,8 +309,8 @@ export default function AuditLogs() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center">
-                      <Spinner className="mx-auto" />
+                    <td colSpan={6} className="p-4">
+                      <TableSkeleton rows={8} cols={6} />
                     </td>
                   </tr>
                 ) : logs.length === 0 ? (

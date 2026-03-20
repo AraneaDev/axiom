@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
+import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { formatDate } from '@/lib/utils';
@@ -54,7 +55,19 @@ export default function SshKeys() {
     deleteMutation.mutate(keyId);
   }
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-7 w-32 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-8 w-24 rounded-md" />
+        </div>
+        <ListSkeleton rows={3} />
+      </div>
+    );
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

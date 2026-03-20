@@ -19,7 +19,7 @@ import { teamsApi } from '@/api/teams.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { PageLoader } from '@/components/ui/Spinner';
+import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 
 const FIELD_TYPES = [
@@ -152,10 +152,15 @@ export default function CustomFieldSettings() {
     });
   }
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <ListSkeleton rows={4} />
+      </div>
+    );
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold">Custom Fields</h1>

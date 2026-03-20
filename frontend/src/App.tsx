@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useParams } from 'react-router';
 
 import { KeyboardShortcutHelp } from '@/components/KeyboardShortcutHelp';
 import { AppShell } from '@/components/layout/AppShell';
+import { ProjectSettingsLayout } from '@/components/layout/ProjectSettingsLayout';
 import { SettingsLayout } from '@/components/layout/SettingsLayout';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { PageLoader } from '@/components/ui/Spinner';
@@ -333,45 +334,19 @@ function AppWithKeyboard() {
               }
             />
             <Route
-              path="/:org/:team/:project/settings/fields"
+              path="/:org/:team/:project/settings"
               element={
                 <ErrorBoundary>
-                  <CustomFieldSettings />
+                  <ProjectSettingsLayout />
                 </ErrorBoundary>
               }
-            />
-            <Route
-              path="/:org/:team/:project/settings/workflow"
-              element={
-                <ErrorBoundary>
-                  <WorkflowEditor />
-                </ErrorBoundary>
-              }
-            />
-            <Route
-              path="/:org/:team/:project/settings/automation"
-              element={
-                <ErrorBoundary>
-                  <AutomationRules />
-                </ErrorBoundary>
-              }
-            />
-            <Route
-              path="/:org/:team/:project/settings/labels"
-              element={
-                <ErrorBoundary>
-                  <LabelsSettings />
-                </ErrorBoundary>
-              }
-            />
-            <Route
-              path="/:org/:team/:project/settings/templates"
-              element={
-                <ErrorBoundary>
-                  <IssueTemplates />
-                </ErrorBoundary>
-              }
-            />
+            >
+              <Route path="labels" element={<LabelsSettings />} />
+              <Route path="fields" element={<CustomFieldSettings />} />
+              <Route path="templates" element={<IssueTemplates />} />
+              <Route path="automation" element={<AutomationRules />} />
+              <Route path="workflow" element={<WorkflowEditor />} />
+            </Route>
 
             {/* Wiki routes */}
             <Route

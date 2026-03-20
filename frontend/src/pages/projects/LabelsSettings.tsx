@@ -12,7 +12,7 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { PageLoader } from '@/components/ui/Spinner';
+import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 
 const PRESET_COLORS = [
@@ -135,10 +135,15 @@ export default function LabelsSettings() {
     });
   }
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <ListSkeleton rows={4} />
+      </div>
+    );
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold">Labels</h1>

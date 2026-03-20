@@ -60,48 +60,82 @@ export default function TeamMembers() {
       </div>
     );
 
+  const members = teamDetail?.members ?? [];
+  const roleBreakdown = members.reduce(
+    (acc: Record<string, number>, m: { role: string }) => {
+      acc[m.role] = (acc[m.role] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+
   return (
-    <div>
+    <div className="max-w-5xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Team Members</h1>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-        {teamDetail?.members?.map(
-          (m: {
-            id: string;
-            role: string;
-            user: { id: string; displayName: string; username: string };
-          }) => (
-            <div key={m.id} className="flex items-center gap-3 p-4">
-              <Avatar name={m.user.displayName} />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{m.user.displayName}</p>
-                <p className="text-xs text-text-secondary">@{m.user.username}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+          {members.map(
+            (m: {
+              id: string;
+              role: string;
+              user: { id: string; displayName: string; username: string };
+            }) => (
+              <div key={m.id} className="flex items-center gap-3 p-4">
+                <Avatar name={m.user.displayName} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{m.user.displayName}</p>
+                  <p className="text-xs text-text-secondary">@{m.user.username}</p>
+                </div>
+                <Badge variant={ROLE_BADGE[m.role] ?? 'default'}>{m.role}</Badge>
+                <div className="flex gap-1">
+                  <Select
+                    value={m.role}
+                    onChange={(v) =>
+                      roleMutation.mutate({ memberId: m.user.id, role: v as string })
+                    }
+                    options={[
+                      { value: 'ADMIN', label: 'Admin' },
+                      { value: 'MEMBER', label: 'Member' },
+                      { value: 'VIEWER', label: 'Viewer' },
+                    ]}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeMutation.mutate(m.user.id)}
+                    title="Remove member"
+                  >
+                    <UserMinus className="h-3.5 w-3.5 text-danger" />
+                  </Button>
+                </div>
               </div>
-              <Badge variant={ROLE_BADGE[m.role] ?? 'default'}>{m.role}</Badge>
-              <div className="flex gap-1">
-                <Select
-                  value={m.role}
-                  onChange={(v) => roleMutation.mutate({ memberId: m.user.id, role: v as string })}
-                  options={[
-                    { value: 'ADMIN', label: 'Admin' },
-                    { value: 'MEMBER', label: 'Member' },
-                    { value: 'VIEWER', label: 'Viewer' },
-                  ]}
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeMutation.mutate(m.user.id)}
-                  title="Remove member"
-                >
-                  <UserMinus className="h-3.5 w-3.5 text-danger" />
-                </Button>
+            ),
+          )}
+        </div>
+
+        {/* Team summary sidebar */}
+        <div className="space-y-4">
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <p className="text-xs text-text-secondary uppercase font-semibold mb-3">Team Summary</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-text-secondary">Total members</span>
+                <span className="text-sm font-semibold text-text">{members.length}</span>
               </div>
+              {Object.entries(roleBreakdown).map(([role, count]) => (
+                <div key={role} className="flex items-center justify-between">
+                  <Badge variant={ROLE_BADGE[role] ?? 'default'} size="sm">
+                    {role}
+                  </Badge>
+                  <span className="text-sm text-text">{count as number}</span>
+                </div>
+              ))}
             </div>
-          ),
-        )}
+          </div>
+        </div>
       </div>
     </div>
   );

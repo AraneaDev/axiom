@@ -25,7 +25,7 @@ import type { StatusCheck } from '@/api/status-checks.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { PageLoader } from '@/components/ui/Spinner';
+import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useRepoContext } from '@/hooks/useRepoContext';
 import { formatRelative } from '@/lib/utils';
 
@@ -101,7 +101,7 @@ export default function CommitDetail() {
     enabled: !!currentRepo?.id && !!sha,
   });
 
-  if (isLoading || !currentRepo) return <PageLoader />;
+  if (isLoading || !currentRepo) return <DetailSkeleton />;
 
   if (isError || !data) {
     return (

@@ -5,7 +5,7 @@ import { Link } from 'react-router';
 import { adminApi } from '@/api/admin.api';
 import type { SystemSettings as SystemSettingsType } from '@/api/admin.api';
 import { Button } from '@/components/ui/Button';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 // ─── Setting Row ────────────────────────────────────────────
 
@@ -40,7 +40,29 @@ export default function SystemSettings() {
     queryFn: adminApi.getSettings,
   });
 
-  if (isLoading || !settings) return <PageLoader />;
+  if (isLoading || !settings)
+    return (
+      <div className="mx-auto max-w-4xl p-6 space-y-6">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-8 rounded-md" />
+          <div>
+            <Skeleton className="h-6 w-48 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+        </div>
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="rounded-xl border border-border bg-surface p-5 space-y-3">
+            <Skeleton className="h-4 w-32 mb-3" />
+            {Array.from({ length: i === 0 ? 4 : 2 }).map((_, j) => (
+              <div key={j} className="flex items-center justify-between py-3">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-5 w-40 rounded" />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
 
   return (
     <div className="mx-auto max-w-4xl p-6 space-y-6">

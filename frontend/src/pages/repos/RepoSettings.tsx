@@ -10,7 +10,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 
@@ -73,7 +73,21 @@ export default function RepoSettings() {
     },
   });
 
-  if (!currentRepo) return <PageLoader />;
+  if (!currentRepo)
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-7 w-56" />
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="rounded-lg border border-border bg-surface p-6 space-y-4">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-9 w-full rounded-md" />
+            <Skeleton className="h-9 w-full rounded-md" />
+            <Skeleton className="h-8 w-32 rounded-md" />
+          </div>
+        ))}
+      </div>
+    );
 
   const handleSave = () => {
     updateMutation.mutate({ name, description, visibility, defaultBranch });
@@ -86,7 +100,7 @@ export default function RepoSettings() {
   };
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl mx-auto">
       <div className="mb-6">
         <Link
           to={basePath}

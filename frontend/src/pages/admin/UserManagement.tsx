@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { PageLoader } from '@/components/ui/Spinner';
+import { TableSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/utils';
 
@@ -234,7 +234,7 @@ export default function UserManagement() {
 
       {/* Table */}
       {isLoading ? (
-        <PageLoader />
+        <TableSkeleton rows={6} cols={5} />
       ) : (
         <div className="rounded-xl border border-border bg-surface overflow-hidden">
           <table className="w-full text-sm">

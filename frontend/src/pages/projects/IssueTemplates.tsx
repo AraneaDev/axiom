@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { PageLoader } from '@/components/ui/Spinner';
+import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 
 const ISSUE_TYPES = [
@@ -160,7 +160,12 @@ export default function IssueTemplates() {
     );
   }
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div>
+        <ListSkeleton rows={3} />
+      </div>
+    );
 
   const templateForm = (
     <div className="space-y-3">
@@ -243,7 +248,7 @@ export default function IssueTemplates() {
   );
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold">Issue Templates</h1>

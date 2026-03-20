@@ -39,7 +39,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { DetailSkeleton } from '@/components/ui/Skeleton';
+import { Spinner } from '@/components/ui/Spinner';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -217,7 +218,7 @@ export default function PRDetail() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] }),
   });
 
-  if (isLoading || !pr) return <PageLoader />;
+  if (isLoading || !pr) return <DetailSkeleton />;
 
   return (
     <div className="space-y-6">
@@ -242,9 +243,9 @@ export default function PRDetail() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4">
         {/* Main content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
           {/* Description */}
           {(pr.body || editingDescription) && (
             <div className="rounded-lg border border-border bg-surface p-4">

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Mail, Monitor } from 'lucide-react';
 
 import { notificationsApi, type NotificationPreference } from '@/api/notifications.api';
-import { PageLoader } from '@/components/ui/Spinner';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 
 const EVENT_TYPE_LABELS: Record<string, { label: string; description: string }> = {
@@ -94,7 +94,29 @@ export default function NotificationSettings() {
     mutation.mutate({ eventType: pref.eventType, settings: { [field]: value } });
   }
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading)
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div>
+          <Skeleton className="h-7 w-52 mb-2" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between px-4 py-4">
+              <div>
+                <Skeleton className="h-4 w-32 mb-1" />
+                <Skeleton className="h-3 w-56" />
+              </div>
+              <div className="flex gap-6">
+                <Skeleton className="h-5 w-9 rounded-full" />
+                <Skeleton className="h-5 w-9 rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
 
   const preferences = data?.preferences ?? [];
 
