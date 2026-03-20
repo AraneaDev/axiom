@@ -4,16 +4,16 @@
 
 ---
 
-## Current State
+## Current State (Updated 2026-03-20)
 
 ### What Works Today
 
 #### Project Management (Jira equivalent)
 - [x] Organizations, teams, and projects with role-based access (Owner/Admin/Member)
 - [x] Issue tracking with types (Task, Bug, Story, Epic), priorities, statuses, labels
-- [x] Kanban board with drag-and-drop column moves
+- [x] Kanban board with drag-and-drop column moves, swimlanes, filters
 - [x] Issue list with search, filtering (status, priority, type, assignee, label), sorting
-- [x] Issue comments with markdown
+- [x] Issue comments with markdown, @mentions, #issue references
 - [x] Issue linking (blocks, is blocked by, duplicates, relates to)
 - [x] Issue-to-commit linking via commit message parsing (CLOSES, FIXES, REFS #num)
 - [x] Issue branch auto-creation with naming convention
@@ -21,37 +21,55 @@
 - [x] Board columns (customizable kanban workflow)
 - [x] Project-scoped issue numbering with prefix (e.g., AXM-42)
 - [x] Due dates on issues
+- [x] Sprint planning with backlog, velocity chart, burndown chart, sprint progress bars
+- [x] Custom fields (text, number, date, select, multi-select, user)
+- [x] Workflow rules with status transitions and auto-actions
+- [x] Automation rules (trigger/condition/action)
+- [x] Issue templates per project
+- [x] Epic hierarchy with parent/child relationships, progress tracking
+- [x] Roadmap timeline view with epic bars and priority coloring
+- [x] Saved filters per project
+- [x] Issue votes and watchers with notification triggers
+- [x] Labels management UI per project
+- [x] Time tracking (log work, estimates, time report page, CSV export)
+- [x] Project analytics (cycle time, lead time, activity trends, workload)
+- [x] Team workload visualization with capacity warnings
 
 #### Source Code Hosting (Bitbucket equivalent)
 - [x] Git repository hosting (bare repos on disk)
 - [x] Smart HTTP protocol (git clone/push via HTTP Basic Auth with API tokens)
 - [x] SSH protocol (git clone/push via SSH key authentication)
 - [x] Repository visibility (Public, Internal, Private)
-- [x] File browser with directory navigation
+- [x] File browser with directory navigation and branch switcher dropdown
 - [x] File viewer with syntax highlighting (lowlight/highlight.js)
 - [x] Blame view (line-by-line authorship)
 - [x] File history
 - [x] Branch management (create, delete, list)
 - [x] Branch comparison (diff between branches)
-- [x] Commit detail view
+- [x] Commit list with pagination (30 per page, load more)
+- [x] Commit detail with file carousel (prev/next navigation, keyboard shortcuts)
 - [x] Repository forking
-- [x] Repository settings page
-- [x] Clone URL display (HTTPS + SSH)
+- [x] Repository settings page (wider layout)
+- [x] Clone URL display (HTTPS + SSH with copy buttons)
+- [x] URL-based tab routing (/branches, /commits, /pipelines, /releases, etc.)
 
 #### Pull Requests & Code Review
 - [x] PR creation with source/target branch
-- [x] PR diff viewer
+- [x] PR diff viewer with inline comments
 - [x] PR commit list
 - [x] PR reviews (Approve, Request Changes, Comment)
 - [x] PR comments (general + inline on diff)
-- [x] PR merge and close
+- [x] PR merge and close with merge strategy selection (merge/squash/rebase)
 - [x] PR-to-issue linking
+- [x] "Needs My Review" filter on PR list
+- [x] Cross-repo open PRs view on team page
 
 #### Branch Protection
 - [x] Pattern-based rules (glob: `main`, `release/*`)
 - [x] Required review count
-- [x] Dismiss stale reviews on new push
-- [x] Required status checks (field exists, no CI integration yet)
+- [x] Require CI status checks
+- [x] Prevent force push, direct push, non-linear history
+- [x] Frontend settings UI with add/edit/delete
 
 #### Documentation (Confluence equivalent)
 - [x] Wiki spaces scoped to teams
@@ -64,13 +82,19 @@
 - [x] TipTap WYSIWYG markdown editor
 - [x] Export to HTML, DOCX, EPUB, PDF, LaTeX, plain text (pandoc + weasyprint)
 - [x] Mermaid diagrams rendered as images in PDF/DOCX exports
+- [x] Real-time collaborative editing (Yjs CRDT + WebSocket)
+- [x] Page labels/tags
+- [x] Page move and copy
+- [x] Rich space index with welcome preview and page cards
+- [x] File attachments on pages
 
 #### CI/CD (Pipelines)
 - [x] Pipeline CRUD with YAML config storage
 - [x] Pipeline run records (status, started/finished timestamps)
-- [x] Manual run triggering
+- [x] Manual run triggering and re-run
 - [x] Run cancellation
-- [x] Log retrieval
+- [x] Log retrieval with real-time streaming (SSE)
+- [x] Job/step detail with expandable output
 - [ ] **No actual execution engine** -- runs are recorded but nothing executes the YAML
 
 #### Release Management
@@ -79,12 +103,22 @@
 - [x] Publish workflow
 - [x] Changelog comparison between tags
 - [x] Release notes (markdown body)
+- [x] Deploy to environments with status tracking
+- [x] Deployment history per release
+
+#### Environments & Secrets
+- [x] Deployment environments (dev/staging/prod)
+- [x] Environment variables with AES-256-CBC encryption
+- [x] Masked values in API responses
+- [x] Variable CRUD UI
 
 #### Webhooks
 - [x] Per-repository webhook configuration
 - [x] Event types: push, pr:created, pr:merged, tag:created, branch:deleted
 - [x] Secret signing for payload verification
 - [x] Webhook CRUD
+- [x] Delivery history with status codes, timing, request/response bodies
+- [x] Redeliver failed webhooks
 
 #### Search
 - [x] Global search across issues, repositories, wiki pages
@@ -97,246 +131,141 @@
 - [x] Two-factor authentication (TOTP)
 - [x] SSH key management
 - [x] API token management (for git + API access)
-- [x] Organization invites
+- [x] Organization invites with token-based accept flow
 - [x] User profile editing
+- [x] Global admin via User.isAdmin field
+
+#### Notifications
+- [x] In-app notification center (bell icon in header)
+- [x] Notification inbox page with filter tabs (All, Unread, Mentions, Watching)
+- [x] Mark as read/unread, mark all as read
+- [x] Click-to-navigate to linked entity
+- [x] Notification preferences per user
+- [x] WebSocket-based real-time notification delivery
+- [ ] **No email notification delivery** (SMTP not integrated)
+
+#### Real-time
+- [x] WebSocket server with JWT authentication
+- [x] Event broadcasting: issue:created/updated, pr:updated/merged, wiki:updated, board:moved, pipeline:updated, notification
+- [x] useRealtimeInvalidation hook for automatic query cache invalidation
+- [x] Zero polling -- all data updates via WebSocket events
+- [x] Collaborative wiki editing via Yjs CRDT
 
 #### AI Integration (MCP)
 - [x] MCP server with SSE transport
 - [x] Tools: list/get/create issues, browse repos, read files, wiki CRUD
 - [x] Permission-aware (respects user's org/team access)
 
-#### Platform
+#### Platform & Infrastructure
+- [x] Redis caching layer with cache-aside pattern (graceful degradation)
+- [x] System health endpoint (GET /api/health) with DB + Redis status
+- [x] Docker healthchecks on all containers (db, redis, api, web)
+- [x] Admin dashboard with live health panel, system stats, storage breakdown
+- [x] Audit logging with filterable log viewer
 - [x] Responsive layout with collapsible sidebar
 - [x] Dark/light mode via CSS variables
 - [x] Breadcrumbs with friendly names and icons
 - [x] Toast notifications
-- [x] Error boundaries
+- [x] Error boundaries (page-level isolation)
 - [x] Design token system (no hardcoded colors)
+- [x] Skeleton loading states on all data-heavy pages
+- [x] Settings sidebar navigation (user settings + project settings)
+- [x] Team activity feed and member profile pages
 
 ---
 
-## Gap Analysis vs. Atlassian Stack
+## Remaining Gaps vs. Atlassian Stack
 
-### Jira Gaps
+### HIGH Priority (Critical for parity)
 
-| Feature | Jira | Axiom | Priority |
-|---------|------|-------|----------|
-| Sprint planning | Backlog + sprint cycles, velocity tracking | No sprints, backlog, or velocity | HIGH |
-| Time tracking | Log work, time estimates, remaining | None | MEDIUM |
-| Custom fields | Unlimited custom fields per issue type | Fixed schema only | HIGH |
-| Workflows | Configurable status transitions with rules | Free-form column moves, no rules | MEDIUM |
-| Epics & hierarchy | Epic > Story > Subtask, parent linking | Epic type exists but no hierarchy view | HIGH |
-| Roadmap / timeline | Timeline view with dependency lines | None | MEDIUM |
-| Bulk operations | Multi-select issues, bulk edit | None | MEDIUM |
-| Issue templates | Per-type templates with required fields | None | LOW |
-| SLA tracking | Response/resolution time tracking | None | LOW |
-| Advanced JQL search | Structured query language | Basic text + filter dropdowns | MEDIUM |
-| Dashboard widgets | Configurable dashboards with charts | Static dashboard only | MEDIUM |
-| Automation rules | When X happens, do Y | None | HIGH |
-| Activity stream | Timeline of all actions per issue | Comments only, no activity log | MEDIUM |
-| Watchers / subscriptions | Watch issues, get notified | Notification model exists, no delivery | MEDIUM |
-| Voting | Vote on issues to prioritize | None | LOW |
-| Labels management | CRUD labels at project level | Labels on issues but no management UI | LOW |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Email notifications (SMTP) | NOT STARTED | Notification model exists, need nodemailer + SMTP config + templates |
+| CI/CD execution engine | NOT STARTED | Pipeline model complete, need Docker-based executor to actually run YAML |
+| File attachments on issues/comments | NOT STARTED | Attachment model exists for wiki, need to extend to issues + comments with drag-and-drop UI |
+| Code search across repositories | NOT STARTED | Only issue/wiki search exists, need source code indexing |
 
-### Confluence Gaps
+### MEDIUM Priority (Important for usability)
 
-| Feature | Confluence | Axiom | Priority |
-|---------|------------|-------|----------|
-| Page templates | Pre-built templates (meeting notes, decision log, etc.) | None | MEDIUM |
-| Inline comments | Comment on specific text ranges | None | MEDIUM |
-| Page restrictions | Per-page view/edit permissions | Space-level only | LOW |
-| Collaborative editing | Real-time multi-user editing | Single-user only | HIGH |
-| Page attachments | Upload files, images | None (images via markdown URLs only) | HIGH |
-| Macros / embeds | Jira issue embed, status macro, etc. | Mermaid only | MEDIUM |
-| Space permissions | Fine-grained read/write per space | Team-level RBAC only | LOW |
-| Full-text search in wiki | Search within page bodies | Basic search only | MEDIUM |
-| Page labels / tags | Categorize pages with labels | None | LOW |
-| Page move / copy | Move pages between spaces, reorder | None | LOW |
-| Favorites / bookmarks | Star pages for quick access | None | LOW |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Bulk issue operations | NOT STARTED | Multi-select + batch edit (status, assignee, labels) |
+| SLA tracking | NOT STARTED | Response/resolution time targets per priority |
+| Advanced query language | NOT STARTED | JQL-like structured search for issues |
+| Configurable dashboard widgets | NOT STARTED | Static dashboard only, need drag-and-drop widget layout |
+| Default PR reviewers | NOT STARTED | Auto-assign reviewers on PR creation |
+| Code Owners (CODEOWNERS) | PARTIAL | Backend parsing exists, no frontend UI or auto-assign |
+| Page restrictions | NOT STARTED | Per-page view/edit permissions |
+| Repository insights | NOT STARTED | Commit frequency, contributor stats, language breakdown |
+| Scheduled reports | NOT STARTED | Auto-generate and email sprint/project reports |
 
-### Bitbucket Gaps
+### LOW Priority (Nice-to-have)
 
-| Feature | Bitbucket | Axiom | Priority |
-|---------|-----------|-------|----------|
-| PR approvals with merge checks | Block merge until approvals + CI pass | Approvals exist, no merge blocking | HIGH |
-| Merge strategies | Merge commit, squash, fast-forward | Single merge strategy only | MEDIUM |
-| PR tasks | Checklist items within PR | None | LOW |
-| Code owners | Auto-assign reviewers by file path | None | MEDIUM |
-| Diff commenting on specific lines | Inline comments with suggestions | Inline comments exist, no suggestions | MEDIUM |
-| Repository permissions | Per-repo user/group access | Visibility levels only (public/internal/private) | MEDIUM |
-| LFS support | Large file storage | None | LOW |
-| CI/CD integration | Bitbucket Pipelines with actual execution | Pipeline model exists, no executor | HIGH |
-| Deployment environments | Dev/staging/prod tracking | None | MEDIUM |
-| Repository insights | Commit frequency, contributor stats | None | LOW |
-| Commit status checks | External CI reports status on commits | Model exists, no integration | HIGH |
-| Default reviewers | Auto-add reviewers to PRs | None | LOW |
-
-### Platform Gaps
-
-| Feature | Atlassian | Axiom | Priority |
-|---------|-----------|-------|----------|
-| Email notifications | Full email notification system | Notification model, no delivery | HIGH |
-| Real-time updates | WebSocket/SSE for live updates | None (poll on navigation) | HIGH |
-| Audit logging | Complete audit trail | Model exists, not all mutations logged | MEDIUM |
-| SSO / SAML / OIDC | Enterprise identity providers | Username/password + 2FA only | MEDIUM |
-| User groups / teams RBAC | Fine-grained permission groups | Org/team roles only | LOW |
-| API rate limiting per user | Per-user/token rate limits | Global rate limiting only | LOW |
-| File uploads / attachments | Global attachment storage | None | HIGH |
-| Backup / export | Full instance backup | Database only, no UI | LOW |
-| Admin dashboard | System health, user management | None | MEDIUM |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| SSO / SAML / OIDC | NOT STARTED | Enterprise identity provider integration |
+| LFS support | NOT STARTED | Large file storage for git |
+| PR tasks/checklists | NOT STARTED | Checklist items within PRs |
+| Wiki page favorites/bookmarks | NOT STARTED | Star pages for quick access |
+| Custom report builder | NOT STARTED | Drag-and-drop report creation |
+| OAuth2 app integrations | NOT STARTED | Third-party app authorization |
 
 ---
 
-## Implementation Roadmap
+## Implementation Roadmap (Remaining Work)
 
-### Phase 1: Core Developer Experience (Highest Impact)
+### Phase A: Email & Attachments (Next)
 
-**1.1 Real-time Updates (WebSocket)**
-- WebSocket server alongside Express
-- Broadcast events: issue updated, PR merged, comment added, board moved
-- Frontend: React Query automatic cache invalidation on WS events
-- Eliminates stale data across tabs/users
-
-**1.2 Email Notifications**
+**A.1 Email Notifications**
 - SMTP integration (nodemailer)
-- Notification preferences per user (email, in-app, none)
-- Templates: issue assigned, PR review requested, mentioned, comment reply
-- Notification center in UI (bell icon in header)
-- Mark as read/unread, notification feed
+- Email templates: issue assigned, PR review requested, mentioned, comment reply
+- Delivery preferences per user (email, in-app, none)
+- Batch digest option (immediate vs daily summary)
 
-**1.3 File Attachments**
-- S3-compatible storage backend (MinIO for self-hosted)
-- Upload API with drag-and-drop UI
-- Attach files to issues, comments, wiki pages, PR comments
+**A.2 Issue/Comment File Attachments**
+- Extend existing Attachment model to support issues and comments
+- Drag-and-drop upload UI in issue description and comment editors
 - Image preview in markdown (`![](attachment://id)`)
 - Storage quota per org
 
-**1.4 CI/CD Execution Engine**
-- Docker-based pipeline executor
+### Phase B: CI/CD Execution
+
+**B.1 Docker-based Pipeline Executor**
 - Parse YAML config into job/step graph
-- Execute steps in isolated containers
-- Stream logs in real-time (WebSocket)
+- Execute steps in isolated Docker containers
+- Stream logs in real-time via existing SSE infrastructure
 - Report commit status checks back to PRs
 - Block PR merge when required checks fail
 
-### Phase 2: Project Management Depth
+### Phase C: Advanced Search & Code Intelligence
 
-**2.1 Sprint Planning**
-- Sprint model (start date, end date, goal)
-- Backlog view (unassigned issues)
-- Sprint board (issues in current sprint)
-- Velocity chart (story points completed per sprint)
-- Sprint retrospective notes
+**C.1 Code Search**
+- Index repository file contents (trigram or Elasticsearch)
+- Search code across all team repos
+- Syntax-aware search results with file context
 
-**2.2 Epic Hierarchy**
-- Epic > Story > Subtask parent-child relationships
-- Epic progress bar (% of child issues closed)
-- Epic board view (swimlanes by epic)
-- Roadmap timeline view with epic bars
+**C.2 Advanced Query Language**
+- JQL-like structured queries for issues
+- Auto-complete field names and values
+- Save and share queries
 
-**2.3 Custom Fields**
-- Schema: CustomFieldDefinition (name, type, projectId)
-- Types: text, number, date, select, multi-select, user
-- Per-project field configuration
-- Display in issue detail sidebar
-- Filterable in issue list
+### Phase D: Enterprise Features
 
-**2.4 Workflow Rules**
-- Status transition rules (e.g., "In Progress" can only move to "Review" or "Blocked")
-- Auto-actions on transition (e.g., assign reviewer when moved to Review)
-- Required fields per status (e.g., require assignee for "In Progress")
-
-**2.5 Automation Rules**
-- Trigger: issue created, PR merged, comment added, label applied
-- Condition: matches filter (type, priority, label, etc.)
-- Action: change status, assign user, add label, add comment, send notification
-- Rule builder UI
-
-### Phase 3: Collaboration
-
-**3.1 Collaborative Wiki Editing**
-- Yjs or Automerge CRDT for real-time collaboration
-- Presence indicators (who's viewing/editing)
-- Cursor sharing
-- Conflict-free concurrent edits
-
-**3.2 Wiki Enhancements**
-- Page templates (meeting notes, ADR, runbook, RFC)
-- File attachments on pages (images, PDFs)
-- Inline comments on text ranges
-- Page labels/tags with search
-- Page move/copy between spaces
-
-**3.3 Activity Streams**
-- Activity timeline on issues (status changes, assignee changes, label changes, not just comments)
-- Activity feed per project/team
-- User activity profile
-
-**3.4 Mentions & Cross-references**
-- @user mentions in comments/descriptions with notifications
-- #issue-key references that auto-link
-- Wiki page references in issues and vice versa
-
-### Phase 4: Advanced Code Features
-
-**4.1 Merge Strategies**
-- Merge commit (default)
-- Squash and merge
-- Rebase and merge
-- Per-repo default strategy setting
-
-**4.2 Code Owners**
-- CODEOWNERS file parsing
-- Auto-assign reviewers based on changed files
-- Required review from code owners before merge
-
-**4.3 Commit Status Checks**
-- API for external CI to report status on commits/PRs
-- Status check display on PR page
-- Required checks for branch protection
-
-**4.4 PR Suggestions**
-- Inline code suggestions in review comments
-- One-click apply suggestion (creates commit)
-
-**4.5 Repository Insights**
-- Commit frequency graph
-- Contributor statistics
-- Language breakdown
-- Code frequency (additions/deletions over time)
-
-### Phase 5: Enterprise & Scale
-
-**5.1 SSO / OIDC**
+**D.1 SSO / OIDC**
 - OpenID Connect provider integration
 - SAML 2.0 support
 - Auto-provision users on first login
 - Group-to-team mapping
 
-**5.2 Admin Dashboard**
-- System health metrics
-- User management (create, disable, delete)
-- Storage usage
-- License management (if applicable)
-- Global settings
-
-**5.3 Advanced Search**
-- Full-text search index (PostgreSQL tsvector or Elasticsearch)
-- Code search across repositories
-- JQL-like query language for issues
-- Saved searches / filters
-
-**5.4 API v2**
-- REST API with OpenAPI spec
-- Pagination on all list endpoints
-- Webhook event expansion
-- OAuth2 app integration
+**D.2 Advanced Admin**
+- Configurable dashboard widgets
+- Scheduled report generation
+- Backup/restore UI
+- License management
 
 ---
 
 ## MCP Integration Roadmap
-
-The MCP server is a differentiator -- no Atlassian product offers native AI tool access.
 
 ### Current MCP Tools
 - list_orgs, list_teams, list_projects
