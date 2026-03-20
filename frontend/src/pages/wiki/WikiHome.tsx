@@ -33,7 +33,7 @@ export default function WikiHome() {
   if (isLoading) return <PageLoader />;
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Wiki</h1>
         <Link to={`/${org}/${teamSlug}/wiki/new`}>
@@ -50,7 +50,7 @@ export default function WikiHome() {
           description="Create a space to start documenting."
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {spaces.map((s) => (
             <Link
               key={s.id}

@@ -355,7 +355,7 @@ export default function LabelsSettings() {
         </div>
       )}
       <Modal
-        isOpen={deleteTarget !== null}
+        open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
         title="Delete label"
         size="sm"

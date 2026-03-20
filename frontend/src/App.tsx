@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useParams } from 'react-router';
 
 import { KeyboardShortcutHelp } from '@/components/KeyboardShortcutHelp';
 import { AppShell } from '@/components/layout/AppShell';
+import { SettingsLayout } from '@/components/layout/SettingsLayout';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { PageLoader } from '@/components/ui/Spinner';
 import { ToastProvider } from '@/components/ui/Toast';
@@ -147,11 +148,13 @@ function AppWithKeyboard() {
             <Route path="/:org/:team/wiki/:space/:page/history" element={<PageHistory />} />
 
             {/* Settings */}
-            <Route path="/settings/profile" element={<Profile />} />
-            <Route path="/settings/security" element={<Security />} />
-            <Route path="/settings/ssh-keys" element={<SshKeys />} />
-            <Route path="/settings/tokens" element={<ApiTokens />} />
-            <Route path="/settings/notifications" element={<NotificationSettings />} />
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route path="profile" element={<Profile />} />
+              <Route path="security" element={<Security />} />
+              <Route path="ssh-keys" element={<SshKeys />} />
+              <Route path="tokens" element={<ApiTokens />} />
+              <Route path="notifications" element={<NotificationSettings />} />
+            </Route>
 
             {/* Admin */}
             <Route path="/admin" element={<AdminDashboard />} />

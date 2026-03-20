@@ -70,7 +70,7 @@ function Widget({
           </Link>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto max-h-80">{children}</div>
+      <div className="overflow-y-auto max-h-80">{children}</div>
     </div>
   );
 }
@@ -332,7 +332,7 @@ export default function Dashboard() {
 
   if (orgsLoading || dashLoading)
     return (
-      <div className="space-y-8">
+      <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
           <div>
             <Skeleton className="h-8 w-64 mb-2" />
@@ -362,7 +362,7 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-7xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">
@@ -444,7 +444,7 @@ export default function Dashboard() {
           {/* Org cards */}
           <div>
             <h2 className="text-lg font-semibold text-text mb-3">Organizations</h2>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
               {orgs.map((org) => (
                 <Link
                   key={org.id}
@@ -483,7 +483,7 @@ export default function Dashboard() {
           {teams && teams.length > 0 && (
             <div>
               <h2 className="text-lg font-semibold text-text mb-3">Teams</h2>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                 {teams.map((team) => (
                   <TeamCard key={team.id} team={team} orgSlug={firstOrg!.slug} />
                 ))}

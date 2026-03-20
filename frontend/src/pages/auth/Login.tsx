@@ -67,7 +67,7 @@ export default function Login() {
       </div>
 
       {/* Right panel — form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-surface">
+      <div className="flex-1 flex items-center justify-center p-8 bg-surface min-h-screen">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2 mb-8">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
