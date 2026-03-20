@@ -2,7 +2,7 @@
 
 A self-hosted project management platform with integrated Git hosting, CI/CD, and real-time collaboration.
 
-![Tests](https://img.shields.io/badge/tests-487%20passing-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) ![Backend](https://img.shields.io/badge/backend-zero%20errors-brightgreen) ![Frontend](https://img.shields.io/badge/frontend-zero%20errors-brightgreen) ![ESLint](https://img.shields.io/badge/ESLint-zero%20warnings-brightgreen) ![E2E](https://img.shields.io/badge/E2E-12%20specs-blue) ![UI Tests](https://img.shields.io/badge/UI%20tests-140%20passing-brightgreen) ![Modules](https://img.shields.io/badge/modules-42%20tested-brightgreen) ![License](https://img.shields.io/badge/license-proprietary-lightgrey)
+![Tests](https://img.shields.io/badge/tests-495%20passing-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) ![Backend](https://img.shields.io/badge/backend-zero%20errors-brightgreen) ![Frontend](https://img.shields.io/badge/frontend-zero%20errors-brightgreen) ![ESLint](https://img.shields.io/badge/ESLint-zero%20warnings-brightgreen) ![E2E](https://img.shields.io/badge/E2E-12%20specs-blue) ![UI Tests](https://img.shields.io/badge/UI%20tests-140%20passing-brightgreen) ![Modules](https://img.shields.io/badge/modules-43%20tested-brightgreen) ![License](https://img.shields.io/badge/license-proprietary-lightgrey)
 
 ---
 
