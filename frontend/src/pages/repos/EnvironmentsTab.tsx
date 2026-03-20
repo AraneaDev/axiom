@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { Modal } from '@/components/ui/Modal';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/utils';
@@ -54,6 +54,7 @@ export default function EnvironmentsTab({ repoId }: EnvironmentsTabProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedEnv, setSelectedEnv] = useState<DeploymentEnvironment | null>(null);
   const [editingEnv, setEditingEnv] = useState<DeploymentEnvironment | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -283,11 +284,7 @@ export default function EnvironmentsTab({ repoId }: EnvironmentsTabProps) {
                       variant="ghost"
                       size="xs"
                       title="Delete environment"
-                      onClick={() => {
-                        if (confirm(`Delete environment "${env.name}"?`)) {
-                          deleteMutation.mutate(env.id);
-                        }
-                      }}
+                      onClick={() => setDeleteTarget(env.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5 text-danger" />
                     </Button>
@@ -404,6 +401,32 @@ export default function EnvironmentsTab({ repoId }: EnvironmentsTabProps) {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete environment confirmation */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Environment"
+        size="sm"
+      >
+        <p className="text-sm text-text-secondary">
+          Are you sure you want to delete this environment? All deployment history will be lost.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+            <X className="h-4 w-4" /> Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (deleteTarget) deleteMutation.mutate(deleteTarget);
+              setDeleteTarget(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </ModalFooter>
       </Modal>
     </div>
   );

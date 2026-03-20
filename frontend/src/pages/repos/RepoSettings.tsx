@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 
 /**
@@ -20,6 +21,7 @@ export default function RepoSettings() {
   const { currentRepo, basePath, org, teamSlug } = useRepoContext();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -50,6 +52,7 @@ export default function RepoSettings() {
     ) => reposApi.update(currentRepo!.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['repos'] });
+      toast.success('Repository settings saved');
     },
   });
 
@@ -58,6 +61,7 @@ export default function RepoSettings() {
       reposApi.updateSettings(currentRepo!.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['repos'] });
+      toast.success('Merge settings saved');
     },
   });
 

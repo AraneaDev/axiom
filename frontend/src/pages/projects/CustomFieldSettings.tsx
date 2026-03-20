@@ -18,7 +18,9 @@ import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { PageLoader } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
 
 const FIELD_TYPES = [
   { value: 'TEXT', label: 'Text' },
@@ -44,9 +46,11 @@ const TYPE_COLORS: Record<string, string> = {
 export default function CustomFieldSettings() {
   const { org, team: teamSlug, project: projectSlug } = useParams();
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formType, setFormType] = useState('TEXT');
   const [formOptions, setFormOptions] = useState('');
@@ -80,6 +84,7 @@ export default function CustomFieldSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['custom-fields', currentProject?.id] });
       resetForm();
+      toast.success('Field created');
     },
   });
 
@@ -94,6 +99,7 @@ export default function CustomFieldSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['custom-fields', currentProject?.id] });
       setEditingId(null);
+      toast.success('Field updated');
     },
   });
 
@@ -101,6 +107,7 @@ export default function CustomFieldSettings() {
     mutationFn: (fieldId: string) => customFieldsApi.deleteDefinition(fieldId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['custom-fields', currentProject?.id] });
+      toast.success('Field deleted');
     },
   });
 
@@ -337,11 +344,7 @@ export default function CustomFieldSettings() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      if (window.confirm(`Delete field "${field.name}" and all its values?`)) {
-                        deleteMutation.mutate(field.id);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget(field.id)}
                     className="text-danger hover:text-danger"
                     title="Delete field"
                   >
@@ -353,6 +356,33 @@ export default function CustomFieldSettings() {
           ))}
         </div>
       )}
+
+      {/* Delete field confirmation */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Custom Field"
+        size="sm"
+      >
+        <p className="text-sm text-text-secondary">
+          Are you sure you want to delete this field and all its values? This action cannot be
+          undone.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+            <X className="h-4 w-4" /> Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (deleteTarget) deleteMutation.mutate(deleteTarget);
+              setDeleteTarget(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

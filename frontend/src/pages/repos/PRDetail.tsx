@@ -38,6 +38,7 @@ import { SuggestionBlock } from '@/components/SuggestionBlock';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -78,6 +79,7 @@ export default function PRDetail() {
   const [descriptionBody, setDescriptionBody] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentBody, setEditCommentBody] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const { user } = useAuthStore();
 
   const toggleSuggestion = useCallback((commentId: string) => {
@@ -504,11 +506,7 @@ export default function PRDetail() {
                               variant="ghost"
                               size="xs"
                               title="Delete comment"
-                              onClick={() => {
-                                if (confirm('Delete this comment?')) {
-                                  deleteCommentMutation.mutate(c.id);
-                                }
-                              }}
+                              onClick={() => setDeleteTarget(c.id)}
                             >
                               <Trash2 className="h-3 w-3 text-danger" />
                             </Button>
@@ -795,6 +793,32 @@ export default function PRDetail() {
           </div>
         </div>
       </div>
+
+      {/* Delete comment confirmation */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Comment"
+        size="sm"
+      >
+        <p className="text-sm text-text-secondary">
+          Are you sure you want to delete this comment? This action cannot be undone.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+            <X className="h-4 w-4" /> Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (deleteTarget) deleteCommentMutation.mutate(deleteTarget);
+              setDeleteTarget(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 
@@ -39,6 +40,7 @@ export default function IssueTemplates() {
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formType, setFormType] = useState<'TASK' | 'BUG' | 'STORY' | 'EPIC'>('TASK');
   const [formTitle, setFormTitle] = useState('');
@@ -344,11 +346,7 @@ export default function IssueTemplates() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      if (window.confirm(`Delete template "${template.name}"?`)) {
-                        deleteMutation.mutate(template.id);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget(template.id)}
                     className="text-danger hover:text-danger"
                     title="Delete template"
                   >
@@ -360,6 +358,32 @@ export default function IssueTemplates() {
           ))}
         </div>
       )}
+
+      {/* Delete template confirmation */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Template"
+        size="sm"
+      >
+        <p className="text-sm text-text-secondary">
+          Are you sure you want to delete this template? This action cannot be undone.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+            <X className="h-4 w-4" /> Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (deleteTarget) deleteMutation.mutate(deleteTarget);
+              setDeleteTarget(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

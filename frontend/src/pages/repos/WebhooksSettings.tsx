@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/Toast';
 
 interface WebhooksSettingsProps {
   repoId: string;
@@ -30,6 +31,7 @@ interface WebhooksSettingsProps {
  */
 export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<WebhookType | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WebhookType | null>(null);
@@ -50,6 +52,7 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks', repoId] });
       setDeleteTarget(null);
+      toast.success('Webhook deleted');
     },
   });
 
@@ -187,6 +190,7 @@ function WebhookFormModal({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const isEdit = !!webhook;
 
   const [url, setUrl] = useState(webhook?.url ?? '');
@@ -209,6 +213,7 @@ function WebhookFormModal({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks', repoId] });
+      toast.success(isEdit ? 'Webhook updated' : 'Webhook created');
       onClose();
     },
     onError: (err: Error) => setError(err.message),

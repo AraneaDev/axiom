@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
 import { formatDate } from '@/lib/utils';
 
 /**
@@ -16,6 +17,7 @@ import { formatDate } from '@/lib/utils';
  */
 export default function ApiTokens() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState('issues:read,wiki:read');
@@ -36,6 +38,7 @@ export default function ApiTokens() {
       setNewToken(data.token ?? null);
       setShowForm(false);
       setName('');
+      toast.success('Token created');
     },
     onError: (err: unknown) =>
       setError(err instanceof Error ? err.message : 'Failed to create token'),
@@ -43,7 +46,10 @@ export default function ApiTokens() {
 
   const deleteMutation = useMutation({
     mutationFn: (tokenId: string) => usersApi.deleteApiToken(tokenId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['apiTokens'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apiTokens'] });
+      toast.success('Token revoked');
+    },
   });
 
   function handleRevoke(tokenId: string) {

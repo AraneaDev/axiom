@@ -11,6 +11,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 
@@ -40,6 +41,7 @@ export default function LabelsSettings() {
   const [formName, setFormName] = useState('');
   const [formColor, setFormColor] = useState(PRESET_COLORS[0]);
   const [formDescription, setFormDescription] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   // Resolve project
   const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
@@ -340,15 +342,7 @@ export default function LabelsSettings() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete label "${label.name}"? It will be removed from all issues.`,
-                        )
-                      ) {
-                        deleteMutation.mutate(label.name);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget(label.name)}
                     className="text-danger hover:text-danger"
                     title="Delete label"
                   >
@@ -360,6 +354,30 @@ export default function LabelsSettings() {
           ))}
         </div>
       )}
+      <Modal
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete label"
+        size="sm"
+      >
+        <p className="text-secondary">
+          Delete label &quot;{deleteTarget}&quot;? It will be removed from all issues.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+            <X className="h-4 w-4" /> Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (deleteTarget) deleteMutation.mutate(deleteTarget);
+              setDeleteTarget(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

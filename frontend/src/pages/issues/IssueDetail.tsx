@@ -15,6 +15,7 @@ import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -162,6 +163,7 @@ export default function IssueDetail() {
 
   return (
     <div>
+      <Breadcrumbs />
       <div className="flex flex-col lg:grid lg:grid-cols-[1fr_400px] gap-8">
         {/* Main content */}
         <div className="min-w-0">
@@ -309,23 +311,26 @@ export default function IssueDetail() {
         </div>
 
         {/* Sidebar */}
-        <IssueDetailSidebar
-          issue={issue}
-          projectId={currentProject!.id}
-          num={num!}
-          org={org!}
-          teamSlug={teamSlug!}
-          projectSlug={projectSlug!}
-          teamMembers={teamDetail?.members}
-          sprints={sprints}
-          children={children}
-          progress={progress}
-          links={links}
-          repos={repos}
-          editingField={editingField}
-          onEditField={setEditingField}
-          onUpdate={(data) => updateMutation.mutate(data)}
-        />
+        <div className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+          <IssueDetailSidebar
+            issue={issue}
+            projectId={currentProject!.id}
+            num={num!}
+            org={org!}
+            teamSlug={teamSlug!}
+            projectSlug={projectSlug!}
+            teamMembers={teamDetail?.members}
+            sprints={sprints}
+            children={children}
+            progress={progress}
+            links={links}
+            repos={repos}
+            editingField={editingField}
+            onEditField={setEditingField}
+            onUpdate={(data) => updateMutation.mutate(data)}
+            isUpdating={updateMutation.isPending}
+          />
+        </div>
       </div>
     </div>
   );

@@ -29,6 +29,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import { Spinner } from '@/components/ui/Spinner';
 import { PRIORITY_COLORS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
 import type { Issue, Sprint } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -61,6 +62,7 @@ interface IssueDetailSidebarProps {
   editingField: string | null;
   onEditField: (field: string | null) => void;
   onUpdate: (data: Record<string, unknown>) => void;
+  isUpdating?: boolean;
 }
 
 /**
@@ -81,6 +83,7 @@ interface IssueDetailSidebarProps {
  * @param root0.editingField
  * @param root0.onEditField
  * @param root0.onUpdate
+ * @param root0.isUpdating
  */
 export function IssueDetailSidebar({
   issue,
@@ -98,6 +101,7 @@ export function IssueDetailSidebar({
   editingField,
   onEditField,
   onUpdate,
+  isUpdating,
 }: IssueDetailSidebarProps) {
   const queryClient = useQueryClient();
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -153,7 +157,10 @@ export function IssueDetailSidebar({
             <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
               Status
             </p>
-            <Badge variant="primary">{issue.column?.name ?? 'Backlog'}</Badge>
+            <div className="flex items-center gap-1.5">
+              <Badge variant="primary">{issue.column?.name ?? 'Backlog'}</Badge>
+              {isUpdating && <Spinner size="sm" className="h-3 w-3" />}
+            </div>
           </div>
 
           {/* Type */}
@@ -411,8 +418,9 @@ export function IssueDetailSidebar({
 
           {/* Parent Issue */}
           <div>
-            <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+            <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5 flex items-center gap-1.5">
               Parent Issue
+              {setParentMutation.isPending && <Spinner size="sm" className="h-3 w-3" />}
             </p>
             {editingField === 'parent' ? (
               <div className="space-y-1">
@@ -526,8 +534,9 @@ export function IssueDetailSidebar({
         {/* Custom Fields */}
         {customFieldDefs.length > 0 && (
           <div className="border-t border-border-light pt-2 mt-3">
-            <p className="text-xs text-text-secondary uppercase font-semibold mb-2">
+            <p className="text-xs text-text-secondary uppercase font-semibold mb-2 flex items-center gap-1.5">
               Custom Fields
+              {setFieldValueMutation.isPending && <Spinner size="sm" className="h-3 w-3" />}
             </p>
             <div className="space-y-2">
               {customFieldDefs.map((def: CustomFieldDefinition) => {

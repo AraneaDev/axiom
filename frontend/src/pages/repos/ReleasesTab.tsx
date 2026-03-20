@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -33,6 +34,7 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [editBody, setEditBody] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const { user } = useAuthStore();
 
   const { data: releases = [] } = useQuery({
@@ -139,11 +141,7 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
           variant="ghost"
           size="sm"
           title={`Delete release ${release.tagName}`}
-          onClick={() => {
-            if (confirm(`Delete release ${release.tagName}?`)) {
-              deleteMutation.mutate(release.tagName);
-            }
-          }}
+          onClick={() => setDeleteTarget(release.tagName)}
           disabled={deleteMutation.isPending}
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -216,6 +214,33 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
           }}
         />
       )}
+
+      {/* Delete release confirmation */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Release"
+        size="sm"
+      >
+        <p className="text-sm text-text-secondary">
+          Are you sure you want to delete release{' '}
+          <code className="text-text font-mono">{deleteTarget}</code>? This action cannot be undone.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+            <X className="h-4 w-4" /> Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (deleteTarget) deleteMutation.mutate(deleteTarget);
+              setDeleteTarget(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
+import { useToast } from '@/components/ui/Toast';
 import { formatDate } from '@/lib/utils';
 
 /**
@@ -16,6 +17,7 @@ import { formatDate } from '@/lib/utils';
  */
 export default function SshKeys() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [publicKey, setPublicKey] = useState('');
@@ -34,6 +36,7 @@ export default function SshKeys() {
       setShowForm(false);
       setTitle('');
       setPublicKey('');
+      toast.success('SSH key added');
     },
     onError: (err: unknown) =>
       setError(err instanceof Error ? err.message : 'Failed to add SSH key'),
@@ -41,7 +44,10 @@ export default function SshKeys() {
 
   const deleteMutation = useMutation({
     mutationFn: (keyId: string) => usersApi.deleteSshKey(keyId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sshKeys'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sshKeys'] });
+      toast.success('SSH key deleted');
+    },
   });
 
   function handleDelete(keyId: string) {
