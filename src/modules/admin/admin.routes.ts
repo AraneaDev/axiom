@@ -11,13 +11,14 @@ const router = Router();
 // All admin routes require authentication
 router.use(authenticate);
 
-// Require the user to be an org OWNER
+// Require the user to be a platform admin
 async function requireAdmin(req: Request, _res: Response, next: NextFunction) {
   try {
-    const membership = await prisma.orgMembership.findFirst({
-      where: { userId: req.userId!, role: 'OWNER' },
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId! },
+      select: { isAdmin: true },
     });
-    if (!membership) {
+    if (!user?.isAdmin) {
       return next(new AppError(403, 'Admin access required', 'FORBIDDEN'));
     }
     next();

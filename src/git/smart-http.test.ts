@@ -10,6 +10,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../config/database';
 import app from '../index';
 
+import { HOOK_SECRET } from './hook-handler';
+
 const execFileAsync = promisify(execFile);
 const TEST_REPOS_PATH = process.env.REPOS_PATH || '/tmp/axiom-test-repos';
 
@@ -169,7 +171,7 @@ describe('Smart HTTP & Hooks', () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
         .set('Authorization', `Bearer ${jwtToken}`)
-        .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Hook-Secret', HOOK_SECRET)
         .set('X-Requested-With', 'XMLHttpRequest')
         .send({
           repo: repoId,
@@ -186,7 +188,7 @@ describe('Smart HTTP & Hooks', () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
         .set('Authorization', `Bearer ${jwtToken}`)
-        .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Hook-Secret', HOOK_SECRET)
         .set('X-Requested-With', 'XMLHttpRequest')
         .send({
           repo: repoId,
@@ -202,7 +204,7 @@ describe('Smart HTTP & Hooks', () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
         .set('Authorization', `Bearer ${jwtToken}`)
-        .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Hook-Secret', HOOK_SECRET)
         .set('X-Requested-With', 'XMLHttpRequest')
         .send({
           repo: repoId,
@@ -218,7 +220,7 @@ describe('Smart HTTP & Hooks', () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
         .set('Authorization', `Bearer ${jwtToken}`)
-        .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Hook-Secret', HOOK_SECRET)
         .set('X-Requested-With', 'XMLHttpRequest')
         .send({
           repo: repoId,
@@ -244,7 +246,7 @@ describe('Smart HTTP & Hooks', () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
         .set('Authorization', `Bearer ${jwtToken}`)
-        .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Hook-Secret', HOOK_SECRET)
         .set('X-Requested-With', 'XMLHttpRequest')
         .send({});
       expect(res.status).toBe(400);
@@ -254,7 +256,7 @@ describe('Smart HTTP & Hooks', () => {
       const res = await request(app)
         .post('/api/internal/hooks/post-receive')
         .set('Authorization', `Bearer ${jwtToken}`)
-        .set('X-Hook-Secret', 'axiom-internal-hook-secret')
+        .set('X-Hook-Secret', HOOK_SECRET)
         .set('X-Requested-With', 'XMLHttpRequest')
         .send({ repo: 'nonexistent', ref: 'refs/heads/main', before: 'a', after: 'b' });
       expect(res.status).toBe(404);

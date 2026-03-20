@@ -17,6 +17,9 @@ model User {
   passwordHash String
   avatarUrl    String?
 
+  // Platform admin
+  isAdmin  Boolean @default(false)
+
   // 2FA
   twoFactorEnabled Boolean @default(false)
   twoFactorSecret  String?

@@ -4,6 +4,7 @@ import { useParams } from 'react-router';
 import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
+import { STABLE_STALE_TIME } from '@/lib/constants';
 
 /**
  * Resolves the current repository context from URL parameters.
@@ -13,13 +14,18 @@ import { teamsApi } from '@/api/teams.api';
 export function useRepoContext() {
   const { org, team: teamSlug, repo: repoSlug } = useParams();
 
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const { data: orgs } = useQuery({
+    queryKey: ['orgs'],
+    queryFn: orgsApi.list,
+    staleTime: STABLE_STALE_TIME,
+  });
   const currentOrg = orgs?.find((o) => o.slug === org);
 
   const { data: teams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
+    staleTime: STABLE_STALE_TIME,
   });
   const currentTeam = teams?.find((t) => t.slug === teamSlug);
 
@@ -27,6 +33,7 @@ export function useRepoContext() {
     queryKey: ['repos', currentTeam?.id],
     queryFn: () => reposApi.listByTeam(currentTeam!.id),
     enabled: !!currentTeam?.id,
+    staleTime: STABLE_STALE_TIME,
   });
   const currentRepo = repos?.find((r) => r.slug === repoSlug);
 

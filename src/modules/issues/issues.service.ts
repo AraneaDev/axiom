@@ -41,47 +41,63 @@ export async function createIssue(
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new AppError(404, 'Project not found');
 
-  // Get next issue number
-  const lastIssue = await prisma.issue.findFirst({
-    where: { projectId },
-    orderBy: { number: 'desc' },
-    select: { number: true },
-  });
-  const number = (lastIssue?.number ?? 0) + 1;
-
   // Find default column
   const defaultColumn = await prisma.boardColumn.findFirst({
     where: { projectId, isDefault: true },
   });
 
-  const issue = await prisma.issue.create({
-    data: {
-      projectId,
-      number,
-      title: data.title,
-      body: data.body ?? '',
-      type: data.type ?? 'TASK',
-      priority: data.priority ?? 'MEDIUM',
-      assigneeId: data.assigneeId,
-      creatorId,
-      columnId: defaultColumn?.id,
-      dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
-      labels: data.labels
-        ? {
-            connectOrCreate: data.labels.map((name) => ({
-              where: { projectId_name: { projectId, name } },
-              create: { projectId, name },
-            })),
-          }
-        : undefined,
-    },
-    include: {
-      assignee: { select: USER_BASIC_SELECT },
-      creator: { select: USER_BASIC_SELECT },
-      labels: true,
-      column: true,
-    },
-  });
+  // Get next issue number and create, with retry on unique constraint violation (race condition)
+  let retries = 3;
+  let issue: Awaited<ReturnType<typeof prisma.issue.create>> | undefined;
+  while (retries > 0) {
+    try {
+      const lastIssue = await prisma.issue.findFirst({
+        where: { projectId },
+        orderBy: { number: 'desc' },
+        select: { number: true },
+      });
+      const number = (lastIssue?.number ?? 0) + 1;
+
+      issue = await prisma.issue.create({
+        data: {
+          projectId,
+          number,
+          title: data.title,
+          body: data.body ?? '',
+          type: data.type ?? 'TASK',
+          priority: data.priority ?? 'MEDIUM',
+          assigneeId: data.assigneeId,
+          creatorId,
+          columnId: defaultColumn?.id,
+          dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+          labels: data.labels
+            ? {
+                connectOrCreate: data.labels.map((name) => ({
+                  where: { projectId_name: { projectId, name } },
+                  create: { projectId, name },
+                })),
+              }
+            : undefined,
+        },
+        include: {
+          assignee: { select: USER_BASIC_SELECT },
+          creator: { select: USER_BASIC_SELECT },
+          labels: true,
+          column: true,
+        },
+      });
+      break;
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        retries--;
+        if (retries === 0) throw err;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  if (!issue) throw new AppError(500, 'Failed to create issue');
 
   await logActivity('issue', issue.id, 'created', creatorId, { title: data.title });
 
@@ -101,7 +117,7 @@ export async function createIssue(
     );
   });
 
-  return { ...issue, key: `${project.prefix}-${number}` };
+  return { ...issue, key: `${project.prefix}-${issue.number}` };
 }
 
 /**

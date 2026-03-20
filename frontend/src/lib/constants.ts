@@ -26,3 +26,6 @@ export const ISSUE_TYPE_LABELS = {
   STORY: 'Story',
   EPIC: 'Epic',
 } as const;
+
+/** staleTime for stable resources (orgs, teams, repos) that rarely change. */
+export const STABLE_STALE_TIME = 5 * 60 * 1000;

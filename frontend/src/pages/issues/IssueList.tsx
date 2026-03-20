@@ -35,6 +35,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { ListSkeleton } from '@/components/ui/Skeleton';
+import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
 type SortField = 'createdAt' | 'updatedAt' | 'priority';
@@ -51,12 +52,17 @@ export default function IssueList() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const { data: orgs } = useQuery({
+    queryKey: ['orgs'],
+    queryFn: orgsApi.list,
+    staleTime: STABLE_STALE_TIME,
+  });
   const currentOrg = orgs?.find((o) => o.slug === org);
   const { data: teams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
+    staleTime: STABLE_STALE_TIME,
   });
   const currentTeam = teams?.find((t) => t.slug === teamSlug);
   const { data: projects } = useQuery({

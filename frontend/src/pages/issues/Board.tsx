@@ -24,7 +24,12 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageLoader } from '@/components/ui/Spinner';
-import { PRIORITY_COLORS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
+import {
+  PRIORITY_COLORS,
+  PRIORITY_LABELS,
+  ISSUE_TYPE_LABELS,
+  STABLE_STALE_TIME,
+} from '@/lib/constants';
 import type { BoardColumn, Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -318,12 +323,17 @@ export default function Board() {
   const [showGroupMenu, setShowGroupMenu] = useState(false);
   const [showColumnManager, setShowColumnManager] = useState(false);
 
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const { data: orgs } = useQuery({
+    queryKey: ['orgs'],
+    queryFn: orgsApi.list,
+    staleTime: STABLE_STALE_TIME,
+  });
   const currentOrg = orgs?.find((o) => o.slug === org);
   const { data: teams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
+    staleTime: STABLE_STALE_TIME,
   });
   const currentTeam = teams?.find((t) => t.slug === teamSlug);
   const { data: projects } = useQuery({

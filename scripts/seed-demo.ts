@@ -45,10 +45,11 @@ async function main() {
 
   const users: Record<string, { id: string }> = {};
   for (const u of userData) {
+    const isAdmin = u.username === 'tim';
     const user = await prisma.user.upsert({
       where: { username: u.username },
-      update: {},
-      create: { ...u, passwordHash },
+      update: { isAdmin },
+      create: { ...u, passwordHash, isAdmin },
     });
     users[u.username] = user;
     console.warn(`        ${u.displayName} (${u.email})`);

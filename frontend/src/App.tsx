@@ -65,7 +65,11 @@ const SystemSettings = lazy(() => import('@/pages/admin/SystemSettings'));
 const AuditLogs = lazy(() => import('@/pages/admin/AuditLogs'));
 
 function SuspenseLoader({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
 }
 
 function ProjectRedirect() {
@@ -92,63 +96,350 @@ function AppWithKeyboard() {
         <Route element={<AuthGuard />}>
           <Route path="/setup-2fa" element={<Setup2FA />} />
           <Route element={<AppShell />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/orgs/new" element={<CreateOrg />} />
+            <Route
+              path="/"
+              element={
+                <ErrorBoundary>
+                  <Dashboard />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/orgs/new"
+              element={
+                <ErrorBoundary>
+                  <CreateOrg />
+                </ErrorBoundary>
+              }
+            />
 
             {/* Org routes */}
-            <Route path="/:org" element={<TeamList />} />
-            <Route path="/:org/teams" element={<TeamList />} />
-            <Route path="/:org/teams/new" element={<CreateTeam />} />
+            <Route
+              path="/:org"
+              element={
+                <ErrorBoundary>
+                  <TeamList />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/teams"
+              element={
+                <ErrorBoundary>
+                  <TeamList />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/teams/new"
+              element={
+                <ErrorBoundary>
+                  <CreateTeam />
+                </ErrorBoundary>
+              }
+            />
 
             {/* Team routes */}
-            <Route path="/:org/:team" element={<TeamDetail />} />
-            <Route path="/:org/:team/members" element={<TeamMembers />} />
-            <Route path="/:org/:team/projects" element={<TeamDetail />} />
-            <Route path="/:org/:team/projects/new" element={<CreateProject />} />
+            <Route
+              path="/:org/:team"
+              element={
+                <ErrorBoundary>
+                  <TeamDetail />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/members"
+              element={
+                <ErrorBoundary>
+                  <TeamMembers />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/projects"
+              element={
+                <ErrorBoundary>
+                  <TeamDetail />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/projects/new"
+              element={
+                <ErrorBoundary>
+                  <CreateProject />
+                </ErrorBoundary>
+              }
+            />
 
             {/* Repo routes */}
-            <Route path="/:org/:team/repos" element={<RepoList />} />
-            <Route path="/:org/:team/repos/new" element={<CreateRepo />} />
-            <Route path="/:org/:team/repos/:repo" element={<RepoDetail />} />
+            <Route
+              path="/:org/:team/repos"
+              element={
+                <ErrorBoundary>
+                  <RepoList />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/new"
+              element={
+                <ErrorBoundary>
+                  <CreateRepo />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo"
+              element={
+                <ErrorBoundary>
+                  <RepoDetail />
+                </ErrorBoundary>
+              }
+            />
             <Route path="/:org/:team/repos/:repo/tree" element={<Navigate to=".." replace />} />
-            <Route path="/:org/:team/repos/:repo/tree/:ref/*" element={<FileBrowser />} />
+            <Route
+              path="/:org/:team/repos/:repo/tree/:ref/*"
+              element={
+                <ErrorBoundary>
+                  <FileBrowser />
+                </ErrorBoundary>
+              }
+            />
             <Route path="/:org/:team/repos/:repo/blob" element={<Navigate to=".." replace />} />
-            <Route path="/:org/:team/repos/:repo/blob/:ref/*" element={<FileView />} />
-            <Route path="/:org/:team/repos/:repo/pulls" element={<PRList />} />
-            <Route path="/:org/:team/repos/:repo/pulls/:number" element={<PRDetail />} />
+            <Route
+              path="/:org/:team/repos/:repo/blob/:ref/*"
+              element={
+                <ErrorBoundary>
+                  <FileView />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/pulls"
+              element={
+                <ErrorBoundary>
+                  <PRList />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/pulls/:number"
+              element={
+                <ErrorBoundary>
+                  <PRDetail />
+                </ErrorBoundary>
+              }
+            />
             <Route path="/:org/:team/repos/:repo/commits" element={<Navigate to=".." replace />} />
-            <Route path="/:org/:team/repos/:repo/commits/:sha" element={<CommitDetail />} />
-            <Route path="/:org/:team/repos/:repo/blame/:ref/*" element={<BlameView />} />
-            <Route path="/:org/:team/repos/:repo/history/:ref/*" element={<FileHistory />} />
-            <Route path="/:org/:team/repos/:repo/compare" element={<BranchCompare />} />
-            <Route path="/:org/:team/repos/:repo/settings" element={<RepoSettings />} />
-            <Route path="/:org/:team/repos/:repo/runs/:runId" element={<PipelineRunDetail />} />
+            <Route
+              path="/:org/:team/repos/:repo/commits/:sha"
+              element={
+                <ErrorBoundary>
+                  <CommitDetail />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/blame/:ref/*"
+              element={
+                <ErrorBoundary>
+                  <BlameView />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/history/:ref/*"
+              element={
+                <ErrorBoundary>
+                  <FileHistory />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/compare"
+              element={
+                <ErrorBoundary>
+                  <BranchCompare />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/settings"
+              element={
+                <ErrorBoundary>
+                  <RepoSettings />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/repos/:repo/runs/:runId"
+              element={
+                <ErrorBoundary>
+                  <PipelineRunDetail />
+                </ErrorBoundary>
+              }
+            />
 
             {/* Issue routes */}
             <Route path="/:org/:team/:project" element={<ProjectRedirect />} />
-            <Route path="/:org/:team/:project/backlog" element={<Backlog />} />
-            <Route path="/:org/:team/:project/board" element={<Board />} />
-            <Route path="/:org/:team/:project/issues" element={<IssueList />} />
-            <Route path="/:org/:team/:project/issues/new" element={<IssueCreate />} />
-            <Route path="/:org/:team/:project/issues/:num" element={<IssueDetail />} />
-            <Route path="/:org/:team/:project/roadmap" element={<Roadmap />} />
-            <Route path="/:org/:team/:project/settings/fields" element={<CustomFieldSettings />} />
-            <Route path="/:org/:team/:project/settings/workflow" element={<WorkflowEditor />} />
-            <Route path="/:org/:team/:project/settings/automation" element={<AutomationRules />} />
-            <Route path="/:org/:team/:project/settings/labels" element={<LabelsSettings />} />
-            <Route path="/:org/:team/:project/settings/templates" element={<IssueTemplates />} />
+            <Route
+              path="/:org/:team/:project/backlog"
+              element={
+                <ErrorBoundary>
+                  <Backlog />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/board"
+              element={
+                <ErrorBoundary>
+                  <Board />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/issues"
+              element={
+                <ErrorBoundary>
+                  <IssueList />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/issues/new"
+              element={
+                <ErrorBoundary>
+                  <IssueCreate />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/issues/:num"
+              element={
+                <ErrorBoundary>
+                  <IssueDetail />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/roadmap"
+              element={
+                <ErrorBoundary>
+                  <Roadmap />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/settings/fields"
+              element={
+                <ErrorBoundary>
+                  <CustomFieldSettings />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/settings/workflow"
+              element={
+                <ErrorBoundary>
+                  <WorkflowEditor />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/settings/automation"
+              element={
+                <ErrorBoundary>
+                  <AutomationRules />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/settings/labels"
+              element={
+                <ErrorBoundary>
+                  <LabelsSettings />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/:project/settings/templates"
+              element={
+                <ErrorBoundary>
+                  <IssueTemplates />
+                </ErrorBoundary>
+              }
+            />
 
             {/* Wiki routes */}
-            <Route path="/:org/:team/wiki" element={<WikiHome />} />
-            <Route path="/:org/:team/wiki/new" element={<CreateWikiSpace />} />
-            <Route path="/:org/:team/wiki/:space" element={<PageView />} />
-            <Route path="/:org/:team/wiki/:space/new" element={<PageEdit />} />
-            <Route path="/:org/:team/wiki/:space/:page" element={<PageView />} />
-            <Route path="/:org/:team/wiki/:space/:page/edit" element={<PageEdit />} />
-            <Route path="/:org/:team/wiki/:space/:page/history" element={<PageHistory />} />
+            <Route
+              path="/:org/:team/wiki"
+              element={
+                <ErrorBoundary>
+                  <WikiHome />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/wiki/new"
+              element={
+                <ErrorBoundary>
+                  <CreateWikiSpace />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/wiki/:space"
+              element={
+                <ErrorBoundary>
+                  <PageView />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/wiki/:space/new"
+              element={
+                <ErrorBoundary>
+                  <PageEdit />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/wiki/:space/:page"
+              element={
+                <ErrorBoundary>
+                  <PageView />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/wiki/:space/:page/edit"
+              element={
+                <ErrorBoundary>
+                  <PageEdit />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/:org/:team/wiki/:space/:page/history"
+              element={
+                <ErrorBoundary>
+                  <PageHistory />
+                </ErrorBoundary>
+              }
+            />
 
             {/* Settings */}
-            <Route path="/settings" element={<SettingsLayout />}>
+            <Route
+              path="/settings"
+              element={
+                <ErrorBoundary>
+                  <SettingsLayout />
+                </ErrorBoundary>
+              }
+            >
               <Route path="profile" element={<Profile />} />
               <Route path="security" element={<Security />} />
               <Route path="ssh-keys" element={<SshKeys />} />
@@ -157,13 +448,48 @@ function AppWithKeyboard() {
             </Route>
 
             {/* Admin */}
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/users" element={<UserManagement />} />
-            <Route path="/admin/settings" element={<SystemSettings />} />
-            <Route path="/admin/audit-logs" element={<AuditLogs />} />
+            <Route
+              path="/admin"
+              element={
+                <ErrorBoundary>
+                  <AdminDashboard />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                <ErrorBoundary>
+                  <UserManagement />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/admin/settings"
+              element={
+                <ErrorBoundary>
+                  <SystemSettings />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/admin/audit-logs"
+              element={
+                <ErrorBoundary>
+                  <AuditLogs />
+                </ErrorBoundary>
+              }
+            />
 
             {/* Search */}
-            <Route path="/search" element={<SearchResults />} />
+            <Route
+              path="/search"
+              element={
+                <ErrorBoundary>
+                  <SearchResults />
+                </ErrorBoundary>
+              }
+            />
           </Route>
         </Route>
       </Routes>

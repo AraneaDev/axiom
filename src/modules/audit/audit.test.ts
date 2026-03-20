@@ -22,12 +22,13 @@ describe('Audit Logs API', () => {
     const passwordHash = await bcrypt.hash(testUser.password, 4);
     const user = await prisma.user.upsert({
       where: { username: testUser.username },
-      update: {},
+      update: { isAdmin: true },
       create: {
         email: testUser.email,
         username: testUser.username,
         displayName: testUser.displayName,
         passwordHash,
+        isAdmin: true,
       },
     });
     userId = user.id;

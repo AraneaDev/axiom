@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
+import { STABLE_STALE_TIME } from '@/lib/constants';
 
 const VIS_ICON = { PRIVATE: Lock, INTERNAL: Building2, PUBLIC: Globe };
 const VIS_BADGE: Record<string, 'default' | 'warning' | 'success'> = {
@@ -23,12 +24,17 @@ const VIS_BADGE: Record<string, 'default' | 'warning' | 'success'> = {
  */
 export default function RepoList() {
   const { org, team: teamSlug } = useParams();
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const { data: orgs } = useQuery({
+    queryKey: ['orgs'],
+    queryFn: orgsApi.list,
+    staleTime: STABLE_STALE_TIME,
+  });
   const currentOrg = orgs?.find((o) => o.slug === org);
   const { data: teams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
+    staleTime: STABLE_STALE_TIME,
   });
   const currentTeam = teams?.find((t) => t.slug === teamSlug);
 
@@ -36,6 +42,7 @@ export default function RepoList() {
     queryKey: ['repos', currentTeam?.id],
     queryFn: () => reposApi.listByTeam(currentTeam!.id),
     enabled: !!currentTeam?.id,
+    staleTime: STABLE_STALE_TIME,
   });
 
   if (isLoading)

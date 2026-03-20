@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageLoader } from '@/components/ui/Spinner';
+import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn, formatRelative } from '@/lib/utils';
 
 /**
@@ -35,12 +36,17 @@ export default function IssueDetail() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const { data: orgs } = useQuery({
+    queryKey: ['orgs'],
+    queryFn: orgsApi.list,
+    staleTime: STABLE_STALE_TIME,
+  });
   const currentOrg = orgs?.find((o) => o.slug === org);
   const { data: teams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
+    staleTime: STABLE_STALE_TIME,
   });
   const currentTeam = teams?.find((t) => t.slug === teamSlug);
   const { data: projects } = useQuery({
@@ -66,6 +72,8 @@ export default function IssueDetail() {
     mutationFn: () => issuesApi.toggleVote(currentProject!.id, parseInt(num!)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue-votes', currentProject?.id, num] });
+      queryClient.invalidateQueries({ queryKey: ['issues'] });
+      queryClient.invalidateQueries({ queryKey: ['board'] });
     },
   });
 
@@ -79,6 +87,8 @@ export default function IssueDetail() {
     mutationFn: () => issuesApi.toggleWatch(currentProject!.id, parseInt(num!)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue-watchers', currentProject?.id, num] });
+      queryClient.invalidateQueries({ queryKey: ['issues'] });
+      queryClient.invalidateQueries({ queryKey: ['board'] });
     },
   });
 
@@ -86,6 +96,7 @@ export default function IssueDetail() {
     queryKey: ['repos', currentTeam?.id],
     queryFn: () => reposApi.listByTeam(currentTeam!.id),
     enabled: !!currentTeam?.id,
+    staleTime: STABLE_STALE_TIME,
   });
 
   const { data: teamDetail } = useQuery({

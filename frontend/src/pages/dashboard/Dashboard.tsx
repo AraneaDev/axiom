@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton';
-import { PRIORITY_COLORS } from '@/lib/constants';
+import { PRIORITY_COLORS, STABLE_STALE_TIME } from '@/lib/constants';
 import type { Team } from '@/lib/types';
 import { cn, formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -316,6 +316,7 @@ export default function Dashboard() {
   const { data: orgs, isLoading: orgsLoading } = useQuery({
     queryKey: ['orgs'],
     queryFn: orgsApi.list,
+    staleTime: STABLE_STALE_TIME,
   });
   const { data: dashboardData, isLoading: dashLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -328,6 +329,7 @@ export default function Dashboard() {
     queryKey: ['teams', firstOrg?.id],
     queryFn: () => teamsApi.listByOrg(firstOrg!.id),
     enabled: !!firstOrg?.id,
+    staleTime: STABLE_STALE_TIME,
   });
 
   if (orgsLoading || dashLoading)

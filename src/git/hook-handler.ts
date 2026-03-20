@@ -9,7 +9,7 @@ import { logger } from '../utils/logger';
 
 import * as gitCmd from './git-commands';
 
-const HOOK_SECRET = process.env.HOOK_SECRET || 'axiom-internal-hook-secret';
+export const HOOK_SECRET = process.env.HOOK_SECRET || crypto.randomBytes(32).toString('hex');
 
 const router = Router();
 

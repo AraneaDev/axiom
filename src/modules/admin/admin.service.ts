@@ -159,15 +159,10 @@ export async function updateUser(userId: string, data: { role?: string; disabled
 
   // Update org membership role if provided
   if (data.role) {
-    const memberships = await prisma.orgMembership.findMany({
+    await prisma.orgMembership.updateMany({
       where: { userId },
+      data: { role: data.role as 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST' },
     });
-    if (memberships.length > 0) {
-      await prisma.orgMembership.updateMany({
-        where: { userId },
-        data: { role: data.role as 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST' },
-      });
-    }
   }
 
   return getUser(userId);

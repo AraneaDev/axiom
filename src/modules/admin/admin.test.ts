@@ -18,12 +18,13 @@ describe('Admin API', () => {
     // Create admin user
     await prisma.user.upsert({
       where: { username: 'admin-test-user' },
-      update: {},
+      update: { isAdmin: true },
       create: {
         email: 'admin-test@axiom.dev',
         username: 'admin-test-user',
         displayName: 'Admin Test User',
         passwordHash,
+        isAdmin: true,
       },
     });
 

@@ -14,6 +14,7 @@ import { NavLink, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
+import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
 
@@ -91,13 +92,18 @@ export function Sidebar() {
   const [orgsCollapsed, setOrgsCollapsed] = useState(false);
   const [teamsCollapsed, setTeamsCollapsed] = useState(false);
 
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const { data: orgs } = useQuery({
+    queryKey: ['orgs'],
+    queryFn: orgsApi.list,
+    staleTime: STABLE_STALE_TIME,
+  });
   const currentOrg = orgs?.find((o) => o.slug === org);
 
   const { data: teams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
+    staleTime: STABLE_STALE_TIME,
   });
 
   useEffect(() => {
