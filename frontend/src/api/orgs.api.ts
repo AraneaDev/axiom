@@ -56,4 +56,30 @@ export const orgsApi = {
    * @param memberId
    */
   removeMember: (orgId: string, memberId: string) => del(`/orgs/${orgId}/members/${memberId}`),
+  createInvitation: (orgId: string, data: { email: string; role?: string; teamId?: string }) =>
+    post<Invitation>(`/orgs/${orgId}/invitations`, data),
+  listInvitations: (orgId: string, teamId?: string) =>
+    get<Invitation[]>(`/orgs/${orgId}/invitations${teamId ? `?teamId=${teamId}` : ''}`),
+  revokeInvitation: (orgId: string, invitationId: string) =>
+    del(`/orgs/${orgId}/invitations/${invitationId}`),
+  acceptInvitation: (token: string) =>
+    post<{
+      org: { id: string; name: string; slug: string };
+      team: { id: string; name: string; slug: string } | null;
+    }>(`/invitations/${token}/accept`, {}),
 };
+
+export interface Invitation {
+  id: string;
+  email: string;
+  orgId: string;
+  teamId: string | null;
+  role: string;
+  status: string;
+  token: string;
+  expiresAt: string;
+  createdAt: string;
+  inviter: { id: string; displayName: string; username: string };
+  org: { id: string; name: string; slug: string };
+  team: { id: string; name: string; slug: string } | null;
+}

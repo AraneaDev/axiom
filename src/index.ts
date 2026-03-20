@@ -25,6 +25,7 @@ import customFieldsDirectRoutes from './modules/custom-fields/custom-fields-dire
 import customFieldsRoutes from './modules/custom-fields/custom-fields.routes';
 import deploymentsRoutes from './modules/deployments/deployments.routes';
 import healthRoutes from './modules/health/health.routes';
+import invitationsRoutes from './modules/invitations/invitations.routes';
 import issueTemplatesRoutes from './modules/issue-templates/issue-templates.routes';
 import issuesRoutes from './modules/issues/issues.routes';
 import labelsRoutes from './modules/labels/labels.routes';
@@ -122,6 +123,7 @@ app.use('/api', auditMiddleware);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/orgs', orgsRoutes);
+app.use('/api', invitationsRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/projects', issuesRoutes);

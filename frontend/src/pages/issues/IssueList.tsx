@@ -16,6 +16,7 @@ import {
   BookmarkCheck,
   Zap,
   Tag,
+  BarChart3,
 } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
@@ -320,6 +321,11 @@ export default function IssueList() {
           <Link to={`/${org}/${teamSlug}/${projectSlug}/roadmap`}>
             <Button variant="secondary" size="sm">
               <GanttChart className="h-4 w-4" /> Roadmap
+            </Button>
+          </Link>
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/analytics`}>
+            <Button variant="secondary" size="sm">
+              <BarChart3 className="h-4 w-4" /> Analytics
             </Button>
           </Link>
           <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/templates`}>

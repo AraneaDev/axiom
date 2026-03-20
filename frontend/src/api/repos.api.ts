@@ -377,6 +377,21 @@ export const reposApi = {
    */
   createProtectionRule: (repoId: string, data: Record<string, unknown>) =>
     post(`/repos/${repoId}/branch-protection`, data),
+  /**
+   * Update a branch protection rule.
+   * @param repoId
+   * @param ruleId
+   * @param data
+   */
+  updateProtectionRule: (repoId: string, ruleId: string, data: Record<string, unknown>) =>
+    patch(`/repos/${repoId}/branch-protection/${ruleId}`, data),
+  /**
+   * Delete a branch protection rule.
+   * @param repoId
+   * @param ruleId
+   */
+  deleteProtectionRule: (repoId: string, ruleId: string) =>
+    del(`/repos/${repoId}/branch-protection/${ruleId}`),
 
   /**
    * List webhooks configured on a repository.

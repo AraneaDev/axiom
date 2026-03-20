@@ -50,6 +50,7 @@ model User {
   issueVotes              IssueVote[]
   notificationPreferences NotificationPreference[]
   watchedIssues           IssueWatcher[]
+  sentInvitations         Invitation[]
 
   @@map("users")
 }
@@ -97,6 +98,26 @@ model InviteLink {
   @@map("invite_links")
 }
 
+model Invitation {
+  id        String       @id @default(cuid())
+  email     String
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teamId    String?
+  team      Team?        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  role      String       @default("MEMBER")
+  invitedBy String
+  inviter   User         @relation(fields: [invitedBy], references: [id])
+  status    String       @default("PENDING") // PENDING, ACCEPTED, EXPIRED
+  token     String       @unique @default(cuid())
+  expiresAt DateTime
+  createdAt DateTime     @default(now())
+
+  @@index([email])
+  @@index([orgId])
+  @@map("invitations")
+}
+
 model RefreshToken {
   id        String   @id @default(cuid())
   userId    String
@@ -121,6 +142,7 @@ model Organization {
   members     OrgMembership[]
   teams       Team[]
   inviteLinks InviteLink[]
+  invitations Invitation[]
 
   @@map("organizations")
 }
@@ -161,10 +183,11 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members    TeamMembership[]
-  repos      Repository[]
-  projects   Project[]
-  wikiSpaces WikiSpace[]
+  members     TeamMembership[]
+  repos       Repository[]
+  projects    Project[]
+  wikiSpaces  WikiSpace[]
+  invitations Invitation[]
 
   @@unique([orgId, slug])
   @@map("teams")

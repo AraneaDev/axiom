@@ -81,3 +81,18 @@ export async function remove(req: Request, res: Response, next: NextFunction) {
     next(err);
   }
 }
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function analytics(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await projectsService.getProjectAnalytics(param(req, 'projectId'));
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}

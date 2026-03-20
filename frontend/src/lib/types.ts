@@ -48,6 +48,23 @@ export interface Project {
   _count?: { issues: number };
 }
 
+export interface ProjectAnalytics {
+  totalIssues: number;
+  openCount: number;
+  closedCount: number;
+  avgCycleTime: number;
+  avgLeadTime: number;
+  issuesByStatus: { status: string; isDone: boolean; count: number }[];
+  issuesByPriority: { priority: string; count: number }[];
+  issuesOverTime: { date: string; opened: number; closed: number }[];
+  memberWorkload: {
+    userId: string;
+    displayName: string;
+    assignedCount: number;
+    completedCount: number;
+  }[];
+}
+
 export interface BoardColumn {
   id: string;
   name: string;
