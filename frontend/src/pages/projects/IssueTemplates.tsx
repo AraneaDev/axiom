@@ -15,6 +15,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
@@ -245,19 +246,34 @@ export default function IssueTemplates() {
   );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold">Issue Templates</h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Create templates to standardize issue creation.
-          </p>
-        </div>
+    <SettingsPage
+      title="Issue Templates"
+      description="Create reusable templates to standardize issue creation"
+      icon={FileText}
+      helpTitle="About templates"
+      helpItems={[
+        {
+          title: 'Template types',
+          description:
+            'Match templates to issue types (Bug, Feature, Task, etc.) to pre-fill the type field automatically.',
+        },
+        {
+          title: 'Template body',
+          description:
+            'Use Markdown to create structured templates with headings, checklists, and sections that guide the issue creator.',
+        },
+        {
+          title: 'Default labels',
+          description:
+            'Attach labels to templates so they are automatically applied to new issues created from the template.',
+        },
+      ]}
+      actions={
         <Button onClick={() => setShowAddForm(true)} disabled={showAddForm}>
           <Plus className="h-4 w-4" /> New Template
         </Button>
-      </div>
-
+      }
+    >
       {/* Add form */}
       {showAddForm && (
         <div className="rounded-lg border border-border bg-surface p-4 mb-4">
@@ -280,6 +296,7 @@ export default function IssueTemplates() {
       {/* Template list */}
       {templates.length === 0 && !showAddForm ? (
         <EmptyState
+          card
           icon={<FileText />}
           title="No issue templates"
           description="Templates help your team create consistent, well-structured issues."
@@ -377,6 +394,6 @@ export default function IssueTemplates() {
         confirmLabel="Delete"
         loading={deleteMutation.isPending}
       />
-    </div>
+    </SettingsPage>
   );
 }

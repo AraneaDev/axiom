@@ -120,7 +120,7 @@ export function IssueDetailSidebar({
 
       {activities.length > 0 && (
         <div className="rounded-lg border border-border bg-surface p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2.5 flex items-center gap-2">
             <History className="h-3.5 w-3.5" />
             History
           </h3>

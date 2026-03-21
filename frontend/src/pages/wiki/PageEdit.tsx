@@ -259,7 +259,7 @@ export default function PageEdit() {
             disabled={saveMutation.isPending || !title.trim()}
           >
             {saveMutation.isPending ? (
-              <Spinner className="h-4 w-4" />
+              <Spinner size="sm" />
             ) : (
               <>
                 <Save className="h-4 w-4" /> Save

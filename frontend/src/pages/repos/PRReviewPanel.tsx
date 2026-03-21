@@ -236,7 +236,7 @@ export function PRReviewPanel({
                 onClick={onMerge}
               >
                 {isMerging ? (
-                  <Spinner className="h-4 w-4" />
+                  <Spinner size="sm" />
                 ) : (
                   <>
                     {STRATEGY_LABELS[mergeStrategy || 'merge']?.icon}

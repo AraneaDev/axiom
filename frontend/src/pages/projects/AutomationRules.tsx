@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bot, Plus, Trash2, Power, PowerOff, Save, X, PlusCircle } from 'lucide-react';
+import { Bot, Plus, Trash2, Power, PowerOff, Save, X, PlusCircle, Zap } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 
@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 
@@ -351,21 +352,41 @@ export default function AutomationRules() {
     );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold">Automation Rules</h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Automate actions in {currentProject?.name}
-          </p>
-        </div>
-        {!showForm && !editingRule && (
+    <SettingsPage
+      title="Automation Rules"
+      description="Automate repetitive workflows with trigger-based rules"
+      icon={Zap}
+      helpTitle="How automations work"
+      helpItems={[
+        {
+          title: 'Triggers',
+          description:
+            'Rules fire when a specific event occurs, such as an issue being created, status changing, or a label being added.',
+        },
+        {
+          title: 'Conditions',
+          description:
+            'Add conditions to narrow when a rule fires. For example, only trigger when priority is Critical or assignee is empty.',
+        },
+        {
+          title: 'Actions',
+          description:
+            'Define what happens when the rule fires: set a field, add a label, assign a member, post a comment, or move to a column.',
+        },
+        {
+          title: 'Enable/Disable',
+          description:
+            'Toggle rules on and off without deleting them. Disabled rules are preserved but will not fire.',
+        },
+      ]}
+      actions={
+        !showForm && !editingRule ? (
           <Button onClick={() => setShowForm(true)}>
             <Plus className="h-4 w-4" /> New Rule
           </Button>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       {/* Create form */}
       {showForm && (
         <div className="mb-6">
@@ -451,12 +472,13 @@ export default function AutomationRules() {
       ) : (
         !showForm && (
           <EmptyState
+            card
             icon={<Bot className="h-10 w-10" />}
             title="No automation rules"
             description="Create rules to automatically assign, label, or move issues based on triggers."
           />
         )
       )}
-    </div>
+    </SettingsPage>
   );
 }

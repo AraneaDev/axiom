@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Settings, Trash2, GripVertical, Save, X } from 'lucide-react';
+import { ListPlus, Plus, Settings, Trash2, GripVertical, Save, X } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 
@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { Toggle } from '@/components/ui/Toggle';
@@ -155,19 +156,39 @@ export default function CustomFieldSettings() {
     );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold">Custom Fields</h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Define custom fields for issues in this project.
-          </p>
-        </div>
+    <SettingsPage
+      title="Custom Fields"
+      description="Define additional fields to capture project-specific data on issues"
+      icon={ListPlus}
+      helpTitle="Field types"
+      helpItems={[
+        {
+          title: 'Text & Number',
+          description:
+            'Free-form input fields for short text values or numeric data like story points or estimates.',
+        },
+        {
+          title: 'Select & Multi-select',
+          description:
+            'Dropdown fields with predefined options. Add options as comma-separated values when creating the field.',
+        },
+        {
+          title: 'Date & Checkbox',
+          description:
+            "Date picker for deadlines or milestones. Checkbox for boolean flags like 'Approved' or 'Reviewed'.",
+        },
+        {
+          title: 'Required fields',
+          description:
+            'Mark a field as required to ensure it is filled out when creating or editing issues.',
+        },
+      ]}
+      actions={
         <Button onClick={() => setShowAddForm(true)} disabled={showAddForm}>
           <Plus className="h-4 w-4" /> Add Field
         </Button>
-      </div>
-
+      }
+    >
       {/* Add form */}
       {showAddForm && (
         <div className="rounded-lg border border-border bg-surface p-4 mb-4 space-y-3">
@@ -219,6 +240,7 @@ export default function CustomFieldSettings() {
       {/* Field list */}
       {fields.length === 0 && !showAddForm ? (
         <EmptyState
+          card
           icon={<Settings />}
           title="No custom fields defined"
           description="Add custom fields to track additional data on your issues."
@@ -334,6 +356,6 @@ export default function CustomFieldSettings() {
         confirmLabel="Delete"
         loading={deleteMutation.isPending}
       />
-    </div>
+    </SettingsPage>
   );
 }

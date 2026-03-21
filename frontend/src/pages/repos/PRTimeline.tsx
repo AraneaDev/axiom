@@ -167,7 +167,7 @@ export function PRTimeline({
               onClick={onSubmitComment}
             >
               {isSubmittingComment ? (
-                <Spinner className="h-4 w-4" />
+                <Spinner size="sm" />
               ) : (
                 <>
                   <GitCommitHorizontal className="h-4 w-4" /> Comment

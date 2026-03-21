@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 
@@ -144,19 +145,34 @@ export default function LabelsSettings() {
     );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold">Labels</h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Manage labels for issues in this project.
-          </p>
-        </div>
+    <SettingsPage
+      title="Labels"
+      description="Organize and categorize issues with color-coded labels"
+      icon={Tag}
+      helpTitle="Using labels"
+      helpItems={[
+        {
+          title: 'Color coding',
+          description:
+            'Choose distinct colors to make labels easy to identify at a glance on boards and issue lists.',
+        },
+        {
+          title: 'Descriptions',
+          description:
+            'Add descriptions to labels to help team members understand when to use each one. Markdown is supported.',
+        },
+        {
+          title: 'Filtering',
+          description:
+            'Labels can be used to filter issues in list view, board view, and backlog. Combine multiple labels for precise filtering.',
+        },
+      ]}
+      actions={
         <Button onClick={() => setShowAddForm(true)} disabled={showAddForm}>
           <Plus className="h-4 w-4" /> New Label
         </Button>
-      </div>
-
+      }
+    >
       {/* Add form */}
       {showAddForm && (
         <div className="rounded-lg border border-border bg-surface p-4 mb-4 space-y-3">
@@ -238,6 +254,7 @@ export default function LabelsSettings() {
       {/* Label list */}
       {labels.length === 0 && !showAddForm ? (
         <EmptyState
+          card
           icon={<Tag />}
           title="No labels defined"
           description="Create labels to categorize and filter issues."
@@ -381,6 +398,6 @@ export default function LabelsSettings() {
         confirmLabel="Delete"
         loading={deleteMutation.isPending}
       />
-    </div>
+    </SettingsPage>
   );
 }

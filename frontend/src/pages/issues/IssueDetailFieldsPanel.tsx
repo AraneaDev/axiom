@@ -115,7 +115,7 @@ export function IssueDetailFieldsPanel({
           </p>
           <div className="flex items-center gap-1.5">
             <Badge variant="primary">{issue.column?.name ?? 'Backlog'}</Badge>
-            {isUpdating && <Spinner size="sm" className="h-3 w-3" />}
+            {isUpdating && <Spinner size="xs" />}
           </div>
         </div>
 
@@ -374,7 +374,7 @@ export function IssueDetailFieldsPanel({
         <div>
           <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5 flex items-center gap-1.5">
             Parent Issue
-            {setParentMutation.isPending && <Spinner size="sm" className="h-3 w-3" />}
+            {setParentMutation.isPending && <Spinner size="xs" />}
           </p>
           {editingField === 'parent' ? (
             <div className="space-y-1">
@@ -474,7 +474,7 @@ export function IssueDetailFieldsPanel({
 
       {/* Labels */}
       {issue.labels?.length > 0 && (
-        <div className="border-t border-border-light pt-2 mt-3">
+        <div className="border-t border-border-light pt-3 mt-4">
           <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
             Labels
           </p>
@@ -488,10 +488,10 @@ export function IssueDetailFieldsPanel({
 
       {/* Custom Fields */}
       {customFieldDefs.length > 0 && (
-        <div className="border-t border-border-light pt-2 mt-3">
-          <p className="text-xs text-text-secondary uppercase font-semibold mb-2 flex items-center gap-1.5">
+        <div className="border-t border-border-light pt-3 mt-4">
+          <p className="text-xs text-text-tertiary uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5">
             Custom Fields
-            {setFieldValueMutation.isPending && <Spinner size="sm" className="h-3 w-3" />}
+            {setFieldValueMutation.isPending && <Spinner size="xs" />}
           </p>
           <div className="space-y-2">
             {customFieldDefs.map((def: CustomFieldDefinition) => {
@@ -515,7 +515,7 @@ export function IssueDetailFieldsPanel({
       )}
 
       {/* Time Tracking */}
-      <div className="border-t border-border-light pt-2 mt-3">
+      <div className="border-t border-border-light pt-3 mt-4">
         <IssueDetailWorklog
           issue={issue}
           projectId={projectId}

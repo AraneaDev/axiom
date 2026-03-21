@@ -1,7 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, ArrowRight, GripVertical, Target, ChevronRight } from 'lucide-react';
+import {
+  Plus,
+  ArrowRight,
+  GripVertical,
+  Target,
+  ChevronRight,
+  LayoutDashboard,
+  List,
+  Settings,
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { Link, useParams, useNavigate } from 'react-router';
 
 import { SprintCard } from './SprintCard';
 import { SprintFormModal } from './SprintFormModal';
@@ -254,9 +263,26 @@ export default function Backlog() {
           <h1 className="text-2xl font-bold text-text">Backlog</h1>
           <p className="text-sm text-text-secondary">Plan sprints and manage your backlog</p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="h-4 w-4" /> Create Sprint
-        </Button>
+        <div className="flex gap-2">
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/board`}>
+            <Button variant="secondary" size="sm">
+              <LayoutDashboard className="h-4 w-4" /> Board
+            </Button>
+          </Link>
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues`}>
+            <Button variant="secondary" size="sm">
+              <List className="h-4 w-4" /> List
+            </Button>
+          </Link>
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/labels`}>
+            <Button variant="secondary" size="sm" title="Project Settings">
+              <Settings className="h-4 w-4" /> Settings
+            </Button>
+          </Link>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4" /> Create Sprint
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

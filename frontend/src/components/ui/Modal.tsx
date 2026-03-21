@@ -134,7 +134,7 @@ export function Modal({ open, onClose, title, size = 'md', children }: ModalProp
  */
 export function ModalFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-border-light">
+    <div className="flex items-center justify-end gap-2 -mx-5 -mb-4 px-5 py-4 mt-4 border-t border-border-light">
       {children}
     </div>
   );

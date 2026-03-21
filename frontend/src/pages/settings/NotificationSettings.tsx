@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Mail, Monitor } from 'lucide-react';
+import { Bell, Mail, Monitor } from 'lucide-react';
 
 import { notificationsApi, type NotificationPreference } from '@/api/notifications.api';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { Toggle } from '@/components/ui/Toggle';
@@ -89,14 +90,29 @@ export default function NotificationSettings() {
   const preferences = data?.preferences ?? [];
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Notification Settings</h1>
-        <p className="text-sm text-text-secondary mt-1">
-          Choose how you want to be notified about activity.
-        </p>
-      </div>
-
+    <SettingsPage
+      title="Notifications"
+      description="Choose how and when you want to be notified"
+      icon={Bell}
+      helpTitle="Notification channels"
+      helpItems={[
+        {
+          title: 'In-app notifications',
+          description:
+            'Appear in the notification center in the header. Unread notifications show a badge count.',
+        },
+        {
+          title: 'Email notifications',
+          description:
+            'Sent to your account email address. Emails include a direct link to the relevant item.',
+        },
+        {
+          title: 'Mentions',
+          description:
+            'You will always receive notifications when directly mentioned with @username, regardless of these settings.',
+        },
+      ]}
+    >
       <div className="rounded-lg border border-border bg-surface">
         <div className="grid grid-cols-[1fr_80px_80px] items-center gap-4 px-4 py-3 border-b border-border bg-surface-secondary text-xs font-semibold text-text-secondary uppercase tracking-wide">
           <span>Event</span>
@@ -136,6 +152,6 @@ export default function NotificationSettings() {
         <Mail className="h-3.5 w-3.5" />
         Email notifications are delivered to your account email address.
       </p>
-    </div>
+    </SettingsPage>
   );
 }

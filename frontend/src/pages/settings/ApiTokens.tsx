@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Plus, Trash2, Copy, X } from 'lucide-react';
+import { Coins, KeyRound, Plus, Trash2, Copy, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { usersApi } from '@/api/users.api';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
@@ -69,9 +70,29 @@ export default function ApiTokens() {
     );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">API Tokens</h1>
+    <SettingsPage
+      title="API Tokens"
+      description="Create and manage tokens for API and git HTTPS access"
+      icon={Coins}
+      helpTitle="Working with tokens"
+      helpItems={[
+        {
+          title: 'Token security',
+          description:
+            'Tokens are shown only once at creation. Store them securely -- they cannot be retrieved later.',
+        },
+        {
+          title: 'Scopes',
+          description:
+            'Scope values are comma-separated and control what the token can access. Leave empty for full access.',
+        },
+        {
+          title: 'Git HTTPS',
+          description:
+            'Use a token as your password when cloning or pushing over HTTPS. Your username remains the same.',
+        },
+      ]}
+      actions={
         <Button
           size="sm"
           onClick={() => {
@@ -81,8 +102,8 @@ export default function ApiTokens() {
         >
           <Plus className="h-4 w-4" /> New Token
         </Button>
-      </div>
-
+      }
+    >
       {newToken && (
         <div className="rounded-lg border border-success/20 bg-success-light p-4 mb-6">
           <p className="text-sm font-medium text-success mb-2">
@@ -132,7 +153,7 @@ export default function ApiTokens() {
                 disabled={createMutation.isPending || !name}
               >
                 {createMutation.isPending ? (
-                  <Spinner className="h-4 w-4" />
+                  <Spinner size="sm" />
                 ) : (
                   <>
                     <Plus className="h-4 w-4" /> Create token
@@ -149,6 +170,7 @@ export default function ApiTokens() {
 
       {!tokens?.length ? (
         <EmptyState
+          card
           icon={<KeyRound className="h-10 w-10" />}
           title="No API tokens"
           description="Create a token for API and MCP access."
@@ -197,6 +219,6 @@ export default function ApiTokens() {
         confirmLabel="Revoke"
         loading={deleteMutation.isPending}
       />
-    </div>
+    </SettingsPage>
   );
 }

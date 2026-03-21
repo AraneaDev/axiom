@@ -122,7 +122,7 @@ export function IssueListTable({
               key={issue.id}
               data-issue-row
               className={cn(
-                'flex items-center gap-3 px-4 py-2.5 border-l-2 hover:bg-surface-tertiary transition-colors duration-100 cursor-pointer',
+                'flex items-center gap-3 px-4 py-2.5 border-l-2 hover:bg-surface-tertiary transition-colors duration-150 cursor-pointer',
                 PRIORITY_BORDER_COLORS[issue.priority] ?? 'border-l-transparent',
                 selectedIds.has(issue.id) && 'bg-primary-light/5',
               )}

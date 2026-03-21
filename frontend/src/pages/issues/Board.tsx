@@ -97,7 +97,7 @@ function IssueCard({
         e.stopPropagation();
         onDragStart(e, issue);
       }}
-      className="block rounded-md border border-border bg-surface p-3 hover:shadow-sm hover:border-primary/30 transition-all cursor-grab active:cursor-grabbing"
+      className="block rounded-md border border-border bg-surface p-3 hover:shadow-md hover:border-primary/50 hover:bg-surface-secondary transition-all cursor-grab active:cursor-grabbing"
     >
       <div className="flex items-center gap-1.5 mb-1.5">
         <IssueTypeIcon type={issue.type} className="h-3.5 w-3.5" />
@@ -363,12 +363,17 @@ export default function Board() {
           <p className="text-sm text-text-secondary">{currentProject?.prefix}</p>
         </div>
         <div className="flex gap-2">
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues`}>
+            <Button variant="secondary" size="sm">
+              <List className="h-4 w-4" /> List
+            </Button>
+          </Link>
           <Button variant="secondary" size="sm" onClick={() => setShowColumnManager(true)}>
             <Settings className="h-4 w-4" /> Columns
           </Button>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues`}>
-            <Button variant="secondary" size="sm">
-              <List className="h-4 w-4" /> List View
+          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/labels`}>
+            <Button variant="secondary" size="sm" title="Project Settings">
+              <Settings className="h-4 w-4" /> Settings
             </Button>
           </Link>
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>

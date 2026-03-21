@@ -266,11 +266,7 @@ export function IssueDetailWorklog({
                   (!(parseInt(logWorkHours) || 0) && !(parseInt(logWorkMinutes) || 0))
                 }
               >
-                {logWorkMutation.isPending ? (
-                  <Spinner className="h-3 w-3" />
-                ) : (
-                  <Check className="h-3 w-3" />
-                )}
+                {logWorkMutation.isPending ? <Spinner size="xs" /> : <Check className="h-3 w-3" />}
                 Log
               </Button>
               <Button

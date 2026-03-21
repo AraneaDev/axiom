@@ -123,7 +123,7 @@ export default function Login() {
 
             <Button type="submit" disabled={loading} className="w-full mt-2" size="lg">
               {loading ? (
-                <Spinner className="h-4 w-4" />
+                <Spinner size="sm" />
               ) : needs2FA ? (
                 <>
                   <ShieldCheck className="h-4 w-4" /> Verify

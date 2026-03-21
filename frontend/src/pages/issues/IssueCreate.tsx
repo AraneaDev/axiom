@@ -161,7 +161,7 @@ export default function IssueCreate() {
           <div className="flex gap-3 pt-2 border-t border-border-light">
             <Button type="submit" disabled={loading}>
               {loading ? (
-                <Spinner className="h-4 w-4" />
+                <Spinner size="sm" />
               ) : (
                 <>
                   <Plus className="h-4 w-4" /> Create Issue

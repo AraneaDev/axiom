@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useQuery } from '@tanstack/react-query';
-import { BookOpen, ChevronDown, FolderPlus, Library, Plus } from 'lucide-react';
+import { BookOpen, ChevronDown, FolderPlus, Hash, Library, Plus } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, Outlet, useOutletContext, useParams } from 'react-router';
 
@@ -208,7 +208,7 @@ export default function WikiLayout() {
 
       {/* Right sidebar: Table of Contents -- mt-36 aligns with content card */}
       {tocEntries.length > 0 && (
-        <aside className="hidden xl:block w-[220px] shrink-0 mt-36 sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
+        <aside className="hidden xl:block w-[220px] shrink-0 pt-8 sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
             On This Page
           </h3>
@@ -221,9 +221,10 @@ export default function WikiLayout() {
                   const el = document.getElementById(entry.id);
                   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
-                className="block w-full text-left text-sm text-text-secondary hover:text-primary transition-colors truncate"
+                className="flex items-center gap-1 w-full text-left text-sm text-text-secondary hover:text-primary transition-colors truncate"
                 style={{ paddingLeft: `${(entry.level - 1) * 12}px` }}
               >
+                <Hash className="h-3 w-3 shrink-0" />
                 {entry.text}
               </button>
             ))}

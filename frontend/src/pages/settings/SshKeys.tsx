@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
@@ -70,19 +71,34 @@ export default function SshKeys() {
     );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text">SSH Keys</h1>
-          <p className="text-sm text-text-tertiary mt-1">
-            Manage SSH keys for authenticating with git over SSH
-          </p>
-        </div>
+    <SettingsPage
+      title="SSH Keys"
+      description="Manage SSH public keys for secure git access"
+      icon={Key}
+      helpTitle="Using SSH keys"
+      helpItems={[
+        {
+          title: 'Generating a key',
+          description:
+            'Run ssh-keygen -t ed25519 in your terminal to generate a new key pair. Copy the contents of the .pub file.',
+        },
+        {
+          title: 'Multiple keys',
+          description:
+            'You can add multiple SSH keys, for example one per device. Each key must be unique across all accounts.',
+        },
+        {
+          title: 'Key format',
+          description:
+            'Supported formats include Ed25519, RSA (2048+ bits), and ECDSA. Ed25519 is recommended for security and performance.',
+        },
+      ]}
+      actions={
         <Button size="sm" onClick={() => setShowForm(!showForm)}>
           <Plus className="h-4 w-4" /> Add Key
         </Button>
-      </div>
-
+      }
+    >
       {showForm && (
         <div className="rounded-lg border border-border bg-surface p-5">
           <h3 className="text-sm font-semibold text-text mb-4">Add new SSH key</h3>
@@ -115,7 +131,7 @@ export default function SshKeys() {
                 disabled={addMutation.isPending || !title || !publicKey}
               >
                 {addMutation.isPending ? (
-                  <Spinner className="h-4 w-4" />
+                  <Spinner size="sm" />
                 ) : (
                   <>
                     <Plus className="h-4 w-4" /> Add key
@@ -132,6 +148,7 @@ export default function SshKeys() {
 
       {!keys?.length ? (
         <EmptyState
+          card
           icon={<Key className="h-10 w-10" />}
           title="No SSH keys"
           description="Add an SSH key to clone repos over SSH."
@@ -186,6 +203,6 @@ export default function SshKeys() {
         confirmLabel="Delete"
         loading={deleteMutation.isPending}
       />
-    </div>
+    </SettingsPage>
   );
 }

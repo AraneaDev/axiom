@@ -47,7 +47,7 @@ export const TrHead = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTableRo
   ({ className, ...props }, ref) => (
     <tr
       ref={ref}
-      className={cn('border-b border-border bg-surface-secondary', className)}
+      className={cn('border-b border-border bg-surface-secondary h-11', className)}
       {...props}
     />
   ),
@@ -59,7 +59,7 @@ export const Th = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCel
     <th
       ref={ref}
       className={cn(
-        'px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wide',
+        'px-4 py-3.5 text-left text-xs font-medium text-text-tertiary uppercase tracking-wide',
         className,
       )}
       {...props}

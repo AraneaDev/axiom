@@ -79,7 +79,7 @@ export default function Setup2FA() {
           />
           <Button onClick={handleVerify} disabled={loading || code.length !== 6}>
             {loading ? (
-              <Spinner className="h-4 w-4" />
+              <Spinner size="sm" />
             ) : (
               <>
                 <ShieldCheck className="h-4 w-4" /> Verify

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Plus, Trash2, Workflow } from 'lucide-react';
+import { ArrowRight, GitBranch, Plus, Trash2, Workflow } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 
@@ -11,6 +11,7 @@ import { workflowsApi } from '@/api/workflows.api';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
@@ -102,16 +103,29 @@ export default function WorkflowEditor() {
     );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold">Workflow Rules</h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Define allowed column transitions for {currentProject?.name}
-          </p>
-        </div>
-      </div>
-
+    <SettingsPage
+      title="Workflow"
+      description="Define transition rules that control how issues move between columns"
+      icon={GitBranch}
+      helpTitle="Workflow transitions"
+      helpItems={[
+        {
+          title: 'Transition rules',
+          description:
+            'Each rule defines an allowed path from one column to another. Without rules, all transitions are allowed.',
+        },
+        {
+          title: 'Adding rules',
+          description:
+            'Select a source and destination column, then add the rule. Issues will only be allowed to move along defined paths.',
+        },
+        {
+          title: 'No rules = free-form',
+          description:
+            'If no transition rules are defined, issues can be moved freely between any columns.',
+        },
+      ]}
+    >
       {/* Add rule form */}
       <div className="bg-surface-elevated border border-border rounded-lg p-4 mb-6">
         <h2 className="text-sm font-semibold mb-3">Add Transition Rule</h2>
@@ -182,11 +196,12 @@ export default function WorkflowEditor() {
         </TableContainer>
       ) : (
         <EmptyState
+          card
           icon={<Workflow className="h-10 w-10" />}
           title="No workflow rules defined"
           description="Without rules, issues can move freely between any columns. Add rules to restrict allowed transitions."
         />
       )}
-    </div>
+    </SettingsPage>
   );
 }

@@ -42,7 +42,7 @@ export function Header() {
         variant="secondary"
         size="sm"
         onClick={toggleSearch}
-        className="flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-1.5 text-text-tertiary hover:text-text-secondary w-72"
+        className="flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-1.5 text-text-secondary hover:text-text w-72"
       >
         <Search className="h-3.5 w-3.5" />
         <span className="text-xs">Search anything...</span>

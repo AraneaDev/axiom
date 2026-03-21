@@ -95,7 +95,7 @@ export default function CreateTeam() {
         </div>
         <Button type="submit" disabled={loading}>
           {loading ? (
-            <Spinner className="h-4 w-4" />
+            <Spinner size="sm" />
           ) : (
             <>
               <Plus className="h-4 w-4" /> Create team

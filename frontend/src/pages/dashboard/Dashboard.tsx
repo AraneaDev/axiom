@@ -55,7 +55,7 @@ export default function Dashboard() {
 
   if (orgsLoading || dashLoading)
     return (
-      <div className="space-y-8">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <Skeleton className="h-8 w-64 mb-2" />
@@ -85,7 +85,7 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">
@@ -172,7 +172,7 @@ export default function Dashboard() {
                 <Link
                   key={org.id}
                   to={`/${org.slug}`}
-                  className="group rounded-lg border border-border bg-surface overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-200"
+                  className="group rounded-lg border border-border bg-surface overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-150"
                 >
                   <div className="h-16 bg-primary-light flex items-end px-5 pb-3">
                     <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center shadow-sm -mb-5 ring-2 ring-surface">

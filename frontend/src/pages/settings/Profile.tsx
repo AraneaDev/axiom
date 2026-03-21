@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
+import { Check, User } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 import { usersApi } from '@/api/users.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -33,9 +34,28 @@ export default function Profile() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Profile</h1>
-
+    <SettingsPage
+      title="Profile"
+      description="Manage your personal information and account details"
+      icon={User}
+      helpTitle="About your profile"
+      helpItems={[
+        {
+          title: 'Display name',
+          description:
+            'Your display name is visible to other members across all organizations you belong to.',
+        },
+        {
+          title: 'Email & Username',
+          description:
+            'Your email and username are set during account creation and cannot be changed. Contact an administrator if you need to update them.',
+        },
+        {
+          title: 'Avatar',
+          description: 'Avatars are automatically generated based on your display name.',
+        },
+      ]}
+    >
       <div className="rounded-lg border border-border bg-surface p-6 mb-6">
         <div className="flex items-center gap-4">
           <Avatar name={user?.displayName ?? 'User'} size="lg" />
@@ -74,7 +94,7 @@ export default function Profile() {
           <div className="flex items-center gap-3 pt-2 border-t border-border-light">
             <Button type="submit" disabled={mutation.isPending}>
               {mutation.isPending ? (
-                <Spinner className="h-4 w-4" />
+                <Spinner size="sm" />
               ) : (
                 <>
                   <Check className="h-4 w-4" /> Save changes
@@ -85,6 +105,6 @@ export default function Profile() {
           </div>
         </form>
       </div>
-    </div>
+    </SettingsPage>
   );
 }

@@ -113,7 +113,7 @@ export function IssueDetailComments({
           onClick={() => commentMutation.mutate()}
         >
           {commentMutation.isPending ? (
-            <Spinner className="h-4 w-4" />
+            <Spinner size="sm" />
           ) : (
             <>
               <MessageSquare className="h-4 w-4" /> Comment

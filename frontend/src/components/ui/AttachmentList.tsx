@@ -112,7 +112,7 @@ export function AttachmentList({
         <div
           key={att.id}
           className={cn(
-            'flex items-center gap-3 p-2 rounded-md border border-border bg-surface hover:bg-surface-secondary transition-colors',
+            'flex items-center gap-3 p-3 rounded-md border border-border bg-surface hover:bg-surface-secondary transition-all',
             canPreview(att.mimeType) && 'cursor-pointer',
           )}
           onClick={() => canPreview(att.mimeType) && setPreviewAttachment(att)}

@@ -4,7 +4,6 @@ import { Route, Navigate, useParams } from 'react-router';
 
 import { ProjectSettingsLayout } from '@/components/layout/ProjectSettingsLayout';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { useUIStore } from '@/stores/ui.store';
 
 const Backlog = lazy(() => import('@/pages/issues/Backlog'));
 const Board = lazy(() => import('@/pages/issues/Board'));
@@ -29,8 +28,7 @@ const PageHistory = lazy(() => import('@/pages/wiki/PageHistory'));
 
 function ProjectRedirect() {
   const { org, team, project } = useParams();
-  const preferredView = useUIStore((s) => s.preferredProjectView);
-  return <Navigate to={`/${org}/${team}/${project}/${preferredView}`} replace />;
+  return <Navigate to={`/${org}/${team}/${project}/board`} replace />;
 }
 
 /**
@@ -113,6 +111,7 @@ export function projectRoutes() {
           </ErrorBoundary>
         }
       >
+        <Route index element={<Navigate to="labels" replace />} />
         <Route path="labels" element={<LabelsSettings />} />
         <Route path="fields" element={<CustomFieldSettings />} />
         <Route path="templates" element={<IssueTemplates />} />

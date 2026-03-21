@@ -69,7 +69,7 @@ export function IssueDetailMetaPanel({
   return (
     <>
       {/* Sub-issues */}
-      <div className="rounded-lg border border-border bg-surface p-4">
+      <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold">Sub-issues</h3>
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>

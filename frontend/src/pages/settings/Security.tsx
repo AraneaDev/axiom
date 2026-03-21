@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { SettingsPage } from '@/components/ui/SettingsPage';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -12,9 +13,29 @@ export default function Security() {
   const { user } = useAuthStore();
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Security</h1>
-
+    <SettingsPage
+      title="Security"
+      description="Manage authentication and access credentials"
+      icon={Shield}
+      helpTitle="Securing your account"
+      helpItems={[
+        {
+          title: 'Two-factor authentication',
+          description:
+            '2FA adds an extra layer of protection by requiring a code from your authenticator app when signing in.',
+        },
+        {
+          title: 'SSH Keys',
+          description:
+            'SSH keys let you authenticate with git repositories without entering your password each time.',
+        },
+        {
+          title: 'API Tokens',
+          description:
+            'Tokens provide programmatic access to the API and can also be used for git HTTPS authentication.',
+        },
+      ]}
+    >
       <div className="space-y-4">
         {/* 2FA status */}
         <div className="rounded-lg border border-border bg-surface p-4">
@@ -67,6 +88,6 @@ export default function Security() {
           </div>
         </Link>
       </div>
-    </div>
+    </SettingsPage>
   );
 }

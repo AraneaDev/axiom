@@ -11,6 +11,7 @@ import {
   Eye,
   Lock,
   Info,
+  X,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router';
@@ -245,6 +246,17 @@ export default function SearchResults() {
           icon={<Search className="h-10 w-10" />}
           title="No results"
           description={`Nothing found for "${query}"`}
+          action={
+            <Button
+              variant="outline"
+              onClick={() => {
+                setInputValue('');
+                setSearchParams({});
+              }}
+            >
+              <X className="h-4 w-4" /> Clear search
+            </Button>
+          }
         />
       )}
     </div>

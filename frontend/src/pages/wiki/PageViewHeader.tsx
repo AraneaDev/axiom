@@ -92,7 +92,7 @@ function ExportDropdown({ spaceId, pageSlug }: { spaceId: string; pageSlug: stri
       align="right"
       trigger={
         <Button variant="ghost" size="sm" disabled={exporting}>
-          {exporting ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />} Export
+          {exporting ? <Spinner size="sm" /> : <Download className="h-4 w-4" />} Export
         </Button>
       }
     >

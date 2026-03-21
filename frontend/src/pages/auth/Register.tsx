@@ -84,7 +84,7 @@ export default function Register() {
           />
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? (
-              <Spinner className="h-4 w-4" />
+              <Spinner size="sm" />
             ) : (
               <>
                 <UserPlus className="h-4 w-4" /> Create account

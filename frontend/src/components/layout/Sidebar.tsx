@@ -37,7 +37,7 @@ function NavItem({
       to={to}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] transition-all duration-150',
+          'flex items-center gap-2 rounded-md px-3 py-1.5 h-8 text-[13px] transition-all duration-150',
           indent && 'ml-2',
           isActive
             ? 'bg-primary-light text-primary font-medium border-l-2 border-primary'
