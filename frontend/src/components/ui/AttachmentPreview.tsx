@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Copy, Download, FileText, FileWarning, Loader2, RefreshCw, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Download, FileWarning, Loader2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from './Button';
 import { Modal, ModalFooter } from './Modal';
@@ -8,7 +8,6 @@ import { Modal, ModalFooter } from './Modal';
 import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
 import { getAccessToken } from '@/api/client';
-import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { canConvertToMarkdown, getPreviewType } from '@/lib/attachment-utils';
 
 interface AttachmentPreviewProps {
@@ -168,87 +167,6 @@ function UnsupportedPreview({ attachment }: { attachment: AttachmentMeta }) {
   );
 }
 
-function MarkdownConvertView({
-  attachment,
-  onBack,
-}: {
-  attachment: AttachmentMeta;
-  onBack: () => void;
-}) {
-  const {
-    data: result,
-    isLoading: loading,
-    isError,
-  } = useQuery({
-    queryKey: ['attachment-convert', attachment.id],
-    queryFn: () => attachmentsApi.convert(attachment.id),
-    staleTime: Infinity,
-  });
-
-  const markdown = result?.markdown ?? null;
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    if (!markdown) return;
-    await navigator.clipboard.writeText(markdown);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [markdown]);
-
-  const handleDownloadMd = useCallback(() => {
-    if (!markdown) return;
-    const blob = new Blob([markdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const baseName = attachment.originalName.replace(/\.[^.]+$/, '');
-    a.download = `${baseName}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [markdown, attachment.originalName]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 text-text-tertiary animate-spin" />
-      </div>
-    );
-  }
-
-  if (isError || markdown === null) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-12">
-        <FileWarning className="h-8 w-8 text-danger" />
-        <p className="text-sm text-text-secondary">Conversion failed.</p>
-        <Button variant="secondary" size="sm" onClick={onBack}>
-          <RefreshCw className="h-4 w-4" /> Back to preview
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Button variant="secondary" size="sm" onClick={handleCopy}>
-          <Copy className="h-4 w-4" /> {copied ? 'Copied' : 'Copy'}
-        </Button>
-        <Button variant="secondary" size="sm" onClick={handleDownloadMd}>
-          <Download className="h-4 w-4" /> Download .md
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <X className="h-4 w-4" /> Back
-        </Button>
-      </div>
-      <div className="bg-surface-tertiary rounded-lg p-4 overflow-auto max-h-[60vh]">
-        <MarkdownRenderer content={markdown} />
-      </div>
-    </div>
-  );
-}
-
 /**
  * Modal for previewing and interacting with file attachments.
  * Supports image, PDF, text, document (Pandoc), and unsupported types.
@@ -279,7 +197,7 @@ function AttachmentPreviewInner({
   open: boolean;
   onClose: () => void;
 }) {
-  const [showMarkdown, setShowMarkdown] = useState(false);
+  const [downloadingMd, setDownloadingMd] = useState(false);
 
   const previewType = getPreviewType(attachment.mimeType);
   const convertible = canConvertToMarkdown(attachment.mimeType);
@@ -302,35 +220,56 @@ function AttachmentPreviewInner({
     URL.revokeObjectURL(blobUrl);
   };
 
+  const handleDownloadMarkdown = async () => {
+    setDownloadingMd(true);
+    try {
+      const result = await attachmentsApi.convert(attachment.id);
+      const blob = new Blob([result.markdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const baseName = attachment.originalName.replace(/\.[^.]+$/, '');
+      a.download = `${baseName}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingMd(false);
+    }
+  };
+
   return (
     <Modal open={open} onClose={onClose} title={attachment.originalName} size="lg">
-      {showMarkdown ? (
-        <MarkdownConvertView attachment={attachment} onBack={() => setShowMarkdown(false)} />
-      ) : (
-        <>
-          {previewType === 'image' && <ImagePreview attachment={attachment} />}
-          {previewType === 'pdf' && <PdfPreview attachment={attachment} />}
-          {previewType === 'text' && <TextPreview attachment={attachment} />}
-          {previewType === 'document' && <DocumentPreview attachment={attachment} />}
-          {previewType === 'unsupported' && <UnsupportedPreview attachment={attachment} />}
-        </>
-      )}
+      {previewType === 'image' && <ImagePreview attachment={attachment} />}
+      {previewType === 'pdf' && <PdfPreview attachment={attachment} />}
+      {previewType === 'text' && <TextPreview attachment={attachment} />}
+      {previewType === 'document' && <DocumentPreview attachment={attachment} />}
+      {previewType === 'unsupported' && <UnsupportedPreview attachment={attachment} />}
 
-      {!showMarkdown && (
-        <ModalFooter>
-          {convertible && (
-            <Button variant="secondary" size="sm" onClick={() => setShowMarkdown(true)}>
-              <FileText className="h-4 w-4" /> Convert to Markdown
-            </Button>
-          )}
-          <Button variant="secondary" size="sm" onClick={handleDownload}>
-            <Download className="h-4 w-4" /> Download
+      <ModalFooter>
+        {convertible && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleDownloadMarkdown}
+            disabled={downloadingMd}
+          >
+            {downloadingMd ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Download as Markdown
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="h-4 w-4" /> Close
-          </Button>
-        </ModalFooter>
-      )}
+        )}
+        <Button variant="secondary" size="sm" onClick={handleDownload}>
+          <Download className="h-4 w-4" /> Download
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          <X className="h-4 w-4" /> Close
+        </Button>
+      </ModalFooter>
     </Modal>
   );
 }
