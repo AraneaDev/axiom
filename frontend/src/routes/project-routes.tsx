@@ -20,6 +20,7 @@ const AutomationRules = lazy(() => import('@/pages/projects/AutomationRules'));
 const LabelsSettings = lazy(() => import('@/pages/projects/LabelsSettings'));
 const IssueTemplates = lazy(() => import('@/pages/projects/IssueTemplates'));
 
+const WikiLayout = lazy(() => import('@/pages/wiki/WikiLayout'));
 const WikiHome = lazy(() => import('@/pages/wiki/WikiHome'));
 const CreateWikiSpace = lazy(() => import('@/pages/wiki/CreateWikiSpace'));
 const PageView = lazy(() => import('@/pages/wiki/PageView'));
@@ -119,63 +120,23 @@ export function projectRoutes() {
         <Route path="workflow" element={<WorkflowEditor />} />
       </Route>
 
-      {/* Wiki routes */}
+      {/* Wiki routes -- wrapped in WikiLayout for persistent sidebar */}
       <Route
         path="/:org/:team/wiki"
         element={
           <ErrorBoundary>
-            <WikiHome />
+            <WikiLayout />
           </ErrorBoundary>
         }
-      />
-      <Route
-        path="/:org/:team/wiki/new"
-        element={
-          <ErrorBoundary>
-            <CreateWikiSpace />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/wiki/:space"
-        element={
-          <ErrorBoundary>
-            <PageView />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/wiki/:space/new"
-        element={
-          <ErrorBoundary>
-            <PageEdit />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/wiki/:space/:page"
-        element={
-          <ErrorBoundary>
-            <PageView />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/wiki/:space/:page/edit"
-        element={
-          <ErrorBoundary>
-            <PageEdit />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/wiki/:space/:page/history"
-        element={
-          <ErrorBoundary>
-            <PageHistory />
-          </ErrorBoundary>
-        }
-      />
+      >
+        <Route index element={<WikiHome />} />
+        <Route path="new" element={<CreateWikiSpace />} />
+        <Route path=":space" element={<PageView />} />
+        <Route path=":space/new" element={<PageEdit />} />
+        <Route path=":space/:page" element={<PageView />} />
+        <Route path=":space/:page/edit" element={<PageEdit />} />
+        <Route path=":space/:page/history" element={<PageHistory />} />
+      </Route>
     </>
   );
 }

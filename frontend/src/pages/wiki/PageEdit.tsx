@@ -3,9 +3,9 @@ import { Eye, EyeOff, Paperclip, Save, X, FileText, Wifi, WifiOff } from 'lucide
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
+import { useWikiContext } from './WikiLayout';
+
 import { attachmentsApi } from '@/api/attachments.api';
-import { orgsApi } from '@/api/orgs.api';
-import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
 import { CollaborativeEditor } from '@/components/editor/CollaborativeEditor';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
@@ -31,21 +31,7 @@ export default function PageEdit() {
   const { user } = useAuthStore();
 
   const [searchParams] = useSearchParams();
-
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams2 } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams2?.find((t) => t.slug === team);
-  const { data: spaces } = useQuery({
-    queryKey: ['wikiSpaces', currentTeam?.id],
-    queryFn: () => wikiApi.listSpaces(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentSpace = spaces?.find((s) => s.slug === spaceSlug);
+  const { currentSpace } = useWikiContext();
 
   const { data: templates = [] } = useQuery({
     queryKey: ['wikiTemplates', currentSpace?.id],
@@ -59,7 +45,7 @@ export default function PageEdit() {
     enabled: !!currentSpace?.id,
   });
 
-  const isNew = pageSlug === 'new';
+  const isNew = !pageSlug || pageSlug === 'new';
   const draftKey = `wiki-draft-${spaceSlug}-${pageSlug ?? 'new'}`;
 
   const { data: existingPage, isLoading } = useQuery({
@@ -80,11 +66,13 @@ export default function PageEdit() {
   });
 
   // Real-time collaboration (only for existing pages, not new ones)
+  const collabEnabled = !isNew && !!existingPage?.id && !!currentSpace;
   const collab = useCollaboration({
     pageId: existingPage?.id,
-    enabled: !isNew && !!existingPage?.id,
+    enabled: collabEnabled,
   });
-  const useCollab = collab.isConnected && collab.ydoc && collab.provider;
+  const useCollab =
+    collabEnabled && collab.isConnected && collab.isSynced && collab.ydoc && collab.provider;
 
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -201,7 +189,7 @@ export default function PageEdit() {
     onError: (err: unknown) => setError(err instanceof Error ? err.message : 'Failed to save'),
   });
 
-  if (!isNew && isLoading) return <PageLoader />;
+  if (!currentSpace || (!isNew && isLoading)) return <PageLoader />;
 
   return (
     <div className="max-w-6xl mx-auto">

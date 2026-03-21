@@ -1,48 +1,29 @@
-import { useQuery } from '@tanstack/react-query';
 import { BookOpen, Plus } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
-import { teamsApi } from '@/api/teams.api';
-import { wikiApi } from '@/api/wiki.api';
+import { useWikiContext } from './WikiLayout';
+
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Skeleton, CardGridSkeleton } from '@/components/ui/Skeleton';
+import { CardGridSkeleton } from '@/components/ui/Skeleton';
 
 /**
- *
+ * Wiki home page -- shows list of spaces as cards.
+ * Layout chrome (sidebar) is handled by WikiLayout.
  */
 export default function WikiHome() {
   const { org, team: teamSlug } = useParams();
+  const { spaces } = useWikiContext();
 
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-
-  const { data: spaces, isLoading } = useQuery({
-    queryKey: ['wikiSpaces', currentTeam?.id],
-    queryFn: () => wikiApi.listSpaces(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-
-  if (isLoading)
+  if (!spaces)
     return (
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <Skeleton className="h-7 w-24" />
-          <Skeleton className="h-8 w-28 rounded-md" />
-        </div>
+      <div>
         <CardGridSkeleton />
       </div>
     );
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Wiki</h1>
         <Link to={`/${org}/${teamSlug}/wiki/new`}>
@@ -52,7 +33,7 @@ export default function WikiHome() {
         </Link>
       </div>
 
-      {!spaces?.length ? (
+      {!spaces.length ? (
         <EmptyState
           icon={<BookOpen className="h-12 w-12" />}
           title="No wiki spaces"

@@ -216,16 +216,21 @@ interface PageViewSidebarProps {
   tocEntries: TocEntry[];
   activeSlug?: string;
   onNewFolder?: (parentId?: string) => void;
+  /** When true, hides the built-in header (New Page / New Folder buttons) */
+  embedded?: boolean;
+  className?: string;
 }
 
 /**
- *
+ * Sidebar showing page tree and table of contents.
  * @param root0
  * @param root0.tree
  * @param root0.basePath
  * @param root0.tocEntries
  * @param root0.activeSlug
  * @param root0.onNewFolder
+ * @param root0.embedded
+ * @param root0.className
  */
 export function PageViewSidebar({
   tree,
@@ -233,6 +238,8 @@ export function PageViewSidebar({
   tocEntries,
   activeSlug,
   onNewFolder,
+  embedded,
+  className,
 }: PageViewSidebarProps) {
   const defaultExpanded = useMemo(() => {
     if (!tree || !activeSlug) return new Set<string>();
@@ -255,20 +262,24 @@ export function PageViewSidebar({
   }, []);
 
   return (
-    <div className="col-span-1 hidden lg:block">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Pages</h3>
-        <div className="flex gap-1">
-          <Link to={`${basePath}/new/edit`}>
-            <Button variant="ghost" size="xs" title="New Page">
-              <Plus className="h-3.5 w-3.5" /> New Page
+    <div className={cn('', className)}>
+      {!embedded && (
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+            Pages
+          </h3>
+          <div className="flex gap-1">
+            <Link to={`${basePath}/new/edit`}>
+              <Button variant="ghost" size="xs" title="New Page">
+                <Plus className="h-3.5 w-3.5" /> New Page
+              </Button>
+            </Link>
+            <Button variant="ghost" size="xs" title="New Folder" onClick={() => onNewFolder?.()}>
+              <FolderPlus className="h-3.5 w-3.5" /> New Folder
             </Button>
-          </Link>
-          <Button variant="ghost" size="xs" title="New Folder" onClick={() => onNewFolder?.()}>
-            <FolderPlus className="h-3.5 w-3.5" /> New Folder
-          </Button>
+          </div>
         </div>
-      </div>
+      )}
       <div className="space-y-0.5 mb-6">
         {tree?.map((node) => (
           <TreeNode

@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
-import { teamsApi } from '@/api/teams.api';
+import { useWikiContext } from './WikiLayout';
+
 import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -10,25 +10,12 @@ import { PageLoader } from '@/components/ui/Spinner';
 import { formatDate } from '@/lib/utils';
 
 /**
- *
+ * Page version history view.
+ * Sidebar is provided by WikiLayout.
  */
 export default function PageHistory() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
-
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams2 } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams2?.find((t) => t.slug === team);
-  const { data: spaces } = useQuery({
-    queryKey: ['wikiSpaces', currentTeam?.id],
-    queryFn: () => wikiApi.listSpaces(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentSpace = spaces?.find((s) => s.slug === spaceSlug);
+  const { currentSpace } = useWikiContext();
 
   const { data: versions, isLoading } = useQuery({
     queryKey: ['pageHistory', currentSpace?.id, pageSlug],

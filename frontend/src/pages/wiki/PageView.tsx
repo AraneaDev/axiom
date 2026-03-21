@@ -9,12 +9,12 @@ import {
   Library,
   Files,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 
-import { CreateFolderModal } from './CreateFolderModal';
 import { PageViewHeader } from './PageViewHeader';
-import { PageViewSidebar, extractToc } from './PageViewSidebar';
+import { extractToc } from './PageViewSidebar';
+import { useWikiContext } from './WikiLayout';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import { wikiApi } from '@/api/wiki.api';
@@ -40,7 +40,8 @@ function countTreePages(nodes: PageTreeNode[]): number {
 }
 
 /**
- *
+ * Page view -- renders a single wiki page or the space overview (no page slug).
+ * Sidebar is provided by WikiLayout; this component only renders the content area.
  */
 export default function PageView() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
@@ -49,36 +50,11 @@ export default function PageView() {
   const toast = useToast();
   const basePath = `/${org}/${team}/wiki/${spaceSlug}`;
 
+  const { currentSpace, tree, setTocEntries } = useWikiContext();
+
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [moveTargetParent, setMoveTargetParent] = useState('');
-  const [folderModalParent, setFolderModalParent] = useState<string | undefined>(undefined);
-  const [showFolderModal, setShowFolderModal] = useState(false);
-
-  // We need spaceId -- get it from spaces list
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: () => import('@/api/orgs.api').then((m) => m.orgsApi.list()),
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => import('@/api/teams.api').then((m) => m.teamsApi.listByOrg(currentOrg!.id)),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === team);
-  const { data: spaces } = useQuery({
-    queryKey: ['wikiSpaces', currentTeam?.id],
-    queryFn: () => wikiApi.listSpaces(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentSpace = spaces?.find((s) => s.slug === spaceSlug);
-
-  const { data: tree } = useQuery({
-    queryKey: ['pageTree', currentSpace?.id],
-    queryFn: () => wikiApi.getPageTree(currentSpace!.id),
-    enabled: !!currentSpace?.id,
-  });
 
   const { data: page, isLoading } = useQuery({
     queryKey: ['page', currentSpace?.id, pageSlug],
@@ -105,7 +81,13 @@ export default function PageView() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', page?.id] }),
   });
 
-  const tocEntries = useMemo(() => (page?.body ? extractToc(page.body) : []), [page?.body]);
+  const tocEntries = useMemo(() => (page?.body ? extractToc(page.body) : []), [page]);
+
+  // Push TOC entries up to WikiLayout
+  useEffect(() => {
+    setTocEntries(tocEntries);
+    return () => setTocEntries([]);
+  }, [tocEntries, setTocEntries]);
 
   const addLabelMutation = useMutation({
     mutationFn: (label: string) => wikiApi.addPageLabel(page!.id, label),
@@ -167,7 +149,7 @@ export default function PageView() {
   // If no page slug, show the space overview
   if (!pageSlug) {
     return (
-      <div className="max-w-5xl mx-auto">
+      <div>
         {/* Hero section */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
@@ -272,88 +254,71 @@ export default function PageView() {
 
   return (
     <div>
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Page tree sidebar */}
-        <PageViewSidebar
-          tree={tree}
-          basePath={basePath}
-          tocEntries={tocEntries}
-          activeSlug={pageSlug}
-          onNewFolder={(parentId) => {
-            setFolderModalParent(parentId);
-            setShowFolderModal(true);
-          }}
-        />
+      <PageViewHeader
+        page={page}
+        basePath={basePath}
+        pageSlug={pageSlug!}
+        spaceId={currentSpace!.id}
+        labels={labels}
+        onAddLabel={(label) => addLabelMutation.mutate(label)}
+        onRemoveLabel={(label) => removeLabelMutation.mutate(label)}
+        onMove={() => setShowMoveModal(true)}
+        onCopy={() => copyMutation.mutate()}
+        onDelete={() => setShowDeleteConfirm(true)}
+      />
 
-        {/* Page content */}
-        <div className="col-span-4 lg:col-span-3">
-          <PageViewHeader
-            page={page}
-            basePath={basePath}
-            pageSlug={pageSlug!}
-            spaceId={currentSpace!.id}
-            labels={labels}
-            onAddLabel={(label) => addLabelMutation.mutate(label)}
-            onRemoveLabel={(label) => removeLabelMutation.mutate(label)}
-            onMove={() => setShowMoveModal(true)}
-            onCopy={() => copyMutation.mutate()}
-            onDelete={() => setShowDeleteConfirm(true)}
-          />
+      <div className="rounded-lg border border-border bg-surface p-6">
+        <div className="prose max-w-4xl leading-relaxed">
+          <MarkdownRenderer content={page.body} />
+        </div>
+      </div>
 
-          <div className="rounded-lg border border-border bg-surface p-6">
-            <div className="prose max-w-4xl leading-relaxed">
-              <MarkdownRenderer content={page.body} />
-            </div>
-          </div>
-
-          {/* Child pages */}
-          {page.children && page.children.length > 0 && (
-            <div className="mt-6">
-              <h2 className="text-lg font-semibold mb-3">Child Pages</h2>
-              <div className="grid gap-2">
-                {page.children.map((child) => (
-                  <Link
-                    key={child.id}
-                    to={`${basePath}/${child.slug}`}
-                    className="flex items-center gap-2 p-3 rounded-lg border border-border hover:border-primary/50 transition-all"
-                  >
-                    <FileText className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">{child.title}</span>
-                    <ChevronRight className="h-4 w-4 ml-auto text-text-secondary" />
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Attachments */}
-          <div className="mt-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
-              <Paperclip className="h-3.5 w-3.5" />
-              Attachments
-              {pageAttachments.length > 0 && (
-                <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary normal-case tracking-normal">
-                  {pageAttachments.length}
-                </span>
-              )}
-            </h2>
-            <AttachmentList
-              attachments={pageAttachments}
-              currentUserId={user?.id}
-              onDelete={(id) => deleteAttachmentMutation.mutate(id)}
-            />
-            <FileUpload
-              className="mt-3"
-              uploadFn={(file) => attachmentsApi.upload(file, { pageId: page.id })}
-              onUpload={() => queryClient.invalidateQueries({ queryKey: ['attachments', page.id] })}
-            />
-          </div>
-
-          {/* Comments */}
-          <div className="mt-8 border-t border-border-light pt-6">
-            <PageComments pageId={page.id} />
+      {/* Child pages */}
+      {page.children && page.children.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-lg font-semibold mb-3">Child Pages</h2>
+          <div className="grid gap-2">
+            {page.children.map((child) => (
+              <Link
+                key={child.id}
+                to={`${basePath}/${child.slug}`}
+                className="flex items-center gap-2 p-3 rounded-lg border border-border hover:border-primary/50 transition-all"
+              >
+                <FileText className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">{child.title}</span>
+                <ChevronRight className="h-4 w-4 ml-auto text-text-secondary" />
+              </Link>
+            ))}
           </div>
         </div>
+      )}
+
+      {/* Attachments */}
+      <div className="mt-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
+          <Paperclip className="h-3.5 w-3.5" />
+          Attachments
+          {pageAttachments.length > 0 && (
+            <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary normal-case tracking-normal">
+              {pageAttachments.length}
+            </span>
+          )}
+        </h2>
+        <AttachmentList
+          attachments={pageAttachments}
+          currentUserId={user?.id}
+          onDelete={(id) => deleteAttachmentMutation.mutate(id)}
+        />
+        <FileUpload
+          className="mt-3"
+          uploadFn={(file) => attachmentsApi.upload(file, { pageId: page.id })}
+          onUpload={() => queryClient.invalidateQueries({ queryKey: ['attachments', page.id] })}
+        />
+      </div>
+
+      {/* Comments */}
+      <div className="mt-8 border-t border-border-light pt-6">
+        <PageComments pageId={page.id} />
       </div>
 
       {/* Move page modal */}
@@ -400,18 +365,6 @@ export default function PageView() {
         confirmLabel="Delete"
         loading={deleteMutation.isPending}
       />
-
-      {currentSpace?.id && (
-        <CreateFolderModal
-          open={showFolderModal}
-          onClose={() => setShowFolderModal(false)}
-          spaceId={currentSpace.id}
-          parentId={folderModalParent}
-          onCreated={() => {
-            queryClient.invalidateQueries({ queryKey: ['pageTree', currentSpace.id] });
-          }}
-        />
-      )}
     </div>
   );
 }
