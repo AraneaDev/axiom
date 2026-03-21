@@ -1,4 +1,4 @@
-import { getAccessToken } from './client';
+import { get, getAccessToken } from './client';
 
 const API_BASE = '/api/attachments';
 
@@ -96,6 +96,22 @@ export const attachmentsApi = {
   getDownloadUrl: (id: string): string => {
     return `${API_BASE}/${id}`;
   },
+
+  /**
+   * Get the preview URL for an attachment (HTML preview via Pandoc).
+   * @param id - Attachment ID.
+   */
+  getPreviewUrl: (id: string): string => {
+    return `${API_BASE}/${id}/preview`;
+  },
+
+  /**
+   * Convert an attachment to Markdown (or other format) via Pandoc.
+   * @param id - Attachment ID.
+   * @param format - Target format (default: markdown).
+   */
+  convert: (id: string, format = 'markdown') =>
+    get<{ markdown: string; originalName: string }>(`/attachments/${id}/convert?format=${format}`),
 
   /**
    * Delete an attachment by ID.

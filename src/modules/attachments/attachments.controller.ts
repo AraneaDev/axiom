@@ -87,6 +87,48 @@ export async function list(req: Request, res: Response, next: NextFunction) {
 }
 
 /**
+ * GET /:id/preview -- preview attachment content
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function preview(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const result = await attachmentsService.preview(req.params.id);
+    if (result.type === 'redirect') {
+      res.redirect(`/api/attachments/${req.params.id}`);
+    } else if (result.type === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.send(result.content);
+    } else {
+      res.setHeader('Content-Type', result.mimeType);
+      res.send(result.content);
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /:id/convert -- convert attachment to markdown
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function convertToMarkdown(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const result = await attachmentsService.convertToMarkdown(req.params.id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * DELETE /:id -- delete attachment
  * @param req
  * @param res

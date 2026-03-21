@@ -1,11 +1,28 @@
+import { execFile } from 'child_process';
 import fs from 'fs/promises';
+import os from 'os';
 import path from 'path';
+import { promisify } from 'util';
 
 import { createId } from '@paralleldrive/cuid2';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { getStorage } from '../../storage/storage';
+
+const execFileAsync = promisify(execFile);
+
+const PANDOC_FORMAT_MAP: Record<string, string> = {
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.oasis.opendocument.text': 'odt',
+  'application/epub+zip': 'epub',
+  'text/html': 'html',
+  'text/csv': 'csv',
+  'text/x-rst': 'rst',
+  'application/x-latex': 'latex',
+  'text/x-latex': 'latex',
+  'text/org': 'org',
+};
 
 /**
  * Build a storage key for an attachment.
@@ -129,4 +146,123 @@ export async function downloadAttachment(id: string) {
   const storage = getStorage();
   const data = await storage.get(attachment.storageKey);
   return { attachment, data };
+}
+
+/**
+ * Write a buffer to a temporary file and return its path.
+ * Caller is responsible for cleanup.
+ * @param data
+ * @param ext
+ */
+async function writeToTempFile(data: Buffer, ext: string): Promise<string> {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'axiom-preview-'));
+  const tmpFile = path.join(tmpDir, `file.${ext}`);
+  await fs.writeFile(tmpFile, data);
+  return tmpFile;
+}
+
+/**
+ * Clean up a temporary file and its parent directory.
+ * @param filePath
+ */
+async function cleanupTempFile(filePath: string): Promise<void> {
+  await fs.unlink(filePath).catch(() => {});
+  await fs.rmdir(path.dirname(filePath)).catch(() => {});
+}
+
+/**
+ * Generate a preview for an attachment.
+ * @param id - The attachment ID
+ * @returns Preview result with type, content, and mimeType
+ * @throws {AppError} 404 if attachment not found
+ * @throws {AppError} 415 if preview not supported for the file type
+ */
+export async function preview(
+  id: string,
+): Promise<{
+  type: 'redirect' | 'text' | 'html' | 'pdf';
+  content: string | Buffer;
+  mimeType: string;
+}> {
+  const attachment = await getAttachment(id);
+  const mime = attachment.mimeType;
+
+  // Images: redirect to download endpoint
+  if (mime.startsWith('image/')) {
+    return { type: 'redirect', content: '', mimeType: mime };
+  }
+
+  const storage = getStorage();
+  const data = await storage.get(attachment.storageKey);
+
+  // PDF: return raw buffer
+  if (mime === 'application/pdf') {
+    return { type: 'pdf', content: data, mimeType: 'application/pdf' };
+  }
+
+  // Plain text, JSON, XML: return as text
+  if (mime.startsWith('text/') && !PANDOC_FORMAT_MAP[mime]) {
+    return { type: 'text', content: data.toString('utf-8'), mimeType: 'text/plain' };
+  }
+  if (mime === 'application/json' || mime === 'application/xml') {
+    return { type: 'text', content: data.toString('utf-8'), mimeType: 'text/plain' };
+  }
+
+  // Pandoc-convertible formats: convert to HTML
+  const pandocFormat = PANDOC_FORMAT_MAP[mime];
+  if (pandocFormat) {
+    const ext = path.extname(attachment.originalName).slice(1) || 'bin';
+    const tmpFile = await writeToTempFile(data, ext);
+    try {
+      const { stdout } = await execFileAsync('pandoc', [
+        '-f',
+        pandocFormat,
+        '-t',
+        'html',
+        '--standalone',
+        tmpFile,
+      ]);
+      return { type: 'html', content: stdout, mimeType: 'text/html' };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Pandoc conversion failed';
+      throw new AppError(500, `Preview conversion failed: ${message}`, 'CONVERSION_ERROR');
+    } finally {
+      await cleanupTempFile(tmpFile);
+    }
+  }
+
+  throw new AppError(415, 'Preview not supported for this file type', 'UNSUPPORTED_PREVIEW');
+}
+
+/**
+ * Convert an attachment to GitHub-flavored Markdown using pandoc.
+ * @param id - The attachment ID
+ * @returns Object with markdown content and original file name
+ * @throws {AppError} 404 if attachment not found
+ * @throws {AppError} 415 if the file type cannot be converted to markdown
+ */
+export async function convertToMarkdown(
+  id: string,
+): Promise<{ markdown: string; originalName: string }> {
+  const attachment = await getAttachment(id);
+  const pandocFormat = PANDOC_FORMAT_MAP[attachment.mimeType];
+
+  if (!pandocFormat) {
+    throw new AppError(415, 'Cannot convert this file type to markdown', 'UNSUPPORTED_CONVERSION');
+  }
+
+  const storage = getStorage();
+  const data = await storage.get(attachment.storageKey);
+  const ext = path.extname(attachment.originalName).slice(1) || 'bin';
+  const tmpFile = await writeToTempFile(data, ext);
+
+  try {
+    const { stdout } = await execFileAsync('pandoc', ['-f', pandocFormat, '-t', 'gfm', tmpFile]);
+    return { markdown: stdout, originalName: attachment.originalName };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Pandoc conversion failed';
+    throw new AppError(500, `Markdown conversion failed: ${message}`, 'CONVERSION_ERROR');
+  } finally {
+    await cleanupTempFile(tmpFile);
+  }
 }

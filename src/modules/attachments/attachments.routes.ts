@@ -60,8 +60,10 @@ router.use(authenticate);
 
 router.post('/', uploadRateLimit, upload.single('file'), controller.upload);
 router.get('/', controller.list);
-router.get('/:id', controller.download);
 router.get('/:id/meta', controller.getMeta);
+router.get('/:id/preview', controller.preview);
+router.get('/:id/convert', controller.convertToMarkdown);
+router.get('/:id', controller.download);
 router.delete('/:id', controller.remove);
 
 export default router;

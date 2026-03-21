@@ -1,11 +1,13 @@
-import { Paperclip, Download, Trash2 } from 'lucide-react';
+import { Download, Eye, Paperclip, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { AttachmentPreview } from './AttachmentPreview';
 import { Button } from './Button';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
 import { getAccessToken } from '@/api/client';
+import { canPreview } from '@/lib/attachment-utils';
 import { cn } from '@/lib/utils';
 
 function formatSize(bytes: number): string {
@@ -80,6 +82,8 @@ export function AttachmentList({
   onDelete,
   className,
 }: AttachmentListProps) {
+  const [previewAttachment, setPreviewAttachment] = useState<AttachmentMeta | null>(null);
+
   if (attachments.length === 0) return null;
 
   const handleDownload = async (attachment: AttachmentMeta) => {
@@ -105,7 +109,11 @@ export function AttachmentList({
       {attachments.map((att) => (
         <div
           key={att.id}
-          className="flex items-center gap-3 p-2 rounded-md border border-border bg-surface hover:bg-surface-secondary transition-colors"
+          className={cn(
+            'flex items-center gap-3 p-2 rounded-md border border-border bg-surface hover:bg-surface-secondary transition-colors',
+            canPreview(att.mimeType) && 'cursor-pointer',
+          )}
+          onClick={() => canPreview(att.mimeType) && setPreviewAttachment(att)}
         >
           {isImage(att.mimeType) ? (
             <AuthImage
@@ -127,10 +135,26 @@ export function AttachmentList({
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            {canPreview(att.mimeType) && (
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewAttachment(att);
+                }}
+                title="Preview file"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="xs"
-              onClick={() => handleDownload(att)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownload(att);
+              }}
               title="Download file"
             >
               <Download className="h-4 w-4" />
@@ -140,7 +164,10 @@ export function AttachmentList({
               <Button
                 variant="ghost"
                 size="xs"
-                onClick={() => onDelete(att.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(att.id);
+                }}
                 title="Delete attachment"
               >
                 <Trash2 className="h-4 w-4 text-danger" />
@@ -149,6 +176,12 @@ export function AttachmentList({
           </div>
         </div>
       ))}
+
+      <AttachmentPreview
+        attachment={previewAttachment}
+        open={previewAttachment !== null}
+        onClose={() => setPreviewAttachment(null)}
+      />
     </div>
   );
 }
