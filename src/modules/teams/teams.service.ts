@@ -3,7 +3,7 @@ import { TeamRole } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
-import { parsePagination, paginatedResponse } from '../../utils/pagination';
+import { parsePagination, parseServicePagination, paginatedResponse } from '../../utils/pagination';
 import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
 /**
@@ -256,9 +256,11 @@ export async function removeTeamMember(teamId: string, memberId: string) {
  * Get recent activity across a team's projects and repos.
  * @param teamId - The team ID
  * @param limit - Max results (default 20)
+ * @param rawLimit
  * @returns List of recent activity entries with user info
  */
-export async function getTeamActivity(teamId: string, limit = 20) {
+export async function getTeamActivity(teamId: string, rawLimit = 20) {
+  const limit = parseServicePagination({ limit: rawLimit }, 20).take;
   // Get all member user IDs for this team
   const members = await prisma.teamMembership.findMany({
     where: { teamId },

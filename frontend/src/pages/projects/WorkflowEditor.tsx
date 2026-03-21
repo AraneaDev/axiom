@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
+import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
 import type { BoardColumn } from '@/lib/types';
 
@@ -146,25 +147,25 @@ export default function WorkflowEditor() {
 
       {/* Rules table */}
       {rules && rules.length > 0 ? (
-        <div className="bg-surface-elevated border border-border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border-light bg-surface-secondary">
-                <th className="text-left px-4 py-3 font-medium text-text-secondary">From</th>
-                <th className="text-left px-4 py-3 font-medium text-text-secondary" />
-                <th className="text-left px-4 py-3 font-medium text-text-secondary">To</th>
-                <th className="text-right px-4 py-3 font-medium text-text-secondary">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+        <TableContainer>
+          <Table>
+            <Thead>
+              <TrHead>
+                <Th>From</Th>
+                <Th />
+                <Th>To</Th>
+                <Th className="text-right">Actions</Th>
+              </TrHead>
+            </Thead>
+            <Tbody>
               {rules.map((rule) => (
-                <tr key={rule.id} className="border-b border-border-light last:border-0">
-                  <td className="px-4 py-3 font-medium">{rule.fromColumn.name}</td>
-                  <td className="px-4 py-3">
+                <tr key={rule.id}>
+                  <Td className="font-medium">{rule.fromColumn.name}</Td>
+                  <Td>
                     <ArrowRight className="h-4 w-4 text-text-tertiary" />
-                  </td>
-                  <td className="px-4 py-3 font-medium">{rule.toColumn.name}</td>
-                  <td className="px-4 py-3 text-right">
+                  </Td>
+                  <Td className="font-medium">{rule.toColumn.name}</Td>
+                  <Td className="text-right">
                     <Button
                       variant="ghost"
                       size="xs"
@@ -173,12 +174,12 @@ export default function WorkflowEditor() {
                     >
                       <Trash2 className="h-4 w-4" /> Remove
                     </Button>
-                  </td>
+                  </Td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </Tbody>
+          </Table>
+        </TableContainer>
       ) : (
         <EmptyState
           icon={<Workflow className="h-10 w-10" />}

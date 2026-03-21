@@ -21,7 +21,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
       ref={ref}
       type="checkbox"
       className={cn(
-        'rounded border-border accent-primary cursor-pointer focus:ring-2 focus:ring-primary/30',
+        'rounded border-border accent-primary cursor-pointer focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1',
         sizes[size],
         props.disabled && 'opacity-40 cursor-not-allowed',
         className,

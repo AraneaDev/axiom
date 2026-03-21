@@ -208,7 +208,7 @@ export default function PageView() {
               <div className="mb-8">
                 <Link
                   to={`${basePath}/${welcomePage.slug}`}
-                  className="group block rounded-xl border border-border bg-surface overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all"
+                  className="group block rounded-lg border border-border bg-surface overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all"
                 >
                   <div className="px-6 py-4 border-b border-border-light bg-surface-secondary/50 flex items-center justify-between">
                     <div className="flex items-center gap-2">

@@ -6,6 +6,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
+import { parseServicePagination } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 import { evaluateRules } from '../automation/automation.service';
@@ -208,6 +209,7 @@ export async function listIssues(
 
   const cacheKey = `issues:${projectId}:${filters?.offset ?? 0}:${filters?.q || ''}:${filters?.type || ''}:${filters?.priority || ''}:${filters?.assigneeId || ''}:${filters?.columnId || ''}:${filters?.label || ''}`;
   return cacheable(cacheKey, 30, async () => {
+    const { take, skip } = parseServicePagination(filters, 50);
     const where: Prisma.IssueWhereInput = { projectId };
     if (filters?.q) {
       const q = filters.q;
@@ -234,8 +236,8 @@ export async function listIssues(
           column: { select: { id: true, name: true } },
         },
         orderBy: [{ column: { position: 'asc' } }, { position: 'asc' }],
-        take: filters?.limit ?? 50,
-        skip: filters?.offset ?? 0,
+        take,
+        skip,
       }),
       prisma.issue.count({ where }),
     ]);

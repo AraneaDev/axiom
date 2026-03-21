@@ -20,7 +20,7 @@ export function TeamCard({
   return (
     <Link
       to={`/${orgSlug}/${team.slug}`}
-      className="group rounded-xl border border-border bg-surface p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200"
+      className="group rounded-lg border border-border bg-surface p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200"
     >
       <div className="flex items-center gap-3 mb-3">
         <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">

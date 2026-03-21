@@ -19,6 +19,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Pagination } from '@/components/ui/Pagination';
 import { TableSkeleton } from '@/components/ui/Skeleton';
+import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { cn } from '@/lib/utils';
 
 const ACTION_OPTIONS = [
@@ -96,7 +97,7 @@ function AuditLogRow({ log }: { log: AuditLogEntry }) {
         )}
         onClick={() => setExpanded(!expanded)}
       >
-        <td className="px-4 py-3 text-sm text-text-secondary whitespace-nowrap">
+        <Td className="text-text-secondary whitespace-nowrap">
           <span className="inline-flex items-center gap-1.5">
             {expanded ? (
               <ChevronDown className="h-3.5 w-3.5 text-text-tertiary" />
@@ -106,27 +107,27 @@ function AuditLogRow({ log }: { log: AuditLogEntry }) {
             <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
             {formatTimestamp(log.createdAt)}
           </span>
-        </td>
-        <td className="px-4 py-3 text-sm">
+        </Td>
+        <Td>
           <span className="inline-flex items-center gap-1.5">
             <User className="h-3.5 w-3.5 text-text-tertiary" />
             <span className="text-text font-medium">{log.userId ?? 'system'}</span>
           </span>
-        </td>
-        <td className="px-4 py-3">
+        </Td>
+        <Td>
           <Badge variant={ACTION_VARIANT_MAP[log.action] ?? 'default'} size="sm">
             {log.action}
           </Badge>
-        </td>
-        <td className="px-4 py-3 text-sm">
+        </Td>
+        <Td>
           <Badge variant="outline" size="sm">
             {parsed.type}
           </Badge>
-        </td>
-        <td className="px-4 py-3 text-sm text-text-secondary font-mono text-xs">
+        </Td>
+        <Td className="text-text-secondary font-mono text-xs">
           {parsed.id ? parsed.id.slice(0, 12) : '--'}
-        </td>
-        <td className="px-4 py-3 text-sm text-text-tertiary whitespace-nowrap">
+        </Td>
+        <Td className="text-text-tertiary whitespace-nowrap">
           {ipAddress ? (
             <span className="inline-flex items-center gap-1">
               <Globe className="h-3.5 w-3.5" />
@@ -135,15 +136,15 @@ function AuditLogRow({ log }: { log: AuditLogEntry }) {
           ) : (
             '--'
           )}
-        </td>
+        </Td>
       </tr>
       {expanded && details && (
-        <tr className="border-b border-border-light bg-surface-tertiary">
-          <td colSpan={6} className="px-4 py-3">
+        <tr className="bg-surface-tertiary">
+          <Td colSpan={6}>
             <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap break-all">
               {JSON.stringify(details, null, 2)}
             </pre>
-          </td>
+          </Td>
         </tr>
       )}
     </>
@@ -275,32 +276,20 @@ export default function AuditLogs() {
         </div>
 
         {/* Table */}
-        <div className="bg-surface-elevated border border-border rounded-lg overflow-hidden">
+        <TableContainer>
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-surface-secondary">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-                    Timestamp
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-                    User
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-                    Action
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-                    Resource
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-                    ID
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-                    IP Address
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <Thead>
+                <TrHead>
+                  <Th>Timestamp</Th>
+                  <Th>User</Th>
+                  <Th>Action</Th>
+                  <Th>Resource</Th>
+                  <Th>ID</Th>
+                  <Th>IP Address</Th>
+                </TrHead>
+              </Thead>
+              <Tbody>
                 {isLoading ? (
                   <tr>
                     <td colSpan={6} className="p-4">
@@ -320,8 +309,8 @@ export default function AuditLogs() {
                 ) : (
                   logs.map((log) => <AuditLogRow key={log.id} log={log} />)
                 )}
-              </tbody>
-            </table>
+              </Tbody>
+            </Table>
           </div>
 
           {/* Pagination */}
@@ -335,7 +324,7 @@ export default function AuditLogs() {
               />
             </div>
           )}
-        </div>
+        </TableContainer>
       </div>
     </div>
   );

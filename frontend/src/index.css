@@ -21,6 +21,7 @@
   --color-surface-tertiary: #f1f5f9;
   --color-surface-elevated: #ffffff;
   --color-surface-overlay: rgba(255, 255, 255, 0.8);
+  --color-surface-inverse: #1e293b;
 
   /* Borders */
   --color-border: #e2e8f0;
@@ -70,6 +71,7 @@
   --color-surface-tertiary: #1e293b;
   --color-surface-elevated: #1a1f35;
   --color-surface-overlay: rgba(12, 15, 26, 0.85);
+  --color-surface-inverse: #e2e8f0;
 
   --color-border: #1e293b;
   --color-border-light: #1a2234;

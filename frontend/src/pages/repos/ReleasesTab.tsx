@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -127,35 +128,35 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
 
     return (
       <div className="border-t border-border bg-surface-secondary">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-border text-left">
-              <th className="px-4 py-1.5 font-medium text-text-secondary">Environment</th>
-              <th className="px-4 py-1.5 font-medium text-text-secondary">Status</th>
-              <th className="px-4 py-1.5 font-medium text-text-secondary">Deployed By</th>
-              <th className="px-4 py-1.5 font-medium text-text-secondary">Time</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
+        <Table className="text-xs">
+          <Thead>
+            <TrHead>
+              <Th className="py-1.5">Environment</Th>
+              <Th className="py-1.5">Status</Th>
+              <Th className="py-1.5">Deployed By</Th>
+              <Th className="py-1.5">Time</Th>
+            </TrHead>
+          </Thead>
+          <Tbody>
             {deployments.map((d: ReleaseDeployment) => (
               <tr key={d.id}>
-                <td className="px-4 py-1.5 text-text">{d.environment?.name}</td>
-                <td className="px-4 py-1.5">
+                <Td className="py-1.5 text-text">{d.environment?.name}</Td>
+                <Td className="py-1.5">
                   <Badge variant={deployStatusVariant(d.status)} size="sm">
                     {d.status.toLowerCase().replace('_', ' ')}
                   </Badge>
-                </td>
-                <td className="px-4 py-1.5 text-text-secondary">
+                </Td>
+                <Td className="py-1.5 text-text-secondary">
                   {d.deployedBy?.displayName || d.deployedBy?.username}
-                </td>
-                <td className="px-4 py-1.5 text-text-tertiary flex items-center gap-1">
+                </Td>
+                <Td className="py-1.5 text-text-tertiary flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {formatRelative(d.createdAt)}
-                </td>
+                </Td>
               </tr>
             ))}
-          </tbody>
-        </table>
+          </Tbody>
+        </Table>
       </div>
     );
   };

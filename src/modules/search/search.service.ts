@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { repoExists } from '../../git/repo-manager';
+import { parseServicePagination } from '../../utils/pagination';
 import {
   PROJECT_URL_WITH_NAME_SELECT,
   SPACE_URL_SELECT,
@@ -116,6 +117,8 @@ function toTsQuery(text: string): string {
  * @returns Array of result sections by resource type with items and totals
  */
 export async function search(params: SearchParams) {
+  const { take, skip } = parseServicePagination(params);
+  params = { ...params, limit: take, offset: skip };
   const { freeText, filters } = parseStructuredQuery(params.q);
   const results: SearchResultSection[] = [];
 

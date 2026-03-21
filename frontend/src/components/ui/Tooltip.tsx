@@ -16,12 +16,12 @@ const positions = {
 };
 
 const arrows = {
-  top: 'top-full left-1/2 -translate-x-1/2 border-t-[#1e293b] border-x-transparent border-b-transparent border-4',
+  top: 'top-full left-1/2 -translate-x-1/2 border-t-[var(--color-surface-inverse)] border-x-transparent border-b-transparent border-4',
   bottom:
-    'bottom-full left-1/2 -translate-x-1/2 border-b-[#1e293b] border-x-transparent border-t-transparent border-4',
-  left: 'left-full top-1/2 -translate-y-1/2 border-l-[#1e293b] border-y-transparent border-r-transparent border-4',
+    'bottom-full left-1/2 -translate-x-1/2 border-b-[var(--color-surface-inverse)] border-x-transparent border-t-transparent border-4',
+  left: 'left-full top-1/2 -translate-y-1/2 border-l-[var(--color-surface-inverse)] border-y-transparent border-r-transparent border-4',
   right:
-    'right-full top-1/2 -translate-y-1/2 border-r-[#1e293b] border-y-transparent border-l-transparent border-4',
+    'right-full top-1/2 -translate-y-1/2 border-r-[var(--color-surface-inverse)] border-y-transparent border-l-transparent border-4',
 };
 
 /**
@@ -42,7 +42,7 @@ export function Tooltip({ content, side = 'top', children }: TooltipProps) {
           positions[side],
         )}
       >
-        <span className="whitespace-nowrap max-w-xs rounded-md bg-[#1e293b] px-2.5 py-1.5 text-xs text-white shadow-lg">
+        <span className="whitespace-nowrap max-w-xs rounded-md bg-surface-inverse px-2.5 py-1.5 text-xs text-text-inverse shadow-lg">
           {content}
         </span>
         <span className={cn('absolute', arrows[side])} />

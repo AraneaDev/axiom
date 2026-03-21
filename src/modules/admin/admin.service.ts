@@ -5,6 +5,7 @@ import _path from 'path';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { AppError } from '../../middleware/errorHandler';
+import { parseServicePagination } from '../../utils/pagination';
 
 // ─── System Stats ───────────────────────────────────────────
 
@@ -72,7 +73,8 @@ export async function getSystemStats() {
  * @param opts.offset
  */
 export async function listUsers(opts: { search?: string; limit?: number; offset?: number }) {
-  const { search, limit = 50, offset = 0 } = opts;
+  const { take, skip } = parseServicePagination(opts, 50);
+  const { search } = opts;
 
   const where = search
     ? {
@@ -103,8 +105,8 @@ export async function listUsers(opts: { search?: string; limit?: number; offset?
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
+      take,
+      skip,
     }),
     prisma.user.count({ where }),
   ]);

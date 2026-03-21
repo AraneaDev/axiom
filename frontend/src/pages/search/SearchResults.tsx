@@ -27,7 +27,6 @@ import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
-import { PRIORITY_COLORS } from '@/lib/constants';
 import type { SearchResult, SavedSearch } from '@/lib/types';
 
 const SEARCH_TABS = [
@@ -269,11 +268,20 @@ function IssueRow({ item }: { item: any }) {
       {item.assignee && (
         <Avatar name={item.assignee.displayName} src={item.assignee.avatarUrl} size="xs" />
       )}
-      <span
-        className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[item.priority as keyof typeof PRIORITY_COLORS] ?? ''}`}
+      <Badge
+        size="sm"
+        variant={
+          item.priority === 'CRITICAL'
+            ? 'danger'
+            : item.priority === 'HIGH'
+              ? 'warning'
+              : item.priority === 'LOW'
+                ? 'success'
+                : 'default'
+        }
       >
         {item.priority}
-      </span>
+      </Badge>
     </Link>
   );
 }

@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Progress } from '@/components/ui/Progress';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 
 function formatMinutes(mins: number | null | undefined): string {
@@ -123,17 +124,17 @@ export default function TimeReport() {
           <p className="text-sm text-text-tertiary">No time logged yet</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-text-secondary text-left">
-                  <th className="pb-2 font-medium">Member</th>
-                  <th className="pb-2 font-medium text-right">Logged</th>
-                  <th className="pb-2 font-medium text-right">Estimated</th>
-                  <th className="pb-2 font-medium text-right">Variance</th>
-                  <th className="pb-2 font-medium w-48">Progress</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-light">
+            <Table>
+              <Thead>
+                <TrHead>
+                  <Th>Member</Th>
+                  <Th className="text-right">Logged</Th>
+                  <Th className="text-right">Estimated</Th>
+                  <Th className="text-right">Variance</Th>
+                  <Th className="w-48">Progress</Th>
+                </TrHead>
+              </Thead>
+              <Tbody>
                 {report.members.map((member) => {
                   const variance = member.totalMinutes - member.estimateMinutes;
                   const pct =
@@ -142,7 +143,7 @@ export default function TimeReport() {
                       : 0;
                   return (
                     <tr key={member.userId}>
-                      <td className="py-2.5">
+                      <Td>
                         <div className="flex items-center gap-2">
                           <Avatar name={member.displayName} size="sm" />
                           <Link
@@ -152,14 +153,14 @@ export default function TimeReport() {
                             {member.displayName}
                           </Link>
                         </div>
-                      </td>
-                      <td className="py-2.5 text-right tabular-nums font-medium">
+                      </Td>
+                      <Td className="text-right tabular-nums font-medium">
                         {formatMinutes(member.totalMinutes)}
-                      </td>
-                      <td className="py-2.5 text-right tabular-nums text-text-secondary">
+                      </Td>
+                      <Td className="text-right tabular-nums text-text-secondary">
                         {member.estimateMinutes > 0 ? formatMinutes(member.estimateMinutes) : '--'}
-                      </td>
-                      <td className="py-2.5 text-right tabular-nums">
+                      </Td>
+                      <Td className="text-right tabular-nums">
                         {member.estimateMinutes > 0 ? (
                           <span
                             className={
@@ -172,8 +173,8 @@ export default function TimeReport() {
                         ) : (
                           '--'
                         )}
-                      </td>
-                      <td className="py-2.5">
+                      </Td>
+                      <Td>
                         {member.estimateMinutes > 0 ? (
                           <div className="flex items-center gap-2">
                             <Progress
@@ -188,12 +189,12 @@ export default function TimeReport() {
                         ) : (
                           <span className="text-xs text-text-tertiary">--</span>
                         )}
-                      </td>
+                      </Td>
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
+              </Tbody>
+            </Table>
           </div>
         )}
       </div>
@@ -208,17 +209,17 @@ export default function TimeReport() {
           <p className="text-sm text-text-tertiary">No time logged yet</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-text-secondary text-left">
-                  <th className="pb-2 font-medium">Issue</th>
-                  <th className="pb-2 font-medium text-right">Logged</th>
-                  <th className="pb-2 font-medium text-right">Estimated</th>
-                  <th className="pb-2 font-medium text-right">Variance</th>
-                  <th className="pb-2 font-medium w-48">Progress</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-light">
+            <Table>
+              <Thead>
+                <TrHead>
+                  <Th>Issue</Th>
+                  <Th className="text-right">Logged</Th>
+                  <Th className="text-right">Estimated</Th>
+                  <Th className="text-right">Variance</Th>
+                  <Th className="w-48">Progress</Th>
+                </TrHead>
+              </Thead>
+              <Tbody>
                 {report.issues.map((issue) => {
                   const variance =
                     issue.estimateMinutes != null
@@ -230,7 +231,7 @@ export default function TimeReport() {
                       : 0;
                   return (
                     <tr key={issue.issueId}>
-                      <td className="py-2.5">
+                      <Td>
                         <div className="flex flex-col">
                           <span className="font-medium text-text truncate max-w-md">
                             {issue.title}
@@ -239,16 +240,16 @@ export default function TimeReport() {
                             <span className="text-xs text-text-tertiary">{issue.sprintName}</span>
                           )}
                         </div>
-                      </td>
-                      <td className="py-2.5 text-right tabular-nums font-medium">
+                      </Td>
+                      <Td className="text-right tabular-nums font-medium">
                         {formatMinutes(issue.loggedMinutes)}
-                      </td>
-                      <td className="py-2.5 text-right tabular-nums text-text-secondary">
+                      </Td>
+                      <Td className="text-right tabular-nums text-text-secondary">
                         {issue.estimateMinutes != null
                           ? formatMinutes(issue.estimateMinutes)
                           : '--'}
-                      </td>
-                      <td className="py-2.5 text-right tabular-nums">
+                      </Td>
+                      <Td className="text-right tabular-nums">
                         {variance != null ? (
                           <span
                             className={
@@ -261,8 +262,8 @@ export default function TimeReport() {
                         ) : (
                           '--'
                         )}
-                      </td>
-                      <td className="py-2.5">
+                      </Td>
+                      <Td>
                         {issue.estimateMinutes && issue.estimateMinutes > 0 ? (
                           <div className="flex items-center gap-2">
                             <Progress
@@ -277,12 +278,12 @@ export default function TimeReport() {
                         ) : (
                           <span className="text-xs text-text-tertiary">--</span>
                         )}
-                      </td>
+                      </Td>
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
+              </Tbody>
+            </Table>
           </div>
         )}
       </div>

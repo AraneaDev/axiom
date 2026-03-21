@@ -44,7 +44,7 @@ export function Widget({
   className?: string;
 }) {
   return (
-    <div className={cn('rounded-xl border border-border bg-surface flex flex-col', className)}>
+    <div className={cn('rounded-lg border border-border bg-surface flex flex-col', className)}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-primary" />

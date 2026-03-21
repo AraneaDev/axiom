@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { parseServicePagination } from '../../utils/pagination';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
 // ─── Profile ────────────────────────────────────────────────
@@ -57,6 +58,7 @@ export async function updateProfile(
  * @returns List of matching users with basic profile info
  */
 export async function searchUsers(query: string, limit = 10) {
+  const { take } = parseServicePagination({ limit });
   return prisma.user.findMany({
     where: {
       OR: [
@@ -65,7 +67,7 @@ export async function searchUsers(query: string, limit = 10) {
       ],
     },
     select: USER_WITH_AVATAR_SELECT,
-    take: limit,
+    take,
     orderBy: { username: 'asc' },
   });
 }

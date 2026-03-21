@@ -8,6 +8,7 @@ import {
   LanguageBreakdown,
 } from '@/api/insights.api';
 import { PageLoader } from '@/components/ui/Spinner';
+import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { formatRelative } from '@/lib/utils';
 
 // ─── Language colors ─────────────────────────────────────────
@@ -293,28 +294,28 @@ export default function InsightsTab({ repoId }: InsightsTabProps) {
           <PageLoader />
         ) : contributors && contributors.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-text-secondary">
-                  <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 font-medium">Email</th>
-                  <th className="pb-2 font-medium text-right">Commits</th>
-                  <th className="pb-2 font-medium text-right">Last Commit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+            <Table>
+              <Thead>
+                <TrHead>
+                  <Th>Name</Th>
+                  <Th>Email</Th>
+                  <Th className="text-right">Commits</Th>
+                  <Th className="text-right">Last Commit</Th>
+                </TrHead>
+              </Thead>
+              <Tbody>
                 {contributors.map((c) => (
                   <tr key={c.email}>
-                    <td className="py-2 font-medium">{c.name}</td>
-                    <td className="py-2 text-text-secondary">{c.email}</td>
-                    <td className="py-2 text-right tabular-nums">{c.commits}</td>
-                    <td className="py-2 text-right text-text-secondary">
+                    <Td className="font-medium">{c.name}</Td>
+                    <Td className="text-text-secondary">{c.email}</Td>
+                    <Td className="text-right tabular-nums">{c.commits}</Td>
+                    <Td className="text-right text-text-secondary">
                       {c.lastCommitDate ? formatRelative(c.lastCommitDate) : '--'}
-                    </td>
+                    </Td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
+              </Tbody>
+            </Table>
           </div>
         ) : (
           <p className="text-sm text-text-secondary">No contributor data available.</p>

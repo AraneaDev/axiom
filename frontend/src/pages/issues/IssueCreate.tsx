@@ -104,7 +104,7 @@ export default function IssueCreate() {
           </div>
         )}
         {error && (
-          <div className="mb-5 rounded-lg bg-danger-light border border-danger/20 px-4 py-3 text-sm text-danger">
+          <div className="mb-5 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
             {error}
           </div>
         )}

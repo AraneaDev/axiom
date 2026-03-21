@@ -12,6 +12,7 @@ import {
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
+import { parseServicePagination } from '../../utils/pagination';
 
 /**
  * Validate a file path to prevent directory traversal and null byte injection.
@@ -121,20 +122,19 @@ export async function getRepo(repoId: string) {
  * @returns Paginated list of repositories with total count
  */
 export async function listRepos(teamId: string, opts?: { limit?: number; offset?: number }) {
-  const limit = Math.min(opts?.limit ?? 25, 100);
-  const offset = opts?.offset ?? 0;
+  const { take, skip } = parseServicePagination(opts);
 
   const [repos, total] = await Promise.all([
     prisma.repository.findMany({
       where: { teamId },
       orderBy: { name: 'asc' },
-      take: limit,
-      skip: offset,
+      take,
+      skip,
     }),
     prisma.repository.count({ where: { teamId } }),
   ]);
 
-  return { data: repos, total, limit, offset };
+  return { data: repos, total, limit: take, offset: skip };
 }
 
 /**

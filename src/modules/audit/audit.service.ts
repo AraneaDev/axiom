@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { parseServicePagination } from '../../utils/pagination';
 
 export interface LogAuditData {
   userId?: string;
@@ -61,15 +62,14 @@ export async function listAuditLogs(opts: ListAuditLogsOpts) {
     where.createdAt = createdAt;
   }
 
-  const limit = Math.min(opts.limit ?? 50, 200);
-  const offset = opts.offset ?? 0;
+  const { take, skip } = parseServicePagination(opts, 50);
 
   const [logs, total] = await Promise.all([
     prisma.auditLog.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
+      take,
+      skip,
     }),
     prisma.auditLog.count({ where }),
   ]);

@@ -11,6 +11,7 @@ import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
+import { parseServicePagination } from '../../utils/pagination';
 import { logActivity } from '../activity/activity.service';
 import { enforceMergeProtection } from '../repos/protection.service';
 
@@ -200,8 +201,7 @@ export async function listPRs(
     where.reviews = { some: { reviewerId: opts.reviewerId } };
   }
 
-  const limit = Math.min(opts?.limit ?? 25, 100);
-  const offset = opts?.offset ?? 0;
+  const { take, skip } = parseServicePagination(opts);
 
   const [prs, total] = await Promise.all([
     prisma.pullRequest.findMany({
@@ -210,8 +210,8 @@ export async function listPRs(
       include: {
         _count: { select: { reviews: true, comments: true } },
       },
-      take: limit,
-      skip: offset,
+      take,
+      skip,
     }),
     prisma.pullRequest.count({ where }),
   ]);
@@ -231,7 +231,7 @@ export async function listPRs(
     author: authorMap.get(pr.authorId) ?? null,
   }));
 
-  return { data, total, limit, offset };
+  return { data, total, limit: take, offset: skip };
 }
 
 /**

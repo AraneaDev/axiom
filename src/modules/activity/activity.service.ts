@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
+import { parseServicePagination } from '../../utils/pagination';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
 export type ResourceType = 'issue' | 'pull_request' | 'wiki_page' | 'repository';
@@ -84,6 +85,7 @@ export async function listActivities(opts: {
   limit?: number;
   offset?: number;
 }) {
+  const { take, skip } = parseServicePagination(opts, 50);
   const where: Prisma.ActivityWhereInput = {};
 
   if (opts.resourceType) where.resourceType = opts.resourceType;
@@ -112,8 +114,8 @@ export async function listActivities(opts: {
         user: { select: USER_WITH_AVATAR_SELECT },
       },
       orderBy: { createdAt: 'desc' },
-      take: opts.limit ?? 50,
-      skip: opts.offset ?? 0,
+      take,
+      skip,
     }),
     prisma.activity.count({ where }),
   ]);

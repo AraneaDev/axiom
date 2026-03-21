@@ -18,6 +18,7 @@ import { teamsApi } from '@/api/teams.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
@@ -331,24 +332,24 @@ export default function ProjectAnalytics() {
           <p className="text-sm text-text-tertiary">No assigned issues</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-text-secondary text-left">
-                  <th className="pb-2 font-medium">Member</th>
-                  <th className="pb-2 font-medium text-right">Assigned</th>
-                  <th className="pb-2 font-medium text-right">In Progress</th>
-                  <th className="pb-2 font-medium text-right">Completed</th>
-                  <th className="pb-2 font-medium w-56">Load Distribution</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-light">
+            <Table>
+              <Thead>
+                <TrHead>
+                  <Th>Member</Th>
+                  <Th className="text-right">Assigned</Th>
+                  <Th className="text-right">In Progress</Th>
+                  <Th className="text-right">Completed</Th>
+                  <Th className="w-56">Load Distribution</Th>
+                </TrHead>
+              </Thead>
+              <Tbody>
                 {analytics.memberWorkload.map((member) => {
                   const openCount =
                     member.assignedCount - member.inProgressCount - member.completedCount;
                   const isOverloaded = member.assignedCount - member.completedCount >= 10;
                   return (
                     <tr key={member.userId}>
-                      <td className="py-2.5">
+                      <Td>
                         <div className="flex items-center gap-2">
                           <Avatar name={member.displayName} size="sm" />
                           <Link
@@ -363,11 +364,11 @@ export default function ProjectAnalytics() {
                             </span>
                           )}
                         </div>
-                      </td>
-                      <td className="py-2.5 text-right tabular-nums">{member.assignedCount}</td>
-                      <td className="py-2.5 text-right tabular-nums">{member.inProgressCount}</td>
-                      <td className="py-2.5 text-right tabular-nums">{member.completedCount}</td>
-                      <td className="py-2.5">
+                      </Td>
+                      <Td className="text-right tabular-nums">{member.assignedCount}</Td>
+                      <Td className="text-right tabular-nums">{member.inProgressCount}</Td>
+                      <Td className="text-right tabular-nums">{member.completedCount}</Td>
+                      <Td>
                         {member.assignedCount > 0 ? (
                           <div className="flex items-center gap-2">
                             <div className="flex-1 flex h-3 rounded-full overflow-hidden bg-surface-tertiary">
@@ -400,12 +401,12 @@ export default function ProjectAnalytics() {
                         ) : (
                           <span className="text-xs text-text-tertiary">--</span>
                         )}
-                      </td>
+                      </Td>
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
+              </Tbody>
+            </Table>
             <div className="flex items-center gap-4 mt-3 text-xs text-text-secondary">
               <span className="flex items-center gap-1.5">
                 <span className="inline-block w-3 h-3 rounded-sm bg-success" /> Completed

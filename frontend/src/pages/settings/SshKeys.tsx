@@ -84,10 +84,10 @@ export default function SshKeys() {
       </div>
 
       {showForm && (
-        <div className="rounded-xl border border-border bg-surface p-5">
+        <div className="rounded-lg border border-border bg-surface p-5">
           <h3 className="text-sm font-semibold text-text mb-4">Add new SSH key</h3>
           {error && (
-            <div className="mb-4 rounded-lg bg-danger-light border border-danger/20 px-4 py-2.5 text-sm text-danger">
+            <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
               {error}
             </div>
           )}
@@ -137,7 +137,7 @@ export default function SshKeys() {
           description="Add an SSH key to clone repos over SSH."
         />
       ) : (
-        <div className="rounded-xl border border-border bg-surface divide-y divide-border">
+        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
           {keys.map((k) => (
             <div
               key={k.id}
@@ -167,7 +167,7 @@ export default function SshKeys() {
       )}
 
       {/* Danger zone */}
-      <div className="rounded-xl border border-danger/30 bg-surface p-5">
+      <div className="rounded-lg border border-danger/30 bg-surface p-5">
         <h3 className="text-sm font-semibold text-danger mb-1">Danger Zone</h3>
         <p className="text-xs text-text-tertiary">
           Deleting an SSH key will revoke access for any system using it. This cannot be undone.

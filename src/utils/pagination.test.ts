@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { parsePagination, paginatedResponse } from './pagination';
+import { parsePagination, parseServicePagination, paginatedResponse } from './pagination';
 
 describe('parsePagination', () => {
   it('should return default values when no query params', () => {
@@ -34,6 +34,48 @@ describe('parsePagination', () => {
     // Math.max(1, NaN) = NaN
     expect(result.take).toBeNaN();
     expect(result.skip).toBeNaN();
+  });
+});
+
+describe('parseServicePagination', () => {
+  it('should return default values when no opts provided', () => {
+    const result = parseServicePagination();
+    expect(result).toEqual({ take: 25, skip: 0 });
+  });
+
+  it('should use custom default limit', () => {
+    const result = parseServicePagination(undefined, 50);
+    expect(result).toEqual({ take: 50, skip: 0 });
+  });
+
+  it('should use provided limit and offset', () => {
+    const result = parseServicePagination({ limit: 10, offset: 20 });
+    expect(result).toEqual({ take: 10, skip: 20 });
+  });
+
+  it('should clamp take to minimum of 1', () => {
+    const result = parseServicePagination({ limit: 0 });
+    expect(result.take).toBe(1);
+  });
+
+  it('should clamp take to maximum of 100', () => {
+    const result = parseServicePagination({ limit: 500 });
+    expect(result.take).toBe(100);
+  });
+
+  it('should clamp skip to minimum of 0', () => {
+    const result = parseServicePagination({ offset: -10 });
+    expect(result.skip).toBe(0);
+  });
+
+  it('should handle partial opts with only limit', () => {
+    const result = parseServicePagination({ limit: 15 });
+    expect(result).toEqual({ take: 15, skip: 0 });
+  });
+
+  it('should handle partial opts with only offset', () => {
+    const result = parseServicePagination({ offset: 30 });
+    expect(result).toEqual({ take: 25, skip: 30 });
   });
 });
 

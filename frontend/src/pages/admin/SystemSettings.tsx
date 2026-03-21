@@ -51,7 +51,7 @@ export default function SystemSettings() {
           </div>
         </div>
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="rounded-xl border border-border bg-surface p-5 space-y-3">
+          <div key={i} className="rounded-lg border border-border bg-surface p-5 space-y-3">
             <Skeleton className="h-4 w-32 mb-3" />
             {Array.from({ length: i === 0 ? 4 : 2 }).map((_, j) => (
               <div key={j} className="flex items-center justify-between py-3">
@@ -82,7 +82,7 @@ export default function SystemSettings() {
       </div>
 
       {/* Settings */}
-      <div className="rounded-xl border border-border bg-surface p-5">
+      <div className="rounded-lg border border-border bg-surface p-5">
         <div className="flex items-center gap-2 mb-4">
           <Server className="h-4 w-4 text-primary" />
           <h3 className="font-semibold text-sm text-text">Server Configuration</h3>
@@ -95,7 +95,7 @@ export default function SystemSettings() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-5">
+      <div className="rounded-lg border border-border bg-surface p-5">
         <div className="flex items-center gap-2 mb-4">
           <Database className="h-4 w-4 text-primary" />
           <h3 className="font-semibold text-sm text-text">Storage</h3>

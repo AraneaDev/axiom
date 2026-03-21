@@ -50,7 +50,7 @@ function formatUptime(seconds: number): string {
 
 function HealthSkeleton() {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 animate-pulse">
+    <div className="rounded-lg border border-border bg-surface p-5 animate-pulse">
       <div className="flex items-center gap-2 mb-4">
         <div className="h-4 w-4 rounded bg-surface-tertiary" />
         <div className="h-4 w-32 rounded bg-surface-tertiary" />
@@ -106,7 +106,7 @@ function HealthPanel() {
 
   if (isError || !health) {
     return (
-      <div className="rounded-xl border border-danger bg-danger-light p-5">
+      <div className="rounded-lg border border-danger bg-danger-light p-5">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-danger" />
           <span className="text-sm font-semibold text-danger">
@@ -138,7 +138,7 @@ function HealthPanel() {
   ];
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-lg border border-border bg-surface p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-primary" />
@@ -202,7 +202,7 @@ function StatCard({
   return (
     <div
       className={cn(
-        'rounded-xl border border-border bg-surface p-5 flex items-start gap-4',
+        'rounded-lg border border-border bg-surface p-5 flex items-start gap-4',
         className,
       )}
     >
@@ -266,7 +266,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Database info */}
-      <div className="rounded-xl border border-border bg-surface p-5">
+      <div className="rounded-lg border border-border bg-surface p-5">
         <div className="flex items-center gap-2 mb-3">
           <HardDrive className="h-4 w-4 text-primary" />
           <h3 className="font-semibold text-sm text-text">Storage Breakdown</h3>

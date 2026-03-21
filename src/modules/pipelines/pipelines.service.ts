@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { parseServicePagination } from '../../utils/pagination';
 
 import { parsePipelineYaml, validatePipeline } from './pipeline-parser';
 import { runPipeline } from './pipeline-runner';
@@ -99,7 +100,7 @@ export async function listRuns(
     },
     include: { pipeline: { select: { name: true } } },
     orderBy: { createdAt: 'desc' },
-    take: opts.limit ?? 20,
+    take: parseServicePagination(opts, 20).take,
   });
 }
 

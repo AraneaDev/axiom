@@ -29,7 +29,7 @@ export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          'relative inline-flex shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus',
+          'relative inline-flex shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1',
           s.track,
           disabled
             ? 'opacity-40 cursor-not-allowed bg-surface-tertiary'
@@ -42,7 +42,7 @@ export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(
       >
         <span
           className={cn(
-            'pointer-events-none inline-block rounded-full bg-white shadow-sm ring-0 transition-transform',
+            'pointer-events-none inline-block rounded-full bg-surface shadow-sm ring-0 transition-transform',
             s.thumb,
             checked ? s.translate : 'translate-x-0',
           )}

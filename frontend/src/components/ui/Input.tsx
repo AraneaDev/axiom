@@ -32,12 +32,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         className={cn(
           'w-full rounded-md border bg-surface px-3 py-2 text-sm transition-all duration-150',
           'placeholder:text-text-tertiary',
-          'focus:border-border-focus focus:ring-2 focus:ring-primary/15 focus:outline-none focus:shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]',
+          'focus-visible:border-border-focus focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:outline-none focus-visible:shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           error
-            ? 'border-danger focus:border-danger focus:ring-danger/15'
+            ? 'border-danger focus-visible:border-danger focus-visible:ring-danger/30'
             : success
-              ? 'border-success focus:border-success focus:ring-success/15'
+              ? 'border-success focus-visible:border-success focus-visible:ring-success/30'
               : 'border-border',
           className,
         )}

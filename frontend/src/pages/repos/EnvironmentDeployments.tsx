@@ -6,6 +6,7 @@ import type { Deployment, DeploymentStatus } from '@/api/deployments.api';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
+import { Table, TableContainer, Tbody, Td, Th, Thead, Tr, TrHead } from '@/components/ui/Table';
 import { formatRelative } from '@/lib/utils';
 
 function statusVariant(status: DeploymentStatus): 'success' | 'danger' | 'warning' | 'default' {
@@ -53,44 +54,42 @@ export function EnvironmentDeployments({ repoId, envId }: EnvironmentDeployments
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-surface-secondary border-b border-border text-left">
-            <th className="px-4 py-2 font-medium text-text-secondary">Status</th>
-            <th className="px-4 py-2 font-medium text-text-secondary">Commit</th>
-            <th className="px-4 py-2 font-medium text-text-secondary">Deployed By</th>
-            <th className="px-4 py-2 font-medium text-text-secondary">Pipeline</th>
-            <th className="px-4 py-2 font-medium text-text-secondary">Time</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
+    <TableContainer>
+      <Table>
+        <Thead>
+          <TrHead>
+            <Th>Status</Th>
+            <Th>Commit</Th>
+            <Th>Deployed By</Th>
+            <Th>Pipeline</Th>
+            <Th>Time</Th>
+          </TrHead>
+        </Thead>
+        <Tbody>
           {deployments.map((d: Deployment) => (
-            <tr key={d.id} className="hover:bg-surface-secondary transition-colors">
-              <td className="px-4 py-2">
+            <Tr key={d.id}>
+              <Td>
                 <Badge variant={statusVariant(d.status)} size="sm">
                   {d.status.toLowerCase().replace('_', ' ')}
                 </Badge>
-              </td>
-              <td className="px-4 py-2">
+              </Td>
+              <Td>
                 <code className="text-xs font-mono text-primary">{d.commitSha.slice(0, 7)}</code>
-              </td>
-              <td className="px-4 py-2 text-text-secondary">
+              </Td>
+              <Td className="text-text-secondary">
                 {d.deployedBy?.displayName || d.deployedBy?.username || 'Unknown'}
-              </td>
-              <td className="px-4 py-2 text-text-secondary">
-                {d.pipelineRun?.pipeline?.name || '--'}
-              </td>
-              <td className="px-4 py-2 text-text-tertiary">
+              </Td>
+              <Td className="text-text-secondary">{d.pipelineRun?.pipeline?.name || '--'}</Td>
+              <Td className="text-text-tertiary">
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {formatRelative(d.createdAt)}
                 </span>
-              </td>
-            </tr>
+              </Td>
+            </Tr>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </Tbody>
+      </Table>
+    </TableContainer>
   );
 }

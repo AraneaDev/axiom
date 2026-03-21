@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
+import { parseServicePagination } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 const ENCRYPTION_KEY =
@@ -173,6 +174,7 @@ export async function listDeployments(
   envId: string,
   opts: { limit?: number; offset?: number } = {},
 ) {
+  const { take, skip } = parseServicePagination(opts, 20);
   return prisma.deployment.findMany({
     where: { environmentId: envId },
     include: {
@@ -180,8 +182,8 @@ export async function listDeployments(
       pipelineRun: { select: { id: true, status: true, pipeline: { select: { name: true } } } },
     },
     orderBy: { createdAt: 'desc' },
-    take: opts.limit ?? 20,
-    skip: opts.offset ?? 0,
+    take,
+    skip,
   });
 }
 

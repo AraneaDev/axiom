@@ -30,9 +30,11 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         className={cn(
           'w-full rounded-md border bg-surface px-3 py-2 text-sm transition-all duration-150',
           'placeholder:text-text-tertiary',
-          'focus:border-border-focus focus:ring-2 focus:ring-primary/15 focus:outline-none',
+          'focus-visible:border-border-focus focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:outline-none',
           'disabled:opacity-50 disabled:cursor-not-allowed',
-          error ? 'border-danger focus:border-danger focus:ring-danger/15' : 'border-border',
+          error
+            ? 'border-danger focus-visible:border-danger focus-visible:ring-danger/30'
+            : 'border-border',
           className,
         )}
         {...props}

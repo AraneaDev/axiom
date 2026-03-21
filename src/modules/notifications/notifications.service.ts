@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { broadcastToUser } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
+import { parseServicePagination } from '../../utils/pagination';
 
 /**
  * Create a notification and broadcast it to the user via WebSocket.
@@ -75,6 +76,7 @@ export async function listNotifications(
   userId: string,
   opts?: { unreadOnly?: boolean; limit?: number; offset?: number },
 ) {
+  const { take, skip } = parseServicePagination(opts, 50);
   const where: { userId: string; read?: boolean } = { userId };
   if (opts?.unreadOnly) where.read = false;
 
@@ -82,8 +84,8 @@ export async function listNotifications(
     prisma.notification.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: opts?.limit ?? 50,
-      skip: opts?.offset ?? 0,
+      take,
+      skip,
     }),
     prisma.notification.count({ where }),
   ]);

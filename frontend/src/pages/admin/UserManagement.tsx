@@ -14,7 +14,9 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { TableSkeleton } from '@/components/ui/Skeleton';
+import { Table, TableContainer, Tbody, Td, Th, Thead, Tr, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
+import { useDebounce } from '@/hooks/useDebounce';
 import { formatRelative } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
@@ -107,25 +109,13 @@ function UserDetailModal({ user, onClose }: { user: AdminUser; onClose: () => vo
  */
 export default function UserManagement() {
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebounce(search);
   const [page, setPage] = useState(0);
   const [viewUser, setViewUser] = useState<AdminUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
 
   const queryClient = useQueryClient();
   const { success, error: showError } = useToast();
-
-  // Debounce search
-  const [debounceTimer, setDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const handleSearch = (value: string) => {
-    setSearch(value);
-    if (debounceTimer) clearTimeout(debounceTimer);
-    const timer = setTimeout(() => {
-      setDebouncedSearch(value);
-      setPage(0);
-    }, 300);
-    setDebounceTimer(timer);
-  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'users', debouncedSearch, page],
@@ -183,7 +173,10 @@ export default function UserManagement() {
         <Input
           placeholder="Search users..."
           value={search}
-          onChange={(e) => handleSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(0);
+          }}
           className="pl-9"
         />
       </div>
@@ -192,34 +185,21 @@ export default function UserManagement() {
       {isLoading ? (
         <TableSkeleton rows={6} cols={5} />
       ) : (
-        <div className="rounded-xl border border-border bg-surface overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-secondary">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-text-tertiary uppercase tracking-wide">
-                  User
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-text-tertiary uppercase tracking-wide">
-                  Email
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-text-tertiary uppercase tracking-wide">
-                  Role
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-text-tertiary uppercase tracking-wide">
-                  Joined
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-text-tertiary uppercase tracking-wide">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+        <TableContainer>
+          <Table>
+            <Thead>
+              <TrHead>
+                <Th>User</Th>
+                <Th>Email</Th>
+                <Th>Role</Th>
+                <Th>Joined</Th>
+                <Th className="text-right">Actions</Th>
+              </TrHead>
+            </Thead>
+            <Tbody>
               {data?.users.map((user) => (
-                <tr
-                  key={user.id}
-                  className="border-b border-border-light last:border-0 hover:bg-surface-secondary transition-colors"
-                >
-                  <td className="px-4 py-3">
+                <Tr key={user.id}>
+                  <Td>
                     <div className="flex items-center gap-3">
                       <Avatar name={user.displayName} src={user.avatarUrl} size="sm" />
                       <div>
@@ -227,9 +207,9 @@ export default function UserManagement() {
                         <p className="text-xs text-text-tertiary">@{user.username}</p>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-text-secondary">{user.email}</td>
-                  <td className="px-4 py-3">
+                  </Td>
+                  <Td className="text-text-secondary">{user.email}</Td>
+                  <Td>
                     {user.orgMemberships.length > 0 ? (
                       <Badge
                         variant={user.orgMemberships[0].role === 'OWNER' ? 'default' : 'outline'}
@@ -240,11 +220,9 @@ export default function UserManagement() {
                     ) : (
                       <span className="text-text-tertiary text-xs">No org</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-text-secondary">
-                    {formatRelative(user.createdAt)}
-                  </td>
-                  <td className="px-4 py-3">
+                  </Td>
+                  <Td className="text-text-secondary">{formatRelative(user.createdAt)}</Td>
+                  <Td>
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
@@ -264,8 +242,8 @@ export default function UserManagement() {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
               {data?.users.length === 0 && (
                 <tr>
@@ -278,8 +256,8 @@ export default function UserManagement() {
                   </td>
                 </tr>
               )}
-            </tbody>
-          </table>
+            </Tbody>
+          </Table>
 
           {/* Pagination */}
           {(data?.total ?? 0) > PAGE_SIZE && (
@@ -292,7 +270,7 @@ export default function UserManagement() {
               />
             </div>
           )}
-        </div>
+        </TableContainer>
       )}
 
       {/* Modals */}

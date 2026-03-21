@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageLoader } from '@/components/ui/Spinner';
+import { Table, TableContainer, Tbody, Td, Th, Thead, Tr, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/utils';
 
@@ -110,31 +111,29 @@ export function EnvironmentSecrets({ repoId, envId }: EnvironmentSecretsProps) {
           }
         />
       ) : (
-        <div className="rounded-lg border border-border bg-surface overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-surface-secondary border-b border-border text-left">
-                <th className="px-4 py-2 font-medium text-text-secondary">Name</th>
-                <th className="px-4 py-2 font-medium text-text-secondary">Value</th>
-                <th className="px-4 py-2 font-medium text-text-secondary">Updated</th>
-                <th className="px-4 py-2 font-medium text-text-secondary w-24">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+        <TableContainer>
+          <Table>
+            <Thead>
+              <TrHead>
+                <Th>Name</Th>
+                <Th>Value</Th>
+                <Th>Updated</Th>
+                <Th className="w-24">Actions</Th>
+              </TrHead>
+            </Thead>
+            <Tbody>
               {variables.map((v: EnvironmentVariable) => (
-                <tr key={v.id} className="hover:bg-surface-secondary transition-colors">
-                  <td className="px-4 py-2">
+                <Tr key={v.id}>
+                  <Td>
                     <code className="text-xs font-mono text-text">{v.name}</code>
-                  </td>
-                  <td className="px-4 py-2">
+                  </Td>
+                  <Td>
                     <span className="text-xs text-text-tertiary font-mono flex items-center gap-1">
                       <EyeOff className="h-3 w-3" /> ****
                     </span>
-                  </td>
-                  <td className="px-4 py-2 text-text-tertiary text-xs">
-                    {formatRelative(v.updatedAt)}
-                  </td>
-                  <td className="px-4 py-2">
+                  </Td>
+                  <Td className="text-text-tertiary text-xs">{formatRelative(v.updatedAt)}</Td>
+                  <Td>
                     <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
@@ -157,12 +156,12 @@ export function EnvironmentSecrets({ repoId, envId }: EnvironmentSecretsProps) {
                         <Trash2 className="h-3.5 w-3.5 text-danger" />
                       </Button>
                     </div>
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </Tbody>
+          </Table>
+        </TableContainer>
       )}
 
       {/* Add Variable Modal */}
