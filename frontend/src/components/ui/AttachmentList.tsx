@@ -1,4 +1,5 @@
 import { Paperclip, Download, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { Button } from './Button';
 
@@ -23,6 +24,39 @@ function formatDate(dateStr: string): string {
 
 function isImage(mimeType: string): boolean {
   return mimeType.startsWith('image/');
+}
+
+function AuthImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let revoke: string | null = null;
+    const token = getAccessToken();
+    fetch(src, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((res) => (res.ok ? res.blob() : null))
+      .then((blob) => {
+        if (blob) {
+          revoke = URL.createObjectURL(blob);
+          setBlobUrl(revoke);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      if (revoke) URL.revokeObjectURL(revoke);
+    };
+  }, [src]);
+
+  if (!blobUrl) {
+    return (
+      <div
+        className={cn('flex items-center justify-center bg-surface-tertiary rounded', className)}
+      >
+        <Paperclip className="h-4 w-4 text-text-tertiary" />
+      </div>
+    );
+  }
+
+  return <img src={blobUrl} alt={alt} className={className} />;
 }
 
 interface AttachmentListProps {
@@ -74,7 +108,7 @@ export function AttachmentList({
           className="flex items-center gap-3 p-2 rounded-md border border-border bg-surface hover:bg-surface-secondary transition-colors"
         >
           {isImage(att.mimeType) ? (
-            <img
+            <AuthImage
               src={attachmentsApi.getDownloadUrl(att.id)}
               alt={att.originalName}
               className="h-10 w-10 rounded object-cover border border-border-light"
