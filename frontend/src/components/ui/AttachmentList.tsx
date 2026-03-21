@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 
 import { AttachmentPreview } from './AttachmentPreview';
 import { Button } from './Button';
+import { ConfirmDialog } from './ConfirmDialog';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
@@ -83,6 +84,7 @@ export function AttachmentList({
   className,
 }: AttachmentListProps) {
   const [previewAttachment, setPreviewAttachment] = useState<AttachmentMeta | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AttachmentMeta | null>(null);
 
   if (attachments.length === 0) return null;
 
@@ -166,7 +168,7 @@ export function AttachmentList({
                 size="xs"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDelete(att.id);
+                  setDeleteTarget(att);
                 }}
                 title="Delete attachment"
               >
@@ -181,6 +183,18 @@ export function AttachmentList({
         attachment={previewAttachment}
         open={previewAttachment !== null}
         onClose={() => setPreviewAttachment(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget && onDelete) onDelete(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        title="Delete Attachment"
+        description={`Are you sure you want to delete "${deleteTarget?.originalName ?? ''}"? This action cannot be undone.`}
+        confirmLabel="Delete"
       />
     </div>
   );
