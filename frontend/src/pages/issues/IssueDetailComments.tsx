@@ -3,9 +3,7 @@ import { MessageSquare, Pencil, Trash2, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
-import { type ActivityEvent } from '@/api/activity.api';
 import { issuesApi } from '@/api/issues.api';
-import { ActivityFeed } from '@/components/ActivityFeed';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
@@ -20,7 +18,6 @@ interface IssueDetailCommentsProps {
   issue: Issue;
   projectId: string;
   num: string;
-  activities: ActivityEvent[];
   commentBody: string;
   onCommentBodyChange: (value: string) => void;
   basePath?: string;
@@ -34,7 +31,6 @@ interface IssueDetailCommentsProps {
  * @param root0.issue
  * @param root0.projectId
  * @param root0.num
- * @param root0.activities
  * @param root0.commentBody
  * @param root0.onCommentBodyChange
  * @param root0.basePath
@@ -45,7 +41,6 @@ export function IssueDetailComments({
   issue,
   projectId,
   num,
-  activities,
   commentBody,
   onCommentBodyChange,
   basePath,
@@ -90,22 +85,50 @@ export function IssueDetailComments({
     setEditingCommentId(commentId);
   }
 
+  const sortedComments = [...(issue.comments ?? [])].reverse();
+
   return (
     <>
       <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-4">
-        Activity
-        {(issue.comments?.length ?? 0) > 0 && (
+        Comments
+        {sortedComments.length > 0 && (
           <span className="ml-2 inline-flex items-center rounded-full bg-surface-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary normal-case tracking-normal">
-            {issue.comments?.length}
+            {sortedComments.length}
           </span>
         )}
       </h2>
+
+      {/* Add comment -- input first */}
+      <div className="space-y-2 mb-6">
+        <MarkdownEditor
+          value={commentBody}
+          onChange={onCommentBodyChange}
+          placeholder="Write a comment... Use @ to mention users, ^ to reference issues"
+          compact
+          projectId={projectId}
+        />
+        <Button
+          size="sm"
+          disabled={!commentBody.trim() || commentMutation.isPending}
+          onClick={() => commentMutation.mutate()}
+        >
+          {commentMutation.isPending ? (
+            <Spinner className="h-4 w-4" />
+          ) : (
+            <>
+              <MessageSquare className="h-4 w-4" /> Comment
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Comments -- newest first */}
       <div className="relative mb-6">
-        {(issue.comments?.length ?? 0) > 0 && (
+        {sortedComments.length > 0 && (
           <div className="absolute left-4 top-6 bottom-6 w-px bg-border-light" />
         )}
         <div className="space-y-4">
-          {issue.comments?.map((comment) => (
+          {sortedComments.map((comment) => (
             <div key={comment.id} className="relative flex gap-3 group">
               <div className="relative z-10 shrink-0">
                 <Avatar name={comment.author.displayName} size="sm" />
@@ -191,38 +214,6 @@ export function IssueDetailComments({
           ))}
         </div>
       </div>
-
-      {/* Add comment */}
-      <div className="space-y-2">
-        <MarkdownEditor
-          value={commentBody}
-          onChange={onCommentBodyChange}
-          placeholder="Write a comment... Use @ to mention users, ^ to reference issues"
-          compact
-          projectId={projectId}
-        />
-        <Button
-          size="sm"
-          disabled={!commentBody.trim() || commentMutation.isPending}
-          onClick={() => commentMutation.mutate()}
-        >
-          {commentMutation.isPending ? (
-            <Spinner className="h-4 w-4" />
-          ) : (
-            <>
-              <MessageSquare className="h-4 w-4" /> Comment
-            </>
-          )}
-        </Button>
-      </div>
-
-      {/* Activity stream */}
-      {activities.length > 0 && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold mb-3">History</h2>
-          <ActivityFeed activities={activities} />
-        </div>
-      )}
 
       {/* Delete comment confirmation */}
       <ConfirmDialog

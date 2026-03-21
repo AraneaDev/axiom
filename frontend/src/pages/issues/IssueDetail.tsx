@@ -354,7 +354,6 @@ export default function IssueDetail() {
             issue={issue}
             projectId={currentProject!.id}
             num={num!}
-            activities={activityData?.activities ?? []}
             commentBody={commentBody}
             onCommentBodyChange={setCommentBody}
             basePath={`/${org}/${teamSlug}/${projectSlug}`}
@@ -378,6 +377,7 @@ export default function IssueDetail() {
             progress={progress}
             links={links}
             repos={repos}
+            activities={activityData?.activities ?? []}
             editingField={editingField}
             onEditField={setEditingField}
             onUpdate={(data) => updateMutation.mutate(data)}

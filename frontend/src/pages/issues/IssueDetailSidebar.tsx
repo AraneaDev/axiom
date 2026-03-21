@@ -1,6 +1,10 @@
+import { History } from 'lucide-react';
+
 import { IssueDetailFieldsPanel } from './IssueDetailFieldsPanel';
 import { IssueDetailMetaPanel } from './IssueDetailMetaPanel';
 
+import { type ActivityEvent } from '@/api/activity.api';
+import { ActivityFeed } from '@/components/ActivityFeed';
 import type { Issue, Sprint } from '@/lib/types';
 
 interface TeamMember {
@@ -40,6 +44,7 @@ interface IssueDetailSidebarProps {
   progress: { total: number; completed: number; percentage: number } | undefined;
   links: IssueLink[];
   repos: { id: string; slug: string; name: string; defaultBranch: string }[];
+  activities: ActivityEvent[];
   editingField: string | null;
   onEditField: (field: string | null) => void;
   onUpdate: (data: Record<string, unknown>) => void;
@@ -61,6 +66,7 @@ interface IssueDetailSidebarProps {
  * @param root0.progress
  * @param root0.links
  * @param root0.repos
+ * @param root0.activities
  * @param root0.editingField
  * @param root0.onEditField
  * @param root0.onUpdate
@@ -79,6 +85,7 @@ export function IssueDetailSidebar({
   progress,
   links,
   repos,
+  activities,
   editingField,
   onEditField,
   onUpdate,
@@ -110,6 +117,16 @@ export function IssueDetailSidebar({
       >
         {childIssues}
       </IssueDetailMetaPanel>
+
+      {activities.length > 0 && (
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
+            <History className="h-3.5 w-3.5" />
+            History
+          </h3>
+          <ActivityFeed activities={activities} />
+        </div>
+      )}
     </div>
   );
 }

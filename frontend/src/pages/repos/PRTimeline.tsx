@@ -151,7 +151,40 @@ export function PRTimeline({
         </div>
       )}
 
-      {/* Comments */}
+      {/* Add comment -- input first */}
+      {pr.status === 'OPEN' && (
+        <div className="space-y-2">
+          <MarkdownEditor
+            value={commentBody}
+            onChange={onCommentBodyChange}
+            placeholder="Leave a comment..."
+            compact
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={!commentBody.trim() || isSubmittingComment}
+              onClick={onSubmitComment}
+            >
+              {isSubmittingComment ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <>
+                  <GitCommitHorizontal className="h-4 w-4" /> Comment
+                </>
+              )}
+            </Button>
+            <Button size="sm" variant="secondary" onClick={onApprove}>
+              <Check className="h-4 w-4" /> Approve
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onRequestChanges}>
+              <X className="h-4 w-4" /> Request changes
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Comments -- newest first */}
       {pr.comments && pr.comments.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -169,7 +202,7 @@ export function PRTimeline({
             )}
           </div>
           <div className="space-y-2">
-            {pr.comments.map((c) => (
+            {[...pr.comments].reverse().map((c) => (
               <div key={c.id} className="rounded-lg border border-border bg-surface p-3 group">
                 {c.filePath && (
                   <p className="text-xs font-mono text-text-secondary mb-1">
@@ -236,39 +269,6 @@ export function PRTimeline({
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Add comment */}
-      {pr.status === 'OPEN' && (
-        <div className="space-y-2">
-          <MarkdownEditor
-            value={commentBody}
-            onChange={onCommentBodyChange}
-            placeholder="Leave a comment..."
-            compact
-          />
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              disabled={!commentBody.trim() || isSubmittingComment}
-              onClick={onSubmitComment}
-            >
-              {isSubmittingComment ? (
-                <Spinner className="h-4 w-4" />
-              ) : (
-                <>
-                  <GitCommitHorizontal className="h-4 w-4" /> Comment
-                </>
-              )}
-            </Button>
-            <Button size="sm" variant="secondary" onClick={onApprove}>
-              <Check className="h-4 w-4" /> Approve
-            </Button>
-            <Button size="sm" variant="ghost" onClick={onRequestChanges}>
-              <X className="h-4 w-4" /> Request changes
-            </Button>
           </div>
         </div>
       )}
