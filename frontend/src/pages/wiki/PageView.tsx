@@ -81,13 +81,14 @@ export default function PageView() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', page?.id] }),
   });
 
-  const tocEntries = useMemo(() => (page?.body ? extractToc(page.body) : []), [page]);
+  const pageBody = page?.body ?? '';
+  const tocEntries = useMemo(() => (pageBody ? extractToc(pageBody) : []), [pageBody]);
 
-  // Push TOC entries up to WikiLayout
+  // Push TOC entries up to WikiLayout whenever page changes
   useEffect(() => {
     setTocEntries(tocEntries);
     return () => setTocEntries([]);
-  }, [tocEntries, setTocEntries]);
+  }, [pageSlug, tocEntries, setTocEntries]);
 
   const addLabelMutation = useMutation({
     mutationFn: (label: string) => wikiApi.addPageLabel(page!.id, label),
