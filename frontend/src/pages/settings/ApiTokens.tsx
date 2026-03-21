@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { usersApi } from '@/api/users.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
@@ -185,26 +185,18 @@ export default function ApiTokens() {
         </div>
       )}
 
-      <Modal open={!!revokeId} onClose={() => setRevokeId(null)} title="Revoke Token" size="sm">
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to revoke this token? Any applications using it will lose access
-          immediately.
-        </p>
-        <ModalFooter>
-          <Button variant="secondary" onClick={() => setRevokeId(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              handleRevoke(revokeId!);
-              setRevokeId(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4" /> Revoke
-          </Button>
-        </ModalFooter>
-      </Modal>
+      <ConfirmDialog
+        open={!!revokeId}
+        onClose={() => setRevokeId(null)}
+        onConfirm={() => {
+          if (revokeId) handleRevoke(revokeId);
+          setRevokeId(null);
+        }}
+        title="Revoke Token"
+        description="Are you sure you want to revoke this token? Any applications using it will lose access immediately."
+        confirmLabel="Revoke"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

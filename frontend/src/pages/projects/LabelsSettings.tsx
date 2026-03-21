@@ -10,9 +10,9 @@ import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 
@@ -226,7 +226,7 @@ export default function LabelsSettings() {
           <div className="flex items-center gap-2 pt-1">
             <span className="text-xs text-text-tertiary">Preview:</span>
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white"
+              className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-on-primary"
               style={{ backgroundColor: formColor }}
             >
               {formName || 'label'}
@@ -334,7 +334,7 @@ export default function LabelsSettings() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{label.name}</span>
                       <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-on-primary"
                         style={{ backgroundColor: label.color }}
                       >
                         {label.name}
@@ -369,30 +369,18 @@ export default function LabelsSettings() {
           ))}
         </div>
       )}
-      <Modal
+      <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget);
+          setDeleteTarget(null);
+        }}
         title="Delete label"
-        size="sm"
-      >
-        <p className="text-secondary">
-          Delete label &quot;{deleteTarget}&quot;? It will be removed from all issues.
-        </p>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (deleteTarget) deleteMutation.mutate(deleteTarget);
-              setDeleteTarget(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
-        </ModalFooter>
-      </Modal>
+        description={`Delete label "${deleteTarget}"? It will be removed from all issues.`}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

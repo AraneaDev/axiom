@@ -176,7 +176,7 @@ export default function Dashboard() {
                 >
                   <div className="h-16 bg-primary-light flex items-end px-5 pb-3">
                     <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center shadow-sm -mb-5 ring-2 ring-surface">
-                      <span className="text-white text-sm font-bold">{org.name[0]}</span>
+                      <span className="text-on-primary text-sm font-bold">{org.name[0]}</span>
                     </div>
                   </div>
                   <div className="p-5 pt-7">

@@ -1,21 +1,35 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Plus, FileText, X, ArrowRight, Trash2, Library, Files } from 'lucide-react';
+import {
+  ChevronRight,
+  Plus,
+  FileText,
+  Paperclip,
+  X,
+  ArrowRight,
+  Library,
+  Files,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 
 import { PageViewHeader } from './PageViewHeader';
 import { PageViewSidebar, extractToc } from './PageViewSidebar';
 
+import { attachmentsApi } from '@/api/attachments.api';
 import { wikiApi } from '@/api/wiki.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { PageComments } from '@/components/wiki/PageComments';
 import type { PageTreeNode } from '@/lib/types';
+import { useAuthStore } from '@/stores/auth.store';
 
 function countTreePages(nodes: PageTreeNode[]): number {
   return nodes.reduce(
@@ -73,6 +87,19 @@ export default function PageView() {
     queryKey: ['pageLabels', page?.id],
     queryFn: () => wikiApi.listPageLabels(page!.id),
     enabled: !!page?.id,
+  });
+
+  const { user } = useAuthStore();
+
+  const { data: pageAttachments = [] } = useQuery({
+    queryKey: ['attachments', page?.id],
+    queryFn: () => attachmentsApi.list({ pageId: page!.id }),
+    enabled: !!page?.id,
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: (id: string) => attachmentsApi.remove(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', page?.id] }),
   });
 
   const tocEntries = useMemo(() => (page?.body ? extractToc(page.body) : []), [page?.body]);
@@ -287,6 +314,29 @@ export default function PageView() {
             </div>
           )}
 
+          {/* Attachments */}
+          <div className="mt-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
+              <Paperclip className="h-3.5 w-3.5" />
+              Attachments
+              {pageAttachments.length > 0 && (
+                <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary normal-case tracking-normal">
+                  {pageAttachments.length}
+                </span>
+              )}
+            </h2>
+            <AttachmentList
+              attachments={pageAttachments}
+              currentUserId={user?.id}
+              onDelete={(id) => deleteAttachmentMutation.mutate(id)}
+            />
+            <FileUpload
+              className="mt-3"
+              uploadFn={(file) => attachmentsApi.upload(file, { pageId: page.id })}
+              onUpload={() => queryClient.invalidateQueries({ queryKey: ['attachments', page.id] })}
+            />
+          </div>
+
           {/* Comments */}
           <div className="mt-8 border-t border-border-light pt-6">
             <PageComments pageId={page.id} />
@@ -326,32 +376,18 @@ export default function PageView() {
       </Modal>
 
       {/* Delete confirmation modal */}
-      <Modal
+      <ConfirmDialog
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => {
+          setShowDeleteConfirm(false);
+          deleteMutation.mutate();
+        }}
         title="Delete Page"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-text-secondary">
-            Are you sure you want to delete &quot;{page.title}&quot;? This action cannot be undone.
-          </p>
-          <ModalFooter>
-            <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>
-              <X className="h-4 w-4" /> Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                setShowDeleteConfirm(false);
-                deleteMutation.mutate();
-              }}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="h-4 w-4" /> Delete
-            </Button>
-          </ModalFooter>
-        </div>
-      </Modal>
+        description={`Are you sure you want to delete "${page.title}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

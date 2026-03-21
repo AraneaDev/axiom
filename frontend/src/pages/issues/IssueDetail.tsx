@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, Check, Eye, EyeOff, Pencil, X } from 'lucide-react';
+import { ArrowUp, Check, Eye, EyeOff, Paperclip, Pencil, X } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
 
@@ -7,6 +7,7 @@ import { IssueDetailComments } from './IssueDetailComments';
 import { IssueDetailSidebar } from './IssueDetailSidebar';
 
 import { activityApi } from '@/api/activity.api';
+import { attachmentsApi } from '@/api/attachments.api';
 import { issuesApi } from '@/api/issues.api';
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
@@ -15,12 +16,15 @@ import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Button } from '@/components/ui/Button';
+import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn, formatRelative } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth.store';
 
 /**
  *
@@ -121,6 +125,19 @@ export default function IssueDetail() {
     queryKey: ['activity', currentProject?.id, num],
     queryFn: () => activityApi.listIssueActivity(currentProject!.id, parseInt(num!), { limit: 50 }),
     enabled: !!currentProject?.id && !!num,
+  });
+
+  const { user } = useAuthStore();
+
+  const { data: attachments = [] } = useQuery({
+    queryKey: ['attachments', issue?.id],
+    queryFn: () => attachmentsApi.list({ issueId: issue!.id }),
+    enabled: !!issue?.id,
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: (id: string) => attachmentsApi.remove(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', issue?.id] }),
   });
 
   const { data: children = [] } = useQuery({
@@ -305,6 +322,31 @@ export default function IssueDetail() {
                 </Button>
               </div>
             )}
+          </div>
+
+          {/* Attachments */}
+          <div className="mb-8">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
+              <Paperclip className="h-3.5 w-3.5" />
+              Attachments
+              {attachments.length > 0 && (
+                <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary normal-case tracking-normal">
+                  {attachments.length}
+                </span>
+              )}
+            </h2>
+            <AttachmentList
+              attachments={attachments}
+              currentUserId={user?.id}
+              onDelete={(id) => deleteAttachmentMutation.mutate(id)}
+            />
+            <FileUpload
+              className="mt-3"
+              uploadFn={(file) => attachmentsApi.upload(file, { issueId: issue.id })}
+              onUpload={() =>
+                queryClient.invalidateQueries({ queryKey: ['attachments', issue.id] })
+              }
+            />
           </div>
 
           {/* Comments and activity */}

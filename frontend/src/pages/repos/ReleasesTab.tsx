@@ -24,9 +24,9 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -360,31 +360,18 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
       )}
 
       {/* Delete release confirmation */}
-      <Modal
+      <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget);
+          setDeleteTarget(null);
+        }}
         title="Delete Release"
-        size="sm"
-      >
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to delete release{' '}
-          <code className="text-text font-mono">{deleteTarget}</code>? This action cannot be undone.
-        </p>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (deleteTarget) deleteMutation.mutate(deleteTarget);
-              setDeleteTarget(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
-        </ModalFooter>
-      </Modal>
+        description={`Are you sure you want to delete release ${deleteTarget}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { Link, useParams } from 'react-router';
 
 import { pipelinesApi, type RunStatus, type Pipeline } from '@/api/pipelines.api';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
@@ -308,29 +309,18 @@ export default function PipelinesTab({ repoId }: Props) {
       )}
 
       {/* Delete confirmation modal */}
-      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Pipeline">
-        <div className="space-y-4">
-          <p className="text-sm text-text-secondary">
-            Are you sure you want to delete pipeline &quot;{deleteTarget?.name}&quot;? This action
-            cannot be undone.
-          </p>
-          <ModalFooter>
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-              <X className="h-4 w-4" /> Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
-                setDeleteTarget(null);
-              }}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="h-4 w-4" /> Delete
-            </Button>
-          </ModalFooter>
-        </div>
-      </Modal>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        title="Delete Pipeline"
+        description={`Are you sure you want to delete pipeline "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

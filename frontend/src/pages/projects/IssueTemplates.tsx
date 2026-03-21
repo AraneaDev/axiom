@@ -11,10 +11,10 @@ import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
@@ -365,30 +365,18 @@ export default function IssueTemplates() {
       )}
 
       {/* Delete template confirmation */}
-      <Modal
+      <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget);
+          setDeleteTarget(null);
+        }}
         title="Delete Template"
-        size="sm"
-      >
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to delete this template? This action cannot be undone.
-        </p>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (deleteTarget) deleteMutation.mutate(deleteTarget);
-              setDeleteTarget(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
-        </ModalFooter>
-      </Modal>
+        description="Are you sure you want to delete this template? This action cannot be undone."
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

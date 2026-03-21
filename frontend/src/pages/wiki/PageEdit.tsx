@@ -1,21 +1,25 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { Eye, EyeOff, Save, X, FileText, Wifi, WifiOff } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Eye, EyeOff, Paperclip, Save, X, FileText, Wifi, WifiOff } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
+import { attachmentsApi } from '@/api/attachments.api';
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
 import { CollaborativeEditor } from '@/components/editor/CollaborativeEditor';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { PresenceIndicators } from '@/components/wiki/PresenceIndicators';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth.store';
 
 /**
  *
@@ -23,6 +27,8 @@ import { cn } from '@/lib/utils';
 export default function PageEdit() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
 
   const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
   const currentOrg = orgs?.find((o) => o.slug === org);
@@ -52,6 +58,17 @@ export default function PageEdit() {
     queryKey: ['page', currentSpace?.id, pageSlug],
     queryFn: () => wikiApi.getPage(currentSpace!.id, pageSlug!),
     enabled: !!currentSpace?.id && !isNew,
+  });
+
+  const { data: pageAttachments = [] } = useQuery({
+    queryKey: ['attachments', existingPage?.id],
+    queryFn: () => attachmentsApi.list({ pageId: existingPage!.id }),
+    enabled: !!existingPage?.id,
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: (id: string) => attachmentsApi.remove(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', existingPage?.id] }),
   });
 
   // Real-time collaboration (only for existing pages, not new ones)
@@ -286,6 +303,33 @@ export default function PageEdit() {
             </div>
           )}
         </div>
+
+        {/* Attachments (existing pages only) */}
+        {!isNew && existingPage?.id && (
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
+              <Paperclip className="h-3.5 w-3.5" />
+              Attachments
+              {pageAttachments.length > 0 && (
+                <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary normal-case tracking-normal">
+                  {pageAttachments.length}
+                </span>
+              )}
+            </h2>
+            <AttachmentList
+              attachments={pageAttachments}
+              currentUserId={user?.id}
+              onDelete={(id) => deleteAttachmentMutation.mutate(id)}
+            />
+            <FileUpload
+              className="mt-3"
+              uploadFn={(file) => attachmentsApi.upload(file, { pageId: existingPage.id })}
+              onUpload={() =>
+                queryClient.invalidateQueries({ queryKey: ['attachments', existingPage.id] })
+              }
+            />
+          </div>
+        )}
       </div>
     </div>
   );

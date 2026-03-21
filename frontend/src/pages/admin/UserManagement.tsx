@@ -1,16 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Users,
-  Search,
-  Eye,
-  Trash2,
-  ArrowLeft,
-  Shield,
-  Mail,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { Users, Search, Eye, Trash2, ArrowLeft, Shield, Mail, Calendar } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -19,9 +8,11 @@ import type { AdminUser } from '@/api/admin.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/utils';
@@ -109,40 +100,6 @@ function UserDetailModal({ user, onClose }: { user: AdminUser; onClose: () => vo
   );
 }
 
-// ─── Delete Confirmation ────────────────────────────────────
-
-function DeleteConfirmModal({
-  user,
-  onClose,
-  onConfirm,
-  isDeleting,
-}: {
-  user: AdminUser;
-  onClose: () => void;
-  onConfirm: () => void;
-  isDeleting: boolean;
-}) {
-  return (
-    <Modal open onClose={onClose} title="Delete User">
-      <div className="space-y-4">
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to delete{' '}
-          <span className="font-semibold text-text">@{user.username}</span>? This action cannot be
-          undone. All their data will be permanently removed.
-        </p>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={isDeleting}>
-            <ArrowLeft className="h-4 w-4" /> Cancel
-          </Button>
-          <Button variant="danger" size="sm" onClick={onConfirm} disabled={isDeleting}>
-            <Trash2 className="h-4 w-4" /> {isDeleting ? 'Deleting...' : 'Delete User'}
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 // ─── Main ───────────────────────────────────────────────────
 
 /**
@@ -200,8 +157,6 @@ export default function UserManagement() {
       setViewUser(user);
     }
   };
-
-  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
 
   return (
     <div className="mx-auto max-w-6xl p-6 space-y-6">
@@ -327,29 +282,14 @@ export default function UserManagement() {
           </table>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-              <p className="text-xs text-text-tertiary">
-                Page {page + 1} of {totalPages}
-              </p>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  disabled={page === 0}
-                >
-                  <ChevronLeft className="h-4 w-4" /> Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                  disabled={page >= totalPages - 1}
-                >
-                  Next <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+          {(data?.total ?? 0) > PAGE_SIZE && (
+            <div className="px-4 border-t border-border">
+              <Pagination
+                total={data?.total ?? 0}
+                limit={PAGE_SIZE}
+                offset={page * PAGE_SIZE}
+                onPageChange={(offset) => setPage(Math.floor(offset / PAGE_SIZE))}
+              />
             </div>
           )}
         </div>
@@ -357,14 +297,15 @@ export default function UserManagement() {
 
       {/* Modals */}
       {viewUser && <UserDetailModal user={viewUser} onClose={() => setViewUser(null)} />}
-      {deleteTarget && (
-        <DeleteConfirmModal
-          user={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
-          isDeleting={deleteMutation.isPending}
-        />
-      )}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title="Delete User"
+        description={`Are you sure you want to delete @${deleteTarget?.username ?? ''}? This action cannot be undone. All their data will be permanently removed.`}
+        confirmLabel="Delete User"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

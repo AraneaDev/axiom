@@ -10,7 +10,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
 import type { Issue } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
@@ -225,30 +225,18 @@ export function IssueDetailComments({
       )}
 
       {/* Delete comment confirmation */}
-      <Modal
+      <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteCommentMutation.mutate(deleteTarget);
+          setDeleteTarget(null);
+        }}
         title="Delete Comment"
-        size="sm"
-      >
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to delete this comment? This action cannot be undone.
-        </p>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (deleteTarget) deleteCommentMutation.mutate(deleteTarget);
-              setDeleteTarget(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
-        </ModalFooter>
-      </Modal>
+        description="Are you sure you want to delete this comment? This action cannot be undone."
+        confirmLabel="Delete"
+        loading={deleteCommentMutation.isPending}
+      />
     </>
   );
 }

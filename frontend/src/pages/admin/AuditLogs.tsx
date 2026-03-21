@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { Pagination } from '@/components/ui/Pagination';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
 
@@ -179,12 +180,6 @@ export default function AuditLogs() {
 
   const logs = data?.logs ?? [];
   const total = data?.total ?? 0;
-  const currentPage = Math.floor((filters.offset ?? 0) / PAGE_SIZE);
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-
-  function goToPage(page: number) {
-    setFilters((f) => ({ ...f, offset: page * PAGE_SIZE }));
-  }
 
   return (
     <div className="flex-1 overflow-auto p-6">
@@ -330,33 +325,14 @@ export default function AuditLogs() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-              <span className="text-sm text-text-secondary">
-                Showing {(filters.offset ?? 0) + 1}--
-                {Math.min((filters.offset ?? 0) + PAGE_SIZE, total)} of {total}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === 0}
-                  onClick={() => goToPage(currentPage - 1)}
-                >
-                  <ChevronRight className="h-4 w-4 rotate-180" /> Prev
-                </Button>
-                <span className="text-sm text-text-secondary">
-                  Page {currentPage + 1} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages - 1}
-                  onClick={() => goToPage(currentPage + 1)}
-                >
-                  Next <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+          {total > PAGE_SIZE && (
+            <div className="px-4 border-t border-border">
+              <Pagination
+                total={total}
+                limit={PAGE_SIZE}
+                offset={filters.offset ?? 0}
+                onPageChange={(offset) => setFilters((f) => ({ ...f, offset }))}
+              />
             </div>
           )}
         </div>

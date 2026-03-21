@@ -5,9 +5,10 @@ import { useState } from 'react';
 import { deploymentsApi } from '@/api/deployments.api';
 import type { DeploymentEnvironment } from '@/api/deployments.api';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
+import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/utils';
 
@@ -282,30 +283,18 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
       </Modal>
 
       {/* Delete environment confirmation */}
-      <Modal
+      <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget);
+          setDeleteTarget(null);
+        }}
         title="Delete Environment"
-        size="sm"
-      >
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to delete this environment? All deployment history will be lost.
-        </p>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (deleteTarget) deleteMutation.mutate(deleteTarget);
-              setDeleteTarget(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
-        </ModalFooter>
-      </Modal>
+        description="Are you sure you want to delete this environment? All deployment history will be lost."
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

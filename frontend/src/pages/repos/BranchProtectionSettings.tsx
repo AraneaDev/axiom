@@ -6,6 +6,7 @@ import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
@@ -167,31 +168,15 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
         <ProtectionRuleFormModal repoId={repoId} rule={editing} onClose={handleCloseForm} />
       )}
 
-      <Modal
+      <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         title="Delete protection rule"
-        size="sm"
-      >
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to delete the protection rule for{' '}
-          <span className="font-mono text-text">{deleteTarget?.pattern}</span>? This cannot be
-          undone.
-        </p>
-        <ModalFooter>
-          <Button variant="secondary" size="sm" onClick={() => setDeleteTarget(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-            disabled={deleteMutation.isPending}
-          >
-            <Trash2 className="h-4 w-4" /> {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-          </Button>
-        </ModalFooter>
-      </Modal>
+        description={`Are you sure you want to delete the protection rule for "${deleteTarget?.pattern}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

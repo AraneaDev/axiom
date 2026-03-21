@@ -340,7 +340,7 @@ export default function IssueList() {
         <Button variant="secondary" size="sm" onClick={() => setShowFilters(!showFilters)}>
           <Filter className="h-3.5 w-3.5" /> Filters
           {activeFilterCount > 0 && (
-            <span className="ml-1 bg-primary text-white text-[10px] rounded-full px-1.5 py-0.5">
+            <span className="ml-1 bg-primary text-on-primary text-[10px] rounded-full px-1.5 py-0.5">
               {activeFilterCount}
             </span>
           )}

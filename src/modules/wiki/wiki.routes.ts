@@ -9,6 +9,9 @@ import {
   requireWikiTemplateAccess,
 } from '../../middleware/rbac';
 
+import * as commentsController from './wiki-comments.controller';
+import * as labelsController from './wiki-labels.controller';
+import * as templatesController from './wiki-templates.controller';
 import * as wikiController from './wiki.controller';
 
 const router = Router();
@@ -52,26 +55,42 @@ router.get(
 );
 
 // Templates (space-scoped require space access, template-scoped require template access)
-router.post('/spaces/:spaceId/templates', requireWikiSpaceAccess(), wikiController.createTemplate);
-router.get('/spaces/:spaceId/templates', requireWikiSpaceAccess(), wikiController.listTemplates);
-router.get('/templates/:templateId', requireWikiTemplateAccess(), wikiController.getTemplate);
-router.delete('/templates/:templateId', requireWikiTemplateAccess(), wikiController.deleteTemplate);
+router.post(
+  '/spaces/:spaceId/templates',
+  requireWikiSpaceAccess(),
+  templatesController.createTemplate,
+);
+router.get(
+  '/spaces/:spaceId/templates',
+  requireWikiSpaceAccess(),
+  templatesController.listTemplates,
+);
+router.get('/templates/:templateId', requireWikiTemplateAccess(), templatesController.getTemplate);
+router.delete(
+  '/templates/:templateId',
+  requireWikiTemplateAccess(),
+  templatesController.deleteTemplate,
+);
 
 // Page comments (require org membership via page lookup)
-router.post('/pages/:pageId/comments', requireWikiPageAccess(), wikiController.addPageComment);
-router.get('/pages/:pageId/comments', requireWikiPageAccess(), wikiController.listPageComments);
-router.patch('/comments/:commentId', requireWikiCommentAccess(), wikiController.patchComment);
-router.delete('/comments/:commentId', requireWikiCommentAccess(), wikiController.deletePageComment);
+router.post('/pages/:pageId/comments', requireWikiPageAccess(), commentsController.addPageComment);
+router.get('/pages/:pageId/comments', requireWikiPageAccess(), commentsController.listPageComments);
+router.patch('/comments/:commentId', requireWikiCommentAccess(), commentsController.patchComment);
+router.delete(
+  '/comments/:commentId',
+  requireWikiCommentAccess(),
+  commentsController.deletePageComment,
+);
 
 // Page labels (require org membership via page lookup)
-router.get('/pages/:pageId/labels', requireWikiPageAccess(), wikiController.listPageLabels);
-router.post('/pages/:pageId/labels', requireWikiPageAccess(), wikiController.addPageLabel);
+router.get('/pages/:pageId/labels', requireWikiPageAccess(), labelsController.listPageLabels);
+router.post('/pages/:pageId/labels', requireWikiPageAccess(), labelsController.addPageLabel);
 router.delete(
   '/pages/:pageId/labels/:label',
   requireWikiPageAccess(),
-  wikiController.removePageLabel,
+  labelsController.removePageLabel,
 );
-router.get('/spaces/:spaceId/labels', requireWikiSpaceAccess(), wikiController.searchByLabel);
+router.get('/spaces/:spaceId/labels', requireWikiSpaceAccess(), labelsController.searchByLabel);
 
 // Move / Copy (require org membership via page lookup)
 router.post('/pages/:pageId/move', requireWikiPageAccess(), wikiController.movePage);

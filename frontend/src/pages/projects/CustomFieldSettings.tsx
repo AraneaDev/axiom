@@ -1,14 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Plus,
-  Settings,
-  Trash2,
-  GripVertical,
-  Save,
-  X,
-  ToggleLeft,
-  ToggleRight,
-} from 'lucide-react';
+import { Plus, Settings, Trash2, GripVertical, Save, X } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 
@@ -18,12 +9,13 @@ import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { Toggle } from '@/components/ui/Toggle';
 
 const FIELD_TYPES = [
   { value: 'TEXT', label: 'Text' },
@@ -205,18 +197,7 @@ export default function CustomFieldSettings() {
           )}
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => setFormRequired(!formRequired)}
-              title={formRequired ? 'Mark as optional' : 'Mark as required'}
-            >
-              {formRequired ? (
-                <ToggleRight className="h-5 w-5 text-primary" />
-              ) : (
-                <ToggleLeft className="h-5 w-5" />
-              )}
-            </Button>
+            <Toggle checked={formRequired} onChange={(val) => setFormRequired(val)} size="sm" />
             <span className="text-sm text-text-secondary">Required</span>
           </div>
 
@@ -276,18 +257,11 @@ export default function CustomFieldSettings() {
                     />
                   )}
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => setFormRequired(!formRequired)}
-                      title={formRequired ? 'Mark as optional' : 'Mark as required'}
-                    >
-                      {formRequired ? (
-                        <ToggleRight className="h-5 w-5 text-primary" />
-                      ) : (
-                        <ToggleLeft className="h-5 w-5" />
-                      )}
-                    </Button>
+                    <Toggle
+                      checked={formRequired}
+                      onChange={(val) => setFormRequired(val)}
+                      size="sm"
+                    />
                     <span className="text-sm text-text-secondary">Required</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -348,31 +322,18 @@ export default function CustomFieldSettings() {
       )}
 
       {/* Delete field confirmation */}
-      <Modal
+      <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget);
+          setDeleteTarget(null);
+        }}
         title="Delete Custom Field"
-        size="sm"
-      >
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to delete this field and all its values? This action cannot be
-          undone.
-        </p>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (deleteTarget) deleteMutation.mutate(deleteTarget);
-              setDeleteTarget(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
-        </ModalFooter>
-      </Modal>
+        description="Are you sure you want to delete this field and all its values? This action cannot be undone."
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

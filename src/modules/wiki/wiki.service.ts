@@ -289,219 +289,27 @@ export async function getPageTree(spaceId: string) {
   }); // end cacheable
 }
 
-// ─── Templates ──────────────────────────────────────────────
-
-/**
- * Create a page template in a wiki space.
- * @param spaceId - The wiki space ID
- * @param data - Template data including name, body, and optional description
- * @param data.name
- * @param data.body
- * @param data.description
- * @returns The created template record
- */
-export async function createTemplate(
-  spaceId: string,
-  data: { name: string; body: string; description?: string },
-) {
-  return prisma.pageTemplate.create({
-    data: { spaceId, ...data },
-  });
-}
-
-/**
- * List all page templates in a wiki space.
- * @param spaceId - The wiki space ID
- * @returns List of template records ordered by creation date
- */
-export async function listTemplates(spaceId: string) {
-  return prisma.pageTemplate.findMany({
-    where: { spaceId },
-    orderBy: { createdAt: 'desc' },
-  });
-}
-
-/**
- * Retrieve a page template by ID.
- * @param id - The template ID
- * @returns The template record
- * @throws {AppError} 404 if template not found
- */
-export async function getTemplate(id: string) {
-  const template = await prisma.pageTemplate.findUnique({ where: { id } });
-  if (!template) throw new AppError(404, 'Template not found');
-  return template;
-}
-
-/**
- * Delete a page template by ID.
- * @param id - The template ID
- * @throws {AppError} 404 if template not found
- */
-export async function deleteTemplate(id: string) {
-  const template = await prisma.pageTemplate.findUnique({ where: { id } });
-  if (!template) throw new AppError(404, 'Template not found');
-  await prisma.pageTemplate.delete({ where: { id } });
-}
-
-// ─── Page Comments ──────────────────────────────────────────
-
-/**
- * Add a comment to a wiki page, optionally anchored to specific text.
- * @param pageId - The page to comment on
- * @param userId - The user authoring the comment
- * @param body - The comment body text
- * @param anchorText - Optional text selection the comment is anchored to
- * @returns The created comment with user relation
- * @throws {AppError} 404 if page not found
- */
-export async function addPageComment(
-  pageId: string,
-  userId: string,
-  body: string,
-  anchorText?: string,
-) {
-  const page = await prisma.page.findUnique({ where: { id: pageId } });
-  if (!page) throw new AppError(404, 'Page not found');
-
-  return prisma.pageComment.create({
-    data: { pageId, userId, body, anchorText },
-    include: { user: { select: USER_BASIC_SELECT } },
-  });
-}
-
-/**
- * List all comments on a wiki page, ordered chronologically.
- * @param pageId - The page to list comments for
- * @returns List of comment records with user relations
- */
-export async function listPageComments(pageId: string) {
-  return prisma.pageComment.findMany({
-    where: { pageId },
-    include: { user: { select: USER_BASIC_SELECT } },
-    orderBy: { createdAt: 'asc' },
-  });
-}
-
-/**
- * Update a wiki page comment (only the author may edit).
- * @param commentId - The comment to update
- * @param userId - The user attempting the update
- * @param body - The new comment body text
- * @returns The updated comment with user relation
- * @throws {AppError} 404 if comment not found
- * @throws {AppError} 403 if user is not the comment author
- */
-export async function updatePageComment(commentId: string, userId: string, body: string) {
-  const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
-  if (comment.userId !== userId) throw new AppError(403, 'You can only edit your own comments');
-
-  return prisma.pageComment.update({
-    where: { id: commentId },
-    data: { body },
-    include: { user: { select: USER_BASIC_SELECT } },
-  });
-}
-
-/**
- * Toggle the resolved status of a wiki page comment.
- * @param commentId - The comment to resolve/unresolve
- * @returns The updated comment with user relation
- * @throws {AppError} 404 if comment not found
- */
-export async function resolveComment(commentId: string) {
-  const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
-
-  return prisma.pageComment.update({
-    where: { id: commentId },
-    data: { resolved: !comment.resolved },
-    include: { user: { select: USER_BASIC_SELECT } },
-  });
-}
-
-/**
- * Delete a wiki page comment.
- * @param commentId - The comment to delete
- * @throws {AppError} 404 if comment not found
- */
-export async function deletePageComment(commentId: string) {
-  const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
-  await prisma.pageComment.delete({ where: { id: commentId } });
-}
-
-// ─── Page Labels ────────────────────────────────────────────
-
-/**
- * List all labels for a wiki page.
- * @param pageId - The page to list labels for
- * @returns Array of page label records
- */
-export async function listPageLabels(pageId: string) {
-  return prisma.pageLabel.findMany({
-    where: { pageId },
-    orderBy: { label: 'asc' },
-  });
-}
-
-/**
- *
- * @param pageId
- * @param label
- */
-export async function addLabel(pageId: string, label: string) {
-  const page = await prisma.page.findUnique({ where: { id: pageId } });
-  if (!page) throw new AppError(404, 'Page not found');
-
-  return prisma.pageLabel.create({
-    data: { pageId, label },
-  });
-}
-
-/**
- * Remove a label from a wiki page.
- * @param pageId - The page to remove the label from
- * @param label - The label text to remove
- * @throws {AppError} 404 if label not found on the page
- */
-export async function removeLabel(pageId: string, label: string) {
-  const existing = await prisma.pageLabel.findUnique({
-    where: { pageId_label: { pageId, label } },
-  });
-  if (!existing) throw new AppError(404, 'Label not found on this page');
-  await prisma.pageLabel.delete({ where: { id: existing.id } });
-}
-
-/**
- * List all labels on a wiki page.
- * @param pageId - The page to list labels for
- * @returns List of page label records ordered alphabetically
- */
-export async function listLabels(pageId: string) {
-  return prisma.pageLabel.findMany({
-    where: { pageId },
-    orderBy: { label: 'asc' },
-  });
-}
-
-/**
- * Search for pages in a wiki space by label.
- * @param spaceId - The wiki space to search in
- * @param label - The label to filter pages by
- * @returns List of matching pages with id, title, and slug
- */
-export async function searchPagesByLabel(spaceId: string, label: string) {
-  return prisma.page.findMany({
-    where: {
-      spaceId,
-      pageLabels: { some: { label } },
-    },
-    select: { id: true, title: true, slug: true },
-    orderBy: { title: 'asc' },
-  });
-}
+// ─── Re-exports from sub-services ───────────────────────────
+export {
+  createTemplate,
+  listTemplates,
+  getTemplate,
+  deleteTemplate,
+} from './wiki-templates.service';
+export {
+  addPageComment,
+  listPageComments,
+  updatePageComment,
+  resolveComment,
+  deletePageComment,
+} from './wiki-comments.service';
+export {
+  listPageLabels,
+  addLabel,
+  removeLabel,
+  listLabels,
+  searchPagesByLabel,
+} from './wiki-labels.service';
 
 // ─── Page Move / Copy ───────────────────────────────────────
 

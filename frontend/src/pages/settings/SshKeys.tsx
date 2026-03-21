@@ -4,9 +4,9 @@ import { useState } from 'react';
 
 import { usersApi } from '@/api/users.api';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
@@ -174,23 +174,18 @@ export default function SshKeys() {
         </p>
       </div>
 
-      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Confirm Delete" size="sm">
-        <p className="text-sm text-text-secondary">Are you sure? This action cannot be undone.</p>
-        <ModalFooter>
-          <Button variant="secondary" onClick={() => setDeleteId(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              handleDelete(deleteId!);
-              setDeleteId(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
-        </ModalFooter>
-      </Modal>
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => {
+          if (deleteId) handleDelete(deleteId);
+          setDeleteId(null);
+        }}
+        title="Delete SSH Key"
+        description="Are you sure? This action cannot be undone."
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

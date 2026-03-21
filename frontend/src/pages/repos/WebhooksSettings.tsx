@@ -1,16 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Plus,
-  Trash2,
-  Pencil,
-  Webhook,
-  Globe,
-  ToggleLeft,
-  ToggleRight,
-  X,
-  ChevronDown,
-  ChevronRight,
-} from 'lucide-react';
+import { Plus, Trash2, Pencil, Webhook, Globe, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 import { WebhookDeliveriesPanel } from './WebhookDeliveries';
@@ -19,10 +8,11 @@ import { WebhookFormModal } from './WebhookForm';
 import { webhooksApi, WEBHOOK_EVENTS, type Webhook as WebhookType } from '@/api/webhooks.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { Toggle } from '@/components/ui/Toggle';
 
 interface WebhooksSettingsProps {
   repoId: string;
@@ -106,19 +96,11 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
           {webhooks.map((wh) => (
             <div key={wh.id}>
               <div className="flex items-center gap-3 px-4 py-3">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => toggleMutation.mutate({ id: wh.id, active: !wh.active })}
-                  className="shrink-0"
-                  title={wh.active ? 'Deactivate webhook' : 'Activate webhook'}
-                >
-                  {wh.active ? (
-                    <ToggleRight className="h-5 w-5 text-success" />
-                  ) : (
-                    <ToggleLeft className="h-5 w-5 text-text-tertiary" />
-                  )}
-                </Button>
+                <Toggle
+                  checked={wh.active}
+                  onChange={(val) => toggleMutation.mutate({ id: wh.id, active: val })}
+                  size="sm"
+                />
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -180,30 +162,15 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
       {showForm && <WebhookFormModal repoId={repoId} webhook={editing} onClose={handleCloseForm} />}
 
       {/* Delete confirmation modal */}
-      <Modal
+      <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         title="Delete webhook"
-        size="sm"
-      >
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to delete the webhook for{' '}
-          <span className="font-mono text-text">{deleteTarget?.url}</span>? This cannot be undone.
-        </p>
-        <ModalFooter>
-          <Button variant="secondary" size="sm" onClick={() => setDeleteTarget(null)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-            disabled={deleteMutation.isPending}
-          >
-            <Trash2 className="h-4 w-4" /> {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-          </Button>
-        </ModalFooter>
-      </Modal>
+        description={`Are you sure you want to delete the webhook for ${deleteTarget?.url}? This cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }
