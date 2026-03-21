@@ -268,7 +268,7 @@ export default function PageView() {
       />
 
       <div className="rounded-lg border border-border bg-surface p-6">
-        <div className="prose max-w-4xl leading-relaxed">
+        <div className="prose max-w-none leading-relaxed">
           <MarkdownRenderer content={page.body} />
         </div>
       </div>
