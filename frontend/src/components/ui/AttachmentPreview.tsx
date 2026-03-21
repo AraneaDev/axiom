@@ -132,26 +132,6 @@ function TextPreview({ attachment }: { attachment: AttachmentMeta }) {
   );
 }
 
-function DocumentPreview({ attachment }: { attachment: AttachmentMeta }) {
-  const url = attachmentsApi.getPreviewUrl(attachment.id);
-  const { text: html, loading } = useAuthText(url);
-
-  if (loading || html === null) {
-    return (
-      <div className="flex items-center justify-center h-64 bg-surface-tertiary rounded-lg">
-        <Loader2 className="h-6 w-6 text-text-tertiary animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="prose prose-sm max-w-none bg-surface-tertiary rounded-lg p-4 overflow-auto max-h-[70vh]"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
-}
-
 function UnsupportedPreview({ attachment }: { attachment: AttachmentMeta }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-12">
@@ -244,7 +224,6 @@ function AttachmentPreviewInner({
       {previewType === 'image' && <ImagePreview attachment={attachment} />}
       {previewType === 'pdf' && <PdfPreview attachment={attachment} />}
       {previewType === 'text' && <TextPreview attachment={attachment} />}
-      {previewType === 'document' && <DocumentPreview attachment={attachment} />}
       {previewType === 'unsupported' && <UnsupportedPreview attachment={attachment} />}
 
       <ModalFooter>

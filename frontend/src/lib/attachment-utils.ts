@@ -10,10 +10,12 @@ const PANDOC_CONVERTIBLE = new Set([
   'text/org',
 ]);
 
-export type PreviewType = 'image' | 'pdf' | 'text' | 'document' | 'unsupported';
+export type PreviewType = 'image' | 'pdf' | 'text' | 'unsupported';
 
 /**
  * Determine the preview type for a given MIME type.
+ * Only returns previewable types that can render natively in the browser.
+ * Document formats (DOCX, ODT, EPUB) are not natively previewable.
  * @param mimeType - The MIME type of the attachment.
  */
 export function getPreviewType(mimeType: string): PreviewType {
@@ -25,7 +27,6 @@ export function getPreviewType(mimeType: string): PreviewType {
     mimeType === 'application/xml'
   )
     return 'text';
-  if (PANDOC_CONVERTIBLE.has(mimeType)) return 'document';
   return 'unsupported';
 }
 
