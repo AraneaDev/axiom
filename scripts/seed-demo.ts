@@ -639,8 +639,30 @@ Use these semantic tokens everywhere. They adapt automatically for dark mode.
 | Avatars, pills | \`rounded-full\` |
 | Transition duration | \`duration-150\` (interactions) |
 | Focus ring | \`focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1\` |
-| Row hover | \`hover:bg-surface-secondary transition-colors\` |
+| Data row hover | \`hover:bg-surface-secondary transition-colors\` (for dense lists, tables) |
+| Card hover | \`hover:border-primary/50 hover:shadow-sm transition-all\` (for navigation tiles) |
 | Card container | \`rounded-lg border border-border bg-surface overflow-hidden\` |
+
+### Hover Pattern: Cards vs Rows
+
+Use **card hover** for navigation tiles (dashboards, team overview -- few items, prominent):
+\`\`\`tsx
+<Link className="group rounded-lg border border-border bg-surface p-4 hover:border-primary/50 hover:shadow-sm transition-all">
+  ...
+  <ArrowRight className="opacity-0 group-hover:opacity-100 transition-opacity" />
+</Link>
+\`\`\`
+
+Use **row hover** for dense data lists (repo list, PR list, file browser -- many items, scannable):
+\`\`\`tsx
+<div className="rounded-lg border border-border bg-surface divide-y divide-border">
+  <Link className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors">
+    ...
+  </Link>
+</div>
+\`\`\`
+
+Never mix these styles within the same page section. If a section uses cards, all items in that section are cards. If it uses rows, all items are rows.
 
 ---
 

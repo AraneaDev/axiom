@@ -197,12 +197,12 @@ export default function TeamDetail() {
                 description="Create a repository to start hosting code."
               />
             ) : (
-              <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+              <div className="space-y-2">
                 {repos.map((r) => (
                   <Link
                     key={r.id}
                     to={`/${org}/${teamSlug}/repos/${r.slug}`}
-                    className="group flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
+                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
                   >
                     <GitBranch className="h-4 w-4 text-text-secondary shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -245,12 +245,12 @@ export default function TeamDetail() {
                   </Button>
                 </Link>
               </div>
-              <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+              <div className="space-y-2">
                 {spaces!.map((s) => (
                   <Link
                     key={s.id}
                     to={`/${org}/${teamSlug}/wiki/${s.slug}`}
-                    className="group flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
+                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
                   >
                     <BookOpen className="h-4 w-4 text-text-secondary shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -284,12 +284,12 @@ export default function TeamDetail() {
                   </Badge>
                 </div>
               </div>
-              <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+              <div className="space-y-2">
                 {openPRs!.map((pr) => (
                   <Link
                     key={pr.id}
                     to={`/${org}/${teamSlug}/repos/${pr.repo.slug}/pulls/${pr.number}`}
-                    className="group flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
+                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
                   >
                     <GitPullRequest className="h-4 w-4 text-success shrink-0" />
                     <div className="flex-1 min-w-0">
