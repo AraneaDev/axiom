@@ -66,11 +66,12 @@ export const wikiApi = {
    * @param data.title
    * @param data.body
    * @param data.isDraft
+   * @param data.parentId
    */
   updatePage: (
     spaceId: string,
     pageSlug: string,
-    data: { title?: string; body?: string; isDraft?: boolean },
+    data: { title?: string; body?: string; isDraft?: boolean; parentId?: string | null },
   ) => patch<Page>(`/wiki/spaces/${spaceId}/pages/${pageSlug}`, data),
   /**
    * Delete a wiki page by slug.

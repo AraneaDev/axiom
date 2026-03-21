@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Eye, EyeOff, Paperclip, Save, X, FileText, Wifi, WifiOff } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import { orgsApi } from '@/api/orgs.api';
@@ -12,7 +12,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Button } from '@/components/ui/Button';
-import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { Dropdown, DropdownItem, Select } from '@/components/ui/Dropdown';
 import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
@@ -29,6 +29,8 @@ export default function PageEdit() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+
+  const [searchParams] = useSearchParams();
 
   const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
   const currentOrg = orgs?.find((o) => o.slug === org);
@@ -48,6 +50,12 @@ export default function PageEdit() {
   const { data: templates = [] } = useQuery({
     queryKey: ['wikiTemplates', currentSpace?.id],
     queryFn: () => wikiApi.listTemplates(currentSpace!.id),
+    enabled: !!currentSpace?.id,
+  });
+
+  const { data: pageTree = [] } = useQuery({
+    queryKey: ['wikiPageTree', currentSpace?.id],
+    queryFn: () => wikiApi.getPageTree(currentSpace!.id),
     enabled: !!currentSpace?.id,
   });
 
@@ -81,8 +89,25 @@ export default function PageEdit() {
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [body, setBody] = useState('');
+  const [parentId, setParentId] = useState<string>(searchParams.get('parent') ?? '');
   const [error, setError] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+
+  // Flatten the page tree into select options with indentation
+  function flattenTree(nodes: typeof pageTree, depth = 0): { value: string; label: string }[] {
+    const result: { value: string; label: string }[] = [];
+    for (const node of nodes) {
+      result.push({
+        value: node.id,
+        label: `${'--'.repeat(depth)}${depth > 0 ? ' ' : ''}${node.title}`,
+      });
+      if (node.children?.length) {
+        result.push(...flattenTree(node.children, depth + 1));
+      }
+    }
+    return result;
+  }
+  const parentOptions = [{ value: '', label: 'None (top level)' }, ...flattenTree(pageTree)];
   const [draftStatus, setDraftStatus] = useState<'saved' | 'saving' | 'idle'>('idle');
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -150,9 +175,18 @@ export default function PageEdit() {
     mutationFn: async () => {
       if (!currentSpace) throw new Error('Space not found');
       if (isNew) {
-        return wikiApi.createPage(currentSpace.id, { title, slug, body });
+        return wikiApi.createPage(currentSpace.id, {
+          title,
+          slug,
+          body,
+          ...(parentId ? { parentId } : {}),
+        });
       } else {
-        return wikiApi.updatePage(currentSpace.id, pageSlug!, { title, body });
+        return wikiApi.updatePage(currentSpace.id, pageSlug!, {
+          title,
+          body,
+          ...(parentId ? { parentId } : { parentId: null }),
+        });
       }
     },
     onSuccess: () => {
@@ -270,6 +304,16 @@ export default function PageEdit() {
             onChange={(e) => setSlug(e.target.value)}
             placeholder="page-slug"
             required
+          />
+        )}
+        {isNew && pageTree.length > 0 && (
+          <Select
+            label="Parent Page"
+            id="parentId"
+            value={parentId}
+            onChange={(v) => setParentId(v as string)}
+            options={parentOptions}
+            placeholder="None (top level)"
           />
         )}
 

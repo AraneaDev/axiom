@@ -12,6 +12,7 @@ import {
 import { useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 
+import { CreateFolderModal } from './CreateFolderModal';
 import { PageViewHeader } from './PageViewHeader';
 import { PageViewSidebar, extractToc } from './PageViewSidebar';
 
@@ -51,6 +52,8 @@ export default function PageView() {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [moveTargetParent, setMoveTargetParent] = useState('');
+  const [folderModalParent, setFolderModalParent] = useState<string | undefined>(undefined);
+  const [showFolderModal, setShowFolderModal] = useState(false);
 
   // We need spaceId -- get it from spaces list
   const { data: orgs } = useQuery({
@@ -271,7 +274,16 @@ export default function PageView() {
     <div>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Page tree sidebar */}
-        <PageViewSidebar tree={tree} basePath={basePath} tocEntries={tocEntries} />
+        <PageViewSidebar
+          tree={tree}
+          basePath={basePath}
+          tocEntries={tocEntries}
+          activeSlug={pageSlug}
+          onNewFolder={(parentId) => {
+            setFolderModalParent(parentId);
+            setShowFolderModal(true);
+          }}
+        />
 
         {/* Page content */}
         <div className="col-span-4 lg:col-span-3">
@@ -388,6 +400,18 @@ export default function PageView() {
         confirmLabel="Delete"
         loading={deleteMutation.isPending}
       />
+
+      {currentSpace?.id && (
+        <CreateFolderModal
+          open={showFolderModal}
+          onClose={() => setShowFolderModal(false)}
+          spaceId={currentSpace.id}
+          parentId={folderModalParent}
+          onCreated={() => {
+            queryClient.invalidateQueries({ queryKey: ['pageTree', currentSpace.id] });
+          }}
+        />
+      )}
     </div>
   );
 }
