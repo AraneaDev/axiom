@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { FileText, Hash } from 'lucide-react';
 import { Link } from 'react-router';
 

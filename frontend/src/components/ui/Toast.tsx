@@ -23,7 +23,7 @@ const ToastContext = createContext<ToastContextType | null>(null);
 /**
  * Access the toast notification API from within a ToastProvider.
  * @returns Object with toast(), success(), error(), and info() methods.
- * @throws Error if called outside of a ToastProvider.
+ * @throws {Error} If called outside of a ToastProvider.
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {

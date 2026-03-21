@@ -2,7 +2,7 @@
 
 A self-hosted project management platform with integrated Git hosting, CI/CD, and real-time collaboration.
 
-![Tests](https://img.shields.io/badge/tests-495%20passing-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) ![Backend](https://img.shields.io/badge/backend-zero%20errors-brightgreen) ![Frontend](https://img.shields.io/badge/frontend-zero%20errors-brightgreen) ![ESLint](https://img.shields.io/badge/ESLint-zero%20warnings-brightgreen) ![E2E](https://img.shields.io/badge/E2E-12%20specs-blue) ![UI Tests](https://img.shields.io/badge/UI%20tests-140%20passing-brightgreen) ![Modules](https://img.shields.io/badge/modules-43%20tested-brightgreen) ![License](https://img.shields.io/badge/license-proprietary-lightgrey)
+![Tests](https://img.shields.io/badge/tests-557%20passing-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) ![Backend](https://img.shields.io/badge/backend-zero%20errors-brightgreen) ![Frontend](https://img.shields.io/badge/frontend-zero%20errors-brightgreen) ![ESLint](https://img.shields.io/badge/ESLint-zero%20warnings-brightgreen) ![E2E](https://img.shields.io/badge/E2E-12%20specs-blue) ![UI Tests](https://img.shields.io/badge/UI%20tests-129%20passing-brightgreen) ![Modules](https://img.shields.io/badge/modules-47%20tested-brightgreen) ![License](https://img.shields.io/badge/license-proprietary-lightgrey)
 
 ---
 
@@ -63,9 +63,9 @@ cd frontend && npx tsc --noEmit  # Frontend typecheck only
 
 | Suite | Command | Count |
 |-------|---------|-------|
-| Unit / Integration | `npm run test` | 454 tests across 40 files |
+| Unit / Integration | `npm run test` | 557 tests across 47 files |
 | E2E | `npm run e2e` | 12 specs |
-| Frontend Components | `cd frontend && npm run test` | 140 tests across 16 files |
+| Frontend Components | `cd frontend && npm run test` | 129 tests across 15 files |
 | Full Check | `npm run check` | typecheck + lint + format + test |
 
 All backend tests run against a real PostgreSQL instance -- no mocked databases.
@@ -109,4 +109,4 @@ The MCP server exposes 37+ tools for AI agent integration, covering issues, repo
 
 The frontend uses CSS variable design tokens for consistent theming with full dark mode support. Available tokens cover text, surfaces, borders, and semantic colors (primary, danger, warning, success, accent).
 
-All icons use [Lucide](https://lucide.dev). The shared component library in `frontend/src/components/ui/` provides 20+ accessible, composable components following the `forwardRef` pattern with variant/size maps.
+All icons use [Lucide](https://lucide.dev). The shared component library in `frontend/src/components/ui/` provides 24+ accessible, composable components following the `forwardRef` pattern with variant/size maps.

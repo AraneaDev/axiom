@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { Filter, Users, Layers, X, User, Check } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
