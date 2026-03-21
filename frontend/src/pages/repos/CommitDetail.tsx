@@ -336,8 +336,9 @@ export default function CommitDetail() {
                     <ChevronRight className="h-3 w-3 text-primary shrink-0" />
                   )}
                   {getFileIcon(s)}
-                  <span className="font-mono text-xs flex-1 truncate">{s.file}</span>
+                  <span className="font-mono text-xs truncate">{s.file}</span>
                   <Badge
+                    className="ml-auto"
                     variant={
                       getChangeType(s) === 'Added'
                         ? 'success'
@@ -380,8 +381,8 @@ export default function CommitDetail() {
             >
               <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
                 {getFileIcon(activeStat)}
-                <span className="flex-1 truncate">{activeStat.file}</span>
-                <span className="flex items-center gap-2 text-xs shrink-0">
+                <span className="truncate">{activeStat.file}</span>
+                <span className="flex items-center gap-2 text-xs shrink-0 ml-auto">
                   <span className="text-success">+{activeStat.additions}</span>
                   <span className="text-danger">-{activeStat.deletions}</span>
                 </span>
