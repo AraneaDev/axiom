@@ -10,7 +10,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
-import { Spinner } from '@/components/ui/Spinner';
+import { PageLoader, Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 
 /**
@@ -19,9 +19,12 @@ import { useToast } from '@/components/ui/Toast';
 export default function CreateRepo() {
   const { org, team: teamSlug } = useParams();
   const navigate = useNavigate();
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const { data: orgs, isLoading: loadingOrgs } = useQuery({
+    queryKey: ['orgs'],
+    queryFn: orgsApi.list,
+  });
   const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
+  const { data: teams, isLoading: loadingTeams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
@@ -66,6 +69,8 @@ export default function CreateRepo() {
       setLoading(false);
     }
   }
+
+  if (loadingOrgs || loadingTeams) return <PageLoader />;
 
   return (
     <div className="max-w-lg mx-auto">

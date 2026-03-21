@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { AppError } from '../../middleware/errorHandler';
 import { param } from '../../utils/params';
 
 import * as savedFiltersService from './saved-filters.service';
@@ -14,8 +15,7 @@ export async function createFilter(req: Request, res: Response, next: NextFuncti
   try {
     const { name, query, projectId } = req.body;
     if (!name || !query) {
-      res.status(400).json({ error: { message: 'name and query are required' } });
-      return;
+      throw new AppError(400, 'name and query are required');
     }
     const filter = await savedFiltersService.create(req.userId!, { name, query, projectId });
     res.status(201).json(filter);

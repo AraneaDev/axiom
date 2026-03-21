@@ -168,7 +168,7 @@ export function Sidebar() {
                 }
               >
                 <div className="h-5 w-5 rounded bg-primary flex items-center justify-center">
-                  <span className="text-[9px] text-white font-bold">{o.name[0]}</span>
+                  <span className="text-[9px] text-text-inverse font-bold">{o.name[0]}</span>
                 </div>
                 <span className="truncate">{o.name}</span>
               </NavLink>

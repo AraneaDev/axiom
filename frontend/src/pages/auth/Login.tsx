@@ -48,9 +48,9 @@ export default function Login() {
       {/* Left panel — branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-primary items-center justify-center p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
-        <div className="relative z-10 text-white max-w-md">
+        <div className="relative z-10 text-text-inverse max-w-md">
           <div className="flex items-center gap-3 mb-8">
-            <div className="h-12 w-12 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+            <div className="h-12 w-12 rounded-lg bg-surface/20 backdrop-blur-sm flex items-center justify-center">
               <span className="text-2xl font-bold">A</span>
             </div>
             <span className="text-3xl font-bold tracking-tight">Axiom</span>
@@ -71,7 +71,7 @@ export default function Login() {
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2 mb-8">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-white text-sm font-bold">A</span>
+              <span className="text-text-inverse text-sm font-bold">A</span>
             </div>
             <span className="text-xl font-bold text-text">Axiom</span>
           </div>

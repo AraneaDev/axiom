@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Spinner } from '@/components/ui/Spinner';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/utils';
@@ -70,12 +71,12 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
   const [expandedDeployments, setExpandedDeployments] = useState<string | null>(null);
   const { user } = useAuthStore();
 
-  const { data: releases = [] } = useQuery({
+  const { data: releases = [], isLoading: loadingReleases } = useQuery({
     queryKey: ['releases', repoId],
     queryFn: () => releasesApi.list(repoId),
   });
 
-  const { data: environments = [] } = useQuery({
+  const { data: environments = [], isLoading: loadingEnvironments } = useQuery({
     queryKey: ['environments', repoId],
     queryFn: () => deploymentsApi.listEnvironments(repoId),
   });
@@ -294,6 +295,14 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
       </div>
     );
   };
+
+  if (loadingReleases || loadingEnvironments) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Spinner className="h-6 w-6" />
+      </div>
+    );
+  }
 
   return (
     <div>

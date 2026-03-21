@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 
-import { prisma } from '../../config/database';
 import { searchSchema, codeSearchSchema, savedSearchSchema } from '../../utils/validation';
 
 import * as searchService from './search.service';
@@ -13,11 +12,7 @@ import * as searchService from './search.service';
 export async function search(req: Request, res: Response, next: NextFunction) {
   try {
     const params = searchSchema.parse(req.query);
-    const memberships = await prisma.orgMembership.findMany({
-      where: { userId: req.userId! },
-      select: { orgId: true },
-    });
-    const orgIds = memberships.map((m: { orgId: string }) => m.orgId);
+    const orgIds = await searchService.getUserOrgIds(req.userId!);
     const results = await searchService.search({ ...params, userId: req.userId!, orgIds });
     res.json(results);
   } catch (err) {

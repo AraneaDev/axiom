@@ -14,6 +14,7 @@ import CreateBranchModal from './CreateBranchModal';
 
 import { issuesApi } from '@/api/issues.api';
 import { Button } from '@/components/ui/Button';
+import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
 
 interface Repo {
@@ -64,21 +65,22 @@ export default function IssueDevelopmentCard({
 
   const toggle = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const { data: branches = [] } = useQuery({
+  const { data: branches = [], isLoading: loadingBranches } = useQuery({
     queryKey: ['issue-branches', projectId, issueNumber],
     queryFn: () => issuesApi.listIssueBranches(projectId, issueNumber),
   });
 
-  const { data: prs = [] } = useQuery({
+  const { data: prs = [], isLoading: loadingPRs } = useQuery({
     queryKey: ['issue-prs', projectId, issueNumber],
     queryFn: () => issuesApi.listIssuePRs(projectId, issueNumber),
   });
 
-  const { data: commits = [] } = useQuery({
+  const { data: commits = [], isLoading: loadingCommits } = useQuery({
     queryKey: ['issue-commits', projectId, issueNumber],
     queryFn: () => issuesApi.listIssueCommits(projectId, issueNumber),
   });
 
+  const isLoading = loadingBranches || loadingPRs || loadingCommits;
   const hasDev = branches.length + prs.length + commits.length > 0;
 
   return (
@@ -86,6 +88,7 @@ export default function IssueDevelopmentCard({
       <div className="flex items-center gap-2 mb-3">
         <GitBranch className="h-4 w-4 text-text-secondary" />
         <h3 className="text-sm font-semibold">Development</h3>
+        {isLoading && <Spinner className="h-3.5 w-3.5" />}
       </div>
 
       {/* Branches */}

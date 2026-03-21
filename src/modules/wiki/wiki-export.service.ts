@@ -1,4 +1,9 @@
-import { Response } from 'express';
+// NOTE: This service intentionally accepts an Express Response parameter.
+// The pandoc conversion streams binary data (PDF, DOCX, EPUB) directly to the
+// HTTP response via child_process stdout.pipe(res). Buffering the entire output
+// would break large exports and negate the streaming benefit. This is an
+// accepted exception to the "services never touch req/res" rule.
+import type { Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
 import { PANDOC_FORMATS, checkPandocInstalled, convertMarkdown } from '../../utils/pandoc';
@@ -10,7 +15,7 @@ import { getPage } from './wiki.service';
  * @param spaceId - The wiki space ID
  * @param pageSlug - The page slug within the space
  * @param format - The export format (html, docx, epub, pdf, latex, plain)
- * @param res - Express response to pipe the export into
+ * @param res - Express response to pipe the export into (intentional exception -- see note above)
  * @throws {AppError} 400 if format is unsupported
  * @throws {AppError} 501 if pandoc is not installed
  * @throws {AppError} 404 if page not found

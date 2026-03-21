@@ -32,7 +32,7 @@ export function Header() {
         </Button>
         <Link to="/" className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center">
-            <span className="text-white text-xs font-bold">A</span>
+            <span className="text-text-inverse text-xs font-bold">A</span>
           </div>
           <span className="text-sm font-semibold text-text tracking-tight">Axiom</span>
         </Link>

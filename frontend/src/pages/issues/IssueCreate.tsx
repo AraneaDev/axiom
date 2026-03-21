@@ -12,7 +12,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
-import { Spinner } from '@/components/ui/Spinner';
+import { PageLoader, Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 
 /**
@@ -23,15 +23,18 @@ export default function IssueCreate() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const { data: orgs, isLoading: loadingOrgs } = useQuery({
+    queryKey: ['orgs'],
+    queryFn: orgsApi.list,
+  });
   const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
+  const { data: teams, isLoading: loadingTeams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
   });
   const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects } = useQuery({
+  const { data: projects, isLoading: loadingProjects } = useQuery({
     queryKey: ['projects', currentTeam?.id],
     queryFn: () => projectsApi.listByTeam(currentTeam!.id),
     enabled: !!currentTeam?.id,
@@ -81,6 +84,8 @@ export default function IssueCreate() {
       setLoading(false);
     }
   }
+
+  if (loadingOrgs || loadingTeams || loadingProjects) return <PageLoader />;
 
   return (
     <div className="max-w-2xl mx-auto">

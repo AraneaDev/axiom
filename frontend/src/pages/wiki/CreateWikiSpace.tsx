@@ -9,7 +9,7 @@ import { wikiApi } from '@/api/wiki.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Spinner } from '@/components/ui/Spinner';
+import { PageLoader, Spinner } from '@/components/ui/Spinner';
 
 /**
  *
@@ -18,9 +18,12 @@ export default function CreateWikiSpace() {
   const { org, team: teamSlug } = useParams();
   const navigate = useNavigate();
 
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
+  const { data: orgs, isLoading: loadingOrgs } = useQuery({
+    queryKey: ['orgs'],
+    queryFn: orgsApi.list,
+  });
   const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
+  const { data: teams, isLoading: loadingTeams } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
@@ -61,6 +64,8 @@ export default function CreateWikiSpace() {
       setLoading(false);
     }
   }
+
+  if (loadingOrgs || loadingTeams) return <PageLoader />;
 
   return (
     <div className="max-w-lg mx-auto">

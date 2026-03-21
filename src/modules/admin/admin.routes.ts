@@ -1,10 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
 
-import { prisma } from '../../config/database';
 import { authenticate } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 
 import * as adminController from './admin.controller';
+import { isUserAdmin } from './admin.service';
 
 const router = Router();
 
@@ -14,11 +14,8 @@ router.use(authenticate);
 // Require the user to be a platform admin
 async function requireAdmin(req: Request, _res: Response, next: NextFunction) {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId! },
-      select: { isAdmin: true },
-    });
-    if (!user?.isAdmin) {
+    const admin = await isUserAdmin(req.userId!);
+    if (!admin) {
       return next(new AppError(403, 'Admin access required', 'FORBIDDEN'));
     }
     next();

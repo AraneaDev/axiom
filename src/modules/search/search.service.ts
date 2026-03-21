@@ -15,6 +15,21 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+// ─── Helpers ────────────────────────────────────────────────
+
+/**
+ * Get all organization IDs a user belongs to.
+ * @param userId - The user ID
+ * @returns Array of org IDs the user is a member of
+ */
+export async function getUserOrgIds(userId: string): Promise<string[]> {
+  const memberships = await prisma.orgMembership.findMany({
+    where: { userId },
+    select: { orgId: true },
+  });
+  return memberships.map((m: { orgId: string }) => m.orgId);
+}
+
 // ─── Types ──────────────────────────────────────────────────
 
 interface SearchParams {

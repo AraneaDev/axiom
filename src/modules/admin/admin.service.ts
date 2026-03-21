@@ -7,6 +7,21 @@ import { env } from '../../config/env';
 import { AppError } from '../../middleware/errorHandler';
 import { parseServicePagination } from '../../utils/pagination';
 
+// ─── Admin Check ────────────────────────────────────────────
+
+/**
+ * Check whether a user has platform admin privileges.
+ * @param userId - The user ID to check
+ * @returns true if the user is an admin, false otherwise
+ */
+export async function isUserAdmin(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
+  return user?.isAdmin === true;
+}
+
 // ─── System Stats ───────────────────────────────────────────
 
 function getDirectorySize(dirPath: string): number {

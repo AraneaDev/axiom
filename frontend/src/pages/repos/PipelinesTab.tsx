@@ -19,6 +19,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
+import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
 import { formatRelative } from '@/lib/utils';
 
@@ -150,12 +151,12 @@ export default function PipelinesTab({ repoId }: Props) {
   const [editPipeline, setEditPipeline] = useState<Pipeline | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<Pipeline | null>(null);
 
-  const { data: pipelines = [] } = useQuery({
+  const { data: pipelines = [], isLoading: loadingPipelines } = useQuery({
     queryKey: ['pipelines', repoId],
     queryFn: () => pipelinesApi.list(repoId),
   });
 
-  const { data: recentRuns = [] } = useQuery({
+  const { data: recentRuns = [], isLoading: loadingRuns } = useQuery({
     queryKey: ['pipeline-runs', repoId],
     queryFn: () => pipelinesApi.listRuns(repoId, { limit: 10 }),
   });
@@ -170,6 +171,14 @@ export default function PipelinesTab({ repoId }: Props) {
       pipelinesApi.triggerRun(repoId, pipelineId, 'HEAD'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['pipeline-runs', repoId] }),
   });
+
+  if (loadingPipelines || loadingRuns) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Spinner className="h-6 w-6" />
+      </div>
+    );
+  }
 
   return (
     <div>
