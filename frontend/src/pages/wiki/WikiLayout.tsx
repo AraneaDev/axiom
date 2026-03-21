@@ -168,7 +168,7 @@ export default function WikiLayout() {
             <PageViewSidebar
               tree={tree}
               basePath={basePath}
-              tocEntries={tocEntries}
+              tocEntries={[]}
               activeSlug={pageSlug}
               onNewFolder={handleNewFolder}
               embedded
@@ -205,6 +205,31 @@ export default function WikiLayout() {
       <main className="flex-1 min-w-0">
         <Outlet context={contextValue} />
       </main>
+
+      {/* Right sidebar: Table of Contents */}
+      {tocEntries.length > 0 && (
+        <aside className="hidden xl:block w-[220px] shrink-0 sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
+          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
+            On This Page
+          </h3>
+          <nav className="space-y-1">
+            {tocEntries.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById(entry.id);
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="block w-full text-left text-sm text-text-secondary hover:text-primary transition-colors truncate"
+                style={{ paddingLeft: `${(entry.level - 1) * 12}px` }}
+              >
+                {entry.text}
+              </button>
+            ))}
+          </nav>
+        </aside>
+      )}
 
       {/* Folder modal */}
       {currentSpace?.id && (
