@@ -294,8 +294,8 @@ export function PageViewSidebar({
         ))}
       </div>
 
-      {/* Table of contents */}
-      {tocEntries.length > 0 && (
+      {/* Table of contents -- only in standalone mode, not when embedded in WikiLayout */}
+      {!embedded && tocEntries.length > 0 && (
         <div className="border-t border-border-light pt-4">
           <TableOfContents entries={tocEntries} />
         </div>
