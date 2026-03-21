@@ -142,7 +142,7 @@ export default function Dashboard() {
               ].map(({ icon: StatIcon, label, value }) => (
                 <div
                   key={label}
-                  className="rounded-lg border border-border bg-surface p-4 flex items-center gap-3 hover:border-primary/30 transition-colors"
+                  className="rounded-lg border border-border bg-surface p-4 flex items-center gap-3 hover:border-primary/40 hover:shadow-sm transition-all"
                 >
                   <div className="h-9 w-9 rounded-lg bg-primary-light flex items-center justify-center shrink-0">
                     <StatIcon className="h-4 w-4 text-primary" />

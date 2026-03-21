@@ -99,7 +99,7 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
             return (
               <div
                 key={env.id}
-                className="rounded-lg border border-border bg-surface p-4 hover:bg-surface-secondary transition-colors cursor-pointer"
+                className="rounded-lg border border-border bg-surface p-4 hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer"
                 onClick={() => onSelectEnv(env)}
               >
                 <div className="flex items-center justify-between">
