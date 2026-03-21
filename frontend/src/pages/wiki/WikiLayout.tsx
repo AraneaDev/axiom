@@ -206,9 +206,9 @@ export default function WikiLayout() {
         <Outlet context={contextValue} />
       </main>
 
-      {/* Right sidebar: Table of Contents */}
+      {/* Right sidebar: Table of Contents -- mt-24 aligns with page body below header */}
       {tocEntries.length > 0 && (
-        <aside className="hidden xl:block w-[220px] shrink-0 sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
+        <aside className="hidden xl:block w-[220px] shrink-0 mt-24 sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
             On This Page
           </h3>
