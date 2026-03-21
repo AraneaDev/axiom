@@ -81,8 +81,8 @@ export function PageComments({ pageId }: PageCommentsProps) {
       toast.error(err instanceof Error ? err.message : 'Failed to update comment'),
   });
 
-  const activeComments = comments.filter((c) => !c.resolved);
-  const resolvedComments = comments.filter((c) => c.resolved);
+  const activeComments = comments.filter((c) => !c.resolved).reverse();
+  const resolvedComments = comments.filter((c) => c.resolved).reverse();
 
   function handleSubmit() {
     if (!body.trim()) return;
