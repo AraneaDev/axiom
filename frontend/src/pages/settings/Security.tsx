@@ -12,7 +12,7 @@ export default function Security() {
   const { user } = useAuthStore();
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div>
       <h1 className="text-2xl font-bold mb-6">Security</h1>
 
       <div className="space-y-4">

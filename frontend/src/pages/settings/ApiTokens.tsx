@@ -59,7 +59,7 @@ export default function ApiTokens() {
 
   if (isLoading)
     return (
-      <div className="max-w-3xl mx-auto">
+      <div>
         <div className="flex items-center justify-between mb-6">
           <Skeleton className="h-7 w-36" />
           <Skeleton className="h-8 w-28 rounded-md" />
@@ -69,7 +69,7 @@ export default function ApiTokens() {
     );
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">API Tokens</h1>
         <Button

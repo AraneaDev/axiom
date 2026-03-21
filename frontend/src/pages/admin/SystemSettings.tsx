@@ -42,7 +42,7 @@ export default function SystemSettings() {
 
   if (isLoading || !settings)
     return (
-      <div className="mx-auto max-w-4xl p-6 space-y-6">
+      <div className="p-6 space-y-6">
         <div className="flex items-center gap-3">
           <Skeleton className="h-8 w-8 rounded-md" />
           <div>
@@ -65,7 +65,7 @@ export default function SystemSettings() {
     );
 
   return (
-    <div className="mx-auto max-w-4xl p-6 space-y-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link to="/admin">

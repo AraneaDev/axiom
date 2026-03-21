@@ -122,7 +122,7 @@ export default function SearchResults() {
   }, [results, activeType]);
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div>
       {/* Search input */}
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">

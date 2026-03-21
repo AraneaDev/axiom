@@ -53,7 +53,7 @@ export default function MemberProfile() {
   if (!profile) return null;
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <div className="mb-6">
         <Link to={`/${org}/${teamSlug}/members`}>
           <Button variant="ghost" size="sm">
