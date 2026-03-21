@@ -1,4 +1,4 @@
-import { AlertTriangle, Trash2 } from 'lucide-react';
+import { AlertTriangle, Trash2, X } from 'lucide-react';
 
 import { Button } from './Button';
 import { Modal, ModalFooter } from './Modal';
@@ -55,7 +55,7 @@ export function ConfirmDialog({
       </div>
       <ModalFooter>
         <Button variant="secondary" size="sm" onClick={onClose} disabled={loading}>
-          <AlertTriangle className="h-3.5 w-3.5 opacity-0" />
+          <X className="h-3.5 w-3.5" />
           Cancel
         </Button>
         <Button variant="danger" size="sm" onClick={onConfirm} disabled={loading}>

@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   AlertTriangle,
   FileText,
+  Paperclip,
   Pencil,
 } from 'lucide-react';
 
@@ -34,6 +35,8 @@ const ACTION_CONFIG: Record<string, { icon: React.ElementType; label: string; co
   review_submitted: { icon: ClipboardCheck, label: 'submitted review', color: 'text-primary' },
   deleted: { icon: Trash2, label: 'deleted', color: 'text-danger' },
   commit: { icon: GitCommit, label: 'committed', color: 'text-text-secondary' },
+  attachment_added: { icon: Paperclip, label: 'added attachment', color: 'text-success' },
+  attachment_removed: { icon: Paperclip, label: 'removed attachment', color: 'text-danger' },
 };
 
 function getActionConfig(action: string) {
@@ -74,6 +77,9 @@ function formatDetails(action: string, details: Record<string, unknown> | null):
   }
   if (action === 'created' && details.title) {
     return String(details.title);
+  }
+  if ((action === 'attachment_added' || action === 'attachment_removed') && details.fileName) {
+    return String(details.fileName);
   }
 
   return '';

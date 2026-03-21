@@ -9,6 +9,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { getStorage } from '../../storage/storage';
+import { logActivity } from '../activity/activity.service';
 
 const execFileAsync = promisify(execFile);
 
@@ -79,6 +80,13 @@ export async function uploadAttachment(
     },
   });
 
+  if (opts.issueId) {
+    await logActivity('issue', opts.issueId, 'attachment_added', uploaderId, {
+      attachmentId: attachment.id,
+      fileName: file.originalname,
+    });
+  }
+
   return attachment;
 }
 
@@ -133,6 +141,13 @@ export async function deleteAttachment(id: string, userId: string) {
   const storage = getStorage();
   await storage.delete(attachment.storageKey);
   await prisma.attachment.delete({ where: { id } });
+
+  if (attachment.issueId) {
+    await logActivity('issue', attachment.issueId, 'attachment_removed', userId, {
+      attachmentId: id,
+      fileName: attachment.originalName,
+    });
+  }
 }
 
 /**
@@ -177,9 +192,7 @@ async function cleanupTempFile(filePath: string): Promise<void> {
  * @throws {AppError} 404 if attachment not found
  * @throws {AppError} 415 if preview not supported for the file type
  */
-export async function preview(
-  id: string,
-): Promise<{
+export async function preview(id: string): Promise<{
   type: 'redirect' | 'text' | 'html' | 'pdf';
   content: string | Buffer;
   mimeType: string;
