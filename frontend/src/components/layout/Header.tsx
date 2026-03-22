@@ -19,7 +19,7 @@ export function Header() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   return (
-    <header className="h-14 border-b border-border bg-surface/80 backdrop-blur-md flex items-center justify-between px-4 shrink-0 sticky top-0 z-30">
+    <header className="h-[52px] border-b border-border bg-surface/80 backdrop-blur-md flex items-center justify-between px-4 shrink-0 sticky top-0 z-30">
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
@@ -42,7 +42,7 @@ export function Header() {
         variant="secondary"
         size="sm"
         onClick={toggleSearch}
-        className="flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-1.5 text-text-secondary hover:text-text w-72"
+        className="flex items-center gap-2 rounded-full bg-surface-tertiary px-4 py-1.5 text-text-secondary hover:text-text w-80"
       >
         <Search className="h-3.5 w-3.5" />
         <span className="text-xs">Search anything...</span>
