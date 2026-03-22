@@ -131,13 +131,18 @@ body {
   box-shadow: var(--shadow-glow);
 }
 
-/* Smooth transitions */
+/* Smooth transitions (covers theme toggle + interactive elements) */
+body,
+header,
+nav,
+main,
+aside,
 a,
 button,
 input,
 select,
 textarea {
-  transition: all 0.15s ease;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 
 /* Toast animation */
