@@ -167,7 +167,7 @@ className="text-primary bg-surface border-border"
 className="text-indigo-600 bg-white border-gray-200"
 ```
 
-Available tokens: `text`, `text-secondary`, `text-tertiary`, `primary`, `primary-hover`, `primary-light`, `surface`, `surface-secondary`, `surface-tertiary`, `surface-elevated`, `border`, `border-light`, `border-focus`, `danger`, `danger-light`, `warning`, `success`, `accent`.
+Available tokens: `text`, `text-secondary`, `text-tertiary`, `text-inverse`, `primary`, `primary-hover`, `primary-light`, `primary-muted`, `accent`, `accent-light`, `surface`, `surface-secondary`, `surface-tertiary`, `surface-elevated`, `surface-overlay`, `surface-inverse`, `border`, `border-light`, `border-focus`, `danger`, `danger-light`, `warning`, `warning-light`, `success`, `success-light`.
 
 ### Routing
 React Router v7. Always import from `'react-router'`, never `'react-router-dom'`.
