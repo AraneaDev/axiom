@@ -46,7 +46,10 @@ export default function Login() {
   return (
     <div className="flex min-h-screen">
       {/* Left panel — branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-primary items-center justify-center p-12 relative overflow-hidden">
+      <div
+        className="hidden lg:flex lg:w-1/2 items-center justify-center p-12 relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #4a3d8f 0%, #0d9488 100%)' }}
+      >
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
         <div className="relative z-10 text-text-inverse max-w-md">
           <div className="flex items-center gap-3 mb-8">
@@ -60,14 +63,14 @@ export default function Login() {
             <br />
             All in one place.
           </h1>
-          <p className="text-lg text-primary-light leading-relaxed">
+          <p className="text-lg text-white/70 leading-relaxed">
             Git hosting, issue tracking, and documentation — unified with built-in AI integration.
           </p>
         </div>
       </div>
 
       {/* Right panel — form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-surface min-h-screen">
+      <div className="flex-1 flex items-center justify-center p-10 bg-surface min-h-screen">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2 mb-8">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
