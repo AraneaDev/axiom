@@ -132,7 +132,7 @@ export default function TeamMembers() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
         <div className="space-y-6">
           <div className="rounded-lg border border-border bg-surface divide-y divide-border">
             {members.map(

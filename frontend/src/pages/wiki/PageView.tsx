@@ -32,6 +32,37 @@ import { PageComments } from '@/components/wiki/PageComments';
 import type { PageTreeNode } from '@/lib/types';
 import { useAuthStore } from '@/stores/auth.store';
 
+function TocSidebar({ tocEntries }: { tocEntries: { level: number; text: string; id: string }[] }) {
+  if (!tocEntries.length) return null;
+  return (
+    <aside className="hidden xl:block w-[340px] shrink-0 sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
+      <div className="rounded-lg border border-border bg-surface overflow-hidden">
+        <div className="px-4 py-3 border-b border-border bg-surface-secondary/50">
+          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+            On This Page
+          </h3>
+        </div>
+        <nav className="p-3 space-y-1">
+          {tocEntries.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => {
+                const el = document.getElementById(entry.id);
+                el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className="block w-full text-left text-sm text-text-secondary hover:text-primary transition-colors truncate"
+              style={{ paddingLeft: `${(entry.level - 1) * 12}px` }}
+            >
+              {entry.text}
+            </button>
+          ))}
+        </nav>
+      </div>
+    </aside>
+  );
+}
+
 function countTreePages(nodes: PageTreeNode[]): number {
   return nodes.reduce(
     (sum, node) => sum + 1 + (node.children ? countTreePages(node.children) : 0),
@@ -268,10 +299,13 @@ export default function PageView() {
         onDelete={() => setShowDeleteConfirm(true)}
       />
 
-      <div className="rounded-lg border border-border bg-surface p-6">
-        <div className="prose max-w-none leading-relaxed">
-          <MarkdownRenderer content={page.body} />
+      <div className="flex gap-6 items-start">
+        <div className="flex-1 min-w-0 rounded-lg border border-border bg-surface p-6">
+          <div className="prose max-w-none leading-relaxed">
+            <MarkdownRenderer content={page.body} />
+          </div>
         </div>
+        <TocSidebar tocEntries={tocEntries} />
       </div>
 
       {/* Child pages */}

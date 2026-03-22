@@ -9,7 +9,6 @@ import {
   Clock,
   Shield,
   ArrowRight,
-  ListChecks,
   FileText,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
@@ -174,6 +173,111 @@ export default function TeamDetail() {
             )}
           </section>
 
+          {/* Wiki Spaces */}
+          {(spaces?.length ?? 0) > 0 ? (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold">Wiki</h2>
+                </div>
+                <Link to={`/${org}/${teamSlug}/wiki/new`}>
+                  <Button variant="ghost" size="sm">
+                    <Plus className="h-4 w-4" /> New Space
+                  </Button>
+                </Link>
+              </div>
+              <div className="space-y-2">
+                {spaces!.map((s) => (
+                  <Link
+                    key={s.id}
+                    to={`/${org}/${teamSlug}/wiki/${s.slug}`}
+                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
+                  >
+                    <BookOpen className="h-4 w-4 text-text-secondary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-text">{s.name}</span>
+                      {s.description && (
+                        <p className="text-xs text-text-tertiary line-clamp-1 mt-0.5">
+                          {s.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-text-tertiary">
+                      <FileText className="h-3 w-3" />
+                      {s._count?.pages ?? 0} pages
+                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold">Wiki</h2>
+                </div>
+              </div>
+              <EmptyState
+                icon={<BookOpen className="h-10 w-10" />}
+                title="No wiki spaces yet"
+                description="Create a wiki space for team documentation."
+                action={
+                  <Link to={`/${org}/${teamSlug}/wiki/new`}>
+                    <Button variant="secondary" size="sm">
+                      <Plus className="h-4 w-4" /> Create Wiki Space
+                    </Button>
+                  </Link>
+                }
+              />
+            </section>
+          )}
+
+          {/* Open Pull Requests */}
+          {(openPRs?.length ?? 0) > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <GitPullRequest className="h-5 w-5 text-success" />
+                  <h2 className="text-lg font-semibold">Open Pull Requests</h2>
+                  <Badge variant="default" size="sm">
+                    {openPRs!.length}
+                  </Badge>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {openPRs!.map((pr) => (
+                  <Link
+                    key={pr.id}
+                    to={`/${org}/${teamSlug}/repos/${pr.repo.slug}/pulls/${pr.number}`}
+                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
+                  >
+                    <GitPullRequest className="h-4 w-4 text-success shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm text-text truncate">{pr.title}</span>
+                        <Badge variant="outline" size="sm">
+                          {pr.repo.name}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-text-tertiary mt-0.5">
+                        #{pr.number} by {pr.author.displayName}
+                        <span className="mx-1">&middot;</span>
+                        {pr.sourceBranch} <ArrowRight className="h-3 w-3 inline" />{' '}
+                        {pr.targetBranch}
+                      </p>
+                    </div>
+                    <span className="text-xs text-text-tertiary shrink-0 flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> {formatRelative(pr.createdAt)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Repositories - full width list */}
           <section>
             <div className="flex items-center justify-between mb-3">
@@ -227,114 +331,6 @@ export default function TeamDetail() {
               </div>
             )}
           </section>
-
-          {/* Wiki Spaces */}
-          {(spaces?.length ?? 0) > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                  <h2 className="text-lg font-semibold">Wiki</h2>
-                </div>
-                <Link to={`/${org}/${teamSlug}/wiki/new`}>
-                  <Button variant="ghost" size="sm">
-                    <Plus className="h-4 w-4" /> New Space
-                  </Button>
-                </Link>
-              </div>
-              <div className="space-y-2">
-                {spaces!.map((s) => (
-                  <Link
-                    key={s.id}
-                    to={`/${org}/${teamSlug}/wiki/${s.slug}`}
-                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
-                  >
-                    <BookOpen className="h-4 w-4 text-text-secondary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <span className="font-medium text-text">{s.name}</span>
-                      {s.description && (
-                        <p className="text-xs text-text-tertiary line-clamp-1 mt-0.5">
-                          {s.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-text-tertiary">
-                      <FileText className="h-3 w-3" />
-                      {s._count?.pages ?? 0} pages
-                    </div>
-                    <ArrowRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Open Pull Requests */}
-          {(openPRs?.length ?? 0) > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <GitPullRequest className="h-5 w-5 text-success" />
-                  <h2 className="text-lg font-semibold">Open Pull Requests</h2>
-                  <Badge variant="default" size="sm">
-                    {openPRs!.length}
-                  </Badge>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {openPRs!.map((pr) => (
-                  <Link
-                    key={pr.id}
-                    to={`/${org}/${teamSlug}/repos/${pr.repo.slug}/pulls/${pr.number}`}
-                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
-                  >
-                    <GitPullRequest className="h-4 w-4 text-success shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm text-text truncate">{pr.title}</span>
-                        <Badge variant="outline" size="sm">
-                          {pr.repo.name}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-text-tertiary mt-0.5">
-                        #{pr.number} by {pr.author.displayName}
-                        <span className="mx-1">&middot;</span>
-                        {pr.sourceBranch} <ArrowRight className="h-3 w-3 inline" />{' '}
-                        {pr.targetBranch}
-                      </p>
-                    </div>
-                    <span className="text-xs text-text-tertiary shrink-0 flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> {formatRelative(pr.createdAt)}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Empty states for wiki and PRs if none exist */}
-          {!spaces?.length && (
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                  <h2 className="text-lg font-semibold">Wiki</h2>
-                </div>
-              </div>
-              <EmptyState
-                icon={<BookOpen className="h-10 w-10" />}
-                title="No wiki spaces yet"
-                description="Create a wiki space for team documentation."
-                action={
-                  <Link to={`/${org}/${teamSlug}/wiki/new`}>
-                    <Button variant="secondary" size="sm">
-                      <Plus className="h-4 w-4" /> Create Wiki Space
-                    </Button>
-                  </Link>
-                }
-              />
-            </section>
-          )}
         </div>
 
         {/* Sidebar: Members + Activity (sticky, like issue detail) */}
@@ -350,19 +346,10 @@ export default function TeamDetail() {
             </div>
             <div className="rounded-lg border border-border bg-surface p-3 text-center">
               <div className="flex items-center justify-center gap-1.5 mb-1">
-                <GitBranch className="h-3.5 w-3.5 text-primary" />
-                <span className="text-lg font-bold text-text">{repos?.length ?? 0}</span>
+                <BookOpen className="h-3.5 w-3.5 text-primary" />
+                <span className="text-lg font-bold text-text">{spaces?.length ?? 0}</span>
               </div>
-              <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Repos</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-3 text-center">
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <ListChecks className="h-3.5 w-3.5 text-primary" />
-                <span className="text-lg font-bold text-text">
-                  {projects?.reduce((sum, p) => sum + (p._count?.issues ?? 0), 0) ?? 0}
-                </span>
-              </div>
-              <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Issues</p>
+              <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Wiki</p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-3 text-center">
               <div className="flex items-center justify-center gap-1.5 mb-1">
@@ -370,6 +357,13 @@ export default function TeamDetail() {
                 <span className="text-lg font-bold text-text">{openPRs?.length ?? 0}</span>
               </div>
               <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Open PRs</p>
+            </div>
+            <div className="rounded-lg border border-border bg-surface p-3 text-center">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <GitBranch className="h-3.5 w-3.5 text-primary" />
+                <span className="text-lg font-bold text-text">{repos?.length ?? 0}</span>
+              </div>
+              <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Repos</p>
             </div>
           </div>
 
@@ -445,7 +439,7 @@ export default function TeamDetail() {
               <p className="text-sm text-text-tertiary py-3">No recent activity.</p>
             ) : (
               <div className="space-y-0 divide-y divide-border-light">
-                {activity.slice(0, 15).map((a) => {
+                {activity.slice(0, 5).map((a) => {
                   const actionLabel = ACTION_LABELS[a.action] ?? a.action;
 
                   const resourceContent = a.resourceTitle ? (

@@ -187,7 +187,7 @@ export default function PRDetail() {
         isSavingDescription={updateDescriptionMutation.isPending}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
         {/* Main content */}
         <div className="space-y-6">
           <PRDiffView

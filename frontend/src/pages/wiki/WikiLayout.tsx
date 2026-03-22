@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useQuery } from '@tanstack/react-query';
-import { BookOpen, ChevronDown, FolderPlus, Hash, Library, Plus } from 'lucide-react';
+import { BookOpen, ChevronDown, FolderPlus, Library, Plus } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, Outlet, useOutletContext, useParams } from 'react-router';
 
@@ -53,7 +53,7 @@ export function useWikiContext() {
 export default function WikiLayout() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
 
-  const [tocEntries, setTocEntries] = useState<TocEntry[]>([]);
+  const [, setTocEntries] = useState<TocEntry[]>([]);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [folderModalParent, setFolderModalParent] = useState<string | undefined>(undefined);
 
@@ -106,7 +106,7 @@ export default function WikiLayout() {
   return (
     <div className="flex gap-6">
       {/* Persistent sidebar */}
-      <aside className="hidden lg:block w-[280px] shrink-0 sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
+      <aside className="hidden lg:block w-[280px] shrink-0 sticky top-20 self-start min-h-[calc(100vh-6rem)] max-h-[calc(100vh-6rem)] overflow-y-auto">
         {showSpaceTree ? (
           <>
             {/* Space heading / selector */}
@@ -205,32 +205,6 @@ export default function WikiLayout() {
       <main className="flex-1 min-w-0">
         <Outlet context={contextValue} />
       </main>
-
-      {/* Right sidebar: Table of Contents -- mt-36 aligns with content card */}
-      {tocEntries.length > 0 && (
-        <aside className="hidden xl:block w-[220px] shrink-0 pt-8 sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
-          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
-            On This Page
-          </h3>
-          <nav className="space-y-1">
-            {tocEntries.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById(entry.id);
-                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                className="flex items-center gap-1 w-full text-left text-sm text-text-secondary hover:text-primary transition-colors truncate"
-                style={{ paddingLeft: `${(entry.level - 1) * 12}px` }}
-              >
-                <Hash className="h-3 w-3 shrink-0" />
-                {entry.text}
-              </button>
-            ))}
-          </nav>
-        </aside>
-      )}
 
       {/* Folder modal */}
       {currentSpace?.id && (

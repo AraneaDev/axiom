@@ -218,8 +218,8 @@ export function Sidebar() {
             <div className="space-y-1">
               <SectionHeader label={currentTeam.name} />
               <NavItem to={`/${org}/${team}/projects`} icon={FolderKanban} label="Projects" />
-              <NavItem to={`/${org}/${team}/repos`} icon={GitBranch} label="Repositories" />
               <NavItem to={`/${org}/${team}/wiki`} icon={BookOpen} label="Wiki" />
+              <NavItem to={`/${org}/${team}/repos`} icon={GitBranch} label="Repositories" />
               <NavItem to={`/${org}/${team}/members`} icon={Users} label="Members" />
             </div>
           )}

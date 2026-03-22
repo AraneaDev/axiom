@@ -127,7 +127,7 @@ export function BoardSkeleton() {
  */
 export function DetailSkeleton() {
   return (
-    <div className="flex flex-col lg:grid lg:grid-cols-[1fr_400px] gap-8">
+    <div className="flex flex-col lg:grid lg:grid-cols-[1fr_340px] gap-8">
       <div className="min-w-0">
         <div className="flex items-start gap-3 mb-6">
           <Skeleton className="h-5 w-5 rounded mt-1.5 shrink-0" />

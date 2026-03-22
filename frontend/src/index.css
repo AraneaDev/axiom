@@ -90,6 +90,20 @@
   --shadow-glow: 0 0 0 3px rgba(155, 138, 222, 0.2);
 }
 
+/* Clickable elements should always show pointer cursor */
+a,
+button,
+[role="button"],
+[type="button"],
+[type="submit"],
+[type="reset"],
+summary,
+select,
+[onclick],
+[tabindex]:not([tabindex="-1"]) {
+  cursor: pointer;
+}
+
 /* Base */
 html {
   -webkit-font-smoothing: antialiased;
