@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
+import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -85,7 +86,7 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">
@@ -123,32 +124,45 @@ export default function Dashboard() {
                   icon: ListChecks,
                   label: 'Open Issues',
                   value: dashboardData.assignedIssues?.length ?? 0,
+                  bg: 'bg-primary-light',
+                  fg: 'text-primary',
                 },
                 {
                   icon: GitPullRequest,
                   label: 'Review Requests',
                   value: dashboardData.reviewRequests?.length ?? 0,
+                  bg: 'bg-accent-light',
+                  fg: 'text-accent',
                 },
                 {
                   icon: CalendarClock,
                   label: 'Due Soon',
                   value: dashboardData.upcomingDueDates?.length ?? 0,
+                  bg: 'bg-warning-light',
+                  fg: 'text-warning',
                 },
                 {
                   icon: Activity,
                   label: 'Recent Events',
                   value: dashboardData.recentActivity?.length ?? 0,
+                  bg: 'bg-success-light',
+                  fg: 'text-success',
                 },
-              ].map(({ icon: StatIcon, label, value }) => (
+              ].map(({ icon: StatIcon, label, value, bg, fg }) => (
                 <div
                   key={label}
-                  className="rounded-lg border border-border bg-surface p-4 flex items-center gap-3 hover:border-primary/40 hover:shadow-sm transition-all"
+                  className="rounded-xl border border-border-light bg-surface-elevated p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-all duration-150"
                 >
-                  <div className="h-9 w-9 rounded-lg bg-primary-light flex items-center justify-center shrink-0">
-                    <StatIcon className="h-4 w-4 text-primary" />
+                  <div
+                    className={cn(
+                      'h-10 w-10 rounded-xl flex items-center justify-center shrink-0',
+                      bg,
+                    )}
+                  >
+                    <StatIcon className={cn('h-[18px] w-[18px]', fg)} />
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-text leading-none">{value}</p>
+                    <p className="text-2xl font-[650] text-text leading-none">{value}</p>
                     <p className="text-xs text-text-tertiary mt-1">{label}</p>
                   </div>
                 </div>
@@ -157,7 +171,7 @@ export default function Dashboard() {
           )}
 
           {/* Widget grid */}
-          <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+          <div className="grid gap-4 grid-cols-1 lg:grid-cols-[3fr_2fr]">
             <MyIssuesWidget issues={dashboardData?.assignedIssues ?? []} />
             <ReviewRequestsWidget prs={dashboardData?.reviewRequests ?? []} />
             <UpcomingDueDatesWidget issues={dashboardData?.upcomingDueDates ?? []} />
@@ -165,14 +179,14 @@ export default function Dashboard() {
           </div>
 
           {/* Org cards */}
-          <div>
+          <div className="mt-4">
             <h2 className="text-lg font-semibold text-text mb-3">Organizations</h2>
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
               {orgs.map((org) => (
                 <Link
                   key={org.id}
                   to={`/${org.slug}`}
-                  className="group rounded-lg border border-border bg-surface overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-150"
+                  className="group rounded-xl border border-border-light bg-surface-elevated overflow-hidden shadow-sm hover:shadow-md transition-all duration-150"
                 >
                   <div className="h-16 bg-primary-light flex items-end px-5 pb-3">
                     <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center shadow-sm -mb-5 ring-2 ring-surface">
