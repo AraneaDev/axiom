@@ -25,22 +25,30 @@ export async function addComment(issueId: string, authorId: string, body: string
   // Notify issue assignee about the new comment (if not the commenter)
   const issue = await prisma.issue.findUnique({
     where: { id: issueId },
-    select: { assigneeId: true, title: true },
+    select: {
+      assigneeId: true,
+      title: true,
+      number: true,
+      project: { select: { slug: true, team: { select: { slug: true, org: { select: { slug: true } } } } } },
+    },
   });
+  const issueUrl = issue?.project
+    ? `/${issue.project.team.org.slug}/${issue.project.team.slug}/${issue.project.slug}/issues/${issue.number}`
+    : undefined;
   if (issue?.assigneeId && issue.assigneeId !== authorId) {
     createNotification(
       issue.assigneeId,
       'issue:commented',
       `New comment on ${issue.title}`,
       body.length > 120 ? body.slice(0, 120) + '...' : body,
-      `/issues/${issueId}`,
+      issueUrl,
     ).catch((err) => {
       logger.error('Failed to send comment notification', { issueId }, err as Error);
     });
   }
 
   // Notify @mentioned users in the comment
-  notifyMentions(body, authorId, `/issues/${issueId}`).catch((err) => {
+  notifyMentions(body, authorId, issueUrl).catch((err) => {
     logger.error('Failed to send mention notifications', { issueId }, err as Error);
   });
 

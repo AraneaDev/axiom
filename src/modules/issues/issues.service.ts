@@ -382,7 +382,7 @@ export async function updateIssue(
         'issue:assigned',
         `You were assigned to ${updated.title}`,
         undefined,
-        `/issues/${issue.id}`,
+        `/${updated.project.team.org.slug}/${updated.project.team.slug}/${updated.project.slug}/issues/${updated.number}`,
       ).catch((err) => {
         logger.error('Failed to send assignment notification', { issueId: issue.id }, err as Error);
       });

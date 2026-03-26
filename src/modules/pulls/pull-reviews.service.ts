@@ -27,6 +27,7 @@ export async function submitReview(
 ) {
   const pr = await prisma.pullRequest.findUnique({
     where: { repoId_number: { repoId, number: prNumber } },
+    include: { repo: { select: { slug: true, team: { select: { slug: true, org: { select: { slug: true } } } } } } },
   });
   if (!pr) throw new AppError(404, 'Pull request not found');
   if (pr.status !== 'OPEN') throw new AppError(400, 'Can only review open PRs');
@@ -57,6 +58,7 @@ export async function submitReview(
           ? data.body.slice(0, 120) + '...'
           : data.body
         : undefined,
+      `/${pr.repo.team.org.slug}/${pr.repo.team.slug}/repos/${pr.repo.slug}/pulls/${prNumber}`,
     ).catch((err) => {
       logger.error('Failed to send PR review notification', { prId: pr.id }, err as Error);
     });
