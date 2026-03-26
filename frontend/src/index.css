@@ -341,7 +341,7 @@ textarea {
 
 /* Tiptap editor styles */
 .tiptap-editor {
-  min-height: inherit;
+  min-height: 120px;
 }
 .tiptap-editor p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
