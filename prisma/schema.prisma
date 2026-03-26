@@ -52,6 +52,7 @@ model User {
   watchedIssues           IssueWatcher[]
   sentInvitations         Invitation[]
   timeEntries             TimeEntry[]
+  passwordResetTokens     PasswordResetToken[]
 
   @@map("users")
 }
@@ -127,6 +128,17 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_tokens")
 }
 
 // ─── Organizations ──────────────────────────────────────────
