@@ -1,10 +1,10 @@
-# Axiom MCP Server — Claude Integration Guide
+# Axiom MCP Server -- Integration Guide
 
-Axiom exposes a Model Context Protocol (MCP) server that lets Claude interact with your projects, issues, wiki, and repositories directly — without opening the browser.
+Axiom exposes a Model Context Protocol (MCP) server that lets Claude interact with your projects, issues, repositories, wiki, and CI/CD pipelines directly -- without opening the browser.
 
 ## Connection
 
-The MCP server runs alongside the Axiom API using SSE (Server-Sent Events) transport.
+The MCP server runs alongside the Axiom API using SSE (Server-Sent Events) transport. All MCP endpoints require authentication.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
@@ -12,8 +12,6 @@ The MCP server runs alongside the Axiom API using SSE (Server-Sent Events) trans
 | `/api/mcp/messages` | POST | Send tool calls |
 
 **Base URL (local dev):** `http://localhost:3000/api/mcp`
-
-> **Security note:** The MCP endpoints are currently unauthenticated. Only expose the Axiom API on localhost or a private network. Do not deploy with the MCP endpoint publicly accessible.
 
 ---
 
@@ -25,7 +23,11 @@ Add the following to your `claude_desktop_config.json` (macOS: `~/Library/Applic
 {
   "mcpServers": {
     "axiom": {
-      "url": "http://localhost:3000/api/mcp"
+      "type": "sse",
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <your-access-token>"
+      }
     }
   }
 }
@@ -40,7 +42,8 @@ Restart Claude Desktop. You should see "axiom" appear in the MCP servers panel.
 Run from your terminal:
 
 ```bash
-claude mcp add axiom --transport sse http://localhost:3000/api/mcp
+claude mcp add axiom --transport sse http://localhost:3000/api/mcp \
+  --header "Authorization: Bearer <your-access-token>"
 ```
 
 Or add to your project's `.claude/settings.json`:
@@ -50,17 +53,43 @@ Or add to your project's `.claude/settings.json`:
   "mcpServers": {
     "axiom": {
       "type": "sse",
-      "url": "http://localhost:3000/api/mcp"
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <your-access-token>"
+      }
     }
   }
 }
 ```
 
+Obtain an access token by calling `POST /api/auth/login` with your Axiom credentials.
+
 ---
 
-## Available Tools (18)
+## Available Tools (37)
 
-### Issues
+### Organization (3 tools)
+
+#### `list_orgs`
+List organizations the current user belongs to. No parameters required.
+
+#### `list_teams`
+List teams in an organization.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `orgId` | string | yes | Organization ID |
+
+#### `list_projects`
+List projects in a team.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `teamId` | string | yes | Team ID |
+
+---
+
+### Issues & Sprints (12 tools)
 
 #### `list_issues`
 List issues in a project with optional filters.
@@ -73,10 +102,6 @@ List issues in a project with optional filters.
 | `assigneeId` | string | no | Filter by assignee user ID |
 | `limit` | number | no | Max results (default: 20) |
 
-**Example prompt:** "List all open bugs in project `<projectId>`"
-
----
-
 #### `get_issue`
 Get full details of a single issue including comments.
 
@@ -85,28 +110,41 @@ Get full details of a single issue including comments.
 | `projectId` | string | yes | Project ID |
 | `issueNumber` | number | yes | Issue number (e.g. 42) |
 
-**Example prompt:** "Get issue #12 from project `<projectId>`"
-
----
-
 #### `create_issue`
-Create a new issue. Created issues are attributed to the org owner.
+Create a new issue in a project.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `projectId` | string | yes | Project ID |
 | `title` | string | yes | Issue title |
-| `body` | string | no | Markdown body (default: empty) |
+| `body` | string | no | Markdown body |
 | `type` | `TASK\|BUG\|STORY\|EPIC` | no | Default: `TASK` |
 | `priority` | `CRITICAL\|HIGH\|MEDIUM\|LOW` | no | Default: `MEDIUM` |
 | `assigneeId` | string | no | User ID to assign |
 
-**Example prompt:** "Create a BUG issue titled 'Login fails on Safari' in project `<projectId>`"
+#### `update_issue`
+Update an existing issue's status, priority, assignee, labels, story points, or sprint.
 
----
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `projectId` | string | yes | Project ID |
+| `issueNumber` | number | yes | Issue number |
+| `columnId` | string | no | Board column ID (moves status) |
+| `priority` | `CRITICAL\|HIGH\|MEDIUM\|LOW` | no | New priority |
+| `assigneeId` | string | no | New assignee user ID |
+| `storyPoints` | number | no | Story point estimate |
+| `sprintId` | string | no | Move to sprint |
+
+#### `delete_issue`
+Permanently delete an issue from a project.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `projectId` | string | yes | Project ID |
+| `issueNumber` | number | yes | Issue number |
 
 #### `add_comment`
-Add a comment to an issue. Attributed to the org owner.
+Add a comment to an issue.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -114,11 +152,199 @@ Add a comment to an issue. Attributed to the org owner.
 | `issueNumber` | number | yes | Issue number |
 | `body` | string | yes | Comment text (markdown) |
 
-**Example prompt:** "Add a comment to issue #5 saying the fix is in progress"
+#### `list_sprints`
+List sprints for a project.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `projectId` | string | yes | Project ID |
+| `status` | `PLANNING\|ACTIVE\|COMPLETED` | no | Filter by status |
+
+#### `get_sprint`
+Get a sprint with all its issues.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `sprintId` | string | yes | Sprint ID |
+
+#### `create_sprint`
+Create a new sprint in PLANNING status.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `projectId` | string | yes | Project ID |
+| `name` | string | yes | Sprint name |
+| `startDate` | string | no | ISO date string |
+| `endDate` | string | no | ISO date string |
+
+#### `start_sprint`
+Start a sprint (PLANNING -> ACTIVE). Only one active sprint per project is allowed.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `sprintId` | string | yes | Sprint ID |
+
+#### `complete_sprint`
+Complete an active sprint. Incomplete issues can be moved to another sprint or backlog.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `sprintId` | string | yes | Sprint ID |
+| `incompleteIssueDestination` | `backlog\|next_sprint` | no | Where to move incomplete issues |
+
+#### `add_issues_to_sprint`
+Add one or more issues to a sprint.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `sprintId` | string | yes | Sprint ID |
+| `issueIds` | string[] | yes | Array of issue IDs |
 
 ---
 
-### Wiki
+### Repositories & Git (9 tools)
+
+#### `list_repos`
+List repositories in a team.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `teamId` | string | yes | Team ID |
+
+#### `browse_files`
+List files and directories at a path in a repository.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `ref` | string | no | Branch, tag, or SHA (default: `HEAD`) |
+| `path` | string | no | Directory path (default: root) |
+
+#### `read_file`
+Read the contents of a file at a given ref.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `filePath` | string | yes | Path to file |
+| `ref` | string | no | Branch, tag, or SHA (default: `HEAD`) |
+
+#### `get_commits`
+Get recent commits on a branch or ref.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `ref` | string | no | Branch, tag, or SHA (default: `HEAD`) |
+| `limit` | number | no | Max commits (default: 10) |
+
+#### `get_branches`
+List all branches in a repository.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+
+#### `list_branches`
+List all branches with their latest commit info.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+
+#### `get_diff`
+Get a diff between two refs.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `base` | string | yes | Base branch/tag/SHA |
+| `head` | string | yes | Head branch/tag/SHA |
+
+---
+
+### Pull Requests (4 tools)
+
+#### `list_pull_requests`
+List pull requests in a repository.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `status` | `OPEN\|MERGED\|CLOSED` | no | Filter by status |
+
+#### `create_pull_request`
+Open a new pull request.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `title` | string | yes | PR title |
+| `sourceBranch` | string | yes | Branch with changes |
+| `targetBranch` | string | yes | Branch to merge into |
+| `body` | string | no | PR description (markdown) |
+
+#### `get_pull_request`
+Get details of a specific pull request including diff stats.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `pullNumber` | number | yes | PR number |
+
+#### `merge_pull_request`
+Merge an open pull request.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `pullNumber` | number | yes | PR number |
+| `strategy` | `merge\|squash\|rebase` | no | Merge strategy (default: `merge`) |
+
+---
+
+### CI/CD & Releases (4 tools)
+
+#### `list_pipelines`
+List CI/CD pipelines for a repository.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+
+#### `trigger_pipeline`
+Trigger a CI/CD pipeline run on a specific git ref.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `pipelineId` | string | yes | Pipeline ID |
+| `ref` | string | yes | Branch, tag, or SHA to run against |
+
+#### `list_releases`
+List releases for a repository.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `draft` | boolean | no | Filter to draft releases |
+| `prerelease` | boolean | no | Filter to prereleases |
+
+#### `create_release`
+Create a new release with a tag name and target branch.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `repoId` | string | yes | Repository ID |
+| `tagName` | string | yes | Tag name (e.g. `v1.2.0`) |
+| `targetBranch` | string | yes | Branch to tag |
+| `name` | string | no | Release title |
+| `body` | string | no | Release notes (markdown) |
+| `draft` | boolean | no | Save as draft |
+| `prerelease` | boolean | no | Mark as prerelease |
+
+---
+
+### Wiki (6 tools)
 
 #### `list_wiki_spaces`
 List all wiki spaces for a team.
@@ -127,8 +353,6 @@ List all wiki spaces for a team.
 |---|---|---|---|
 | `teamId` | string | yes | Team ID |
 
----
-
 #### `get_wiki_page`
 Get a wiki page by its space and slug.
 
@@ -136,10 +360,6 @@ Get a wiki page by its space and slug.
 |---|---|---|---|
 | `spaceId` | string | yes | Wiki space ID |
 | `pageSlug` | string | yes | Page URL slug |
-
-**Example prompt:** "Get the 'architecture' page from space `<spaceId>`"
-
----
 
 #### `create_wiki_page`
 Create a new wiki page in a space.
@@ -152,9 +372,21 @@ Create a new wiki page in a space.
 | `body` | string | no | Markdown content |
 | `parentId` | string | no | Parent page ID for nesting |
 
-**Example prompt:** "Create a wiki page titled 'Deployment Guide' in space `<spaceId>` with the following content: ..."
+#### `update_wiki_page`
+Update an existing wiki page's title and/or body.
 
----
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `pageId` | string | yes | Page ID |
+| `title` | string | no | New title |
+| `body` | string | no | New body (markdown) |
+
+#### `delete_wiki_page`
+Permanently delete a wiki page from a space.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `pageId` | string | yes | Page ID |
 
 #### `get_page_tree`
 Get the full nested page tree for a wiki space.
@@ -165,107 +397,7 @@ Get the full nested page tree for a wiki space.
 
 ---
 
-### Teams & Projects
-
-#### `list_teams`
-List all teams in an organization.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `orgId` | string | yes | Organization ID |
-
----
-
-#### `list_projects`
-List all projects in a team.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `teamId` | string | yes | Team ID |
-
----
-
-### Repositories
-
-#### `list_repos`
-List repositories in a team.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `teamId` | string | yes | Team ID |
-
----
-
-#### `browse_files`
-List files and directories at a path in a repository.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `repoId` | string | yes | Repository ID |
-| `ref` | string | no | Branch, tag, or SHA (default: `HEAD`) |
-| `path` | string | no | Directory path (default: root) |
-
-**Example prompt:** "Show me the files in the `src/` directory of repo `<repoId>`"
-
----
-
-#### `read_file`
-Read the contents of a file at a given ref.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `repoId` | string | yes | Repository ID |
-| `ref` | string | no | Branch, tag, or SHA (default: `HEAD`) |
-| `filePath` | string | yes | Path to file |
-
-**Example prompt:** "Read `src/index.ts` from repo `<repoId>` on the `main` branch"
-
----
-
-#### `get_commits`
-Get recent commits on a branch.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `repoId` | string | yes | Repository ID |
-| `ref` | string | no | Branch, tag, or SHA (default: `HEAD`) |
-| `limit` | number | no | Max commits (default: 10) |
-
----
-
-#### `get_branches`
-List all branches in a repository.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `repoId` | string | yes | Repository ID |
-
----
-
-#### `get_diff`
-Get a diff between two refs.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `repoId` | string | yes | Repository ID |
-| `base` | string | yes | Base branch/tag/SHA |
-| `head` | string | yes | Head branch/tag/SHA |
-
-**Example prompt:** "Show the diff between `main` and `feature/auth` in repo `<repoId>`"
-
----
-
-#### `list_pull_requests`
-List pull requests in a repository.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `repoId` | string | yes | Repository ID |
-| `status` | `OPEN\|MERGED\|CLOSED` | no | Filter by status |
-
----
-
-### Search
+### Search (1 tool)
 
 #### `search`
 Search across issues and wiki pages by keyword.
@@ -276,29 +408,26 @@ Search across issues and wiki pages by keyword.
 | `type` | `issues\|wiki\|all` | no | Scope (default: `all`) |
 | `limit` | number | no | Max results (default: 10) |
 
-**Example prompt:** "Search for anything related to 'authentication' across issues and wiki"
-
 ---
 
-## Finding IDs
+## Discovery Chain
 
-Most tools require IDs (`projectId`, `teamId`, etc.). Use this discovery chain:
+Most tools require IDs (`projectId`, `teamId`, etc.). Use this chain to find them:
 
 ```
-1. list_teams(orgId)        → get teamId
-2. list_projects(teamId)    → get projectId
-3. list_issues(projectId)   → work with issues
+list_orgs()                  -> get orgId
+list_teams(orgId)            -> get teamId
+list_projects(teamId)        -> get projectId
+list_issues(projectId)       -> work with issues
 
-1. list_teams(orgId)        → get teamId
-2. list_wiki_spaces(teamId) → get spaceId
-3. get_page_tree(spaceId)   → navigate pages
+list_teams(orgId)            -> get teamId
+list_wiki_spaces(teamId)     -> get spaceId
+get_page_tree(spaceId)       -> navigate pages
 
-1. list_teams(teamId)       → get teamId
-2. list_repos(teamId)       → get repoId
-3. browse_files(repoId)     → explore code
+list_teams(orgId)            -> get teamId
+list_repos(teamId)           -> get repoId
+browse_files(repoId)         -> explore code
 ```
-
-You need the `orgId` to start. Find it in the Axiom UI: Settings > Organization, or inspect the network tab when the dashboard loads.
 
 ---
 
@@ -306,42 +435,60 @@ You need the `orgId` to start. Find it in the Axiom UI: Settings > Organization,
 
 ### Triage open bugs
 ```
-1. list_teams(orgId) → find the Core team
-2. list_projects(teamId) → find the Platform project
-3. list_issues(projectId, type: "BUG") → list all bugs
-4. get_issue(projectId, issueNumber) → inspect each one
-5. add_comment(projectId, issueNumber, ...) → leave triage notes
+1. list_orgs() -> find your org
+2. list_teams(orgId) -> find the target team
+3. list_projects(teamId) -> find the project
+4. list_issues(projectId, type: "BUG") -> list all bugs
+5. get_issue(projectId, issueNumber) -> inspect each one
+6. update_issue(projectId, issueNumber, priority: "HIGH") -> reprioritize
+7. add_comment(projectId, issueNumber, body: "...") -> leave triage notes
+```
+
+### Sprint planning
+```
+1. list_projects(teamId) -> find project
+2. list_sprints(projectId, status: "PLANNING") -> find upcoming sprint
+3. list_issues(projectId) -> find backlog issues
+4. add_issues_to_sprint(sprintId, issueIds) -> populate sprint
+5. start_sprint(sprintId) -> kick off the sprint
 ```
 
 ### Write and publish a runbook
 ```
-1. list_teams(orgId) → find the Infra team
-2. list_wiki_spaces(teamId) → find the Runbooks space
-3. get_page_tree(spaceId) → see existing pages
-4. create_wiki_page(spaceId, title, slug, body) → publish the doc
+1. list_teams(orgId) -> find the Infra team
+2. list_wiki_spaces(teamId) -> find the Runbooks space
+3. get_page_tree(spaceId) -> see existing pages
+4. create_wiki_page(spaceId, title, slug, body) -> publish the doc
 ```
 
-### Review a pull request diff
+### Review and merge a pull request
 ```
-1. list_repos(teamId) → find the repo
-2. list_pull_requests(repoId, status: "OPEN") → find open PRs
-3. get_diff(repoId, base, head) → read the diff
-4. read_file(repoId, ref, filePath) → inspect specific files
+1. list_repos(teamId) -> find the repo
+2. list_pull_requests(repoId, status: "OPEN") -> find open PRs
+3. get_pull_request(repoId, pullNumber) -> review diff stats
+4. get_diff(repoId, base, head) -> read the full diff
+5. read_file(repoId, filePath, ref) -> inspect specific files
+6. merge_pull_request(repoId, pullNumber, strategy: "squash") -> merge
 ```
 
 ### Bulk issue creation from a spec
 ```
-1. search(query: "v2 spec", type: "wiki") → find the spec page
-2. get_wiki_page(spaceId, pageSlug) → read requirements
-3. list_projects(teamId) → find target project
-4. create_issue(...) × N → create one issue per requirement
+1. search(query: "v2 spec", type: "wiki") -> find the spec page
+2. get_wiki_page(spaceId, pageSlug) -> read requirements
+3. list_projects(teamId) -> find target project
+4. create_issue(...) x N -> create one issue per requirement
+```
+
+### Create a release
+```
+1. list_repos(teamId) -> find the repo
+2. list_pipelines(repoId) -> verify CI is green
+3. create_release(repoId, tagName: "v1.0.0", targetBranch: "main", body: "...") -> publish
 ```
 
 ---
 
 ## Known Limitations
 
-- **No authentication**: MCP endpoints accept any request. Keep Axiom on localhost or a private network.
-- **Creator attribution**: Issues, comments, and wiki pages created via MCP are attributed to the first org OWNER, not the calling user.
-- **No issue updates**: There is no `update_issue` tool. Status changes must be made through the Axiom UI.
+- **Creator attribution**: Issues, comments, wiki pages, and other resources created via MCP are attributed to the authenticated user whose token is used to connect.
 - **Single SSE connection**: The server supports one active SSE connection at a time. Reconnecting replaces the previous session.
