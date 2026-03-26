@@ -132,7 +132,7 @@ export default function IssueCreate() {
             />
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-text">Description</label>
+              <label htmlFor="description" className="text-sm font-medium text-text">Description</label>
               <MarkdownEditor
                 value={body}
                 onChange={setBody}
