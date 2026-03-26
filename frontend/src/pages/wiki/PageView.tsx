@@ -18,6 +18,7 @@ import { extractToc } from './PageViewSidebar';
 import { useWikiContext } from './WikiLayout';
 
 import { attachmentsApi } from '@/api/attachments.api';
+import { hydrateApi } from '@/api/hydrate.api';
 import { wikiApi } from '@/api/wiki.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
@@ -89,6 +90,36 @@ export default function PageView() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [moveTargetParent, setMoveTargetParent] = useState('');
 
+  // Hydration: single request for all wiki page data
+  const hydrationQuery = useQuery({
+    queryKey: ['wiki-hydrate', currentSpace?.id, pageSlug],
+    queryFn: () => hydrateApi.wikiPage(currentSpace!.id, pageSlug!),
+    enabled: !!currentSpace?.id && !!pageSlug,
+    retry: 1,
+    staleTime: 30_000,
+  });
+
+  // Seed individual caches from hydration response
+  const hydrationMappings = useMemo(() => [
+    { key: ['page', currentSpace?.id, pageSlug], field: 'page' as const },
+  ], [currentSpace?.id, pageSlug]);
+
+  useEffect(() => {
+    if (!hydrationQuery.data) return;
+    const hd = hydrationQuery.data;
+    for (const { key, field } of hydrationMappings) {
+      const value = hd[field];
+      if (value !== null && value !== undefined) {
+        queryClient.setQueryData(key, value);
+      }
+    }
+    const pageId = (hd.page as { id?: string })?.id;
+    if (pageId) {
+      if (hd.labels !== null) queryClient.setQueryData(['pageLabels', pageId], hd.labels);
+      if (hd.attachments !== null) queryClient.setQueryData(['attachments', pageId], hd.attachments);
+    }
+  }, [hydrationQuery.data, hydrationMappings, queryClient]);
+
   const { data: page, isLoading } = useQuery({
     queryKey: ['page', currentSpace?.id, pageSlug],
     queryFn: () => wikiApi.getPage(currentSpace!.id, pageSlug!),
@@ -98,7 +129,8 @@ export default function PageView() {
   const { data: labels = [] } = useQuery({
     queryKey: ['pageLabels', page?.id],
     queryFn: () => wikiApi.listPageLabels(page!.id),
-    enabled: !!page?.id,
+    enabled: !!page?.id
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.labels === null)),
   });
 
   const { user } = useAuthStore();
@@ -106,7 +138,8 @@ export default function PageView() {
   const { data: pageAttachments = [] } = useQuery({
     queryKey: ['attachments', page?.id],
     queryFn: () => attachmentsApi.list({ pageId: page!.id }),
-    enabled: !!page?.id,
+    enabled: !!page?.id
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.attachments === null)),
   });
 
   const deleteAttachmentMutation = useMutation({

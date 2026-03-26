@@ -27,6 +27,14 @@ export interface IssuesListHydration {
   customFields: unknown[] | null;
 }
 
+export interface WikiPageHydration {
+  page: Record<string, unknown>;
+  labels: unknown[] | null;
+  attachments: unknown[] | null;
+  history: unknown[] | null;
+  children: unknown[] | null;
+}
+
 export interface PRDetailHydration {
   pr: Record<string, unknown>;
   mergeChecks: Record<string, unknown> | null;
@@ -46,6 +54,9 @@ export const hydrateApi = {
 
   prDetail: (repoId: string, prNumber: number) =>
     get<PRDetailHydration>(`/repos/${repoId}/pulls/${prNumber}/hydrate`),
+
+  wikiPage: (spaceId: string, pageSlug: string) =>
+    get<WikiPageHydration>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/hydrate`),
 
   issuesList: (projectId: string, filters?: Record<string, string>) => {
     const params = new URLSearchParams(filters ?? {}).toString();
