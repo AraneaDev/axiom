@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowUp, Check, Eye, EyeOff, Paperclip, Pencil, X } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
 
 
@@ -9,6 +9,7 @@ import { IssueDetailSidebar } from './IssueDetailSidebar';
 
 import { activityApi } from '@/api/activity.api';
 import { attachmentsApi } from '@/api/attachments.api';
+import { hydrateApi } from '@/api/hydrate.api';
 import { issuesApi } from '@/api/issues.api';
 import { reposApi } from '@/api/repos.api';
 import { sprintsApi } from '@/api/sprints.api';
@@ -44,6 +45,58 @@ export default function IssueDetail() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
+  // Hydration: single request for all issue detail data
+  const hydrationQuery = useQuery({
+    queryKey: ['issue-hydrate', currentProject?.id, num],
+    queryFn: () => hydrateApi.issueDetail(currentProject!.id, parseInt(num!)),
+    enabled: !!currentProject?.id && !!num,
+    retry: 1,
+    staleTime: 30_000,
+  });
+
+  // Seed individual caches from hydration response
+  const numInt = num ? parseInt(num) : undefined;
+  const hydrationMappings = useMemo(() => [
+    { key: ['issue', currentProject?.id, num], field: 'issue' as const },
+    { key: ['issue-votes', currentProject?.id, num], field: 'votes' as const },
+    { key: ['issue-watchers', currentProject?.id, num], field: 'watchers' as const },
+    { key: ['sprints', currentProject?.id], field: 'sprints' as const },
+    { key: ['activity', currentProject?.id, num], field: 'activity' as const },
+  ], [currentProject?.id, num]);
+
+  useEffect(() => {
+    if (!hydrationQuery.data) return;
+    const hd = hydrationQuery.data;
+    for (const { key, field } of hydrationMappings) {
+      const value = hd[field];
+      if (value !== null && value !== undefined) {
+        queryClient.setQueryData(key, value);
+      }
+    }
+    // Seed keys that depend on issue.number / issue.id (not available in mappings)
+    if (hd.links !== null && hd.links !== undefined && hd.issue) {
+      const issueNum = (hd.issue as { number?: number }).number;
+      const issueId = (hd.issue as { id?: string }).id;
+      if (issueNum !== undefined) {
+        if (hd.links !== null) queryClient.setQueryData(['issue-links', currentProject?.id, issueNum], hd.links);
+        if (hd.children !== null) queryClient.setQueryData(['issue-children', currentProject?.id, issueNum], hd.children);
+        if (hd.progress !== null) queryClient.setQueryData(['issue-progress', currentProject?.id, issueNum], hd.progress);
+        if (hd.development.branches !== null) queryClient.setQueryData(['issue-branches', currentProject?.id, issueNum], hd.development.branches);
+        if (hd.development.pullRequests !== null) queryClient.setQueryData(['issue-prs', currentProject?.id, issueNum], hd.development.pullRequests);
+        if (hd.development.commits !== null) queryClient.setQueryData(['issue-commits', currentProject?.id, issueNum], hd.development.commits);
+      }
+      if (issueId && hd.attachments !== null) {
+        queryClient.setQueryData(['attachments', issueId], hd.attachments);
+      }
+    }
+    if (hd.worklogs !== null && hd.worklogs !== undefined) {
+      queryClient.setQueryData(['worklogs', currentProject?.id, numInt], hd.worklogs);
+    }
+    if (hd.customFields !== null && hd.customFields !== undefined) {
+      queryClient.setQueryData(['custom-fields', currentProject?.id], hd.customFields);
+    }
+  }, [hydrationQuery.data, hydrationMappings, queryClient, currentProject?.id, numInt]);
+
   const { data: issue, isLoading, isError } = useQuery({
     queryKey: ['issue', currentProject?.id, num],
     queryFn: () => issuesApi.get(currentProject!.id, parseInt(num!)),
@@ -53,7 +106,9 @@ export default function IssueDetail() {
   const { data: voteData } = useQuery({
     queryKey: ['issue-votes', currentProject?.id, num],
     queryFn: () => issuesApi.getVotes(currentProject!.id, parseInt(num!)),
-    enabled: !!currentProject?.id && !!num,
+    enabled: !!currentProject?.id && !!num
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.votes === null)),
+    staleTime: 30_000,
   });
 
   const voteMutation = useMutation({
@@ -69,7 +124,9 @@ export default function IssueDetail() {
   const { data: watcherData } = useQuery({
     queryKey: ['issue-watchers', currentProject?.id, num],
     queryFn: () => issuesApi.getWatchers(currentProject!.id, parseInt(num!)),
-    enabled: !!currentProject?.id && !!num,
+    enabled: !!currentProject?.id && !!num
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.watchers === null)),
+    staleTime: 30_000,
   });
 
   const watchMutation = useMutation({
@@ -98,19 +155,25 @@ export default function IssueDetail() {
   const { data: links = [] } = useQuery({
     queryKey: ['issue-links', currentProject?.id, issue?.number],
     queryFn: () => issuesApi.listLinks(currentProject!.id, issue!.number),
-    enabled: !!currentProject?.id && !!issue?.number,
+    enabled: !!currentProject?.id && !!issue?.number
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.links === null)),
+    staleTime: 30_000,
   });
 
   const { data: sprints = [] } = useQuery({
     queryKey: ['sprints', currentProject?.id],
     queryFn: () => sprintsApi.list(currentProject!.id),
-    enabled: !!currentProject?.id,
+    enabled: !!currentProject?.id
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.sprints === null)),
+    staleTime: 30_000,
   });
 
   const { data: activityData } = useQuery({
     queryKey: ['activity', currentProject?.id, num],
     queryFn: () => activityApi.listIssueActivity(currentProject!.id, parseInt(num!), { limit: 50 }),
-    enabled: !!currentProject?.id && !!num,
+    enabled: !!currentProject?.id && !!num
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.activity === null)),
+    staleTime: 30_000,
   });
 
   const { user } = useAuthStore();
@@ -118,7 +181,9 @@ export default function IssueDetail() {
   const { data: attachments = [] } = useQuery({
     queryKey: ['attachments', issue?.id],
     queryFn: () => attachmentsApi.list({ issueId: issue!.id }),
-    enabled: !!issue?.id,
+    enabled: !!issue?.id
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.attachments === null)),
+    staleTime: 30_000,
   });
 
   const deleteAttachmentMutation = useMutation({
@@ -130,13 +195,17 @@ export default function IssueDetail() {
   const { data: children = [] } = useQuery({
     queryKey: ['issue-children', currentProject?.id, issue?.number],
     queryFn: () => issuesApi.getChildren(currentProject!.id, issue!.number),
-    enabled: !!currentProject?.id && !!issue?.number,
+    enabled: !!currentProject?.id && !!issue?.number
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.children === null)),
+    staleTime: 30_000,
   });
 
   const { data: progress } = useQuery({
     queryKey: ['issue-progress', currentProject?.id, issue?.number],
     queryFn: () => issuesApi.getProgress(currentProject!.id, issue!.number),
-    enabled: !!currentProject?.id && !!issue?.number && children.length > 0,
+    enabled: !!currentProject?.id && !!issue?.number && children.length > 0
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.progress === null)),
+    staleTime: 30_000,
   });
 
   const updateMutation = useMutation({
