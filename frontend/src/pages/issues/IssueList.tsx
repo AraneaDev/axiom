@@ -11,7 +11,7 @@ import {
   Bookmark,
   BookmarkCheck,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { IssueListBulkActions } from './IssueListBulkActions';
@@ -19,6 +19,7 @@ import { IssueListFilters } from './IssueListFilters';
 import { IssueListTable } from './IssueListTable';
 
 import { getAccessToken } from '@/api/client';
+import { hydrateApi } from '@/api/hydrate.api';
 import { issuesApi } from '@/api/issues.api';
 import { savedFiltersApi } from '@/api/saved-filters.api';
 import { sprintsApi } from '@/api/sprints.api';
@@ -54,20 +55,50 @@ export default function IssueList() {
   const filters: Record<string, string> = {};
   for (const [k, v] of searchParams.entries()) filters[k] = v;
 
+  // Hydration: single request for all issues list data
+  const hydrationQuery = useQuery({
+    queryKey: ['issues-list-hydrate', currentProject?.id, filters],
+    queryFn: () => hydrateApi.issuesList(currentProject!.id, filters),
+    enabled: !!currentProject?.id,
+    retry: 1,
+    staleTime: 30_000,
+  });
+
+  // Seed individual caches from hydration response
+  const hydrationMappings = useMemo(() => [
+    { key: ['issues', currentProject?.id, filters], field: 'issues' as const },
+    { key: ['board', currentProject?.id], field: 'boardColumns' as const },
+    { key: ['sprints', currentProject?.id], field: 'sprints' as const },
+    { key: ['saved-filters', currentProject?.id], field: 'savedFilters' as const },
+  ], [currentProject?.id, filters]);
+
+  useEffect(() => {
+    if (!hydrationQuery.data) return;
+    const hd = hydrationQuery.data;
+    for (const { key, field } of hydrationMappings) {
+      const value = hd[field];
+      if (value !== null && value !== undefined) {
+        queryClient.setQueryData(key, value);
+      }
+    }
+  }, [hydrationQuery.data, hydrationMappings, queryClient]);
+
+  const hydrated = !!hydrationQuery.data;
+
   const { data, isLoading } = useQuery({
     queryKey: ['issues', currentProject?.id, filters],
     queryFn: () => issuesApi.list(currentProject!.id, filters),
-    enabled: !!currentProject?.id,
+    enabled: !!currentProject?.id && !hydrated,
   });
 
   // Board columns for bulk status change
   const { data: boardColumns = [] } = useQuery({
     queryKey: ['board', currentProject?.id],
     queryFn: () => issuesApi.getBoard(currentProject!.id),
-    enabled: !!currentProject?.id,
+    enabled: !!currentProject?.id && !hydrated,
   });
 
-  // Team members for bulk assign
+  // Team members for bulk assign (not in hydration -- always independent)
   const { data: teamDetail } = useQuery({
     queryKey: ['team-detail', currentTeam?.id],
     queryFn: () => teamsApi.get(currentTeam!.id),
@@ -78,7 +109,7 @@ export default function IssueList() {
   const { data: sprints = [] } = useQuery({
     queryKey: ['sprints', currentProject?.id],
     queryFn: () => sprintsApi.list(currentProject!.id),
-    enabled: !!currentProject?.id,
+    enabled: !!currentProject?.id && !hydrated,
   });
 
   // Use extracted filter/sort/search hook
@@ -120,7 +151,7 @@ export default function IssueList() {
   const { data: savedFilters = [] } = useQuery({
     queryKey: ['saved-filters', currentProject?.id],
     queryFn: () => savedFiltersApi.list(currentProject?.id),
-    enabled: !!currentProject?.id,
+    enabled: !!currentProject?.id && !hydrated,
   });
 
   const saveFilterMutation = useMutation({

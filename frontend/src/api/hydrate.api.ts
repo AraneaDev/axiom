@@ -19,6 +19,14 @@ export interface IssueDetailHydration {
   customFields: unknown[] | null;
 }
 
+export interface IssuesListHydration {
+  issues: { issues: unknown[]; total: number } | null;
+  boardColumns: unknown[] | null;
+  sprints: unknown[] | null;
+  savedFilters: unknown[] | null;
+  customFields: unknown[] | null;
+}
+
 export interface PRDetailHydration {
   pr: Record<string, unknown>;
   mergeChecks: Record<string, unknown> | null;
@@ -38,4 +46,10 @@ export const hydrateApi = {
 
   prDetail: (repoId: string, prNumber: number) =>
     get<PRDetailHydration>(`/repos/${repoId}/pulls/${prNumber}/hydrate`),
+
+  issuesList: (projectId: string, filters?: Record<string, string>) => {
+    const params = new URLSearchParams(filters ?? {}).toString();
+    const qs = params ? `?${params}` : '';
+    return get<IssuesListHydration>(`/projects/${projectId}/issues/hydrate${qs}`);
+  },
 };
