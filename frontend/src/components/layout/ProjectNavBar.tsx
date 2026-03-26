@@ -35,7 +35,7 @@ export function ProjectNavBar() {
   const activeKey = TABS.find((t) => suffix === t.key || suffix.startsWith(t.key + '/'))?.key ?? 'board';
 
   return (
-    <div className="flex items-center gap-1 overflow-x-auto border-b border-border scrollbar-none px-4">
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-border px-4" style={{ scrollbarWidth: 'none' }}>
       {TABS.map((tab) => {
         const active = tab.key === activeKey;
         return (

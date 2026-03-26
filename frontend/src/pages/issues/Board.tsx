@@ -356,13 +356,13 @@ export default function Board() {
   if (isLoading) return <BoardSkeleton />;
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="flex items-center justify-between mb-4">
-        <div>
+        <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">{currentProject?.name} Board</h1>
-          <p className="text-sm text-text-secondary">{currentProject?.prefix}</p>
+          <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">{currentProject?.prefix}</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={() => setShowColumnManager(true)}>
             <Settings className="h-4 w-4" /> Columns
           </Button>
