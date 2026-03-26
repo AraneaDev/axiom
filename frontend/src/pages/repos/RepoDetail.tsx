@@ -153,6 +153,11 @@ export default function RepoDetail() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Link to={`/${org}/${teamSlug}/repos/${repoSlug}/pulls/new`}>
+            <Button variant="primary" size="sm">
+              <GitPullRequest className="h-4 w-4" /> New Pull Request
+            </Button>
+          </Link>
           <Dropdown
             trigger={
               <Button variant="secondary" size="sm">
