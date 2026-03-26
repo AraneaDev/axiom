@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   Plus,
-  Building2,
   ArrowRight,
   ListChecks,
   GitPullRequest,
@@ -22,10 +21,10 @@ import {
 import { dashboardApi } from '@/api/dashboard.api';
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
+import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -103,18 +102,7 @@ export default function Dashboard() {
       </div>
 
       {!orgs?.length ? (
-        <EmptyState
-          icon={<Building2 className="h-12 w-12" />}
-          title="No organizations yet"
-          description="Create your first organization to start managing projects and documentation."
-          action={
-            <Link to="/orgs/new">
-              <Button>
-                <Plus className="h-4 w-4" /> Create Organization
-              </Button>
-            </Link>
-          }
-        />
+        <OnboardingWizard />
       ) : (
         <>
           {/* Quick stats */}
