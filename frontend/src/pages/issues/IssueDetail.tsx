@@ -3,17 +3,17 @@ import { AlertTriangle, ArrowUp, Check, Eye, EyeOff, Paperclip, Pencil, X } from
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
 
+
 import { IssueDetailComments } from './IssueDetailComments';
 import { IssueDetailSidebar } from './IssueDetailSidebar';
 
 import { activityApi } from '@/api/activity.api';
 import { attachmentsApi } from '@/api/attachments.api';
 import { issuesApi } from '@/api/issues.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
 import { reposApi } from '@/api/repos.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
@@ -32,7 +32,8 @@ import { useAuthStore } from '@/stores/auth.store';
  *
  */
 export default function IssueDetail() {
-  const { org, team: teamSlug, project: projectSlug, num } = useParams();
+  const { org, teamSlug, projectSlug, currentTeam, currentProject } = useProjectContext();
+  const { num } = useParams();
   const queryClient = useQueryClient();
   const toast = useToast();
   const [commentBody, setCommentBody] = useState('');
@@ -42,26 +43,6 @@ export default function IssueDetail() {
   const [bodyDraft, setBodyDraft] = useState('');
   const [editingField, setEditingField] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   const { data: issue, isLoading, isError } = useQuery({
     queryKey: ['issue', currentProject?.id, num],

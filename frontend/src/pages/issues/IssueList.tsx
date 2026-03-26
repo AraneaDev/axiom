@@ -12,7 +12,7 @@ import {
   BookmarkCheck,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 
 import { IssueListBulkActions } from './IssueListBulkActions';
 import { IssueListFilters } from './IssueListFilters';
@@ -20,8 +20,6 @@ import { IssueListTable } from './IssueListTable';
 
 import { getAccessToken } from '@/api/client';
 import { issuesApi } from '@/api/issues.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
 import { savedFiltersApi } from '@/api/saved-filters.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
@@ -32,7 +30,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useIssueListFilters } from '@/hooks/useIssueListFilters';
-import { STABLE_STALE_TIME } from '@/lib/constants';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
 
@@ -40,33 +38,13 @@ import { useUIStore } from '@/stores/ui.store';
  *
  */
 export default function IssueList() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { org, teamSlug, projectSlug, currentTeam, currentProject } = useProjectContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const setPreferredView = useUIStore((s) => s.setPreferredProjectView);
   useEffect(() => {
     setPreferredView('issues');
   }, [setPreferredView]);
-
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   // Pagination state from URL
   const pageLimit = parseInt(searchParams.get('limit') || '25');

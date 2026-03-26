@@ -1,13 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Plus, ArrowLeft } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { issueTemplatesApi, type IssueTemplate } from '@/api/issue-templates.api';
 import { issuesApi } from '@/api/issues.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
@@ -19,27 +17,9 @@ import { useToast } from '@/components/ui/Toast';
  *
  */
 export default function IssueCreate() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { org, teamSlug, projectSlug, currentProject, isLoading: loadingContext } = useProjectContext();
   const navigate = useNavigate();
   const toast = useToast();
-
-  const { data: orgs, isLoading: loadingOrgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams, isLoading: loadingTeams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects, isLoading: loadingProjects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   const { data: templates = [] } = useQuery({
     queryKey: ['issue-templates', currentProject?.id],
@@ -85,7 +65,7 @@ export default function IssueCreate() {
     }
   }
 
-  if (loadingOrgs || loadingTeams || loadingProjects) return <PageLoader />;
+  if (loadingContext) return <PageLoader />;
 
   return (
     <div className="max-w-2xl mx-auto">

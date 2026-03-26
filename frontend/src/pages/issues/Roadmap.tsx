@@ -1,12 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Plus, Calendar } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 
 import { issuesApi } from '@/api/issues.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -170,22 +168,7 @@ function EpicBar({
  *
  */
 export default function Roadmap() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
-
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
+  const { org, teamSlug, projectSlug, currentProject } = useProjectContext();
 
   const { data: epics = [], isLoading } = useQuery({
     queryKey: ['roadmap', currentProject?.id],

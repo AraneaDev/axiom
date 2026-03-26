@@ -1,21 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, ChevronDown, ChevronRight, Settings } from 'lucide-react';
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 
 import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
 import type { Filters, GroupBy } from './BoardFilters';
 import { ColumnManager } from './ColumnManager';
 
 import { issuesApi } from '@/api/issues.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { BoardSkeleton } from '@/components/ui/Skeleton';
-import { PRIORITY_COLORS, PRIORITY_LABELS, STABLE_STALE_TIME } from '@/lib/constants';
+import { useProjectContext } from '@/hooks/useProjectContext';
+import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
 import type { BoardColumn, Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
@@ -228,7 +226,7 @@ function Column({
  *
  */
 export default function Board() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { org, teamSlug, projectSlug, currentProject } = useProjectContext();
   const queryClient = useQueryClient();
   const setPreferredView = useUIStore((s) => s.setPreferredProjectView);
   useEffect(() => {
@@ -238,26 +236,6 @@ export default function Board() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [showColumnManager, setShowColumnManager] = useState(false);
-
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   const { data: columns, isLoading } = useQuery({
     queryKey: ['board', currentProject?.id],

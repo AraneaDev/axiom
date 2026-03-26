@@ -7,16 +7,14 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { SprintCard } from './SprintCard';
 import { SprintFormModal } from './SprintFormModal';
 
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
 import { sprintsApi } from '@/api/sprints.api';
-import { teamsApi } from '@/api/teams.api';
 import { BurndownChart } from '@/components/BurndownChart';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -130,7 +128,7 @@ function BacklogIssueRow({
  *
  */
 export default function Backlog() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { org, teamSlug, projectSlug, currentProject } = useProjectContext();
   const queryClient = useQueryClient();
   const setPreferredView = useUIStore((s) => s.setPreferredProjectView);
   useEffect(() => {
@@ -144,22 +142,6 @@ export default function Backlog() {
     startDate: '',
     endDate: '',
   });
-
-  // Resolve project
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   const { data: sprints = [], isLoading: sprintsLoading } = useQuery({
     queryKey: ['sprints', currentProject?.id],
