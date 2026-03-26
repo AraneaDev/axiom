@@ -332,8 +332,8 @@ export default function LabelsSettings() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{label.name}</span>
                       <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-on-primary"
-                        style={{ backgroundColor: label.color }}
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{ backgroundColor: label.color, color: '#fff' }}
                       >
                         {label.name}
                       </span>
