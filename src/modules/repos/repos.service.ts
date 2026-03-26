@@ -1,6 +1,13 @@
+import { execFile } from 'child_process';
+import fs from 'node:fs/promises';
+import path from 'path';
+import { promisify } from 'util';
+
 import { prisma } from '../../config/database';
 import { cacheable } from '../../config/redis';
 import * as gitCmd from '../../git/git-commands';
+
+const execFileAsync = promisify(execFile);
 import {
   initBareRepo,
   deleteRepo,
@@ -440,4 +447,55 @@ export async function getBlame(repoId: string, ref: string, filePath: string) {
 export async function getTags(repoId: string) {
   const diskPath = await getRepoDiskPath(repoId);
   return gitCmd.listTags(diskPath);
+}
+
+/**
+ * Update a file in a repository by creating a new commit via a git worktree.
+ * @param repoId - The repository ID
+ * @param filePath - The file path within the repository
+ * @param content - The new file content
+ * @param message - The commit message
+ * @param branch - The branch to commit to
+ * @param authorName - The commit author display name
+ * @param authorEmail - The commit author email
+ * @returns Object with the new HEAD sha
+ * @throws {AppError} 404 if repository not found
+ * @throws {AppError} 400 if file path is invalid
+ */
+export async function updateFile(
+  repoId: string,
+  filePath: string,
+  content: string,
+  message: string,
+  branch: string,
+  authorName: string,
+  authorEmail: string,
+) {
+  const diskPath = await getRepoDiskPath(repoId);
+  validateFilePath(filePath);
+
+  const worktreeDir = path.join(diskPath, '..', `_edit_${Date.now()}`);
+  try {
+    await execFileAsync('git', ['worktree', 'add', worktreeDir, branch], { cwd: diskPath });
+
+    const fullPath = path.join(worktreeDir, filePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, content, 'utf-8');
+
+    await execFileAsync('git', ['-C', worktreeDir, 'add', filePath]);
+    await execFileAsync('git', [
+      '-C', worktreeDir,
+      '-c', `user.name=${authorName}`,
+      '-c', `user.email=${authorEmail}`,
+      'commit', '-m', message,
+    ]);
+
+    const { stdout } = await execFileAsync('git', ['-C', worktreeDir, 'rev-parse', 'HEAD']);
+    const newHead = stdout.trim();
+    await execFileAsync('git', ['update-ref', `refs/heads/${branch}`, newHead], { cwd: diskPath });
+
+    return { sha: newHead };
+  } finally {
+    await execFileAsync('git', ['worktree', 'remove', '--force', worktreeDir], { cwd: diskPath }).catch(() => {});
+  }
 }

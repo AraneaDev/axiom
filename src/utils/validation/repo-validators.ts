@@ -82,6 +82,12 @@ export const batchApplySuggestionsSchema = z.object({
   commentIds: z.array(z.string().min(1)).min(1),
 });
 
+export const updateFileSchema = z.object({
+  content: z.string(),
+  message: z.string().min(1).max(500),
+  branch: z.string().min(1),
+});
+
 // ─── Pipelines ─────────────────────────────────────────────
 
 export const createPipelineSchema = z.object({

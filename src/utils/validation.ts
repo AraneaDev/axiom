@@ -65,6 +65,7 @@ export {
   createEnvironmentSchema,
   updateEnvironmentSchema,
   createDeploymentSchema,
+  updateFileSchema,
 } from './validation/repo-validators';
 
 export {

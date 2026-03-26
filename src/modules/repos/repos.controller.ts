@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { prisma } from '../../config/database';
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 import {
@@ -9,6 +10,7 @@ import {
   forkRepoSchema,
   createBranchSchema,
   updateRepoSettingsSchema,
+  updateFileSchema,
 } from '../../utils/validation';
 
 import * as reposService from './repos.service';
@@ -287,6 +289,36 @@ export async function getBlame(req: Request, res: Response, next: NextFunction) 
 export async function listTags(req: Request, res: Response, next: NextFunction) {
   try {
     res.json(await reposService.getTags(param(req, 'repoId')));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// File editor
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function updateBlob(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = updateFileSchema.parse(req.body);
+    const filePath = req.params[0];
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId! },
+      select: { displayName: true, email: true },
+    });
+    const result = await reposService.updateFile(
+      param(req, 'repoId'),
+      filePath,
+      data.content,
+      data.message,
+      data.branch,
+      user!.displayName,
+      user!.email,
+    );
+    res.json(result);
   } catch (err) {
     next(err);
   }

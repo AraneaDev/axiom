@@ -36,6 +36,9 @@ router.get('/:repoId/tree/:ref/*', requireRepoAccess(), reposController.getTree)
 router.get('/:repoId/blob/:ref/*', requireRepoAccess(), reposController.getBlob);
 router.get('/:repoId/blame/:ref/*', requireRepoAccess(), reposController.getBlame);
 
+// File editor
+router.patch('/:repoId/blob/:ref/*', authenticate, requireRepoAccess(), reposController.updateBlob);
+
 // Tags
 router.get('/:repoId/tags', requireRepoAccess(), reposController.listTags);
 
