@@ -5,12 +5,9 @@ import {
   GripVertical,
   Target,
   ChevronRight,
-  LayoutDashboard,
-  List,
-  Settings,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { Link, useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
 
 import { SprintCard } from './SprintCard';
 import { SprintFormModal } from './SprintFormModal';
@@ -264,21 +261,6 @@ export default function Backlog() {
           <p className="text-sm text-text-secondary">Plan sprints and manage your backlog</p>
         </div>
         <div className="flex gap-2">
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/board`}>
-            <Button variant="secondary" size="sm">
-              <LayoutDashboard className="h-4 w-4" /> Board
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues`}>
-            <Button variant="secondary" size="sm">
-              <List className="h-4 w-4" /> List
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/labels`}>
-            <Button variant="secondary" size="sm" title="Project Settings">
-              <Settings className="h-4 w-4" /> Settings
-            </Button>
-          </Link>
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" /> Create Sprint
           </Button>

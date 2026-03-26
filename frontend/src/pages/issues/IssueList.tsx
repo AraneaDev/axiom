@@ -5,19 +5,11 @@ import {
   ArrowUpDown,
   LayoutList,
   LayoutGrid,
-  LayoutDashboard,
-  LayoutTemplate,
-  Clock,
   Download,
   X,
   Search,
-  GanttChart,
-  Target,
   Bookmark,
   BookmarkCheck,
-  Zap,
-  Tag,
-  BarChart3,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
@@ -251,46 +243,6 @@ export default function IssueList() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/backlog`}>
-            <Button variant="secondary" size="sm">
-              <Target className="h-4 w-4" /> Backlog
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/board`}>
-            <Button variant="secondary" size="sm">
-              <LayoutDashboard className="h-4 w-4" /> Board
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/roadmap`}>
-            <Button variant="secondary" size="sm">
-              <GanttChart className="h-4 w-4" /> Roadmap
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/analytics`}>
-            <Button variant="secondary" size="sm">
-              <BarChart3 className="h-4 w-4" /> Analytics
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/templates`}>
-            <Button variant="secondary" size="sm">
-              <LayoutTemplate className="h-4 w-4" /> Templates
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/automation`}>
-            <Button variant="secondary" size="sm">
-              <Zap className="h-4 w-4" /> Automations
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/time-report`}>
-            <Button variant="secondary" size="sm">
-              <Clock className="h-4 w-4" /> Time Report
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/labels`}>
-            <Button variant="secondary" size="sm">
-              <Tag className="h-4 w-4" /> Labels
-            </Button>
-          </Link>
           <Button
             variant="secondary"
             size="sm"

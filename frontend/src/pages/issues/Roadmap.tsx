@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, List, Plus, Calendar, LayoutDashboard } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Calendar } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -309,16 +309,6 @@ export default function Roadmap() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues`}>
-            <Button variant="secondary" size="sm">
-              <List className="h-4 w-4" /> Issues
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/board`}>
-            <Button variant="secondary" size="sm">
-              <LayoutDashboard className="h-4 w-4" /> Board
-            </Button>
-          </Link>
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
             <Button size="sm">
               <Plus className="h-4 w-4" /> New Issue

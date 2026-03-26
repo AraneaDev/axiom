@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, List, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Settings } from 'lucide-react';
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -363,19 +363,9 @@ export default function Board() {
           <p className="text-sm text-text-secondary">{currentProject?.prefix}</p>
         </div>
         <div className="flex gap-2">
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues`}>
-            <Button variant="secondary" size="sm">
-              <List className="h-4 w-4" /> List
-            </Button>
-          </Link>
           <Button variant="secondary" size="sm" onClick={() => setShowColumnManager(true)}>
             <Settings className="h-4 w-4" /> Columns
           </Button>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/settings/labels`}>
-            <Button variant="secondary" size="sm" title="Project Settings">
-              <Settings className="h-4 w-4" /> Settings
-            </Button>
-          </Link>
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
             <Button size="sm">
               <Plus className="h-4 w-4" /> New Issue
