@@ -90,6 +90,36 @@ export async function deleteUser(req: Request, res: Response, next: NextFunction
 
 /**
  *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function deactivateUser(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await adminService.deactivateUser(param(req, 'userId'));
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function reactivateUser(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await adminService.reactivateUser(param(req, 'userId'));
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
  * @param _req
  * @param res
  * @param next

@@ -110,8 +110,10 @@ export async function listUsers(opts: { search?: string; limit?: number; offset?
         username: true,
         displayName: true,
         avatarUrl: true,
+        isAdmin: true,
         twoFactorEnabled: true,
         createdAt: true,
+        deactivatedAt: true,
         orgMemberships: {
           select: {
             role: true,
@@ -142,8 +144,10 @@ export async function getUser(userId: string) {
       username: true,
       displayName: true,
       avatarUrl: true,
+      isAdmin: true,
       twoFactorEnabled: true,
       createdAt: true,
+      deactivatedAt: true,
       orgMemberships: {
         select: {
           role: true,
@@ -195,6 +199,37 @@ export async function deleteUser(userId: string) {
 
   await prisma.user.delete({ where: { id: userId } });
   return { deleted: true };
+}
+
+/**
+ *
+ * @param userId
+ */
+export async function deactivateUser(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, 'User not found');
+  if (user.isAdmin) throw new AppError(400, 'Cannot deactivate an admin user');
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { deactivatedAt: new Date() } }),
+    prisma.refreshToken.deleteMany({ where: { userId } }),
+  ]);
+  return { success: true };
+}
+
+/**
+ *
+ * @param userId
+ */
+export async function reactivateUser(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, 'User not found');
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { deactivatedAt: null },
+  });
+  return { success: true };
 }
 
 // ─── System Settings ────────────────────────────────────────

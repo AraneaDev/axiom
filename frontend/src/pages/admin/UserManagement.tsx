@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Search, Eye, Trash2, ArrowLeft, Shield, Mail, Calendar } from 'lucide-react';
+import { Users, Search, Eye, Trash2, ArrowLeft, Shield, Mail, Calendar, UserX, UserCheck } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -139,6 +139,18 @@ export default function UserManagement() {
     },
   });
 
+  const deactivateMutation = useMutation({
+    mutationFn: ({ userId, deactivated }: { userId: string; deactivated: boolean }) =>
+      deactivated ? adminApi.reactivateUser(userId) : adminApi.deactivateUser(userId),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      success(vars.deactivated ? 'User reactivated' : 'User deactivated');
+    },
+    onError: (_err, vars) => {
+      showError(vars.deactivated ? 'Failed to reactivate user' : 'Failed to deactivate user');
+    },
+  });
+
   const handleViewUser = async (user: AdminUser) => {
     try {
       const detail = await adminApi.getUser(user.id);
@@ -203,7 +215,12 @@ export default function UserManagement() {
                     <div className="flex items-center gap-3">
                       <Avatar name={user.displayName} src={user.avatarUrl} size="sm" />
                       <div>
-                        <p className="font-medium text-text">{user.displayName}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-text">{user.displayName}</p>
+                          {user.deactivatedAt && (
+                            <Badge variant="danger" size="sm">Deactivated</Badge>
+                          )}
+                        </div>
                         <p className="text-xs text-text-tertiary">@{user.username}</p>
                       </div>
                     </div>
@@ -232,6 +249,27 @@ export default function UserManagement() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
+                      {!user.isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            deactivateMutation.mutate({
+                              userId: user.id,
+                              deactivated: !!user.deactivatedAt,
+                            })
+                          }
+                          title={user.deactivatedAt ? 'Reactivate user' : 'Deactivate user'}
+                          className={user.deactivatedAt ? 'text-success hover:text-success' : 'text-warning hover:text-warning'}
+                          disabled={deactivateMutation.isPending}
+                        >
+                          {user.deactivatedAt ? (
+                            <UserCheck className="h-4 w-4" />
+                          ) : (
+                            <UserX className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"

@@ -1,4 +1,4 @@
-import { get, patch, del } from './client';
+import { get, patch, post, del } from './client';
 
 export interface SystemStats {
   totalUsers: number;
@@ -20,8 +20,10 @@ export interface AdminUser {
   username: string;
   displayName: string;
   avatarUrl?: string;
+  isAdmin?: boolean;
   twoFactorEnabled: boolean;
   createdAt: string;
+  deactivatedAt?: string | null;
   orgMemberships: {
     role: string;
     org: { id: string; name: string; slug: string };
@@ -64,6 +66,9 @@ export const adminApi = {
     patch<AdminUser>(`/admin/users/${userId}`, data),
 
   deleteUser: (userId: string) => del<{ deleted: boolean }>(`/admin/users/${userId}`),
+
+  deactivateUser: (userId: string) => post<{ success: boolean }>(`/admin/users/${userId}/deactivate`, {}),
+  reactivateUser: (userId: string) => post<{ success: boolean }>(`/admin/users/${userId}/reactivate`, {}),
 
   getSettings: () => get<SystemSettings>('/admin/settings'),
 };

@@ -50,6 +50,11 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
         data: { lastUsedAt: new Date() },
       });
 
+      const apiTokenUser = await prisma.user.findUnique({ where: { id: apiToken.userId }, select: { deactivatedAt: true } });
+      if (apiTokenUser?.deactivatedAt) {
+        throw new AppError(403, 'Account has been deactivated', 'ACCOUNT_DEACTIVATED');
+      }
+
       req.userId = apiToken.userId;
       return next();
     }
@@ -58,6 +63,12 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     if (header.startsWith('Bearer ')) {
       const token = header.slice(7);
       const payload = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
+
+      const jwtUser = await prisma.user.findUnique({ where: { id: payload.userId }, select: { deactivatedAt: true } });
+      if (jwtUser?.deactivatedAt) {
+        throw new AppError(403, 'Account has been deactivated', 'ACCOUNT_DEACTIVATED');
+      }
+
       req.userId = payload.userId;
       return next();
     }
