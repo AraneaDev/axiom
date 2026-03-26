@@ -254,7 +254,7 @@ export default function PipelinesTab({ repoId }: Props) {
                         <Workflow className="h-3.5 w-3.5" />
                       </Button>
                       <Button
-                        variant="ghost"
+                        variant="danger"
                         size="sm"
                         title="Delete pipeline"
                         onClick={() => setDeleteTarget(p)}

@@ -441,7 +441,7 @@ export default function AutomationRules() {
                 >
                   <Save className="h-4 w-4" /> Edit
                 </Button>
-                <Button variant="ghost" size="xs" onClick={() => deleteMutation.mutate(rule.id)}>
+                <Button variant="danger" size="xs" onClick={() => deleteMutation.mutate(rule.id)}>
                   <Trash2 className="h-4 w-4" /> Delete
                 </Button>
               </div>

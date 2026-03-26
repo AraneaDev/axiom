@@ -231,7 +231,7 @@ export default function AdminDashboard() {
   if (isLoading || !stats) return <PageLoader />;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="px-6 py-4 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

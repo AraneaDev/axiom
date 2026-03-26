@@ -11,13 +11,13 @@ import {
   ArrowRight,
   FileText,
 } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
 import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -46,16 +46,7 @@ const ACTION_LABELS: Record<string, string> = {
  *
  */
 export default function TeamDetail() {
-  const { org, team: teamSlug } = useParams();
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
+  const { org, teamSlug, currentTeam } = useTeamContext();
 
   const { data: projects, isLoading: projectsLoading } = useQuery({
     queryKey: ['projects', currentTeam?.id],
@@ -96,7 +87,7 @@ export default function TeamDetail() {
   if (projectsLoading) return <PageLoader />;
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">{currentTeam?.name}</h1>

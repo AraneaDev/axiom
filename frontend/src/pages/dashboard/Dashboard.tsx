@@ -56,7 +56,7 @@ export default function Dashboard() {
 
   if (orgsLoading || dashLoading)
     return (
-      <div className="space-y-6">
+      <div className="px-6 py-4 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <Skeleton className="h-8 w-64 mb-2" />
@@ -86,7 +86,7 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="space-y-8">
+    <div className="px-6 py-4 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">

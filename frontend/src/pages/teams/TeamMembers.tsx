@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserMinus, UserPlus, Mail, Copy, X, Clock } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import type { Invitation } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -25,22 +26,12 @@ const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
  *
  */
 export default function TeamMembers() {
-  const { org, team: teamSlug } = useParams();
+  const { org, teamSlug, currentOrg, currentTeam } = useTeamContext();
   const queryClient = useQueryClient();
   const toast = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('MEMBER');
-
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
 
   const { data: teamDetail, isLoading } = useQuery({
     queryKey: ['team', currentTeam?.id],
@@ -124,7 +115,7 @@ export default function TeamMembers() {
   );
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Team Members</h1>
         <Button onClick={() => setInviteOpen(true)}>

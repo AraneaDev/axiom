@@ -353,10 +353,9 @@ export default function LabelsSettings() {
                     <Pencil className="h-4 w-4" />
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="danger"
                     size="sm"
                     onClick={() => setDeleteTarget(label.name)}
-                    className="text-danger hover:text-danger"
                     title="Delete label"
                   >
                     <Trash2 className="h-4 w-4" />

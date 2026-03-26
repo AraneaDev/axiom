@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -30,17 +30,8 @@ const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
  *
  */
 export default function MemberProfile() {
-  const { org, team: teamSlug, username } = useParams();
-
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
+  const { org, teamSlug, currentTeam } = useTeamContext();
+  const { username } = useParams();
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['member-profile', currentTeam?.id, username],
@@ -53,7 +44,7 @@ export default function MemberProfile() {
   if (!profile) return null;
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="mb-6">
         <Link to={`/${org}/${teamSlug}/members`}>
           <Button variant="ghost" size="sm">

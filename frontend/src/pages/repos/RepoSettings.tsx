@@ -109,7 +109,7 @@ export default function RepoSettings() {
         >
           <ArrowLeft className="h-3 w-3" /> Back to repository
         </Link>
-        <h1 className="text-xl font-bold flex items-center gap-2">
+        <h1 className="text-2xl font-bold flex items-center gap-2">
           <Settings className="h-5 w-5" /> Repository Settings
         </h1>
       </div>
