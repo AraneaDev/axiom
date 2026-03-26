@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, Check, Eye, EyeOff, Paperclip, Pencil, X } from 'lucide-react';
+import { AlertTriangle, ArrowUp, Check, Eye, EyeOff, Paperclip, Pencil, X } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
 
@@ -18,10 +18,12 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/Toast';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn, formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -32,6 +34,7 @@ import { useAuthStore } from '@/stores/auth.store';
 export default function IssueDetail() {
   const { org, team: teamSlug, project: projectSlug, num } = useParams();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [commentBody, setCommentBody] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -60,7 +63,7 @@ export default function IssueDetail() {
   });
   const currentProject = projects?.find((p) => p.slug === projectSlug);
 
-  const { data: issue, isLoading } = useQuery({
+  const { data: issue, isLoading, isError } = useQuery({
     queryKey: ['issue', currentProject?.id, num],
     queryFn: () => issuesApi.get(currentProject!.id, parseInt(num!)),
     enabled: !!currentProject?.id && !!num,
@@ -79,6 +82,7 @@ export default function IssueDetail() {
       queryClient.invalidateQueries({ queryKey: ['issues'] });
       queryClient.invalidateQueries({ queryKey: ['board'] });
     },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
   });
 
   const { data: watcherData } = useQuery({
@@ -94,6 +98,7 @@ export default function IssueDetail() {
       queryClient.invalidateQueries({ queryKey: ['issues'] });
       queryClient.invalidateQueries({ queryKey: ['board'] });
     },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
   });
 
   const { data: repos = [] } = useQuery({
@@ -138,6 +143,7 @@ export default function IssueDetail() {
   const deleteAttachmentMutation = useMutation({
     mutationFn: (id: string) => attachmentsApi.remove(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', issue?.id] }),
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
   });
 
   const { data: children = [] } = useQuery({
@@ -163,6 +169,7 @@ export default function IssueDetail() {
       setEditingTitle(false);
       setEditingField(null);
     },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
   });
 
   useEffect(() => {
@@ -173,6 +180,9 @@ export default function IssueDetail() {
   }, [editingTitle]);
 
   if (isLoading) return <DetailSkeleton />;
+  if (isError) {
+    return <EmptyState icon={<AlertTriangle />} title="Failed to load issue" description="Something went wrong loading this issue." />;
+  }
   if (!issue) return <div className="text-center py-16 text-text-secondary">Issue not found</div>;
 
   function startEditTitle() {

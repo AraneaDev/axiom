@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronRight,
+  Hash,
   Plus,
   FileText,
   Paperclip,
@@ -51,9 +52,10 @@ function TocSidebar({ tocEntries }: { tocEntries: { level: number; text: string;
                 const el = document.getElementById(entry.id);
                 el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}
-              className="block w-full text-left text-sm text-text-secondary hover:text-primary transition-colors truncate"
+              className="flex items-center gap-1.5 w-full text-left text-sm text-text-secondary hover:text-primary transition-colors truncate"
               style={{ paddingLeft: `${(entry.level - 1) * 12}px` }}
             >
+              <Hash className="h-3 w-3 shrink-0 opacity-40" />
               {entry.text}
             </button>
           ))}

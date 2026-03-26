@@ -82,6 +82,7 @@ export default function CustomFieldSettings() {
       resetForm();
       toast.success('Field created');
     },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
   });
 
   const updateMutation = useMutation({
@@ -97,6 +98,7 @@ export default function CustomFieldSettings() {
       setEditingId(null);
       toast.success('Field updated');
     },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
   });
 
   const deleteMutation = useMutation({
@@ -105,6 +107,7 @@ export default function CustomFieldSettings() {
       queryClient.invalidateQueries({ queryKey: ['custom-fields', currentProject?.id] });
       toast.success('Field deleted');
     },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
   });
 
   function resetForm() {
@@ -124,6 +127,10 @@ export default function CustomFieldSettings() {
   }
 
   function handleCreate() {
+    if (!formName.trim()) {
+      toast.error('Field name is required');
+      return;
+    }
     const options =
       formType === 'SELECT' || formType === 'MULTI_SELECT'
         ? formOptions
