@@ -388,6 +388,7 @@ model Project {
   labels                 Label[]
   columns                BoardColumn[]
   sprints                Sprint[]
+  milestones             Milestone[]
   customFieldDefinitions CustomFieldDefinition[]
   workflowRules          WorkflowRule[]
   automationRules        AutomationRule[]
@@ -449,11 +450,13 @@ model Issue {
 
   // Epic hierarchy & sprint planning
   parentId     String?
-  parent       Issue?  @relation("issueHierarchy", fields: [parentId], references: [id])
-  children     Issue[] @relation("issueHierarchy")
+  parent       Issue?      @relation("issueHierarchy", fields: [parentId], references: [id])
+  children     Issue[]     @relation("issueHierarchy")
   storyPoints  Int?
   sprintId     String?
-  sprint       Sprint? @relation(fields: [sprintId], references: [id])
+  sprint       Sprint?     @relation(fields: [sprintId], references: [id])
+  milestoneId  String?
+  milestone    Milestone?  @relation(fields: [milestoneId], references: [id])
   timeEstimate Int? // minutes
   timeSpent    Int? // minutes
 
@@ -1101,6 +1104,30 @@ model IssueVote {
 
   @@unique([issueId, userId])
   @@map("issue_votes")
+}
+
+// ─── Milestones ─────────────────────────────────────────────
+
+enum MilestoneStatus {
+  OPEN
+  CLOSED
+}
+
+model Milestone {
+  id          String          @id @default(cuid())
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      MilestoneStatus @default(OPEN)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  issues Issue[]
+
+  @@unique([projectId, title])
+  @@map("milestones")
 }
 
 // ─── Issue Watchers ─────────────────────────────────────────

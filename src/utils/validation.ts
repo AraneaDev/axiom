@@ -29,6 +29,8 @@ export {
   createInviteLinkSchema,
   createIssueTemplateSchema,
   updateIssueTemplateSchema,
+  createMilestoneSchema,
+  updateMilestoneSchema,
 } from './validation/common-validators';
 
 export {

@@ -200,3 +200,15 @@ export const createIssueTemplateSchema = z.object({
 });
 
 export const updateIssueTemplateSchema = createIssueTemplateSchema.partial();
+
+// --- Milestones ---
+
+export const createMilestoneSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  dueDate: z.string().optional(),
+});
+
+export const updateMilestoneSchema = createMilestoneSchema.partial().extend({
+  status: z.enum(['OPEN', 'CLOSED']).optional(),
+});
