@@ -1,11 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -16,20 +14,8 @@ import { useToast } from '@/components/ui/Toast';
  *
  */
 export default function CreateProject() {
-  const { org, team: teamSlug } = useParams();
+  const { org, teamSlug, currentTeam, isLoading: teamLoading } = useTeamContext();
   const navigate = useNavigate();
-
-  const { data: orgs, isLoading: loadingOrgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams, isLoading: loadingTeams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
 
   const toast = useToast();
   const [name, setName] = useState('');
@@ -76,7 +62,7 @@ export default function CreateProject() {
     }
   }
 
-  if (loadingOrgs || loadingTeams) return <PageLoader />;
+  if (teamLoading) return <PageLoader />;
 
   return (
     <div className="max-w-4xl mx-auto">

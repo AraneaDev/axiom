@@ -7,9 +7,8 @@ import { Link, Outlet, useOutletContext, useParams } from 'react-router';
 import { CreateFolderModal } from './CreateFolderModal';
 import { PageViewSidebar } from './PageViewSidebar';
 
-import { orgsApi } from '@/api/orgs.api';
-import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import type { PageTreeNode } from '@/lib/types';
@@ -51,22 +50,12 @@ export function useWikiContext() {
  * Right content area: child route via Outlet.
  */
 export default function WikiLayout() {
-  const { org, team, space: spaceSlug, page: pageSlug } = useParams();
+  const { org, teamSlug: team, currentOrg, currentTeam } = useTeamContext();
+  const { space: spaceSlug, page: pageSlug } = useParams();
 
   const [, setTocEntries] = useState<TocEntry[]>([]);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [folderModalParent, setFolderModalParent] = useState<string | undefined>(undefined);
-
-  // Fetch org -> team -> spaces chain
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === team);
 
   const { data: spaces } = useQuery({
     queryKey: ['wikiSpaces', currentTeam?.id],

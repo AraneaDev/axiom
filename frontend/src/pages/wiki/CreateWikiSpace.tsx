@@ -1,11 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
-import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -15,20 +13,8 @@ import { PageLoader, Spinner } from '@/components/ui/Spinner';
  *
  */
 export default function CreateWikiSpace() {
-  const { org, team: teamSlug } = useParams();
+  const { org, teamSlug, currentTeam, isLoading: teamLoading } = useTeamContext();
   const navigate = useNavigate();
-
-  const { data: orgs, isLoading: loadingOrgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams, isLoading: loadingTeams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
 
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -65,7 +51,7 @@ export default function CreateWikiSpace() {
     }
   }
 
-  if (loadingOrgs || loadingTeams) return <PageLoader />;
+  if (teamLoading) return <PageLoader />;
 
   return (
     <div className="max-w-4xl mx-auto">

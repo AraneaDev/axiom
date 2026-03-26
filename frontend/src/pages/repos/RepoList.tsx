@@ -1,10 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { GitBranch, Plus, Lock, Globe, Building2 } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
-import { teamsApi } from '@/api/teams.api';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -23,20 +22,7 @@ const VIS_BADGE: Record<string, 'default' | 'warning' | 'success'> = {
  *
  */
 export default function RepoList() {
-  const { org, team: teamSlug } = useParams();
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
+  const { org, teamSlug, currentTeam } = useTeamContext();
 
   const { data: repos, isLoading } = useQuery({
     queryKey: ['repos', currentTeam?.id],
