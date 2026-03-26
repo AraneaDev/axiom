@@ -7,7 +7,6 @@ import { authenticator } from 'otplib';
 
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
-import { emailQueue } from '../../email/queue';
 import type { AuthPayload } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
@@ -339,6 +338,7 @@ export async function requestPasswordReset(email: string) {
     },
   });
 
+  const { emailQueue } = await import('../../email/queue');
   await emailQueue.add('password-reset', {
     to: user.email,
     recipientName: user.displayName,
