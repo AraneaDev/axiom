@@ -9,6 +9,7 @@ import * as commitsCtrl from './issue-commits.controller';
 import * as linksCtrl from './issue-links.controller';
 import * as votesCtrl from './issue-votes.controller';
 import * as watchersCtrl from './issue-watchers.controller';
+import * as hydrateCtrl from './issues-hydrate.controller';
 import * as issuesController from './issues.controller';
 
 const router = Router();
@@ -36,6 +37,7 @@ router.get('/:projectId/issues/export', issuesController.exportCsv);
 // Bulk operations (must come before :issueNumber routes)
 router.patch('/:projectId/issues/bulk', issuesController.bulkUpdate);
 
+router.get('/:projectId/issues/:issueNumber/hydrate', hydrateCtrl.hydrateIssueDetail);
 router.get('/:projectId/issues/:issueNumber', issuesController.get);
 router.patch('/:projectId/issues/:issueNumber', issuesController.update);
 router.delete('/:projectId/issues/:issueNumber', issuesController.remove);
