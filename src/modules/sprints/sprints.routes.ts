@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { requireProjectAccess } from '../../middleware/requireProjectAccess';
 
+import { hydrateBacklog } from '../issues/backlog-hydrate.controller';
 import * as sprintsController from './sprints.controller';
 
 const router = Router();
@@ -28,6 +29,7 @@ router.delete('/:projectId/sprints/:sprintId/issues/:issueId', sprintsController
 
 // Velocity & backlog
 router.get('/:projectId/velocity', sprintsController.velocity);
+router.get('/:projectId/backlog/hydrate', hydrateBacklog);
 router.get('/:projectId/backlog', sprintsController.backlog);
 
 export default router;
