@@ -35,6 +35,12 @@ export interface WikiPageHydration {
   children: unknown[] | null;
 }
 
+export interface BacklogHydration {
+  sprints: unknown[] | null;
+  backlogIssues: unknown[] | null;
+  velocity: unknown[] | null;
+}
+
 export interface PRDetailHydration {
   pr: Record<string, unknown>;
   mergeChecks: Record<string, unknown> | null;
@@ -63,4 +69,7 @@ export const hydrateApi = {
     const qs = params ? `?${params}` : '';
     return get<IssuesListHydration>(`/projects/${projectId}/issues/hydrate${qs}`);
   },
+
+  backlog: (projectId: string) =>
+    get<BacklogHydration>(`/projects/${projectId}/backlog/hydrate`),
 };

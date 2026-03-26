@@ -6,12 +6,13 @@ import {
   Target,
   ChevronRight,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
 import { SprintCard } from './SprintCard';
 import { SprintFormModal } from './SprintFormModal';
 
+import { hydrateApi } from '@/api/hydrate.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { BurndownChart } from '@/components/BurndownChart';
 import { useProjectContext } from '@/hooks/useProjectContext';
@@ -144,22 +145,50 @@ export default function Backlog() {
     endDate: '',
   });
 
+  // Hydration: single request for all backlog data
+  const hydrationQuery = useQuery({
+    queryKey: ['backlog-hydrate', currentProject?.id],
+    queryFn: () => hydrateApi.backlog(currentProject!.id),
+    enabled: !!currentProject?.id,
+    retry: 1,
+    staleTime: 30_000,
+  });
+
+  // Seed individual caches from hydration response
+  const hydrationMappings = useMemo(() => [
+    { key: ['sprints', currentProject?.id], field: 'sprints' as const },
+    { key: ['backlog', currentProject?.id], field: 'backlogIssues' as const },
+    { key: ['velocity', currentProject?.id], field: 'velocity' as const },
+  ], [currentProject?.id]);
+
+  useEffect(() => {
+    if (!hydrationQuery.data) return;
+    const hd = hydrationQuery.data;
+    for (const { key, field } of hydrationMappings) {
+      const value = hd[field];
+      if (value !== null && value !== undefined) {
+        queryClient.setQueryData(key, value);
+      }
+    }
+  }, [hydrationQuery.data, hydrationMappings, queryClient]);
+
+  // Fallback queries -- only fire if hydration didn't provide the data
   const { data: sprints = [], isLoading: sprintsLoading } = useQuery({
     queryKey: ['sprints', currentProject?.id],
     queryFn: () => sprintsApi.list(currentProject!.id),
-    enabled: !!currentProject?.id,
+    enabled: !!currentProject?.id && !hydrationQuery.data?.sprints,
   });
 
   const { data: backlogIssues = [], isLoading: backlogLoading } = useQuery({
     queryKey: ['backlog', currentProject?.id],
     queryFn: () => sprintsApi.getBacklog(currentProject!.id),
-    enabled: !!currentProject?.id,
+    enabled: !!currentProject?.id && !hydrationQuery.data?.backlogIssues,
   });
 
   const { data: velocityData = [] } = useQuery({
     queryKey: ['velocity', currentProject?.id],
     queryFn: () => sprintsApi.getVelocity(currentProject!.id),
-    enabled: !!currentProject?.id,
+    enabled: !!currentProject?.id && !hydrationQuery.data?.velocity,
   });
 
   const createMutation = useMutation({
@@ -182,7 +211,7 @@ export default function Backlog() {
     },
   });
 
-  const isLoading = sprintsLoading || backlogLoading;
+  const isLoading = (sprintsLoading || backlogLoading) && !hydrationQuery.data;
   if (isLoading)
     return (
       <div className="px-6 py-4">
@@ -209,8 +238,9 @@ export default function Backlog() {
 
   // Sort sprints: active first, then planning, then completed
   const statusOrder: Record<string, number> = { ACTIVE: 0, PLANNING: 1, COMPLETED: 2 };
-  const sortedSprints = [...sprints].sort(
-    (a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9),
+  const sortedSprints = useMemo(
+    () => [...sprints].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9)),
+    [sprints],
   );
 
   const handleBacklogDrop = (e: React.DragEvent) => {
