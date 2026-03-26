@@ -2,6 +2,7 @@
 import { lazy } from 'react';
 import { Route, Navigate, useParams } from 'react-router';
 
+import { ProjectLayout } from '@/components/layout/ProjectLayout';
 import { ProjectSettingsLayout } from '@/components/layout/ProjectSettingsLayout';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
@@ -38,94 +39,96 @@ function ProjectRedirect() {
 export function projectRoutes() {
   return (
     <>
-      {/* Issue routes */}
-      <Route path="/:org/:team/:project" element={<ProjectRedirect />} />
-      <Route
-        path="/:org/:team/:project/backlog"
-        element={
-          <ErrorBoundary>
-            <Backlog />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/:project/board"
-        element={
-          <ErrorBoundary>
-            <Board />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/:project/issues"
-        element={
-          <ErrorBoundary>
-            <IssueList />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/:project/issues/new"
-        element={
-          <ErrorBoundary>
-            <IssueCreate />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/:project/issues/:num"
-        element={
-          <ErrorBoundary>
-            <IssueDetail />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/:project/roadmap"
-        element={
-          <ErrorBoundary>
-            <Roadmap />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/:project/milestones"
-        element={
-          <ErrorBoundary>
-            <Milestones />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/:project/analytics"
-        element={
-          <ErrorBoundary>
-            <ProjectAnalytics />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/:project/time-report"
-        element={
-          <ErrorBoundary>
-            <TimeReport />
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/:org/:team/:project/settings"
-        element={
-          <ErrorBoundary>
-            <ProjectSettingsLayout />
-          </ErrorBoundary>
-        }
-      >
-        <Route index element={<Navigate to="labels" replace />} />
-        <Route path="labels" element={<LabelsSettings />} />
-        <Route path="fields" element={<CustomFieldSettings />} />
-        <Route path="templates" element={<IssueTemplates />} />
-        <Route path="automation" element={<AutomationRules />} />
-        <Route path="workflow" element={<WorkflowEditor />} />
+      {/* Project routes -- wrapped in ProjectLayout for persistent nav bar */}
+      <Route path="/:org/:team/:project" element={<ProjectLayout />}>
+        <Route index element={<ProjectRedirect />} />
+        <Route
+          path="board"
+          element={
+            <ErrorBoundary>
+              <Board />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="issues"
+          element={
+            <ErrorBoundary>
+              <IssueList />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="issues/new"
+          element={
+            <ErrorBoundary>
+              <IssueCreate />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="issues/:num"
+          element={
+            <ErrorBoundary>
+              <IssueDetail />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="backlog"
+          element={
+            <ErrorBoundary>
+              <Backlog />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="roadmap"
+          element={
+            <ErrorBoundary>
+              <Roadmap />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="milestones"
+          element={
+            <ErrorBoundary>
+              <Milestones />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="analytics"
+          element={
+            <ErrorBoundary>
+              <ProjectAnalytics />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="time-report"
+          element={
+            <ErrorBoundary>
+              <TimeReport />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <ErrorBoundary>
+              <ProjectSettingsLayout />
+            </ErrorBoundary>
+          }
+        >
+          <Route index element={<Navigate to="labels" replace />} />
+          <Route path="labels" element={<LabelsSettings />} />
+          <Route path="fields" element={<CustomFieldSettings />} />
+          <Route path="templates" element={<IssueTemplates />} />
+          <Route path="automation" element={<AutomationRules />} />
+          <Route path="workflow" element={<WorkflowEditor />} />
+        </Route>
       </Route>
 
       {/* Wiki routes -- wrapped in WikiLayout for persistent sidebar */}
