@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
 
 import { PRDiffView } from './PRDiffView';
@@ -7,6 +7,7 @@ import { PRHeader } from './PRHeader';
 import { PRReviewPanel } from './PRReviewPanel';
 import { PRTimeline } from './PRTimeline';
 
+import { hydrateApi } from '@/api/hydrate.api';
 import { reposApi } from '@/api/repos.api';
 import { statusChecksApi } from '@/api/status-checks.api';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
@@ -43,16 +44,49 @@ export default function PRDetail() {
 
   const prNumber = parseInt(prNum!);
 
+  // Hydration: single request for all PR detail data
+  const hydrationQuery = useQuery({
+    queryKey: ['pr-hydrate', currentRepo?.id, prNumber],
+    queryFn: () => hydrateApi.prDetail(currentRepo!.id, prNumber),
+    enabled: !!currentRepo?.id,
+    retry: 1,
+    staleTime: 30_000,
+  });
+
+  // Seed individual caches from hydration response
+  const hydrationMappings = useMemo(() => [
+    { key: ['pr', currentRepo?.id, prNumber], field: 'pr' as const },
+    { key: ['mergeChecks', currentRepo?.id, prNumber], field: 'mergeChecks' as const },
+    { key: ['prCommits', currentRepo?.id, prNumber], field: 'commits' as const },
+  ], [currentRepo?.id, prNumber]);
+
+  useEffect(() => {
+    if (!hydrationQuery.data) return;
+    const hd = hydrationQuery.data;
+    for (const { key, field } of hydrationMappings) {
+      const value = hd[field];
+      if (value !== null && value !== undefined) {
+        queryClient.setQueryData(key, value);
+      }
+    }
+    // Seed diff stats -- the hydration only returns { stats } not the full diff
+    if (hd.diff !== null && hd.diff !== undefined) {
+      queryClient.setQueryData(['prDiff', currentRepo?.id, prNumber], hd.diff);
+    }
+  }, [hydrationQuery.data, hydrationMappings, queryClient, currentRepo?.id, prNumber]);
+
   const { data: pr, isLoading } = useQuery({
     queryKey: ['pr', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getPR(currentRepo!.id, prNumber),
-    enabled: !!currentRepo?.id,
+    enabled: !!currentRepo?.id
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.pr === null)),
   });
 
   const { data: mergeChecks } = useQuery({
     queryKey: ['mergeChecks', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getMergeChecks(currentRepo!.id, prNumber),
-    enabled: !!currentRepo?.id,
+    enabled: !!currentRepo?.id
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.mergeChecks === null)),
   });
 
   if (mergeChecks && mergeStrategy === '') {
@@ -62,13 +96,15 @@ export default function PRDetail() {
   const { data: diff } = useQuery({
     queryKey: ['prDiff', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getPRDiff(currentRepo!.id, prNumber),
-    enabled: !!currentRepo?.id,
+    enabled: !!currentRepo?.id
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.diff === null)),
   });
 
   const { data: commits } = useQuery({
     queryKey: ['prCommits', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getPRCommits(currentRepo!.id, prNumber),
-    enabled: !!currentRepo?.id,
+    enabled: !!currentRepo?.id
+      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.commits === null)),
   });
 
   const { data: prStatuses } = useQuery({
