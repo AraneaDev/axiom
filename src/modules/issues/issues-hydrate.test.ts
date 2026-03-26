@@ -120,3 +120,111 @@ describe('Issue Detail Hydrate API', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('Issues List Hydration', () => {
+  let token: string;
+  let projectId: string;
+  let orgId: string;
+  let userId: string;
+
+  beforeAll(async () => {
+    const passwordHash = await bcrypt.hash('testpassword123', 4);
+
+    const user = await prisma.user.upsert({
+      where: { username: 'hydrate-list-test-user' },
+      update: {},
+      create: {
+        email: 'hydrate-list-test@axiom.dev',
+        username: 'hydrate-list-test-user',
+        displayName: 'Hydrate List Test User',
+        passwordHash,
+      },
+    });
+    userId = user.id;
+
+    const org = await prisma.organization.create({
+      data: {
+        name: 'Hydrate List Test Org',
+        slug: 'hydrate-list-test-org',
+        members: { create: { userId: user.id, role: 'OWNER' } },
+      },
+    });
+    orgId = org.id;
+
+    const team = await prisma.team.create({
+      data: {
+        name: 'Hydrate List Test Team',
+        slug: 'hydrate-list-test-team',
+        orgId: org.id,
+        members: { create: { userId: user.id, role: 'ADMIN' } },
+      },
+    });
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ login: 'hydrate-list-test@axiom.dev', password: 'testpassword123' });
+    token = loginRes.body.accessToken;
+
+    const projectRes = await request(app)
+      .post(`/api/projects/team/${team.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ name: 'Hydrate List Project', slug: 'hydrate-list-project', prefix: 'HYL' });
+    projectId = projectRes.body.id;
+
+    // Create a couple of issues
+    await request(app)
+      .post(`/api/projects/${projectId}/issues`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ title: 'List hydrate issue 1', type: 'TASK' });
+
+    await request(app)
+      .post(`/api/projects/${projectId}/issues`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ title: 'List hydrate issue 2', type: 'BUG' });
+  });
+
+  afterAll(async () => {
+    await prisma.organization.delete({ where: { id: orgId } }).catch(() => {});
+    await prisma.user.delete({ where: { id: userId } }).catch(() => {});
+  });
+
+  it('should return issues list with context data', async () => {
+    const res = await request(app)
+      .get(`/api/projects/${projectId}/issues/hydrate`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
+
+    expect(res.status).toBe(200);
+
+    // Issues data
+    expect(res.body).toHaveProperty('issues');
+    expect(res.body.issues).toHaveProperty('issues');
+    expect(res.body.issues.issues.length).toBeGreaterThanOrEqual(2);
+    expect(res.body.issues).toHaveProperty('total');
+
+    // Context data
+    expect(res.body).toHaveProperty('boardColumns');
+    expect(Array.isArray(res.body.boardColumns)).toBe(true);
+    expect(res.body).toHaveProperty('sprints');
+    expect(res.body).toHaveProperty('savedFilters');
+    expect(res.body).toHaveProperty('customFields');
+  });
+
+  it('should pass filters through', async () => {
+    const res = await request(app)
+      .get(`/api/projects/${projectId}/issues/hydrate?type=BUG`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
+
+    expect(res.status).toBe(200);
+    expect(res.body.issues).toHaveProperty('issues');
+    // All returned issues should be BUGs
+    for (const issue of res.body.issues.issues) {
+      expect(issue.type).toBe('BUG');
+    }
+  });
+});

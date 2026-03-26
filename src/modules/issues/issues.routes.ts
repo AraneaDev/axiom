@@ -37,6 +37,8 @@ router.get('/:projectId/issues/export', issuesController.exportCsv);
 // Bulk operations (must come before :issueNumber routes)
 router.patch('/:projectId/issues/bulk', issuesController.bulkUpdate);
 
+// Hydration endpoints (must come before :issueNumber routes)
+router.get('/:projectId/issues/hydrate', hydrateCtrl.hydrateIssuesList);
 router.get('/:projectId/issues/:issueNumber/hydrate', hydrateCtrl.hydrateIssueDetail);
 router.get('/:projectId/issues/:issueNumber', issuesController.get);
 router.patch('/:projectId/issues/:issueNumber', issuesController.update);

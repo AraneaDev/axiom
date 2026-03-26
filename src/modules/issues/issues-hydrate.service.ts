@@ -2,8 +2,10 @@ import { settled } from '../../utils/settled';
 import { listActivities } from '../activity/activity.service';
 import { listAttachments } from '../attachments/attachments.service';
 import { listFieldDefinitions } from '../custom-fields/custom-fields.service';
+import { list as listSavedFilters } from '../saved-filters/saved-filters.service';
 import { listSprints } from '../sprints/sprints.service';
 
+import { getBoard } from './issue-board.service';
 import { getBranches } from './issue-branches.service';
 import { getCommits } from './issue-commits.service';
 import { getChildren, getIssuePullRequests } from './issue-hierarchy.service';
@@ -11,7 +13,7 @@ import { getLinks } from './issue-links.service';
 import { getWorklogs } from './issue-time.service';
 import { getVotes } from './issue-votes.service';
 import { getWatchers } from './issue-watchers.service';
-import { getIssue, getEpicProgress } from './issues.service';
+import { getIssue, getEpicProgress, listIssues } from './issues.service';
 
 /**
  * Hydrate the full Issue Detail view in a single call.
@@ -63,5 +65,57 @@ export async function hydrateIssueDetail(projectId: string, issueNumber: number,
     worklogs: settled(results[8], 'worklogs'),
     sprints: settled(results[11], 'sprints'),
     customFields: settled(results[12], 'customFields'),
+  };
+}
+
+/**
+ * Hydrate the Issues List view in a single call.
+ * Fetches issues (with filters), board columns, sprints, saved filters,
+ * and custom field definitions in parallel.
+ * @param projectId - The project to list issues for
+ * @param filters - Query string filters (q, type, priority, etc.)
+ * @param userId - The requesting user (for saved filters)
+ */
+export async function hydrateIssuesList(
+  projectId: string,
+  filters: Record<string, string>,
+  userId: string,
+) {
+  const issueFilters: {
+    q?: string;
+    type?: string;
+    priority?: string;
+    assigneeId?: string;
+    columnId?: string;
+    sprintId?: string;
+    label?: string;
+    limit?: number;
+    offset?: number;
+  } = {};
+
+  if (filters.q) issueFilters.q = filters.q;
+  if (filters.type) issueFilters.type = filters.type;
+  if (filters.priority) issueFilters.priority = filters.priority;
+  if (filters.assigneeId) issueFilters.assigneeId = filters.assigneeId;
+  if (filters.columnId) issueFilters.columnId = filters.columnId;
+  if (filters.sprintId) issueFilters.sprintId = filters.sprintId;
+  if (filters.label) issueFilters.label = filters.label;
+  if (filters.limit) issueFilters.limit = parseInt(filters.limit, 10);
+  if (filters.offset) issueFilters.offset = parseInt(filters.offset, 10);
+
+  const results = await Promise.allSettled([
+    listIssues(projectId, issueFilters),
+    getBoard(projectId),
+    listSprints(projectId),
+    listSavedFilters(userId, projectId),
+    listFieldDefinitions(projectId),
+  ]);
+
+  return {
+    issues: settled(results[0], 'issues'),
+    boardColumns: settled(results[1], 'boardColumns'),
+    sprints: settled(results[2], 'sprints'),
+    savedFilters: settled(results[3], 'savedFilters'),
+    customFields: settled(results[4], 'customFields'),
   };
 }
