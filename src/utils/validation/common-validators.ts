@@ -149,6 +149,10 @@ export const adminUpdateUserSchema = z.object({
   email: z.string().email().optional(),
 });
 
+export const adminResetPasswordSchema = z.object({
+  newPassword: z.string().min(8).max(128),
+});
+
 // --- Workflows ---
 
 export const createWorkflowRuleSchema = z.object({

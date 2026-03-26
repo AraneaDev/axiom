@@ -36,6 +36,7 @@ router.patch('/users/:userId', adminController.updateUser);
 router.delete('/users/:userId', adminController.deleteUser);
 router.post('/users/:userId/deactivate', adminController.deactivateUser);
 router.post('/users/:userId/reactivate', adminController.reactivateUser);
+router.post('/users/:userId/reset-password', adminController.resetUserPassword);
 
 // Settings
 router.get('/settings', adminController.getSettings);

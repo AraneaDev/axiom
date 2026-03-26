@@ -232,6 +232,26 @@ export async function reactivateUser(userId: string) {
   return { success: true };
 }
 
+/**
+ *
+ * @param userId
+ * @param newPassword
+ */
+export async function resetUserPassword(userId: string, newPassword: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, 'User not found');
+
+  const bcrypt = await import('bcryptjs');
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+    prisma.refreshToken.deleteMany({ where: { userId } }),
+  ]);
+
+  return { success: true };
+}
+
 // ─── System Settings ────────────────────────────────────────
 
 /**

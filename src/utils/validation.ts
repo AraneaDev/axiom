@@ -20,6 +20,7 @@ export {
   codeSearchSchema,
   savedSearchSchema,
   adminUpdateUserSchema,
+  adminResetPasswordSchema,
   createWorkflowRuleSchema,
   updateWorkflowRuleSchema,
   createInvitationSchema,

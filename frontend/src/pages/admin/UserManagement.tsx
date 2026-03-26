@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Search, Eye, Trash2, ArrowLeft, Shield, Mail, Calendar, UserX, UserCheck } from 'lucide-react';
+import { Users, Search, Eye, Trash2, ArrowLeft, Shield, Mail, Calendar, UserX, UserCheck, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -102,6 +102,56 @@ function UserDetailModal({ user, onClose }: { user: AdminUser; onClose: () => vo
   );
 }
 
+// ─── Reset Password Modal ───────────────────────────────────
+
+function ResetPasswordModal({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [isPending, setIsPending] = useState(false);
+  const { success, error: showError } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsPending(true);
+    try {
+      await adminApi.resetPassword(user.id, newPassword);
+      success('Password reset successfully');
+      onClose();
+    } catch {
+      showError('Failed to reset password');
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Reset Password">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <p className="text-sm text-text-secondary">
+          Set a new password for <span className="font-medium text-text">@{user.username}</span>. Their active sessions will be invalidated.
+        </p>
+        <Input
+          label="New Password"
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="Min. 8 characters"
+          required
+          minLength={8}
+          maxLength={128}
+        />
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" size="sm" type="button" onClick={onClose}>
+            <ArrowLeft className="h-4 w-4" /> Cancel
+          </Button>
+          <Button size="sm" type="submit" disabled={isPending || newPassword.length < 8}>
+            <KeyRound className="h-4 w-4" /> Reset Password
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ─── Main ───────────────────────────────────────────────────
 
 /**
@@ -113,6 +163,7 @@ export default function UserManagement() {
   const [page, setPage] = useState(0);
   const [viewUser, setViewUser] = useState<AdminUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<AdminUser | null>(null);
 
   const queryClient = useQueryClient();
   const { success, error: showError } = useToast();
@@ -273,6 +324,14 @@ export default function UserManagement() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => setResetPasswordTarget(user)}
+                        title="Reset password"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => setDeleteTarget(user)}
                         title="Delete user"
                         className="text-danger hover:text-danger"
@@ -312,6 +371,9 @@ export default function UserManagement() {
       )}
 
       {/* Modals */}
+      {resetPasswordTarget && (
+        <ResetPasswordModal user={resetPasswordTarget} onClose={() => setResetPasswordTarget(null)} />
+      )}
       {viewUser && <UserDetailModal user={viewUser} onClose={() => setViewUser(null)} />}
       <ConfirmDialog
         open={!!deleteTarget}

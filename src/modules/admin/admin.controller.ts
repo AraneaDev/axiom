@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
-import { validate, adminUpdateUserSchema } from '../../utils/validation';
+import { validate, adminUpdateUserSchema, adminResetPasswordSchema } from '../../utils/validation';
 
 import * as adminService from './admin.service';
 
@@ -112,6 +112,23 @@ export async function deactivateUser(req: Request, res: Response, next: NextFunc
 export async function reactivateUser(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await adminService.reactivateUser(param(req, 'userId'));
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function resetUserPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = param(req, 'userId');
+    const { newPassword } = validate(adminResetPasswordSchema, req.body);
+    const result = await adminService.resetUserPassword(userId, newPassword);
     res.json(result);
   } catch (err) {
     next(err);
