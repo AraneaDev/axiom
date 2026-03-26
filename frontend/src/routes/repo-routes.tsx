@@ -10,6 +10,7 @@ const RepoDetail = lazy(() => import('@/pages/repos/RepoDetail'));
 const FileBrowser = lazy(() => import('@/pages/repos/FileBrowser'));
 const FileView = lazy(() => import('@/pages/repos/FileView'));
 const PRList = lazy(() => import('@/pages/repos/PRList'));
+const PRCreate = lazy(() => import('@/pages/repos/PRCreate'));
 const PRDetail = lazy(() => import('@/pages/repos/PRDetail'));
 const CommitDetail = lazy(() => import('@/pages/repos/CommitDetail'));
 const BlameView = lazy(() => import('@/pages/repos/BlameView'));
@@ -119,6 +120,14 @@ export function repoRoutes() {
         element={
           <ErrorBoundary>
             <PRList />
+          </ErrorBoundary>
+        }
+      />
+      <Route
+        path="/:org/:team/repos/:repo/pulls/new"
+        element={
+          <ErrorBoundary>
+            <PRCreate />
           </ErrorBoundary>
         }
       />
