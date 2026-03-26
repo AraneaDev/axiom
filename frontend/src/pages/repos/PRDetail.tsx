@@ -195,6 +195,8 @@ export default function PRDetail() {
             diff={diff}
             diffView={diffView}
             onDiffViewChange={setDiffView}
+            repoId={currentRepo?.id}
+            prNumber={prNumber}
           />
 
           <PRTimeline
