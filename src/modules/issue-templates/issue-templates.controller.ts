@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { param } from '../../utils/params';
+import { createIssueTemplateSchema, updateIssueTemplateSchema } from '../../utils/validation';
 
 import * as templatesService from './issue-templates.service';
 
@@ -12,19 +13,8 @@ import * as templatesService from './issue-templates.service';
  */
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name, type, title, body, labels, assigneeId } = req.body;
-    if (!name || !type || !title) {
-      res.status(400).json({ error: { message: 'name, type, and title are required' } });
-      return;
-    }
-    const template = await templatesService.createTemplate(param(req, 'projectId'), {
-      name,
-      type,
-      title,
-      body: body ?? '',
-      labels,
-      assigneeId,
-    });
+    const data = createIssueTemplateSchema.parse(req.body);
+    const template = await templatesService.createTemplate(param(req, 'projectId'), data);
     res.status(201).json(template);
   } catch (err) {
     next(err);
@@ -72,11 +62,11 @@ export async function get(req: Request, res: Response, next: NextFunction) {
  */
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name, type, title, body, labels, assigneeId } = req.body;
+    const data = updateIssueTemplateSchema.parse(req.body);
     const template = await templatesService.updateTemplate(
       param(req, 'projectId'),
       param(req, 'templateId'),
-      { name, type, title, body, labels, assigneeId },
+      data,
     );
     res.json(template);
   } catch (err) {

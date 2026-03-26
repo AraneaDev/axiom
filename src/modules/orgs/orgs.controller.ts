@@ -1,7 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { param } from '../../utils/params';
-import { createOrgSchema } from '../../utils/validation';
+import {
+  createOrgSchema,
+  updateOrgSchema,
+  addOrgMemberSchema,
+  createInviteLinkSchema,
+} from '../../utils/validation';
 
 import * as orgsService from './orgs.service';
 
@@ -59,7 +64,8 @@ export async function list(req: Request, res: Response, next: NextFunction) {
  */
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    const org = await orgsService.updateOrg(param(req, 'orgId'), req.body);
+    const data = updateOrgSchema.parse(req.body);
+    const org = await orgsService.updateOrg(param(req, 'orgId'), data);
     res.json(org);
   } catch (err) {
     next(err);
@@ -104,7 +110,7 @@ export async function listMembers(req: Request, res: Response, next: NextFunctio
  */
 export async function addMember(req: Request, res: Response, next: NextFunction) {
   try {
-    const { userId, role } = req.body;
+    const { userId, role } = addOrgMemberSchema.parse(req.body);
     const member = await orgsService.addOrgMember(param(req, 'orgId'), userId, role);
     res.status(201).json(member);
   } catch (err) {
@@ -120,10 +126,11 @@ export async function addMember(req: Request, res: Response, next: NextFunction)
  */
 export async function updateMemberRole(req: Request, res: Response, next: NextFunction) {
   try {
+    const { role } = addOrgMemberSchema.pick({ role: true }).parse(req.body);
     const member = await orgsService.updateOrgMemberRole(
       param(req, 'orgId'),
       param(req, 'memberId'),
-      req.body.role,
+      role,
     );
     res.json(member);
   } catch (err) {
@@ -155,7 +162,8 @@ export async function removeMember(req: Request, res: Response, next: NextFuncti
  */
 export async function createInvite(req: Request, res: Response, next: NextFunction) {
   try {
-    const invite = await orgsService.createInviteLink(param(req, 'orgId'), req.userId!, req.body);
+    const data = createInviteLinkSchema.parse(req.body);
+    const invite = await orgsService.createInviteLink(param(req, 'orgId'), req.userId!, data);
     res.status(201).json(invite);
   } catch (err) {
     next(err);

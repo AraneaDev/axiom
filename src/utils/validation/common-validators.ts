@@ -139,3 +139,51 @@ export const adminUpdateUserSchema = z.object({
   role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER', 'GUEST']).optional(),
   email: z.string().email().optional(),
 });
+
+// --- Workflows ---
+
+export const createWorkflowRuleSchema = z.object({
+  fromColumnId: z.string().min(1),
+  toColumnId: z.string().min(1),
+});
+
+export const updateWorkflowRuleSchema = createWorkflowRuleSchema.partial();
+
+// --- Invitations ---
+
+export const createInvitationSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER', 'GUEST']),
+  teamId: z.string().optional(),
+});
+
+// --- Organizations (additional) ---
+
+export const updateOrgSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).optional(),
+});
+
+export const addOrgMemberSchema = z.object({
+  userId: z.string().min(1),
+  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER', 'GUEST']).default('MEMBER'),
+});
+
+export const createInviteLinkSchema = z.object({
+  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER', 'GUEST']).default('MEMBER'),
+  maxUses: z.number().int().min(1).max(1000).default(25),
+  expiresInDays: z.number().int().min(1).max(365).optional(),
+});
+
+// --- Issue Templates ---
+
+export const createIssueTemplateSchema = z.object({
+  name: z.string().min(1).max(200),
+  type: z.enum(['TASK', 'BUG', 'STORY', 'EPIC']),
+  title: z.string().min(1).max(500),
+  body: z.string().default(''),
+  labels: z.array(z.string()).optional(),
+  assigneeId: z.string().optional(),
+});
+
+export const updateIssueTemplateSchema = createIssueTemplateSchema.partial();

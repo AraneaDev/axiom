@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { param } from '../../utils/params';
+import { createWorkflowRuleSchema, updateWorkflowRuleSchema } from '../../utils/validation';
 
 import * as workflowService from './workflow.service';
 
@@ -11,7 +12,8 @@ import * as workflowService from './workflow.service';
  */
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
-    const rule = await workflowService.createRule(param(req, 'projectId'), req.body);
+    const data = createWorkflowRuleSchema.parse(req.body);
+    const rule = await workflowService.createRule(param(req, 'projectId'), data);
     res.status(201).json(rule);
   } catch (err) {
     next(err);
@@ -39,10 +41,11 @@ export async function list(req: Request, res: Response, next: NextFunction) {
  */
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
+    const data = updateWorkflowRuleSchema.parse(req.body);
     const rule = await workflowService.updateRule(
       param(req, 'ruleId'),
       param(req, 'projectId'),
-      req.body,
+      data,
     );
     res.json(rule);
   } catch (err) {

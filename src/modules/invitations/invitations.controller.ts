@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { param } from '../../utils/params';
+import { createInvitationSchema } from '../../utils/validation';
 
 import * as invitationsService from './invitations.service';
 
@@ -12,12 +13,12 @@ import * as invitationsService from './invitations.service';
  */
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email, role, teamId } = req.body;
-    const invitation = await invitationsService.createInvitation(param(req, 'orgId'), req.userId!, {
-      email,
-      role,
-      teamId,
-    });
+    const data = createInvitationSchema.parse(req.body);
+    const invitation = await invitationsService.createInvitation(
+      param(req, 'orgId'),
+      req.userId!,
+      data,
+    );
     res.status(201).json(invitation);
   } catch (err) {
     next(err);
