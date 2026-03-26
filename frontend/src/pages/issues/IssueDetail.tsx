@@ -180,7 +180,7 @@ export default function IssueDetail() {
   }
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="flex flex-col lg:grid lg:grid-cols-[1fr_340px] gap-8">
         {/* Main content */}
         <div className="min-w-0">
@@ -197,7 +197,7 @@ export default function IssueDetail() {
                       if (e.key === 'Enter') saveTitle();
                       if (e.key === 'Escape') setEditingTitle(false);
                     }}
-                    className="flex-1 text-xl font-semibold bg-transparent border-b-2 border-primary outline-none py-0.5"
+                    className="flex-1 text-2xl font-bold bg-transparent border-b-2 border-primary outline-none py-0.5"
                   />
                   <Button
                     variant="ghost"
@@ -221,7 +221,7 @@ export default function IssueDetail() {
                   </Button>
                 </div>
               ) : (
-                <h1 className="text-xl font-semibold group cursor-pointer" onClick={startEditTitle}>
+                <h1 className="text-2xl font-bold group cursor-pointer" onClick={startEditTitle}>
                   {issue.title}
                   <Pencil className="h-3.5 w-3.5 ml-2 inline opacity-0 group-hover:opacity-40 transition-opacity" />
                 </h1>
