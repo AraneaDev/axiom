@@ -340,7 +340,8 @@ textarea {
 }
 
 /* Tiptap editor styles */
-.tiptap.ProseMirror {
+.tiptap.ProseMirror,
+div[contenteditable].tiptap-editor {
   min-height: 120px;
 }
 .tiptap-editor p.is-editor-empty:first-child::before {
