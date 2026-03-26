@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Clock, Download, Timer, Users } from 'lucide-react';
+import { Download, Timer, Users } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
@@ -97,21 +97,22 @@ export default function TimeReport() {
   if (isLoading || !report) return <TimeReportSkeleton />;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 px-6 py-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <Clock className="h-6 w-6 text-primary" />
-            {currentProject?.name} Time Report
-          </h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Time logged vs. estimated across team members and issues
-          </p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">{currentProject?.name} Time Report</h1>
+          {currentProject?.prefix && (
+            <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
+              {currentProject.prefix}
+            </span>
+          )}
         </div>
-        <Button variant="secondary" size="sm" onClick={handleExportCsv}>
-          <Download className="h-4 w-4" /> Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={handleExportCsv}>
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
+        </div>
       </div>
 
       {/* Member breakdown */}

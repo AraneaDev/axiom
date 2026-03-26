@@ -223,8 +223,8 @@ export default function IssueList() {
 
   if (isLoading)
     return (
-      <div>
-        <div className="flex items-center justify-between mb-6">
+      <div className="px-6 py-4">
+        <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold">Issues</h1>
         </div>
         <ListSkeleton rows={8} />
@@ -232,14 +232,12 @@ export default function IssueList() {
     );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="px-6 py-4">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{currentProject?.name} Issues</h1>
-          <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-xs font-medium text-text-secondary">
-            {hasActiveSearch || activeFilterCount > 0
-              ? `${filteredIssues.length} / ${data?.total ?? 0}`
-              : `${data?.total ?? 0}`}
+          <h1 className="text-2xl font-bold">{currentProject?.name} Issues</h1>
+          <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
+            {currentProject?.prefix}
           </span>
         </div>
         <div className="flex items-center gap-2">

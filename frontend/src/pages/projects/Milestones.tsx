@@ -264,22 +264,23 @@ export default function Milestones() {
   const closedCount = milestones.filter((m) => m.status === 'CLOSED').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-6 py-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <Flag className="h-6 w-6 text-primary" />
-            Milestones
-          </h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Track progress toward project goals
-          </p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Milestones</h1>
+          {currentProject?.prefix && (
+            <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
+              {currentProject.prefix}
+            </span>
+          )}
         </div>
-        <Button onClick={() => setShowCreate(true)} disabled={!currentProject}>
-          <Plus className="h-4 w-4" />
-          New Milestone
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setShowCreate(true)} disabled={!currentProject}>
+            <Plus className="h-4 w-4" />
+            New Milestone
+          </Button>
+        </div>
       </div>
 
       {/* Filter tabs */}

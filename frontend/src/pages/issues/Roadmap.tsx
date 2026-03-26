@@ -265,7 +265,7 @@ export default function Roadmap() {
 
   if (isLoading)
     return (
-      <div>
+      <div className="px-6 py-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <Skeleton className="h-7 w-48 mb-2" />
@@ -300,15 +300,17 @@ export default function Roadmap() {
     );
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="flex items-center justify-between mb-4">
-        <div>
+        <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">{currentProject?.name} Roadmap</h1>
-          <p className="text-sm text-text-secondary">
-            {epics.length} epic{epics.length !== 1 ? 's' : ''} on the timeline
-          </p>
+          {currentProject?.prefix && (
+            <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
+              {currentProject.prefix}
+            </span>
+          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
             <Button size="sm">
               <Plus className="h-4 w-4" /> New Issue

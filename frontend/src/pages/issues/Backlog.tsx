@@ -202,8 +202,8 @@ export default function Backlog() {
   const isLoading = sprintsLoading || backlogLoading;
   if (isLoading)
     return (
-      <div>
-        <div className="flex items-center justify-between mb-6">
+      <div className="px-6 py-4">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <Skeleton className="h-7 w-32 mb-2" />
             <Skeleton className="h-4 w-56" />
@@ -254,13 +254,17 @@ export default function Backlog() {
   };
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-text">Backlog</h1>
-          <p className="text-sm text-text-secondary">Plan sprints and manage your backlog</p>
+    <div className="px-6 py-4">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Backlog</h1>
+          {currentProject?.prefix && (
+            <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
+              {currentProject.prefix}
+            </span>
+          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" /> Create Sprint
           </Button>

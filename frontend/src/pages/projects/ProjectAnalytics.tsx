@@ -140,16 +140,18 @@ export default function ProjectAnalytics() {
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 px-6 py-4">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          <BarChart3 className="h-6 w-6 text-primary" />
-          {currentProject?.name} Analytics
-        </h1>
-        <p className="text-sm text-text-secondary mt-1">
-          Project performance overview and issue metrics
-        </p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">{currentProject?.name} Analytics</h1>
+          {currentProject?.prefix && (
+            <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
+              {currentProject.prefix}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2" />
       </div>
 
       {/* Summary cards */}
