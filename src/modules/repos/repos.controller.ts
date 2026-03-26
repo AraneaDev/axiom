@@ -1,6 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
 import { prisma } from '../../config/database';
+import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 import {
@@ -15,311 +16,124 @@ import {
 
 import * as reposService from './repos.service';
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(createRepoSchema, req.body);
-    const repo = await reposService.createRepo(param(req, 'teamId'), body);
-    res.status(201).json(repo);
-  } catch (err) {
-    next(err);
-  }
-}
+export const create = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(createRepoSchema, req.body);
+  const repo = await reposService.createRepo(param(req, 'teamId'), body);
+  res.status(201).json(repo);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function get(req: Request, res: Response, next: NextFunction) {
-  try {
-    const repo = await reposService.getRepo(param(req, 'repoId'));
-    res.json(repo);
-  } catch (err) {
-    next(err);
-  }
-}
+export const get = asyncHandler(async (req: Request, res: Response) => {
+  const repo = await reposService.getRepo(param(req, 'repoId'));
+  res.json(repo);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { take, skip } = parsePagination(req.query as Record<string, string>);
-    const result = await reposService.listRepos(param(req, 'teamId'), {
-      limit: take,
-      offset: skip,
-    });
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const list = asyncHandler(async (req: Request, res: Response) => {
+  const { take, skip } = parsePagination(req.query as Record<string, string>);
+  const result = await reposService.listRepos(param(req, 'teamId'), {
+    limit: take,
+    offset: skip,
+  });
+  res.json(result);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function update(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(updateRepoSchema, req.body);
-    const repo = await reposService.updateRepo(param(req, 'repoId'), body);
-    res.json(repo);
-  } catch (err) {
-    next(err);
-  }
-}
+export const update = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(updateRepoSchema, req.body);
+  const repo = await reposService.updateRepo(param(req, 'repoId'), body);
+  res.json(repo);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function remove(req: Request, res: Response, next: NextFunction) {
-  try {
-    await reposService.deleteRepoById(param(req, 'repoId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  await reposService.deleteRepoById(param(req, 'repoId'));
+  res.status(204).send();
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function fork(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(forkRepoSchema, req.body);
-    const repo = await reposService.forkRepoById(
-      param(req, 'repoId'),
-      body.targetTeamId,
-      body.slug,
-    );
-    res.status(201).json(repo);
-  } catch (err) {
-    next(err);
-  }
-}
+export const fork = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(forkRepoSchema, req.body);
+  const repo = await reposService.forkRepoById(param(req, 'repoId'), body.targetTeamId, body.slug);
+  res.status(201).json(repo);
+});
 
 // Settings
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function updateSettings(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(updateRepoSettingsSchema, req.body);
-    const repo = await reposService.updateRepoSettings(param(req, 'repoId'), body);
-    res.json(repo);
-  } catch (err) {
-    next(err);
-  }
-}
+export const updateSettings = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(updateRepoSettingsSchema, req.body);
+  const repo = await reposService.updateRepoSettings(param(req, 'repoId'), body);
+  res.json(repo);
+});
 
 // Branches
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listBranches(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await reposService.getBranches(param(req, 'repoId')));
-  } catch (err) {
-    next(err);
-  }
-}
+export const listBranches = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await reposService.getBranches(param(req, 'repoId')));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getBranch(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await reposService.getBranchDetail(param(req, 'repoId'), param(req, 'branchName')));
-  } catch (err) {
-    next(err);
-  }
-}
+export const getBranch = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await reposService.getBranchDetail(param(req, 'repoId'), param(req, 'branchName')));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function createBranch(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(createBranchSchema, req.body);
-    res
-      .status(201)
-      .json(await reposService.createRepoBranch(param(req, 'repoId'), body.name, body.startPoint));
-  } catch (err) {
-    next(err);
-  }
-}
+export const createBranch = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(createBranchSchema, req.body);
+  res
+    .status(201)
+    .json(await reposService.createRepoBranch(param(req, 'repoId'), body.name, body.startPoint));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function deleteBranch(req: Request, res: Response, next: NextFunction) {
-  try {
-    await reposService.deleteRepoBranch(param(req, 'repoId'), param(req, 'branchName'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const deleteBranch = asyncHandler(async (req: Request, res: Response) => {
+  await reposService.deleteRepoBranch(param(req, 'repoId'), param(req, 'branchName'));
+  res.status(204).send();
+});
 
 // Commits
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listCommits(req: Request, res: Response, next: NextFunction) {
-  try {
-    const ref = (req.query.ref as string) || 'HEAD';
-    const limit = Math.max(
-      1,
-      Math.min(parseInt((req.query.limit as string) || '20', 10) || 20, 100),
-    );
-    const skip = Math.max(0, parseInt((req.query.skip as string) || '0', 10) || 0);
-    const filePath = (req.query.path as string) || undefined;
-    res.json(await reposService.getCommits(param(req, 'repoId'), ref, limit, skip, filePath));
-  } catch (err) {
-    next(err);
-  }
-}
+export const listCommits = asyncHandler(async (req: Request, res: Response) => {
+  const ref = (req.query.ref as string) || 'HEAD';
+  const limit = Math.max(1, Math.min(parseInt((req.query.limit as string) || '20', 10) || 20, 100));
+  const skip = Math.max(0, parseInt((req.query.skip as string) || '0', 10) || 0);
+  const filePath = (req.query.path as string) || undefined;
+  res.json(await reposService.getCommits(param(req, 'repoId'), ref, limit, skip, filePath));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getCommit(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await reposService.getCommitDetail(param(req, 'repoId'), param(req, 'sha')));
-  } catch (err) {
-    next(err);
-  }
-}
+export const getCommit = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await reposService.getCommitDetail(param(req, 'repoId'), param(req, 'sha')));
+});
 
 // Tree / File browser
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getTree(req: Request, res: Response, next: NextFunction) {
-  try {
-    const ref = param(req, 'ref');
-    const treePath = req.params[0] || ''; // wildcard capture
-    res.json(await reposService.getTree(param(req, 'repoId'), ref, treePath));
-  } catch (err) {
-    next(err);
-  }
-}
+export const getTree = asyncHandler(async (req: Request, res: Response) => {
+  const ref = param(req, 'ref');
+  const treePath = req.params[0] || ''; // wildcard capture
+  res.json(await reposService.getTree(param(req, 'repoId'), ref, treePath));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getBlob(req: Request, res: Response, next: NextFunction) {
-  try {
-    const ref = param(req, 'ref');
-    const filePath = req.params[0] || '';
-    res.json(await reposService.getBlob(param(req, 'repoId'), ref, filePath));
-  } catch (err) {
-    next(err);
-  }
-}
+export const getBlob = asyncHandler(async (req: Request, res: Response) => {
+  const ref = param(req, 'ref');
+  const filePath = req.params[0] || '';
+  res.json(await reposService.getBlob(param(req, 'repoId'), ref, filePath));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getBlame(req: Request, res: Response, next: NextFunction) {
-  try {
-    const ref = param(req, 'ref');
-    const filePath = req.params[0] || '';
-    res.json(await reposService.getBlame(param(req, 'repoId'), ref, filePath));
-  } catch (err) {
-    next(err);
-  }
-}
+export const getBlame = asyncHandler(async (req: Request, res: Response) => {
+  const ref = param(req, 'ref');
+  const filePath = req.params[0] || '';
+  res.json(await reposService.getBlame(param(req, 'repoId'), ref, filePath));
+});
 
 // Tags
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listTags(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await reposService.getTags(param(req, 'repoId')));
-  } catch (err) {
-    next(err);
-  }
-}
+export const listTags = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await reposService.getTags(param(req, 'repoId')));
+});
 
 // File editor
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function updateBlob(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = updateFileSchema.parse(req.body);
-    const filePath = req.params[0];
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId! },
-      select: { displayName: true, email: true },
-    });
-    const result = await reposService.updateFile(
-      param(req, 'repoId'),
-      filePath,
-      data.content,
-      data.message,
-      data.branch,
-      user!.displayName,
-      user!.email,
-    );
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const updateBlob = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(updateFileSchema, req.body);
+  const filePath = req.params[0];
+  const user = await prisma.user.findUnique({
+    where: { id: req.userId! },
+    select: { displayName: true, email: true },
+  });
+  const result = await reposService.updateFile(
+    param(req, 'repoId'),
+    filePath,
+    data.content,
+    data.message,
+    data.branch,
+    user!.displayName,
+    user!.email,
+  );
+  res.json(result);
+});

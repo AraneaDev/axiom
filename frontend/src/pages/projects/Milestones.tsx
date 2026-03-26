@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  AlertTriangle,
   Flag,
   Plus,
   Trash2,
@@ -12,15 +13,16 @@ import {
 import { useState } from 'react';
 
 import { milestonesApi, type Milestone } from '@/api/milestones.api';
-import { useProjectContext } from '@/hooks/useProjectContext';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
+import { useModalState } from '@/hooks/useModalState';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { cn, formatDate } from '@/lib/utils';
 
 type FilterTab = 'all' | 'open' | 'closed';
@@ -86,13 +88,19 @@ function MilestoneCard({
                   className={cn(
                     'flex items-center gap-1',
                     isOpen && isOverdue(milestone.dueDate) && 'text-danger font-medium',
-                    isOpen && isDueSoon(milestone.dueDate) && !isOverdue(milestone.dueDate) && 'text-warning font-medium',
+                    isOpen &&
+                      isDueSoon(milestone.dueDate) &&
+                      !isOverdue(milestone.dueDate) &&
+                      'text-warning font-medium',
                   )}
                 >
                   <Calendar className="h-3.5 w-3.5" />
                   Due {formatDate(milestone.dueDate)}
                   {isOpen && isOverdue(milestone.dueDate) && ' (overdue)'}
-                  {isOpen && isDueSoon(milestone.dueDate) && !isOverdue(milestone.dueDate) && ' (soon)'}
+                  {isOpen &&
+                    isDueSoon(milestone.dueDate) &&
+                    !isOverdue(milestone.dueDate) &&
+                    ' (soon)'}
                 </span>
               )}
             </div>
@@ -106,11 +114,7 @@ function MilestoneCard({
             disabled={isToggling}
             title={isOpen ? 'Close milestone' : 'Reopen milestone'}
           >
-            {isOpen ? (
-              <CheckCircle2 className="h-4 w-4" />
-            ) : (
-              <RotateCcw className="h-4 w-4" />
-            )}
+            {isOpen ? <CheckCircle2 className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
             {isOpen ? 'Close' : 'Reopen'}
           </Button>
           <Button
@@ -156,13 +160,17 @@ export default function Milestones() {
   const toast = useToast();
 
   const [filter, setFilter] = useState<FilterTab>('open');
-  const [showCreate, setShowCreate] = useState(false);
+  const createModal = useModalState();
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Milestone | null>(null);
 
-  const { data: milestones = [], isLoading } = useQuery({
+  const {
+    data: milestones = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['milestones', currentProject?.id],
     queryFn: () => milestonesApi.list(currentProject!.id),
     enabled: !!currentProject?.id,
@@ -174,7 +182,7 @@ export default function Milestones() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['milestones', currentProject?.id] });
       toast.success('Milestone created');
-      setShowCreate(false);
+      createModal.close();
       setNewTitle('');
       setNewDescription('');
       setNewDueDate('');
@@ -232,7 +240,7 @@ export default function Milestones() {
     <div className="space-y-6 px-6 py-4">
       {/* Header */}
       <PageHeader title="Milestones" prefix={currentProject?.prefix}>
-        <Button onClick={() => setShowCreate(true)} disabled={!currentProject}>
+        <Button onClick={() => createModal.open()} disabled={!currentProject}>
           <Plus className="h-4 w-4" />
           New Milestone
         </Button>
@@ -241,7 +249,8 @@ export default function Milestones() {
       {/* Filter tabs */}
       <div className="flex items-center gap-1 border-b border-border">
         {(['open', 'closed', 'all'] as FilterTab[]).map((tab) => {
-          const count = tab === 'open' ? openCount : tab === 'closed' ? closedCount : milestones.length;
+          const count =
+            tab === 'open' ? openCount : tab === 'closed' ? closedCount : milestones.length;
           return (
             <button
               key={tab}
@@ -257,7 +266,9 @@ export default function Milestones() {
               <span
                 className={cn(
                   'ml-2 text-xs rounded-full px-1.5 py-0.5',
-                  filter === tab ? 'bg-primary-light text-primary' : 'bg-surface-tertiary text-text-tertiary',
+                  filter === tab
+                    ? 'bg-primary-light text-primary'
+                    : 'bg-surface-tertiary text-text-tertiary',
                 )}
               >
                 {count}
@@ -268,10 +279,20 @@ export default function Milestones() {
       </div>
 
       {/* Milestones list */}
-      {isLoading ? (
+      {error ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+            <p className="text-secondary">Failed to load milestones</p>
+          </div>
+        </div>
+      ) : isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-lg border border-border bg-surface p-5 h-28 animate-pulse" />
+            <div
+              key={i}
+              className="rounded-lg border border-border bg-surface p-5 h-28 animate-pulse"
+            />
           ))}
         </div>
       ) : filteredMilestones.length === 0 ? (
@@ -285,7 +306,7 @@ export default function Milestones() {
           }
           action={
             filter === 'all' ? (
-              <Button onClick={() => setShowCreate(true)}>
+              <Button onClick={() => createModal.open()}>
                 <Plus className="h-4 w-4" />
                 New Milestone
               </Button>
@@ -309,7 +330,7 @@ export default function Milestones() {
       )}
 
       {/* Create modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Milestone" size="md">
+      <Modal open={createModal.isOpen} onClose={createModal.close} title="New Milestone" size="md">
         <form onSubmit={handleCreate} className="space-y-4">
           <Input
             label="Title"
@@ -336,11 +357,7 @@ export default function Milestones() {
             />
           </div>
           <div className="flex items-center justify-end gap-3 pt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setShowCreate(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => createModal.close()}>
               <X className="h-4 w-4" />
               Cancel
             </Button>

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle } from 'lucide-react';
 import { useParams, Link } from 'react-router';
 
 import { useWikiContext } from './WikiLayout';
@@ -17,13 +18,28 @@ export default function PageHistory() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
   const { currentSpace } = useWikiContext();
 
-  const { data: versions, isLoading } = useQuery({
+  const {
+    data: versions,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['pageHistory', currentSpace?.id, pageSlug],
     queryFn: () => wikiApi.getPageHistory(currentSpace!.id, pageSlug!),
     enabled: !!currentSpace?.id && !!pageSlug,
   });
 
   if (isLoading) return <PageLoader />;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load page history</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

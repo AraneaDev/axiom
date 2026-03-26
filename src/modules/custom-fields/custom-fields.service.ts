@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 // ─── Field Definitions ──────────────────────────────────────
 
@@ -86,8 +87,10 @@ export async function updateFieldDefinition(
     position?: number;
   },
 ) {
-  const existing = await prisma.customFieldDefinition.findUnique({ where: { id: fieldId } });
-  if (!existing) throw new AppError(404, 'Custom field definition not found');
+  await findOrThrow(
+    prisma.customFieldDefinition.findUnique({ where: { id: fieldId } }),
+    'Custom field definition not found',
+  );
 
   return prisma.customFieldDefinition.update({
     where: { id: fieldId },
@@ -105,8 +108,10 @@ export async function updateFieldDefinition(
  * @param fieldId
  */
 export async function deleteFieldDefinition(fieldId: string) {
-  const existing = await prisma.customFieldDefinition.findUnique({ where: { id: fieldId } });
-  if (!existing) throw new AppError(404, 'Custom field definition not found');
+  await findOrThrow(
+    prisma.customFieldDefinition.findUnique({ where: { id: fieldId } }),
+    'Custom field definition not found',
+  );
 
   // Cascade delete is handled by Prisma schema, but let's be explicit
   await prisma.customFieldValue.deleteMany({ where: { fieldDefinitionId: fieldId } });
@@ -122,10 +127,12 @@ export async function deleteFieldDefinition(fieldId: string) {
  * @param value
  */
 export async function setFieldValue(issueId: string, fieldDefinitionId: string, value: string) {
-  const definition = await prisma.customFieldDefinition.findUnique({
-    where: { id: fieldDefinitionId },
-  });
-  if (!definition) throw new AppError(404, 'Custom field definition not found');
+  await findOrThrow(
+    prisma.customFieldDefinition.findUnique({
+      where: { id: fieldDefinitionId },
+    }),
+    'Custom field definition not found',
+  );
 
   return prisma.customFieldValue.upsert({
     where: {

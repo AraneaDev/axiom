@@ -1,5 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Search, Eye, Trash2, ArrowLeft, Shield, Mail, Calendar, UserX, UserCheck, KeyRound } from 'lucide-react';
+import {
+  Users,
+  Search,
+  Eye,
+  Trash2,
+  ArrowLeft,
+  Shield,
+  Mail,
+  Calendar,
+  UserX,
+  UserCheck,
+  KeyRound,
+  AlertTriangle,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -127,7 +140,8 @@ function ResetPasswordModal({ user, onClose }: { user: AdminUser; onClose: () =>
     <Modal open onClose={onClose} title="Reset Password">
       <form onSubmit={handleSubmit} className="space-y-4">
         <p className="text-sm text-text-secondary">
-          Set a new password for <span className="font-medium text-text">@{user.username}</span>. Their active sessions will be invalidated.
+          Set a new password for <span className="font-medium text-text">@{user.username}</span>.
+          Their active sessions will be invalidated.
         </p>
         <Input
           label="New Password"
@@ -168,7 +182,7 @@ export default function UserManagement() {
   const queryClient = useQueryClient();
   const { success, error: showError } = useToast();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['admin', 'users', debouncedSearch, page],
     queryFn: () =>
       adminApi.listUsers({
@@ -245,7 +259,14 @@ export default function UserManagement() {
       </div>
 
       {/* Table */}
-      {isLoading ? (
+      {error ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+            <p className="text-secondary">Failed to load users</p>
+          </div>
+        </div>
+      ) : isLoading ? (
         <TableSkeleton rows={6} cols={5} />
       ) : (
         <TableContainer>
@@ -269,7 +290,9 @@ export default function UserManagement() {
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-text">{user.displayName}</p>
                           {user.deactivatedAt && (
-                            <Badge variant="danger" size="sm">Deactivated</Badge>
+                            <Badge variant="danger" size="sm">
+                              Deactivated
+                            </Badge>
                           )}
                         </div>
                         <p className="text-xs text-text-tertiary">@{user.username}</p>
@@ -311,7 +334,11 @@ export default function UserManagement() {
                             })
                           }
                           title={user.deactivatedAt ? 'Reactivate user' : 'Deactivate user'}
-                          className={user.deactivatedAt ? 'text-success hover:text-success' : 'text-warning hover:text-warning'}
+                          className={
+                            user.deactivatedAt
+                              ? 'text-success hover:text-success'
+                              : 'text-warning hover:text-warning'
+                          }
                           disabled={deactivateMutation.isPending}
                         >
                           {user.deactivatedAt ? (
@@ -372,7 +399,10 @@ export default function UserManagement() {
 
       {/* Modals */}
       {resetPasswordTarget && (
-        <ResetPasswordModal user={resetPasswordTarget} onClose={() => setResetPasswordTarget(null)} />
+        <ResetPasswordModal
+          user={resetPasswordTarget}
+          onClose={() => setResetPasswordTarget(null)}
+        />
       )}
       {viewUser && <UserDetailModal user={viewUser} onClose={() => setViewUser(null)} />}
       <ConfirmDialog

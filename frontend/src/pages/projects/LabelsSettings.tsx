@@ -1,9 +1,8 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Save, X, Pencil, Trash2, Tag } from 'lucide-react';
 import { useState } from 'react';
 
 import { labelsApi, type LabelWithDescription } from '@/api/labels.api';
-import { useProjectContext } from '@/hooks/useProjectContext';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
@@ -12,7 +11,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
+import { useCRUDSettings } from '@/hooks/useCRUDSettings';
+import { useProjectContext } from '@/hooks/useProjectContext';
 
 const PRESET_COLORS = [
   '#ef4444', // red
@@ -32,15 +32,10 @@ const PRESET_COLORS = [
  */
 export default function LabelsSettings() {
   const { currentProject } = useProjectContext();
-  const queryClient = useQueryClient();
-  const toast = useToast();
 
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [editingName, setEditingName] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formColor, setFormColor] = useState(PRESET_COLORS[0]);
   const [formDescription, setFormDescription] = useState('');
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const { data: labels = [], isLoading } = useQuery({
     queryKey: ['labels', currentProject?.id],
@@ -48,44 +43,37 @@ export default function LabelsSettings() {
     enabled: !!currentProject?.id,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: { name: string; color: string; description?: string }) =>
-      labelsApi.create(currentProject!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['labels', currentProject?.id] });
-      resetForm();
-      toast.success('Label created');
+  const {
+    showAddForm,
+    setShowAddForm,
+    editingId: editingName,
+    setEditingId: setEditingName,
+    deleteTarget,
+    setDeleteTarget,
+    resetForm: resetCRUD,
+    createMutation,
+    updateMutation,
+    deleteMutation,
+    confirmDelete,
+  } = useCRUDSettings<
+    { name: string; color: string; description?: string },
+    { name?: string; color?: string; description?: string },
+    string
+  >({
+    queryKey: ['labels', currentProject?.id],
+    createFn: (data) => labelsApi.create(currentProject!.id, data),
+    updateFn: (oldName, data) => labelsApi.update(currentProject!.id, oldName, data),
+    deleteFn: (labelName) => labelsApi.delete(currentProject!.id, labelName),
+    entityName: 'Label',
+    onCreateSuccess: () => {
+      setFormName('');
+      setFormColor(PRESET_COLORS[0]);
+      setFormDescription('');
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({
-      oldName,
-      data,
-    }: {
-      oldName: string;
-      data: { name?: string; color?: string; description?: string };
-    }) => labelsApi.update(currentProject!.id, oldName, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['labels', currentProject?.id] });
-      setEditingName(null);
-      toast.success('Label updated');
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (labelName: string) => labelsApi.delete(currentProject!.id, labelName),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['labels', currentProject?.id] });
-      toast.success('Label deleted');
-    },
-    onError: (err: Error) => toast.error(err.message),
   });
 
   function resetForm() {
-    setShowAddForm(false);
+    resetCRUD();
     setFormName('');
     setFormColor(PRESET_COLORS[0]);
     setFormDescription('');
@@ -109,7 +97,7 @@ export default function LabelsSettings() {
 
   function handleUpdate(oldName: string) {
     updateMutation.mutate({
-      oldName,
+      id: oldName,
       data: {
         name: formName.trim(),
         color: formColor,
@@ -370,10 +358,7 @@ export default function LabelsSettings() {
       <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) deleteMutation.mutate(deleteTarget);
-          setDeleteTarget(null);
-        }}
+        onConfirm={confirmDelete}
         title="Delete label"
         description={`Delete label "${deleteTarget}"? It will be removed from all issues.`}
         confirmLabel="Delete"

@@ -54,3 +54,11 @@ export const SPACE_URL_SELECT = {
   slug: true,
   team: { select: TEAM_ORG_SELECT },
 } as const;
+
+/** Include chain for team → org (used in deep includes for URL building) */
+export const TEAM_ORG_INCLUDE = { team: { include: { org: true } } } as const;
+
+/** Include chain for project → team → org (used in issue URL building) */
+export const PROJECT_TEAM_ORG_INCLUDE = {
+  project: { include: { team: { include: { org: true } } } },
+} as const;

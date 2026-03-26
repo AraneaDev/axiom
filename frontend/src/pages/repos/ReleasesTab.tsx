@@ -30,6 +30,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
+import { useModalState } from '@/hooks/useModalState';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -64,7 +65,7 @@ function deployStatusVariant(status: string): 'success' | 'danger' | 'warning' |
 export default function ReleasesTab({ repoId, defaultBranch }: Props) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [showCreate, setShowCreate] = useState(false);
+  const createModal = useModalState();
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [editBody, setEditBody] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -308,7 +309,7 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-text-secondary">{releases.length} releases</p>
-        <Button size="sm" onClick={() => setShowCreate(true)}>
+        <Button size="sm" onClick={() => createModal.open()}>
           <Plus className="h-4 w-4" /> New Release
         </Button>
       </div>
@@ -319,7 +320,7 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
           title="No releases yet"
           description="Create your first release to publish a version of this repository."
           action={
-            <Button onClick={() => setShowCreate(true)}>
+            <Button onClick={() => createModal.open()}>
               <Plus className="h-4 w-4" /> Create Release
             </Button>
           }
@@ -357,14 +358,14 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
         </>
       )}
 
-      {showCreate && (
+      {createModal.isOpen && (
         <CreateReleaseModal
           repoId={repoId}
           defaultBranch={defaultBranch}
-          onClose={() => setShowCreate(false)}
+          onClose={createModal.close}
           onCreated={() => {
             qc.invalidateQueries({ queryKey: ['releases', repoId] });
-            setShowCreate(false);
+            createModal.close();
           }}
         />
       )}

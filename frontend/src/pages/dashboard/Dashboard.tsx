@@ -6,6 +6,7 @@ import {
   GitPullRequest,
   Activity,
   CalendarClock,
+  AlertTriangle,
 } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -35,12 +36,20 @@ import { useAuthStore } from '@/stores/auth.store';
  */
 export default function Dashboard() {
   const { user } = useAuthStore();
-  const { data: orgs, isLoading: orgsLoading } = useQuery({
+  const {
+    data: orgs,
+    isLoading: orgsLoading,
+    error: orgsError,
+  } = useQuery({
     queryKey: ['orgs'],
     queryFn: orgsApi.list,
     staleTime: STABLE_STALE_TIME,
   });
-  const { data: dashboardData, isLoading: dashLoading } = useQuery({
+  const {
+    data: dashboardData,
+    isLoading: dashLoading,
+    error: dashError,
+  } = useQuery({
     queryKey: ['dashboard'],
     queryFn: dashboardApi.get,
   });
@@ -75,6 +84,17 @@ export default function Dashboard() {
         </div>
       </div>
     );
+
+  if (orgsError || dashError) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load dashboard</p>
+        </div>
+      </div>
+    );
+  }
 
   const now = new Date();
   const hour = now.getHours();

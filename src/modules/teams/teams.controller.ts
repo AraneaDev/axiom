@@ -1,212 +1,93 @@
 import { TeamRole } from '@prisma/client';
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
-import { createTeamSchema, addTeamMemberSchema } from '../../utils/validation';
+import { validate, createTeamSchema, addTeamMemberSchema } from '../../utils/validation';
 
 import * as teamsService from './teams.service';
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = createTeamSchema.parse(req.body);
-    const team = await teamsService.createTeam(param(req, 'orgId'), req.userId!, data);
-    res.status(201).json(team);
-  } catch (err) {
-    next(err);
-  }
-}
+export const create = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(createTeamSchema, req.body);
+  const team = await teamsService.createTeam(param(req, 'orgId'), req.userId!, data);
+  res.status(201).json(team);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function get(req: Request, res: Response, next: NextFunction) {
-  try {
-    const team = await teamsService.getTeam(param(req, 'teamId'));
-    res.json(team);
-  } catch (err) {
-    next(err);
-  }
-}
+export const get = asyncHandler(async (req: Request, res: Response) => {
+  const team = await teamsService.getTeam(param(req, 'teamId'));
+  res.json(team);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const teams = await teamsService.listOrgTeams(
-      param(req, 'orgId'),
-      req.query as Record<string, string>,
-    );
-    res.json(teams);
-  } catch (err) {
-    next(err);
-  }
-}
+export const list = asyncHandler(async (req: Request, res: Response) => {
+  const teams = await teamsService.listOrgTeams(
+    param(req, 'orgId'),
+    req.query as Record<string, string>,
+  );
+  res.json(teams);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function update(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { name, description } = req.body;
-    if (name !== undefined && typeof name !== 'string') {
-      res.status(400).json({ error: { message: 'name must be a string' } });
-      return;
-    }
-    if (description !== undefined && typeof description !== 'string') {
-      res.status(400).json({ error: { message: 'description must be a string' } });
-      return;
-    }
-    const team = await teamsService.updateTeam(param(req, 'teamId'), { name, description });
-    res.json(team);
-  } catch (err) {
-    next(err);
+export const update = asyncHandler(async (req: Request, res: Response) => {
+  const { name, description } = req.body;
+  if (name !== undefined && typeof name !== 'string') {
+    res.status(400).json({ error: { message: 'name must be a string' } });
+    return;
   }
-}
+  if (description !== undefined && typeof description !== 'string') {
+    res.status(400).json({ error: { message: 'description must be a string' } });
+    return;
+  }
+  const team = await teamsService.updateTeam(param(req, 'teamId'), { name, description });
+  res.json(team);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function remove(req: Request, res: Response, next: NextFunction) {
-  try {
-    await teamsService.deleteTeam(param(req, 'teamId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  await teamsService.deleteTeam(param(req, 'teamId'));
+  res.status(204).send();
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listMembers(req: Request, res: Response, next: NextFunction) {
-  try {
-    const members = await teamsService.listTeamMembers(param(req, 'teamId'));
-    res.json(members);
-  } catch (err) {
-    next(err);
-  }
-}
+export const listMembers = asyncHandler(async (req: Request, res: Response) => {
+  const members = await teamsService.listTeamMembers(param(req, 'teamId'));
+  res.json(members);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function addMember(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = addTeamMemberSchema.parse(req.body);
-    const member = await teamsService.addTeamMember(
-      param(req, 'teamId'),
-      data.userId,
-      data.role as TeamRole,
-    );
-    res.status(201).json(member);
-  } catch (err) {
-    next(err);
-  }
-}
+export const addMember = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(addTeamMemberSchema, req.body);
+  const member = await teamsService.addTeamMember(
+    param(req, 'teamId'),
+    data.userId,
+    data.role as TeamRole,
+  );
+  res.status(201).json(member);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function updateMemberRole(req: Request, res: Response, next: NextFunction) {
-  try {
-    const member = await teamsService.updateTeamMemberRole(
-      param(req, 'teamId'),
-      param(req, 'memberId'),
-      req.body.role,
-    );
-    res.json(member);
-  } catch (err) {
-    next(err);
-  }
-}
+export const updateMemberRole = asyncHandler(async (req: Request, res: Response) => {
+  const member = await teamsService.updateTeamMemberRole(
+    param(req, 'teamId'),
+    param(req, 'memberId'),
+    req.body.role,
+  );
+  res.json(member);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function removeMember(req: Request, res: Response, next: NextFunction) {
-  try {
-    await teamsService.removeTeamMember(param(req, 'teamId'), param(req, 'memberId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const removeMember = asyncHandler(async (req: Request, res: Response) => {
+  await teamsService.removeTeamMember(param(req, 'teamId'), param(req, 'memberId'));
+  res.status(204).send();
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listOpenPRs(req: Request, res: Response, next: NextFunction) {
-  try {
-    const prs = await teamsService.listTeamOpenPRs(param(req, 'teamId'));
-    res.json(prs);
-  } catch (err) {
-    next(err);
-  }
-}
+export const listOpenPRs = asyncHandler(async (req: Request, res: Response) => {
+  const prs = await teamsService.listTeamOpenPRs(param(req, 'teamId'));
+  res.json(prs);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getActivity(req: Request, res: Response, next: NextFunction) {
-  try {
-    const activity = await teamsService.getTeamActivity(param(req, 'teamId'));
-    res.json(activity);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getActivity = asyncHandler(async (req: Request, res: Response) => {
+  const activity = await teamsService.getTeamActivity(param(req, 'teamId'));
+  res.json(activity);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getMemberProfile(req: Request, res: Response, next: NextFunction) {
-  try {
-    const profile = await teamsService.getTeamMemberProfile(
-      param(req, 'teamId'),
-      param(req, 'username'),
-    );
-    res.json(profile);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getMemberProfile = asyncHandler(async (req: Request, res: Response) => {
+  const profile = await teamsService.getTeamMemberProfile(
+    param(req, 'teamId'),
+    param(req, 'username'),
+  );
+  res.json(profile);
+});

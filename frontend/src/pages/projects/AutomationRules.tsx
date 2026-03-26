@@ -1,8 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bot, Plus, Trash2, Power, PowerOff, Save, X, PlusCircle, Zap } from 'lucide-react';
+import {
+  AlertTriangle,
+  Bot,
+  Plus,
+  Trash2,
+  Power,
+  PowerOff,
+  Save,
+  X,
+  PlusCircle,
+  Zap,
+} from 'lucide-react';
 import { useState } from 'react';
 
-import { useProjectContext } from '@/hooks/useProjectContext';
 import {
   automationApi,
   type AutomationCondition,
@@ -16,6 +26,7 @@ import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { useProjectContext } from '@/hooks/useProjectContext';
 
 const TRIGGER_OPTIONS = [
   { value: 'issue:created', label: 'Issue Created' },
@@ -271,7 +282,11 @@ export default function AutomationRules() {
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
 
-  const { data: rules, isLoading } = useQuery({
+  const {
+    data: rules,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['automation-rules', currentProject?.id],
     queryFn: () => automationApi.listRules(currentProject!.id),
     enabled: !!currentProject?.id,
@@ -329,6 +344,17 @@ export default function AutomationRules() {
         <ListSkeleton rows={4} />
       </div>
     );
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load automation rules</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <SettingsPage

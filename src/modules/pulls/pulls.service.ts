@@ -10,6 +10,7 @@ import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
 import { logActivity } from '../activity/activity.service';
@@ -66,8 +67,11 @@ async function parseAndLinkIssues(prId: string, repoId: string, text: string): P
 const execFileAsync = promisify(execFile);
 
 async function getRepoDisk(repoId: string): Promise<{ diskPath: string; defaultBranch: string }> {
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
+  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
   if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
   return { diskPath: repo.diskPath, defaultBranch: repo.defaultBranch };
 }
@@ -153,14 +157,16 @@ export async function createPR(
  * @throws {AppError} 404 if PR not found
  */
 export async function getPR(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-    include: {
-      reviews: { orderBy: { createdAt: 'desc' } },
-      comments: { orderBy: { createdAt: 'asc' } },
-    },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+      include: {
+        reviews: { orderBy: { createdAt: 'desc' } },
+        comments: { orderBy: { createdAt: 'asc' } },
+      },
+    }),
+    'Pull request not found',
+  );
 
   // Add merge status
   const { diskPath } = await getRepoDisk(repoId);
@@ -253,10 +259,12 @@ export async function updatePR(
     body?: string;
   },
 ) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
   if (pr.status !== 'OPEN') throw new AppError(400, 'Can only edit open PRs');
 
   const updatedPr = await prisma.pullRequest.update({
@@ -280,10 +288,12 @@ export async function updatePR(
  * @throws {AppError} 400 if PR is not open
  */
 export async function closePR(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
   if (pr.status !== 'OPEN') throw new AppError(400, 'PR is not open');
 
   const closed = await prisma.pullRequest.update({
@@ -305,10 +315,12 @@ export async function closePR(repoId: string, prNumber: number) {
  * @throws {AppError} 404 if PR not found
  */
 export async function getMergeChecks(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
 
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
   const _protection = await prisma.branchProtection.findFirst({
@@ -356,10 +368,12 @@ export async function mergePR(
   prNumber: number,
   strategy?: 'merge' | 'squash' | 'rebase',
 ) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
   if (pr.status !== 'OPEN') throw new AppError(400, 'PR is not open');
 
   // Resolve effective strategy: explicit > repo default > 'merge'
@@ -507,10 +521,12 @@ export async function mergePR(
  * @throws {AppError} 404 if PR not found
  */
 export async function getLinkedIssues(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
 
   return prisma.issuePullRequest.findMany({
     where: { prId: pr.id },
@@ -540,10 +556,12 @@ export async function getLinkedIssues(repoId: string, prNumber: number) {
  * @throws {AppError} 404 if PR not found
  */
 export async function getPRDiff(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
 
   const { diskPath } = await getRepoDisk(repoId);
   const diffOutput = await gitCmd.diff(diskPath, pr.targetBranch, pr.sourceBranch);
@@ -560,10 +578,12 @@ export async function getPRDiff(repoId: string, prNumber: number) {
  * @throws {AppError} 404 if PR not found
  */
 export async function getPRCommits(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
 
   const { diskPath } = await getRepoDisk(repoId);
   const base = await gitCmd.mergeBase(diskPath, pr.targetBranch, pr.sourceBranch);

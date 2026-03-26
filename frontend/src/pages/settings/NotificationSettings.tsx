@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, Mail, Monitor } from 'lucide-react';
+import { AlertTriangle, Bell, Mail, Monitor } from 'lucide-react';
 
 import { notificationsApi, type NotificationPreference } from '@/api/notifications.api';
 import { SettingsPage } from '@/components/ui/SettingsPage';
@@ -37,7 +37,7 @@ export default function NotificationSettings() {
   const queryClient = useQueryClient();
   const toast = useToast();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['notificationPreferences'],
     queryFn: notificationsApi.getPreferences,
   });
@@ -86,6 +86,23 @@ export default function NotificationSettings() {
         </div>
       </div>
     );
+
+  if (error) {
+    return (
+      <SettingsPage
+        title="Notifications"
+        description="Choose how and when you want to be notified"
+        icon={Bell}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+            <p className="text-secondary">Failed to load notification preferences</p>
+          </div>
+        </div>
+      </SettingsPage>
+    );
+  }
 
   const preferences = data?.preferences ?? [];
 

@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Server, Database, FolderOpen, Globe, Tag, Shield } from 'lucide-react';
+import {
+  ArrowLeft,
+  Server,
+  Database,
+  FolderOpen,
+  Globe,
+  Tag,
+  Shield,
+  AlertTriangle,
+} from 'lucide-react';
 import { Link } from 'react-router';
 
 import { adminApi } from '@/api/admin.api';
@@ -35,10 +44,25 @@ function SettingRow({
  *
  */
 export default function SystemSettings() {
-  const { data: settings, isLoading } = useQuery<SystemSettingsType>({
+  const {
+    data: settings,
+    isLoading,
+    error,
+  } = useQuery<SystemSettingsType>({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
   });
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load system settings</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading || !settings)
     return (

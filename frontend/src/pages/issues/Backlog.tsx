@@ -1,11 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Plus,
-  ArrowRight,
-  GripVertical,
-  Target,
-  ChevronRight,
-} from 'lucide-react';
+import { Plus, ArrowRight, GripVertical, Target, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -15,15 +9,15 @@ import { SprintFormModal } from './SprintFormModal';
 import { hydrateApi } from '@/api/hydrate.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { BurndownChart } from '@/components/BurndownChart';
-import { useProjectContext } from '@/hooks/useProjectContext';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { VelocityChart } from '@/components/VelocityChart';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
 import type { Issue, Sprint } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -155,11 +149,14 @@ export default function Backlog() {
   });
 
   // Seed individual caches from hydration response
-  const hydrationMappings = useMemo(() => [
-    { key: ['sprints', currentProject?.id], field: 'sprints' as const },
-    { key: ['backlog', currentProject?.id], field: 'backlogIssues' as const },
-    { key: ['velocity', currentProject?.id], field: 'velocity' as const },
-  ], [currentProject?.id]);
+  const hydrationMappings = useMemo(
+    () => [
+      { key: ['sprints', currentProject?.id], field: 'sprints' as const },
+      { key: ['backlog', currentProject?.id], field: 'backlogIssues' as const },
+      { key: ['velocity', currentProject?.id], field: 'velocity' as const },
+    ],
+    [currentProject?.id],
+  );
 
   useEffect(() => {
     if (!hydrationQuery.data) return;
@@ -212,12 +209,12 @@ export default function Backlog() {
   });
 
   // Sort sprints: active first, then planning, then completed
-  const statusOrder: Record<string, number> = { ACTIVE: 0, PLANNING: 1, COMPLETED: 2 };
-  const sortedSprints = useMemo(
-    () => [...sprints].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9)),
-    [sprints],
-  );
+  const sortedSprints = useMemo(() => {
+    const order: Record<string, number> = { ACTIVE: 0, PLANNING: 1, COMPLETED: 2 };
+    return [...sprints].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+  }, [sprints]);
 
+  const backlogError = hydrationQuery.error;
   const isLoading = (sprintsLoading || backlogLoading) && !hydrationQuery.data;
   if (isLoading)
     return (
@@ -242,6 +239,17 @@ export default function Backlog() {
         </div>
       </div>
     );
+
+  if (backlogError) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load backlog</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleBacklogDrop = (e: React.DragEvent) => {
     e.preventDefault();

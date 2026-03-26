@@ -1,5 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 import {
@@ -15,325 +16,143 @@ import {
 
 import * as pullsService from './pulls.service';
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(createPRSchema, req.body);
-    const pr = await pullsService.createPR(param(req, 'repoId'), req.userId!, body);
-    res.status(201).json(pr);
-  } catch (err) {
-    next(err);
-  }
-}
+export const create = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(createPRSchema, req.body);
+  const pr = await pullsService.createPR(param(req, 'repoId'), req.userId!, body);
+  res.status(201).json(pr);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function get(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await pullsService.getPR(param(req, 'repoId'), parseInt(param(req, 'number'), 10)));
-  } catch (err) {
-    next(err);
-  }
-}
+export const get = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await pullsService.getPR(param(req, 'repoId'), parseInt(param(req, 'number'), 10)));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const status = req.query.status as 'OPEN' | 'MERGED' | 'CLOSED' | undefined;
-    const reviewerId = req.query.reviewerId as string | undefined;
-    const { take, skip } = parsePagination(req.query as Record<string, string>);
-    res.json(
-      await pullsService.listPRs(param(req, 'repoId'), status, {
-        limit: take,
-        offset: skip,
-        reviewerId,
-      }),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const list = asyncHandler(async (req: Request, res: Response) => {
+  const status = req.query.status as 'OPEN' | 'MERGED' | 'CLOSED' | undefined;
+  const reviewerId = req.query.reviewerId as string | undefined;
+  const { take, skip } = parsePagination(req.query as Record<string, string>);
+  res.json(
+    await pullsService.listPRs(param(req, 'repoId'), status, {
+      limit: take,
+      offset: skip,
+      reviewerId,
+    }),
+  );
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function update(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(updatePRSchema, req.body);
-    res.json(
-      await pullsService.updatePR(param(req, 'repoId'), parseInt(param(req, 'number'), 10), body),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const update = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(updatePRSchema, req.body);
+  res.json(
+    await pullsService.updatePR(param(req, 'repoId'), parseInt(param(req, 'number'), 10), body),
+  );
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function close(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await pullsService.closePR(param(req, 'repoId'), parseInt(param(req, 'number'), 10)));
-  } catch (err) {
-    next(err);
-  }
-}
+export const close = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await pullsService.closePR(param(req, 'repoId'), parseInt(param(req, 'number'), 10)));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function merge(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(mergePRSchema, req.body);
-    res.json(
-      await pullsService.mergePR(
-        param(req, 'repoId'),
-        parseInt(param(req, 'number'), 10),
-        body.strategy,
-      ),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const merge = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(mergePRSchema, req.body);
+  res.json(
+    await pullsService.mergePR(
+      param(req, 'repoId'),
+      parseInt(param(req, 'number'), 10),
+      body.strategy,
+    ),
+  );
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function mergeChecks(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(
-      await pullsService.getMergeChecks(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const mergeChecks = asyncHandler(async (req: Request, res: Response) => {
+  res.json(
+    await pullsService.getMergeChecks(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
+  );
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getDiff(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(
-      await pullsService.getPRDiff(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const getDiff = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await pullsService.getPRDiff(param(req, 'repoId'), parseInt(param(req, 'number'), 10)));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getCommits(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(
-      await pullsService.getPRCommits(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const getCommits = asyncHandler(async (req: Request, res: Response) => {
+  res.json(
+    await pullsService.getPRCommits(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
+  );
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getLinkedIssues(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(
-      await pullsService.getLinkedIssues(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const getLinkedIssues = asyncHandler(async (req: Request, res: Response) => {
+  res.json(
+    await pullsService.getLinkedIssues(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
+  );
+});
 
 // Reviews
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function submitReview(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(submitReviewSchema, req.body);
-    const review = await pullsService.submitReview(
-      param(req, 'repoId'),
-      parseInt(param(req, 'number'), 10),
-      req.userId!,
-      body,
-    );
-    res.status(201).json(review);
-  } catch (err) {
-    next(err);
-  }
-}
+export const submitReview = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(submitReviewSchema, req.body);
+  const review = await pullsService.submitReview(
+    param(req, 'repoId'),
+    parseInt(param(req, 'number'), 10),
+    req.userId!,
+    body,
+  );
+  res.status(201).json(review);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listReviews(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(
-      await pullsService.listReviews(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const listReviews = asyncHandler(async (req: Request, res: Response) => {
+  res.json(
+    await pullsService.listReviews(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
+  );
+});
 
 // PR Comments
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function addComment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(addPRCommentSchema, req.body);
-    const comment = await pullsService.addPRComment(
-      param(req, 'repoId'),
-      parseInt(param(req, 'number'), 10),
-      req.userId!,
-      body,
-    );
-    res.status(201).json(comment);
-  } catch (err) {
-    next(err);
-  }
-}
+export const addComment = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(addPRCommentSchema, req.body);
+  const comment = await pullsService.addPRComment(
+    param(req, 'repoId'),
+    parseInt(param(req, 'number'), 10),
+    req.userId!,
+    body,
+  );
+  res.status(201).json(comment);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listComments(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(
-      await pullsService.listPRComments(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const listComments = asyncHandler(async (req: Request, res: Response) => {
+  res.json(
+    await pullsService.listPRComments(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
+  );
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function updateComment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { body } = req.body;
-    if (!body || typeof body !== 'string') {
-      res.status(400).json({ error: { message: 'body is required' } });
-      return;
-    }
-    const comment = await pullsService.updatePRComment(param(req, 'commentId'), req.userId!, body);
-    res.json(comment);
-  } catch (err) {
-    next(err);
+export const updateComment = asyncHandler(async (req: Request, res: Response) => {
+  const { body } = req.body;
+  if (!body || typeof body !== 'string') {
+    res.status(400).json({ error: { message: 'body is required' } });
+    return;
   }
-}
+  const comment = await pullsService.updatePRComment(param(req, 'commentId'), req.userId!, body);
+  res.json(comment);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function deleteComment(req: Request, res: Response, next: NextFunction) {
-  try {
-    await pullsService.deletePRComment(param(req, 'commentId'), req.userId!);
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const deleteComment = asyncHandler(async (req: Request, res: Response) => {
+  await pullsService.deletePRComment(param(req, 'commentId'), req.userId!);
+  res.status(204).send();
+});
 
 // Suggestions
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function applySuggestion(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(applySuggestionSchema, req.body);
-    const result = await pullsService.applySuggestion(
-      param(req, 'repoId'),
-      parseInt(param(req, 'number'), 10),
-      body.commentId,
-      req.userId!,
-    );
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const applySuggestion = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(applySuggestionSchema, req.body);
+  const result = await pullsService.applySuggestion(
+    param(req, 'repoId'),
+    parseInt(param(req, 'number'), 10),
+    body.commentId,
+    req.userId!,
+  );
+  res.json(result);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function batchApplySuggestions(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(batchApplySuggestionsSchema, req.body);
-    const result = await pullsService.batchApplySuggestions(
-      param(req, 'repoId'),
-      parseInt(param(req, 'number'), 10),
-      body.commentIds,
-      req.userId!,
-    );
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const batchApplySuggestions = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(batchApplySuggestionsSchema, req.body);
+  const result = await pullsService.batchApplySuggestions(
+    param(req, 'repoId'),
+    parseInt(param(req, 'number'), 10),
+    body.commentIds,
+    req.userId!,
+  );
+  res.json(result);
+});

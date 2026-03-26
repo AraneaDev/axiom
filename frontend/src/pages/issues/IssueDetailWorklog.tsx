@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Check, ChevronDown, ChevronUp, Clock, Timer, User, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Progress } from '@/components/ui/Progress';
 import { Spinner } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
+import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import type { Issue } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 
@@ -48,14 +50,15 @@ export function IssueDetailWorklog({
   onEditField,
   onUpdate,
 }: IssueDetailWorklogProps) {
-  const queryClient = useQueryClient();
+  const toast = useToast();
+  const { invalidateIssue, invalidateWorklogs } = useIssueInvalidation(projectId, num);
   const [showLogWork, setShowLogWork] = useState(false);
   const [showEntries, setShowEntries] = useState(false);
   const [logWorkHours, setLogWorkHours] = useState('');
   const [logWorkMinutes, setLogWorkMinutes] = useState('');
   const [logWorkDesc, setLogWorkDesc] = useState('');
 
-  const { data: worklogs = [] } = useQuery({
+  const { data: worklogs = [], error: worklogsError } = useQuery({
     queryKey: ['worklogs', projectId, num],
     queryFn: () => issuesApi.getWorklogs(projectId, parseInt(num)),
     enabled: !!projectId && !!num,
@@ -65,14 +68,14 @@ export function IssueDetailWorklog({
     mutationFn: (data: { minutes: number; description?: string }) =>
       issuesApi.logWork(projectId, parseInt(num), data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue', projectId, num] });
-      queryClient.invalidateQueries({ queryKey: ['activity', projectId, num] });
-      queryClient.invalidateQueries({ queryKey: ['worklogs', projectId, num] });
+      invalidateIssue();
+      invalidateWorklogs();
       setShowLogWork(false);
       setLogWorkHours('');
       setLogWorkMinutes('');
       setLogWorkDesc('');
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   function handleLogWork() {
@@ -85,6 +88,9 @@ export function IssueDetailWorklog({
       description: logWorkDesc || undefined,
     });
   }
+
+  if (worklogsError)
+    return <div className="p-4 text-center text-danger">Failed to load worklogs</div>;
 
   return (
     <div>

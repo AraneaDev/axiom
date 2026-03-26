@@ -1,7 +1,9 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 import {
+  validate,
   createOrgSchema,
   updateOrgSchema,
   addOrgMemberSchema,
@@ -10,192 +12,72 @@ import {
 
 import * as orgsService from './orgs.service';
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = createOrgSchema.parse(req.body);
-    const org = await orgsService.createOrg(req.userId!, data);
-    res.status(201).json(org);
-  } catch (err) {
-    next(err);
-  }
-}
+export const create = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(createOrgSchema, req.body);
+  const org = await orgsService.createOrg(req.userId!, data);
+  res.status(201).json(org);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function get(req: Request, res: Response, next: NextFunction) {
-  try {
-    const org = await orgsService.getOrg(param(req, 'orgId'));
-    res.json(org);
-  } catch (err) {
-    next(err);
-  }
-}
+export const get = asyncHandler(async (req: Request, res: Response) => {
+  const org = await orgsService.getOrg(param(req, 'orgId'));
+  res.json(org);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const orgs = await orgsService.listUserOrgs(req.userId!);
-    res.json(orgs);
-  } catch (err) {
-    next(err);
-  }
-}
+export const list = asyncHandler(async (req: Request, res: Response) => {
+  const orgs = await orgsService.listUserOrgs(req.userId!);
+  res.json(orgs);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function update(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = updateOrgSchema.parse(req.body);
-    const org = await orgsService.updateOrg(param(req, 'orgId'), data);
-    res.json(org);
-  } catch (err) {
-    next(err);
-  }
-}
+export const update = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(updateOrgSchema, req.body);
+  const org = await orgsService.updateOrg(param(req, 'orgId'), data);
+  res.json(org);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function remove(req: Request, res: Response, next: NextFunction) {
-  try {
-    await orgsService.deleteOrg(param(req, 'orgId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  await orgsService.deleteOrg(param(req, 'orgId'));
+  res.status(204).send();
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listMembers(req: Request, res: Response, next: NextFunction) {
-  try {
-    const members = await orgsService.listOrgMembers(param(req, 'orgId'));
-    res.json(members);
-  } catch (err) {
-    next(err);
-  }
-}
+export const listMembers = asyncHandler(async (req: Request, res: Response) => {
+  const members = await orgsService.listOrgMembers(param(req, 'orgId'));
+  res.json(members);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function addMember(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { userId, role } = addOrgMemberSchema.parse(req.body);
-    const member = await orgsService.addOrgMember(param(req, 'orgId'), userId, role);
-    res.status(201).json(member);
-  } catch (err) {
-    next(err);
-  }
-}
+export const addMember = asyncHandler(async (req: Request, res: Response) => {
+  const { userId, role } = validate(addOrgMemberSchema, req.body);
+  const member = await orgsService.addOrgMember(param(req, 'orgId'), userId, role);
+  res.status(201).json(member);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function updateMemberRole(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { role } = addOrgMemberSchema.pick({ role: true }).parse(req.body);
-    const member = await orgsService.updateOrgMemberRole(
-      param(req, 'orgId'),
-      param(req, 'memberId'),
-      role,
-    );
-    res.json(member);
-  } catch (err) {
-    next(err);
-  }
-}
+export const updateMemberRole = asyncHandler(async (req: Request, res: Response) => {
+  const { role } = validate(addOrgMemberSchema.pick({ role: true }), req.body);
+  const member = await orgsService.updateOrgMemberRole(
+    param(req, 'orgId'),
+    param(req, 'memberId'),
+    role,
+  );
+  res.json(member);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function removeMember(req: Request, res: Response, next: NextFunction) {
-  try {
-    await orgsService.removeOrgMember(param(req, 'orgId'), param(req, 'memberId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const removeMember = asyncHandler(async (req: Request, res: Response) => {
+  await orgsService.removeOrgMember(param(req, 'orgId'), param(req, 'memberId'));
+  res.status(204).send();
+});
 
 // Invite Links
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function createInvite(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = createInviteLinkSchema.parse(req.body);
-    const invite = await orgsService.createInviteLink(param(req, 'orgId'), req.userId!, data);
-    res.status(201).json(invite);
-  } catch (err) {
-    next(err);
-  }
-}
+export const createInvite = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(createInviteLinkSchema, req.body);
+  const invite = await orgsService.createInviteLink(param(req, 'orgId'), req.userId!, data);
+  res.status(201).json(invite);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listInvites(req: Request, res: Response, next: NextFunction) {
-  try {
-    const invites = await orgsService.listInviteLinks(param(req, 'orgId'));
-    res.json(invites);
-  } catch (err) {
-    next(err);
-  }
-}
+export const listInvites = asyncHandler(async (req: Request, res: Response) => {
+  const invites = await orgsService.listInviteLinks(param(req, 'orgId'));
+  res.json(invites);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function deleteInvite(req: Request, res: Response, next: NextFunction) {
-  try {
-    await orgsService.deleteInviteLink(param(req, 'inviteId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const deleteInvite = asyncHandler(async (req: Request, res: Response) => {
+  await orgsService.deleteInviteLink(param(req, 'inviteId'));
+  res.status(204).send();
+});

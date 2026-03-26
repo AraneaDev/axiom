@@ -13,12 +13,12 @@ import {
 import { Link } from 'react-router';
 
 import { projectsApi } from '@/api/projects.api';
-import { useProjectContext } from '@/hooks/useProjectContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { cn } from '@/lib/utils';
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -80,7 +80,11 @@ function AnalyticsSkeleton() {
 export default function ProjectAnalytics() {
   const { org, teamSlug, currentProject } = useProjectContext();
 
-  const { data: analytics, isLoading } = useQuery({
+  const {
+    data: analytics,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['project-analytics', currentProject?.id],
     queryFn: () => projectsApi.analytics(currentProject!.id),
     enabled: !!currentProject?.id,
@@ -108,6 +112,17 @@ export default function ProjectAnalytics() {
   }
 
   if (isLoading || !analytics) return <AnalyticsSkeleton />;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load project analytics</p>
+        </div>
+      </div>
+    );
+  }
 
   const maxStatusCount = Math.max(...analytics.issuesByStatus.map((s) => s.count), 1);
   const maxPriorityCount = Math.max(...analytics.issuesByPriority.map((p) => p.count), 1);

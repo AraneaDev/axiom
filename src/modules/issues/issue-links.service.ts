@@ -1,7 +1,7 @@
 import { LinkType } from '@prisma/client';
 
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { PROJECT_URL_SELECT } from '../../utils/prisma-selects';
 
 /**
@@ -10,10 +10,12 @@ import { PROJECT_URL_SELECT } from '../../utils/prisma-selects';
  * @param issueNumber
  */
 export async function getLinks(projectId: string, issueNumber: number) {
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-  });
-  if (!issue) throw new AppError(404, 'Issue not found');
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+    }),
+    'Issue not found',
+  );
 
   const links = await prisma.issueLink.findMany({
     where: { OR: [{ fromId: issue.id }, { toId: issue.id }] },
@@ -56,17 +58,21 @@ export async function addLink(
     type: LinkType;
   },
 ) {
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-  });
-  if (!issue) throw new AppError(404, 'Issue not found');
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+    }),
+    'Issue not found',
+  );
 
-  const target = await prisma.issue.findUnique({
-    where: {
-      projectId_number: { projectId: data.targetProjectId, number: data.targetIssueNumber },
-    },
-  });
-  if (!target) throw new AppError(404, 'Target issue not found');
+  const target = await findOrThrow(
+    prisma.issue.findUnique({
+      where: {
+        projectId_number: { projectId: data.targetProjectId, number: data.targetIssueNumber },
+      },
+    }),
+    'Target issue not found',
+  );
 
   const link = await prisma.issueLink.create({
     data: { fromId: issue.id, toId: target.id, type: data.type },

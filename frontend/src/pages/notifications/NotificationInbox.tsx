@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  AlertTriangle,
   Bell,
   Check,
   CheckCheck,
@@ -79,7 +80,7 @@ export default function NotificationInbox() {
 
   const unreadOnly = filter === 'unread';
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['notifications', 'inbox', { unreadOnly, page }],
     queryFn: () =>
       notificationsApi.list({
@@ -153,7 +154,14 @@ export default function NotificationInbox() {
         className="mb-4"
       />
 
-      {isLoading ? (
+      {error ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+            <p className="text-secondary">Failed to load notifications</p>
+          </div>
+        </div>
+      ) : isLoading ? (
         <ListSkeleton rows={8} />
       ) : sorted.length === 0 ? (
         <EmptyState

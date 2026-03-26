@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
@@ -29,7 +30,9 @@ export async function addComment(issueId: string, authorId: string, body: string
       assigneeId: true,
       title: true,
       number: true,
-      project: { select: { slug: true, team: { select: { slug: true, org: { select: { slug: true } } } } } },
+      project: {
+        select: { slug: true, team: { select: { slug: true, org: { select: { slug: true } } } } },
+      },
     },
   });
   const issueUrl = issue?.project
@@ -78,8 +81,10 @@ export async function addComment(issueId: string, authorId: string, body: string
  * @throws {AppError} 403 if user is not the comment author
  */
 export async function updateComment(commentId: string, userId: string, body: string) {
-  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
+  const comment = await findOrThrow(
+    prisma.comment.findUnique({ where: { id: commentId } }),
+    'Comment not found',
+  );
   if (comment.authorId !== userId) throw new AppError(403, 'You can only edit your own comments');
 
   return prisma.comment.update({
@@ -97,8 +102,10 @@ export async function updateComment(commentId: string, userId: string, body: str
  * @throws {AppError} 403 if user is not the comment author
  */
 export async function deleteComment(commentId: string, userId: string) {
-  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
+  const comment = await findOrThrow(
+    prisma.comment.findUnique({ where: { id: commentId } }),
+    'Comment not found',
+  );
   if (comment.authorId !== userId) throw new AppError(403, 'You can only delete your own comments');
 
   await prisma.comment.delete({ where: { id: commentId } });

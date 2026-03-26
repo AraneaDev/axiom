@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
+import { checkUnique } from '../../utils/check-unique';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 const DEFAULT_COLUMNS = [
   { name: 'Backlog', position: 0, isDefault: true, isDone: false },
@@ -27,15 +28,8 @@ export async function createProject(
     prefix: string;
   },
 ) {
-  const existing = await prisma.project.findUnique({
-    where: { teamId_slug: { teamId, slug: data.slug } },
-  });
-  if (existing) throw new AppError(409, 'Project slug already taken');
-
-  const prefixExists = await prisma.project.findUnique({
-    where: { teamId_prefix: { teamId, prefix: data.prefix } },
-  });
-  if (prefixExists) throw new AppError(409, 'Project prefix already taken');
+  await checkUnique('project', { teamId, slug: data.slug }, 'Project slug already taken');
+  await checkUnique('project', { teamId, prefix: data.prefix }, 'Project prefix already taken');
 
   return prisma.project.create({
     data: {
@@ -57,16 +51,17 @@ export async function createProject(
  * @param projectId
  */
 export async function getProject(projectId: string) {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: {
-      columns: { orderBy: { position: 'asc' } },
-      labels: true,
-      _count: { select: { issues: true } },
-    },
-  });
-  if (!project) throw new AppError(404, 'Project not found');
-  return project;
+  return findOrThrow(
+    prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        columns: { orderBy: { position: 'asc' } },
+        labels: true,
+        _count: { select: { issues: true } },
+      },
+    }),
+    'Project not found',
+  );
 }
 
 /**
@@ -109,11 +104,13 @@ export async function deleteProject(projectId: string) {
  * @param projectId
  */
 export async function getProjectAnalytics(projectId: string) {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: { columns: { orderBy: { position: 'asc' } } },
-  });
-  if (!project) throw new AppError(404, 'Project not found');
+  const project = await findOrThrow(
+    prisma.project.findUnique({
+      where: { id: projectId },
+      include: { columns: { orderBy: { position: 'asc' } } },
+    }),
+    'Project not found',
+  );
 
   // Issues by status (board column)
   const columnCounts = await prisma.issue.groupBy({

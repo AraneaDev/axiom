@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Key, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Key, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { usersApi } from '@/api/users.api';
@@ -26,7 +26,11 @@ export default function SshKeys() {
   const [error, setError] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data: keys, isLoading } = useQuery({
+  const {
+    data: keys,
+    isLoading,
+    error: queryError,
+  } = useQuery({
     queryKey: ['sshKeys'],
     queryFn: usersApi.listSshKeys,
   });
@@ -69,6 +73,17 @@ export default function SshKeys() {
         <ListSkeleton rows={3} />
       </div>
     );
+
+  if (queryError) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load SSH keys</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <SettingsPage

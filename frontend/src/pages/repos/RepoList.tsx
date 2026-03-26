@@ -1,14 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { GitBranch, Plus, Lock, Globe, Building2 } from 'lucide-react';
+import { GitBranch, Plus, Lock, Globe, Building2, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { reposApi } from '@/api/repos.api';
-import { useTeamContext } from '@/hooks/useTeamContext';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 
 const VIS_ICON = { PRIVATE: Lock, INTERNAL: Building2, PUBLIC: Globe };
@@ -24,7 +24,11 @@ const VIS_BADGE: Record<string, 'default' | 'warning' | 'success'> = {
 export default function RepoList() {
   const { org, teamSlug, currentTeam } = useTeamContext();
 
-  const { data: repos, isLoading } = useQuery({
+  const {
+    data: repos,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['repos', currentTeam?.id],
     queryFn: () => reposApi.listByTeam(currentTeam!.id),
     enabled: !!currentTeam?.id,
@@ -40,6 +44,17 @@ export default function RepoList() {
         <ListSkeleton rows={6} />
       </div>
     );
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load repositories</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

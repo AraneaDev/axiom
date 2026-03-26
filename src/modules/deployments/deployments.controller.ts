@@ -1,6 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 import {
@@ -12,206 +13,86 @@ import {
 
 import * as svc from './deployments.service';
 
-/**
- * POST /:repoId/environments
- * @param req
- * @param res
- * @param next
- */
-export async function createEnvironment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const repoId = param(req, 'repoId');
-    const body = validate(createEnvironmentSchema, req.body);
-    const env = await svc.createEnvironment(repoId, body);
-    res.status(201).json(env);
-  } catch (err) {
-    next(err);
-  }
-}
+export const createEnvironment = asyncHandler(async (req: Request, res: Response) => {
+  const repoId = param(req, 'repoId');
+  const body = validate(createEnvironmentSchema, req.body);
+  const env = await svc.createEnvironment(repoId, body);
+  res.status(201).json(env);
+});
 
-/**
- * GET /:repoId/environments
- * @param req
- * @param res
- * @param next
- */
-export async function listEnvironments(req: Request, res: Response, next: NextFunction) {
-  try {
-    const repoId = param(req, 'repoId');
-    res.json(await svc.listEnvironments(repoId));
-  } catch (err) {
-    next(err);
-  }
-}
+export const listEnvironments = asyncHandler(async (req: Request, res: Response) => {
+  const repoId = param(req, 'repoId');
+  res.json(await svc.listEnvironments(repoId));
+});
 
-/**
- * PATCH /:repoId/environments/:envId
- * @param req
- * @param res
- * @param next
- */
-export async function updateEnvironment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const envId = param(req, 'envId');
-    const body = validate(updateEnvironmentSchema, req.body);
-    res.json(await svc.updateEnvironment(envId, body));
-  } catch (err) {
-    next(err);
-  }
-}
+export const updateEnvironment = asyncHandler(async (req: Request, res: Response) => {
+  const envId = param(req, 'envId');
+  const body = validate(updateEnvironmentSchema, req.body);
+  res.json(await svc.updateEnvironment(envId, body));
+});
 
-/**
- * DELETE /:repoId/environments/:envId
- * @param req
- * @param res
- * @param next
- */
-export async function deleteEnvironment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const envId = param(req, 'envId');
-    await svc.deleteEnvironment(envId);
-    res.status(204).end();
-  } catch (err) {
-    next(err);
-  }
-}
+export const deleteEnvironment = asyncHandler(async (req: Request, res: Response) => {
+  const envId = param(req, 'envId');
+  await svc.deleteEnvironment(envId);
+  res.status(204).end();
+});
 
-/**
- * POST /:repoId/environments/:envId/deployments
- * @param req
- * @param res
- * @param next
- */
-export async function createDeployment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const envId = param(req, 'envId');
-    const body = validate(createDeploymentSchema, req.body);
-    const deployment = await svc.createDeployment(envId, {
-      ...body,
-      deployedById: req.userId!,
-    });
-    res.status(201).json(deployment);
-  } catch (err) {
-    next(err);
-  }
-}
+export const createDeployment = asyncHandler(async (req: Request, res: Response) => {
+  const envId = param(req, 'envId');
+  const body = validate(createDeploymentSchema, req.body);
+  const deployment = await svc.createDeployment(envId, {
+    ...body,
+    deployedById: req.userId!,
+  });
+  res.status(201).json(deployment);
+});
 
-/**
- * GET /:repoId/environments/:envId/deployments
- * @param req
- * @param res
- * @param next
- */
-export async function listDeployments(req: Request, res: Response, next: NextFunction) {
-  try {
-    const envId = param(req, 'envId');
-    const { take, skip } = parsePagination(req.query as Record<string, string>);
-    res.json(await svc.listDeployments(envId, { limit: take, offset: skip }));
-  } catch (err) {
-    next(err);
-  }
-}
+export const listDeployments = asyncHandler(async (req: Request, res: Response) => {
+  const envId = param(req, 'envId');
+  const { take, skip } = parsePagination(req.query as Record<string, string>);
+  res.json(await svc.listDeployments(envId, { limit: take, offset: skip }));
+});
 
-/**
- * GET /:repoId/environments/:envId/deployments/:deploymentId
- * @param req
- * @param res
- * @param next
- */
-export async function getDeployment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const deploymentId = param(req, 'deploymentId');
-    const deployment = await svc.getDeployment(deploymentId);
-    if (!deployment) {
-      throw new AppError(404, 'Deployment not found');
-    }
-    res.json(deployment);
-  } catch (err) {
-    next(err);
+export const getDeployment = asyncHandler(async (req: Request, res: Response) => {
+  const deploymentId = param(req, 'deploymentId');
+  const deployment = await svc.getDeployment(deploymentId);
+  if (!deployment) {
+    throw new AppError(404, 'Deployment not found');
   }
-}
+  res.json(deployment);
+});
 
-/**
- * GET /:repoId/commits/:sha/deployments
- * @param req
- * @param res
- * @param next
- */
-export async function getDeploymentsByCommit(req: Request, res: Response, next: NextFunction) {
-  try {
-    const repoId = param(req, 'repoId');
-    const sha = param(req, 'sha');
-    res.json(await svc.getDeploymentsByCommit(repoId, sha));
-  } catch (err) {
-    next(err);
-  }
-}
+export const getDeploymentsByCommit = asyncHandler(async (req: Request, res: Response) => {
+  const repoId = param(req, 'repoId');
+  const sha = param(req, 'sha');
+  res.json(await svc.getDeploymentsByCommit(repoId, sha));
+});
 
-// ─── Environment Variables ──────────────────────────────────
+// Environment Variables
 
-/**
- * GET /:repoId/environments/:envId/variables
- * @param req
- * @param res
- * @param next
- */
-export async function listEnvVariables(req: Request, res: Response, next: NextFunction) {
-  try {
-    const envId = param(req, 'envId');
-    res.json(await svc.listEnvVariables(envId));
-  } catch (err) {
-    next(err);
-  }
-}
+export const listEnvVariables = asyncHandler(async (req: Request, res: Response) => {
+  const envId = param(req, 'envId');
+  res.json(await svc.listEnvVariables(envId));
+});
 
-/**
- * POST /:repoId/environments/:envId/variables
- * @param req
- * @param res
- * @param next
- */
-export async function createEnvVariable(req: Request, res: Response, next: NextFunction) {
-  try {
-    const envId = param(req, 'envId');
-    const { name, value } = req.body;
-    if (!name || !value) throw new AppError(400, 'name and value are required');
-    const variable = await svc.upsertEnvVariable(envId, name, value);
-    res.status(201).json(variable);
-  } catch (err) {
-    next(err);
-  }
-}
+export const createEnvVariable = asyncHandler(async (req: Request, res: Response) => {
+  const envId = param(req, 'envId');
+  const { name, value } = req.body;
+  if (!name || !value) throw new AppError(400, 'name and value are required');
+  const variable = await svc.upsertEnvVariable(envId, name, value);
+  res.status(201).json(variable);
+});
 
-/**
- * PUT /:repoId/environments/:envId/variables/:variableId
- * @param req
- * @param res
- * @param next
- */
-export async function updateEnvVariable(req: Request, res: Response, next: NextFunction) {
-  try {
-    const envId = param(req, 'envId');
-    const { name, value } = req.body;
-    if (!name || !value) throw new AppError(400, 'name and value are required');
-    const variable = await svc.upsertEnvVariable(envId, name, value);
-    res.json(variable);
-  } catch (err) {
-    next(err);
-  }
-}
+export const updateEnvVariable = asyncHandler(async (req: Request, res: Response) => {
+  const envId = param(req, 'envId');
+  const { name, value } = req.body;
+  if (!name || !value) throw new AppError(400, 'name and value are required');
+  const variable = await svc.upsertEnvVariable(envId, name, value);
+  res.json(variable);
+});
 
-/**
- * DELETE /:repoId/environments/:envId/variables/:variableId
- * @param req
- * @param res
- * @param next
- */
-export async function deleteEnvVariable(req: Request, res: Response, next: NextFunction) {
-  try {
-    const variableId = param(req, 'variableId');
-    await svc.deleteEnvVariable(variableId);
-    res.status(204).end();
-  } catch (err) {
-    next(err);
-  }
-}
+export const deleteEnvVariable = asyncHandler(async (req: Request, res: Response) => {
+  const variableId = param(req, 'variableId');
+  await svc.deleteEnvVariable(variableId);
+  res.status(204).end();
+});

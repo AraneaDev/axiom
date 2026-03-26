@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Coins, KeyRound, Plus, Trash2, Copy, X } from 'lucide-react';
+import { AlertTriangle, Coins, KeyRound, Plus, Trash2, Copy, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { usersApi } from '@/api/users.api';
@@ -27,7 +27,11 @@ export default function ApiTokens() {
   const [error, setError] = useState('');
   const [revokeId, setRevokeId] = useState<string | null>(null);
 
-  const { data: tokens, isLoading } = useQuery({
+  const {
+    data: tokens,
+    isLoading,
+    error: queryError,
+  } = useQuery({
     queryKey: ['apiTokens'],
     queryFn: usersApi.listApiTokens,
   });
@@ -68,6 +72,17 @@ export default function ApiTokens() {
         <ListSkeleton rows={3} />
       </div>
     );
+
+  if (queryError) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load API tokens</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <SettingsPage

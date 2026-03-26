@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { Toggle } from '@/components/ui/Toggle';
+import { useModalState } from '@/hooks/useModalState';
 
 interface WebhooksSettingsProps {
   repoId: string;
@@ -26,7 +27,7 @@ interface WebhooksSettingsProps {
 export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [showForm, setShowForm] = useState(false);
+  const formModal = useModalState();
   const [editing, setEditing] = useState<WebhookType | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WebhookType | null>(null);
   const [expandedDeliveries, setExpandedDeliveries] = useState<string | null>(null);
@@ -53,11 +54,11 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
 
   const handleEdit = (webhook: WebhookType) => {
     setEditing(webhook);
-    setShowForm(true);
+    formModal.open();
   };
 
   const handleCloseForm = () => {
-    setShowForm(false);
+    formModal.close();
     setEditing(null);
   };
 
@@ -67,7 +68,7 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Webhook className="h-5 w-5" /> Webhooks
         </h2>
-        <Button size="sm" onClick={() => setShowForm(true)}>
+        <Button size="sm" onClick={() => formModal.open()}>
           <Plus className="h-4 w-4" /> Add webhook
         </Button>
       </div>
@@ -84,7 +85,7 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
           title="No webhooks configured"
           description="Add a webhook to notify external services of repository events."
           action={
-            <Button size="sm" onClick={() => setShowForm(true)}>
+            <Button size="sm" onClick={() => formModal.open()}>
               <Plus className="h-4 w-4" /> Add webhook
             </Button>
           }
@@ -159,7 +160,9 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
       )}
 
       {/* Create / Edit form modal */}
-      {showForm && <WebhookFormModal repoId={repoId} webhook={editing} onClose={handleCloseForm} />}
+      {formModal.isOpen && (
+        <WebhookFormModal repoId={repoId} webhook={editing} onClose={handleCloseForm} />
+      )}
 
       {/* Delete confirmation modal */}
       <ConfirmDialog

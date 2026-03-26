@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
  * Create or update a commit status check.
@@ -21,8 +22,10 @@ export async function createOrUpdateStatus(
     description?: string;
   },
 ) {
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo) throw new AppError(404, 'Repository not found');
+  await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
 
   return prisma.commitStatus.upsert({
     where: {
@@ -62,16 +65,21 @@ export async function getStatusesForCommit(repoId: string, sha: string) {
  * @param prNumber
  */
 export async function getStatusesForPR(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
 
   // Resolve head SHA from source branch
   const { repoExists } = await import('../../git/repo-manager');
   const { resolveRef } = await import('../../git/git-commands');
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
+  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
   if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
 
   let headSha: string;

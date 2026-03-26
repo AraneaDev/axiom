@@ -10,6 +10,7 @@ import {
   Shield,
   ArrowRight,
   FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -17,12 +18,12 @@ import { projectsApi } from '@/api/projects.api';
 import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
-import { useTeamContext } from '@/hooks/useTeamContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { cn, formatRelative } from '@/lib/utils';
 
 const ACTION_LABELS: Record<string, string> = {
@@ -48,7 +49,11 @@ const ACTION_LABELS: Record<string, string> = {
 export default function TeamDetail() {
   const { org, teamSlug, currentTeam } = useTeamContext();
 
-  const { data: projects, isLoading: projectsLoading } = useQuery({
+  const {
+    data: projects,
+    isLoading: projectsLoading,
+    error,
+  } = useQuery({
     queryKey: ['projects', currentTeam?.id],
     queryFn: () => projectsApi.listByTeam(currentTeam!.id),
     enabled: !!currentTeam?.id,
@@ -85,6 +90,17 @@ export default function TeamDetail() {
   });
 
   if (projectsLoading) return <PageLoader />;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load team details</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-6 py-4">

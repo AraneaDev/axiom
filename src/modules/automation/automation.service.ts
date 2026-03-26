@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 export type AutomationTrigger =
   | 'issue:created'
@@ -51,8 +51,7 @@ interface CreateRuleData {
  * @param data
  */
 export async function createRule(projectId: string, data: CreateRuleData) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
   return prisma.automationRule.create({
     data: {
@@ -83,8 +82,10 @@ export async function listRules(projectId: string) {
  * @param data
  */
 export async function updateRule(ruleId: string, data: Partial<CreateRuleData>) {
-  const rule = await prisma.automationRule.findUnique({ where: { id: ruleId } });
-  if (!rule) throw new AppError(404, 'Automation rule not found');
+  await findOrThrow(
+    prisma.automationRule.findUnique({ where: { id: ruleId } }),
+    'Automation rule not found',
+  );
 
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
@@ -105,8 +106,10 @@ export async function updateRule(ruleId: string, data: Partial<CreateRuleData>) 
  * @param ruleId
  */
 export async function deleteRule(ruleId: string) {
-  const rule = await prisma.automationRule.findUnique({ where: { id: ruleId } });
-  if (!rule) throw new AppError(404, 'Automation rule not found');
+  await findOrThrow(
+    prisma.automationRule.findUnique({ where: { id: ruleId } }),
+    'Automation rule not found',
+  );
   return prisma.automationRule.delete({ where: { id: ruleId } });
 }
 
@@ -115,8 +118,10 @@ export async function deleteRule(ruleId: string) {
  * @param ruleId
  */
 export async function toggleRule(ruleId: string) {
-  const rule = await prisma.automationRule.findUnique({ where: { id: ruleId } });
-  if (!rule) throw new AppError(404, 'Automation rule not found');
+  const rule = await findOrThrow(
+    prisma.automationRule.findUnique({ where: { id: ruleId } }),
+    'Automation rule not found',
+  );
 
   return prisma.automationRule.update({
     where: { id: ruleId },

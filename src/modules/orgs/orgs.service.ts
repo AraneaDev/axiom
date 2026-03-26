@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { checkUnique } from '../../utils/check-unique';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
@@ -17,8 +18,7 @@ export async function createOrg(
   userId: string,
   data: { name: string; slug: string; description?: string },
 ) {
-  const existing = await prisma.organization.findUnique({ where: { slug: data.slug } });
-  if (existing) throw new AppError(409, 'Organization slug already taken');
+  await checkUnique('organization', { slug: data.slug }, 'Organization slug already taken');
 
   const org = await prisma.organization.create({
     data: {
@@ -121,10 +121,7 @@ export async function addOrgMember(
   userId: string,
   role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST' = 'MEMBER',
 ) {
-  const existing = await prisma.orgMembership.findUnique({
-    where: { userId_orgId: { userId, orgId } },
-  });
-  if (existing) throw new AppError(409, 'User is already a member');
+  await checkUnique('orgMembership', { userId, orgId }, 'User is already a member');
 
   return prisma.orgMembership.create({
     data: { userId, orgId, role },

@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { MessageSquare, Pencil, Trash2, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -10,6 +10,9 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
+import { useDraftState } from '@/hooks/useDraftState';
+import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import type { Issue } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -20,6 +23,7 @@ interface IssueDetailCommentsProps {
   num: string;
   commentBody: string;
   onCommentBodyChange: (value: string) => void;
+  onCommentReset: () => void;
   basePath?: string;
   orgSlug?: string;
   teamSlug?: string;
@@ -33,6 +37,7 @@ interface IssueDetailCommentsProps {
  * @param root0.num
  * @param root0.commentBody
  * @param root0.onCommentBodyChange
+ * @param root0.onCommentReset
  * @param root0.basePath
  * @param root0.orgSlug
  * @param root0.teamSlug
@@ -43,27 +48,25 @@ export function IssueDetailComments({
   num,
   commentBody,
   onCommentBodyChange,
+  onCommentReset,
   basePath,
   orgSlug,
   teamSlug,
 }: IssueDetailCommentsProps) {
-  const queryClient = useQueryClient();
+  const toast = useToast();
   const { user } = useAuthStore();
+  const editCommentDraft = useDraftState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [editCommentBody, setEditCommentBody] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-
-  const invalidateIssue = () => {
-    queryClient.invalidateQueries({ queryKey: ['issue', projectId, num] });
-    queryClient.invalidateQueries({ queryKey: ['activity', projectId, num] });
-  };
+  const { invalidateIssue } = useIssueInvalidation(projectId, num);
 
   const commentMutation = useMutation({
     mutationFn: () => issuesApi.addComment(projectId, parseInt(num), commentBody),
     onSuccess: () => {
-      onCommentBodyChange('');
+      onCommentReset();
       invalidateIssue();
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const updateCommentMutation = useMutation({
@@ -71,17 +74,20 @@ export function IssueDetailComments({
       issuesApi.updateComment(projectId, commentId, body),
     onSuccess: () => {
       setEditingCommentId(null);
+      editCommentDraft.reset();
       invalidateIssue();
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const deleteCommentMutation = useMutation({
     mutationFn: (commentId: string) => issuesApi.deleteComment(projectId, commentId),
     onSuccess: () => invalidateIssue(),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   function startEditComment(commentId: string, body: string) {
-    setEditCommentBody(body);
+    editCommentDraft.startEditing(body);
     setEditingCommentId(commentId);
   }
 
@@ -178,25 +184,34 @@ export function IssueDetailComments({
                   {editingCommentId === comment.id ? (
                     <div className="space-y-2">
                       <MarkdownEditor
-                        value={editCommentBody}
-                        onChange={setEditCommentBody}
+                        value={editCommentDraft.draft}
+                        onChange={editCommentDraft.setDraft}
                         compact
                         projectId={projectId}
                       />
                       <div className="flex gap-2">
                         <Button
                           size="sm"
-                          disabled={!editCommentBody.trim() || updateCommentMutation.isPending}
+                          disabled={
+                            !editCommentDraft.draft.trim() || updateCommentMutation.isPending
+                          }
                           onClick={() =>
                             updateCommentMutation.mutate({
                               commentId: comment.id,
-                              body: editCommentBody,
+                              body: editCommentDraft.draft,
                             })
                           }
                         >
                           <Check className="h-4 w-4" /> Save
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingCommentId(null);
+                            editCommentDraft.cancel();
+                          }}
+                        >
                           <X className="h-4 w-4" /> Cancel
                         </Button>
                       </div>

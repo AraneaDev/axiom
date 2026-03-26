@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Users, Plus, FolderKanban } from 'lucide-react';
+import { Users, Plus, FolderKanban, AlertTriangle } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
@@ -18,13 +18,28 @@ export default function TeamList() {
   const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
   const currentOrg = orgs?.find((o) => o.slug === org);
 
-  const { data: teams, isLoading } = useQuery({
+  const {
+    data: teams,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['teams', currentOrg?.id],
     queryFn: () => teamsApi.listByOrg(currentOrg!.id),
     enabled: !!currentOrg?.id,
   });
 
   if (isLoading) return <PageLoader />;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load teams</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-6 py-4">

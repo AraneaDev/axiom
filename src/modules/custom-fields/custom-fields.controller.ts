@@ -1,123 +1,64 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 
 import * as customFieldsService from './custom-fields.service';
 
-/**
- * Create a custom field definition for a project.
- * @param req
- * @param res
- * @param next
- */
-export async function createDefinition(req: Request, res: Response, next: NextFunction) {
-  try {
-    const projectId = param(req, 'projectId');
-    const { name, type, options, required, position } = req.body;
-    if (!name || !type) {
-      throw new AppError(400, 'name and type are required');
-    }
-    const definition = await customFieldsService.createFieldDefinition(projectId, {
-      name,
-      type,
-      options,
-      required,
-      position,
-    });
-    res.status(201).json(definition);
-  } catch (err) {
-    next(err);
+export const createDefinition = asyncHandler(async (req: Request, res: Response) => {
+  const projectId = param(req, 'projectId');
+  const { name, type, options, required, position } = req.body;
+  if (!name || !type) {
+    throw new AppError(400, 'name and type are required');
   }
-}
+  const definition = await customFieldsService.createFieldDefinition(projectId, {
+    name,
+    type,
+    options,
+    required,
+    position,
+  });
+  res.status(201).json(definition);
+});
 
-/**
- * List all custom field definitions for a project.
- * @param req
- * @param res
- * @param next
- */
-export async function listDefinitions(req: Request, res: Response, next: NextFunction) {
-  try {
-    const projectId = param(req, 'projectId');
-    const definitions = await customFieldsService.listFieldDefinitions(projectId);
-    res.json(definitions);
-  } catch (err) {
-    next(err);
-  }
-}
+export const listDefinitions = asyncHandler(async (req: Request, res: Response) => {
+  const projectId = param(req, 'projectId');
+  const definitions = await customFieldsService.listFieldDefinitions(projectId);
+  res.json(definitions);
+});
 
-/**
- * Update a custom field definition.
- * @param req
- * @param res
- * @param next
- */
-export async function updateDefinition(req: Request, res: Response, next: NextFunction) {
-  try {
-    const fieldId = param(req, 'fieldId');
-    const { name, options, required, position } = req.body;
-    const definition = await customFieldsService.updateFieldDefinition(fieldId, {
-      name,
-      options,
-      required,
-      position,
-    });
-    res.json(definition);
-  } catch (err) {
-    next(err);
-  }
-}
+export const updateDefinition = asyncHandler(async (req: Request, res: Response) => {
+  const fieldId = param(req, 'fieldId');
+  const { name, options, required, position } = req.body;
+  const definition = await customFieldsService.updateFieldDefinition(fieldId, {
+    name,
+    options,
+    required,
+    position,
+  });
+  res.json(definition);
+});
 
-/**
- * Delete a custom field definition and all its values.
- * @param req
- * @param res
- * @param next
- */
-export async function deleteDefinition(req: Request, res: Response, next: NextFunction) {
-  try {
-    const fieldId = param(req, 'fieldId');
-    await customFieldsService.deleteFieldDefinition(fieldId);
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const deleteDefinition = asyncHandler(async (req: Request, res: Response) => {
+  const fieldId = param(req, 'fieldId');
+  await customFieldsService.deleteFieldDefinition(fieldId);
+  res.status(204).send();
+});
 
-/**
- * Set a custom field value for an issue.
- * @param req
- * @param res
- * @param next
- */
-export async function setFieldValue(req: Request, res: Response, next: NextFunction) {
-  try {
-    const issueId = param(req, 'issueId');
-    const fieldId = param(req, 'fieldId');
-    const { value } = req.body;
-    if (value === undefined) {
-      throw new AppError(400, 'value is required');
-    }
-    const fieldValue = await customFieldsService.setFieldValue(issueId, fieldId, String(value));
-    res.json(fieldValue);
-  } catch (err) {
-    next(err);
+export const setFieldValue = asyncHandler(async (req: Request, res: Response) => {
+  const issueId = param(req, 'issueId');
+  const fieldId = param(req, 'fieldId');
+  const { value } = req.body;
+  if (value === undefined) {
+    throw new AppError(400, 'value is required');
   }
-}
+  const fieldValue = await customFieldsService.setFieldValue(issueId, fieldId, String(value));
+  res.json(fieldValue);
+});
 
-/**
- * Get all custom field values for an issue.
- * @param req
- * @param res
- * @param next
- */
-export async function getFieldValues(req: Request, res: Response, next: NextFunction) {
-  try {
-    const issueId = param(req, 'issueId');
-    const values = await customFieldsService.getFieldValues(issueId);
-    res.json(values);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getFieldValues = asyncHandler(async (req: Request, res: Response) => {
+  const issueId = param(req, 'issueId');
+  const values = await customFieldsService.getFieldValues(issueId);
+  res.json(values);
+});

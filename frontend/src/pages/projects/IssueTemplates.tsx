@@ -1,10 +1,9 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Save, X, Pencil, Trash2, FileText, Tag } from 'lucide-react';
 import { useState } from 'react';
 
 import { issueTemplatesApi, type IssueTemplate } from '@/api/issue-templates.api';
 import { labelsApi } from '@/api/labels.api';
-import { useProjectContext } from '@/hooks/useProjectContext';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -14,7 +13,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
+import { useCRUDSettings } from '@/hooks/useCRUDSettings';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { cn } from '@/lib/utils';
 
 const ISSUE_TYPES = [
@@ -36,12 +36,7 @@ const TYPE_BADGE_CLASS: Record<string, string> = {
  */
 export default function IssueTemplates() {
   const { currentProject } = useProjectContext();
-  const queryClient = useQueryClient();
-  const toast = useToast();
 
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formType, setFormType] = useState<'TASK' | 'BUG' | 'STORY' | 'EPIC'>('TASK');
   const [formTitle, setFormTitle] = useState('');
@@ -60,45 +55,35 @@ export default function IssueTemplates() {
     enabled: !!currentProject?.id,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: Omit<IssueTemplate, 'id'>) =>
-      issueTemplatesApi.create(currentProject!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue-templates', currentProject?.id] });
-      resetForm();
-      toast.success('Template created');
+  const {
+    showAddForm,
+    setShowAddForm,
+    editingId,
+    setEditingId,
+    deleteTarget,
+    setDeleteTarget,
+    resetForm: resetCRUD,
+    createMutation,
+    updateMutation,
+    deleteMutation,
+    confirmDelete,
+  } = useCRUDSettings<Omit<IssueTemplate, 'id'>, Partial<Omit<IssueTemplate, 'id'>>, string>({
+    queryKey: ['issue-templates', currentProject?.id],
+    createFn: (data) => issueTemplatesApi.create(currentProject!.id, data),
+    updateFn: (templateId, data) => issueTemplatesApi.update(currentProject!.id, templateId, data),
+    deleteFn: (templateId) => issueTemplatesApi.delete(currentProject!.id, templateId),
+    entityName: 'Template',
+    onCreateSuccess: () => {
+      setFormName('');
+      setFormType('TASK');
+      setFormTitle('');
+      setFormBody('');
+      setFormLabels([]);
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({
-      templateId,
-      data,
-    }: {
-      templateId: string;
-      data: Partial<Omit<IssueTemplate, 'id'>>;
-    }) => issueTemplatesApi.update(currentProject!.id, templateId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue-templates', currentProject?.id] });
-      setEditingId(null);
-      toast.success('Template updated');
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (templateId: string) => issueTemplatesApi.delete(currentProject!.id, templateId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue-templates', currentProject?.id] });
-      toast.success('Template deleted');
-    },
-    onError: (err: Error) => toast.error(err.message),
   });
 
   function resetForm() {
-    setShowAddForm(false);
-    setEditingId(null);
+    resetCRUD();
     setFormName('');
     setFormType('TASK');
     setFormTitle('');
@@ -128,7 +113,7 @@ export default function IssueTemplates() {
 
   function handleUpdate(templateId: string) {
     updateMutation.mutate({
-      templateId,
+      id: templateId,
       data: {
         name: formName.trim(),
         type: formType,
@@ -366,10 +351,7 @@ export default function IssueTemplates() {
       <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) deleteMutation.mutate(deleteTarget);
-          setDeleteTarget(null);
-        }}
+        onConfirm={confirmDelete}
         title="Delete Template"
         description="Are you sure you want to delete this template? This action cannot be undone."
         confirmLabel="Delete"

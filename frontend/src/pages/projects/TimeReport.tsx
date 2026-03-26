@@ -1,15 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { Download, Timer, Users } from 'lucide-react';
+import { AlertTriangle, Download, Timer, Users } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { projectsApi } from '@/api/projects.api';
-import { useProjectContext } from '@/hooks/useProjectContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Progress } from '@/components/ui/Progress';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
+import { useProjectContext } from '@/hooks/useProjectContext';
 
 function formatMinutes(mins: number | null | undefined): string {
   if (mins == null || mins === 0) return '0h';
@@ -43,7 +43,11 @@ function TimeReportSkeleton() {
 export default function TimeReport() {
   const { org, teamSlug, currentProject } = useProjectContext();
 
-  const { data: report, isLoading } = useQuery({
+  const {
+    data: report,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['time-report', currentProject?.id],
     queryFn: () => projectsApi.timeReport(currentProject!.id),
     enabled: !!currentProject?.id,
@@ -72,6 +76,17 @@ export default function TimeReport() {
   }
 
   if (isLoading || !report) return <TimeReportSkeleton />;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load time report</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 px-6 py-4">

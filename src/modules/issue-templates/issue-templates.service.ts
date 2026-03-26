@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 export interface IssueTemplate {
   id: string;
@@ -16,11 +17,13 @@ function generateId(): string {
 }
 
 async function getTemplates(projectId: string): Promise<IssueTemplate[]> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { issueTemplates: true },
-  });
-  if (!project) throw new AppError(404, 'Project not found');
+  const project = await findOrThrow(
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { issueTemplates: true },
+    }),
+    'Project not found',
+  );
 
   if (!project.issueTemplates) return [];
   return project.issueTemplates as unknown as IssueTemplate[];

@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { dispatchWebhook } from '../../git/hook-handler';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
  *
@@ -45,8 +46,10 @@ export async function listWebhooks(repoId: string) {
  * @param webhookId
  */
 export async function getWebhook(webhookId: string) {
-  const webhook = await prisma.webhook.findUnique({ where: { id: webhookId } });
-  if (!webhook) throw new AppError(404, 'Webhook not found');
+  const webhook = await findOrThrow(
+    prisma.webhook.findUnique({ where: { id: webhookId } }),
+    'Webhook not found',
+  );
   return webhook;
 }
 
@@ -68,8 +71,7 @@ export async function updateWebhook(
     active?: boolean;
   },
 ) {
-  const webhook = await prisma.webhook.findUnique({ where: { id: webhookId } });
-  if (!webhook) throw new AppError(404, 'Webhook not found');
+  await findOrThrow(prisma.webhook.findUnique({ where: { id: webhookId } }), 'Webhook not found');
   return prisma.webhook.update({ where: { id: webhookId }, data });
 }
 
@@ -78,8 +80,7 @@ export async function updateWebhook(
  * @param webhookId
  */
 export async function deleteWebhook(webhookId: string) {
-  const webhook = await prisma.webhook.findUnique({ where: { id: webhookId } });
-  if (!webhook) throw new AppError(404, 'Webhook not found');
+  await findOrThrow(prisma.webhook.findUnique({ where: { id: webhookId } }), 'Webhook not found');
   await prisma.webhook.delete({ where: { id: webhookId } });
 }
 
@@ -88,8 +89,7 @@ export async function deleteWebhook(webhookId: string) {
  * @param webhookId
  */
 export async function listDeliveries(webhookId: string) {
-  const webhook = await prisma.webhook.findUnique({ where: { id: webhookId } });
-  if (!webhook) throw new AppError(404, 'Webhook not found');
+  await findOrThrow(prisma.webhook.findUnique({ where: { id: webhookId } }), 'Webhook not found');
   return prisma.webhookDelivery.findMany({
     where: { webhookId },
     orderBy: { createdAt: 'desc' },
@@ -107,8 +107,10 @@ export async function redeliverWebhook(webhookId: string, deliveryId: string) {
   if (!delivery || delivery.webhookId !== webhookId) {
     throw new AppError(404, 'Delivery not found');
   }
-  const webhook = await prisma.webhook.findUnique({ where: { id: webhookId } });
-  if (!webhook) throw new AppError(404, 'Webhook not found');
+  const webhook = await findOrThrow(
+    prisma.webhook.findUnique({ where: { id: webhookId } }),
+    'Webhook not found',
+  );
 
   const payload = delivery.requestBody ? JSON.parse(delivery.requestBody) : {};
   await dispatchWebhook(webhook.id, webhook.url, webhook.secret, payload, 1);

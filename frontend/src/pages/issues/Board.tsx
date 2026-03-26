@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { BoardSkeleton } from '@/components/ui/Skeleton';
+import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
 import type { BoardColumn, Issue } from '@/lib/types';
@@ -229,6 +230,7 @@ function Column({
 export default function Board() {
   const { org, teamSlug, projectSlug, currentProject } = useProjectContext();
   const queryClient = useQueryClient();
+  const { invalidateList } = useIssueInvalidation(currentProject?.id ?? '');
   const setPreferredView = useUIStore((s) => s.setPreferredProjectView);
   useEffect(() => {
     setPreferredView('board');
@@ -238,7 +240,11 @@ export default function Board() {
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [showColumnManager, setShowColumnManager] = useState(false);
 
-  const { data: columns, isLoading } = useQuery({
+  const {
+    data: columns,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['board', currentProject?.id],
     queryFn: () => issuesApi.getBoard(currentProject!.id),
     enabled: !!currentProject?.id,
@@ -274,7 +280,7 @@ export default function Board() {
       position: number;
     }) => issuesApi.moveIssue(currentProject!.id, issueNumber, { columnId, position }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['board', currentProject?.id] });
+      invalidateList();
     },
   });
 
@@ -333,6 +339,7 @@ export default function Board() {
   );
 
   if (isLoading) return <BoardSkeleton />;
+  if (error) return <div className="p-8 text-center text-danger">Failed to load board data</div>;
 
   return (
     <div className="px-6 py-4">

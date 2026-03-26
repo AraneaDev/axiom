@@ -1,107 +1,38 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 
 import * as webhooksService from './webhooks.service';
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const webhook = await webhooksService.createWebhook(param(req, 'repoId'), req.body);
-    res.status(201).json(webhook);
-  } catch (err) {
-    next(err);
-  }
-}
+export const create = asyncHandler(async (req: Request, res: Response) => {
+  const webhook = await webhooksService.createWebhook(param(req, 'repoId'), req.body);
+  res.status(201).json(webhook);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await webhooksService.listWebhooks(param(req, 'repoId')));
-  } catch (err) {
-    next(err);
-  }
-}
+export const list = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await webhooksService.listWebhooks(param(req, 'repoId')));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function get(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await webhooksService.getWebhook(param(req, 'webhookId')));
-  } catch (err) {
-    next(err);
-  }
-}
+export const get = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await webhooksService.getWebhook(param(req, 'webhookId')));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function update(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await webhooksService.updateWebhook(param(req, 'webhookId'), req.body));
-  } catch (err) {
-    next(err);
-  }
-}
+export const update = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await webhooksService.updateWebhook(param(req, 'webhookId'), req.body));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function remove(req: Request, res: Response, next: NextFunction) {
-  try {
-    await webhooksService.deleteWebhook(param(req, 'webhookId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  await webhooksService.deleteWebhook(param(req, 'webhookId'));
+  res.status(204).send();
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listDeliveries(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await webhooksService.listDeliveries(param(req, 'webhookId')));
-  } catch (err) {
-    next(err);
-  }
-}
+export const listDeliveries = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await webhooksService.listDeliveries(param(req, 'webhookId')));
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function redeliver(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(
-      await webhooksService.redeliverWebhook(param(req, 'webhookId'), param(req, 'deliveryId')),
-    );
-  } catch (err) {
-    next(err);
-  }
-}
+export const redeliver = asyncHandler(async (req: Request, res: Response) => {
+  res.json(
+    await webhooksService.redeliverWebhook(param(req, 'webhookId'), param(req, 'deliveryId')),
+  );
+});

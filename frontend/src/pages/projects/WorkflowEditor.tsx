@@ -1,10 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, GitBranch, Plus, Trash2, Workflow } from 'lucide-react';
+import { AlertTriangle, ArrowRight, GitBranch, Plus, Trash2, Workflow } from 'lucide-react';
 import { useState } from 'react';
 
 import { issuesApi } from '@/api/issues.api';
 import { workflowsApi } from '@/api/workflows.api';
-import { useProjectContext } from '@/hooks/useProjectContext';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -12,6 +11,7 @@ import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import type { BoardColumn } from '@/lib/types';
 
 /**
@@ -33,7 +33,11 @@ export default function WorkflowEditor() {
   });
 
   // Fetch workflow rules
-  const { data: rules, isLoading } = useQuery({
+  const {
+    data: rules,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['workflow-rules', currentProject?.id],
     queryFn: () => workflowsApi.listRules(currentProject!.id),
     enabled: !!currentProject?.id,
@@ -80,6 +84,17 @@ export default function WorkflowEditor() {
         <ListSkeleton rows={4} />
       </div>
     );
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load workflow rules</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <SettingsPage

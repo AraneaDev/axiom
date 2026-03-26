@@ -1,9 +1,8 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ListPlus, Plus, Settings, Trash2, GripVertical, Save, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { customFieldsApi, type CustomFieldDefinition } from '@/api/custom-fields.api';
-import { useProjectContext } from '@/hooks/useProjectContext';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -12,8 +11,9 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
 import { Toggle } from '@/components/ui/Toggle';
+import { useCRUDSettings } from '@/hooks/useCRUDSettings';
+import { useProjectContext } from '@/hooks/useProjectContext';
 
 const FIELD_TYPES = [
   { value: 'TEXT', label: 'Text' },
@@ -38,12 +38,7 @@ const TYPE_COLORS: Record<string, string> = {
  */
 export default function CustomFieldSettings() {
   const { currentProject } = useProjectContext();
-  const queryClient = useQueryClient();
-  const toast = useToast();
 
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formType, setFormType] = useState('TEXT');
   const [formOptions, setFormOptions] = useState('');
@@ -55,44 +50,38 @@ export default function CustomFieldSettings() {
     enabled: !!currentProject?.id,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: { name: string; type: string; options?: string[]; required?: boolean }) =>
-      customFieldsApi.createDefinition(currentProject!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['custom-fields', currentProject?.id] });
-      resetForm();
-      toast.success('Field created');
+  const {
+    showAddForm,
+    setShowAddForm,
+    editingId,
+    setEditingId,
+    deleteTarget,
+    setDeleteTarget,
+    resetForm: resetCRUD,
+    createMutation,
+    updateMutation,
+    deleteMutation,
+    confirmDelete,
+  } = useCRUDSettings<
+    { name: string; type: string; options?: string[]; required?: boolean },
+    { name?: string; options?: string[]; required?: boolean },
+    string
+  >({
+    queryKey: ['custom-fields', currentProject?.id],
+    createFn: (data) => customFieldsApi.createDefinition(currentProject!.id, data),
+    updateFn: (fieldId, data) => customFieldsApi.updateDefinition(fieldId, data),
+    deleteFn: (fieldId) => customFieldsApi.deleteDefinition(fieldId),
+    entityName: 'Field',
+    onCreateSuccess: () => {
+      setFormName('');
+      setFormType('TEXT');
+      setFormOptions('');
+      setFormRequired(false);
     },
-    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({
-      fieldId,
-      data,
-    }: {
-      fieldId: string;
-      data: { name?: string; options?: string[]; required?: boolean };
-    }) => customFieldsApi.updateDefinition(fieldId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['custom-fields', currentProject?.id] });
-      setEditingId(null);
-      toast.success('Field updated');
-    },
-    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (fieldId: string) => customFieldsApi.deleteDefinition(fieldId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['custom-fields', currentProject?.id] });
-      toast.success('Field deleted');
-    },
-    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Operation failed'),
   });
 
   function resetForm() {
-    setShowAddForm(false);
+    resetCRUD();
     setFormName('');
     setFormType('TEXT');
     setFormOptions('');
@@ -107,32 +96,29 @@ export default function CustomFieldSettings() {
     setFormRequired(field.required);
   }
 
+  function parseOptions() {
+    return formType === 'SELECT' || formType === 'MULTI_SELECT'
+      ? formOptions
+          .split(',')
+          .map((o) => o.trim())
+          .filter(Boolean)
+      : undefined;
+  }
+
   function handleCreate() {
-    if (!formName.trim()) {
-      toast.error('Field name is required');
-      return;
-    }
-    const options =
-      formType === 'SELECT' || formType === 'MULTI_SELECT'
-        ? formOptions
-            .split(',')
-            .map((o) => o.trim())
-            .filter(Boolean)
-        : undefined;
-    createMutation.mutate({ name: formName, type: formType, options, required: formRequired });
+    if (!formName.trim()) return;
+    createMutation.mutate({
+      name: formName,
+      type: formType,
+      options: parseOptions(),
+      required: formRequired,
+    });
   }
 
   function handleUpdate(fieldId: string) {
-    const options =
-      formType === 'SELECT' || formType === 'MULTI_SELECT'
-        ? formOptions
-            .split(',')
-            .map((o) => o.trim())
-            .filter(Boolean)
-        : undefined;
     updateMutation.mutate({
-      fieldId,
-      data: { name: formName, options, required: formRequired },
+      id: fieldId,
+      data: { name: formName, options: parseOptions(), required: formRequired },
     });
   }
 
@@ -334,10 +320,7 @@ export default function CustomFieldSettings() {
       <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) deleteMutation.mutate(deleteTarget);
-          setDeleteTarget(null);
-        }}
+        onConfirm={confirmDelete}
         title="Delete Custom Field"
         description="Are you sure you want to delete this field and all its values? This action cannot be undone."
         confirmLabel="Delete"

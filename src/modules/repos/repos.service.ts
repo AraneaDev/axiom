@@ -15,6 +15,7 @@ import {
   getRepoSize,
 } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
+import { checkUnique } from '../../utils/check-unique';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
@@ -68,10 +69,7 @@ export async function createRepo(
     'Team not found',
   );
 
-  const existing = await prisma.repository.findUnique({
-    where: { teamId_slug: { teamId, slug: data.slug } },
-  });
-  if (existing) throw new AppError(409, 'Repository slug already taken');
+  await checkUnique('repository', { teamId, slug: data.slug }, 'Repository slug already taken');
 
   const defaultBranch = data.defaultBranch ?? 'main';
   const diskPath = getRepoPath(team.org.slug, team.slug, data.slug);
@@ -286,15 +284,21 @@ export async function forkRepoById(repoId: string, targetTeamId: string, newSlug
 // ─── Git operations (proxied through service) ───────────────
 
 async function getRepoDiskPath(repoId: string): Promise<string> {
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
+  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
   if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not found on disk');
   return repo.diskPath;
 }
 
 async function getRepoWithDefault(repoId: string) {
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
+  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
   return repo;
 }
 
@@ -382,8 +386,7 @@ export async function getCommits(
  */
 export async function getCommitDetail(repoId: string, sha: string) {
   const diskPath = await getRepoDiskPath(repoId);
-  const commit = await gitCmd.getCommit(diskPath, sha);
-  if (!commit) throw new AppError(404, 'Commit not found');
+  const commit = await findOrThrow(gitCmd.getCommit(diskPath, sha), 'Commit not found');
   const diffOutput = await gitCmd.diffCommit(diskPath, sha);
   const stats = await gitCmd.diffStat(diskPath, `${sha}~1`, sha).catch((err) => {
     logger.error('Failed to get diff stats for commit', { repoId, sha }, err as Error);
@@ -484,10 +487,15 @@ export async function updateFile(
 
     await execFileAsync('git', ['-C', worktreeDir, 'add', filePath]);
     await execFileAsync('git', [
-      '-C', worktreeDir,
-      '-c', `user.name=${authorName}`,
-      '-c', `user.email=${authorEmail}`,
-      'commit', '-m', message,
+      '-C',
+      worktreeDir,
+      '-c',
+      `user.name=${authorName}`,
+      '-c',
+      `user.email=${authorEmail}`,
+      'commit',
+      '-m',
+      message,
     ]);
 
     const { stdout } = await execFileAsync('git', ['-C', worktreeDir, 'rev-parse', 'HEAD']);
@@ -496,6 +504,8 @@ export async function updateFile(
 
     return { sha: newHead };
   } finally {
-    await execFileAsync('git', ['worktree', 'remove', '--force', worktreeDir], { cwd: diskPath }).catch(() => {});
+    await execFileAsync('git', ['worktree', 'remove', '--force', worktreeDir], {
+      cwd: diskPath,
+    }).catch(() => {});
   }
 }

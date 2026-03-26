@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Eye, GitPullRequest, Plus, GitMerge, XCircle } from 'lucide-react';
+import { Eye, GitPullRequest, Plus, GitMerge, XCircle, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -28,7 +28,11 @@ export default function PRList() {
   const [myReviews, setMyReviews] = useState(false);
   const { user } = useAuthStore();
 
-  const { data: prs, isLoading } = useQuery({
+  const {
+    data: prs,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['prs', currentRepo?.id, statusFilter, myReviews ? user?.id : null],
     queryFn: () =>
       reposApi.listPRs(
@@ -54,6 +58,17 @@ export default function PRList() {
         <ListSkeleton rows={5} />
       </div>
     );
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load pull requests</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

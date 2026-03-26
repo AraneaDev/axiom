@@ -5,6 +5,7 @@ import _path from 'path';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
 
 // ─── Admin Check ────────────────────────────────────────────
@@ -136,35 +137,35 @@ export async function listUsers(opts: { search?: string; limit?: number; offset?
  * @param userId
  */
 export async function getUser(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      username: true,
-      displayName: true,
-      avatarUrl: true,
-      isAdmin: true,
-      twoFactorEnabled: true,
-      createdAt: true,
-      deactivatedAt: true,
-      orgMemberships: {
-        select: {
-          role: true,
-          org: { select: { id: true, name: true, slug: true } },
+  return findOrThrow(
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        displayName: true,
+        avatarUrl: true,
+        isAdmin: true,
+        twoFactorEnabled: true,
+        createdAt: true,
+        deactivatedAt: true,
+        orgMemberships: {
+          select: {
+            role: true,
+            org: { select: { id: true, name: true, slug: true } },
+          },
+        },
+        teamMemberships: {
+          select: {
+            role: true,
+            team: { select: { id: true, name: true, slug: true } },
+          },
         },
       },
-      teamMemberships: {
-        select: {
-          role: true,
-          team: { select: { id: true, name: true, slug: true } },
-        },
-      },
-    },
-  });
-
-  if (!user) throw new AppError(404, 'User not found');
-  return user;
+    }),
+    'User not found',
+  );
 }
 
 /**
@@ -175,8 +176,7 @@ export async function getUser(userId: string) {
  * @param data.disabled
  */
 export async function updateUser(userId: string, data: { role?: string; disabled?: boolean }) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new AppError(404, 'User not found');
+  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), 'User not found');
 
   // Update org membership role if provided
   if (data.role) {
@@ -194,8 +194,7 @@ export async function updateUser(userId: string, data: { role?: string; disabled
  * @param userId
  */
 export async function deleteUser(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new AppError(404, 'User not found');
+  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), 'User not found');
 
   await prisma.user.delete({ where: { id: userId } });
   return { deleted: true };
@@ -206,8 +205,10 @@ export async function deleteUser(userId: string) {
  * @param userId
  */
 export async function deactivateUser(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new AppError(404, 'User not found');
+  const user = await findOrThrow(
+    prisma.user.findUnique({ where: { id: userId } }),
+    'User not found',
+  );
   if (user.isAdmin) throw new AppError(400, 'Cannot deactivate an admin user');
 
   await prisma.$transaction([
@@ -222,8 +223,7 @@ export async function deactivateUser(userId: string) {
  * @param userId
  */
 export async function reactivateUser(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new AppError(404, 'User not found');
+  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), 'User not found');
 
   await prisma.user.update({
     where: { id: userId },
@@ -238,8 +238,7 @@ export async function reactivateUser(userId: string) {
  * @param newPassword
  */
 export async function resetUserPassword(userId: string, newPassword: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new AppError(404, 'User not found');
+  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), 'User not found');
 
   const bcrypt = await import('bcryptjs');
   const passwordHash = await bcrypt.hash(newPassword, 12);

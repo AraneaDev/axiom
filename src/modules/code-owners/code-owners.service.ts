@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 export interface CodeOwnerRule {
   pattern: string;
@@ -15,8 +16,11 @@ export interface CodeOwnerRule {
  * @param ref
  */
 export async function parseCodeOwners(repoId: string, ref: string): Promise<CodeOwnerRule[]> {
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
+  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
   if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
 
   const paths = ['CODEOWNERS', '.github/CODEOWNERS', 'docs/CODEOWNERS'];
@@ -145,13 +149,18 @@ export async function getOwnersForFiles(
  * @param prNumber
  */
 export async function getOwnersForPR(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
 
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
+  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
   if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
 
   // Get changed files

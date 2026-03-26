@@ -1,72 +1,33 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
-import { createInvitationSchema } from '../../utils/validation';
+import { validate, createInvitationSchema } from '../../utils/validation';
 
 import * as invitationsService from './invitations.service';
 
-/**
- * Create an invitation to join an org (and optionally a team).
- * @param req
- * @param res
- * @param next
- */
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = createInvitationSchema.parse(req.body);
-    const invitation = await invitationsService.createInvitation(
-      param(req, 'orgId'),
-      req.userId!,
-      data,
-    );
-    res.status(201).json(invitation);
-  } catch (err) {
-    next(err);
-  }
-}
+export const create = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(createInvitationSchema, req.body);
+  const invitation = await invitationsService.createInvitation(
+    param(req, 'orgId'),
+    req.userId!,
+    data,
+  );
+  res.status(201).json(invitation);
+});
 
-/**
- * List invitations for an org, optionally filtered by teamId query param.
- * @param req
- * @param res
- * @param next
- */
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const teamId = req.query.teamId as string | undefined;
-    const invitations = await invitationsService.listInvitations(param(req, 'orgId'), teamId);
-    res.json(invitations);
-  } catch (err) {
-    next(err);
-  }
-}
+export const list = asyncHandler(async (req: Request, res: Response) => {
+  const teamId = req.query.teamId as string | undefined;
+  const invitations = await invitationsService.listInvitations(param(req, 'orgId'), teamId);
+  res.json(invitations);
+});
 
-/**
- * Revoke a pending invitation.
- * @param req
- * @param res
- * @param next
- */
-export async function revoke(req: Request, res: Response, next: NextFunction) {
-  try {
-    await invitationsService.revokeInvitation(param(req, 'id'), param(req, 'orgId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const revoke = asyncHandler(async (req: Request, res: Response) => {
+  await invitationsService.revokeInvitation(param(req, 'id'), param(req, 'orgId'));
+  res.status(204).send();
+});
 
-/**
- * Accept an invitation by token (requires auth).
- * @param req
- * @param res
- * @param next
- */
-export async function accept(req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await invitationsService.acceptInvitation(param(req, 'token'), req.userId!);
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const accept = asyncHandler(async (req: Request, res: Response) => {
+  const result = await invitationsService.acceptInvitation(param(req, 'token'), req.userId!);
+  res.json(result);
+});

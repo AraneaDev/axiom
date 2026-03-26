@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
+import { checkUnique } from '../../utils/check-unique';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parsePagination, paginatedResponse } from '../../utils/pagination';
 
@@ -20,10 +20,7 @@ export async function createLabel(
 ) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
-  const existing = await prisma.label.findUnique({
-    where: { projectId_name: { projectId, name: data.name } },
-  });
-  if (existing) throw new AppError(409, 'Label with this name already exists');
+  await checkUnique('label', { projectId, name: data.name }, 'Label with this name already exists');
 
   return prisma.label.create({
     data: {
@@ -92,10 +89,11 @@ export async function updateLabel(
 
   // If renaming, check for conflicts
   if (data.name && data.name !== labelName) {
-    const conflict = await prisma.label.findUnique({
-      where: { projectId_name: { projectId, name: data.name } },
-    });
-    if (conflict) throw new AppError(409, 'Label with this name already exists');
+    await checkUnique(
+      'label',
+      { projectId, name: data.name },
+      'Label with this name already exists',
+    );
   }
 
   return prisma.label.update({

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  AlertTriangle,
   ChevronRight,
   Hash,
   Plus,
@@ -31,6 +32,7 @@ import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { PageComments } from '@/components/wiki/PageComments';
+import { useModalState } from '@/hooks/useModalState';
 import type { PageTreeNode } from '@/lib/types';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -86,8 +88,8 @@ export default function PageView() {
 
   const { currentSpace, tree, setTocEntries } = useWikiContext();
 
-  const [showMoveModal, setShowMoveModal] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const moveModal = useModalState();
+  const deleteConfirm = useModalState();
   const [moveTargetParent, setMoveTargetParent] = useState('');
 
   // Hydration: single request for all wiki page data
@@ -100,9 +102,10 @@ export default function PageView() {
   });
 
   // Seed individual caches from hydration response
-  const hydrationMappings = useMemo(() => [
-    { key: ['page', currentSpace?.id, pageSlug], field: 'page' as const },
-  ], [currentSpace?.id, pageSlug]);
+  const hydrationMappings = useMemo(
+    () => [{ key: ['page', currentSpace?.id, pageSlug], field: 'page' as const }],
+    [currentSpace?.id, pageSlug],
+  );
 
   useEffect(() => {
     if (!hydrationQuery.data) return;
@@ -116,11 +119,16 @@ export default function PageView() {
     const pageId = (hd.page as { id?: string })?.id;
     if (pageId) {
       if (hd.labels !== null) queryClient.setQueryData(['pageLabels', pageId], hd.labels);
-      if (hd.attachments !== null) queryClient.setQueryData(['attachments', pageId], hd.attachments);
+      if (hd.attachments !== null)
+        queryClient.setQueryData(['attachments', pageId], hd.attachments);
     }
   }, [hydrationQuery.data, hydrationMappings, queryClient]);
 
-  const { data: page, isLoading } = useQuery({
+  const {
+    data: page,
+    isLoading,
+    error: pageError,
+  } = useQuery({
     queryKey: ['page', currentSpace?.id, pageSlug],
     queryFn: () => wikiApi.getPage(currentSpace!.id, pageSlug!),
     enabled: !!currentSpace?.id && !!pageSlug,
@@ -129,8 +137,10 @@ export default function PageView() {
   const { data: labels = [] } = useQuery({
     queryKey: ['pageLabels', page?.id],
     queryFn: () => wikiApi.listPageLabels(page!.id),
-    enabled: !!page?.id
-      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.labels === null)),
+    enabled:
+      !!page?.id &&
+      (hydrationQuery.isError ||
+        (hydrationQuery.isSuccess && hydrationQuery.data?.labels === null)),
   });
 
   const { user } = useAuthStore();
@@ -138,8 +148,10 @@ export default function PageView() {
   const { data: pageAttachments = [] } = useQuery({
     queryKey: ['attachments', page?.id],
     queryFn: () => attachmentsApi.list({ pageId: page!.id }),
-    enabled: !!page?.id
-      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.attachments === null)),
+    enabled:
+      !!page?.id &&
+      (hydrationQuery.isError ||
+        (hydrationQuery.isSuccess && hydrationQuery.data?.attachments === null)),
   });
 
   const deleteAttachmentMutation = useMutation({
@@ -197,7 +209,7 @@ export default function PageView() {
     onSuccess: () => {
       toast.success('Page moved');
       queryClient.invalidateQueries({ queryKey: ['pageTree', currentSpace?.id] });
-      setShowMoveModal(false);
+      moveModal.close();
     },
     onError: (err: unknown) =>
       toast.error(err instanceof Error ? err.message : 'Failed to move page'),
@@ -212,6 +224,17 @@ export default function PageView() {
   });
 
   if (isLoading) return <DetailSkeleton />;
+
+  if (pageError) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load wiki page</p>
+        </div>
+      </div>
+    );
+  }
 
   // If no page slug, show the space overview
   if (!pageSlug) {
@@ -329,9 +352,9 @@ export default function PageView() {
         labels={labels}
         onAddLabel={(label) => addLabelMutation.mutate(label)}
         onRemoveLabel={(label) => removeLabelMutation.mutate(label)}
-        onMove={() => setShowMoveModal(true)}
+        onMove={() => moveModal.open()}
         onCopy={() => copyMutation.mutate()}
-        onDelete={() => setShowDeleteConfirm(true)}
+        onDelete={() => deleteConfirm.open()}
       />
 
       <div className="flex gap-6 items-start">
@@ -392,7 +415,7 @@ export default function PageView() {
       </div>
 
       {/* Move page modal */}
-      <Modal open={showMoveModal} onClose={() => setShowMoveModal(false)} title="Move Page">
+      <Modal open={moveModal.isOpen} onClose={moveModal.close} title="Move Page">
         <div className="space-y-4">
           <p className="text-sm text-text-secondary">
             Move &quot;{page.title}&quot; to a new parent page. Leave empty to move to root level.
@@ -405,7 +428,7 @@ export default function PageView() {
             placeholder="Parent page ID"
           />
           <ModalFooter>
-            <Button variant="secondary" onClick={() => setShowMoveModal(false)}>
+            <Button variant="secondary" onClick={moveModal.close}>
               <X className="h-4 w-4" /> Cancel
             </Button>
             <Button
@@ -424,10 +447,10 @@ export default function PageView() {
 
       {/* Delete confirmation modal */}
       <ConfirmDialog
-        open={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
+        open={deleteConfirm.isOpen}
+        onClose={deleteConfirm.close}
         onConfirm={() => {
-          setShowDeleteConfirm(false);
+          deleteConfirm.close();
           deleteMutation.mutate();
         }}
         title="Delete Page"

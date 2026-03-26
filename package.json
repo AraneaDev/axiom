@@ -99,7 +99,7 @@
       "prettier --write"
     ],
     "frontend/src/**/*.{ts,tsx}": [
-      "cd frontend && npx eslint --fix",
+      "npx eslint --fix --config frontend/eslint.config.mjs",
       "prettier --write"
     ]
   },

@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import { prisma } from '../../config/database';
 import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER = 10 * 1024 * 1024;
@@ -22,8 +23,11 @@ async function git(args: string[], opts: ExecOptions): Promise<string> {
 }
 
 async function getRepoDiskPath(repoId: string): Promise<string> {
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
+  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
   if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not found on disk');
   return repo.diskPath;
 }

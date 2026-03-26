@@ -7,6 +7,7 @@ import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
 import { logActivity } from '../activity/activity.service';
@@ -14,8 +15,11 @@ import { logActivity } from '../activity/activity.service';
 const execFileAsync = promisify(execFile);
 
 async function getRepoDisk(repoId: string): Promise<{ diskPath: string; defaultBranch: string }> {
-  const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo || !repo.diskPath) throw new AppError(404, 'Repository not found');
+  const repo = await findOrThrow(
+    prisma.repository.findUnique({ where: { id: repoId } }),
+    'Repository not found',
+  );
+  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
   if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
   return { diskPath: repo.diskPath, defaultBranch: repo.defaultBranch };
 }
@@ -49,10 +53,12 @@ export async function addPRComment(
     line?: number;
   },
 ) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
 
   const comment = await prisma.pRComment.create({
     data: {
@@ -80,10 +86,12 @@ export async function addPRComment(
  * @throws {AppError} 404 if PR not found
  */
 export async function listPRComments(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
 
   return prisma.pRComment.findMany({
     where: { prId: pr.id },
@@ -101,8 +109,10 @@ export async function listPRComments(repoId: string, prNumber: number) {
  * @throws {AppError} 403 if user is not the comment author
  */
 export async function updatePRComment(commentId: string, userId: string, body: string) {
-  const comment = await prisma.pRComment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
+  const comment = await findOrThrow(
+    prisma.pRComment.findUnique({ where: { id: commentId } }),
+    'Comment not found',
+  );
   if (comment.authorId !== userId) throw new AppError(403, 'You can only edit your own comments');
 
   return prisma.pRComment.update({
@@ -119,8 +129,10 @@ export async function updatePRComment(commentId: string, userId: string, body: s
  * @throws {AppError} 403 if user is not the comment author
  */
 export async function deletePRComment(commentId: string, userId: string) {
-  const comment = await prisma.pRComment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
+  const comment = await findOrThrow(
+    prisma.pRComment.findUnique({ where: { id: commentId } }),
+    'Comment not found',
+  );
   if (comment.authorId !== userId) throw new AppError(403, 'You can only delete your own comments');
 
   await prisma.pRComment.delete({ where: { id: commentId } });
@@ -142,14 +154,18 @@ export async function applySuggestion(
   commentId: string,
   userId: string,
 ) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
   if (pr.status !== 'OPEN') throw new AppError(400, 'Can only apply suggestions on open PRs');
 
-  const comment = await prisma.pRComment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
+  const comment = await findOrThrow(
+    prisma.pRComment.findUnique({ where: { id: commentId } }),
+    'Comment not found',
+  );
   if (!comment.filePath || comment.line == null) {
     throw new AppError(400, 'Comment does not reference a file location');
   }
@@ -219,10 +235,12 @@ export async function batchApplySuggestions(
   commentIds: string[],
   userId: string,
 ) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
   if (pr.status !== 'OPEN') throw new AppError(400, 'Can only apply suggestions on open PRs');
 
   if (!commentIds.length) throw new AppError(400, 'No comment IDs provided');

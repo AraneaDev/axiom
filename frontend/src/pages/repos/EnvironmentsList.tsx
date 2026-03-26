@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
+import { useModalState } from '@/hooks/useModalState';
 import { formatRelative } from '@/lib/utils';
 
 interface EnvironmentsListProps {
@@ -28,7 +29,7 @@ interface EnvironmentsListProps {
 export function EnvironmentsList({ repoId, environments, onSelectEnv }: EnvironmentsListProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const createModal = useModalState();
   const [editingEnv, setEditingEnv] = useState<DeploymentEnvironment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
@@ -40,7 +41,7 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
       deploymentsApi.createEnvironment(repoId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['environments', repoId] });
-      setShowCreateModal(false);
+      createModal.close();
       setFormName('');
       setFormUrl('');
       toast.success('Environment created');
@@ -72,7 +73,7 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Environments</h2>
-        <Button size="sm" onClick={() => setShowCreateModal(true)}>
+        <Button size="sm" onClick={() => createModal.open()}>
           <Plus className="h-4 w-4" /> New Environment
         </Button>
       </div>
@@ -83,7 +84,7 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
           title="No environments"
           description="Create deployment environments to track where your code is running."
           action={
-            <Button onClick={() => setShowCreateModal(true)}>
+            <Button onClick={() => createModal.open()}>
               <Plus className="h-4 w-4" /> New Environment
             </Button>
           }
@@ -177,9 +178,9 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
 
       {/* Create Environment Modal */}
       <Modal
-        open={showCreateModal}
+        open={createModal.isOpen}
         onClose={() => {
-          setShowCreateModal(false);
+          createModal.close();
           setFormName('');
           setFormUrl('');
         }}
@@ -213,7 +214,7 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
               variant="secondary"
               type="button"
               onClick={() => {
-                setShowCreateModal(false);
+                createModal.close();
                 setFormName('');
                 setFormUrl('');
               }}

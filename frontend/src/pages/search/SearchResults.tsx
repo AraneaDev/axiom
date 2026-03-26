@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  AlertTriangle,
   Search,
   FileText,
   Code2,
@@ -49,7 +50,11 @@ export default function SearchResults() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const { data: results, isLoading } = useQuery({
+  const {
+    data: results,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['search', query, activeType],
     queryFn: () => searchApi.search(query, activeType),
     enabled: query.length > 0,
@@ -198,6 +203,15 @@ export default function SearchResults() {
         onChange={handleTabChange}
         className="mb-6"
       />
+
+      {error && (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+            <p className="text-secondary">Failed to load search results</p>
+          </div>
+        </div>
+      )}
 
       {isLoading && <ListSkeleton rows={6} />}
 

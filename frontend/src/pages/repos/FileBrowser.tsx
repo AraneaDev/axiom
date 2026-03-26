@@ -1,5 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, FileText, ChevronRight, GitBranch, ChevronDown } from 'lucide-react';
+import {
+  AlertTriangle,
+  FolderOpen,
+  FileText,
+  ChevronRight,
+  GitBranch,
+  ChevronDown,
+} from 'lucide-react';
 import { Link, useParams, useNavigate } from 'react-router';
 
 import { reposApi } from '@/api/repos.api';
@@ -24,13 +31,28 @@ export default function FileBrowser() {
     enabled: !!currentRepo?.id,
   });
 
-  const { data: tree, isLoading } = useQuery({
+  const {
+    data: tree,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['tree', currentRepo?.id, ref, path],
     queryFn: () => reposApi.getTree(currentRepo!.id, ref!, path),
     enabled: !!currentRepo?.id && !!ref,
   });
 
   if (isLoading || !currentRepo) return <PageLoader />;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load file tree</p>
+        </div>
+      </div>
+    );
+  }
 
   // Breadcrumbs
   const parts = path ? path.split('/') : [];

@@ -1,5 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 import {
   validate,
@@ -13,206 +14,83 @@ import {
 import * as wikiExportService from './wiki-export.service';
 import * as wikiService from './wiki.service';
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function createSpace(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = validate(createWikiSpaceSchema, req.body);
-    const space = await wikiService.createSpace(param(req, 'teamId'), data);
-    res.status(201).json(space);
-  } catch (err) {
-    next(err);
-  }
-}
+export const createSpace = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(createWikiSpaceSchema, req.body);
+  const space = await wikiService.createSpace(param(req, 'teamId'), data);
+  res.status(201).json(space);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getSpace(req: Request, res: Response, next: NextFunction) {
-  try {
-    const space = await wikiService.getSpace(param(req, 'spaceId'));
-    res.json(space);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getSpace = asyncHandler(async (req: Request, res: Response) => {
+  const space = await wikiService.getSpace(param(req, 'spaceId'));
+  res.json(space);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listSpaces(req: Request, res: Response, next: NextFunction) {
-  try {
-    const spaces = await wikiService.listSpaces(param(req, 'teamId'));
-    res.json(spaces);
-  } catch (err) {
-    next(err);
-  }
-}
+export const listSpaces = asyncHandler(async (req: Request, res: Response) => {
+  const spaces = await wikiService.listSpaces(param(req, 'teamId'));
+  res.json(spaces);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function createPage(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = validate(createPageSchema, req.body);
-    const page = await wikiService.createPage(param(req, 'spaceId'), req.userId!, data);
-    res.status(201).json(page);
-  } catch (err) {
-    next(err);
-  }
-}
+export const createPage = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(createPageSchema, req.body);
+  const page = await wikiService.createPage(param(req, 'spaceId'), req.userId!, data);
+  res.status(201).json(page);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getPage(req: Request, res: Response, next: NextFunction) {
-  try {
-    const page = await wikiService.getPage(param(req, 'spaceId'), param(req, 'pageSlug'));
-    res.json(page);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getPage = asyncHandler(async (req: Request, res: Response) => {
+  const page = await wikiService.getPage(param(req, 'spaceId'), param(req, 'pageSlug'));
+  res.json(page);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function updatePage(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = validate(updatePageSchema, req.body);
-    const page = await wikiService.updatePage(
-      param(req, 'spaceId'),
-      param(req, 'pageSlug'),
-      req.userId!,
-      data,
-    );
-    res.json(page);
-  } catch (err) {
-    next(err);
-  }
-}
+export const updatePage = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(updatePageSchema, req.body);
+  const page = await wikiService.updatePage(
+    param(req, 'spaceId'),
+    param(req, 'pageSlug'),
+    req.userId!,
+    data,
+  );
+  res.json(page);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function deletePage(req: Request, res: Response, next: NextFunction) {
-  try {
-    await wikiService.deletePage(param(req, 'spaceId'), param(req, 'pageSlug'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const deletePage = asyncHandler(async (req: Request, res: Response) => {
+  await wikiService.deletePage(param(req, 'spaceId'), param(req, 'pageSlug'));
+  res.status(204).send();
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function pageHistory(req: Request, res: Response, next: NextFunction) {
-  try {
-    const versions = await wikiService.getPageHistory(
-      param(req, 'spaceId'),
-      param(req, 'pageSlug'),
-    );
-    res.json(versions);
-  } catch (err) {
-    next(err);
-  }
-}
+export const pageHistory = asyncHandler(async (req: Request, res: Response) => {
+  const versions = await wikiService.getPageHistory(param(req, 'spaceId'), param(req, 'pageSlug'));
+  res.json(versions);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function exportPage(req: Request, res: Response, next: NextFunction) {
-  try {
-    const format = (req.query.format as string) || 'html';
-    await wikiExportService.exportPage(param(req, 'spaceId'), param(req, 'pageSlug'), format, res);
-  } catch (err) {
-    next(err);
-  }
-}
+export const exportPage = asyncHandler(async (req: Request, res: Response) => {
+  const format = (req.query.format as string) || 'html';
+  await wikiExportService.exportPage(param(req, 'spaceId'), param(req, 'pageSlug'), format, res);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function pageTree(req: Request, res: Response, next: NextFunction) {
-  try {
-    const tree = await wikiService.getPageTree(param(req, 'spaceId'));
-    res.json(tree);
-  } catch (err) {
-    next(err);
-  }
-}
+export const pageTree = asyncHandler(async (req: Request, res: Response) => {
+  const tree = await wikiService.getPageTree(param(req, 'spaceId'));
+  res.json(tree);
+});
 
-// ─── Page Move / Copy ───────────────────────────────────────
+// Page Move / Copy
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function movePage(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = validate(movePageSchema, req.body);
-    const page = await wikiService.movePage(
-      param(req, 'pageId'),
-      data.targetSpaceId,
-      data.targetParentId,
-    );
-    res.json(page);
-  } catch (err) {
-    next(err);
-  }
-}
+export const movePage = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(movePageSchema, req.body);
+  const page = await wikiService.movePage(
+    param(req, 'pageId'),
+    data.targetSpaceId,
+    data.targetParentId,
+  );
+  res.json(page);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function copyPage(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = validate(copyPageSchema, req.body);
-    const page = await wikiService.copyPage(
-      param(req, 'pageId'),
-      req.userId!,
-      data.targetSpaceId,
-      data.newSlug,
-    );
-    res.status(201).json(page);
-  } catch (err) {
-    next(err);
-  }
-}
+export const copyPage = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(copyPageSchema, req.body);
+  const page = await wikiService.copyPage(
+    param(req, 'pageId'),
+    req.userId!,
+    data.targetSpaceId,
+    data.newSlug,
+  );
+  res.status(201).json(page);
+});

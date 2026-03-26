@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
+import { useModalState } from '@/hooks/useModalState';
 import { formatRelative } from '@/lib/utils';
 
 const STATUS_ICON: Record<RunStatus, React.ReactNode> = {
@@ -147,7 +148,7 @@ export default function PipelinesTab({ repoId }: Props) {
     repo: repoSlug,
   } = useParams<{ org: string; team: string; repo: string }>();
   const qc = useQueryClient();
-  const [showEditor, setShowEditor] = useState(false);
+  const editorModal = useModalState();
   const [editPipeline, setEditPipeline] = useState<Pipeline | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<Pipeline | null>(null);
 
@@ -188,7 +189,7 @@ export default function PipelinesTab({ repoId }: Props) {
           size="sm"
           onClick={() => {
             setEditPipeline(undefined);
-            setShowEditor(true);
+            editorModal.open();
           }}
         >
           <Plus className="h-4 w-4" /> New Pipeline
@@ -201,7 +202,7 @@ export default function PipelinesTab({ repoId }: Props) {
           title="No pipelines yet"
           description="Create a pipeline to automate your CI/CD workflow."
           action={
-            <Button onClick={() => setShowEditor(true)}>
+            <Button onClick={() => editorModal.open()}>
               <Plus className="h-4 w-4" /> Create Pipeline
             </Button>
           }
@@ -248,7 +249,7 @@ export default function PipelinesTab({ repoId }: Props) {
                         title="Edit pipeline"
                         onClick={() => {
                           setEditPipeline(p);
-                          setShowEditor(true);
+                          editorModal.open();
                         }}
                       >
                         <Workflow className="h-3.5 w-3.5" />
@@ -305,14 +306,14 @@ export default function PipelinesTab({ repoId }: Props) {
         </>
       )}
 
-      {showEditor && (
+      {editorModal.isOpen && (
         <PipelineEditorModal
           repoId={repoId}
           pipeline={editPipeline}
-          onClose={() => setShowEditor(false)}
+          onClose={editorModal.close}
           onSaved={() => {
             qc.invalidateQueries({ queryKey: ['pipelines', repoId] });
-            setShowEditor(false);
+            editorModal.close();
           }}
         />
       )}

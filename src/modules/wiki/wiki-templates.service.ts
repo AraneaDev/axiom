@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
  * Create a page template in a wiki space.
@@ -38,9 +38,7 @@ export async function listTemplates(spaceId: string) {
  * @throws {AppError} 404 if template not found
  */
 export async function getTemplate(id: string) {
-  const template = await prisma.pageTemplate.findUnique({ where: { id } });
-  if (!template) throw new AppError(404, 'Template not found');
-  return template;
+  return findOrThrow(prisma.pageTemplate.findUnique({ where: { id } }), 'Template not found');
 }
 
 /**
@@ -49,7 +47,6 @@ export async function getTemplate(id: string) {
  * @throws {AppError} 404 if template not found
  */
 export async function deleteTemplate(id: string) {
-  const template = await prisma.pageTemplate.findUnique({ where: { id } });
-  if (!template) throw new AppError(404, 'Template not found');
+  await findOrThrow(prisma.pageTemplate.findUnique({ where: { id } }), 'Template not found');
   await prisma.pageTemplate.delete({ where: { id } });
 }

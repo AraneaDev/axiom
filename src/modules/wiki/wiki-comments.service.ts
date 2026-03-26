@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
@@ -17,8 +18,7 @@ export async function addPageComment(
   body: string,
   anchorText?: string,
 ) {
-  const page = await prisma.page.findUnique({ where: { id: pageId } });
-  if (!page) throw new AppError(404, 'Page not found');
+  await findOrThrow(prisma.page.findUnique({ where: { id: pageId } }), 'Page not found');
 
   return prisma.pageComment.create({
     data: { pageId, userId, body, anchorText },
@@ -49,8 +49,10 @@ export async function listPageComments(pageId: string) {
  * @throws {AppError} 403 if user is not the comment author
  */
 export async function updatePageComment(commentId: string, userId: string, body: string) {
-  const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
+  const comment = await findOrThrow(
+    prisma.pageComment.findUnique({ where: { id: commentId } }),
+    'Comment not found',
+  );
   if (comment.userId !== userId) throw new AppError(403, 'You can only edit your own comments');
 
   return prisma.pageComment.update({
@@ -67,8 +69,10 @@ export async function updatePageComment(commentId: string, userId: string, body:
  * @throws {AppError} 404 if comment not found
  */
 export async function resolveComment(commentId: string) {
-  const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
+  const comment = await findOrThrow(
+    prisma.pageComment.findUnique({ where: { id: commentId } }),
+    'Comment not found',
+  );
 
   return prisma.pageComment.update({
     where: { id: commentId },
@@ -83,7 +87,9 @@ export async function resolveComment(commentId: string) {
  * @throws {AppError} 404 if comment not found
  */
 export async function deletePageComment(commentId: string) {
-  const comment = await prisma.pageComment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new AppError(404, 'Comment not found');
+  await findOrThrow(
+    prisma.pageComment.findUnique({ where: { id: commentId } }),
+    'Comment not found',
+  );
   await prisma.pageComment.delete({ where: { id: commentId } });
 }

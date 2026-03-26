@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 import { findIssueOrThrow } from './issue-utils';
@@ -59,10 +60,12 @@ export async function setParent(
     });
   }
 
-  const parent = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: parentIssueNumber } },
-  });
-  if (!parent) throw new AppError(404, 'Parent issue not found');
+  const parent = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: parentIssueNumber } },
+    }),
+    'Parent issue not found',
+  );
   if (parent.id === issue.id) throw new AppError(400, 'An issue cannot be its own parent');
 
   // Check for circular references: walk up from the proposed parent
@@ -95,8 +98,10 @@ export async function setParent(
  * @throws {AppError} 404 if project or issue not found
  */
 export async function getChildren(projectId: string, issueNumber: number) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  const project = await findOrThrow(
+    prisma.project.findUnique({ where: { id: projectId } }),
+    'Project not found',
+  );
 
   const issue = await findIssueOrThrow(projectId, issueNumber);
 

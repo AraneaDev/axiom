@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
@@ -32,8 +33,7 @@ export async function bulkUpdate(
   },
   userId: string,
 ) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
   const issues = await prisma.issue.findMany({
     where: { id: { in: issueIds }, projectId },

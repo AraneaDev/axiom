@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { logActivity } from '../activity/activity.service';
 import { createNotification } from '../notifications/notifications.service';
@@ -25,11 +26,17 @@ export async function submitReview(
     body?: string;
   },
 ) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-    include: { repo: { select: { slug: true, team: { select: { slug: true, org: { select: { slug: true } } } } } } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+      include: {
+        repo: {
+          select: { slug: true, team: { select: { slug: true, org: { select: { slug: true } } } } },
+        },
+      },
+    }),
+    'Pull request not found',
+  );
   if (pr.status !== 'OPEN') throw new AppError(400, 'Can only review open PRs');
 
   const review = await prisma.pRReview.create({
@@ -79,10 +86,12 @@ export async function submitReview(
  * @throws {AppError} 404 if PR not found
  */
 export async function listReviews(repoId: string, prNumber: number) {
-  const pr = await prisma.pullRequest.findUnique({
-    where: { repoId_number: { repoId, number: prNumber } },
-  });
-  if (!pr) throw new AppError(404, 'Pull request not found');
+  const pr = await findOrThrow(
+    prisma.pullRequest.findUnique({
+      where: { repoId_number: { repoId, number: prNumber } },
+    }),
+    'Pull request not found',
+  );
 
   return prisma.pRReview.findMany({
     where: { prId: pr.id },

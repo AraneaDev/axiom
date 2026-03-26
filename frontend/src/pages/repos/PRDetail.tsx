@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
 
@@ -54,11 +55,14 @@ export default function PRDetail() {
   });
 
   // Seed individual caches from hydration response
-  const hydrationMappings = useMemo(() => [
-    { key: ['pr', currentRepo?.id, prNumber], field: 'pr' as const },
-    { key: ['mergeChecks', currentRepo?.id, prNumber], field: 'mergeChecks' as const },
-    { key: ['prCommits', currentRepo?.id, prNumber], field: 'commits' as const },
-  ], [currentRepo?.id, prNumber]);
+  const hydrationMappings = useMemo(
+    () => [
+      { key: ['pr', currentRepo?.id, prNumber], field: 'pr' as const },
+      { key: ['mergeChecks', currentRepo?.id, prNumber], field: 'mergeChecks' as const },
+      { key: ['prCommits', currentRepo?.id, prNumber], field: 'commits' as const },
+    ],
+    [currentRepo?.id, prNumber],
+  );
 
   useEffect(() => {
     if (!hydrationQuery.data) return;
@@ -75,18 +79,25 @@ export default function PRDetail() {
     }
   }, [hydrationQuery.data, hydrationMappings, queryClient, currentRepo?.id, prNumber]);
 
-  const { data: pr, isLoading } = useQuery({
+  const {
+    data: pr,
+    isLoading,
+    error: prError,
+  } = useQuery({
     queryKey: ['pr', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getPR(currentRepo!.id, prNumber),
-    enabled: !!currentRepo?.id
-      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.pr === null)),
+    enabled:
+      !!currentRepo?.id &&
+      (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.pr === null)),
   });
 
   const { data: mergeChecks } = useQuery({
     queryKey: ['mergeChecks', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getMergeChecks(currentRepo!.id, prNumber),
-    enabled: !!currentRepo?.id
-      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.mergeChecks === null)),
+    enabled:
+      !!currentRepo?.id &&
+      (hydrationQuery.isError ||
+        (hydrationQuery.isSuccess && hydrationQuery.data?.mergeChecks === null)),
   });
 
   if (mergeChecks && mergeStrategy === '') {
@@ -96,15 +107,18 @@ export default function PRDetail() {
   const { data: diff } = useQuery({
     queryKey: ['prDiff', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getPRDiff(currentRepo!.id, prNumber),
-    enabled: !!currentRepo?.id
-      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.diff === null)),
+    enabled:
+      !!currentRepo?.id &&
+      (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.diff === null)),
   });
 
   const { data: commits } = useQuery({
     queryKey: ['prCommits', currentRepo?.id, prNumber],
     queryFn: () => reposApi.getPRCommits(currentRepo!.id, prNumber),
-    enabled: !!currentRepo?.id
-      && (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.commits === null)),
+    enabled:
+      !!currentRepo?.id &&
+      (hydrationQuery.isError ||
+        (hydrationQuery.isSuccess && hydrationQuery.data?.commits === null)),
   });
 
   const { data: prStatuses } = useQuery({
@@ -189,6 +203,17 @@ export default function PRDetail() {
   });
 
   if (isLoading || !pr) return <DetailSkeleton />;
+
+  if (prError || hydrationQuery.error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load pull request</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

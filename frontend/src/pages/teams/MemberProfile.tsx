@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  AlertTriangle,
   ArrowLeft,
   Calendar,
   Clock,
@@ -12,12 +13,12 @@ import {
 import { Link, useParams } from 'react-router';
 
 import { teamsApi } from '@/api/teams.api';
-import { useTeamContext } from '@/hooks/useTeamContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import { formatDate, formatRelative } from '@/lib/utils';
 
 const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
@@ -33,13 +34,28 @@ export default function MemberProfile() {
   const { org, teamSlug, currentTeam } = useTeamContext();
   const { username } = useParams();
 
-  const { data: profile, isLoading } = useQuery({
+  const {
+    data: profile,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['member-profile', currentTeam?.id, username],
     queryFn: () => teamsApi.getMemberProfile(currentTeam!.id, username!),
     enabled: !!currentTeam?.id && !!username,
   });
 
   if (isLoading) return <DetailSkeleton />;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load member profile</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!profile) return null;
 

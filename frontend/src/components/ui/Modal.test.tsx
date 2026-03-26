@@ -58,8 +58,8 @@ describe('Modal', () => {
         <p>Body</p>
       </Modal>,
     );
-    // The backdrop is the div with bg-black/50 class
-    const backdrop = document.querySelector('.bg-black\\/50');
+    // The backdrop is the div with bg-backdrop class
+    const backdrop = document.querySelector('.bg-backdrop');
     expect(backdrop).toBeTruthy();
     fireEvent.click(backdrop!);
     expect(onClose).toHaveBeenCalledTimes(1);

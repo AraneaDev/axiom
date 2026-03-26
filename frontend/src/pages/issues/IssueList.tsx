@@ -10,6 +10,7 @@ import {
   Search,
   Bookmark,
   BookmarkCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -26,9 +27,9 @@ import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useIssueListFilters } from '@/hooks/useIssueListFilters';
@@ -57,7 +58,7 @@ export default function IssueList() {
     const f: Record<string, string> = {};
     for (const [k, v] of searchParams.entries()) f[k] = v;
     return f;
-  }, [filterString]);
+  }, [searchParams]);
 
   // Hydration: single request for all issues list data
   const hydrationQuery = useQuery({
@@ -69,12 +70,15 @@ export default function IssueList() {
   });
 
   // Seed individual caches from hydration response
-  const hydrationMappings = useMemo(() => [
-    { key: ['issues', currentProject?.id, filters], field: 'issues' as const },
-    { key: ['board', currentProject?.id], field: 'boardColumns' as const },
-    { key: ['sprints', currentProject?.id], field: 'sprints' as const },
-    { key: ['saved-filters', currentProject?.id], field: 'savedFilters' as const },
-  ], [currentProject?.id, filterString]);
+  const hydrationMappings = useMemo(
+    () => [
+      { key: ['issues', currentProject?.id, filters], field: 'issues' as const },
+      { key: ['board', currentProject?.id], field: 'boardColumns' as const },
+      { key: ['sprints', currentProject?.id], field: 'sprints' as const },
+      { key: ['saved-filters', currentProject?.id], field: 'savedFilters' as const },
+    ],
+    [currentProject?.id, filters],
+  );
 
   useEffect(() => {
     if (!hydrationQuery.data) return;
@@ -89,7 +93,11 @@ export default function IssueList() {
 
   const hydrated = !!hydrationQuery.data;
 
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    error: issuesError,
+  } = useQuery({
     queryKey: ['issues', currentProject?.id, filters],
     queryFn: () => issuesApi.list(currentProject!.id, filters),
     enabled: !!currentProject?.id && !hydrated,
@@ -235,6 +243,8 @@ export default function IssueList() {
 
   const hasSelection = selectedIds.size > 0;
 
+  const queryError = hydrationQuery.error || issuesError;
+
   if (isLoading)
     return (
       <div className="px-6 py-4">
@@ -244,6 +254,17 @@ export default function IssueList() {
         <ListSkeleton rows={8} />
       </div>
     );
+
+  if (queryError) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load issues</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-6 py-4">

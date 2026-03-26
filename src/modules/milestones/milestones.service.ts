@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
  *
@@ -45,14 +45,15 @@ export async function listMilestones(projectId: string) {
  * @param milestoneId
  */
 export async function getMilestone(milestoneId: string) {
-  const milestone = await prisma.milestone.findUnique({
-    where: { id: milestoneId },
-    include: {
-      issues: { include: { assignee: true }, orderBy: { createdAt: 'desc' } },
-    },
-  });
-  if (!milestone) throw new AppError(404, 'Milestone not found');
-  return milestone;
+  return findOrThrow(
+    prisma.milestone.findUnique({
+      where: { id: milestoneId },
+      include: {
+        issues: { include: { assignee: true }, orderBy: { createdAt: 'desc' } },
+      },
+    }),
+    'Milestone not found',
+  );
 }
 
 /**
@@ -68,8 +69,10 @@ export async function updateMilestone(
   milestoneId: string,
   data: { title?: string; description?: string; dueDate?: string; status?: 'OPEN' | 'CLOSED' },
 ) {
-  const milestone = await prisma.milestone.findUnique({ where: { id: milestoneId } });
-  if (!milestone) throw new AppError(404, 'Milestone not found');
+  await findOrThrow(
+    prisma.milestone.findUnique({ where: { id: milestoneId } }),
+    'Milestone not found',
+  );
   return prisma.milestone.update({
     where: { id: milestoneId },
     data: {

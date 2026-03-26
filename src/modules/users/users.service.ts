@@ -4,7 +4,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
-import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
+import { USER_WITH_AVATAR_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 
 // ─── Profile ────────────────────────────────────────────────
 
@@ -91,7 +91,7 @@ export async function getDashboard(userId: string) {
         OR: [{ column: { isDone: false } }, { columnId: null }],
       },
       include: {
-        project: { include: { team: { include: { org: true } } } },
+        project: { include: TEAM_ORG_INCLUDE },
         column: { select: { id: true, name: true, isDone: true } },
         assignee: { select: { id: true, displayName: true, username: true, avatarUrl: true } },
       },
@@ -137,7 +137,7 @@ export async function getDashboard(userId: string) {
         OR: [{ column: { isDone: false } }, { columnId: null }],
       },
       include: {
-        project: { include: { team: { include: { org: true } } } },
+        project: { include: TEAM_ORG_INCLUDE },
         column: { select: { id: true, name: true, isDone: true } },
       },
       orderBy: { dueDate: 'asc' },
@@ -298,8 +298,8 @@ export async function listSshKeys(userId: string) {
 export async function addSshKey(userId: string, data: { title: string; publicKey: string }) {
   const fingerprint = parseAndFingerprintKey(data.publicKey);
 
-  const existing = await prisma.sshKey.findUnique({ where: { fingerprint } });
-  if (existing) throw new AppError(409, 'SSH key already registered');
+  const { checkUnique } = await import('../../utils/check-unique');
+  await checkUnique('sshKey', { fingerprint }, 'SSH key already registered');
 
   return prisma.sshKey.create({
     data: {

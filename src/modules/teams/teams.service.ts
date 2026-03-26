@@ -2,6 +2,7 @@ import { TeamRole } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { checkUnique } from '../../utils/check-unique';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parsePagination, parseServicePagination, paginatedResponse } from '../../utils/pagination';
 import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
@@ -22,10 +23,7 @@ export async function createTeam(
   userId: string,
   data: { name: string; slug: string; description?: string },
 ) {
-  const existing = await prisma.team.findUnique({
-    where: { orgId_slug: { orgId, slug: data.slug } },
-  });
-  if (existing) throw new AppError(409, 'Team slug already taken in this org');
+  await checkUnique('team', { orgId, slug: data.slug }, 'Team slug already taken in this org');
 
   return prisma.team.create({
     data: {
@@ -151,10 +149,7 @@ export async function addTeamMember(
   userId: string,
   role: TeamRole = TeamRole.MEMBER,
 ) {
-  const existing = await prisma.teamMembership.findUnique({
-    where: { userId_teamId: { userId, teamId } },
-  });
-  if (existing) throw new AppError(409, 'User is already a team member');
+  await checkUnique('teamMembership', { userId, teamId }, 'User is already a team member');
 
   // Verify user is in the org
   const team = await findOrThrow(
@@ -369,23 +364,27 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
  * @throws {AppError} 404 if user not found or not a team member
  */
 export async function getTeamMemberProfile(teamId: string, username: string) {
-  const user = await prisma.user.findUnique({
-    where: { username },
-    select: {
-      id: true,
-      email: true,
-      username: true,
-      displayName: true,
-      avatarUrl: true,
-      createdAt: true,
-    },
-  });
-  if (!user) throw new AppError(404, 'User not found');
+  const user = await findOrThrow(
+    prisma.user.findUnique({
+      where: { username },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        displayName: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
+    }),
+    'User not found',
+  );
 
-  const membership = await prisma.teamMembership.findFirst({
-    where: { teamId, userId: user.id },
-  });
-  if (!membership) throw new AppError(404, 'User is not a member of this team');
+  const membership = await findOrThrow(
+    prisma.teamMembership.findFirst({
+      where: { teamId, userId: user.id },
+    }),
+    'User is not a member of this team',
+  );
 
   // Get team's projects and repos for scoped stats
   const team = await prisma.team.findUnique({

@@ -2,7 +2,9 @@ import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
-import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { checkUnique } from '../../utils/check-unique';
+import { findOrThrow } from '../../utils/find-or-throw';
+import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
 /**
@@ -19,10 +21,7 @@ export async function createSpace(
   teamId: string,
   data: { name: string; slug: string; description?: string },
 ) {
-  const existing = await prisma.wikiSpace.findUnique({
-    where: { teamId_slug: { teamId, slug: data.slug } },
-  });
-  if (existing) throw new AppError(409, 'Wiki space slug already taken');
+  await checkUnique('wikiSpace', { teamId, slug: data.slug }, 'Wiki space slug already taken');
 
   return prisma.wikiSpace.create({
     data: { teamId, ...data },
@@ -36,18 +35,19 @@ export async function createSpace(
  * @throws {AppError} 404 if wiki space not found
  */
 export async function getSpace(spaceId: string) {
-  const space = await prisma.wikiSpace.findUnique({
-    where: { id: spaceId },
-    include: {
-      pages: {
-        where: { parentId: null },
-        include: { children: { select: { id: true, title: true, slug: true } } },
-        orderBy: { position: 'asc' },
+  return findOrThrow(
+    prisma.wikiSpace.findUnique({
+      where: { id: spaceId },
+      include: {
+        pages: {
+          where: { parentId: null },
+          include: { children: { select: { id: true, title: true, slug: true } } },
+          orderBy: { position: 'asc' },
+        },
       },
-    },
-  });
-  if (!space) throw new AppError(404, 'Wiki space not found');
-  return space;
+    }),
+    'Wiki space not found',
+  );
 }
 
 /**
@@ -87,10 +87,7 @@ export async function createPage(
     isDraft?: boolean;
   },
 ) {
-  const existing = await prisma.page.findUnique({
-    where: { spaceId_slug: { spaceId, slug: data.slug } },
-  });
-  if (existing) throw new AppError(409, 'Page slug already taken in this space');
+  await checkUnique('page', { spaceId, slug: data.slug }, 'Page slug already taken in this space');
 
   // Get next position
   const lastPage = await prisma.page.findFirst({
@@ -136,23 +133,24 @@ export async function createPage(
  * @throws {AppError} 404 if page not found
  */
 export async function getPage(spaceId: string, pageSlug: string) {
-  const page = await prisma.page.findUnique({
-    where: { spaceId_slug: { spaceId, slug: pageSlug } },
-    include: {
-      space: { include: { team: { include: { org: true } } } },
-      children: {
-        select: { id: true, title: true, slug: true, position: true },
-        orderBy: { position: 'asc' },
+  return findOrThrow(
+    prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId, slug: pageSlug } },
+      include: {
+        space: { include: TEAM_ORG_INCLUDE },
+        children: {
+          select: { id: true, title: true, slug: true, position: true },
+          orderBy: { position: 'asc' },
+        },
+        versions: {
+          orderBy: { version: 'desc' },
+          take: 1,
+          include: { author: { select: USER_BASIC_SELECT } },
+        },
       },
-      versions: {
-        orderBy: { version: 'desc' },
-        take: 1,
-        include: { author: { select: USER_BASIC_SELECT } },
-      },
-    },
-  });
-  if (!page) throw new AppError(404, 'Page not found');
-  return page;
+    }),
+    'Page not found',
+  );
 }
 
 /**
@@ -179,11 +177,13 @@ export async function updatePage(
     isDraft?: boolean;
   },
 ) {
-  const page = await prisma.page.findUnique({
-    where: { spaceId_slug: { spaceId, slug: pageSlug } },
-    include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
-  });
-  if (!page) throw new AppError(404, 'Page not found');
+  const page = await findOrThrow(
+    prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId, slug: pageSlug } },
+      include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+    }),
+    'Page not found',
+  );
 
   const nextVersion = (page.versions[0]?.version ?? 0) + 1;
 
@@ -222,10 +222,12 @@ export async function updatePage(
  * @throws {AppError} 404 if page not found
  */
 export async function deletePage(spaceId: string, pageSlug: string, userId?: string) {
-  const page = await prisma.page.findUnique({
-    where: { spaceId_slug: { spaceId, slug: pageSlug } },
-  });
-  if (!page) throw new AppError(404, 'Page not found');
+  const page = await findOrThrow(
+    prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId, slug: pageSlug } },
+    }),
+    'Page not found',
+  );
   await prisma.page.delete({ where: { id: page.id } });
   await cacheInvalidate(`wiki:tree:${spaceId}`);
   if (userId) {
@@ -243,17 +245,19 @@ export async function deletePage(spaceId: string, pageSlug: string, userId?: str
  * @throws {AppError} 404 if page not found
  */
 export async function getPageHistory(spaceId: string, pageSlug: string) {
-  const page = await prisma.page.findUnique({
-    where: { spaceId_slug: { spaceId, slug: pageSlug } },
-    include: {
-      space: { include: { team: { include: { org: true } } } },
-      versions: {
-        orderBy: { version: 'desc' },
-        include: { author: { select: USER_BASIC_SELECT } },
+  const page = await findOrThrow(
+    prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId, slug: pageSlug } },
+      include: {
+        space: { include: TEAM_ORG_INCLUDE },
+        versions: {
+          orderBy: { version: 'desc' },
+          include: { author: { select: USER_BASIC_SELECT } },
+        },
       },
-    },
-  });
-  if (!page) throw new AppError(404, 'Page not found');
+    }),
+    'Page not found',
+  );
   return page.versions;
 }
 
@@ -328,17 +332,20 @@ export async function movePage(
   targetSpaceId?: string,
   targetParentId?: string | null,
 ) {
-  const page = await prisma.page.findUnique({ where: { id: pageId } });
-  if (!page) throw new AppError(404, 'Page not found');
+  const page = await findOrThrow(
+    prisma.page.findUnique({ where: { id: pageId } }),
+    'Page not found',
+  );
 
   const newSpaceId = targetSpaceId ?? page.spaceId;
 
   // Check slug uniqueness in target space if moving to a different space
   if (newSpaceId !== page.spaceId) {
-    const existing = await prisma.page.findUnique({
-      where: { spaceId_slug: { spaceId: newSpaceId, slug: page.slug } },
-    });
-    if (existing) throw new AppError(409, 'Page slug already taken in target space');
+    await checkUnique(
+      'page',
+      { spaceId: newSpaceId, slug: page.slug },
+      'Page slug already taken in target space',
+    );
   }
 
   // Prevent circular parent
@@ -371,16 +378,19 @@ export async function copyPage(
   targetSpaceId?: string,
   newSlug?: string,
 ) {
-  const page = await prisma.page.findUnique({ where: { id: pageId } });
-  if (!page) throw new AppError(404, 'Page not found');
+  const page = await findOrThrow(
+    prisma.page.findUnique({ where: { id: pageId } }),
+    'Page not found',
+  );
 
   const destSpaceId = targetSpaceId ?? page.spaceId;
   const destSlug = newSlug ?? `${page.slug}-copy`;
 
-  const existing = await prisma.page.findUnique({
-    where: { spaceId_slug: { spaceId: destSpaceId, slug: destSlug } },
-  });
-  if (existing) throw new AppError(409, 'Page slug already taken in target space');
+  await checkUnique(
+    'page',
+    { spaceId: destSpaceId, slug: destSlug },
+    'Page slug already taken in target space',
+  );
 
   const lastPage = await prisma.page.findFirst({
     where: { spaceId: destSpaceId, parentId: null },

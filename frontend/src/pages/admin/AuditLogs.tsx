@@ -8,6 +8,7 @@ import {
   Calendar,
   User,
   Globe,
+  AlertTriangle,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -174,13 +175,24 @@ export default function AuditLogs() {
     endDate: endDate || undefined,
   };
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['audit-logs', currentFilters],
     queryFn: () => auditApi.list(currentFilters),
   });
 
   const logs = data?.logs ?? [];
   const total = data?.total ?? 0;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load audit logs</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-auto px-6 py-4">

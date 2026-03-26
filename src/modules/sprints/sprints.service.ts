@@ -84,19 +84,21 @@ export async function listSprints(projectId: string, opts?: { status?: string })
  * @throws {AppError} 404 if sprint not found
  */
 export async function getSprint(sprintId: string) {
-  const sprint = await prisma.sprint.findUnique({
-    where: { id: sprintId },
-    include: {
-      issues: {
-        include: {
-          assignee: { select: USER_BASIC_SELECT },
-          labels: true,
-          column: { select: { id: true, name: true } },
+  const sprint = await findOrThrow(
+    prisma.sprint.findUnique({
+      where: { id: sprintId },
+      include: {
+        issues: {
+          include: {
+            assignee: { select: USER_BASIC_SELECT },
+            labels: true,
+            column: { select: { id: true, name: true } },
+          },
         },
       },
-    },
-  });
-  if (!sprint) throw new AppError(404, 'Sprint not found');
+    }),
+    'Sprint not found',
+  );
 
   return {
     ...sprint,

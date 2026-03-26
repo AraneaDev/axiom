@@ -1,7 +1,7 @@
 import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
-import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { evaluateRules } from '../automation/automation.service';
@@ -55,10 +55,12 @@ export async function moveIssue(
   columnId: string,
   position: number,
 ) {
-  const issue = await prisma.issue.findFirst({
-    where: { projectId, number: issueNumber },
-  });
-  if (!issue) throw new AppError(404, 'Issue not found');
+  const issue = await findOrThrow(
+    prisma.issue.findFirst({
+      where: { projectId, number: issueNumber },
+    }),
+    'Issue not found',
+  );
 
   // Validate workflow transition
   await validateTransition(projectId, issue.columnId, columnId);
@@ -97,8 +99,10 @@ export async function moveIssue(
  * @throws {AppError} 404 if project not found
  */
 export async function getRoadmap(projectId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  const project = await findOrThrow(
+    prisma.project.findUnique({ where: { id: projectId } }),
+    'Project not found',
+  );
 
   const epics = await prisma.issue.findMany({
     where: { projectId, type: 'EPIC' },

@@ -223,12 +223,27 @@ function StatCard({
  *
  */
 export default function AdminDashboard() {
-  const { data: stats, isLoading } = useQuery<SystemStats>({
+  const {
+    data: stats,
+    isLoading,
+    error,
+  } = useQuery<SystemStats>({
     queryKey: ['admin', 'stats'],
     queryFn: adminApi.getStats,
   });
 
   if (isLoading || !stats) return <PageLoader />;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Activity className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load admin dashboard</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-6 py-4 space-y-6">

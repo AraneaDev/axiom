@@ -1,78 +1,39 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 import { validate, createPageCommentSchema } from '../../utils/validation';
 
 import * as svc from './wiki-comments.service';
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function addPageComment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = validate(createPageCommentSchema, req.body);
-    const comment = await svc.addPageComment(
-      param(req, 'pageId'),
-      req.userId!,
-      data.body,
-      data.anchorText,
-    );
-    res.status(201).json(comment);
-  } catch (err) {
-    next(err);
-  }
-}
+export const addPageComment = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(createPageCommentSchema, req.body);
+  const comment = await svc.addPageComment(
+    param(req, 'pageId'),
+    req.userId!,
+    data.body,
+    data.anchorText,
+  );
+  res.status(201).json(comment);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listPageComments(req: Request, res: Response, next: NextFunction) {
-  try {
-    const comments = await svc.listPageComments(param(req, 'pageId'));
-    res.json(comments);
-  } catch (err) {
-    next(err);
-  }
-}
+export const listPageComments = asyncHandler(async (req: Request, res: Response) => {
+  const comments = await svc.listPageComments(param(req, 'pageId'));
+  res.json(comments);
+});
 
-/**
- * Unified PATCH handler for wiki comments: update body or toggle resolved.
- * @param req
- * @param res
- * @param next
- */
-export async function patchComment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { body } = req.body;
-    if (body && typeof body === 'string') {
-      const comment = await svc.updatePageComment(param(req, 'commentId'), req.userId!, body);
-      res.json(comment);
-    } else {
-      const comment = await svc.resolveComment(param(req, 'commentId'));
-      res.json(comment);
-    }
-  } catch (err) {
-    next(err);
+export const patchComment = asyncHandler(async (req: Request, res: Response) => {
+  const { body } = req.body;
+  if (body && typeof body === 'string') {
+    const comment = await svc.updatePageComment(param(req, 'commentId'), req.userId!, body);
+    res.json(comment);
+  } else {
+    const comment = await svc.resolveComment(param(req, 'commentId'));
+    res.json(comment);
   }
-}
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function deletePageComment(req: Request, res: Response, next: NextFunction) {
-  try {
-    await svc.deletePageComment(param(req, 'commentId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const deletePageComment = asyncHandler(async (req: Request, res: Response) => {
+  await svc.deletePageComment(param(req, 'commentId'));
+  res.status(204).send();
+});

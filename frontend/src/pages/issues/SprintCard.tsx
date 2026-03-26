@@ -25,6 +25,8 @@ import { Select } from '@/components/ui/Dropdown';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
+import { useDraftState } from '@/hooks/useDraftState';
+import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
 import type { Issue, Sprint } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -162,56 +164,56 @@ interface SprintCardProps {
  */
 export function SprintCard({ sprint, org, team, project, projectId, allSprints }: SprintCardProps) {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const toast = useToast();
+  const { invalidateSprints } = useIssueInvalidation(projectId);
   const [collapsed, setCollapsed] = useState(sprint.status === 'COMPLETED');
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [moveToSprintId, setMoveToSprintId] = useState<string>('');
-  const [editingGoal, setEditingGoal] = useState(false);
-  const [goalDraft, setGoalDraft] = useState('');
+  const goalDraftState = useDraftState('');
 
   const startMutation = useMutation({
     mutationFn: () => sprintsApi.start(projectId, sprint.id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
-      toast('Sprint started', 'success');
+      invalidateSprints();
+      toast.success('Sprint started');
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const completeMutation = useMutation({
     mutationFn: () => sprintsApi.complete(projectId, sprint.id, moveToSprintId || undefined),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['backlog', projectId] });
+      invalidateSprints();
       queryClient.invalidateQueries({ queryKey: ['velocity', projectId] });
       setShowCompleteModal(false);
-      toast('Sprint completed', 'success');
+      toast.success('Sprint completed');
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const addIssuesMutation = useMutation({
     mutationFn: (issueIds: string[]) => sprintsApi.addIssues(projectId, sprint.id, issueIds),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['backlog', projectId] });
+      invalidateSprints();
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const removeIssueMutation = useMutation({
     mutationFn: (issueId: string) => sprintsApi.removeIssue(projectId, sprint.id, issueId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['backlog', projectId] });
+      invalidateSprints();
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const updateGoalMutation = useMutation({
     mutationFn: (goal: string) => sprintsApi.update(projectId, sprint.id, { goal }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
-      setEditingGoal(false);
+      invalidateSprints();
+      goalDraftState.reset();
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const totalPoints =
@@ -274,20 +276,24 @@ export function SprintCard({ sprint, org, team, project, projectId, allSprints }
       </div>
 
       {/* Sprint goal */}
-      {!collapsed && (editingGoal || sprint.goal) && (
+      {!collapsed && (goalDraftState.isEditing || sprint.goal) && (
         <div className="px-4 py-2 bg-surface-secondary/50 border-b border-border-light text-xs text-text-secondary">
-          {editingGoal ? (
+          {goalDraftState.isEditing ? (
             <div className="space-y-2">
-              <MarkdownEditor value={goalDraft} onChange={setGoalDraft} compact />
+              <MarkdownEditor
+                value={goalDraftState.draft}
+                onChange={goalDraftState.setDraft}
+                compact
+              />
               <div className="flex gap-2">
                 <Button
                   size="xs"
                   disabled={updateGoalMutation.isPending}
-                  onClick={() => updateGoalMutation.mutate(goalDraft)}
+                  onClick={() => updateGoalMutation.mutate(goalDraftState.draft)}
                 >
                   <Check className="h-3 w-3" /> Save
                 </Button>
-                <Button size="xs" variant="ghost" onClick={() => setEditingGoal(false)}>
+                <Button size="xs" variant="ghost" onClick={() => goalDraftState.cancel()}>
                   <X className="h-3 w-3" /> Cancel
                 </Button>
               </div>
@@ -301,10 +307,7 @@ export function SprintCard({ sprint, org, team, project, projectId, allSprints }
                 size="xs"
                 className="opacity-0 group-hover:opacity-100 transition-opacity ml-1"
                 title="Edit goal"
-                onClick={() => {
-                  setGoalDraft(sprint.goal ?? '');
-                  setEditingGoal(true);
-                }}
+                onClick={() => goalDraftState.startEditing(sprint.goal ?? '')}
               >
                 <Pencil className="h-3 w-3" />
               </Button>

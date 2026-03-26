@@ -132,7 +132,7 @@ export function Sidebar() {
     <>
       {/* Mobile backdrop */}
       <div
-        className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+        className="fixed inset-0 z-30 bg-backdrop lg:hidden"
         onClick={() => setSidebarOpen(false)}
       />
       <aside
@@ -226,15 +226,18 @@ export function Sidebar() {
             <div className="space-y-1">
               <SectionHeader label={currentTeam.name} />
               <NavItem to={`/${org}/${team}/projects`} icon={FolderKanban} label="Projects" />
-              {projects && projects.slice(0, 8).map((project) => (
-                <NavItem
-                  key={project.id}
-                  to={`/${org}/${team}/${project.slug}/board`}
-                  icon={FolderKanban}
-                  label={project.name}
-                  indent
-                />
-              ))}
+              {projects &&
+                projects
+                  .slice(0, 8)
+                  .map((project) => (
+                    <NavItem
+                      key={project.id}
+                      to={`/${org}/${team}/${project.slug}/board`}
+                      icon={FolderKanban}
+                      label={project.name}
+                      indent
+                    />
+                  ))}
               <NavItem to={`/${org}/${team}/wiki`} icon={BookOpen} label="Wiki" />
               <NavItem to={`/${org}/${team}/repos`} icon={GitBranch} label="Repositories" />
               <NavItem to={`/${org}/${team}/members`} icon={Users} label="Members" />

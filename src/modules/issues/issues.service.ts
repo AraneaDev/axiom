@@ -4,10 +4,15 @@ import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
 import { parseServicePagination } from '../../utils/pagination';
-import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import {
+  USER_BASIC_SELECT,
+  TEAM_ORG_INCLUDE,
+  PROJECT_TEAM_ORG_INCLUDE,
+} from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 import { evaluateRules } from '../automation/automation.service';
 import { createNotification } from '../notifications/notifications.service';
@@ -50,8 +55,10 @@ export async function createIssue(
     dueDate?: string;
   },
 ) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  const project = await findOrThrow(
+    prisma.project.findUnique({ where: { id: projectId } }),
+    'Project not found',
+  );
 
   // Find default column
   const defaultColumn = await prisma.boardColumn.findFirst({
@@ -143,29 +150,33 @@ export async function createIssue(
  * @throws {AppError} 404 if project or issue not found
  */
 export async function getIssue(projectId: string, issueNumber: number) {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: { team: { include: { org: true } } },
-  });
-  if (!project) throw new AppError(404, 'Project not found');
+  const project = await findOrThrow(
+    prisma.project.findUnique({
+      where: { id: projectId },
+      include: TEAM_ORG_INCLUDE,
+    }),
+    'Project not found',
+  );
 
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-    include: {
-      assignee: { select: USER_BASIC_SELECT },
-      creator: { select: USER_BASIC_SELECT },
-      labels: true,
-      column: true,
-      sprint: { select: { id: true, name: true } },
-      parent: { select: { id: true, number: true, title: true } },
-      project: { include: { team: { include: { org: true } } } },
-      comments: {
-        include: { author: { select: USER_BASIC_SELECT } },
-        orderBy: { createdAt: 'asc' },
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+      include: {
+        assignee: { select: USER_BASIC_SELECT },
+        creator: { select: USER_BASIC_SELECT },
+        labels: true,
+        column: true,
+        sprint: { select: { id: true, name: true } },
+        parent: { select: { id: true, number: true, title: true } },
+        project: { include: TEAM_ORG_INCLUDE },
+        comments: {
+          include: { author: { select: USER_BASIC_SELECT } },
+          orderBy: { createdAt: 'asc' },
+        },
       },
-    },
-  });
-  if (!issue) throw new AppError(404, 'Issue not found');
+    }),
+    'Issue not found',
+  );
 
   return {
     ...issue,
@@ -206,8 +217,10 @@ export async function listIssues(
     offset?: number;
   },
 ) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new AppError(404, 'Project not found');
+  const project = await findOrThrow(
+    prisma.project.findUnique({ where: { id: projectId } }),
+    'Project not found',
+  );
 
   const cacheKey = `issues:${projectId}:${filters?.offset ?? 0}:${filters?.q || ''}:${filters?.type || ''}:${filters?.priority || ''}:${filters?.assigneeId || ''}:${filters?.columnId || ''}:${filters?.sprintId || ''}:${filters?.label || ''}`;
   return cacheable(cacheKey, 30, async () => {
@@ -302,10 +315,12 @@ export async function updateIssue(
   },
   userId?: string,
 ) {
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-  });
-  if (!issue) throw new AppError(404, 'Issue not found');
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+    }),
+    'Issue not found',
+  );
 
   // Validate workflow transition before updating column
   if (data.columnId !== undefined && data.columnId !== issue.columnId) {
@@ -348,7 +363,7 @@ export async function updateIssue(
       labels: true,
       column: true,
       sprint: { select: { id: true, name: true } },
-      project: { include: { team: { include: { org: true } } } },
+      project: { include: TEAM_ORG_INCLUDE },
     },
   });
 
@@ -450,10 +465,12 @@ export async function updateIssue(
  * @throws {AppError} 404 if issue not found
  */
 export async function deleteIssue(projectId: string, issueNumber: number, userId?: string) {
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-  });
-  if (!issue) throw new AppError(404, 'Issue not found');
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+    }),
+    'Issue not found',
+  );
   await prisma.issue.delete({ where: { id: issue.id } });
   await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
   if (userId) {
@@ -474,11 +491,13 @@ export async function deleteIssue(projectId: string, issueNumber: number, userId
  * @throws {AppError} 404 if issue not found
  */
 export async function getEpicProgress(projectId: string, issueNumber: number) {
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-    include: { project: { include: { team: { include: { org: true } } } } },
-  });
-  if (!issue) throw new AppError(404, 'Issue not found');
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+      include: PROJECT_TEAM_ORG_INCLUDE,
+    }),
+    'Issue not found',
+  );
 
   const children = await prisma.issue.findMany({
     where: { parentId: issue.id },

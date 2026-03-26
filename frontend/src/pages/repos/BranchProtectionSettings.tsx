@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { useModalState } from '@/hooks/useModalState';
 
 interface BranchProtectionRule {
   id: string;
@@ -38,7 +39,7 @@ interface BranchProtectionSettingsProps {
 export default function BranchProtectionSettings({ repoId }: BranchProtectionSettingsProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [showForm, setShowForm] = useState(false);
+  const formModal = useModalState();
   const [editing, setEditing] = useState<BranchProtectionRule | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BranchProtectionRule | null>(null);
 
@@ -58,11 +59,11 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
 
   const handleEdit = (rule: BranchProtectionRule) => {
     setEditing(rule);
-    setShowForm(true);
+    formModal.open();
   };
 
   const handleCloseForm = () => {
-    setShowForm(false);
+    formModal.close();
     setEditing(null);
   };
 
@@ -72,7 +73,7 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Shield className="h-5 w-5" /> Branch Protection
         </h2>
-        <Button size="sm" onClick={() => setShowForm(true)}>
+        <Button size="sm" onClick={() => formModal.open()}>
           <Plus className="h-4 w-4" /> Add rule
         </Button>
       </div>
@@ -89,7 +90,7 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
           title="No branch protection rules"
           description="Add a rule to enforce review and merge policies on specific branches."
           action={
-            <Button size="sm" onClick={() => setShowForm(true)}>
+            <Button size="sm" onClick={() => formModal.open()}>
               <Plus className="h-4 w-4" /> Add rule
             </Button>
           }
@@ -164,7 +165,7 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
         </div>
       )}
 
-      {showForm && (
+      {formModal.isOpen && (
         <ProtectionRuleFormModal repoId={repoId} rule={editing} onClose={handleCloseForm} />
       )}
 

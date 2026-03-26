@@ -1,68 +1,37 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
-import { createWorkflowRuleSchema, updateWorkflowRuleSchema } from '../../utils/validation';
+import {
+  validate,
+  createWorkflowRuleSchema,
+  updateWorkflowRuleSchema,
+} from '../../utils/validation';
 
 import * as workflowService from './workflow.service';
 
-/**
- * @param req
- * @param res
- * @param next
- */
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = createWorkflowRuleSchema.parse(req.body);
-    const rule = await workflowService.createRule(param(req, 'projectId'), data);
-    res.status(201).json(rule);
-  } catch (err) {
-    next(err);
-  }
-}
+export const create = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(createWorkflowRuleSchema, req.body);
+  const rule = await workflowService.createRule(param(req, 'projectId'), data);
+  res.status(201).json(rule);
+});
 
-/**
- * @param req
- * @param res
- * @param next
- */
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const rules = await workflowService.listRules(param(req, 'projectId'));
-    res.json(rules);
-  } catch (err) {
-    next(err);
-  }
-}
+export const list = asyncHandler(async (req: Request, res: Response) => {
+  const rules = await workflowService.listRules(param(req, 'projectId'));
+  res.json(rules);
+});
 
-/**
- * @param req
- * @param res
- * @param next
- */
-export async function update(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = updateWorkflowRuleSchema.parse(req.body);
-    const rule = await workflowService.updateRule(
-      param(req, 'ruleId'),
-      param(req, 'projectId'),
-      data,
-    );
-    res.json(rule);
-  } catch (err) {
-    next(err);
-  }
-}
+export const update = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(updateWorkflowRuleSchema, req.body);
+  const rule = await workflowService.updateRule(
+    param(req, 'ruleId'),
+    param(req, 'projectId'),
+    data,
+  );
+  res.json(rule);
+});
 
-/**
- * @param req
- * @param res
- * @param next
- */
-export async function remove(req: Request, res: Response, next: NextFunction) {
-  try {
-    await workflowService.deleteRule(param(req, 'ruleId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  await workflowService.deleteRule(param(req, 'ruleId'));
+  res.status(204).send();
+});

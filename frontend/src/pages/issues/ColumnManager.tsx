@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { Plus, Trash2, GripVertical, Save, Check, X, Pencil } from 'lucide-react';
 import { useState, useRef, useCallback } from 'react';
 
@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
+import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import type { BoardColumn } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -35,8 +36,8 @@ interface ColumnRow {
  * @param root0.columns
  */
 export function ColumnManager({ open, onClose, projectId, columns }: ColumnManagerProps) {
-  const queryClient = useQueryClient();
   const toast = useToast();
+  const { invalidateList } = useIssueInvalidation(projectId);
   const [rows, setRows] = useState<ColumnRow[]>(() =>
     columns.map((c) => ({
       id: c.id,
@@ -53,10 +54,6 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
   const dragItem = useRef<number | null>(null);
   const dragOver = useRef<number | null>(null);
 
-  const invalidateBoard = () => {
-    queryClient.invalidateQueries({ queryKey: ['board', projectId] });
-  };
-
   const createMutation = useMutation({
     mutationFn: (data: { name: string; isDone?: boolean }) =>
       issuesApi.createColumn(projectId, data),
@@ -67,9 +64,9 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
       ]);
       setNewName('');
       setNewIsDone(false);
-      invalidateBoard();
+      invalidateList();
     },
-    onError: () => toast.error('Failed to create column'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to create column'),
   });
 
   const updateMutation = useMutation({
@@ -80,24 +77,24 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
       columnId: string;
       data: { name?: string; isDone?: boolean };
     }) => issuesApi.updateColumn(projectId, columnId, data),
-    onSuccess: () => invalidateBoard(),
-    onError: () => toast.error('Failed to update column'),
+    onSuccess: () => invalidateList(),
+    onError: (err: Error) => toast.error(err.message || 'Failed to update column'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (columnId: string) => issuesApi.deleteColumn(projectId, columnId),
     onSuccess: (_, columnId) => {
       setRows((prev) => prev.filter((r) => r.id !== columnId));
-      invalidateBoard();
+      invalidateList();
     },
-    onError: () => toast.error('Cannot delete column. Move issues first.'),
+    onError: (err: Error) => toast.error(err.message || 'Cannot delete column. Move issues first.'),
   });
 
   const reorderMutation = useMutation({
     mutationFn: (positions: { id: string; position: number }[]) =>
       issuesApi.reorderColumns(projectId, positions),
-    onSuccess: () => invalidateBoard(),
-    onError: () => toast.error('Failed to reorder columns'),
+    onSuccess: () => invalidateList(),
+    onError: (err: Error) => toast.error(err.message || 'Failed to reorder columns'),
   });
 
   const handleCreate = () => {

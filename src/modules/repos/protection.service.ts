@@ -1,5 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { checkUnique } from '../../utils/check-unique';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
  *
@@ -23,10 +25,11 @@ export async function createRule(
     requireLinear?: boolean;
   },
 ) {
-  const existing = await prisma.branchProtection.findUnique({
-    where: { repoId_pattern: { repoId, pattern: data.pattern } },
-  });
-  if (existing) throw new AppError(409, 'Protection rule for this pattern already exists');
+  await checkUnique(
+    'branchProtection',
+    { repoId, pattern: data.pattern },
+    'Protection rule for this pattern already exists',
+  );
 
   return prisma.branchProtection.create({
     data: { repoId, ...data },
@@ -49,9 +52,10 @@ export async function listRules(repoId: string) {
  * @param ruleId
  */
 export async function getRule(ruleId: string) {
-  const rule = await prisma.branchProtection.findUnique({ where: { id: ruleId } });
-  if (!rule) throw new AppError(404, 'Protection rule not found');
-  return rule;
+  return findOrThrow(
+    prisma.branchProtection.findUnique({ where: { id: ruleId } }),
+    'Protection rule not found',
+  );
 }
 
 /**
@@ -74,8 +78,10 @@ export async function updateRule(
     requireLinear?: boolean;
   },
 ) {
-  const rule = await prisma.branchProtection.findUnique({ where: { id: ruleId } });
-  if (!rule) throw new AppError(404, 'Protection rule not found');
+  await findOrThrow(
+    prisma.branchProtection.findUnique({ where: { id: ruleId } }),
+    'Protection rule not found',
+  );
   return prisma.branchProtection.update({ where: { id: ruleId }, data });
 }
 
@@ -84,8 +90,10 @@ export async function updateRule(
  * @param ruleId
  */
 export async function deleteRule(ruleId: string) {
-  const rule = await prisma.branchProtection.findUnique({ where: { id: ruleId } });
-  if (!rule) throw new AppError(404, 'Protection rule not found');
+  await findOrThrow(
+    prisma.branchProtection.findUnique({ where: { id: ruleId } }),
+    'Protection rule not found',
+  );
   await prisma.branchProtection.delete({ where: { id: ruleId } });
 }
 
@@ -149,7 +157,6 @@ export async function enforceMergeProtection(repoId: string, targetBranch: strin
       );
     }
   }
-
 
   if (rule.requireCI) {
     const pr = await prisma.pullRequest.findUnique({ where: { id: prId } });

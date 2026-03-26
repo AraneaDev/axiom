@@ -1,15 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Plus, Calendar } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Calendar, AlertTriangle } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router';
 
 import { issuesApi } from '@/api/issues.api';
-import { useProjectContext } from '@/hooks/useProjectContext';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { PRIORITY_COLORS } from '@/lib/constants';
 import type { RoadmapEpic, Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -171,7 +171,11 @@ function EpicBar({
 export default function Roadmap() {
   const { org, teamSlug, projectSlug, currentProject } = useProjectContext();
 
-  const { data: epics = [], isLoading } = useQuery({
+  const {
+    data: epics = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['roadmap', currentProject?.id],
     queryFn: () => issuesApi.getRoadmap(currentProject!.id),
     enabled: !!currentProject?.id,
@@ -282,6 +286,17 @@ export default function Roadmap() {
         </div>
       </div>
     );
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load roadmap</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-6 py-4">

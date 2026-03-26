@@ -8,9 +8,10 @@ import { CreateFolderModal } from './CreateFolderModal';
 import { PageViewSidebar } from './PageViewSidebar';
 
 import { wikiApi } from '@/api/wiki.api';
-import { useTeamContext } from '@/hooks/useTeamContext';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { useModalState } from '@/hooks/useModalState';
+import { useTeamContext } from '@/hooks/useTeamContext';
 import type { PageTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -54,7 +55,7 @@ export default function WikiLayout() {
   const { space: spaceSlug, page: pageSlug } = useParams();
 
   const [, setTocEntries] = useState<TocEntry[]>([]);
-  const [showFolderModal, setShowFolderModal] = useState(false);
+  const folderModal = useModalState();
   const [folderModalParent, setFolderModalParent] = useState<string | undefined>(undefined);
 
   const { data: spaces } = useQuery({
@@ -72,10 +73,13 @@ export default function WikiLayout() {
 
   const basePath = `/${org}/${team}/wiki/${spaceSlug}`;
 
-  const handleNewFolder = useCallback((parentId?: string) => {
-    setFolderModalParent(parentId);
-    setShowFolderModal(true);
-  }, []);
+  const handleNewFolder = useCallback(
+    (parentId?: string) => {
+      setFolderModalParent(parentId);
+      folderModal.open();
+    },
+    [folderModal],
+  );
 
   const contextValue = useMemo<WikiContextValue>(
     () => ({
@@ -198,8 +202,8 @@ export default function WikiLayout() {
       {/* Folder modal */}
       {currentSpace?.id && (
         <CreateFolderModal
-          open={showFolderModal}
-          onClose={() => setShowFolderModal(false)}
+          open={folderModal.isOpen}
+          onClose={folderModal.close}
           spaceId={currentSpace.id}
           parentId={folderModalParent}
           onCreated={() => {

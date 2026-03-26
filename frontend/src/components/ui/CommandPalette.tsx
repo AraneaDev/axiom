@@ -158,7 +158,7 @@ export function CommandPalette() {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={toggleSearch} />
+      <div className="absolute inset-0 bg-backdrop backdrop-blur-sm" onClick={toggleSearch} />
 
       {/* Palette */}
       <div className="relative w-full max-w-xl rounded-xl border border-border bg-surface shadow-2xl animate-scale-in">

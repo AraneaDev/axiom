@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
@@ -8,11 +8,13 @@ import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
  * @returns CSV string
  */
 export async function exportIssuesCsv(projectId: string) {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: { columns: true },
-  });
-  if (!project) throw new AppError(404, 'Project not found');
+  const project = await findOrThrow(
+    prisma.project.findUnique({
+      where: { id: projectId },
+      include: { columns: true },
+    }),
+    'Project not found',
+  );
 
   const columnMap = new Map(project.columns.map((c) => [c.id, c.name]));
 

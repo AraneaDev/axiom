@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
  * List all labels for a wiki page.
@@ -21,8 +21,7 @@ export async function listPageLabels(pageId: string) {
  * @throws {AppError} 404 if page not found
  */
 export async function addLabel(pageId: string, label: string) {
-  const page = await prisma.page.findUnique({ where: { id: pageId } });
-  if (!page) throw new AppError(404, 'Page not found');
+  await findOrThrow(prisma.page.findUnique({ where: { id: pageId } }), 'Page not found');
 
   return prisma.pageLabel.create({
     data: { pageId, label },
@@ -36,10 +35,12 @@ export async function addLabel(pageId: string, label: string) {
  * @throws {AppError} 404 if label not found on the page
  */
 export async function removeLabel(pageId: string, label: string) {
-  const existing = await prisma.pageLabel.findUnique({
-    where: { pageId_label: { pageId, label } },
-  });
-  if (!existing) throw new AppError(404, 'Label not found on this page');
+  const existing = await findOrThrow(
+    prisma.pageLabel.findUnique({
+      where: { pageId_label: { pageId, label } },
+    }),
+    'Label not found on this page',
+  );
   await prisma.pageLabel.delete({ where: { id: existing.id } });
 }
 

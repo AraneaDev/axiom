@@ -1,83 +1,34 @@
-import { NextFunction, Request, Response } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 import { validate, createMilestoneSchema, updateMilestoneSchema } from '../../utils/validation';
 
 import * as milestonesService from './milestones.service';
 
-/**
- * Create a new milestone.
- * @param req
- * @param res
- * @param next
- */
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(createMilestoneSchema, req.body);
-    const milestone = await milestonesService.createMilestone(param(req, 'projectId'), body);
-    res.status(201).json(milestone);
-  } catch (err) {
-    next(err);
-  }
-}
+export const create = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(createMilestoneSchema, req.body);
+  const milestone = await milestonesService.createMilestone(param(req, 'projectId'), body);
+  res.status(201).json(milestone);
+});
 
-/**
- * List milestones for a project.
- * @param req
- * @param res
- * @param next
- */
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const milestones = await milestonesService.listMilestones(param(req, 'projectId'));
-    res.json(milestones);
-  } catch (err) {
-    next(err);
-  }
-}
+export const list = asyncHandler(async (req: Request, res: Response) => {
+  const milestones = await milestonesService.listMilestones(param(req, 'projectId'));
+  res.json(milestones);
+});
 
-/**
- * Get a single milestone.
- * @param req
- * @param res
- * @param next
- */
-export async function get(req: Request, res: Response, next: NextFunction) {
-  try {
-    const milestone = await milestonesService.getMilestone(param(req, 'milestoneId'));
-    res.json(milestone);
-  } catch (err) {
-    next(err);
-  }
-}
+export const get = asyncHandler(async (req: Request, res: Response) => {
+  const milestone = await milestonesService.getMilestone(param(req, 'milestoneId'));
+  res.json(milestone);
+});
 
-/**
- * Update a milestone.
- * @param req
- * @param res
- * @param next
- */
-export async function update(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = validate(updateMilestoneSchema, req.body);
-    const milestone = await milestonesService.updateMilestone(param(req, 'milestoneId'), body);
-    res.json(milestone);
-  } catch (err) {
-    next(err);
-  }
-}
+export const update = asyncHandler(async (req: Request, res: Response) => {
+  const body = validate(updateMilestoneSchema, req.body);
+  const milestone = await milestonesService.updateMilestone(param(req, 'milestoneId'), body);
+  res.json(milestone);
+});
 
-/**
- * Delete a milestone.
- * @param req
- * @param res
- * @param next
- */
-export async function remove(req: Request, res: Response, next: NextFunction) {
-  try {
-    await milestonesService.deleteMilestone(param(req, 'milestoneId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  await milestonesService.deleteMilestone(param(req, 'milestoneId'));
+  res.status(204).send();
+});

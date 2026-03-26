@@ -1,151 +1,62 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 import { validate, adminUpdateUserSchema, adminResetPasswordSchema } from '../../utils/validation';
 
 import * as adminService from './admin.service';
 
-/**
- *
- * @param _req
- * @param res
- * @param next
- */
-export async function getStats(_req: Request, res: Response, next: NextFunction) {
-  try {
-    const stats = await adminService.getSystemStats();
-    res.json(stats);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getStats = asyncHandler(async (_req: Request, res: Response) => {
+  const stats = await adminService.getSystemStats();
+  res.json(stats);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function listUsers(req: Request, res: Response, next: NextFunction) {
-  try {
-    const search = req.query.search as string | undefined;
-    const { take, skip } = parsePagination(req.query as Record<string, string>);
+export const listUsers = asyncHandler(async (req: Request, res: Response) => {
+  const search = req.query.search as string | undefined;
+  const { take, skip } = parsePagination(req.query as Record<string, string>);
 
-    const result = await adminService.listUsers({ search, limit: take, offset: skip });
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+  const result = await adminService.listUsers({ search, limit: take, offset: skip });
+  res.json(result);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function getUser(req: Request, res: Response, next: NextFunction) {
-  try {
-    const userId = param(req, 'userId');
-    const user = await adminService.getUser(userId);
-    res.json(user);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getUser = asyncHandler(async (req: Request, res: Response) => {
+  const userId = param(req, 'userId');
+  const user = await adminService.getUser(userId);
+  res.json(user);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function updateUser(req: Request, res: Response, next: NextFunction) {
-  try {
-    const userId = param(req, 'userId');
-    const body = validate(adminUpdateUserSchema, req.body);
-    const user = await adminService.updateUser(userId, body);
-    res.json(user);
-  } catch (err) {
-    next(err);
-  }
-}
+export const updateUser = asyncHandler(async (req: Request, res: Response) => {
+  const userId = param(req, 'userId');
+  const body = validate(adminUpdateUserSchema, req.body);
+  const user = await adminService.updateUser(userId, body);
+  res.json(user);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function deleteUser(req: Request, res: Response, next: NextFunction) {
-  try {
-    const userId = param(req, 'userId');
-    const result = await adminService.deleteUser(userId);
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
+  const userId = param(req, 'userId');
+  const result = await adminService.deleteUser(userId);
+  res.json(result);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function deactivateUser(req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await adminService.deactivateUser(param(req, 'userId'));
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const deactivateUser = asyncHandler(async (req: Request, res: Response) => {
+  const result = await adminService.deactivateUser(param(req, 'userId'));
+  res.json(result);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function reactivateUser(req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await adminService.reactivateUser(param(req, 'userId'));
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const reactivateUser = asyncHandler(async (req: Request, res: Response) => {
+  const result = await adminService.reactivateUser(param(req, 'userId'));
+  res.json(result);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function resetUserPassword(req: Request, res: Response, next: NextFunction) {
-  try {
-    const userId = param(req, 'userId');
-    const { newPassword } = validate(adminResetPasswordSchema, req.body);
-    const result = await adminService.resetUserPassword(userId, newPassword);
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const resetUserPassword = asyncHandler(async (req: Request, res: Response) => {
+  const userId = param(req, 'userId');
+  const { newPassword } = validate(adminResetPasswordSchema, req.body);
+  const result = await adminService.resetUserPassword(userId, newPassword);
+  res.json(result);
+});
 
-/**
- *
- * @param _req
- * @param res
- * @param next
- */
-export async function getSettings(_req: Request, res: Response, next: NextFunction) {
-  try {
-    const settings = adminService.getSystemSettings();
-    res.json(settings);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getSettings = asyncHandler(async (_req: Request, res: Response) => {
+  const settings = adminService.getSystemSettings();
+  res.json(settings);
+});

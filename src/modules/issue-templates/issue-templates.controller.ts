@@ -1,90 +1,45 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
+import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
-import { createIssueTemplateSchema, updateIssueTemplateSchema } from '../../utils/validation';
+import {
+  validate,
+  createIssueTemplateSchema,
+  updateIssueTemplateSchema,
+} from '../../utils/validation';
 
 import * as templatesService from './issue-templates.service';
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = createIssueTemplateSchema.parse(req.body);
-    const template = await templatesService.createTemplate(param(req, 'projectId'), data);
-    res.status(201).json(template);
-  } catch (err) {
-    next(err);
-  }
-}
+export const create = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(createIssueTemplateSchema, req.body);
+  const template = await templatesService.createTemplate(param(req, 'projectId'), data);
+  res.status(201).json(template);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const templates = await templatesService.listTemplates(param(req, 'projectId'));
-    res.json(templates);
-  } catch (err) {
-    next(err);
-  }
-}
+export const list = asyncHandler(async (req: Request, res: Response) => {
+  const templates = await templatesService.listTemplates(param(req, 'projectId'));
+  res.json(templates);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function get(req: Request, res: Response, next: NextFunction) {
-  try {
-    const template = await templatesService.getTemplate(
-      param(req, 'projectId'),
-      param(req, 'templateId'),
-    );
-    res.json(template);
-  } catch (err) {
-    next(err);
-  }
-}
+export const get = asyncHandler(async (req: Request, res: Response) => {
+  const template = await templatesService.getTemplate(
+    param(req, 'projectId'),
+    param(req, 'templateId'),
+  );
+  res.json(template);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function update(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = updateIssueTemplateSchema.parse(req.body);
-    const template = await templatesService.updateTemplate(
-      param(req, 'projectId'),
-      param(req, 'templateId'),
-      data,
-    );
-    res.json(template);
-  } catch (err) {
-    next(err);
-  }
-}
+export const update = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(updateIssueTemplateSchema, req.body);
+  const template = await templatesService.updateTemplate(
+    param(req, 'projectId'),
+    param(req, 'templateId'),
+    data,
+  );
+  res.json(template);
+});
 
-/**
- *
- * @param req
- * @param res
- * @param next
- */
-export async function remove(req: Request, res: Response, next: NextFunction) {
-  try {
-    await templatesService.deleteTemplate(param(req, 'projectId'), param(req, 'templateId'));
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  await templatesService.deleteTemplate(param(req, 'projectId'), param(req, 'templateId'));
+  res.status(204).send();
+});

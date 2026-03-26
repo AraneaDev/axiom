@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
  * Create a workflow transition rule for a project.
@@ -17,12 +18,16 @@ export async function createRule(
   }
 
   // Verify both columns belong to this project
-  const [fromCol, toCol] = await Promise.all([
-    prisma.boardColumn.findFirst({ where: { id: data.fromColumnId, projectId } }),
-    prisma.boardColumn.findFirst({ where: { id: data.toColumnId, projectId } }),
+  await Promise.all([
+    findOrThrow(
+      prisma.boardColumn.findFirst({ where: { id: data.fromColumnId, projectId } }),
+      'Source column not found in this project',
+    ),
+    findOrThrow(
+      prisma.boardColumn.findFirst({ where: { id: data.toColumnId, projectId } }),
+      'Target column not found in this project',
+    ),
   ]);
-  if (!fromCol) throw new AppError(404, 'Source column not found in this project');
-  if (!toCol) throw new AppError(404, 'Target column not found in this project');
 
   // Check for duplicate
   const existing = await prisma.workflowRule.findFirst({
@@ -63,8 +68,10 @@ export async function listRules(projectId: string) {
  * @param ruleId
  */
 export async function deleteRule(ruleId: string) {
-  const rule = await prisma.workflowRule.findUnique({ where: { id: ruleId } });
-  if (!rule) throw new AppError(404, 'Workflow rule not found');
+  await findOrThrow(
+    prisma.workflowRule.findUnique({ where: { id: ruleId } }),
+    'Workflow rule not found',
+  );
   return prisma.workflowRule.delete({ where: { id: ruleId } });
 }
 
@@ -82,8 +89,10 @@ export async function updateRule(
   projectId: string,
   data: { fromColumnId?: string; toColumnId?: string; requiredFields?: unknown },
 ) {
-  const rule = await prisma.workflowRule.findUnique({ where: { id: ruleId } });
-  if (!rule) throw new AppError(404, 'Workflow rule not found');
+  const rule = await findOrThrow(
+    prisma.workflowRule.findUnique({ where: { id: ruleId } }),
+    'Workflow rule not found',
+  );
 
   const fromColumnId = data.fromColumnId ?? rule.fromColumnId;
   const toColumnId = data.toColumnId ?? rule.toColumnId;
@@ -94,14 +103,16 @@ export async function updateRule(
 
   // Verify changed columns belong to the project
   if (data.fromColumnId) {
-    const fromCol = await prisma.boardColumn.findFirst({
-      where: { id: data.fromColumnId, projectId },
-    });
-    if (!fromCol) throw new AppError(404, 'Source column not found in this project');
+    await findOrThrow(
+      prisma.boardColumn.findFirst({ where: { id: data.fromColumnId, projectId } }),
+      'Source column not found in this project',
+    );
   }
   if (data.toColumnId) {
-    const toCol = await prisma.boardColumn.findFirst({ where: { id: data.toColumnId, projectId } });
-    if (!toCol) throw new AppError(404, 'Target column not found in this project');
+    await findOrThrow(
+      prisma.boardColumn.findFirst({ where: { id: data.toColumnId, projectId } }),
+      'Target column not found in this project',
+    );
   }
 
   // Check for duplicate if columns changed

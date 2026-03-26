@@ -1,12 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserMinus, UserPlus, Mail, Copy, X, Clock } from 'lucide-react';
+import { UserMinus, UserPlus, Mail, Copy, X, Clock, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
 import type { Invitation } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
-import { useTeamContext } from '@/hooks/useTeamContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -15,6 +14,8 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { useModalState } from '@/hooks/useModalState';
+import { useTeamContext } from '@/hooks/useTeamContext';
 
 const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
   ADMIN: 'primary',
@@ -29,11 +30,15 @@ export default function TeamMembers() {
   const { org, teamSlug, currentOrg, currentTeam } = useTeamContext();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [inviteOpen, setInviteOpen] = useState(false);
+  const inviteModal = useModalState();
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('MEMBER');
 
-  const { data: teamDetail, isLoading } = useQuery({
+  const {
+    data: teamDetail,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['team', currentTeam?.id],
     queryFn: () => teamsApi.get(currentTeam!.id),
     enabled: !!currentTeam?.id,
@@ -65,7 +70,7 @@ export default function TeamMembers() {
       orgsApi.createInvitation(currentOrg!.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invitations', currentOrg?.id, currentTeam?.id] });
-      setInviteOpen(false);
+      inviteModal.close();
       setInviteEmail('');
       setInviteRole('MEMBER');
       toast.success('Invitation sent');
@@ -105,6 +110,17 @@ export default function TeamMembers() {
       </div>
     );
 
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
+          <p className="text-secondary">Failed to load team members</p>
+        </div>
+      </div>
+    );
+  }
+
   const members = teamDetail?.members ?? [];
   const roleBreakdown = members.reduce(
     (acc: Record<string, number>, m: { role: string }) => {
@@ -118,7 +134,7 @@ export default function TeamMembers() {
     <div className="px-6 py-4">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Team Members</h1>
-        <Button onClick={() => setInviteOpen(true)}>
+        <Button onClick={() => inviteModal.open()}>
           <UserPlus className="h-4 w-4" /> Invite Member
         </Button>
       </div>
@@ -245,7 +261,7 @@ export default function TeamMembers() {
       </div>
 
       {/* Invite Member Modal */}
-      <Modal open={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite Member">
+      <Modal open={inviteModal.isOpen} onClose={inviteModal.close} title="Invite Member">
         <form onSubmit={handleInviteSubmit} className="space-y-4">
           <Input
             label="Email address"
@@ -268,7 +284,7 @@ export default function TeamMembers() {
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" type="button" onClick={() => setInviteOpen(false)}>
+            <Button variant="ghost" type="button" onClick={() => inviteModal.close()}>
               <X className="h-4 w-4" /> Cancel
             </Button>
             <Button type="submit" disabled={inviteMutation.isPending}>
