@@ -13,7 +13,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { logAudit } from '../audit/audit.service';
 
 const SALT_ROUNDS = 12;
-const ACCESS_TOKEN_TTL = '15m';
+const ACCESS_TOKEN_TTL = '4h';
 const REFRESH_TOKEN_TTL_DAYS = 30;
 
 function generateTokens(userId: string) {
