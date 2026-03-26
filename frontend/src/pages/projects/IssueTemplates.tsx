@@ -1,13 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Save, X, Pencil, Trash2, FileText, Tag } from 'lucide-react';
 import { useState } from 'react';
-import { useParams } from 'react-router';
 
 import { issueTemplatesApi, type IssueTemplate } from '@/api/issue-templates.api';
 import { labelsApi } from '@/api/labels.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -38,7 +35,7 @@ const TYPE_BADGE_CLASS: Record<string, string> = {
  *
  */
 export default function IssueTemplates() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { currentProject } = useProjectContext();
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -50,22 +47,6 @@ export default function IssueTemplates() {
   const [formTitle, setFormTitle] = useState('');
   const [formBody, setFormBody] = useState('');
   const [formLabels, setFormLabels] = useState<string[]>([]);
-
-  // Resolve project
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['issue-templates', currentProject?.id],

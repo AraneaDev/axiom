@@ -10,16 +10,14 @@ import {
   Timer,
   Users,
 } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
-import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -79,29 +77,7 @@ function AnalyticsSkeleton() {
  *
  */
 export default function ProjectAnalytics() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
-
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
+  const { org, teamSlug, currentProject } = useProjectContext();
 
   const { data: analytics, isLoading } = useQuery({
     queryKey: ['project-analytics', currentProject?.id],

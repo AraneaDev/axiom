@@ -10,12 +10,9 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useParams } from 'react-router';
 
 import { milestonesApi, type Milestone } from '@/api/milestones.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -23,7 +20,6 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
-import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
 type FilterTab = 'all' | 'open' | 'closed';
@@ -162,7 +158,7 @@ function MilestoneCard({
  *
  */
 export default function Milestones() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { currentProject } = useProjectContext();
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -172,30 +168,6 @@ export default function Milestones() {
   const [newDescription, setNewDescription] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Milestone | null>(null);
-
-  // Project resolution
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   const { data: milestones = [], isLoading } = useQuery({
     queryKey: ['milestones', currentProject?.id],

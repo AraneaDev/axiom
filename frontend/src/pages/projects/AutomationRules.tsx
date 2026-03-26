@@ -1,11 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bot, Plus, Trash2, Power, PowerOff, Save, X, PlusCircle, Zap } from 'lucide-react';
 import { useState } from 'react';
-import { useParams } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import {
   automationApi,
   type AutomationCondition,
@@ -268,29 +265,11 @@ function RuleForm({
  *
  */
 export default function AutomationRules() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { currentProject } = useProjectContext();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
-
-  // Resolve project
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   const { data: rules, isLoading } = useQuery({
     queryKey: ['automation-rules', currentProject?.id],

@@ -1,12 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ListPlus, Plus, Settings, Trash2, GripVertical, Save, X } from 'lucide-react';
 import { useState } from 'react';
-import { useParams } from 'react-router';
 
 import { customFieldsApi, type CustomFieldDefinition } from '@/api/custom-fields.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -40,7 +37,7 @@ const TYPE_COLORS: Record<string, string> = {
  *
  */
 export default function CustomFieldSettings() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { currentProject } = useProjectContext();
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -51,22 +48,6 @@ export default function CustomFieldSettings() {
   const [formType, setFormType] = useState('TEXT');
   const [formOptions, setFormOptions] = useState('');
   const [formRequired, setFormRequired] = useState(false);
-
-  // Resolve project
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   const { data: fields = [], isLoading } = useQuery({
     queryKey: ['custom-fields', currentProject?.id],

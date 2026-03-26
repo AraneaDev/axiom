@@ -1,16 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { Download, Timer, Users } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Progress } from '@/components/ui/Progress';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
-import { STABLE_STALE_TIME } from '@/lib/constants';
 
 function formatMinutes(mins: number | null | undefined): string {
   if (mins == null || mins === 0) return '0h';
@@ -42,29 +40,7 @@ function TimeReportSkeleton() {
  *
  */
 export default function TimeReport() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
-
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
+  const { org, teamSlug, currentProject } = useProjectContext();
 
   const { data: report, isLoading } = useQuery({
     queryKey: ['time-report', currentProject?.id],

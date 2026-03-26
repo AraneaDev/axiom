@@ -1,13 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, GitBranch, Plus, Trash2, Workflow } from 'lucide-react';
 import { useState } from 'react';
-import { useParams } from 'react-router';
 
 import { issuesApi } from '@/api/issues.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
 import { workflowsApi } from '@/api/workflows.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -21,30 +18,12 @@ import type { BoardColumn } from '@/lib/types';
  *
  */
 export default function WorkflowEditor() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { currentProject } = useProjectContext();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [fromColumnId, setFromColumnId] = useState('');
   const [toColumnId, setToColumnId] = useState('');
-
-  // Resolve project
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   // Fetch board columns
   const { data: columns } = useQuery({

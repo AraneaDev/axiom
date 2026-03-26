@@ -1,12 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Save, X, Pencil, Trash2, Tag } from 'lucide-react';
 import { useState } from 'react';
-import { useParams } from 'react-router';
 
 import { labelsApi, type LabelWithDescription } from '@/api/labels.api';
-import { orgsApi } from '@/api/orgs.api';
-import { projectsApi } from '@/api/projects.api';
-import { teamsApi } from '@/api/teams.api';
+import { useProjectContext } from '@/hooks/useProjectContext';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
@@ -34,7 +31,7 @@ const PRESET_COLORS = [
  *
  */
 export default function LabelsSettings() {
-  const { org, team: teamSlug, project: projectSlug } = useParams();
+  const { currentProject } = useProjectContext();
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -44,22 +41,6 @@ export default function LabelsSettings() {
   const [formColor, setFormColor] = useState(PRESET_COLORS[0]);
   const [formDescription, setFormDescription] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-
-  // Resolve project
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: projects } = useQuery({
-    queryKey: ['projects', currentTeam?.id],
-    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentProject = projects?.find((p) => p.slug === projectSlug);
 
   const { data: labels = [], isLoading } = useQuery({
     queryKey: ['labels', currentProject?.id],
