@@ -145,7 +145,7 @@ export function MarkdownEditor({
     editorProps: {
       attributes: {
         class: `tiptap-editor prose prose-sm max-w-none dark:prose-invert focus:outline-none ${
-          compact ? 'min-h-[80px]' : 'min-h-[300px]'
+          compact ? 'min-h-[120px]' : 'min-h-[300px]'
         } px-4 py-3`,
       },
     },

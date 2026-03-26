@@ -40,6 +40,7 @@ export const issuesApi = {
       priority?: string;
       assigneeId?: string;
       labels?: string[];
+      dueDate?: string;
     },
   ) => post<Issue>(`/projects/${projectId}/issues`, data),
   /**
