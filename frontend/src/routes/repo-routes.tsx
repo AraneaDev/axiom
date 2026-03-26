@@ -13,6 +13,7 @@ const PRList = lazy(() => import('@/pages/repos/PRList'));
 const PRCreate = lazy(() => import('@/pages/repos/PRCreate'));
 const PRDetail = lazy(() => import('@/pages/repos/PRDetail'));
 const CommitDetail = lazy(() => import('@/pages/repos/CommitDetail'));
+const FileEdit = lazy(() => import('@/pages/repos/FileEdit'));
 const BlameView = lazy(() => import('@/pages/repos/BlameView'));
 const FileHistory = lazy(() => import('@/pages/repos/FileHistory'));
 const BranchCompare = lazy(() => import('@/pages/repos/BranchCompare'));
@@ -112,6 +113,14 @@ export function repoRoutes() {
         element={
           <ErrorBoundary>
             <FileView />
+          </ErrorBoundary>
+        }
+      />
+      <Route
+        path="/:org/:team/repos/:repo/edit/:ref/*"
+        element={
+          <ErrorBoundary>
+            <FileEdit />
           </ErrorBoundary>
         }
       />

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { common, createLowlight } from 'lowlight';
-import { ChevronRight, ChevronDown, Copy, Clock, FileWarning, GitBranch } from 'lucide-react';
+import { ChevronRight, ChevronDown, Copy, Clock, FileWarning, GitBranch, Pencil } from 'lucide-react';
 import React from 'react';
 import { Link, Navigate, useParams, useNavigate } from 'react-router';
 
@@ -214,6 +214,11 @@ export default function FileView() {
           {!isMarkdown && ` · ${lines.length} lines`}
         </span>
         <div className="flex items-center gap-2">
+          <Link to={`${basePath}/edit/${ref}/${filePath}`}>
+            <Button variant="ghost" size="sm">
+              <Pencil className="h-4 w-4" /> Edit
+            </Button>
+          </Link>
           <Link to={`${basePath}/blame/${ref}/${filePath}`}>
             <Button variant="ghost" size="sm">
               <GitBranch className="h-4 w-4" /> Blame

@@ -397,6 +397,20 @@ export const reposApi = {
     del(`/repos/${repoId}/branch-protection/${ruleId}`),
 
   /**
+   * Update a file by committing new content to a branch.
+   * @param repoId
+   * @param ref
+   * @param filePath
+   * @param data
+   */
+  updateFile: (
+    repoId: string,
+    ref: string,
+    filePath: string,
+    data: { content: string; message: string; branch: string },
+  ) => patch<{ sha: string }>(`/repos/${repoId}/blob/${ref}/${filePath}`, data),
+
+  /**
    * List webhooks configured on a repository.
    * @param repoId
    */
