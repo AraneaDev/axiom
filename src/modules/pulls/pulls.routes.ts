@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth';
 import { requireRepoAccess } from '../../middleware/rbac';
 
 import * as pullsController from './pulls.controller';
+import * as hydrateController from './pulls-hydrate.controller';
 
 const router = Router();
 
@@ -17,6 +18,9 @@ router.patch('/:repoId/pulls/:number', requireRepoAccess(), pullsController.upda
 router.post('/:repoId/pulls/:number/close', requireRepoAccess(), pullsController.close);
 router.post('/:repoId/pulls/:number/merge', requireRepoAccess(), pullsController.merge);
 router.get('/:repoId/pulls/:number/merge-checks', requireRepoAccess(), pullsController.mergeChecks);
+
+// PR detail hydration
+router.get('/:repoId/pulls/:number/hydrate', requireRepoAccess(), hydrateController.hydratePRDetail);
 
 // PR diff and commits
 router.get('/:repoId/pulls/:number/diff', requireRepoAccess(), pullsController.getDiff);
