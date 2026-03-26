@@ -988,191 +988,7 @@ const { take, skip } = parseServicePagination(opts);  // defaults: take=25, skip
 6. Use \`parseServicePagination\` for list endpoints
 7. Use \`AppError\` for error responses`,
     },
-    {
-      title: 'MCP Integration Guide',
-      slug: 'mcp-integration',
-      position: 10,
-      author: 'tim',
-      body: `# MCP Integration Guide
-
-The Model Context Protocol (MCP) server built into Axiom lets AI assistants such as Claude interact directly with your projects, issues, repositories, and wiki -- without opening a browser. Claude can list issues, create and update them, browse code, open pull requests, manage sprints, and publish wiki pages entirely through natural-language conversation.
-
-## Connecting from Claude Desktop
-
-Add the following to \`claude_desktop_config.json\` (macOS: \`~/Library/Application Support/Claude/claude_desktop_config.json\`):
-
-\`\`\`json
-{
-  "mcpServers": {
-    "axiom": {
-      "type": "sse",
-      "url": "http://localhost:3000/api/mcp",
-      "headers": {
-        "Authorization": "Bearer <your-access-token>"
-      }
-    }
-  }
-}
-\`\`\`
-
-Restart Claude Desktop. "axiom" will appear in the MCP servers panel.
-
-## Connecting from Claude Code
-
-\`\`\`bash
-claude mcp add axiom --transport sse http://localhost:3000/api/mcp \\
-  --header "Authorization: Bearer <your-access-token>"
-\`\`\`
-
-Obtain a token by calling \`POST /api/auth/login\` with your Axiom credentials. The response includes an \`accessToken\` field.
-
-## Discovery Chain
-
-Because most tools need IDs, start by discovering them:
-
-\`\`\`
-list_orgs()              -> orgId
-list_teams(orgId)        -> teamId
-list_projects(teamId)    -> projectId
-list_repos(teamId)       -> repoId
-list_wiki_spaces(teamId) -> spaceId
-\`\`\`
-
-## Example Workflows
-
-### Triage bugs in a sprint
-
-\`\`\`
-list_orgs -> list_teams -> list_projects
-list_issues(projectId, type: "BUG")
-get_issue(projectId, issueNumber)         <- read full detail
-update_issue(projectId, issueNumber, priority: "HIGH")
-add_comment(projectId, issueNumber, body: "Triaged -- assigning to next sprint")
-\`\`\`
-
-### Review and merge a pull request
-
-\`\`\`
-list_repos(teamId) -> list_pull_requests(repoId, status: "OPEN")
-get_pull_request(repoId, pullNumber)
-get_diff(repoId, base, head)
-merge_pull_request(repoId, pullNumber, strategy: "squash")
-\`\`\`
-
-### Publish documentation
-
-\`\`\`
-list_wiki_spaces(teamId) -> get_page_tree(spaceId)
-create_wiki_page(spaceId, title, slug, body)
-\`\`\`
-
-## Known Limitations
-
-- **Creator attribution**: All resources created via MCP are attributed to the user whose access token is used.
-- **Single SSE connection**: Only one active SSE session at a time. Reconnecting replaces the previous session.`,
-    },
-    {
-      title: 'MCP Tool Reference',
-      slug: 'mcp-tools',
-      position: 11,
-      author: 'tim',
-      body: `# MCP Tool Reference
-
-Axiom exposes 37 MCP tools across 7 categories.
-
----
-
-## Organization (3 tools)
-
-| Tool | Description |
-|---|---|
-| \`list_orgs\` | List organizations the current user belongs to |
-| \`list_teams\` | List teams in an organization (\`orgId\`) |
-| \`list_projects\` | List projects in a team (\`teamId\`) |
-
----
-
-## Issues (8 tools)
-
-| Tool | Key Parameters | Description |
-|---|---|---|
-| \`list_issues\` | \`projectId\`, \`type\`, \`priority\`, \`assigneeId\` | List issues with optional filters |
-| \`get_issue\` | \`projectId\`, \`issueNumber\` | Get full issue detail including comments |
-| \`create_issue\` | \`projectId\`, \`title\`, \`type\`, \`priority\`, \`assigneeId\` | Create a new issue |
-| \`update_issue\` | \`projectId\`, \`issueNumber\`, \`columnId\`, \`priority\`, \`assigneeId\` | Update status, priority, assignee, or sprint |
-| \`delete_issue\` | \`projectId\`, \`issueNumber\` | Permanently delete an issue |
-| \`add_comment\` | \`projectId\`, \`issueNumber\`, \`body\` | Add a markdown comment to an issue |
-| \`list_sprints\` | \`projectId\`, \`status\` | List sprints, optionally filtered by status |
-| \`get_sprint\` | \`sprintId\` | Get a sprint with all its issues |
-
-## Sprints (4 tools)
-
-| Tool | Key Parameters | Description |
-|---|---|---|
-| \`create_sprint\` | \`projectId\`, \`name\`, \`startDate\`, \`endDate\` | Create a sprint in PLANNING status |
-| \`start_sprint\` | \`sprintId\` | Move sprint from PLANNING to ACTIVE |
-| \`complete_sprint\` | \`sprintId\`, \`incompleteIssueDestination\` | Complete active sprint |
-| \`add_issues_to_sprint\` | \`sprintId\`, \`issueIds\` | Add issues to a sprint |
-
----
-
-## Repositories & Git (7 tools)
-
-| Tool | Key Parameters | Description |
-|---|---|---|
-| \`list_repos\` | \`teamId\` | List repositories in a team |
-| \`browse_files\` | \`repoId\`, \`path\`, \`ref\` | List files/directories at a path |
-| \`read_file\` | \`repoId\`, \`filePath\`, \`ref\` | Read file content at a ref |
-| \`get_commits\` | \`repoId\`, \`ref\`, \`limit\` | Get recent commits on a branch |
-| \`get_branches\` | \`repoId\` | List branches |
-| \`list_branches\` | \`repoId\` | List branches with latest commit info |
-| \`get_diff\` | \`repoId\`, \`base\`, \`head\` | Get diff between two refs |
-
----
-
-## Pull Requests (4 tools)
-
-| Tool | Key Parameters | Description |
-|---|---|---|
-| \`list_pull_requests\` | \`repoId\`, \`status\` | List PRs, optionally filtered by status |
-| \`create_pull_request\` | \`repoId\`, \`title\`, \`sourceBranch\`, \`targetBranch\` | Open a new pull request |
-| \`get_pull_request\` | \`repoId\`, \`pullNumber\` | Get PR detail including diff stats |
-| \`merge_pull_request\` | \`repoId\`, \`pullNumber\`, \`strategy\` | Merge a PR (merge/squash/rebase) |
-
----
-
-## CI/CD & Releases (4 tools)
-
-| Tool | Key Parameters | Description |
-|---|---|---|
-| \`list_pipelines\` | \`repoId\` | List CI/CD pipelines for a repository |
-| \`trigger_pipeline\` | \`pipelineId\`, \`ref\` | Trigger a pipeline run on a git ref |
-| \`list_releases\` | \`repoId\`, \`draft\`, \`prerelease\` | List releases with optional filters |
-| \`create_release\` | \`repoId\`, \`tagName\`, \`targetBranch\`, \`name\`, \`body\` | Create a new release |
-
----
-
-## Wiki (6 tools)
-
-| Tool | Key Parameters | Description |
-|---|---|---|
-| \`list_wiki_spaces\` | \`teamId\` | List wiki spaces for a team |
-| \`get_wiki_page\` | \`spaceId\`, \`pageSlug\` | Get a wiki page by space and slug |
-| \`create_wiki_page\` | \`spaceId\`, \`title\`, \`slug\`, \`body\` | Create a new wiki page |
-| \`update_wiki_page\` | \`pageId\`, \`title\`, \`body\` | Update page title and/or body |
-| \`delete_wiki_page\` | \`pageId\` | Permanently delete a wiki page |
-| \`get_page_tree\` | \`spaceId\` | Get the full nested page tree |
-
----
-
-## Search (1 tool)
-
-| Tool | Key Parameters | Description |
-|---|---|---|
-| \`search\` | \`query\`, \`type\`, \`limit\` | Search issues and wiki pages by keyword |
-
-\`type\` accepts \`issues\`, \`wiki\`, or \`all\` (default).`,
-    },
+    // Additional docs are auto-imported from docs/*.md below
   ];
 
   const wikiSpace = await prisma.wikiSpace.upsert({
@@ -1218,6 +1034,55 @@ Axiom exposes 37 MCP tools across 7 categories.
     });
     totalPages++;
   }
+
+  // Auto-import markdown files from docs/ as wiki pages
+  const docsDir = path.resolve(__dirname, '..', 'docs');
+  if (fs.existsSync(docsDir)) {
+    const docFiles = fs.readdirSync(docsDir).filter((f) => f.endsWith('.md'));
+    for (const file of docFiles) {
+      const slug = file.replace(/\.md$/, '');
+      const existingPage = await prisma.page.findUnique({
+        where: { spaceId_slug: { spaceId: wikiSpace.id, slug } },
+      });
+
+      const body = fs.readFileSync(path.join(docsDir, file), 'utf-8');
+      // Derive title from first H1, or from filename
+      const h1Match = body.match(/^#\s+(.+)$/m);
+      const title = h1Match ? h1Match[1] : slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+      if (existingPage) {
+        // Update existing page with latest content from docs/
+        await prisma.page.update({
+          where: { id: existingPage.id },
+          data: { body, title },
+        });
+        totalPages++;
+        continue;
+      }
+
+      const page = await prisma.page.create({
+        data: {
+          spaceId: wikiSpace.id,
+          title,
+          slug,
+          body,
+          position: 100 + totalPages,
+        },
+      });
+
+      await prisma.pageVersion.create({
+        data: {
+          pageId: page.id,
+          title,
+          body,
+          version: 1,
+          authorId: users.tim.id,
+        },
+      });
+      totalPages++;
+    }
+  }
+
   console.warn(`        Axiom Documentation (${totalPages} pages)`);
 
   // ────────────────────────────────────────────────────────────
