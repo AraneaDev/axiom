@@ -225,6 +225,7 @@ export default function IssueList() {
     return (
       <div>
         <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">Issues</h1>
         </div>
         <ListSkeleton rows={8} />
       </div>
@@ -234,12 +235,7 @@ export default function IssueList() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-text">Issues</h1>
-          {currentProject?.prefix && (
-            <span className="text-xs font-mono font-medium text-text-tertiary bg-surface-tertiary px-2 py-1 rounded">
-              {currentProject.prefix}
-            </span>
-          )}
+          <h1 className="text-2xl font-semibold tracking-tight">{currentProject?.name} Issues</h1>
           <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-xs font-medium text-text-secondary">
             {hasActiveSearch || activeFilterCount > 0
               ? `${filteredIssues.length} / ${data?.total ?? 0}`

@@ -257,8 +257,8 @@ export default function Backlog() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-text">Backlog</h1>
-          <p className="text-sm text-text-secondary mt-0.5">Plan sprints and manage your backlog</p>
+          <h1 className="text-2xl font-bold text-text">Backlog</h1>
+          <p className="text-sm text-text-secondary">Plan sprints and manage your backlog</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setShowCreateModal(true)}>
