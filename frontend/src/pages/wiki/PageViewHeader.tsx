@@ -63,6 +63,7 @@ function Breadcrumbs({
 }
 
 const EXPORT_FORMATS = [
+  { key: 'md', label: 'Markdown', icon: FileText },
   { key: 'html', label: 'HTML', icon: FileCode },
   { key: 'docx', label: 'Word (DOCX)', icon: FileType },
   { key: 'epub', label: 'EPUB', icon: BookOpen },

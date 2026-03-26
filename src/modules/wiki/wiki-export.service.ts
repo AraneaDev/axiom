@@ -20,12 +20,25 @@ import { getPage } from './wiki.service';
  * @throws {AppError} 501 if pandoc is not installed
  * @throws {AppError} 404 if page not found
  */
+const SUPPORTED_FORMATS = [...Object.keys(PANDOC_FORMATS), 'md'];
+
 export async function exportPage(spaceId: string, pageSlug: string, format: string, res: Response) {
-  if (!PANDOC_FORMATS[format]) {
+  if (!SUPPORTED_FORMATS.includes(format)) {
     throw new AppError(
       400,
-      `Unsupported format: ${format}. Supported: ${Object.keys(PANDOC_FORMATS).join(', ')}`,
+      `Unsupported format: ${format}. Supported: ${SUPPORTED_FORMATS.join(', ')}`,
     );
+  }
+
+  const page = await getPage(spaceId, pageSlug);
+
+  // Markdown needs no conversion -- serve the raw body directly
+  if (format === 'md') {
+    const slug = page.slug || 'page';
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${slug}.md"`);
+    res.send(page.body ?? '');
+    return;
   }
 
   const installed = await checkPandocInstalled();
@@ -33,6 +46,5 @@ export async function exportPage(spaceId: string, pageSlug: string, format: stri
     throw new AppError(501, 'pandoc is not installed on the server');
   }
 
-  const page = await getPage(spaceId, pageSlug);
   await convertMarkdown(page.body ?? '', page.title, format, res);
 }
