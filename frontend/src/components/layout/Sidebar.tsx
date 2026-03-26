@@ -13,6 +13,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
+import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
 import { STABLE_STALE_TIME } from '@/lib/constants';
@@ -118,6 +119,13 @@ export function Sidebar() {
     if (currentTeam?.id) setCurrentTeam(currentTeam.id);
   }, [currentTeam?.id, setCurrentTeam]);
 
+  const { data: projects } = useQuery({
+    queryKey: ['projects', 'team', currentTeam?.id],
+    queryFn: () => projectsApi.listByTeam(currentTeam!.id),
+    enabled: !!currentTeam?.id,
+    staleTime: STABLE_STALE_TIME,
+  });
+
   if (!sidebarOpen) return null;
 
   return (
@@ -218,6 +226,15 @@ export function Sidebar() {
             <div className="space-y-1">
               <SectionHeader label={currentTeam.name} />
               <NavItem to={`/${org}/${team}/projects`} icon={FolderKanban} label="Projects" />
+              {projects && projects.slice(0, 8).map((project) => (
+                <NavItem
+                  key={project.id}
+                  to={`/${org}/${team}/${project.slug}/board`}
+                  icon={FolderKanban}
+                  label={project.name}
+                  indent
+                />
+              ))}
               <NavItem to={`/${org}/${team}/wiki`} icon={BookOpen} label="Wiki" />
               <NavItem to={`/${org}/${team}/repos`} icon={GitBranch} label="Repositories" />
               <NavItem to={`/${org}/${team}/members`} icon={Users} label="Members" />

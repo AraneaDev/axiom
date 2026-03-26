@@ -7,13 +7,7 @@ import {
   Users,
   BookOpen,
   GitBranch,
-  LayoutList,
-  Settings,
-  Rocket,
   Search,
-  Workflow,
-  GitPullRequest,
-  Tag,
 } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
 
@@ -24,19 +18,13 @@ import { STABLE_STALE_TIME } from '@/lib/constants';
 
 /** Map well-known route keywords to icons and friendly labels */
 const SECTION_META: Record<string, { icon: React.ElementType; label: string }> = {
-  issues: { icon: LayoutList, label: 'Issues' },
   repos: { icon: GitBranch, label: 'Repositories' },
   wiki: { icon: BookOpen, label: 'Wiki' },
-  settings: { icon: Settings, label: 'Settings' },
-  releases: { icon: Rocket, label: 'Releases' },
   search: { icon: Search, label: 'Search' },
-  pipelines: { icon: Workflow, label: 'Pipelines' },
-  pulls: { icon: GitPullRequest, label: 'Pull Requests' },
-  tags: { icon: Tag, label: 'Tags' },
   new: { icon: FolderKanban, label: 'New' },
-  board: { icon: LayoutList, label: 'Board' },
   create: { icon: FolderKanban, label: 'Create' },
 };
+
 
 interface Crumb {
   label: string;
