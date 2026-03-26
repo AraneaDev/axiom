@@ -68,7 +68,7 @@ export default function IssueCreate() {
   if (loadingContext) return <PageLoader />;
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-semibold tracking-tight mb-6">Create Issue</h1>
 
       <div className="rounded-lg border border-border bg-surface p-6">

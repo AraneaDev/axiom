@@ -99,7 +99,7 @@ export function OnboardingWizard() {
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center py-12">
-      <div className="w-full max-w-lg mx-auto">
+      <div className="w-full max-w-4xl mx-auto">
         {/* Step indicators */}
         <div className="flex items-center justify-center mb-10">
           {STEPS.map((s, i) => (

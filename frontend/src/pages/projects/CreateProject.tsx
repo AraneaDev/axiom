@@ -79,7 +79,7 @@ export default function CreateProject() {
   if (loadingOrgs || loadingTeams) return <PageLoader />;
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create project</h1>
       {error && (
         <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">

@@ -47,7 +47,7 @@ export default function CreateOrg() {
   }
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create organization</h1>
 
       {error && (
