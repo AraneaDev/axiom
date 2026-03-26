@@ -7,12 +7,19 @@ import {
   Clock,
   AlertTriangle,
   ExternalLink,
+  TrendingDown,
 } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { useQuery } from '@tanstack/react-query';
+
 import type { DashboardIssue, DashboardPR, DashboardActivity } from '@/api/dashboard.api';
+import { projectsApi } from '@/api/projects.api';
+import { sprintsApi } from '@/api/sprints.api';
+import { BurndownChart } from '@/components/BurndownChart';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Spinner } from '@/components/ui/Spinner';
 import { PRIORITY_COLORS } from '@/lib/constants';
 import { cn, formatRelative } from '@/lib/utils';
 
@@ -299,6 +306,114 @@ export function RecentActivityWidget({ activities }: { activities: DashboardActi
         </div>
       )}
     </Widget>
+  );
+}
+
+// ─── Sprint Health widget ────────────────────────────────────
+
+/**
+ * Shows a compact burndown chart for each project's active sprint in the given team.
+ * @param root0
+ * @param root0.teamId
+ * @param root0.orgSlug
+ * @param root0.teamSlug
+ */
+export function SprintHealthWidget({
+  teamId,
+  orgSlug,
+  teamSlug,
+}: {
+  teamId: string;
+  orgSlug: string;
+  teamSlug: string;
+}) {
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+    queryKey: ['projects', teamId],
+    queryFn: () => projectsApi.listByTeam(teamId),
+    enabled: !!teamId,
+  });
+
+  return (
+    <Widget icon={TrendingDown} title="Sprint Health">
+      {projectsLoading ? (
+        <div className="flex items-center justify-center p-6">
+          <Spinner />
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="p-6 text-center text-sm text-text-tertiary">No projects in this team</div>
+      ) : (
+        <div className="divide-y divide-border">
+          {projects.map((project) => (
+            <ProjectSprintHealth
+              key={project.id}
+              projectId={project.id}
+              projectName={project.name}
+              projectSlug={project.slug}
+              orgSlug={orgSlug}
+              teamSlug={teamSlug}
+            />
+          ))}
+        </div>
+      )}
+    </Widget>
+  );
+}
+
+/**
+ * Renders the active sprint burndown for a single project.
+ * @param root0
+ * @param root0.projectId
+ * @param root0.projectName
+ * @param root0.projectSlug
+ * @param root0.orgSlug
+ * @param root0.teamSlug
+ */
+function ProjectSprintHealth({
+  projectId,
+  projectName,
+  projectSlug,
+  orgSlug,
+  teamSlug,
+}: {
+  projectId: string;
+  projectName: string;
+  projectSlug: string;
+  orgSlug: string;
+  teamSlug: string;
+}) {
+  const { data: sprints = [], isLoading } = useQuery({
+    queryKey: ['sprints', projectId, 'ACTIVE'],
+    queryFn: () => sprintsApi.list(projectId, { status: 'ACTIVE' }),
+    enabled: !!projectId,
+  });
+
+  const activeSprint = sprints.find((s) => s.status === 'ACTIVE');
+
+  return (
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-3">
+        <Link
+          to={`/${orgSlug}/${teamSlug}/${projectSlug}/backlog`}
+          className="text-xs font-medium text-text-secondary hover:text-primary"
+        >
+          {projectName}
+        </Link>
+        {activeSprint && (
+          <Badge variant="primary" size="sm">
+            {activeSprint.name}
+          </Badge>
+        )}
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-4">
+          <Spinner />
+        </div>
+      ) : activeSprint ? (
+        <BurndownChart sprint={activeSprint} />
+      ) : (
+        <p className="text-xs text-text-tertiary py-2">No active sprint</p>
+      )}
+    </div>
   );
 }
 

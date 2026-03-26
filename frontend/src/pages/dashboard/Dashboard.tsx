@@ -16,6 +16,7 @@ import {
   ReviewRequestsWidget,
   UpcomingDueDatesWidget,
   RecentActivityWidget,
+  SprintHealthWidget,
 } from './DashboardWidgets';
 
 import { dashboardApi } from '@/api/dashboard.api';
@@ -177,6 +178,23 @@ export default function Dashboard() {
             <UpcomingDueDatesWidget issues={dashboardData?.upcomingDueDates ?? []} />
             <RecentActivityWidget activities={dashboardData?.recentActivity ?? []} />
           </div>
+
+          {/* Sprint Health */}
+          {teams && teams.length > 0 && firstOrg && (
+            <div>
+              <h2 className="text-lg font-semibold text-text mb-3">Sprint Health</h2>
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                {teams.map((team) => (
+                  <SprintHealthWidget
+                    key={team.id}
+                    teamId={team.id}
+                    orgSlug={firstOrg.slug}
+                    teamSlug={team.slug}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Org cards */}
           <div className="mt-4">
