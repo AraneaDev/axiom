@@ -12,11 +12,11 @@ export interface Milestone {
 }
 
 export const milestonesApi = {
-  list: (projectId: string) => get<Milestone[]>(`/${projectId}/milestones`),
-  get: (milestoneId: string) => get<Milestone>(`/milestones/${milestoneId}`),
+  list: (projectId: string) => get<Milestone[]>(`/projects/${projectId}/milestones`),
+  get: (milestoneId: string) => get<Milestone>(`/projects/milestones/${milestoneId}`),
   create: (projectId: string, data: { title: string; description?: string; dueDate?: string }) =>
-    post<Milestone>(`/${projectId}/milestones`, data),
+    post<Milestone>(`/projects/${projectId}/milestones`, data),
   update: (milestoneId: string, data: Record<string, unknown>) =>
-    patch<Milestone>(`/milestones/${milestoneId}`, data),
-  delete: (milestoneId: string) => del(`/milestones/${milestoneId}`),
+    patch<Milestone>(`/projects/milestones/${milestoneId}`, data),
+  delete: (milestoneId: string) => del(`/projects/milestones/${milestoneId}`),
 };
