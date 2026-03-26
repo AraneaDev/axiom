@@ -6,6 +6,8 @@ export {
   registerSchema,
   loginSchema,
   refreshSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
   createOrgSchema,
   createTeamSchema,
   addTeamMemberSchema,

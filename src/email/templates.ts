@@ -18,6 +18,7 @@ const SUBJECTS: Record<string, (data: TemplateData) => string> = {
   pr_review_requested: (d) => `Review requested: ${d.title}`,
   pr_merged: (d) => `Pull request merged: ${d.title}`,
   mention: (d) => `You were mentioned: ${d.title}`,
+  password_reset: () => 'Reset your Axiom password',
 };
 
 function escapeHtml(str: string): string {

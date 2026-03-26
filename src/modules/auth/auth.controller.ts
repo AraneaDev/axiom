@@ -1,6 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 
-import { registerSchema, loginSchema, refreshSchema } from '../../utils/validation';
+import {
+  registerSchema,
+  loginSchema,
+  refreshSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from '../../utils/validation';
 
 import * as authService from './auth.service';
 
@@ -109,6 +115,38 @@ export async function disableTwoFactor(req: Request, res: Response, next: NextFu
   try {
     const { code } = req.body;
     const result = await authService.disableTwoFactor(req.userId!, code);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function forgotPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { email } = forgotPasswordSchema.parse(req.body);
+    const result = await authService.requestPasswordReset(email);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+export async function resetPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = resetPasswordSchema.parse(req.body);
+    const result = await authService.resetPassword(data.token, data.password);
     res.json(result);
   } catch (err) {
     next(err);
