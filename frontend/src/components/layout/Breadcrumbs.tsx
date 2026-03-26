@@ -16,7 +16,7 @@ import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 
-/** Map well-known route keywords to icons and friendly labels */
+/** Map well-known team-level route keywords to icons and friendly labels */
 const SECTION_META: Record<string, { icon: React.ElementType; label: string }> = {
   repos: { icon: GitBranch, label: 'Repositories' },
   wiki: { icon: BookOpen, label: 'Wiki' },
@@ -25,6 +25,20 @@ const SECTION_META: Record<string, { icon: React.ElementType; label: string }> =
   create: { icon: FolderKanban, label: 'Create' },
 };
 
+/**
+ * Project-level view segments that should NOT appear as breadcrumbs.
+ * The ProjectNavBar handles indicating which view is active.
+ */
+const PROJECT_VIEW_SEGMENTS = new Set([
+  'board',
+  'issues',
+  'backlog',
+  'roadmap',
+  'milestones',
+  'analytics',
+  'time-report',
+  'settings',
+]);
 
 interface Crumb {
   label: string;
@@ -37,9 +51,17 @@ function CrumbSkeleton() {
   return <span className="inline-block h-4 w-16 bg-surface-tertiary rounded animate-pulse" />;
 }
 
+function deSlugify(seg: string) {
+  return seg.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /**
  * Breadcrumbs that resolve URL slugs to human-friendly names
  * using React Query data for orgs, teams, and projects (fetches if cache misses).
+ *
+ * Project routes (/:org/:team/:project/board etc.) show: Org > Team > Project
+ * Issues routes (/:org/:team/:project/issues/123) show: Org > Team > Project > 123
+ * Team-level routes (/:org/:team/repos/:repo) keep existing behavior.
  */
 export function Breadcrumbs() {
   const { pathname } = useLocation();
@@ -70,39 +92,93 @@ export function Breadcrumbs() {
     enabled: !!currentTeam?.id && segments.length > 2,
     staleTime: STABLE_STALE_TIME,
   });
-  const currentProject = projects?.find((p) => p.slug === segments[2]);
 
   if (segments.length === 0) return null;
 
-  const crumbs: Crumb[] = segments.map((seg, i) => {
+  // Determine whether segment[2] is a project slug vs a team-level section (repos, wiki, etc.).
+  // Only treat it as a project when it is not a known SECTION_META keyword and we can confirm
+  // a matching project exists in the fetched list (or the list is still loading).
+  const thirdSeg = segments[2] ?? '';
+  const thirdSegIsKnownSection = !!SECTION_META[thirdSeg];
+  const matchedProject = projects?.find((p) => p.slug === thirdSeg);
+  // While loading, tentatively treat an unknown keyword as a project so we can show skeleton.
+  const isProjectRoute =
+    !!thirdSeg &&
+    !thirdSegIsKnownSection &&
+    segments.length >= 4 &&
+    (projectsLoading || !!matchedProject);
+
+  // Project breadcrumb always links to the board view.
+  const projectBreadcrumbPath =
+    segments.length >= 3 ? `/${segments[0]}/${segments[1]}/${thirdSeg}/board` : '';
+
+  const crumbs: Crumb[] = [];
+
+  segments.forEach((seg, i) => {
     const path = '/' + segments.slice(0, i + 1).join('/');
 
-    // First segment: org
-    if (i === 0 && params.org && seg === params.org) {
-      if (orgsLoading) return { label: seg, path, icon: Building2, loading: true };
-      if (currentOrg) return { label: currentOrg.name, path, icon: Building2 };
+    // Segment 0: org
+    if (i === 0) {
+      if (orgsLoading) {
+        crumbs.push({ label: seg, path, icon: Building2, loading: true });
+      } else {
+        crumbs.push({ label: currentOrg?.name ?? deSlugify(seg), path, icon: Building2 });
+      }
+      return;
     }
 
-    // Second segment: team
-    if (i === 1 && params.team && seg === params.team) {
-      if (teamsLoading) return { label: seg, path, icon: Users, loading: true };
-      if (currentTeam) return { label: currentTeam.name, path, icon: Users };
+    // Segment 1: team
+    if (i === 1) {
+      if (teamsLoading) {
+        crumbs.push({ label: seg, path, icon: Users, loading: true });
+      } else {
+        crumbs.push({ label: currentTeam?.name ?? deSlugify(seg), path, icon: Users });
+      }
+      return;
     }
 
-    // Third segment: project (for issue/board routes) or other entity
-    if (i === 2 && segments.length > 3) {
-      if (projectsLoading) return { label: seg, path, icon: FolderKanban, loading: true };
-      if (currentProject) return { label: currentProject.name, path, icon: FolderKanban };
+    // Segment 2: project slug or team-level section
+    if (i === 2) {
+      if (isProjectRoute) {
+        if (projectsLoading) {
+          crumbs.push({ label: seg, path: projectBreadcrumbPath, icon: FolderKanban, loading: true });
+        } else {
+          crumbs.push({
+            label: matchedProject?.name ?? deSlugify(seg),
+            path: projectBreadcrumbPath,
+            icon: FolderKanban,
+          });
+        }
+        return;
+      }
+      // Team-level section keyword (repos, wiki, etc.)
+      const meta = SECTION_META[seg];
+      if (meta) {
+        crumbs.push({ label: meta.label, path, icon: meta.icon });
+        return;
+      }
+      crumbs.push({ label: deSlugify(seg), path });
+      return;
     }
 
-    // Known section keywords
+    // Segment 3 on project routes: the view name (board, issues, backlog, …) — suppress it.
+    if (isProjectRoute && i === 3 && PROJECT_VIEW_SEGMENTS.has(seg)) {
+      return;
+    }
+
+    // Segment 4+ on project routes: sub-resources like issue numbers
+    if (isProjectRoute && i >= 4) {
+      crumbs.push({ label: deSlugify(seg), path });
+      return;
+    }
+
+    // Segment 3+ on team-level routes: repo name, wiki space/page, etc.
     const meta = SECTION_META[seg];
     if (meta) {
-      return { label: meta.label, path, icon: meta.icon };
+      crumbs.push({ label: meta.label, path, icon: meta.icon });
+      return;
     }
-
-    // Fallback: capitalize and de-slugify
-    return { label: seg.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()), path };
+    crumbs.push({ label: deSlugify(seg), path });
   });
 
   return (
