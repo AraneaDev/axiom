@@ -340,9 +340,11 @@ textarea {
 }
 
 /* Tiptap editor styles */
+/* Base min-height for compact editors (comments, inline).
+   Non-compact editors override via Tailwind min-h-[300px] on the element. */
 .tiptap.ProseMirror,
 div[contenteditable].tiptap-editor {
-  min-height: 120px;
+  min-height: var(--editor-min-h, 120px);
 }
 .tiptap-editor p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);

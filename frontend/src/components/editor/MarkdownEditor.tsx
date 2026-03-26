@@ -310,8 +310,8 @@ export function MarkdownEditor({
       </div>
 
       {/* Editor */}
-      <div className={compact ? 'min-h-[120px]' : 'min-h-[300px]'}>
-        <EditorContent editor={editor} className="h-full [&_.tiptap]:min-h-[inherit]" />
+      <div style={{ ['--editor-min-h' as string]: compact ? '120px' : '300px' }}>
+        <EditorContent editor={editor} />
       </div>
     </div>
   );
