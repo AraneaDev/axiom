@@ -29,6 +29,7 @@ const TeamDetail = lazy(() => import('@/pages/teams/TeamDetail'));
 const TeamMembers = lazy(() => import('@/pages/teams/TeamMembers'));
 const MemberProfile = lazy(() => import('@/pages/teams/MemberProfile'));
 const CreateProject = lazy(() => import('@/pages/projects/CreateProject'));
+const NotFound = lazy(() => import('@/pages/NotFound'));
 
 function SuspenseLoader({ children }: { children: React.ReactNode }) {
   return (
@@ -152,6 +153,9 @@ function AppWithKeyboard() {
 
             {/* Admin, settings, notifications, search */}
             {adminRoutes()}
+
+            {/* Catch-all 404 route */}
+            <Route path="*" element={<SuspenseLoader><NotFound /></SuspenseLoader>} />
           </Route>
         </Route>
       </Routes>
