@@ -184,6 +184,8 @@ export default function PageEdit() {
       } catch {
         /* ignore storage errors */
       }
+      queryClient.invalidateQueries({ queryKey: ['page'] });
+      queryClient.invalidateQueries({ queryKey: ['page-tree'] });
       navigate(`/${org}/${team}/wiki/${spaceSlug}/${isNew ? slug : pageSlug}`);
     },
     onError: (err: unknown) => setError(err instanceof Error ? err.message : 'Failed to save'),
