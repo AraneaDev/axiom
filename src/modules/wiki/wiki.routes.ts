@@ -10,6 +10,7 @@ import {
 } from '../../middleware/rbac';
 
 import * as commentsController from './wiki-comments.controller';
+import * as hydrateController from './wiki-hydrate.controller';
 import * as labelsController from './wiki-labels.controller';
 import * as templatesController from './wiki-templates.controller';
 import * as wikiController from './wiki.controller';
@@ -42,6 +43,11 @@ router.delete(
   '/spaces/:spaceId/pages/:pageSlug',
   requireWikiSpaceAccess(),
   wikiController.deletePage,
+);
+router.get(
+  '/spaces/:spaceId/pages/:pageSlug/hydrate',
+  requireWikiSpaceAccess(),
+  hydrateController.hydrateWikiPage,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/history',
