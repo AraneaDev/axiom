@@ -150,6 +150,24 @@ export async function enforceMergeProtection(repoId: string, targetBranch: strin
     }
   }
 
-  // requireCI would check external status checks — placeholder for now
-  // noDirectPush is enforced at the git protocol level, not here
+
+  if (rule.requireCI) {
+    const pr = await prisma.pullRequest.findUnique({ where: { id: prId } });
+    if (!pr || pr.ciStatus !== 'SUCCESS') {
+      throw new AppError(403, 'CI checks must pass before merging');
+    }
+  }
+
+  if (rule.requireLinear) {
+    const pr = await prisma.pullRequest.findUnique({ where: { id: prId } });
+    if (pr) {
+      const mergeStrategy = pr.mergeStrategy || 'merge';
+      if (mergeStrategy === 'merge') {
+        throw new AppError(
+          403,
+          'Linear history required: use squash or rebase merge strategy instead of merge commit',
+        );
+      }
+    }
+  }
 }
