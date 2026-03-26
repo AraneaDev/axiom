@@ -1,16 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { Eye, GitPullRequest, Plus, GitMerge, XCircle } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
-import { teamsApi } from '@/api/teams.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
-import { STABLE_STALE_TIME } from '@/lib/constants';
+import { useRepoContext } from '@/hooks/useRepoContext';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -25,31 +23,10 @@ const STATUS_ICON = { OPEN: GitPullRequest, MERGED: GitMerge, CLOSED: XCircle };
  *
  */
 export default function PRList() {
-  const { org, team: teamSlug, repo: repoSlug } = useParams();
+  const { org, teamSlug, currentRepo, basePath } = useRepoContext();
   const [statusFilter, setStatusFilter] = useState<string>('OPEN');
   const [myReviews, setMyReviews] = useState(false);
   const { user } = useAuthStore();
-
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: repos } = useQuery({
-    queryKey: ['repos', currentTeam?.id],
-    queryFn: () => reposApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentRepo = repos?.find((r) => r.slug === repoSlug);
 
   const { data: prs, isLoading } = useQuery({
     queryKey: ['prs', currentRepo?.id, statusFilter, myReviews ? user?.id : null],
@@ -77,7 +54,6 @@ export default function PRList() {
         <ListSkeleton rows={5} />
       </div>
     );
-  const basePath = `/${org}/${teamSlug}/repos/${repoSlug}`;
 
   return (
     <div>

@@ -7,18 +7,18 @@ import { PRHeader } from './PRHeader';
 import { PRReviewPanel } from './PRReviewPanel';
 import { PRTimeline } from './PRTimeline';
 
-import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
 import { statusChecksApi } from '@/api/status-checks.api';
-import { teamsApi } from '@/api/teams.api';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
+import { useRepoContext } from '@/hooks/useRepoContext';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
  *
  */
 export default function PRDetail() {
-  const { org, team: teamSlug, repo: repoSlug, number: prNum } = useParams();
+  const { org, teamSlug, repoSlug, currentRepo } = useRepoContext();
+  const { number: prNum } = useParams();
   const queryClient = useQueryClient();
   const [commentBody, setCommentBody] = useState('');
   const [mergeStrategy, setMergeStrategy] = useState('');
@@ -41,20 +41,6 @@ export default function PRDetail() {
     });
   }, []);
 
-  const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-  const { data: repos } = useQuery({
-    queryKey: ['repos', currentTeam?.id],
-    queryFn: () => reposApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-  const currentRepo = repos?.find((r) => r.slug === repoSlug);
   const prNumber = parseInt(prNum!);
 
   const { data: pr, isLoading } = useQuery({

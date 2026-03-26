@@ -1,23 +1,21 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, GitPullRequest, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
-import { orgsApi } from '@/api/orgs.api';
 import { reposApi } from '@/api/repos.api';
-import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
-import { STABLE_STALE_TIME } from '@/lib/constants';
+import { useRepoContext } from '@/hooks/useRepoContext';
 
 /**
  *
  */
 export default function PRCreate() {
-  const { org, team: teamSlug, repo: repoSlug } = useParams();
+  const { currentRepo, basePath } = useRepoContext();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -26,29 +24,6 @@ export default function PRCreate() {
   const [sourceBranch, setSourceBranch] = useState('');
   const [targetBranch, setTargetBranch] = useState('');
 
-  const { data: orgs } = useQuery({
-    queryKey: ['orgs'],
-    queryFn: orgsApi.list,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentOrg = orgs?.find((o) => o.slug === org);
-
-  const { data: teams } = useQuery({
-    queryKey: ['teams', currentOrg?.id],
-    queryFn: () => teamsApi.listByOrg(currentOrg!.id),
-    enabled: !!currentOrg?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentTeam = teams?.find((t) => t.slug === teamSlug);
-
-  const { data: repos } = useQuery({
-    queryKey: ['repos', currentTeam?.id],
-    queryFn: () => reposApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
-  const currentRepo = repos?.find((r) => r.slug === repoSlug);
-
   const { data: branches } = useQuery({
     queryKey: ['branches', currentRepo?.id],
     queryFn: () => reposApi.listBranches(currentRepo!.id),
@@ -56,8 +31,6 @@ export default function PRCreate() {
   });
 
   const branchOptions = (branches ?? []).map((b) => ({ value: b.name, label: b.name }));
-
-  const basePath = `/${org}/${teamSlug}/repos/${repoSlug}`;
 
   const { mutate: createPR, isPending } = useMutation({
     mutationFn: () =>
