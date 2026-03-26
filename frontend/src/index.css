@@ -340,8 +340,9 @@ textarea {
 }
 
 /* Tiptap editor styles */
-.tiptap-editor {
-  min-height: 120px;
+.tiptap-editor,
+.tiptap.ProseMirror {
+  min-height: 120px !important;
 }
 .tiptap-editor p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
