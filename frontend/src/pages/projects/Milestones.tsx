@@ -15,6 +15,7 @@ import { milestonesApi, type Milestone } from '@/api/milestones.api';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -238,22 +239,12 @@ export default function Milestones() {
   return (
     <div className="space-y-6 px-6 py-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Milestones</h1>
-          {currentProject?.prefix && (
-            <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
-              {currentProject.prefix}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={() => setShowCreate(true)} disabled={!currentProject}>
-            <Plus className="h-4 w-4" />
-            New Milestone
-          </Button>
-        </div>
-      </div>
+      <PageHeader title="Milestones" prefix={currentProject?.prefix}>
+        <Button onClick={() => setShowCreate(true)} disabled={!currentProject}>
+          <Plus className="h-4 w-4" />
+          New Milestone
+        </Button>
+      </PageHeader>
 
       {/* Filter tabs */}
       <div className="flex items-center gap-1 border-b border-border">

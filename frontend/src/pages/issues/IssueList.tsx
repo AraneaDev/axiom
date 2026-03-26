@@ -25,6 +25,7 @@ import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
@@ -211,40 +212,32 @@ export default function IssueList() {
 
   return (
     <div className="px-6 py-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{currentProject?.name} Issues</h1>
-          <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
-            {currentProject?.prefix}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={async () => {
-              const token = getAccessToken();
-              const res = await fetch(`/api/projects/${currentProject!.id}/issues/export`, {
-                headers: { Authorization: `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
-              });
-              const blob = await res.blob();
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = 'issues.csv';
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-          >
-            <Download className="h-4 w-4" /> Export CSV
+      <PageHeader title={`${currentProject?.name} Issues`} prefix={currentProject?.prefix}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={async () => {
+            const token = getAccessToken();
+            const res = await fetch(`/api/projects/${currentProject!.id}/issues/export`, {
+              headers: { Authorization: `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'issues.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          <Download className="h-4 w-4" /> Export CSV
+        </Button>
+        <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
+          <Button size="sm">
+            <Plus className="h-4 w-4" /> New Issue
           </Button>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
-            <Button size="sm">
-              <Plus className="h-4 w-4" /> New Issue
-            </Button>
-          </Link>
-        </div>
-      </div>
+        </Link>
+      </PageHeader>
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 mb-4 bg-surface rounded-lg border border-border p-2">

@@ -11,6 +11,7 @@ import { issuesApi } from '@/api/issues.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { BoardSkeleton } from '@/components/ui/Skeleton';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
@@ -335,22 +336,16 @@ export default function Board() {
 
   return (
     <div className="px-6 py-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{currentProject?.name} Board</h1>
-          <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">{currentProject?.prefix}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setShowColumnManager(true)}>
-            <Settings className="h-4 w-4" /> Columns
+      <PageHeader title={`${currentProject?.name} Board`} prefix={currentProject?.prefix}>
+        <Button variant="secondary" size="sm" onClick={() => setShowColumnManager(true)}>
+          <Settings className="h-4 w-4" /> Columns
+        </Button>
+        <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
+          <Button size="sm">
+            <Plus className="h-4 w-4" /> New Issue
           </Button>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
-            <Button size="sm">
-              <Plus className="h-4 w-4" /> New Issue
-            </Button>
-          </Link>
-        </div>
-      </div>
+        </Link>
+      </PageHeader>
 
       <BoardFilters
         filters={filters}

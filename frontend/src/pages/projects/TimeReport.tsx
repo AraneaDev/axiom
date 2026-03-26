@@ -6,6 +6,7 @@ import { projectsApi } from '@/api/projects.api';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Progress } from '@/components/ui/Progress';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
@@ -75,21 +76,11 @@ export default function TimeReport() {
   return (
     <div className="space-y-8 px-6 py-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{currentProject?.name} Time Report</h1>
-          {currentProject?.prefix && (
-            <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
-              {currentProject.prefix}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={handleExportCsv}>
-            <Download className="h-4 w-4" /> Export CSV
-          </Button>
-        </div>
-      </div>
+      <PageHeader title={`${currentProject?.name} Time Report`} prefix={currentProject?.prefix}>
+        <Button variant="secondary" size="sm" onClick={handleExportCsv}>
+          <Download className="h-4 w-4" /> Export CSV
+        </Button>
+      </PageHeader>
 
       {/* Member breakdown */}
       <div className="rounded-lg border border-border bg-surface p-5">

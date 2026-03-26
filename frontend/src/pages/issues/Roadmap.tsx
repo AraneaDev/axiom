@@ -7,6 +7,7 @@ import { issuesApi } from '@/api/issues.api';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { PRIORITY_COLORS } from '@/lib/constants';
@@ -284,23 +285,13 @@ export default function Roadmap() {
 
   return (
     <div className="px-6 py-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{currentProject?.name} Roadmap</h1>
-          {currentProject?.prefix && (
-            <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
-              {currentProject.prefix}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
-            <Button size="sm">
-              <Plus className="h-4 w-4" /> New Issue
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <PageHeader title={`${currentProject?.name} Roadmap`} prefix={currentProject?.prefix}>
+        <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
+          <Button size="sm">
+            <Plus className="h-4 w-4" /> New Issue
+          </Button>
+        </Link>
+      </PageHeader>
 
       {epics.length === 0 ? (
         <EmptyState

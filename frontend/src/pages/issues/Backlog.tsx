@@ -17,6 +17,7 @@ import { BurndownChart } from '@/components/BurndownChart';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
@@ -237,21 +238,11 @@ export default function Backlog() {
 
   return (
     <div className="px-6 py-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Backlog</h1>
-          {currentProject?.prefix && (
-            <span className="text-xs font-mono text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">
-              {currentProject.prefix}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4" /> Create Sprint
-          </Button>
-        </div>
-      </div>
+      <PageHeader title="Backlog" prefix={currentProject?.prefix}>
+        <Button onClick={() => setShowCreateModal(true)}>
+          <Plus className="h-4 w-4" /> Create Sprint
+        </Button>
+      </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main panel: sprints + backlog */}
