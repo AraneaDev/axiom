@@ -3,6 +3,9 @@ import { Link } from 'react-router';
 
 import { Button } from '@/components/ui/Button';
 
+/**
+ *
+ */
 export default function NotFound() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface p-6">

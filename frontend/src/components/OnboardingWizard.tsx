@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, ArrowLeft, Building2, Users, CheckCircle } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
@@ -27,6 +27,9 @@ const STEPS = [
   { label: 'Team' },
 ];
 
+/**
+ *
+ */
 export function OnboardingWizard() {
   const [step, setStep] = useState(0);
   const [orgName, setOrgName] = useState('');

@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import {
   ListChecks,
@@ -11,7 +12,6 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { useQuery } from '@tanstack/react-query';
 
 import type { DashboardIssue, DashboardPR, DashboardActivity } from '@/api/dashboard.api';
 import { projectsApi } from '@/api/projects.api';

@@ -8,8 +8,8 @@ import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Dropdown';
+import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 

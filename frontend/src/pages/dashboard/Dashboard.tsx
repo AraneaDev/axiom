@@ -21,8 +21,8 @@ import {
 import { dashboardApi } from '@/api/dashboard.api';
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
-import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton';

@@ -6,8 +6,6 @@ import { promisify } from 'util';
 import { prisma } from '../../config/database';
 import { cacheable } from '../../config/redis';
 import * as gitCmd from '../../git/git-commands';
-
-const execFileAsync = promisify(execFile);
 import {
   initBareRepo,
   deleteRepo,
@@ -20,6 +18,8 @@ import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Validate a file path to prevent directory traversal and null byte injection.

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Flag,
@@ -10,6 +9,7 @@ import {
   RotateCcw,
   X,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useParams } from 'react-router';
 
 import { milestonesApi, type Milestone } from '@/api/milestones.api';

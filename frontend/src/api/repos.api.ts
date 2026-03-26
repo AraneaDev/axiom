@@ -402,6 +402,9 @@ export const reposApi = {
    * @param ref
    * @param filePath
    * @param data
+   * @param data.content
+   * @param data.message
+   * @param data.branch
    */
   updateFile: (
     repoId: string,

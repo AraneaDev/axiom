@@ -255,8 +255,7 @@ export async function removeTeamMember(teamId: string, memberId: string) {
 /**
  * Get recent activity across a team's projects and repos.
  * @param teamId - The team ID
- * @param limit - Max results (default 20)
- * @param rawLimit
+ * @param rawLimit - Max results (default 20)
  * @returns List of recent activity entries with user info
  */
 export async function getTeamActivity(teamId: string, rawLimit = 20) {

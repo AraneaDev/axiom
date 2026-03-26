@@ -7,6 +7,9 @@ import * as milestonesService from './milestones.service';
 
 /**
  * Create a new milestone.
+ * @param req
+ * @param res
+ * @param next
  */
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
@@ -20,6 +23,9 @@ export async function create(req: Request, res: Response, next: NextFunction) {
 
 /**
  * List milestones for a project.
+ * @param req
+ * @param res
+ * @param next
  */
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
@@ -32,6 +38,9 @@ export async function list(req: Request, res: Response, next: NextFunction) {
 
 /**
  * Get a single milestone.
+ * @param req
+ * @param res
+ * @param next
  */
 export async function get(req: Request, res: Response, next: NextFunction) {
   try {
@@ -44,6 +53,9 @@ export async function get(req: Request, res: Response, next: NextFunction) {
 
 /**
  * Update a milestone.
+ * @param req
+ * @param res
+ * @param next
  */
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
@@ -57,6 +69,9 @@ export async function update(req: Request, res: Response, next: NextFunction) {
 
 /**
  * Delete a milestone.
+ * @param req
+ * @param res
+ * @param next
  */
 export async function remove(req: Request, res: Response, next: NextFunction) {
   try {

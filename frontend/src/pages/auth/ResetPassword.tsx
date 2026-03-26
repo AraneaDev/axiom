@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 
+/**
+ *
+ */
 export default function ResetPassword() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();

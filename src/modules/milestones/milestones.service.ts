@@ -1,6 +1,14 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
+/**
+ *
+ * @param projectId
+ * @param data
+ * @param data.title
+ * @param data.description
+ * @param data.dueDate
+ */
 export async function createMilestone(
   projectId: string,
   data: { title: string; description?: string; dueDate?: string },
@@ -15,6 +23,10 @@ export async function createMilestone(
   });
 }
 
+/**
+ *
+ * @param projectId
+ */
 export async function listMilestones(projectId: string) {
   const milestones = await prisma.milestone.findMany({
     where: { projectId },
@@ -28,6 +40,10 @@ export async function listMilestones(projectId: string) {
   }));
 }
 
+/**
+ *
+ * @param milestoneId
+ */
 export async function getMilestone(milestoneId: string) {
   const milestone = await prisma.milestone.findUnique({
     where: { id: milestoneId },
@@ -39,6 +55,15 @@ export async function getMilestone(milestoneId: string) {
   return milestone;
 }
 
+/**
+ *
+ * @param milestoneId
+ * @param data
+ * @param data.title
+ * @param data.description
+ * @param data.dueDate
+ * @param data.status
+ */
 export async function updateMilestone(
   milestoneId: string,
   data: { title?: string; description?: string; dueDate?: string; status?: 'OPEN' | 'CLOSED' },
@@ -55,6 +80,10 @@ export async function updateMilestone(
   });
 }
 
+/**
+ *
+ * @param milestoneId
+ */
 export async function deleteMilestone(milestoneId: string) {
   await prisma.milestone.delete({ where: { id: milestoneId } });
 }

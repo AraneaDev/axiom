@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-import app from '../../index';
 import { prisma } from '../../config/database';
+import app from '../../index';
 
 describe('Invitations', () => {
   let ownerToken: string;

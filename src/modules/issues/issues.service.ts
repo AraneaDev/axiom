@@ -188,6 +188,7 @@ export async function getIssue(projectId: string, issueNumber: number) {
  * @param filters.label
  * @param filters.limit
  * @param filters.offset
+ * @param filters.sprintId
  * @returns Paginated list of issues with computed keys and total count
  * @throws {AppError} 404 if project not found
  */

@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 
+/**
+ *
+ */
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
