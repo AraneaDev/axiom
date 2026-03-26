@@ -391,6 +391,23 @@ async function main() {
     }
   }
 
+  // Remove wiki pages whose docs/*.md file was deleted or renamed
+  if (fs.existsSync(docsDir)) {
+    const docSlugs = new Set(
+      fs.readdirSync(docsDir).filter((f) => f.endsWith('.md')).map((f) => f.replace(/\.md$/, '')),
+    );
+    const allPages = await prisma.page.findMany({
+      where: { spaceId: wikiSpace.id },
+      select: { id: true, slug: true },
+    });
+    for (const pg of allPages) {
+      if (!docSlugs.has(pg.slug)) {
+        await prisma.pageVersion.deleteMany({ where: { pageId: pg.id } });
+        await prisma.page.delete({ where: { id: pg.id } });
+      }
+    }
+  }
+
   console.warn(`        Axiom Documentation (${totalPages} pages)`);
 
   // ────────────────────────────────────────────────────────────
