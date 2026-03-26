@@ -297,9 +297,12 @@ export default function Roadmap() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-text-secondary">
-          {epics.length} epic{epics.length !== 1 ? 's' : ''} on the timeline
-        </p>
+        <div>
+          <h1 className="text-xl font-bold text-text">Roadmap</h1>
+          <p className="text-sm text-text-secondary mt-0.5">
+            {epics.length} epic{epics.length !== 1 ? 's' : ''} on the timeline
+          </p>
+        </div>
         <div className="flex gap-2">
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
             <Button size="sm">

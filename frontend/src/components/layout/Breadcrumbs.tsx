@@ -121,8 +121,13 @@ export function Breadcrumbs() {
 
     // Segment 2: project slug or team-level section
     if (i === 2) {
-      // Project routes: ProjectNavBar shows the project name, so skip segment 2+ entirely.
       if (isProjectRoute) {
+        // Show project name in breadcrumbs
+        if (projectsLoading) {
+          crumbs.push({ label: seg, path, icon: FolderKanban, loading: true });
+        } else {
+          crumbs.push({ label: matchedProject?.name ?? deSlugify(seg), path, icon: FolderKanban });
+        }
         return;
       }
       // Team-level section keyword (repos, wiki, etc.)
@@ -135,7 +140,7 @@ export function Breadcrumbs() {
       return;
     }
 
-    // Segment 3+ on project routes: suppress all (project name is in ProjectNavBar)
+    // Segment 3+ on project routes: suppress (tab bar handles view name)
     if (isProjectRoute && i >= 3) {
       return;
     }

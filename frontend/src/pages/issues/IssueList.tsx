@@ -234,6 +234,7 @@ export default function IssueList() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-text">Issues</h1>
           {currentProject?.prefix && (
             <span className="text-xs font-mono font-medium text-text-tertiary bg-surface-tertiary px-2 py-1 rounded">
               {currentProject.prefix}
