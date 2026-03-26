@@ -211,6 +211,13 @@ export default function Backlog() {
     },
   });
 
+  // Sort sprints: active first, then planning, then completed
+  const statusOrder: Record<string, number> = { ACTIVE: 0, PLANNING: 1, COMPLETED: 2 };
+  const sortedSprints = useMemo(
+    () => [...sprints].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9)),
+    [sprints],
+  );
+
   const isLoading = (sprintsLoading || backlogLoading) && !hydrationQuery.data;
   if (isLoading)
     return (
@@ -235,13 +242,6 @@ export default function Backlog() {
         </div>
       </div>
     );
-
-  // Sort sprints: active first, then planning, then completed
-  const statusOrder: Record<string, number> = { ACTIVE: 0, PLANNING: 1, COMPLETED: 2 };
-  const sortedSprints = useMemo(
-    () => [...sprints].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9)),
-    [sprints],
-  );
 
   const handleBacklogDrop = (e: React.DragEvent) => {
     e.preventDefault();
