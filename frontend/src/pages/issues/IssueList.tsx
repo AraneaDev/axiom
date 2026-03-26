@@ -120,6 +120,10 @@ export default function IssueList() {
     setAssigneeFilter,
     labelFilter,
     setLabelFilter,
+    sprintFilter,
+    setSprintFilter,
+    columnFilter,
+    setColumnFilter,
     showFilters,
     setShowFilters,
     sortField,
@@ -485,8 +489,14 @@ export default function IssueList() {
           setAssigneeFilter={setAssigneeFilter}
           labelFilter={labelFilter}
           setLabelFilter={setLabelFilter}
+          sprintFilter={sprintFilter}
+          setSprintFilter={setSprintFilter}
+          columnFilter={columnFilter}
+          setColumnFilter={setColumnFilter}
           allAssignees={allAssignees}
           allLabels={allLabels}
+          allSprints={sprints}
+          allColumns={boardColumns.map((c) => ({ id: c.id, name: c.name }))}
           activeFilterCount={activeFilterCount}
         />
       )}

@@ -1,4 +1,4 @@
-import { Filter, User, X } from 'lucide-react';
+import { Filter, User, X, Timer, Columns } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -15,6 +15,16 @@ interface Label {
   name: string;
 }
 
+interface Sprint {
+  id: string;
+  name: string;
+}
+
+interface Column {
+  id: string;
+  name: string;
+}
+
 interface IssueListFiltersProps {
   typeFilter: string[];
   setTypeFilter: (v: string[]) => void;
@@ -24,8 +34,14 @@ interface IssueListFiltersProps {
   setAssigneeFilter: (v: string[]) => void;
   labelFilter: string[];
   setLabelFilter: (v: string[]) => void;
+  sprintFilter: string;
+  setSprintFilter: (v: string) => void;
+  columnFilter: string;
+  setColumnFilter: (v: string) => void;
   allAssignees: Assignee[];
   allLabels: Label[];
+  allSprints: Sprint[];
+  allColumns: Column[];
   activeFilterCount: number;
 }
 
@@ -44,8 +60,14 @@ function toggleFilter(arr: string[], val: string, setter: (v: string[]) => void)
  * @param root0.setAssigneeFilter
  * @param root0.labelFilter
  * @param root0.setLabelFilter
+ * @param root0.sprintFilter
+ * @param root0.setSprintFilter
+ * @param root0.columnFilter
+ * @param root0.setColumnFilter
  * @param root0.allAssignees
  * @param root0.allLabels
+ * @param root0.allSprints
+ * @param root0.allColumns
  * @param root0.activeFilterCount
  */
 export function IssueListFilters({
@@ -57,8 +79,14 @@ export function IssueListFilters({
   setAssigneeFilter,
   labelFilter,
   setLabelFilter,
+  sprintFilter,
+  setSprintFilter,
+  columnFilter,
+  setColumnFilter,
   allAssignees,
   allLabels,
+  allSprints,
+  allColumns,
   activeFilterCount,
 }: IssueListFiltersProps) {
   return (
@@ -155,6 +183,64 @@ export function IssueListFilters({
           </div>
         </div>
       )}
+      <div>
+        <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+          Sprint
+        </p>
+        <div className="flex flex-wrap gap-1">
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => setSprintFilter(sprintFilter === 'none' ? '' : 'none')}
+            className={cn(
+              sprintFilter === 'none'
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border text-text-secondary hover:border-border-focus',
+            )}
+          >
+            <Timer className="h-3 w-3" /> No sprint
+          </Button>
+          {allSprints.map((s) => (
+            <Button
+              key={s.id}
+              variant="outline"
+              size="xs"
+              onClick={() => setSprintFilter(sprintFilter === s.id ? '' : s.id)}
+              className={cn(
+                sprintFilter === s.id
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-text-secondary hover:border-border-focus',
+              )}
+            >
+              <Timer className="h-3 w-3" /> {s.name}
+            </Button>
+          ))}
+        </div>
+      </div>
+      {allColumns.length > 0 && (
+        <div>
+          <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+            Status
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {allColumns.map((c) => (
+              <Button
+                key={c.id}
+                variant="outline"
+                size="xs"
+                onClick={() => setColumnFilter(columnFilter === c.id ? '' : c.id)}
+                className={cn(
+                  columnFilter === c.id
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-text-secondary hover:border-border-focus',
+                )}
+              >
+                <Columns className="h-3 w-3" /> {c.name}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
       {activeFilterCount > 0 && (
         <Button
           variant="ghost"
@@ -164,6 +250,8 @@ export function IssueListFilters({
             setPriorityFilter([]);
             setAssigneeFilter([]);
             setLabelFilter([]);
+            setSprintFilter('');
+            setColumnFilter('');
           }}
           className="text-text-tertiary hover:text-danger self-end"
         >

@@ -199,6 +199,7 @@ export async function listIssues(
     priority?: string;
     assigneeId?: string;
     columnId?: string;
+    sprintId?: string;
     label?: string;
     limit?: number;
     offset?: number;
@@ -207,7 +208,7 @@ export async function listIssues(
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new AppError(404, 'Project not found');
 
-  const cacheKey = `issues:${projectId}:${filters?.offset ?? 0}:${filters?.q || ''}:${filters?.type || ''}:${filters?.priority || ''}:${filters?.assigneeId || ''}:${filters?.columnId || ''}:${filters?.label || ''}`;
+  const cacheKey = `issues:${projectId}:${filters?.offset ?? 0}:${filters?.q || ''}:${filters?.type || ''}:${filters?.priority || ''}:${filters?.assigneeId || ''}:${filters?.columnId || ''}:${filters?.sprintId || ''}:${filters?.label || ''}`;
   return cacheable(cacheKey, 30, async () => {
     const { take, skip } = parseServicePagination(filters, 50);
     const where: Prisma.IssueWhereInput = { projectId };
@@ -225,6 +226,11 @@ export async function listIssues(
     if (filters?.priority) where.priority = filters.priority as Prisma.IssueWhereInput['priority'];
     if (filters?.assigneeId) where.assigneeId = filters.assigneeId;
     if (filters?.columnId) where.columnId = filters.columnId;
+    if (filters?.sprintId === 'none') {
+      where.sprintId = null;
+    } else if (filters?.sprintId) {
+      where.sprintId = filters.sprintId;
+    }
     if (filters?.label) where.labels = { some: { name: filters.label } };
 
     const [issues, total] = await Promise.all([

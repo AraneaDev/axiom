@@ -18,6 +18,8 @@ export function useIssueListFilters(issues: Issue[]) {
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
+  const [sprintFilter, setSprintFilter] = useState<string>('');
+  const [columnFilter, setColumnFilter] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
 
   // Sort state
@@ -87,6 +89,14 @@ export function useIssueListFilters(issues: Issue[]) {
       result = result.filter((i) => i.assignee && assigneeFilter.includes(i.assignee.id));
     if (labelFilter.length > 0)
       result = result.filter((i) => i.labels?.some((l) => labelFilter.includes(l.id)));
+    if (sprintFilter === 'none') {
+      result = result.filter((i) => !i.sprintId);
+    } else if (sprintFilter) {
+      result = result.filter((i) => i.sprintId === sprintFilter);
+    }
+    if (columnFilter) {
+      result = result.filter((i) => i.column?.id === columnFilter);
+    }
     return [...result].sort((a, b) => {
       const cmp =
         sortField === 'priority'
@@ -102,12 +112,19 @@ export function useIssueListFilters(issues: Issue[]) {
     priorityFilter,
     assigneeFilter,
     labelFilter,
+    sprintFilter,
+    columnFilter,
     sortField,
     sortDir,
   ]);
 
   const activeFilterCount =
-    typeFilter.length + priorityFilter.length + assigneeFilter.length + labelFilter.length;
+    typeFilter.length +
+    priorityFilter.length +
+    assigneeFilter.length +
+    labelFilter.length +
+    (sprintFilter ? 1 : 0) +
+    (columnFilter ? 1 : 0);
   const hasActiveSearch = searchQuery.trim().length > 0;
 
   const toggleSort = (field: SortField) => {
@@ -134,6 +151,10 @@ export function useIssueListFilters(issues: Issue[]) {
     setAssigneeFilter,
     labelFilter,
     setLabelFilter,
+    sprintFilter,
+    setSprintFilter,
+    columnFilter,
+    setColumnFilter,
     showFilters,
     setShowFilters,
     // Sort state

@@ -62,6 +62,7 @@ export async function list(req: Request, res: Response, next: NextFunction) {
       priority: req.query.priority as string,
       assigneeId: req.query.assigneeId as string,
       columnId: req.query.columnId as string,
+      sprintId: req.query.sprintId as string,
       label: req.query.label as string,
       limit: clampedLimit,
       offset: skip,
