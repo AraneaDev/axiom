@@ -310,7 +310,9 @@ export function MarkdownEditor({
       </div>
 
       {/* Editor */}
-      <EditorContent editor={editor} />
+      <div className={compact ? 'min-h-[120px]' : 'min-h-[300px]'}>
+        <EditorContent editor={editor} className="h-full [&_.tiptap]:min-h-[inherit]" />
+      </div>
     </div>
   );
 }
