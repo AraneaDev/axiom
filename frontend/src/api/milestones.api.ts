@@ -1,0 +1,22 @@
+import { get, post, patch, del } from './client';
+
+export interface Milestone {
+  id: string;
+  projectId: string;
+  title: string;
+  description?: string;
+  dueDate?: string;
+  status: 'OPEN' | 'CLOSED';
+  issueCount: number;
+  createdAt: string;
+}
+
+export const milestonesApi = {
+  list: (projectId: string) => get<Milestone[]>(`/${projectId}/milestones`),
+  get: (milestoneId: string) => get<Milestone>(`/milestones/${milestoneId}`),
+  create: (projectId: string, data: { title: string; description?: string; dueDate?: string }) =>
+    post<Milestone>(`/${projectId}/milestones`, data),
+  update: (milestoneId: string, data: Record<string, unknown>) =>
+    patch<Milestone>(`/milestones/${milestoneId}`, data),
+  delete: (milestoneId: string) => del(`/milestones/${milestoneId}`),
+};

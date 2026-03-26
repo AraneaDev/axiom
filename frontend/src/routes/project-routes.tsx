@@ -18,6 +18,7 @@ const WorkflowEditor = lazy(() => import('@/pages/projects/WorkflowEditor'));
 const AutomationRules = lazy(() => import('@/pages/projects/AutomationRules'));
 const LabelsSettings = lazy(() => import('@/pages/projects/LabelsSettings'));
 const IssueTemplates = lazy(() => import('@/pages/projects/IssueTemplates'));
+const Milestones = lazy(() => import('@/pages/projects/Milestones'));
 
 const WikiLayout = lazy(() => import('@/pages/wiki/WikiLayout'));
 const WikiHome = lazy(() => import('@/pages/wiki/WikiHome'));
@@ -84,6 +85,14 @@ export function projectRoutes() {
         element={
           <ErrorBoundary>
             <Roadmap />
+          </ErrorBoundary>
+        }
+      />
+      <Route
+        path="/:org/:team/:project/milestones"
+        element={
+          <ErrorBoundary>
+            <Milestones />
           </ErrorBoundary>
         }
       />
