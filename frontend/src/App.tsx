@@ -19,6 +19,8 @@ import { useUIStore } from '@/stores/ui.store';
 const Login = lazy(() => import('@/pages/auth/Login'));
 const Register = lazy(() => import('@/pages/auth/Register'));
 const Setup2FA = lazy(() => import('@/pages/auth/Setup2FA'));
+const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const Dashboard = lazy(() => import('@/pages/dashboard/Dashboard'));
 const CreateOrg = lazy(() => import('@/pages/orgs/CreateOrg'));
 const TeamList = lazy(() => import('@/pages/teams/TeamList'));
@@ -49,6 +51,8 @@ function AppWithKeyboard() {
         <Route element={<GuestGuard />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
         </Route>
 
         {/* Authenticated routes */}

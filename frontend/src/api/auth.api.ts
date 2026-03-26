@@ -46,4 +46,10 @@ export const authApi = {
    * @param code
    */
   disable2FA: (code: string) => post<{ enabled: boolean }>('/auth/2fa/disable', { code }),
+
+  forgotPassword: (email: string) =>
+    post<{ success: boolean }>('/auth/forgot-password', { email }),
+
+  resetPassword: (token: string, password: string) =>
+    post<{ success: boolean }>('/auth/reset-password', { token, password }),
 };
