@@ -358,9 +358,12 @@ export default function Board() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold">{currentProject?.name} Board</h1>
-          <p className="text-sm text-text-secondary">{currentProject?.prefix}</p>
+        <div className="flex items-center gap-2">
+          {currentProject?.prefix && (
+            <span className="text-xs font-mono font-medium text-text-tertiary bg-surface-tertiary px-2 py-1 rounded">
+              {currentProject.prefix}
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => setShowColumnManager(true)}>

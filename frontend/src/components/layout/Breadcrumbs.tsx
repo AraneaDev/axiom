@@ -25,20 +25,6 @@ const SECTION_META: Record<string, { icon: React.ElementType; label: string }> =
   create: { icon: FolderKanban, label: 'Create' },
 };
 
-/**
- * Project-level view segments that should NOT appear as breadcrumbs.
- * The ProjectNavBar handles indicating which view is active.
- */
-const PROJECT_VIEW_SEGMENTS = new Set([
-  'board',
-  'issues',
-  'backlog',
-  'roadmap',
-  'milestones',
-  'analytics',
-  'time-report',
-  'settings',
-]);
 
 interface Crumb {
   label: string;
@@ -108,10 +94,6 @@ export function Breadcrumbs() {
     segments.length >= 4 &&
     (projectsLoading || !!matchedProject);
 
-  // Project breadcrumb always links to the board view.
-  const projectBreadcrumbPath =
-    segments.length >= 3 ? `/${segments[0]}/${segments[1]}/${thirdSeg}/board` : '';
-
   const crumbs: Crumb[] = [];
 
   segments.forEach((seg, i) => {
@@ -139,16 +121,8 @@ export function Breadcrumbs() {
 
     // Segment 2: project slug or team-level section
     if (i === 2) {
+      // Project routes: ProjectNavBar shows the project name, so skip segment 2+ entirely.
       if (isProjectRoute) {
-        if (projectsLoading) {
-          crumbs.push({ label: seg, path: projectBreadcrumbPath, icon: FolderKanban, loading: true });
-        } else {
-          crumbs.push({
-            label: matchedProject?.name ?? deSlugify(seg),
-            path: projectBreadcrumbPath,
-            icon: FolderKanban,
-          });
-        }
         return;
       }
       // Team-level section keyword (repos, wiki, etc.)
@@ -161,14 +135,8 @@ export function Breadcrumbs() {
       return;
     }
 
-    // Segment 3 on project routes: the view name (board, issues, backlog, …) — suppress it.
-    if (isProjectRoute && i === 3 && PROJECT_VIEW_SEGMENTS.has(seg)) {
-      return;
-    }
-
-    // Segment 4+ on project routes: sub-resources like issue numbers
-    if (isProjectRoute && i >= 4) {
-      crumbs.push({ label: deSlugify(seg), path });
+    // Segment 3+ on project routes: suppress all (project name is in ProjectNavBar)
+    if (isProjectRoute && i >= 3) {
       return;
     }
 

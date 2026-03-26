@@ -267,13 +267,8 @@ export default function Roadmap() {
     return (
       <div>
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <Skeleton className="h-7 w-48 mb-2" />
-            <Skeleton className="h-4 w-32" />
-          </div>
+          <Skeleton className="h-4 w-32" />
           <div className="flex gap-2">
-            <Skeleton className="h-8 w-20 rounded-md" />
-            <Skeleton className="h-8 w-20 rounded-md" />
             <Skeleton className="h-8 w-28 rounded-md" />
           </div>
         </div>
@@ -302,12 +297,9 @@ export default function Roadmap() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold">{currentProject?.name} Roadmap</h1>
-          <p className="text-sm text-text-secondary">
-            {epics.length} epic{epics.length !== 1 ? 's' : ''} on the timeline
-          </p>
-        </div>
+        <p className="text-sm text-text-secondary">
+          {epics.length} epic{epics.length !== 1 ? 's' : ''} on the timeline
+        </p>
         <div className="flex gap-2">
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
             <Button size="sm">
