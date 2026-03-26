@@ -52,12 +52,16 @@ export default function IssueList() {
   const pageLimit = parseInt(searchParams.get('limit') || '25');
   const pageOffset = parseInt(searchParams.get('offset') || '0');
 
-  const filters: Record<string, string> = {};
-  for (const [k, v] of searchParams.entries()) filters[k] = v;
+  const filterString = searchParams.toString();
+  const filters: Record<string, string> = useMemo(() => {
+    const f: Record<string, string> = {};
+    for (const [k, v] of searchParams.entries()) f[k] = v;
+    return f;
+  }, [filterString]);
 
   // Hydration: single request for all issues list data
   const hydrationQuery = useQuery({
-    queryKey: ['issues-list-hydrate', currentProject?.id, filters],
+    queryKey: ['issues-list-hydrate', currentProject?.id, filterString],
     queryFn: () => hydrateApi.issuesList(currentProject!.id, filters),
     enabled: !!currentProject?.id,
     retry: 1,
@@ -70,7 +74,7 @@ export default function IssueList() {
     { key: ['board', currentProject?.id], field: 'boardColumns' as const },
     { key: ['sprints', currentProject?.id], field: 'sprints' as const },
     { key: ['saved-filters', currentProject?.id], field: 'savedFilters' as const },
-  ], [currentProject?.id, filters]);
+  ], [currentProject?.id, filterString]);
 
   useEffect(() => {
     if (!hydrationQuery.data) return;
