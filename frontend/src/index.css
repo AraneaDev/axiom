@@ -552,19 +552,24 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
   opacity: 0.6;
 }
 
-/* Task list styling in prose/preview -- rendered as <ul> with <li> containing <input type="checkbox"> */
-.prose ul:has(> li > input[type='checkbox']) {
+/* Task list styling in prose/preview -- marked GFM renders task lists with these classes */
+.prose ul.contains-task-list,
+ul.contains-task-list {
   list-style: none !important;
-  padding-left: 0 !important;
+  padding-left: 0.5rem !important;
 }
-.prose ul > li:has(> input[type='checkbox']) {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
+.prose li.task-list-item,
+li.task-list-item {
+  list-style: none !important;
 }
-.prose ul > li > input[type='checkbox'] {
-  flex-shrink: 0;
-  margin-top: 0.3rem;
+.prose li.task-list-item > input[type='checkbox'],
+li.task-list-item > input[type='checkbox'] {
+  margin-right: 0.5rem;
+}
+
+/* Collapsible content in editor -- tighten inner spacing */
+.collapsible-content p {
+  margin: 0.125rem 0;
 }
 
 /* TipTap callout content -- prevent paragraph margins inside callout */
