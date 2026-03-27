@@ -9,6 +9,7 @@ import { broadcastToRoom } from '../../realtime/ws-server';
 import { logger } from '../../utils/logger';
 import { createOrUpdateStatus } from '../status-checks/status-checks.service';
 
+import { buildSafeEnv } from './pipeline-env';
 import { parsePipelineYaml, getTopologicalOrder } from './pipeline-parser';
 import type { ParsedStep } from './pipeline-parser';
 
@@ -87,7 +88,11 @@ async function executeStep(
   });
 
   return new Promise((resolve) => {
-    const env = { ...process.env, ...ctx.env, ...(step.env ?? {}) };
+    const env = buildSafeEnv(
+      process.env as Record<string, string | undefined>,
+      ctx.env,
+      step.env ?? {},
+    );
     const proc = spawn('sh', ['-c', step.run], {
       cwd: ctx.tmpDir,
       env,
