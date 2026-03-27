@@ -87,6 +87,9 @@ function sanitize(raw: string, basePath?: string) {
       'data-table-of-contents',
       'data-type',
       'data-checked',
+      'checked',
+      'disabled',
+      'type',
     ],
     ADD_TAGS: ['input'],
   });
@@ -101,8 +104,8 @@ function sanitize(raw: string, basePath?: string) {
   // Add task-list classes to <ul>/<li> elements containing checkboxes
   const withTaskLists = collapseImageParagraphs(linkifyMentionsAndRefs(withIssueKeys, basePath));
   return withTaskLists
-    .replace(/<li>(\s*<input[^>]*type="checkbox")/g, '<li class="task-list-item">$1')
-    .replace(/<ul>\n(<li class="task-list-item")/g, '<ul class="task-list">\n$1');
+    .replace(/<li>(\s*<input[^>]*?type="checkbox")/gi, '<li class="task-list-item">$1')
+    .replace(/<ul>([\s\S]*?<li class="task-list-item")/g, '<ul class="task-list">$1');
 }
 
 function parseMarkdown(markdown: string, basePath?: string): Segment[] {
