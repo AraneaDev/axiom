@@ -49,10 +49,7 @@ export const attachmentsApi = {
     });
 
     if (!res.ok) {
-      const body = await res.json().catch((err) => {
-        console.error('Failed to parse error response JSON', err);
-        return {};
-      });
+      const body = await res.json().catch(() => ({}));
       throw new Error(body.error?.message ?? 'Upload failed');
     }
 
@@ -79,10 +76,7 @@ export const attachmentsApi = {
     const res = await fetch(`${API_BASE}?${params.toString()}`, { headers });
 
     if (!res.ok) {
-      const body = await res.json().catch((err) => {
-        console.error('Failed to parse error response JSON', err);
-        return {};
-      });
+      const body = await res.json().catch(() => ({}));
       throw new Error(body.error?.message ?? 'Failed to list attachments');
     }
 
@@ -130,10 +124,7 @@ export const attachmentsApi = {
     });
 
     if (!res.ok && res.status !== 204) {
-      const body = await res.json().catch((err) => {
-        console.error('Failed to parse error response JSON', err);
-        return {};
-      });
+      const body = await res.json().catch(() => ({}));
       throw new Error(body.error?.message ?? 'Failed to delete attachment');
     }
   },
