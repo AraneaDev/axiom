@@ -123,9 +123,7 @@ export function CalloutBlock({ node, updateAttributes }: NodeViewProps) {
             </div>
           )}
         </div>
-        <div className="flex-1 min-w-0">
-          <NodeViewContent className="callout-content" />
-        </div>
+        <NodeViewContent as="div" className="flex-1 min-w-0 callout-content [&>p]:my-0" />
       </div>
     </NodeViewWrapper>
   );

@@ -256,14 +256,16 @@ function ReadOnlyTableOfContents({
 function processCustomBlocks(html: string, allHtml: string): React.ReactNode[] {
   // Parse the full document HTML for headings (used by TOC blocks)
   const tocHeadings: { level: number; text: string; id: string }[] = [];
-  const headingRegex = /<h([1-3])\s+id="([^"]*)"[^>]*>(.*?)<\/h\1>/gi;
-  let hMatch;
-  while ((hMatch = headingRegex.exec(allHtml)) !== null) {
-    const level = parseInt(hMatch[1], 10);
-    const id = hMatch[2];
-    const text = hMatch[3].replace(/<[^>]+>/g, '');
-    tocHeadings.push({ level, text, id });
-  }
+  const tocParser = document.createElement('div');
+  tocParser.innerHTML = allHtml;
+  tocParser.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((el) => {
+    const level = parseInt(el.tagName[1], 10);
+    const text = el.textContent || '';
+    const id = el.id || headingSlug(text);
+    if (text.trim()) {
+      tocHeadings.push({ level, text, id });
+    }
+  });
 
   const parts: React.ReactNode[] = [];
 
