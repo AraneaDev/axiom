@@ -106,8 +106,11 @@ export async function createIssue(
         },
       });
       break;
-    } catch (err: unknown) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        (err as { code: string }).code === 'P2002'
+      ) {
         retries--;
         if (retries === 0) throw err;
         continue;

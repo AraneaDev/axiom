@@ -1,7 +1,19 @@
+import type { BoardColumn, Issue, Label, Sprint } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+
+type BasicUser = { id: string; username: string; displayName: string };
+type IssueWithRelations = Issue & {
+  assignee: BasicUser | null;
+  labels: Label[];
+  column: { id: string; name: string } | null;
+};
+type SprintWithIssues = Sprint & { issues: IssueWithRelations[] };
+type IssueWithColumn = Issue & { column: BoardColumn | null };
 
 /**
  * Create a new sprint in PLANNING status.
@@ -52,9 +64,9 @@ export async function createSprint(
 export async function listSprints(projectId: string, opts?: { status?: string }) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
-  const where: Record<string, unknown> = { projectId };
+  const where: Prisma.SprintWhereInput = { projectId };
   if (opts?.status) {
-    where.status = opts.status;
+    where.status = opts.status as Prisma.EnumSprintStatusFilter;
   }
 
   const sprints = await prisma.sprint.findMany({
@@ -71,9 +83,12 @@ export async function listSprints(projectId: string, opts?: { status?: string })
     orderBy: { startDate: 'desc' },
   });
 
-  return sprints.map((s) => ({
+  return (sprints as SprintWithIssues[]).map((s: SprintWithIssues) => ({
     ...s,
-    _storyPoints: s.issues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0),
+    _storyPoints: s.issues.reduce(
+      (sum: number, i: IssueWithRelations) => sum + (i.storyPoints ?? 0),
+      0,
+    ),
   }));
 }
 
@@ -102,7 +117,10 @@ export async function getSprint(sprintId: string) {
 
   return {
     ...sprint,
-    _storyPoints: sprint.issues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0),
+    _storyPoints: (sprint as SprintWithIssues).issues.reduce(
+      (sum: number, i: IssueWithRelations) => sum + (i.storyPoints ?? 0),
+      0,
+    ),
   };
 }
 
@@ -214,7 +232,9 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
   }
 
   // Find incomplete issues (not in a "done" column)
-  const incompleteIssueIds = sprint.issues.filter((i) => !i.column?.isDone).map((i) => i.id);
+  const incompleteIssueIds = (sprint as Sprint & { issues: IssueWithColumn[] }).issues
+    .filter((i: IssueWithColumn) => !i.column?.isDone)
+    .map((i: IssueWithColumn) => i.id);
 
   // Move incomplete issues
   if (incompleteIssueIds.length > 0) {
@@ -297,13 +317,17 @@ export async function getVelocity(projectId: string, sprintCount = 5) {
     },
   });
 
-  return completedSprints
-    .map((s) => ({
+  type SprintWithPoints = Sprint & { issues: { storyPoints: number | null }[] };
+  return (completedSprints as SprintWithPoints[])
+    .map((s: SprintWithPoints) => ({
       sprintId: s.id,
       sprintName: s.name,
       startDate: s.startDate,
       endDate: s.endDate,
-      completedPoints: s.issues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0),
+      completedPoints: s.issues.reduce(
+        (sum: number, i: { storyPoints: number | null }) => sum + (i.storyPoints ?? 0),
+        0,
+      ),
       issueCount: s.issues.length,
     }))
     .reverse(); // chronological order
@@ -331,5 +355,8 @@ export async function getBacklog(projectId: string) {
     orderBy: { createdAt: 'desc' },
   });
 
-  return issues.map((i) => ({ ...i, key: `${project.prefix}-${i.number}` }));
+  return (issues as IssueWithRelations[]).map((i: IssueWithRelations) => ({
+    ...i,
+    key: `${project.prefix}-${i.number}`,
+  }));
 }

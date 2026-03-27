@@ -18,6 +18,15 @@ interface ParentIssuePickerProps {
   onEditField: (field: string | null) => void;
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.issue
+ * @param root0.projectId
+ * @param root0.num
+ * @param root0.isEditing
+ * @param root0.onEditField
+ */
 export function ParentIssuePicker({
   issue,
   projectId,

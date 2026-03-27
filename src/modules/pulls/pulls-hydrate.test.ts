@@ -68,7 +68,13 @@ describe('PR Detail Hydration API', () => {
     await fs.writeFile(path.join(workDir, 'README.md'), '# Hydrate Test');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
     await execFileAsync('git', [
-      '-C', workDir, 'commit', '-m', 'Initial commit', '--author', 'Test <t@t.com>',
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Initial commit',
+      '--author',
+      'Test <t@t.com>',
     ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'main']);
 
@@ -77,7 +83,13 @@ describe('PR Detail Hydration API', () => {
     await fs.writeFile(path.join(workDir, 'hydrate.ts'), 'export const hydrate = true;');
     await execFileAsync('git', ['-C', workDir, 'add', '.']);
     await execFileAsync('git', [
-      '-C', workDir, 'commit', '-m', 'Add hydrate module', '--author', 'Test <t@t.com>',
+      '-C',
+      workDir,
+      'commit',
+      '-m',
+      'Add hydrate module',
+      '--author',
+      'Test <t@t.com>',
     ]);
     await execFileAsync('git', ['-C', workDir, 'push', 'origin', 'feature/hydrate']);
 

@@ -1,9 +1,13 @@
 import { execSync } from 'child_process';
 
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 describe('seed-demo', () => {
   beforeAll(() => {

@@ -18,6 +18,13 @@ interface CustomFieldEditorProps {
   teamMembers: TeamMember[] | undefined;
 }
 
+/**
+ *
+ * @param root0
+ * @param root0.issueId
+ * @param root0.projectId
+ * @param root0.teamMembers
+ */
 export function CustomFieldEditor({ issueId, projectId, teamMembers }: CustomFieldEditorProps) {
   const queryClient = useQueryClient();
 

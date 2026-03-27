@@ -30,6 +30,7 @@ export const issuesApi = {
    * @param data.priority
    * @param data.assigneeId
    * @param data.labels
+   * @param data.dueDate
    */
   create: (
     projectId: string,

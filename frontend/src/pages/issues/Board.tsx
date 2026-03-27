@@ -3,8 +3,8 @@ import { Plus, ChevronDown, ChevronRight, Settings } from 'lucide-react';
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link } from 'react-router';
 
-import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
 import type { Filters, GroupBy } from './BoardFilters';
+import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
 import { ColumnManager } from './ColumnManager';
 
 import { issuesApi } from '@/api/issues.api';
@@ -81,13 +81,15 @@ function IssueCard({
   org,
   team,
   project,
+  columnId,
   onDragStart,
 }: {
   issue: Issue;
   org: string;
   team: string;
   project: string;
-  onDragStart: (e: React.DragEvent, issue: Issue) => void;
+  columnId: string;
+  onDragStart: (e: React.DragEvent, issue: Issue, columnId: string) => void;
 }) {
   return (
     <Link
@@ -95,7 +97,7 @@ function IssueCard({
       draggable
       onDragStart={(e) => {
         e.stopPropagation();
-        onDragStart(e, issue);
+        onDragStart(e, issue, columnId);
       }}
       className="block rounded-md border border-border bg-surface p-3 hover:shadow-md hover:border-primary/50 hover:bg-surface-secondary transition-all cursor-grab active:cursor-grabbing"
     >
@@ -165,6 +167,7 @@ function Column({
   onDragOver,
   onDrop,
   dragOverColumnId,
+  dragSourceColumnId,
   groupBy,
   filters,
 }: {
@@ -172,14 +175,18 @@ function Column({
   org: string;
   team: string;
   project: string;
-  onDragStart: (e: React.DragEvent, issue: Issue) => void;
+  onDragStart: (e: React.DragEvent, issue: Issue, columnId: string) => void;
   onDragOver: (e: React.DragEvent, columnId: string) => void;
   onDrop: (e: React.DragEvent, columnId: string) => void;
   dragOverColumnId: string | null;
+  dragSourceColumnId: string | null;
   groupBy: GroupBy;
   filters: Filters;
 }) {
   const isOver = dragOverColumnId === column.id;
+  const isDragging = dragSourceColumnId !== null;
+  const isSource = dragSourceColumnId === column.id;
+  const isValidTarget = isDragging && !isSource;
   const filteredIssues = useMemo(
     () => applyFilters(column.issues, filters),
     [column.issues, filters],
@@ -201,8 +208,12 @@ function Column({
         onDrop={(e) => onDrop(e, column.id)}
         className={cn(
           'flex-1 rounded-lg bg-surface-secondary p-2 min-h-[200px] transition-all duration-150',
-          column.isDone && 'opacity-60',
-          isOver && 'ring-2 ring-primary/40 bg-primary/5',
+          column.isDone && !isDragging && 'opacity-60',
+          isValidTarget &&
+            !isOver &&
+            'ring-2 ring-primary/30 border-dashed border-2 border-primary/30',
+          isOver && 'ring-2 ring-primary bg-primary/10 scale-[1.02] shadow-lg',
+          isSource && isDragging && 'opacity-40 scale-[0.98]',
         )}
       >
         {lanes.map((lane) => (
@@ -214,6 +225,7 @@ function Column({
                 org={org}
                 team={team}
                 project={project}
+                columnId={column.id}
                 onDragStart={onDragStart}
               />
             ))}
@@ -236,6 +248,7 @@ export default function Board() {
     setPreferredView('board');
   }, [setPreferredView]);
   const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
+  const [dragSourceColumnId, setDragSourceColumnId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [showColumnManager, setShowColumnManager] = useState(false);
@@ -284,12 +297,13 @@ export default function Board() {
     },
   });
 
-  const handleDragStart = useCallback((e: React.DragEvent, issue: Issue) => {
+  const handleDragStart = useCallback((e: React.DragEvent, issue: Issue, columnId: string) => {
     e.dataTransfer.setData(
       'application/json',
-      JSON.stringify({ issueId: issue.id, sourceColumnId: issue.column?.id }),
+      JSON.stringify({ issueId: issue.id, sourceColumnId: columnId }),
     );
     e.dataTransfer.effectAllowed = 'move';
+    setDragSourceColumnId(columnId);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, columnId: string) => {
@@ -302,6 +316,7 @@ export default function Board() {
     (e: React.DragEvent, targetColumnId: string) => {
       e.preventDefault();
       setDragOverColumnId(null);
+      setDragSourceColumnId(null);
       try {
         const data = JSON.parse(e.dataTransfer.getData('application/json'));
         if (data.sourceColumnId === targetColumnId) return;
@@ -366,6 +381,10 @@ export default function Board() {
       <div
         className="flex gap-4 overflow-x-auto pb-4"
         onDragLeave={() => setDragOverColumnId(null)}
+        onDragEnd={() => {
+          setDragOverColumnId(null);
+          setDragSourceColumnId(null);
+        }}
       >
         {columns?.map((col) => (
           <Column
@@ -378,6 +397,7 @@ export default function Board() {
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             dragOverColumnId={dragOverColumnId}
+            dragSourceColumnId={dragSourceColumnId}
             groupBy={groupBy}
             filters={filters}
           />

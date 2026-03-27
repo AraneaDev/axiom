@@ -1,7 +1,8 @@
 import { Check, Hash, Pencil, Target, User } from 'lucide-react';
+
+import { CustomFieldEditor } from './CustomFieldEditor';
 import { IssueDetailWorklog } from './IssueDetailWorklog';
 import { ParentIssuePicker } from './ParentIssuePicker';
-import { CustomFieldEditor } from './CustomFieldEditor';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';

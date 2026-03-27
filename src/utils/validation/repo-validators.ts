@@ -125,7 +125,7 @@ export const updateReleaseSchema = z.object({
 export const createEnvironmentSchema = z.object({
   name: z.string().min(1).max(100),
   url: z.string().url().optional(),
-  protectionRules: z.record(z.unknown()).optional(),
+  protectionRules: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const updateEnvironmentSchema = createEnvironmentSchema.partial();

@@ -11,6 +11,7 @@ router.use(express.raw({ type: 'application/x-git-*', limit: '100mb' }));
 router.get('/:org/:team/:repo.git/info/refs', handleInfoRefs);
 
 // Data transfer: POST /:org/:team/:repo.git/git-upload-pack|git-receive-pack
-router.post('/:org/:team/:repo.git/:service(git-upload-pack|git-receive-pack)', handleServiceRpc);
+router.post('/:org/:team/:repo.git/git-upload-pack', handleServiceRpc);
+router.post('/:org/:team/:repo.git/git-receive-pack', handleServiceRpc);
 
 export default router;

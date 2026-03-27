@@ -1,4 +1,4 @@
-FROM node:22-alpine AS base
+FROM node:25-alpine AS base
 RUN apk add --no-cache git pandoc weasyprint font-noto
 WORKDIR /app
 
@@ -7,6 +7,7 @@ FROM base AS deps
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 RUN npx prisma generate
 
 # Build
@@ -21,6 +22,7 @@ ENV NODE_ENV=production
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
+COPY --from=deps /app/prisma.config.ts ./
 COPY --from=build /app/dist ./dist
 COPY package.json ./
 

@@ -5,6 +5,9 @@ import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 
+/**
+ *
+ */
 export function useTeamContext() {
   const { org, team: teamSlug } = useParams();
 
@@ -25,5 +28,12 @@ export function useTeamContext() {
 
   const basePath = `/${org}/${teamSlug}`;
 
-  return { org, teamSlug, currentOrg, currentTeam, basePath, isLoading: !currentOrg || !currentTeam };
+  return {
+    org,
+    teamSlug,
+    currentOrg,
+    currentTeam,
+    basePath,
+    isLoading: !currentOrg || !currentTeam,
+  };
 }

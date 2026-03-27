@@ -68,9 +68,7 @@ describe('Wiki Page Hydration API', () => {
   });
 
   afterAll(async () => {
-    await prisma.organization
-      .delete({ where: { slug: 'wiki-hydrate-test-org' } })
-      .catch(() => {});
+    await prisma.organization.delete({ where: { slug: 'wiki-hydrate-test-org' } }).catch(() => {});
     await prisma.user.delete({ where: { username: 'wiki-hydrate-test-user' } }).catch(() => {});
   });
 

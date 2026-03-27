@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { OrgRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { authenticator } from 'otplib';
+import { generateSecret, generateURI, verifySync } from 'otplib';
 
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
@@ -141,7 +141,7 @@ export async function login(data: { login: string; password: string; twoFactorCo
     if (!user.twoFactorSecret) {
       throw new AppError(500, '2FA misconfigured');
     }
-    const isValid = authenticator.verify({
+    const isValid = verifySync({
       token: data.twoFactorCode,
       secret: user.twoFactorSecret,
     });
@@ -254,8 +254,8 @@ export async function enableTwoFactor(userId: string) {
   );
   if (user.twoFactorEnabled) throw new AppError(400, '2FA already enabled');
 
-  const secret = authenticator.generateSecret();
-  const otpauthUrl = authenticator.keyuri(user.email, 'Axiom', secret);
+  const secret = generateSecret();
+  const otpauthUrl = generateURI({ label: user.email, issuer: 'Axiom', secret });
 
   // Store secret (not yet enabled — user must verify first)
   await prisma.user.update({
@@ -279,7 +279,7 @@ export async function verifyAndActivateTwoFactor(userId: string, code: string) {
     throw new AppError(400, 'Call enable-2fa first');
   }
 
-  const isValid = authenticator.verify({ token: code, secret: user.twoFactorSecret });
+  const isValid = verifySync({ token: code, secret: user.twoFactorSecret });
   if (!isValid) throw new AppError(400, 'Invalid 2FA code');
 
   await prisma.user.update({
@@ -304,7 +304,7 @@ export async function disableTwoFactor(userId: string, code: string) {
     throw new AppError(400, '2FA not enabled');
   }
 
-  const isValid = authenticator.verify({ token: code, secret: user.twoFactorSecret });
+  const isValid = verifySync({ token: code, secret: user.twoFactorSecret });
   if (!isValid) throw new AppError(401, 'Invalid 2FA code');
 
   await prisma.user.update({

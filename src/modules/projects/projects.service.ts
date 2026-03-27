@@ -1,6 +1,13 @@
+import type { BoardColumn, Project } from '@prisma/client';
+
 import { prisma } from '../../config/database';
 import { checkUnique } from '../../utils/check-unique';
 import { findOrThrow } from '../../utils/find-or-throw';
+
+type ProjectWithColumns = Project & { columns: BoardColumn[] };
+type ColumnCountRow = { columnId: string | null; _count: { id: number } };
+type PriorityCountRow = { priority: string; _count: { id: number } };
+type ClosedIssueRow = { createdAt: Date; updatedAt: Date };
 
 const DEFAULT_COLUMNS = [
   { name: 'Backlog', position: 0, isDefault: true, isDone: false },
@@ -118,8 +125,10 @@ export async function getProjectAnalytics(projectId: string) {
     where: { projectId },
     _count: { id: true },
   });
-  const columnMap = new Map(project.columns.map((c) => [c.id, c]));
-  const issuesByStatus = columnCounts.map((row) => {
+  const columnMap = new Map<string, BoardColumn>(
+    (project as ProjectWithColumns).columns.map((c: BoardColumn) => [c.id, c]),
+  );
+  const issuesByStatus = (columnCounts as ColumnCountRow[]).map((row: ColumnCountRow) => {
     const col = row.columnId ? columnMap.get(row.columnId) : null;
     return {
       status: col?.name ?? 'Unassigned',
@@ -134,7 +143,7 @@ export async function getProjectAnalytics(projectId: string) {
     where: { projectId },
     _count: { id: true },
   });
-  const issuesByPriority = priorityCounts.map((row) => ({
+  const issuesByPriority = (priorityCounts as PriorityCountRow[]).map((row: PriorityCountRow) => ({
     priority: row.priority,
     count: row._count.id,
   }));
@@ -156,7 +165,11 @@ export async function getProjectAnalytics(projectId: string) {
   });
 
   // Build day-by-day map
-  const doneColumnIds = new Set(project.columns.filter((c) => c.isDone).map((c) => c.id));
+  const doneColumnIds = new Set(
+    (project as ProjectWithColumns).columns
+      .filter((c: BoardColumn) => c.isDone)
+      .map((c: BoardColumn) => c.id),
+  );
   const dayMap = new Map<string, { opened: number; closed: number }>();
   for (let d = 0; d < 30; d++) {
     const date = new Date(thirtyDaysAgo);
@@ -193,8 +206,8 @@ export async function getProjectAnalytics(projectId: string) {
   let avgCycleTime = 0;
   let avgLeadTime = 0;
   if (closedIssues.length > 0) {
-    const totalMs = closedIssues.reduce(
-      (sum, i) => sum + (i.updatedAt.getTime() - i.createdAt.getTime()),
+    const totalMs = (closedIssues as ClosedIssueRow[]).reduce(
+      (sum: number, i: ClosedIssueRow) => sum + (i.updatedAt.getTime() - i.createdAt.getTime()),
       0,
     );
     const avgMs = totalMs / closedIssues.length;
@@ -206,7 +219,9 @@ export async function getProjectAnalytics(projectId: string) {
   // Member workload
   // "In progress" = columns that are not default (Backlog) and not done
   const inProgressColumnIds = new Set(
-    project.columns.filter((c) => !c.isDefault && !c.isDone).map((c) => c.id),
+    (project as ProjectWithColumns).columns
+      .filter((c: BoardColumn) => !c.isDefault && !c.isDone)
+      .map((c: BoardColumn) => c.id),
   );
 
   const allIssues = await prisma.issue.findMany({

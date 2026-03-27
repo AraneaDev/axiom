@@ -150,7 +150,9 @@ export async function getPreferences(userId: string) {
     orderBy: { createdAt: 'asc' },
   });
 
-  const byEvent = new Map(stored.map((p) => [p.eventType, p]));
+  const byEvent = new Map<string, { eventType: string; inApp: boolean; email: boolean }>(
+    stored.map((p: { eventType: string; inApp: boolean; email: boolean }) => [p.eventType, p]),
+  );
 
   return DEFAULT_EVENT_TYPES.map((eventType) => {
     const existing = byEvent.get(eventType);

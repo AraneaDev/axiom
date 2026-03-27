@@ -210,7 +210,7 @@ export async function listTeamOpenPRs(teamId: string) {
   });
 
   // Fetch author info
-  const authorIds = [...new Set(prs.map((pr) => pr.authorId))];
+  const authorIds = [...new Set(prs.map((pr: (typeof prs)[number]) => pr.authorId))];
   const authors =
     authorIds.length > 0
       ? await prisma.user.findMany({
@@ -218,9 +218,9 @@ export async function listTeamOpenPRs(teamId: string) {
           select: USER_BASIC_SELECT,
         })
       : [];
-  const authorMap = new Map(authors.map((a) => [a.id, a]));
+  const authorMap = new Map(authors.map((a: (typeof authors)[number]) => [a.id, a] as const));
 
-  return prs.map((pr) => ({
+  return prs.map((pr: (typeof prs)[number]) => ({
     ...pr,
     author: authorMap.get(pr.authorId) ?? {
       id: pr.authorId,
@@ -260,7 +260,7 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
     where: { teamId },
     select: { userId: true },
   });
-  const memberIds = members.map((m) => m.userId);
+  const memberIds = members.map((m: (typeof members)[number]) => m.userId);
 
   if (memberIds.length === 0) return [];
 
@@ -276,56 +276,76 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
   // Hydrate with resource titles and links
   const teamOrgSelect = { slug: true, org: { select: { slug: true } } } as const;
 
-  const issueIds = activities.filter((a) => a.resourceType === 'issue').map((a) => a.resourceId);
+  type Activity = (typeof activities)[number];
+  const issueIds = activities
+    .filter((a: Activity) => a.resourceType === 'issue')
+    .map((a: Activity) => a.resourceId);
   const prIds = activities
-    .filter((a) => a.resourceType === 'pull_request')
-    .map((a) => a.resourceId);
-  const wikiIds = activities.filter((a) => a.resourceType === 'wiki_page').map((a) => a.resourceId);
+    .filter((a: Activity) => a.resourceType === 'pull_request')
+    .map((a: Activity) => a.resourceId);
+  const wikiIds = activities
+    .filter((a: Activity) => a.resourceType === 'wiki_page')
+    .map((a: Activity) => a.resourceId);
 
-  const issues =
+  const issueSelect = {
+    id: true,
+    number: true,
+    title: true,
+    project: { select: { slug: true, prefix: true, team: { select: teamOrgSelect } } },
+  } as const;
+  type IssueResult = Awaited<
+    ReturnType<typeof prisma.issue.findMany<{ select: typeof issueSelect }>>
+  >[number];
+
+  const issues: IssueResult[] =
     issueIds.length > 0
       ? await prisma.issue.findMany({
           where: { id: { in: issueIds } },
-          select: {
-            id: true,
-            number: true,
-            title: true,
-            project: { select: { slug: true, prefix: true, team: { select: teamOrgSelect } } },
-          },
+          select: issueSelect,
         })
       : [];
 
-  const prs =
+  const prSelect = {
+    id: true,
+    number: true,
+    title: true,
+    repo: { select: { slug: true, team: { select: teamOrgSelect } } },
+  } as const;
+  type PRResult = Awaited<
+    ReturnType<typeof prisma.pullRequest.findMany<{ select: typeof prSelect }>>
+  >[number];
+
+  const prs: PRResult[] =
     prIds.length > 0
       ? await prisma.pullRequest.findMany({
           where: { id: { in: prIds } },
-          select: {
-            id: true,
-            number: true,
-            title: true,
-            repo: { select: { slug: true, team: { select: teamOrgSelect } } },
-          },
+          select: prSelect,
         })
       : [];
 
-  const wikiPages =
+  const wikiSelect = {
+    id: true,
+    title: true,
+    slug: true,
+    space: { select: { slug: true, team: { select: teamOrgSelect } } },
+  } as const;
+  type WikiResult = Awaited<
+    ReturnType<typeof prisma.page.findMany<{ select: typeof wikiSelect }>>
+  >[number];
+
+  const wikiPages: WikiResult[] =
     wikiIds.length > 0
       ? await prisma.page.findMany({
           where: { id: { in: wikiIds } },
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            space: { select: { slug: true, team: { select: teamOrgSelect } } },
-          },
+          select: wikiSelect,
         })
       : [];
 
-  const issueMap = new Map(issues.map((i) => [i.id, i]));
-  const prMap = new Map(prs.map((p) => [p.id, p]));
-  const wikiMap = new Map(wikiPages.map((w) => [w.id, w]));
+  const issueMap = new Map(issues.map((i: (typeof issues)[number]) => [i.id, i] as const));
+  const prMap = new Map(prs.map((p: (typeof prs)[number]) => [p.id, p] as const));
+  const wikiMap = new Map(wikiPages.map((w: (typeof wikiPages)[number]) => [w.id, w] as const));
 
-  return activities.map((a) => {
+  return activities.map((a: Activity) => {
     let resourceTitle: string | null = null;
     let resourceLink: string | null = null;
     let resourceKey: string | null = null;
@@ -395,8 +415,8 @@ export async function getTeamMemberProfile(teamId: string, username: string) {
     },
   });
 
-  const projectIds = team?.projects.map((p) => p.id) ?? [];
-  const repoIds = team?.repos.map((r) => r.id) ?? [];
+  const projectIds = team?.projects.map((p: { id: string }) => p.id) ?? [];
+  const repoIds = team?.repos.map((r: { id: string }) => r.id) ?? [];
 
   const [assignedIssuesCount, openPRsCount, recentActivity] = await Promise.all([
     prisma.issue.count({

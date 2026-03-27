@@ -32,12 +32,17 @@ router.get('/:repoId/commits/:sha', requireRepoAccess(), reposController.getComm
 
 // File browser — root and subdirectory variants
 router.get('/:repoId/tree/:ref', requireRepoAccess(), reposController.getTree);
-router.get('/:repoId/tree/:ref/*', requireRepoAccess(), reposController.getTree);
-router.get('/:repoId/blob/:ref/*', requireRepoAccess(), reposController.getBlob);
-router.get('/:repoId/blame/:ref/*', requireRepoAccess(), reposController.getBlame);
+router.get('/:repoId/tree/:ref/*path', requireRepoAccess(), reposController.getTree);
+router.get('/:repoId/blob/:ref/*path', requireRepoAccess(), reposController.getBlob);
+router.get('/:repoId/blame/:ref/*path', requireRepoAccess(), reposController.getBlame);
 
 // File editor
-router.patch('/:repoId/blob/:ref/*', authenticate, requireRepoAccess(), reposController.updateBlob);
+router.patch(
+  '/:repoId/blob/:ref/*path',
+  authenticate,
+  requireRepoAccess(),
+  reposController.updateBlob,
+);
 
 // Tags
 router.get('/:repoId/tags', requireRepoAccess(), reposController.listTags);

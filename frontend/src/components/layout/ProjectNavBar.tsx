@@ -1,4 +1,3 @@
-import { useLocation, useNavigate, useParams } from 'react-router';
 import {
   KanbanSquare,
   List,
@@ -9,6 +8,7 @@ import {
   Clock,
   Settings,
 } from 'lucide-react';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { cn } from '@/lib/utils';
 
@@ -23,6 +23,9 @@ const TABS = [
   { key: 'settings', label: 'Settings', icon: <Settings className="h-4 w-4" /> },
 ] as const;
 
+/**
+ *
+ */
 export function ProjectNavBar() {
   const { org, team, project } = useParams<{ org: string; team: string; project: string }>();
   const location = useLocation();
@@ -32,10 +35,14 @@ export function ProjectNavBar() {
 
   // Determine active tab from pathname
   const suffix = location.pathname.slice(basePath.length).replace(/^\//, '');
-  const activeKey = TABS.find((t) => suffix === t.key || suffix.startsWith(t.key + '/'))?.key ?? 'board';
+  const activeKey =
+    TABS.find((t) => suffix === t.key || suffix.startsWith(t.key + '/'))?.key ?? 'board';
 
   return (
-    <div className="flex items-center gap-1 overflow-x-auto border-b border-border px-4" style={{ scrollbarWidth: 'none' }}>
+    <div
+      className="flex items-center gap-1 overflow-x-auto border-b border-border px-4"
+      style={{ scrollbarWidth: 'none' }}
+    >
       {TABS.map((tab) => {
         const active = tab.key === activeKey;
         return (

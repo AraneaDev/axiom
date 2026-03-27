@@ -10,6 +10,10 @@ interface PageHeaderProps {
  * Consistent page header for project views.
  * Renders title + optional project prefix badge on the left,
  * and action buttons (passed as children) on the right.
+ * @param root0
+ * @param root0.title
+ * @param root0.prefix
+ * @param root0.children
  */
 export function PageHeader({ title, prefix, children }: PageHeaderProps) {
   return (
@@ -22,11 +26,7 @@ export function PageHeader({ title, prefix, children }: PageHeaderProps) {
           </span>
         )}
       </div>
-      {children && (
-        <div className="flex items-center gap-2">
-          {children}
-        </div>
-      )}
+      {children && <div className="flex items-center gap-2">{children}</div>}
     </div>
   );
 }

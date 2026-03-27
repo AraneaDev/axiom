@@ -161,7 +161,7 @@ export async function validateTransition(
   // If no rules defined for this source column, any transition is allowed
   if (rulesFromColumn.length === 0) return;
 
-  const allowed = rulesFromColumn.some((r) => r.toColumnId === toColumnId);
+  const allowed = rulesFromColumn.some((r: { toColumnId: string }) => r.toColumnId === toColumnId);
   if (!allowed) {
     throw new AppError(400, 'This column transition is not allowed by workflow rules');
   }

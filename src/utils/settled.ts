@@ -1,5 +1,7 @@
 /**
  * Extract value from a PromiseSettledResult, logging failures.
+ * @param result
+ * @param label
  */
 export function settled<T>(result: PromiseSettledResult<T>, label: string): T | null {
   if (result.status === 'fulfilled') return result.value;

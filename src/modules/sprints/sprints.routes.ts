@@ -2,8 +2,8 @@ import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import { requireProjectAccess } from '../../middleware/requireProjectAccess';
-
 import { hydrateBacklog } from '../issues/backlog-hydrate.controller';
+
 import * as sprintsController from './sprints.controller';
 
 const router = Router();

@@ -3,12 +3,12 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 
 import { projectsApi } from '@/api/projects.api';
-import { useTeamContext } from '@/hooks/useTeamContext';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { PageLoader, Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
+import { useTeamContext } from '@/hooks/useTeamContext';
 
 /**
  *

@@ -35,7 +35,11 @@ export const createPageSchema = z.object({
     .max(100)
     .regex(/^[a-z0-9-]+$/),
   body: z.string().default(''),
-  parentId: z.string().nullable().optional().transform((v) => v ?? undefined),
+  parentId: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((v) => v ?? undefined),
   isDraft: z.boolean().default(false),
 });
 

@@ -42,7 +42,7 @@ function getDatabaseSize(): Promise<string> {
   return prisma.$queryRaw<
     { size: string }[]
   >`SELECT pg_size_pretty(pg_database_size(current_database())) AS size`.then(
-    (rows) => rows[0]?.size ?? 'unknown',
+    (rows: { size: string }[]) => rows[0]?.size ?? 'unknown',
   );
 }
 

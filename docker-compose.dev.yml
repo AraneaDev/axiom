@@ -87,6 +87,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
+      - ./prisma.config.ts:/app/prisma.config.ts
       - ./scripts:/app/scripts
       - ./vitest.config.ts:/app/vitest.config.ts
       - ./package.json:/app/package.json
@@ -107,11 +108,20 @@ services:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
       - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7000"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:7000"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://web:7000
+    depends_on:
+      - web
+    profiles:
+      - tunnel
 
 volumes:
   pgdata:

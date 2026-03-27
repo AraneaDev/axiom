@@ -34,7 +34,7 @@ export async function listMilestones(projectId: string) {
     orderBy: { createdAt: 'desc' },
   });
 
-  return milestones.map((m) => ({
+  return milestones.map((m: (typeof milestones)[number]) => ({
     ...m,
     issueCount: m._count.issues,
   }));

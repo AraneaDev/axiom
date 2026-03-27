@@ -2,6 +2,9 @@ import { Outlet } from 'react-router';
 
 import { ProjectNavBar } from './ProjectNavBar';
 
+/**
+ *
+ */
 export function ProjectLayout() {
   return (
     <div className="flex flex-col h-full">

@@ -22,6 +22,13 @@ import { getPage } from './wiki.service';
  */
 const SUPPORTED_FORMATS = [...Object.keys(PANDOC_FORMATS), 'md'];
 
+/**
+ *
+ * @param spaceId
+ * @param pageSlug
+ * @param format
+ * @param res
+ */
 export async function exportPage(spaceId: string, pageSlug: string, format: string, res: Response) {
   if (!SUPPORTED_FORMATS.includes(format)) {
     throw new AppError(

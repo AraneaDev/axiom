@@ -223,16 +223,18 @@ export async function listPRs(
   ]);
 
   // Manually join author info (no relation on PullRequest model)
-  const authorIds = [...new Set(prs.map((pr) => pr.authorId))];
+  const authorIds = [...new Set(prs.map((pr: { authorId: string }) => pr.authorId))];
   const authors = authorIds.length
     ? await prisma.user.findMany({
         where: { id: { in: authorIds } },
         select: { id: true, username: true, displayName: true },
       })
     : [];
-  const authorMap = new Map(authors.map((a) => [a.id, a]));
+  const authorMap = new Map(
+    authors.map((a: { id: string; username: string; displayName: string }) => [a.id, a]),
+  );
 
-  const data = prs.map((pr) => ({
+  const data = prs.map((pr: (typeof prs)[number]) => ({
     ...pr,
     author: authorMap.get(pr.authorId) ?? null,
   }));

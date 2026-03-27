@@ -12,7 +12,7 @@ import { AppError } from '../../middleware/errorHandler';
 export function validate<T extends z.ZodTypeAny>(schema: T, data: unknown): z.output<T> {
   const result = schema.safeParse(data);
   if (!result.success) {
-    const message = result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ');
+    const message = result.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ');
     throw new AppError(400, message);
   }
   return result.data;
@@ -137,7 +137,7 @@ export const savedSearchSchema = z.object({
   query: z.object({
     q: z.string(),
     type: z.string().optional(),
-    filters: z.record(z.string()).optional(),
+    filters: z.record(z.string(), z.string()).optional(),
   }),
 });
 

@@ -42,7 +42,7 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
       error: {
         message: 'Validation failed',
         code: 'VALIDATION_ERROR',
-        details: err.errors,
+        details: err.issues,
       },
     });
   }

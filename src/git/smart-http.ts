@@ -158,10 +158,11 @@ export async function handleInfoRefs(req: Request, res: Response, next: NextFunc
  */
 export async function handleServiceRpc(req: Request, res: Response, next: NextFunction) {
   try {
-    const service = req.params.service as GitService;
-    if (service !== 'git-upload-pack' && service !== 'git-receive-pack') {
+    const urlService = req.path.split('/').pop() as string;
+    if (urlService !== 'git-upload-pack' && urlService !== 'git-receive-pack') {
       return res.status(400).send('Invalid service');
     }
+    const service = urlService as GitService;
 
     let userId: string;
     try {

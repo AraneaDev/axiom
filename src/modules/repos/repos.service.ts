@@ -218,7 +218,7 @@ export async function deleteRepoById(repoId: string) {
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.repository.delete({ where: { id: repoId } });
+    await (tx as unknown as typeof prisma).repository.delete({ where: { id: repoId } });
   });
 }
 
@@ -251,7 +251,7 @@ export async function forkRepoById(repoId: string, targetTeamId: string, newSlug
 
   // DB first inside transaction, then clone on disk
   const forkedRepo = await prisma.$transaction(async (tx) => {
-    return tx.repository.create({
+    return (tx as unknown as typeof prisma).repository.create({
       data: {
         teamId: targetTeamId,
         name: source.name,

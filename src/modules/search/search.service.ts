@@ -258,7 +258,7 @@ async function searchIssues(
         LIMIT ${params.limit + 50}
       `;
 
-      const ftsIds = rawIssues.map((r) => r.id);
+      const ftsIds = rawIssues.map((r: { id: string; rank: number }) => r.id);
       if (ftsIds.length === 0) {
         // FTS found nothing -- fall back to LIKE search
         where.OR = [
@@ -354,8 +354,10 @@ async function searchWiki(
         return { type: 'wiki', items: [], total: 0 };
       }
 
-      const snippetMap = new Map(rawPages.map((r) => [r.id, r.snippet]));
-      where.id = { in: rawPages.map((r) => r.id) };
+      const snippetMap = new Map(
+        rawPages.map((r: { id: string; snippet: string }) => [r.id, r.snippet]),
+      );
+      where.id = { in: rawPages.map((r: { id: string }) => r.id) };
 
       const [pages, total] = await Promise.all([
         prisma.page.findMany({

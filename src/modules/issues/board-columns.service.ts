@@ -17,8 +17,10 @@ export async function createColumn(
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
   // If no position given, append at end
-  let position = data.position;
-  if (position === undefined) {
+  let position: number;
+  if (data.position !== undefined) {
+    position = data.position;
+  } else {
     const last = await prisma.boardColumn.findFirst({
       where: { projectId },
       orderBy: { position: 'desc' },

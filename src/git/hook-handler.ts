@@ -69,7 +69,12 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
         const { getMatchingRule } = await import('../modules/repos/protection.service');
         const rule = await getMatchingRule(repo.id, branch);
         if (rule?.noForcePush) {
-          logger.warn('Force push detected on protected branch', { repoId: repo.id, branch, before: payload.before, after: payload.after });
+          logger.warn('Force push detected on protected branch', {
+            repoId: repo.id,
+            branch,
+            before: payload.before,
+            after: payload.after,
+          });
         }
       } catch {
         // Protection check is best-effort in post-receive

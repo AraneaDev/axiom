@@ -125,7 +125,7 @@ export default function RepoDetail() {
   const sshCloneUrl = `git@${window.location.hostname}:${org}/${teamSlug}/${repoSlug}.git`;
 
   const tabs = [
-    { key: 'code', label: 'Code', icon: <Code className="h-4 w-4" /> },
+    { key: 'code', label: 'Files', icon: <FolderOpen className="h-4 w-4" /> },
     {
       key: 'branches',
       label: `Branches (${branches?.length ?? 0})`,

@@ -64,14 +64,23 @@ export async function getWorklogs(projectId: string, issueNumber: number) {
     orderBy: { createdAt: 'desc' },
   });
 
-  return entries.map((e) => ({
-    id: e.id,
-    userId: e.userId,
-    user: e.user,
-    minutes: e.minutes,
-    description: e.description,
-    createdAt: e.createdAt,
-  }));
+  return entries.map(
+    (e: {
+      id: string;
+      userId: string;
+      user: unknown;
+      minutes: number;
+      description: string | null;
+      createdAt: Date;
+    }) => ({
+      id: e.id,
+      userId: e.userId,
+      user: e.user,
+      minutes: e.minutes,
+      description: e.description,
+      createdAt: e.createdAt,
+    }),
+  );
 }
 
 /**

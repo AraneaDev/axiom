@@ -98,7 +98,7 @@ export async function listActivities(opts: {
       where: { projectId: opts.projectId },
       select: { id: true },
     });
-    const issueIds = issues.map((i) => i.id);
+    const issueIds = issues.map((i: { id: string }) => i.id);
 
     // Include activities for the project's issues
     where.OR = [

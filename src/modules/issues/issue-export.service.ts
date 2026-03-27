@@ -16,7 +16,9 @@ export async function exportIssuesCsv(projectId: string) {
     'Project not found',
   );
 
-  const columnMap = new Map(project.columns.map((c) => [c.id, c.name]));
+  const columnMap = new Map(
+    project.columns.map((c: { id: string; name: string }) => [c.id, c.name]),
+  );
 
   const issues = await prisma.issue.findMany({
     where: { projectId },
@@ -38,17 +40,29 @@ export async function exportIssuesCsv(projectId: string) {
     'Estimate (min)',
     'Logged (min)',
   ];
-  const rows = issues.map((issue) => [
-    `${project.prefix}-${issue.number}`,
-    `"${issue.title.replace(/"/g, '""')}"`,
-    issue.columnId ? (columnMap.get(issue.columnId) ?? '') : '',
-    issue.priority,
-    issue.type,
-    issue.assignee?.displayName ?? '',
-    issue.createdAt.toISOString().slice(0, 10),
-    issue.timeEstimate?.toString() ?? '',
-    issue.timeSpent?.toString() ?? '',
-  ]);
+  const rows = issues.map(
+    (issue: {
+      number: number;
+      title: string;
+      columnId: string | null;
+      priority: string;
+      type: string;
+      assignee: { displayName: string } | null;
+      createdAt: Date;
+      timeEstimate: number | null;
+      timeSpent: number | null;
+    }) => [
+      `${project.prefix}-${issue.number}`,
+      `"${issue.title.replace(/"/g, '""')}"`,
+      issue.columnId ? (columnMap.get(issue.columnId) ?? '') : '',
+      issue.priority,
+      issue.type,
+      issue.assignee?.displayName ?? '',
+      issue.createdAt.toISOString().slice(0, 10),
+      issue.timeEstimate?.toString() ?? '',
+      issue.timeSpent?.toString() ?? '',
+    ],
+  );
 
-  return [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  return [header.join(','), ...rows.map((r: string[]) => r.join(','))].join('\n');
 }

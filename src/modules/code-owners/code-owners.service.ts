@@ -185,17 +185,21 @@ export async function getOwnersForPR(repoId: string, prNumber: number) {
   });
 
   // Look up reviewer usernames
-  const reviewerIds = [...new Set(reviews.map((r) => r.reviewerId))];
+  const reviewerIds = [...new Set(reviews.map((r: { reviewerId: string }) => r.reviewerId))];
   const reviewerUsers = await prisma.user.findMany({
     where: { id: { in: reviewerIds } },
     select: { id: true, username: true },
   });
-  const reviewerMap = new Map(reviewerUsers.map((u) => [u.id, u.username]));
+  const reviewerMap = new Map(
+    reviewerUsers.map((u: { id: string; username: string }) => [u.id, u.username]),
+  );
 
   const ownerStatuses = [...allOwners].map((owner) => {
     const ownerName = owner.replace('@', '');
     // Find most recent review from this owner
-    const review = reviews.find((r) => reviewerMap.get(r.reviewerId) === ownerName);
+    const review = reviews.find(
+      (r: { reviewerId: string; status: string }) => reviewerMap.get(r.reviewerId) === ownerName,
+    );
     return {
       owner,
       approved: review?.status === 'APPROVED',
