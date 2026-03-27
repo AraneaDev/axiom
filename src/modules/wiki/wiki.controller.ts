@@ -27,8 +27,14 @@ export const getSpace = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const listSpaces = asyncHandler(async (req: Request, res: Response) => {
-  const spaces = await wikiService.listSpaces(param(req, 'teamId'));
+  const includeArchived = req.query.includeArchived === 'true';
+  const spaces = await wikiService.listSpaces(param(req, 'teamId'), includeArchived);
   res.json(spaces);
+});
+
+export const updateSpace = asyncHandler(async (req: Request, res: Response) => {
+  const space = await wikiService.updateSpace(param(req, 'spaceId'), req.body);
+  res.json(space);
 });
 
 export const createPage = asyncHandler(async (req: Request, res: Response) => {
@@ -38,7 +44,7 @@ export const createPage = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getPage = asyncHandler(async (req: Request, res: Response) => {
-  const page = await wikiService.getPage(param(req, 'spaceId'), param(req, 'pageSlug'));
+  const page = await wikiService.getPage(param(req, 'spaceId'), param(req, 'pageSlug'), req.userId);
   res.json(page);
 });
 
@@ -54,7 +60,7 @@ export const updatePage = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const deletePage = asyncHandler(async (req: Request, res: Response) => {
-  await wikiService.deletePage(param(req, 'spaceId'), param(req, 'pageSlug'));
+  await wikiService.deletePage(param(req, 'spaceId'), param(req, 'pageSlug'), req.userId);
   res.status(204).send();
 });
 

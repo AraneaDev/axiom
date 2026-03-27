@@ -178,6 +178,7 @@ export interface WikiSpace {
   name: string;
   slug: string;
   description?: string;
+  isArchived?: boolean;
   _count?: { pages: number };
 }
 
@@ -191,6 +192,7 @@ export interface Page {
   isDraft: boolean;
   children?: PageTreeNode[];
   versions?: PageVersion[];
+  restrictions?: PageRestriction[];
   createdAt: string;
   updatedAt: string;
 }
@@ -264,6 +266,16 @@ export interface PageLabel {
   id: string;
   pageId: string;
   label: string;
+}
+
+export interface PageRestriction {
+  id: string;
+  pageId: string;
+  type: 'VIEW' | 'EDIT';
+  userId?: string;
+  user?: { id: string; username: string; displayName: string };
+  teamRoleMin?: string;
+  createdAt: string;
 }
 
 export interface ApiToken {

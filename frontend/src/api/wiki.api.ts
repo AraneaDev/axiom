@@ -1,4 +1,4 @@
-import { get, post, patch, del } from './client';
+import { get, post, patch, put, del } from './client';
 
 import type {
   WikiSpace,
@@ -8,6 +8,7 @@ import type {
   PageTemplate,
   PageComment,
   PageLabel,
+  PageRestriction,
   DiffResult,
 } from '@/lib/types';
 
@@ -182,6 +183,36 @@ export const wikiApi = {
     get<{ id: string; title: string; slug: string }[]>(
       `/wiki/spaces/${spaceId}/labels?label=${encodeURIComponent(label)}`,
     ),
+
+  /**
+   * Update a wiki space (e.g., archive/unarchive).
+   * @param spaceId
+   * @param data
+   * @param data.isArchived
+   */
+  updateSpace: (spaceId: string, data: { isArchived?: boolean }) =>
+    patch<WikiSpace>(`/wiki/spaces/${spaceId}`, data),
+
+  /**
+   * Get restrictions for a wiki page.
+   * @param pageId
+   */
+  getRestrictions: (pageId: string) => get<PageRestriction[]>(`/wiki/pages/${pageId}/restrictions`),
+
+  /**
+   * Set restrictions on a wiki page (replaces existing of the given type).
+   * @param pageId
+   * @param type
+   * @param userIds
+   */
+  setRestrictions: (pageId: string, type: 'VIEW' | 'EDIT', userIds: string[]) =>
+    put<PageRestriction[]>(`/wiki/pages/${pageId}/restrictions`, { type, userIds }),
+
+  /**
+   * Remove a single page restriction.
+   * @param restrictionId
+   */
+  removeRestriction: (restrictionId: string) => del(`/wiki/restrictions/${restrictionId}`),
 
   /**
    * Move a page to a different space or parent.

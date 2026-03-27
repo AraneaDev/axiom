@@ -53,6 +53,7 @@ model User {
   sentInvitations         Invitation[]
   timeEntries             TimeEntry[]
   passwordResetTokens     PasswordResetToken[]
+  pageRestrictions        PageRestriction[]    @relation("UserPageRestrictions")
 
   @@map("users")
 }
@@ -561,6 +562,7 @@ model WikiSpace {
   name        String
   slug        String
   description String?
+  isArchived  Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -592,6 +594,7 @@ model Page {
   pageComments PageComment[]
   pageLabels   PageLabel[]
   attachments  Attachment[]
+  restrictions PageRestriction[]
 
   @@unique([spaceId, slug])
   @@map("pages")
@@ -1016,6 +1019,26 @@ model PageLabel {
 
   @@unique([pageId, label])
   @@map("page_labels")
+}
+
+enum RestrictionType {
+  VIEW
+  EDIT
+}
+
+model PageRestriction {
+  id          String          @id @default(cuid())
+  pageId      String
+  page        Page            @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  type        RestrictionType
+  userId      String?
+  user        User?           @relation("UserPageRestrictions", fields: [userId], references: [id])
+  teamRoleMin TeamRole?
+  createdAt   DateTime        @default(now())
+
+  @@unique([pageId, type, userId])
+  @@index([pageId])
+  @@map("page_restrictions")
 }
 
 model PageTemplate {

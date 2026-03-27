@@ -25,6 +25,8 @@ import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
+import { PageRestrictions } from '@/components/wiki/PageRestrictions';
+import type { PageRestriction } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 
 interface PageCrumb {
@@ -118,10 +120,12 @@ interface PageViewHeaderProps {
     slug: string;
     parent?: PageCrumb;
     versions?: { createdAt: string; author?: { displayName: string } }[];
+    restrictions?: PageRestriction[];
   };
   basePath: string;
   pageSlug: string;
   spaceId: string;
+  teamId: string;
   labels: PageLabel[];
   onAddLabel: (label: string) => void;
   onRemoveLabel: (label: string) => void;
@@ -137,6 +141,7 @@ interface PageViewHeaderProps {
  * @param root0.basePath
  * @param root0.pageSlug
  * @param root0.spaceId
+ * @param root0.teamId
  * @param root0.labels
  * @param root0.onAddLabel
  * @param root0.onRemoveLabel
@@ -149,6 +154,7 @@ export function PageViewHeader({
   basePath,
   pageSlug,
   spaceId,
+  teamId,
   labels,
   onAddLabel,
   onRemoveLabel,
@@ -166,6 +172,11 @@ export function PageViewHeader({
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-text">{page.title}</h1>
         <div className="flex gap-2">
+          <PageRestrictions
+            pageId={page.id}
+            teamId={teamId}
+            restrictions={page.restrictions ?? []}
+          />
           <ExportDropdown spaceId={spaceId} pageSlug={pageSlug} />
           <Link to={`${basePath}/${pageSlug}/history`}>
             <Button variant="ghost" size="sm">

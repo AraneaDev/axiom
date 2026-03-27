@@ -7,11 +7,13 @@ import {
   requireWikiPageAccess,
   requireWikiCommentAccess,
   requireWikiTemplateAccess,
+  requireWikiRestrictionAccess,
 } from '../../middleware/rbac';
 
 import * as commentsController from './wiki-comments.controller';
 import * as hydrateController from './wiki-hydrate.controller';
 import * as labelsController from './wiki-labels.controller';
+import * as permController from './wiki-permissions.controller';
 import * as templatesController from './wiki-templates.controller';
 import * as wikiController from './wiki.controller';
 
@@ -29,6 +31,7 @@ router.get('/team/:teamId/spaces', requireTeamPermission('wiki:view'), wikiContr
 
 // Space operations (require org membership via space lookup)
 router.get('/spaces/:spaceId', requireWikiSpaceAccess(), wikiController.getSpace);
+router.patch('/spaces/:spaceId', requireWikiSpaceAccess(), wikiController.updateSpace);
 router.get('/spaces/:spaceId/tree', requireWikiSpaceAccess(), wikiController.pageTree);
 
 // Pages (require org membership via space lookup)
@@ -107,6 +110,15 @@ router.delete(
   labelsController.removePageLabel,
 );
 router.get('/spaces/:spaceId/labels', requireWikiSpaceAccess(), labelsController.searchByLabel);
+
+// Page restrictions (require org membership via page lookup)
+router.get('/pages/:pageId/restrictions', requireWikiPageAccess(), permController.getRestrictions);
+router.put('/pages/:pageId/restrictions', requireWikiPageAccess(), permController.setRestrictions);
+router.delete(
+  '/restrictions/:restrictionId',
+  requireWikiRestrictionAccess(),
+  permController.removeRestriction,
+);
 
 // Move / Copy (require org membership via page lookup)
 router.post('/pages/:pageId/move', requireWikiPageAccess(), wikiController.movePage);

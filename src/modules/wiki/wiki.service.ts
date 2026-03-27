@@ -9,6 +9,8 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
+import { canViewPage, canEditPage } from './wiki-permissions.service';
+
 /**
  * Create a new wiki space within a team.
  * @param teamId - The team to create the space in
@@ -55,13 +57,34 @@ export async function getSpace(spaceId: string) {
 /**
  * List all wiki spaces for a team with page counts.
  * @param teamId - The team to list wiki spaces for
+ * @param includeArchived - Whether to include archived spaces (default: false)
  * @returns List of wiki spaces with page counts
  */
-export async function listSpaces(teamId: string) {
+export async function listSpaces(teamId: string, includeArchived = false) {
   return prisma.wikiSpace.findMany({
-    where: { teamId },
+    where: { teamId, ...(includeArchived ? {} : { isArchived: false }) },
     include: { _count: { select: { pages: true } } },
     orderBy: { name: 'asc' },
+  });
+}
+
+/**
+ * Update wiki space properties (e.g., archive/unarchive).
+ * @param spaceId - The wiki space ID
+ * @param data - Update payload
+ * @param data.isArchived - Whether to archive or unarchive
+ * @returns The updated wiki space record
+ * @throws {AppError} 404 if wiki space not found
+ */
+export async function updateSpace(spaceId: string, data: { isArchived?: boolean }) {
+  const space = await findOrThrow(
+    prisma.wikiSpace.findUnique({ where: { id: spaceId } }),
+    'Wiki space not found',
+  );
+
+  return prisma.wikiSpace.update({
+    where: { id: space.id },
+    data,
   });
 }
 
@@ -131,11 +154,13 @@ export async function createPage(
  * Retrieve a wiki page by space and slug, including children and latest version.
  * @param spaceId - The wiki space ID
  * @param pageSlug - The page slug within the space
+ * @param userId - Optional user ID for permission checking
  * @returns The page with children and latest version with author
  * @throws {AppError} 404 if page not found
+ * @throws {AppError} 403 if user lacks view permission
  */
-export async function getPage(spaceId: string, pageSlug: string) {
-  return findOrThrow(
+export async function getPage(spaceId: string, pageSlug: string, userId?: string) {
+  const page = await findOrThrow(
     prisma.page.findUnique({
       where: { spaceId_slug: { spaceId, slug: pageSlug } },
       include: {
@@ -149,10 +174,20 @@ export async function getPage(spaceId: string, pageSlug: string) {
           take: 1,
           include: { author: { select: USER_BASIC_SELECT } },
         },
+        restrictions: {
+          include: { user: { select: USER_BASIC_SELECT } },
+        },
       },
     }),
     'Page not found',
   );
+
+  if (userId) {
+    const allowed = await canViewPage(userId, page.id);
+    if (!allowed) throw new AppError(403, 'You do not have permission to view this page');
+  }
+
+  return page;
 }
 
 /**
@@ -188,6 +223,9 @@ export async function updatePage(
     }),
     'Page not found',
   );
+
+  const editAllowed = await canEditPage(authorId, page.id);
+  if (!editAllowed) throw new AppError(403, 'You do not have permission to edit this page');
 
   const nextVersion = (page.versions[0]?.version ?? 0) + 1;
 
@@ -233,6 +271,12 @@ export async function deletePage(spaceId: string, pageSlug: string, userId?: str
     }),
     'Page not found',
   );
+
+  if (userId) {
+    const editAllowed = await canEditPage(userId, page.id);
+    if (!editAllowed) throw new AppError(403, 'You do not have permission to delete this page');
+  }
+
   await prisma.page.delete({ where: { id: page.id } });
   await cacheInvalidate(`wiki:tree:${spaceId}`);
   if (userId) {

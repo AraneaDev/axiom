@@ -282,6 +282,186 @@ describe('Wiki API', () => {
     expect(res.status).toBe(403);
   });
 
+  // ─── Page Restrictions ──────────────────────────────────────
+
+  // 8a. Get restrictions (empty initially)
+  it('8a. should return empty restrictions for page', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/pages/${rootPageId}/restrictions`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBe(0);
+  });
+
+  // 8b. Unrestricted page accessible to all team members
+  it('8b. should allow unrestricted page access to all team members', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
+      .set('Authorization', `Bearer ${secondToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBeDefined();
+  });
+
+  let restrictionId: string;
+
+  // 8c. Set EDIT restrictions
+  it('8c. should set edit restrictions on a page', async () => {
+    // Get first user's ID
+    const user = await prisma.user.findUnique({ where: { username: 'wiki-test-user' } });
+    const res = await request(app)
+      .put(`/api/wiki/pages/${rootPageId}/restrictions`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ type: 'EDIT', userIds: [user!.id] });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    const editRestrictions = res.body.filter((r: { type: string }) => r.type === 'EDIT');
+    expect(editRestrictions.length).toBe(1);
+    restrictionId = editRestrictions[0].id;
+  });
+
+  // 8d. Edit-restricted page blocks non-listed users from editing
+  it('8d. should block edit-restricted page from non-listed users', async () => {
+    const res = await request(app)
+      .patch(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
+      .set('Authorization', `Bearer ${secondToken}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Unauthorized edit attempt' });
+    expect(res.status).toBe(403);
+  });
+
+  // 8e. Edit-restricted page allows listed users to edit
+  it('8e. should allow edit-restricted page access to listed users', async () => {
+    const res = await request(app)
+      .patch(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Authorized edit' });
+    expect(res.status).toBe(200);
+  });
+
+  // 8f. Edit-restricted page still allows non-listed users to view
+  it('8f. should allow viewing edit-restricted page by non-listed users', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
+      .set('Authorization', `Bearer ${secondToken}`);
+    expect(res.status).toBe(200);
+  });
+
+  // 8g. Set VIEW restrictions (blocks both view and edit for non-listed users)
+  it('8g. should set view restrictions on a page', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'wiki-test-user' } });
+    const res = await request(app)
+      .put(`/api/wiki/pages/${rootPageId}/restrictions`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ type: 'VIEW', userIds: [user!.id] });
+    expect(res.status).toBe(200);
+  });
+
+  // 8h. View-restricted page blocks non-listed users
+  it('8h. should block view-restricted page from non-listed users', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
+      .set('Authorization', `Bearer ${secondToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  // 8i. Remove the restriction by ID
+  it('8i. should remove a restriction', async () => {
+    // First clear the VIEW restrictions
+    await request(app)
+      .put(`/api/wiki/pages/${rootPageId}/restrictions`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ type: 'VIEW', userIds: [] });
+
+    // Remove the EDIT restriction
+    const res = await request(app)
+      .delete(`/api/wiki/restrictions/${restrictionId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
+    expect(res.status).toBe(204);
+  });
+
+  // 8j. After removing restrictions, page is accessible again
+  it('8j. should allow access after removing restrictions', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
+      .set('Authorization', `Bearer ${secondToken}`);
+    expect(res.status).toBe(200);
+  });
+
+  // 8k. Org owners bypass restrictions
+  it('8k. should allow org owners to bypass restrictions', async () => {
+    // Set VIEW restriction for user2 only (not user1/owner)
+    const user2 = await prisma.user.findUnique({ where: { username: 'wiki-test-user2' } });
+    await request(app)
+      .put(`/api/wiki/pages/${rootPageId}/restrictions`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ type: 'VIEW', userIds: [user2!.id] });
+
+    // Owner (user1) should still be able to view even though not in list
+    const res = await request(app)
+      .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+
+    // Clean up: remove restrictions
+    await request(app)
+      .put(`/api/wiki/pages/${rootPageId}/restrictions`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ type: 'VIEW', userIds: [] });
+  });
+
+  // ─── Space Archiving ──────────────────────────────────────────
+
+  // 9a. Archive a space
+  it('9a. should archive a wiki space', async () => {
+    const res = await request(app)
+      .patch(`/api/wiki/spaces/${spaceId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ isArchived: true });
+    expect(res.status).toBe(200);
+    expect(res.body.isArchived).toBe(true);
+  });
+
+  // 9b. Archived space filtered from default listing
+  it('9b. should filter archived spaces from default listing', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/team/${teamId}/spaces`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const archivedSpace = res.body.find((s: { id: string }) => s.id === spaceId);
+    expect(archivedSpace).toBeUndefined();
+  });
+
+  // 9c. Archived space visible with includeArchived flag
+  it('9c. should show archived spaces when includeArchived is true', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/team/${teamId}/spaces?includeArchived=true`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const archivedSpace = res.body.find((s: { id: string }) => s.id === spaceId);
+    expect(archivedSpace).toBeDefined();
+    expect(archivedSpace.isArchived).toBe(true);
+  });
+
+  // 9d. Unarchive a space
+  it('9d. should unarchive a wiki space', async () => {
+    const res = await request(app)
+      .patch(`/api/wiki/spaces/${spaceId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ isArchived: false });
+    expect(res.status).toBe(200);
+    expect(res.body.isArchived).toBe(false);
+  });
+
   // 7. Delete page
   it('7. should delete the child page', async () => {
     const res = await request(app)

@@ -80,4 +80,5 @@ export {
   movePageSchema,
   copyPageSchema,
   restoreVersionSchema,
+  setRestrictionsSchema,
 } from './validation/user-validators';

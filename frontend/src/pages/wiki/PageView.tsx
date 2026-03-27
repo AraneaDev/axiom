@@ -87,7 +87,7 @@ export default function PageView() {
   const toast = useToast();
   const basePath = `/${org}/${team}/wiki/${spaceSlug}`;
 
-  const { currentSpace, tree, setTocEntries } = useWikiContext();
+  const { currentSpace, currentTeam, tree, setTocEntries } = useWikiContext();
 
   const moveModal = useModalState();
   const deleteConfirm = useModalState();
@@ -350,6 +350,7 @@ export default function PageView() {
         basePath={basePath}
         pageSlug={pageSlug!}
         spaceId={currentSpace!.id}
+        teamId={currentTeam!.id}
         labels={labels}
         onAddLabel={(label) => addLabelMutation.mutate(label)}
         onRemoveLabel={(label) => removeLabelMutation.mutate(label)}

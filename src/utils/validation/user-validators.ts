@@ -74,6 +74,13 @@ export const addPageLabelSchema = z.object({
   label: z.string().min(1).max(100),
 });
 
+// ─── Wiki Page Restrictions ─────────────────────────────────
+
+export const setRestrictionsSchema = z.object({
+  type: z.enum(['VIEW', 'EDIT']),
+  userIds: z.array(z.string()).min(0),
+});
+
 // ─── Wiki Page Move / Copy ──────────────────────────────────
 
 export const movePageSchema = z.object({
