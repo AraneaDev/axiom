@@ -137,8 +137,11 @@ const commands: CommandDefinition[] = [
       editor
         .chain()
         .focus()
-        .setCodeBlock({ language: 'mermaid' })
-        .insertContent('graph TD\n  A-->B')
+        .insertContent({
+          type: 'codeBlock',
+          attrs: { language: 'mermaid' },
+          content: [{ type: 'text', text: 'graph TD\n  A-->B' }],
+        })
         .run();
     },
   },
