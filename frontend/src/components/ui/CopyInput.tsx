@@ -1,0 +1,52 @@
+import { Check, Copy } from 'lucide-react';
+import { useState } from 'react';
+
+import { Button } from '@/components/ui/Button';
+import { cn } from '@/lib/utils';
+
+interface CopyInputProps {
+  value: string;
+  label?: string;
+  className?: string;
+}
+
+/**
+ * Read-only input with a copy-to-clipboard button.
+ * Used for displaying URLs or tokens that users need to copy.
+ * @param props.value - The text to display and copy.
+ * @param root0
+ * @param root0.value
+ * @param props.label - Accessible label for the input.
+ * @param root0.label
+ * @param props.className - Additional CSS classes for the wrapper.
+ * @param root0.className
+ */
+export function CopyInput({ value, label, className }: CopyInputProps) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className={cn('flex items-center gap-2', className)}>
+      <input
+        readOnly
+        value={value}
+        aria-label={label}
+        className="flex-1 min-w-0 text-xs font-mono bg-surface-secondary border border-border rounded px-2 py-1.5 h-8 text-text"
+      />
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={handleCopy}
+        title={label ? `Copy ${label}` : 'Copy'}
+        aria-label={label ? `Copy ${label}` : 'Copy'}
+      >
+        {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+      </Button>
+    </div>
+  );
+}
