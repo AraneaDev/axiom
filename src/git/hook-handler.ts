@@ -6,6 +6,7 @@ import { Request, Response, NextFunction, Router } from 'express';
 import { prisma } from '../config/database';
 import { cacheInvalidate } from '../config/redis';
 import { triggerPipelineOnPush } from '../pipelines/trigger';
+import { broadcastToRoom } from '../realtime/broadcast';
 import { logger } from '../utils/logger';
 
 import * as gitCmd from './git-commands';
@@ -40,7 +41,10 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
 
     const repo = await prisma.repository.findUnique({
       where: { id: payload.repo },
-      include: { webhooks: { where: { active: true } } },
+      include: {
+        webhooks: { where: { active: true } },
+        team: { include: { org: true } },
+      },
     });
 
     if (!repo) {
@@ -107,6 +111,10 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
 
     // Invalidate repo file tree cache
     cacheInvalidate(`repo:${repo.id}:*`).catch(() => {});
+
+    // Broadcast realtime event so frontends invalidate their query caches
+    const room = `repo:${repo.team.org.slug}/${repo.team.slug}/${repo.slug}`;
+    broadcastToRoom(room, { type: 'repo:pushed', repoId: repo.id, ref: refName });
 
     // Update any open PRs that involve this branch
     if (!isTag && !isDelete) {

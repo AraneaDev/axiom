@@ -11,7 +11,8 @@ export type RealtimeEvent =
   | { type: 'pr:merged'; repoId: string; prId: string }
   | { type: 'wiki:updated'; spaceId: string; pageId: string }
   | { type: 'notification'; userId: string; notificationId: string }
-  | { type: 'pipeline:updated'; repoId: string; runId: string };
+  | { type: 'pipeline:updated'; repoId: string; runId: string }
+  | { type: 'repo:pushed'; repoId: string; ref: string };
 
 /**
  * Client-to-server message types.

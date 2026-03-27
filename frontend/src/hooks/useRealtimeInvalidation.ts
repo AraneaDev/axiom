@@ -16,7 +16,8 @@ export type RealtimeEvent =
   | { type: 'pr:merged'; repoId: string; prId: string }
   | { type: 'wiki:updated'; spaceId: string; pageId: string }
   | { type: 'notification'; userId: string; notificationId: string }
-  | { type: 'pipeline:updated'; repoId: string; runId: string };
+  | { type: 'pipeline:updated'; repoId: string; runId: string }
+  | { type: 'repo:pushed'; repoId: string; ref: string };
 
 /**
  * Hook that auto-subscribes to relevant rooms based on current route context
@@ -118,6 +119,14 @@ export function useRealtimeInvalidation(): void {
           queryClient.invalidateQueries({ queryKey: ['pipeline-runs', event.repoId] });
           queryClient.invalidateQueries({ queryKey: ['pipeline-run', event.runId] });
           queryClient.invalidateQueries({ queryKey: ['pipeline-run'] });
+          break;
+
+        case 'repo:pushed':
+          queryClient.invalidateQueries({ queryKey: ['tree'] });
+          queryClient.invalidateQueries({ queryKey: ['blob'] });
+          queryClient.invalidateQueries({ queryKey: ['commits'] });
+          queryClient.invalidateQueries({ queryKey: ['branches'] });
+          queryClient.invalidateQueries({ queryKey: ['prs', event.repoId] });
           break;
       }
     },
