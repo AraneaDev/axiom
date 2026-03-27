@@ -6,6 +6,8 @@ import { Table } from '@tiptap/extension-table';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import TableRow from '@tiptap/extension-table-row';
+import TaskItem from '@tiptap/extension-task-item';
+import TaskList from '@tiptap/extension-task-list';
 import Underline from '@tiptap/extension-underline';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -26,13 +28,20 @@ import {
   Link as LinkIcon,
   ImageIcon,
   Table as TableIcon,
+  MessageSquareWarning,
+  ListChecks,
+  FoldVertical,
+  ListTree,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Markdown } from 'tiptap-markdown';
 
+import { CalloutExtension } from './CalloutExtension';
+import { CollapsibleExtension } from './CollapsibleExtension';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
+import { TableOfContentsExtension } from './TableOfContentsExtension';
 
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
@@ -135,6 +144,11 @@ export function MarkdownEditor({
         projectId: projectId ?? null,
         instanceId,
       }),
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      CalloutExtension,
+      CollapsibleExtension,
+      TableOfContentsExtension,
     ],
     content: value || '',
     onUpdate: ({ editor: e }) => {
@@ -304,6 +318,34 @@ export function MarkdownEditor({
               title="Horizontal Rule"
             >
               <Minus className={ic} />
+            </ToolbarButton>
+            <ToolbarDivider />
+            <ToolbarButton
+              onClick={() => editor.chain().focus().toggleTaskList().run()}
+              active={editor.isActive('taskList')}
+              title="Task List"
+            >
+              <ListChecks className={ic} />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().setCallout({ type: 'info' }).run()}
+              active={editor.isActive('callout')}
+              title="Callout"
+            >
+              <MessageSquareWarning className={ic} />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().setCollapsible().run()}
+              active={editor.isActive('collapsible')}
+              title="Collapsible Section"
+            >
+              <FoldVertical className={ic} />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().insertTableOfContents().run()}
+              title="Table of Contents"
+            >
+              <ListTree className={ic} />
             </ToolbarButton>
           </>
         )}
