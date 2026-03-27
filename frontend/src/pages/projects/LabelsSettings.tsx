@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { labelsApi, type LabelWithDescription } from '@/api/labels.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -210,12 +211,9 @@ export default function LabelsSettings() {
           </div>
           <div className="flex items-center gap-2 pt-1">
             <span className="text-xs text-text-tertiary">Preview:</span>
-            <span
-              className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-on-primary"
-              style={{ backgroundColor: formColor }}
-            >
+            <Badge style={{ backgroundColor: formColor, color: '#fff' }}>
               {formName || 'label'}
-            </span>
+            </Badge>
           </div>
         </div>
       )}
@@ -319,12 +317,9 @@ export default function LabelsSettings() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{label.name}</span>
-                      <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                        style={{ backgroundColor: label.color, color: '#fff' }}
-                      >
+                      <Badge size="sm" style={{ backgroundColor: label.color, color: '#fff' }}>
                         {label.name}
-                      </span>
+                      </Badge>
                     </div>
                     {label.description && (
                       <div className="text-xs text-text-tertiary mt-0.5">

@@ -308,16 +308,16 @@ export default function IssueTemplates() {
                         {template.labels.map((l) => {
                           const labelDef = projectLabels.find((pl) => pl.name === l);
                           return (
-                            <span
+                            <Badge
                               key={l}
-                              className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium"
+                              size="sm"
                               style={{
                                 backgroundColor: (labelDef?.color ?? '#6366f1') + '20',
                                 color: labelDef?.color ?? '#6366f1',
                               }}
                             >
                               {l}
-                            </span>
+                            </Badge>
                           );
                         })}
                       </div>
