@@ -266,57 +266,71 @@ function processCustomBlocks(html: string, allHtml: string): React.ReactNode[] {
   }
 
   const parts: React.ReactNode[] = [];
-  // Split on custom block patterns
-  const blockRegex =
-    /(<div\s+data-callout-type="([^"]*)"[^>]*class="callout-block"[^>]*>([\s\S]*?)<\/div>|<div\s+data-collapsible(?:="")?[^>]*data-title="([^"]*)"[^>]*data-open="([^"]*)"[^>]*class="collapsible-block"[^>]*>([\s\S]*?)<\/div>|<div\s+data-table-of-contents(?:="")?[^>]*class="table-of-contents-block"[^>]*>[\s\S]*?<\/div>)/g;
 
-  let lastIndex = 0;
-  let match;
-  while ((match = blockRegex.exec(html)) !== null) {
-    // Add preceding HTML
-    if (match.index > lastIndex) {
-      const preceding = html.slice(lastIndex, match.index);
-      if (preceding.trim()) {
+  // Use a DOM parser for reliable attribute extraction instead of fragile regexes
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+
+  // Walk top-level children and identify custom blocks
+  let htmlBuffer = '';
+  let partIndex = 0;
+
+  const flushBuffer = () => {
+    if (htmlBuffer.trim()) {
+      parts.push(
+        <div key={`html-${partIndex++}`} dangerouslySetInnerHTML={{ __html: htmlBuffer }} />,
+      );
+    }
+    htmlBuffer = '';
+  };
+
+  for (const child of Array.from(tempDiv.childNodes)) {
+    if (child instanceof HTMLElement) {
+      if (child.hasAttribute('data-callout-type') || child.classList.contains('callout-block')) {
+        flushBuffer();
+        const type = (child.getAttribute('data-callout-type') ||
+          child.getAttribute('data-type') ||
+          'info') as CalloutType;
         parts.push(
-          <div key={`html-${lastIndex}`} dangerouslySetInnerHTML={{ __html: preceding }} />,
+          <ReadOnlyCallout key={`callout-${partIndex++}`} type={type} html={child.innerHTML} />,
         );
+        continue;
+      }
+
+      if (child.hasAttribute('data-collapsible') || child.classList.contains('collapsible-block')) {
+        flushBuffer();
+        const title = child.getAttribute('data-title') || 'Click to expand';
+        const open = child.getAttribute('data-open') !== 'false';
+        parts.push(
+          <ReadOnlyCollapsible
+            key={`collapsible-${partIndex++}`}
+            title={title}
+            html={child.innerHTML}
+            defaultOpen={open}
+          />,
+        );
+        continue;
+      }
+
+      if (
+        child.hasAttribute('data-table-of-contents') ||
+        child.classList.contains('table-of-contents-block')
+      ) {
+        flushBuffer();
+        parts.push(<ReadOnlyTableOfContents key={`toc-${partIndex++}`} headings={tocHeadings} />);
+        continue;
       }
     }
 
-    if (match[2] !== undefined) {
-      // Callout block
-      parts.push(
-        <ReadOnlyCallout
-          key={`callout-${match.index}`}
-          type={match[2] as CalloutType}
-          html={match[3]}
-        />,
-      );
-    } else if (match[4] !== undefined) {
-      // Collapsible block
-      parts.push(
-        <ReadOnlyCollapsible
-          key={`collapsible-${match.index}`}
-          title={match[4]}
-          html={match[6]}
-          defaultOpen={match[5] !== 'false'}
-        />,
-      );
-    } else {
-      // Table of contents block
-      parts.push(<ReadOnlyTableOfContents key={`toc-${match.index}`} headings={tocHeadings} />);
-    }
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Remaining HTML
-  if (lastIndex < html.length) {
-    const remaining = html.slice(lastIndex);
-    if (remaining.trim()) {
-      parts.push(<div key={`html-${lastIndex}`} dangerouslySetInnerHTML={{ __html: remaining }} />);
+    // Regular HTML node -- accumulate
+    if (child instanceof HTMLElement) {
+      htmlBuffer += child.outerHTML;
+    } else if (child.textContent?.trim()) {
+      htmlBuffer += child.textContent;
     }
   }
+
+  flushBuffer();
 
   return parts.length > 0 ? parts : [<div key="full" dangerouslySetInnerHTML={{ __html: html }} />];
 }
