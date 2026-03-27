@@ -43,7 +43,15 @@ export const createPageSchema = z.object({
   isDraft: z.boolean().default(false),
 });
 
-export const updatePageSchema = createPageSchema.partial();
+export const updatePageSchema = createPageSchema
+  .extend({
+    changeDescription: z.string().max(500).optional(),
+  })
+  .partial();
+
+export const restoreVersionSchema = z.object({
+  version: z.number().int().min(1),
+});
 
 // ─── Wiki Templates ─────────────────────────────────────────
 

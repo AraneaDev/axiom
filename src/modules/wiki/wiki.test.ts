@@ -179,6 +179,74 @@ describe('Wiki API', () => {
     expect(versions.length).toBeGreaterThanOrEqual(2);
   });
 
+  // ─── Version Diff & Restore ────────────────────────────────
+
+  // 6a. Update with change description
+  it('6a. should update a page with a change description', async () => {
+    const res = await request(app)
+      .patch(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ body: 'Version 3 content.', changeDescription: 'Added version 3 content' });
+    expect(res.status).toBe(200);
+  });
+
+  // 6b. Diff two versions
+  it('6b. should diff two versions', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}/diff?from=2&to=3`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.from).toBeDefined();
+    expect(res.body.to).toBeDefined();
+    expect(res.body.from.version).toBe(2);
+    expect(res.body.to.version).toBe(3);
+    expect(Array.isArray(res.body.changes)).toBe(true);
+    expect(res.body.changes.length).toBeGreaterThan(0);
+  });
+
+  // 6c. Diff with invalid versions should fail
+  it('6c. should reject diff with same version numbers', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}/diff?from=1&to=1`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(400);
+  });
+
+  // 6d. Restore a version
+  it('6d. should restore a previous version', async () => {
+    const res = await request(app)
+      .post(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}/restore`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ version: 1 });
+    expect(res.status).toBe(200);
+    // Check the latest version has the restore description
+    expect(res.body.versions[0].changeDescription).toBe('Restored to version 1');
+  });
+
+  // 6e. History should now have more versions after restore
+  it('6e. should have additional version after restore', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}/history`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const versions = res.body.versions ?? res.body;
+    expect(versions.length).toBeGreaterThanOrEqual(4);
+    // Latest version should be the restored one
+    const latest = versions[0];
+    expect(latest.changeDescription).toBe('Restored to version 1');
+  });
+
+  // 6f. Diff should include changeDescription
+  it('6f. should include changeDescription in diff response', async () => {
+    const res = await request(app)
+      .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}/diff?from=2&to=3`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.to.changeDescription).toBe('Added version 3 content');
+  });
+
   // ─── Page Comments ──────────────────────────────────────────
 
   // 7a. Add comment to page

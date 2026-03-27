@@ -79,6 +79,7 @@ export default function PageEdit() {
   const [slug, setSlug] = useState('');
   const [body, setBody] = useState('');
   const [parentId, setParentId] = useState<string>(searchParams.get('parent') ?? '');
+  const [changeDescription, setChangeDescription] = useState('');
   const [error, setError] = useState('');
   const [showPreview, setShowPreview] = useState(false);
 
@@ -175,6 +176,7 @@ export default function PageEdit() {
           title,
           body,
           ...(parentId ? { parentId } : { parentId: null }),
+          ...(changeDescription.trim() ? { changeDescription: changeDescription.trim() } : {}),
         });
       }
     },
@@ -338,6 +340,17 @@ export default function PageEdit() {
             </div>
           )}
         </div>
+
+        {/* Change description (existing pages only) */}
+        {!isNew && (
+          <Input
+            id="changeDescription"
+            label="Change description (optional)"
+            value={changeDescription}
+            onChange={(e) => setChangeDescription(e.target.value)}
+            placeholder="Briefly describe what you changed"
+          />
+        )}
 
         {/* Attachments (existing pages only) */}
         {!isNew && existingPage?.id && (

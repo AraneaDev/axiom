@@ -8,6 +8,7 @@ import type {
   PageTemplate,
   PageComment,
   PageLabel,
+  DiffResult,
 } from '@/lib/types';
 
 /** Wiki API client for spaces, pages, templates, comments, labels, and export. */
@@ -67,11 +68,18 @@ export const wikiApi = {
    * @param data.body
    * @param data.isDraft
    * @param data.parentId
+   * @param data.changeDescription
    */
   updatePage: (
     spaceId: string,
     pageSlug: string,
-    data: { title?: string; body?: string; isDraft?: boolean; parentId?: string | null },
+    data: {
+      title?: string;
+      body?: string;
+      isDraft?: boolean;
+      parentId?: string | null;
+      changeDescription?: string;
+    },
   ) => patch<Page>(`/wiki/spaces/${spaceId}/pages/${pageSlug}`, data),
   /**
    * Delete a wiki page by slug.
@@ -193,6 +201,25 @@ export const wikiApi = {
    */
   copyPage: (pageId: string, data: { targetSpaceId?: string; newSlug?: string }) =>
     post<Page>(`/wiki/pages/${pageId}/copy`, data),
+
+  /**
+   * Compare two versions of a wiki page and return a structured diff.
+   * @param spaceId
+   * @param pageSlug
+   * @param from - Version number to compare from
+   * @param to - Version number to compare to
+   */
+  diffVersions: (spaceId: string, pageSlug: string, from: number, to: number) =>
+    get<DiffResult>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/diff?from=${from}&to=${to}`),
+
+  /**
+   * Restore a wiki page to a previous version.
+   * @param spaceId
+   * @param pageSlug
+   * @param version - The version number to restore to
+   */
+  restoreVersion: (spaceId: string, pageSlug: string, version: number) =>
+    post<Page>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/restore`, { version }),
 
   /**
    * Export a wiki page as a downloadable file (HTML, DOCX, PDF, etc.). Uses raw fetch for blob download.

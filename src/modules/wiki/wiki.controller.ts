@@ -9,6 +9,7 @@ import {
   updatePageSchema,
   movePageSchema,
   copyPageSchema,
+  restoreVersionSchema,
 } from '../../utils/validation';
 
 import * as wikiExportService from './wiki-export.service';
@@ -70,6 +71,37 @@ export const exportPage = asyncHandler(async (req: Request, res: Response) => {
 export const pageTree = asyncHandler(async (req: Request, res: Response) => {
   const tree = await wikiService.getPageTree(param(req, 'spaceId'));
   res.json(tree);
+});
+
+// Version Comparison & Restore
+
+export const diffVersions = asyncHandler(async (req: Request, res: Response) => {
+  const from = parseInt(req.query.from as string, 10);
+  const to = parseInt(req.query.to as string, 10);
+  if (isNaN(from) || isNaN(to)) {
+    res
+      .status(400)
+      .json({ error: { message: 'Both "from" and "to" query params are required as integers' } });
+    return;
+  }
+  const result = await wikiService.diffVersions(
+    param(req, 'spaceId'),
+    param(req, 'pageSlug'),
+    from,
+    to,
+  );
+  res.json(result);
+});
+
+export const restoreVersion = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(restoreVersionSchema, req.body);
+  const page = await wikiService.restoreVersion(
+    param(req, 'spaceId'),
+    param(req, 'pageSlug'),
+    data.version,
+    req.userId!,
+  );
+  res.json(page);
 });
 
 // Page Move / Copy

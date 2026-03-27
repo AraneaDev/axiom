@@ -79,4 +79,5 @@ export {
   addPageLabelSchema,
   movePageSchema,
   copyPageSchema,
+  restoreVersionSchema,
 } from './validation/user-validators';

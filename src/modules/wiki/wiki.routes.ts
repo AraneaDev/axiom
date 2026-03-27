@@ -59,6 +59,16 @@ router.get(
   requireWikiSpaceAccess(),
   wikiController.exportPage,
 );
+router.get(
+  '/spaces/:spaceId/pages/:pageSlug/diff',
+  requireWikiSpaceAccess(),
+  wikiController.diffVersions,
+);
+router.post(
+  '/spaces/:spaceId/pages/:pageSlug/restore',
+  requireWikiSpaceAccess(),
+  wikiController.restoreVersion,
+);
 
 // Templates (space-scoped require space access, template-scoped require template access)
 router.post(

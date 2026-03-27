@@ -1,3 +1,5 @@
+import * as Diff from 'diff';
+
 import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
@@ -158,11 +160,12 @@ export async function getPage(spaceId: string, pageSlug: string) {
  * @param spaceId - The wiki space ID
  * @param pageSlug - The page slug within the space
  * @param authorId - The user performing the update
- * @param data - Partial update data for title, body, parentId, or isDraft
+ * @param data - Partial update data for title, body, parentId, isDraft, or changeDescription
  * @param data.title
  * @param data.body
  * @param data.parentId
  * @param data.isDraft
+ * @param data.changeDescription
  * @returns The updated page with latest version
  * @throws {AppError} 404 if page not found
  */
@@ -175,6 +178,7 @@ export async function updatePage(
     body?: string;
     parentId?: string;
     isDraft?: boolean;
+    changeDescription?: string;
   },
 ) {
   const page = await findOrThrow(
@@ -200,6 +204,7 @@ export async function updatePage(
           title: data.title ?? page.title,
           body: data.body ?? page.body,
           authorId,
+          changeDescription: data.changeDescription,
         },
       },
     },
@@ -291,6 +296,140 @@ export async function getPageTree(spaceId: string) {
 
     return buildTree(null);
   }); // end cacheable
+}
+
+// ─── Version Comparison & Restore ────────────────────────────
+
+/**
+ * Compare two page versions and return a structured diff.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @param fromVersion - The earlier version number
+ * @param toVersion - The later version number
+ * @returns Both versions with structured diff changes
+ * @throws {AppError} 404 if page or either version not found
+ * @throws {AppError} 400 if version numbers are invalid
+ */
+export async function diffVersions(
+  spaceId: string,
+  pageSlug: string,
+  fromVersion: number,
+  toVersion: number,
+) {
+  if (fromVersion < 1 || toVersion < 1 || fromVersion === toVersion) {
+    throw new AppError(400, 'Invalid version numbers for comparison');
+  }
+
+  const page = await findOrThrow(
+    prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId, slug: pageSlug } },
+    }),
+    'Page not found',
+  );
+
+  const [fromVer, toVer] = await Promise.all([
+    findOrThrow(
+      prisma.pageVersion.findUnique({
+        where: { pageId_version: { pageId: page.id, version: fromVersion } },
+        include: { author: { select: USER_BASIC_SELECT } },
+      }),
+      `Version ${fromVersion} not found`,
+    ),
+    findOrThrow(
+      prisma.pageVersion.findUnique({
+        where: { pageId_version: { pageId: page.id, version: toVersion } },
+        include: { author: { select: USER_BASIC_SELECT } },
+      }),
+      `Version ${toVersion} not found`,
+    ),
+  ]);
+
+  const changes = Diff.diffLines(fromVer.body, toVer.body);
+
+  return {
+    from: {
+      version: fromVer.version,
+      title: fromVer.title,
+      body: fromVer.body,
+      author: fromVer.author,
+      changeDescription: fromVer.changeDescription,
+      createdAt: fromVer.createdAt,
+    },
+    to: {
+      version: toVer.version,
+      title: toVer.title,
+      body: toVer.body,
+      author: toVer.author,
+      changeDescription: toVer.changeDescription,
+      createdAt: toVer.createdAt,
+    },
+    changes: changes.map((c) => ({
+      value: c.value,
+      added: c.added ?? false,
+      removed: c.removed ?? false,
+    })),
+  };
+}
+
+/**
+ * Restore a wiki page to a previous version by creating a new version with that content.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @param targetVersion - The version number to restore to
+ * @param userId - The user performing the restore
+ * @returns The updated page with the new version
+ * @throws {AppError} 404 if page or target version not found
+ */
+export async function restoreVersion(
+  spaceId: string,
+  pageSlug: string,
+  targetVersion: number,
+  userId: string,
+) {
+  const page = await findOrThrow(
+    prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId, slug: pageSlug } },
+      include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+    }),
+    'Page not found',
+  );
+
+  const target = await findOrThrow(
+    prisma.pageVersion.findUnique({
+      where: { pageId_version: { pageId: page.id, version: targetVersion } },
+    }),
+    `Version ${targetVersion} not found`,
+  );
+
+  const nextVersion = (page.versions[0]?.version ?? 0) + 1;
+
+  const updated = await prisma.page.update({
+    where: { id: page.id },
+    data: {
+      title: target.title,
+      body: target.body,
+      versions: {
+        create: {
+          version: nextVersion,
+          title: target.title,
+          body: target.body,
+          authorId: userId,
+          changeDescription: `Restored to version ${targetVersion}`,
+        },
+      },
+    },
+    include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+  });
+
+  await cacheInvalidate(`wiki:tree:${spaceId}`);
+  await logActivity('wiki_page', page.id, 'updated', userId, {
+    title: updated.title,
+    restoredToVersion: targetVersion,
+  });
+
+  broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
+
+  return updated;
 }
 
 // ─── Re-exports from sub-services ───────────────────────────

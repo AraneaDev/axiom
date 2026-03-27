@@ -210,7 +210,34 @@ export interface PageVersion {
   title: string;
   body: string;
   author: { id: string; username: string; displayName: string };
+  changeDescription?: string | null;
   createdAt: string;
+}
+
+export interface DiffChange {
+  value: string;
+  added: boolean;
+  removed: boolean;
+}
+
+export interface DiffResult {
+  from: {
+    version: number;
+    title: string;
+    body: string;
+    author: { id: string; username: string; displayName: string };
+    changeDescription?: string | null;
+    createdAt: string;
+  };
+  to: {
+    version: number;
+    title: string;
+    body: string;
+    author: { id: string; username: string; displayName: string };
+    changeDescription?: string | null;
+    createdAt: string;
+  };
+  changes: DiffChange[];
 }
 
 export interface PageTemplate {

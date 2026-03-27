@@ -603,9 +603,10 @@ model PageVersion {
   page     Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
   version  Int
   title    String
-  body     String // markdown
-  authorId String
-  author   User   @relation(fields: [authorId], references: [id])
+  body              String // markdown
+  authorId          String
+  author            User   @relation(fields: [authorId], references: [id])
+  changeDescription String?
 
   createdAt DateTime @default(now())
 
