@@ -1,11 +1,16 @@
-import { BookOpen, Plus } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Archive, ArchiveRestore, BookOpen, Eye, EyeOff, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useWikiContext } from './WikiLayout';
 
+import { wikiApi } from '@/api/wiki.api';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CardGridSkeleton } from '@/components/ui/Skeleton';
+import { cn } from '@/lib/utils';
 
 /**
  * Wiki home page -- shows list of spaces as cards.
@@ -13,7 +18,17 @@ import { CardGridSkeleton } from '@/components/ui/Skeleton';
  */
 export default function WikiHome() {
   const { org, team: teamSlug } = useParams();
-  const { spaces } = useWikiContext();
+  const { spaces, currentTeam } = useWikiContext();
+  const [showArchived, setShowArchived] = useState(false);
+  const queryClient = useQueryClient();
+
+  const archiveMutation = useMutation({
+    mutationFn: ({ spaceId, isArchived }: { spaceId: string; isArchived: boolean }) =>
+      wikiApi.updateSpace(spaceId, { isArchived }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wikiSpaces', currentTeam?.id] });
+    },
+  });
 
   if (!spaces)
     return (
@@ -22,18 +37,35 @@ export default function WikiHome() {
       </div>
     );
 
+  const activeSpaces = spaces.filter((s) => !s.isArchived);
+  const archivedSpaces = spaces.filter((s) => s.isArchived);
+  const displaySpaces = showArchived ? spaces : activeSpaces;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Wiki</h1>
-        <Link to={`/${org}/${teamSlug}/wiki/new`}>
-          <Button size="sm">
-            <Plus className="h-4 w-4" /> New Space
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {archivedSpaces.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowArchived(!showArchived)}
+              title={showArchived ? 'Hide archived spaces' : 'Show archived spaces'}
+            >
+              {showArchived ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showArchived ? 'Hide Archived' : `Show Archived (${archivedSpaces.length})`}
+            </Button>
+          )}
+          <Link to={`/${org}/${teamSlug}/wiki/new`}>
+            <Button size="sm">
+              <Plus className="h-4 w-4" /> New Space
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      {!spaces.length ? (
+      {!displaySpaces.length ? (
         <EmptyState
           icon={<BookOpen className="h-12 w-12" />}
           title="No wiki spaces"
@@ -41,19 +73,43 @@ export default function WikiHome() {
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {spaces.map((s) => (
-            <Link
+          {displaySpaces.map((s) => (
+            <div
               key={s.id}
-              to={`/${org}/${teamSlug}/wiki/${s.slug}`}
-              className="rounded-lg border border-border bg-surface p-5 hover:border-primary/50 hover:shadow-sm transition-all"
+              className={cn(
+                'rounded-lg border border-border bg-surface p-5 transition-all',
+                s.isArchived ? 'opacity-60' : 'hover:border-primary/50 hover:shadow-sm',
+              )}
             >
-              <div className="flex items-center gap-3 mb-2">
-                <BookOpen className="h-5 w-5 text-primary" />
-                <h3 className="font-semibold">{s.name}</h3>
+              <Link to={`/${org}/${teamSlug}/wiki/${s.slug}`}>
+                <div className="flex items-center gap-3 mb-2">
+                  <BookOpen
+                    className={cn('h-5 w-5', s.isArchived ? 'text-text-tertiary' : 'text-primary')}
+                  />
+                  <h3 className="font-semibold">{s.name}</h3>
+                  {s.isArchived && <Badge variant="warning">Archived</Badge>}
+                </div>
+                {s.description && <p className="text-sm text-text-secondary">{s.description}</p>}
+                <p className="text-xs text-text-secondary mt-2">{s._count?.pages ?? 0} pages</p>
+              </Link>
+              <div className="mt-3 pt-3 border-t border-border">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() =>
+                    archiveMutation.mutate({ spaceId: s.id, isArchived: !s.isArchived })
+                  }
+                  disabled={archiveMutation.isPending}
+                >
+                  {s.isArchived ? (
+                    <ArchiveRestore className="h-3.5 w-3.5" />
+                  ) : (
+                    <Archive className="h-3.5 w-3.5" />
+                  )}
+                  {s.isArchived ? 'Unarchive' : 'Archive'}
+                </Button>
               </div>
-              {s.description && <p className="text-sm text-text-secondary">{s.description}</p>}
-              <p className="text-xs text-text-secondary mt-2">{s._count?.pages ?? 0} pages</p>
-            </Link>
+            </div>
           ))}
         </div>
       )}

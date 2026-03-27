@@ -17,8 +17,12 @@ export const wikiApi = {
   /**
    * List all wiki spaces for a team.
    * @param teamId
+   * @param includeArchived
    */
-  listSpaces: (teamId: string) => get<WikiSpace[]>(`/wiki/team/${teamId}/spaces`),
+  listSpaces: (teamId: string, includeArchived?: boolean) =>
+    get<WikiSpace[]>(
+      `/wiki/team/${teamId}/spaces${includeArchived ? '?includeArchived=true' : ''}`,
+    ),
   /**
    * Create a new wiki space within a team.
    * @param teamId

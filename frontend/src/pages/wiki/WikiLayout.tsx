@@ -32,6 +32,7 @@ interface WikiContextValue {
         slug: string;
         name: string;
         description?: string;
+        isArchived?: boolean;
         _count?: { pages: number };
       }>
     | undefined;
@@ -61,7 +62,7 @@ export default function WikiLayout() {
 
   const { data: spaces, isLoading: spacesLoading } = useQuery({
     queryKey: ['wikiSpaces', currentTeam?.id],
-    queryFn: () => wikiApi.listSpaces(currentTeam!.id),
+    queryFn: () => wikiApi.listSpaces(currentTeam!.id, true),
     enabled: !!currentTeam?.id,
   });
   const currentSpace = spaces?.find((s) => s.slug === spaceSlug);
@@ -104,7 +105,7 @@ export default function WikiLayout() {
         {showSpaceTree ? (
           <>
             {/* Space heading / selector */}
-            {spaces && spaces.length > 1 ? (
+            {spaces && spaces.filter((s) => !s.isArchived).length > 1 ? (
               <Dropdown
                 trigger={
                   <button
@@ -120,17 +121,19 @@ export default function WikiLayout() {
                 }
                 align="left"
               >
-                {spaces.map((s) => (
-                  <DropdownItem key={s.id}>
-                    <Link
-                      to={`/${org}/${team}/wiki/${s.slug}`}
-                      className="flex items-center gap-2 w-full"
-                    >
-                      <BookOpen className="h-3.5 w-3.5" />
-                      {s.name}
-                    </Link>
-                  </DropdownItem>
-                ))}
+                {spaces
+                  .filter((s) => !s.isArchived)
+                  .map((s) => (
+                    <DropdownItem key={s.id}>
+                      <Link
+                        to={`/${org}/${team}/wiki/${s.slug}`}
+                        className="flex items-center gap-2 w-full"
+                      >
+                        <BookOpen className="h-3.5 w-3.5" />
+                        {s.name}
+                      </Link>
+                    </DropdownItem>
+                  ))}
               </Dropdown>
             ) : (
               <div className="flex items-center gap-2 px-2 py-1.5 mb-3">
@@ -186,22 +189,24 @@ export default function WikiLayout() {
                 <Spinner className="h-4 w-4" />
               </div>
             ) : (
-              spaces?.map((s) => (
-                <Link
-                  key={s.id}
-                  to={`/${org}/${team}/wiki/${s.slug}`}
-                  className={cn(
-                    'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
-                    s.slug === spaceSlug && 'bg-primary-light text-primary font-medium',
-                  )}
-                >
-                  <BookOpen className="h-3.5 w-3.5 text-text-secondary" />
-                  <span className="truncate">{s.name}</span>
-                  {s._count?.pages != null && (
-                    <span className="ml-auto text-xs text-text-tertiary">{s._count.pages}</span>
-                  )}
-                </Link>
-              ))
+              spaces
+                ?.filter((s) => !s.isArchived)
+                .map((s) => (
+                  <Link
+                    key={s.id}
+                    to={`/${org}/${team}/wiki/${s.slug}`}
+                    className={cn(
+                      'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
+                      s.slug === spaceSlug && 'bg-primary-light text-primary font-medium',
+                    )}
+                  >
+                    <BookOpen className="h-3.5 w-3.5 text-text-secondary" />
+                    <span className="truncate">{s.name}</span>
+                    {s._count?.pages != null && (
+                      <span className="ml-auto text-xs text-text-tertiary">{s._count.pages}</span>
+                    )}
+                  </Link>
+                ))
             )}
           </>
         )}
