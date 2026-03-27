@@ -122,6 +122,10 @@ export const searchSchema = z.object({
   type: z.enum(['issues', 'wiki', 'repos', 'code', 'all']).default('all'),
   teamId: z.string().optional(),
   projectId: z.string().optional(),
+  spaceId: z.string().optional(),
+  label: z.string().optional(),
+  since: z.string().optional(),
+  until: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });

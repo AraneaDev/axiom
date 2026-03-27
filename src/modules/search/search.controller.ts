@@ -23,6 +23,12 @@ export const searchCodeEndpoint = asyncHandler(async (req: Request, res: Respons
   res.json(results);
 });
 
+export const getAccessibleSpaces = asyncHandler(async (req: Request, res: Response) => {
+  const orgIds = await searchService.getUserOrgIds(req.userId!);
+  const spaces = await searchService.getAccessibleSpaces(orgIds);
+  res.json(spaces);
+});
+
 export const getSavedSearches = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
   const searches = await searchService.getSavedSearches(userId);

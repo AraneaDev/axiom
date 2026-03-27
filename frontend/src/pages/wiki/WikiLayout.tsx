@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useQuery } from '@tanstack/react-query';
-import { BookOpen, ChevronDown, FolderPlus, Library, Plus, Star } from 'lucide-react';
+import { BookOpen, ChevronDown, FolderPlus, Library, Plus, Search, Star } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import { Link, Outlet, useOutletContext, useParams } from 'react-router';
+import { Link, Outlet, useNavigate, useOutletContext, useParams } from 'react-router';
 
 import { CreateFolderModal } from './CreateFolderModal';
 import { PageViewSidebar } from './PageViewSidebar';
@@ -10,6 +10,7 @@ import { PageViewSidebar } from './PageViewSidebar';
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useModalState } from '@/hooks/useModalState';
 import { useTeamContext } from '@/hooks/useTeamContext';
@@ -56,7 +57,9 @@ export default function WikiLayout() {
   const { org, teamSlug: team, currentOrg, currentTeam } = useTeamContext();
   const { space: spaceSlug, page: pageSlug } = useParams();
 
+  const navigate = useNavigate();
   const [, setTocEntries] = useState<TocEntry[]>([]);
+  const [searchInput, setSearchInput] = useState('');
   const folderModal = useModalState();
   const [folderModalParent, setFolderModalParent] = useState<string | undefined>(undefined);
 
@@ -149,6 +152,31 @@ export default function WikiLayout() {
                 </span>
               </div>
             )}
+
+            {/* Space search */}
+            <form
+              className="mb-3 px-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (searchInput.trim() && currentSpace) {
+                  navigate(
+                    `/search?q=${encodeURIComponent(searchInput.trim())}&type=wiki&spaceId=${currentSpace.id}`,
+                  );
+                  setSearchInput('');
+                }
+              }}
+            >
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-tertiary pointer-events-none" />
+                <Input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search in space..."
+                  className="h-7 pl-7 text-xs w-full"
+                />
+              </div>
+            </form>
 
             {/* Action buttons */}
             <div className="flex gap-1 mb-3 px-1">

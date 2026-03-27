@@ -37,6 +37,10 @@ interface SearchParams {
   type: 'issues' | 'wiki' | 'repos' | 'code' | 'all';
   teamId?: string;
   projectId?: string;
+  spaceId?: string;
+  label?: string;
+  since?: string;
+  until?: string;
   limit: number;
   offset: number;
   userId?: string;
@@ -316,7 +320,9 @@ async function searchWiki(
   _filters: Record<string, string>,
   params: SearchParams,
 ) {
-  if (!freeText) {
+  // Allow wiki search with filters even if no free text
+  const hasFilters = !!(params.spaceId || params.label || params.since || params.until);
+  if (!freeText && !hasFilters) {
     return { type: 'wiki', items: [], total: 0 };
   }
 
@@ -325,6 +331,26 @@ async function searchWiki(
 
   if (params.orgIds && params.orgIds.length > 0) {
     where.space = { team: { orgId: { in: params.orgIds } } };
+  }
+
+  // Space filter
+  if (params.spaceId) {
+    where.spaceId = params.spaceId;
+  }
+
+  // Label filter
+  if (params.label) {
+    where.pageLabels = {
+      some: { label: { equals: params.label, mode: 'insensitive' } },
+    };
+  }
+
+  // Date range filters on updatedAt
+  if (params.since || params.until) {
+    const updatedAt: Prisma.DateTimeFilter = {};
+    if (params.since) updatedAt.gte = new Date(params.since);
+    if (params.until) updatedAt.lte = new Date(params.until);
+    where.updatedAt = updatedAt;
   }
 
   if (tsq) {
@@ -364,6 +390,7 @@ async function searchWiki(
           where,
           include: {
             space: { select: SPACE_URL_SELECT },
+            pageLabels: true,
           },
           take: params.limit,
           skip: params.offset,
@@ -379,6 +406,8 @@ async function searchWiki(
           ...p,
           url: `/${p.space.team.org.slug}/${p.space.team.slug}/wiki/${p.space.slug}/${p.slug}`,
           spaceName: p.space.name,
+          spaceId: p.spaceId,
+          labels: p.pageLabels.map((l: { label: string }) => l.label),
           snippet: snippetMap.get(p.id) ?? '',
         })),
       };
@@ -387,11 +416,13 @@ async function searchWiki(
     }
   }
 
-  // Fallback to LIKE search
-  where.OR = [
-    { title: { contains: freeText, mode: 'insensitive' } },
-    { body: { contains: freeText, mode: 'insensitive' } },
-  ];
+  // Fallback to LIKE search (only if we have free text)
+  if (freeText) {
+    where.OR = [
+      { title: { contains: freeText, mode: 'insensitive' } },
+      { body: { contains: freeText, mode: 'insensitive' } },
+    ];
+  }
 
   const [pages, total] = await Promise.all([
     prisma.page.findMany({
@@ -405,6 +436,7 @@ async function searchWiki(
             team: { select: { slug: true, org: { select: { slug: true } } } },
           },
         },
+        pageLabels: true,
       },
       take: params.limit,
       skip: params.offset,
@@ -420,6 +452,8 @@ async function searchWiki(
       ...p,
       url: `/${p.space.team.org.slug}/${p.space.team.slug}/wiki/${p.space.slug}/${p.slug}`,
       spaceName: p.space.name,
+      spaceId: p.spaceId,
+      labels: p.pageLabels.map((l: { label: string }) => l.label),
       snippet: '',
     })),
   };
@@ -561,6 +595,25 @@ export async function searchCode(
     items: allMatches.slice(0, params.limit),
     total: allMatches.length,
   };
+}
+
+// ─── Accessible Spaces (for search filter UI) ───────────────
+
+/**
+ * Get all wiki spaces the user can access (via org membership).
+ * @param orgIds - Organization IDs the user belongs to
+ * @returns List of spaces with id, name, and slug
+ */
+export async function getAccessibleSpaces(orgIds: string[]) {
+  if (!orgIds.length) return [];
+  return prisma.wikiSpace.findMany({
+    where: {
+      isArchived: false,
+      team: { orgId: { in: orgIds } },
+    },
+    select: { id: true, name: true, slug: true },
+    orderBy: { name: 'asc' },
+  });
 }
 
 // ─── Saved Searches ─────────────────────────────────────────

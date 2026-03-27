@@ -243,7 +243,13 @@ export function PageViewHeader({
             className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2.5 py-0.5 text-xs font-medium text-primary"
           >
             <Tag className="h-3 w-3" />
-            {pl.label}
+            <Link
+              to={`/search?q=${encodeURIComponent(pl.label)}&type=wiki&label=${encodeURIComponent(pl.label)}`}
+              className="hover:underline"
+              title={`Search pages with label "${pl.label}"`}
+            >
+              {pl.label}
+            </Link>
             <Button
               variant="ghost"
               size="xs"
