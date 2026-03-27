@@ -1,4 +1,4 @@
-import { get, post, patch, del } from './client';
+import { get, post, patch, put, del } from './client';
 
 import type {
   WikiSpace,
@@ -8,6 +8,8 @@ import type {
   PageTemplate,
   PageComment,
   PageLabel,
+  PageRestriction,
+  DiffResult,
 } from '@/lib/types';
 
 /** Wiki API client for spaces, pages, templates, comments, labels, and export. */
@@ -15,8 +17,12 @@ export const wikiApi = {
   /**
    * List all wiki spaces for a team.
    * @param teamId
+   * @param includeArchived
    */
-  listSpaces: (teamId: string) => get<WikiSpace[]>(`/wiki/team/${teamId}/spaces`),
+  listSpaces: (teamId: string, includeArchived?: boolean) =>
+    get<WikiSpace[]>(
+      `/wiki/team/${teamId}/spaces${includeArchived ? '?includeArchived=true' : ''}`,
+    ),
   /**
    * Create a new wiki space within a team.
    * @param teamId
@@ -67,11 +73,18 @@ export const wikiApi = {
    * @param data.body
    * @param data.isDraft
    * @param data.parentId
+   * @param data.changeDescription
    */
   updatePage: (
     spaceId: string,
     pageSlug: string,
-    data: { title?: string; body?: string; isDraft?: boolean; parentId?: string | null },
+    data: {
+      title?: string;
+      body?: string;
+      isDraft?: boolean;
+      parentId?: string | null;
+      changeDescription?: string;
+    },
   ) => patch<Page>(`/wiki/spaces/${spaceId}/pages/${pageSlug}`, data),
   /**
    * Delete a wiki page by slug.
@@ -147,6 +160,14 @@ export const wikiApi = {
   deletePageComment: (commentId: string) => del(`/wiki/comments/${commentId}`),
 
   /**
+   * Toggle a reaction on a comment (add if not present, remove if already given).
+   * @param commentId
+   * @param reactionType
+   */
+  toggleReaction: (commentId: string, reactionType: string) =>
+    post<{ added: boolean }>(`/wiki/comments/${commentId}/reactions`, { reactionType }),
+
+  /**
    * List labels attached to a wiki page.
    * @param pageId
    */
@@ -176,6 +197,36 @@ export const wikiApi = {
     ),
 
   /**
+   * Update a wiki space (e.g., archive/unarchive).
+   * @param spaceId
+   * @param data
+   * @param data.isArchived
+   */
+  updateSpace: (spaceId: string, data: { isArchived?: boolean }) =>
+    patch<WikiSpace>(`/wiki/spaces/${spaceId}`, data),
+
+  /**
+   * Get restrictions for a wiki page.
+   * @param pageId
+   */
+  getRestrictions: (pageId: string) => get<PageRestriction[]>(`/wiki/pages/${pageId}/restrictions`),
+
+  /**
+   * Set restrictions on a wiki page (replaces existing of the given type).
+   * @param pageId
+   * @param type
+   * @param userIds
+   */
+  setRestrictions: (pageId: string, type: 'VIEW' | 'EDIT', userIds: string[]) =>
+    put<PageRestriction[]>(`/wiki/pages/${pageId}/restrictions`, { type, userIds }),
+
+  /**
+   * Remove a single page restriction.
+   * @param restrictionId
+   */
+  removeRestriction: (restrictionId: string) => del(`/wiki/restrictions/${restrictionId}`),
+
+  /**
    * Move a page to a different space or parent.
    * @param pageId
    * @param data
@@ -193,6 +244,84 @@ export const wikiApi = {
    */
   copyPage: (pageId: string, data: { targetSpaceId?: string; newSlug?: string }) =>
     post<Page>(`/wiki/pages/${pageId}/copy`, data),
+
+  /**
+   * Compare two versions of a wiki page and return a structured diff.
+   * @param spaceId
+   * @param pageSlug
+   * @param from - Version number to compare from
+   * @param to - Version number to compare to
+   */
+  diffVersions: (spaceId: string, pageSlug: string, from: number, to: number) =>
+    get<DiffResult>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/diff?from=${from}&to=${to}`),
+
+  /**
+   * Restore a wiki page to a previous version.
+   * @param spaceId
+   * @param pageSlug
+   * @param version - The version number to restore to
+   */
+  restoreVersion: (spaceId: string, pageSlug: string, version: number) =>
+    post<Page>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/restore`, { version }),
+
+  // ─── Starred Pages ───────────────────────────────────────────
+
+  /**
+   * Toggle star on a wiki page (star if unstarred, unstar if starred).
+   * @param pageId
+   */
+  toggleStar: (pageId: string) => post<{ starred: boolean }>(`/wiki/pages/${pageId}/star`, {}),
+
+  /**
+   * Check if a page is starred by the current user.
+   * @param pageId
+   */
+  isStarred: (pageId: string) => get<{ starred: boolean }>(`/wiki/pages/${pageId}/star`),
+
+  /**
+   * Get all starred pages for the current user.
+   */
+  getStarredPages: () =>
+    get<
+      {
+        id: string;
+        starredAt: string;
+        page: {
+          id: string;
+          title: string;
+          slug: string;
+          spaceId: string;
+          space: {
+            id: string;
+            slug: string;
+            name: string;
+            team: { slug: string; org: { slug: string } };
+          };
+        };
+      }[]
+    >('/wiki/starred'),
+
+  // ─── Page Analytics ────────────────────────────────────────────
+
+  /**
+   * Record a page view (debounced server-side, max 1 per user per page per hour).
+   * @param pageId
+   */
+  recordView: (pageId: string) => post<void>(`/wiki/pages/${pageId}/view`, {}),
+
+  /**
+   * Get analytics for a wiki page (view count, unique viewers, recent viewers).
+   * @param pageId
+   */
+  getAnalytics: (pageId: string) =>
+    get<{
+      viewCount: number;
+      uniqueViewers: number;
+      recentViewers: {
+        user: { id: string; username: string; displayName: string; avatarUrl?: string };
+        viewedAt: string;
+      }[];
+    }>(`/wiki/pages/${pageId}/analytics`),
 
   /**
    * Export a wiki page as a downloadable file (HTML, DOCX, PDF, etc.). Uses raw fetch for blob download.

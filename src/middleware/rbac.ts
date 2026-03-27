@@ -182,6 +182,41 @@ export function requireWikiTemplateAccess() {
 }
 
 /**
+ * Verify the authenticated user is a member of the org that owns the wiki restriction.
+ * Expects :restrictionId in route params.
+ * @returns Express middleware that checks org membership for the restriction's org
+ * @throws {AppError} 401 if not authenticated
+ * @throws {AppError} 404 if restriction not found
+ * @throws {AppError} 403 if user is not an org member
+ */
+export function requireWikiRestrictionAccess() {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      const restrictionId = param(req, 'restrictionId');
+      const userId = req.userId;
+      if (!userId) throw new AppError(401, 'Authentication required');
+
+      const restriction = await prisma.pageRestriction.findUnique({
+        where: { id: restrictionId },
+        select: { page: { select: { space: { select: { team: { select: { orgId: true } } } } } } },
+      });
+      if (!restriction) throw new AppError(404, 'Restriction not found');
+
+      const orgMembership = await prisma.orgMembership.findUnique({
+        where: { userId_orgId: { userId, orgId: restriction.page.space.team.orgId } },
+      });
+      if (!orgMembership) {
+        throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/**
  * Require org-level permission. Expects :orgId in route params.
  * @param action - The permission action to check (e.g., 'manage_members', 'delete')
  * @returns Express middleware that checks org-level permissions

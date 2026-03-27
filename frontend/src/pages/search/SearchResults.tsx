@@ -13,12 +13,16 @@ import {
   Lock,
   Info,
   X,
+  Filter,
+  Tag,
+  Calendar,
+  Library,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router';
 
 import { searchApi } from '@/api/search.api';
-import type { SearchType } from '@/api/search.api';
+import type { SearchType, SearchFilters } from '@/api/search.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -50,14 +54,39 @@ export default function SearchResults() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
+  // Wiki filter state from URL params
+  const spaceId = searchParams.get('spaceId') || '';
+  const labelFilter = searchParams.get('label') || '';
+  const sinceFilter = searchParams.get('since') || '';
+  const untilFilter = searchParams.get('until') || '';
+  const [labelInput, setLabelInput] = useState(labelFilter);
+
+  const filters: SearchFilters = useMemo(() => {
+    const f: SearchFilters = {};
+    if (spaceId) f.spaceId = spaceId;
+    if (labelFilter) f.label = labelFilter;
+    if (sinceFilter) f.since = sinceFilter;
+    if (untilFilter) f.until = untilFilter;
+    return f;
+  }, [spaceId, labelFilter, sinceFilter, untilFilter]);
+
+  const hasActiveFilters = !!(spaceId || labelFilter || sinceFilter || untilFilter);
+
   const {
     data: results,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['search', query, activeType],
-    queryFn: () => searchApi.search(query, activeType),
+    queryKey: ['search', query, activeType, filters],
+    queryFn: () => searchApi.search(query, activeType, filters),
     enabled: query.length > 0,
+  });
+
+  // Fetch spaces for the filter dropdown (only when showing wiki)
+  const { data: allSpaces } = useQuery({
+    queryKey: ['searchAccessibleSpaces'],
+    queryFn: () => searchApi.getAccessibleSpaces(),
+    enabled: activeType === 'wiki' || activeType === 'all',
   });
 
   const { data: savedSearches } = useQuery({
@@ -97,14 +126,43 @@ export default function SearchResults() {
     });
   }, [results]);
 
+  function buildParams(overrides: Record<string, string> = {}) {
+    const p: Record<string, string> = { q: query, type: activeType };
+    if (spaceId) p.spaceId = spaceId;
+    if (labelFilter) p.label = labelFilter;
+    if (sinceFilter) p.since = sinceFilter;
+    if (untilFilter) p.until = untilFilter;
+    return { ...p, ...overrides };
+  }
+
   function handleSearch(q: string) {
     if (q.trim()) {
-      setSearchParams({ q: q.trim(), type: activeType });
+      setSearchParams(buildParams({ q: q.trim() }));
     }
   }
 
   function handleTabChange(key: string) {
-    setSearchParams({ q: query, type: key });
+    // Clear wiki-specific filters when switching away from wiki
+    if (key !== 'wiki' && key !== 'all') {
+      setSearchParams({ q: query, type: key });
+    } else {
+      setSearchParams(buildParams({ type: key }));
+    }
+  }
+
+  function setFilter(key: string, value: string) {
+    const p = buildParams();
+    if (value) {
+      p[key] = value;
+    } else {
+      delete p[key];
+    }
+    setSearchParams(p);
+  }
+
+  function clearAllFilters() {
+    setSearchParams({ q: query, type: activeType });
+    setLabelInput('');
   }
 
   function handleSaveSearch() {
@@ -203,6 +261,140 @@ export default function SearchResults() {
         onChange={handleTabChange}
         className="mb-6"
       />
+
+      {/* Wiki filters */}
+      {(activeType === 'wiki' || activeType === 'all') && (
+        <div className="flex items-center gap-2 flex-wrap mb-4 p-3 rounded-lg border border-border bg-surface">
+          <Filter className="h-4 w-4 text-text-tertiary shrink-0" />
+          <span className="text-xs font-medium text-text-secondary mr-1">Wiki filters:</span>
+
+          {/* Space dropdown */}
+          <Dropdown
+            align="left"
+            trigger={
+              <Button variant="outline" size="xs">
+                <Library className="h-3.5 w-3.5" />
+                {spaceId && allSpaces
+                  ? allSpaces.find((s: { id: string }) => s.id === spaceId)?.name || 'Space'
+                  : 'All spaces'}
+              </Button>
+            }
+          >
+            <DropdownItem onClick={() => setFilter('spaceId', '')}>
+              <Library className="h-3.5 w-3.5" /> All spaces
+            </DropdownItem>
+            {allSpaces?.map((s: { id: string; name: string }) => (
+              <DropdownItem key={s.id} onClick={() => setFilter('spaceId', s.id)}>
+                <BookOpen className="h-3.5 w-3.5" /> {s.name}
+              </DropdownItem>
+            ))}
+          </Dropdown>
+
+          {/* Label filter */}
+          <form
+            className="flex items-center gap-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setFilter('label', labelInput.trim());
+            }}
+          >
+            <Input
+              type="text"
+              value={labelInput}
+              onChange={(e) => setLabelInput(e.target.value)}
+              placeholder="Filter by label"
+              className="h-7 w-32 text-xs"
+            />
+            {labelInput.trim() && (
+              <Button type="submit" variant="outline" size="xs">
+                <Tag className="h-3 w-3" /> Apply
+              </Button>
+            )}
+          </form>
+
+          {/* Since date */}
+          <Input
+            type="date"
+            value={sinceFilter}
+            onChange={(e) => setFilter('since', e.target.value)}
+            className="h-7 w-36 text-xs"
+            title="Updated since"
+          />
+
+          {/* Until date */}
+          <Input
+            type="date"
+            value={untilFilter}
+            onChange={(e) => setFilter('until', e.target.value)}
+            className="h-7 w-36 text-xs"
+            title="Updated until"
+          />
+
+          {/* Clear all filters */}
+          {hasActiveFilters && (
+            <Button variant="ghost" size="xs" onClick={clearAllFilters}>
+              <X className="h-3 w-3" /> Clear filters
+            </Button>
+          )}
+
+          {/* Active filter badges */}
+          {spaceId && allSpaces && (
+            <Badge size="sm" variant="default">
+              <Library className="h-3 w-3" />
+              {allSpaces.find((s: { id: string }) => s.id === spaceId)?.name}
+              <button
+                type="button"
+                onClick={() => setFilter('spaceId', '')}
+                className="ml-1 hover:text-danger"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {labelFilter && (
+            <Badge size="sm" variant="default">
+              <Tag className="h-3 w-3" />
+              {labelFilter}
+              <button
+                type="button"
+                onClick={() => {
+                  setFilter('label', '');
+                  setLabelInput('');
+                }}
+                className="ml-1 hover:text-danger"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {sinceFilter && (
+            <Badge size="sm" variant="default">
+              <Calendar className="h-3 w-3" />
+              from {sinceFilter}
+              <button
+                type="button"
+                onClick={() => setFilter('since', '')}
+                className="ml-1 hover:text-danger"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {untilFilter && (
+            <Badge size="sm" variant="default">
+              <Calendar className="h-3 w-3" />
+              until {untilFilter}
+              <button
+                type="button"
+                onClick={() => setFilter('until', '')}
+                className="ml-1 hover:text-danger"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="flex items-center justify-center h-64">

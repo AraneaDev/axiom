@@ -87,7 +87,7 @@ export default function PageView() {
   const toast = useToast();
   const basePath = `/${org}/${team}/wiki/${spaceSlug}`;
 
-  const { currentSpace, tree, setTocEntries } = useWikiContext();
+  const { currentSpace, currentTeam, tree, setTocEntries } = useWikiContext();
 
   const moveModal = useModalState();
   const deleteConfirm = useModalState();
@@ -159,6 +159,15 @@ export default function PageView() {
     mutationFn: (id: string) => attachmentsApi.remove(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', page?.id] }),
   });
+
+  // Record page view when page loads
+  useEffect(() => {
+    if (page?.id) {
+      wikiApi.recordView(page.id).catch(() => {
+        // silently ignore view tracking errors
+      });
+    }
+  }, [page?.id]);
 
   const pageBody = page?.body ?? '';
   const tocEntries = useMemo(() => (pageBody ? extractToc(pageBody) : []), [pageBody]);
@@ -350,6 +359,7 @@ export default function PageView() {
         basePath={basePath}
         pageSlug={pageSlug!}
         spaceId={currentSpace!.id}
+        teamId={currentTeam!.id}
         labels={labels}
         onAddLabel={(label) => addLabelMutation.mutate(label)}
         onRemoveLabel={(label) => removeLabelMutation.mutate(label)}

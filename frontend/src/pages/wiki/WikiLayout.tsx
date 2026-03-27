@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useQuery } from '@tanstack/react-query';
-import { BookOpen, ChevronDown, FolderPlus, Library, Plus } from 'lucide-react';
+import { BookOpen, ChevronDown, FolderPlus, Library, Plus, Search, Star } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import { Link, Outlet, useOutletContext, useParams } from 'react-router';
+import { Link, Outlet, useNavigate, useOutletContext, useParams } from 'react-router';
 
 import { CreateFolderModal } from './CreateFolderModal';
 import { PageViewSidebar } from './PageViewSidebar';
@@ -10,6 +10,7 @@ import { PageViewSidebar } from './PageViewSidebar';
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useModalState } from '@/hooks/useModalState';
 import { useTeamContext } from '@/hooks/useTeamContext';
@@ -32,6 +33,7 @@ interface WikiContextValue {
         slug: string;
         name: string;
         description?: string;
+        isArchived?: boolean;
         _count?: { pages: number };
       }>
     | undefined;
@@ -55,13 +57,15 @@ export default function WikiLayout() {
   const { org, teamSlug: team, currentOrg, currentTeam } = useTeamContext();
   const { space: spaceSlug, page: pageSlug } = useParams();
 
+  const navigate = useNavigate();
   const [, setTocEntries] = useState<TocEntry[]>([]);
+  const [searchInput, setSearchInput] = useState('');
   const folderModal = useModalState();
   const [folderModalParent, setFolderModalParent] = useState<string | undefined>(undefined);
 
   const { data: spaces, isLoading: spacesLoading } = useQuery({
     queryKey: ['wikiSpaces', currentTeam?.id],
-    queryFn: () => wikiApi.listSpaces(currentTeam!.id),
+    queryFn: () => wikiApi.listSpaces(currentTeam!.id, true),
     enabled: !!currentTeam?.id,
   });
   const currentSpace = spaces?.find((s) => s.slug === spaceSlug);
@@ -70,6 +74,12 @@ export default function WikiLayout() {
     queryKey: ['pageTree', currentSpace?.id],
     queryFn: () => wikiApi.getPageTree(currentSpace!.id),
     enabled: !!currentSpace?.id,
+  });
+
+  const { data: starredPages } = useQuery({
+    queryKey: ['starredPages'],
+    queryFn: () => wikiApi.getStarredPages(),
+    staleTime: 30_000,
   });
 
   const basePath = `/${org}/${team}/wiki/${spaceSlug}`;
@@ -104,7 +114,7 @@ export default function WikiLayout() {
         {showSpaceTree ? (
           <>
             {/* Space heading / selector */}
-            {spaces && spaces.length > 1 ? (
+            {spaces && spaces.filter((s) => !s.isArchived).length > 1 ? (
               <Dropdown
                 trigger={
                   <button
@@ -120,17 +130,19 @@ export default function WikiLayout() {
                 }
                 align="left"
               >
-                {spaces.map((s) => (
-                  <DropdownItem key={s.id}>
-                    <Link
-                      to={`/${org}/${team}/wiki/${s.slug}`}
-                      className="flex items-center gap-2 w-full"
-                    >
-                      <BookOpen className="h-3.5 w-3.5" />
-                      {s.name}
-                    </Link>
-                  </DropdownItem>
-                ))}
+                {spaces
+                  .filter((s) => !s.isArchived)
+                  .map((s) => (
+                    <DropdownItem key={s.id}>
+                      <Link
+                        to={`/${org}/${team}/wiki/${s.slug}`}
+                        className="flex items-center gap-2 w-full"
+                      >
+                        <BookOpen className="h-3.5 w-3.5" />
+                        {s.name}
+                      </Link>
+                    </DropdownItem>
+                  ))}
               </Dropdown>
             ) : (
               <div className="flex items-center gap-2 px-2 py-1.5 mb-3">
@@ -140,6 +152,31 @@ export default function WikiLayout() {
                 </span>
               </div>
             )}
+
+            {/* Space search */}
+            <form
+              className="mb-3 px-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (searchInput.trim() && currentSpace) {
+                  navigate(
+                    `/search?q=${encodeURIComponent(searchInput.trim())}&type=wiki&spaceId=${currentSpace.id}`,
+                  );
+                  setSearchInput('');
+                }
+              }}
+            >
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-tertiary pointer-events-none" />
+                <Input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search in space..."
+                  className="h-7 pl-7 text-xs w-full"
+                />
+              </div>
+            </form>
 
             {/* Action buttons */}
             <div className="flex gap-1 mb-3 px-1">
@@ -157,6 +194,34 @@ export default function WikiLayout() {
                 <FolderPlus className="h-3.5 w-3.5" />
               </Button>
             </div>
+
+            {/* Starred pages */}
+            {starredPages &&
+              starredPages.filter((s) => s.page.spaceId === currentSpace?.id).length > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-text-tertiary uppercase tracking-wide">
+                    <Star className="h-3 w-3" />
+                    Starred
+                  </div>
+                  <div className="space-y-0.5 mt-1">
+                    {starredPages
+                      .filter((s) => s.page.spaceId === currentSpace?.id)
+                      .map((s) => (
+                        <Link
+                          key={s.id}
+                          to={`${basePath}/${s.page.slug}`}
+                          className={cn(
+                            'flex items-center gap-2 px-2 py-1 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
+                            s.page.slug === pageSlug && 'bg-primary-light text-primary font-medium',
+                          )}
+                        >
+                          <Star className="h-3 w-3 fill-warning text-warning shrink-0" />
+                          <span className="truncate">{s.page.title}</span>
+                        </Link>
+                      ))}
+                  </div>
+                </div>
+              )}
 
             {/* Page tree */}
             {treeLoading ? (
@@ -186,22 +251,24 @@ export default function WikiLayout() {
                 <Spinner className="h-4 w-4" />
               </div>
             ) : (
-              spaces?.map((s) => (
-                <Link
-                  key={s.id}
-                  to={`/${org}/${team}/wiki/${s.slug}`}
-                  className={cn(
-                    'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
-                    s.slug === spaceSlug && 'bg-primary-light text-primary font-medium',
-                  )}
-                >
-                  <BookOpen className="h-3.5 w-3.5 text-text-secondary" />
-                  <span className="truncate">{s.name}</span>
-                  {s._count?.pages != null && (
-                    <span className="ml-auto text-xs text-text-tertiary">{s._count.pages}</span>
-                  )}
-                </Link>
-              ))
+              spaces
+                ?.filter((s) => !s.isArchived)
+                .map((s) => (
+                  <Link
+                    key={s.id}
+                    to={`/${org}/${team}/wiki/${s.slug}`}
+                    className={cn(
+                      'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
+                      s.slug === spaceSlug && 'bg-primary-light text-primary font-medium',
+                    )}
+                  >
+                    <BookOpen className="h-3.5 w-3.5 text-text-secondary" />
+                    <span className="truncate">{s.name}</span>
+                    {s._count?.pages != null && (
+                      <span className="ml-auto text-xs text-text-tertiary">{s._count.pages}</span>
+                    )}
+                  </Link>
+                ))
             )}
           </>
         )}

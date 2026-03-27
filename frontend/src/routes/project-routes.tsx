@@ -27,6 +27,7 @@ const CreateWikiSpace = lazy(() => import('@/pages/wiki/CreateWikiSpace'));
 const PageView = lazy(() => import('@/pages/wiki/PageView'));
 const PageEdit = lazy(() => import('@/pages/wiki/PageEdit'));
 const PageHistory = lazy(() => import('@/pages/wiki/PageHistory'));
+const PageDiff = lazy(() => import('@/pages/wiki/PageDiff'));
 
 function ProjectRedirect() {
   const { org, team, project } = useParams();
@@ -147,6 +148,7 @@ export function projectRoutes() {
         <Route path=":space/:page" element={<PageView />} />
         <Route path=":space/:page/edit" element={<PageEdit />} />
         <Route path=":space/:page/history" element={<PageHistory />} />
+        <Route path=":space/:page/diff" element={<PageDiff />} />
       </Route>
     </>
   );

@@ -3,6 +3,20 @@ import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
+const VALID_REACTION_TYPES = ['thumbsup', 'heart', 'eyes', 'rocket', 'thinking', 'check'] as const;
+
+const COMMENT_INCLUDE = {
+  user: { select: USER_BASIC_SELECT },
+  reactions: {
+    select: {
+      id: true,
+      reactionType: true,
+      userId: true,
+      user: { select: USER_BASIC_SELECT },
+    },
+  },
+} as const;
+
 /**
  * Add a comment to a wiki page, optionally anchored to specific text.
  * @param pageId - The page to comment on
@@ -22,7 +36,7 @@ export async function addPageComment(
 
   return prisma.pageComment.create({
     data: { pageId, userId, body, anchorText },
-    include: { user: { select: USER_BASIC_SELECT } },
+    include: COMMENT_INCLUDE,
   });
 }
 
@@ -34,7 +48,7 @@ export async function addPageComment(
 export async function listPageComments(pageId: string) {
   return prisma.pageComment.findMany({
     where: { pageId },
-    include: { user: { select: USER_BASIC_SELECT } },
+    include: COMMENT_INCLUDE,
     orderBy: { createdAt: 'asc' },
   });
 }
@@ -58,7 +72,7 @@ export async function updatePageComment(commentId: string, userId: string, body:
   return prisma.pageComment.update({
     where: { id: commentId },
     data: { body },
-    include: { user: { select: USER_BASIC_SELECT } },
+    include: COMMENT_INCLUDE,
   });
 }
 
@@ -77,7 +91,7 @@ export async function resolveComment(commentId: string) {
   return prisma.pageComment.update({
     where: { id: commentId },
     data: { resolved: !comment.resolved },
-    include: { user: { select: USER_BASIC_SELECT } },
+    include: COMMENT_INCLUDE,
   });
 }
 
@@ -92,4 +106,43 @@ export async function deletePageComment(commentId: string) {
     'Comment not found',
   );
   await prisma.pageComment.delete({ where: { id: commentId } });
+}
+
+/**
+ * Toggle a reaction on a comment. If the user already reacted with this type,
+ * it is removed; otherwise it is added.
+ * @param commentId - The comment to react to
+ * @param userId - The user toggling the reaction
+ * @param reactionType - One of the valid reaction types
+ * @returns Whether the reaction was added (true) or removed (false)
+ * @throws {AppError} 404 if comment not found
+ * @throws {AppError} 400 if reactionType is invalid
+ */
+export async function toggleReaction(
+  commentId: string,
+  userId: string,
+  reactionType: string,
+): Promise<{ added: boolean }> {
+  if (!VALID_REACTION_TYPES.includes(reactionType as (typeof VALID_REACTION_TYPES)[number])) {
+    throw new AppError(400, `Invalid reaction type: ${reactionType}`);
+  }
+
+  await findOrThrow(
+    prisma.pageComment.findUnique({ where: { id: commentId } }),
+    'Comment not found',
+  );
+
+  const existing = await prisma.commentReaction.findUnique({
+    where: { commentId_userId_reactionType: { commentId, userId, reactionType } },
+  });
+
+  if (existing) {
+    await prisma.commentReaction.delete({ where: { id: existing.id } });
+    return { added: false };
+  }
+
+  await prisma.commentReaction.create({
+    data: { commentId, userId, reactionType },
+  });
+  return { added: true };
 }

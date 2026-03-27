@@ -23,6 +23,7 @@ describe('Attachments API', () => {
   let userId: string;
   let otherToken: string;
   let attachmentId: string;
+  let pageId: string;
 
   beforeAll(async () => {
     const passwordHash = await bcrypt.hash('testpassword123', 4);
@@ -60,10 +61,35 @@ describe('Attachments API', () => {
       .set('X-Requested-With', 'XMLHttpRequest')
       .send({ login: 'attachother', password: 'testpassword123' });
     otherToken = otherLoginRes.body.accessToken;
+
+    // Create an org/team/space/page so we can associate attachments
+    const org = await prisma.organization.create({
+      data: {
+        name: 'Attach Test Org',
+        slug: 'attach-test-org',
+        members: { create: { userId: user.id, role: 'OWNER' } },
+      },
+    });
+    const team = await prisma.team.create({
+      data: {
+        name: 'Attach Test Team',
+        slug: 'attach-test-team',
+        orgId: org.id,
+        members: { create: { userId: user.id, role: 'ADMIN' } },
+      },
+    });
+    const space = await prisma.wikiSpace.create({
+      data: { teamId: team.id, name: 'Attach Space', slug: 'attach-space' },
+    });
+    const page = await prisma.page.create({
+      data: { spaceId: space.id, title: 'Attach Page', slug: 'attach-page', body: '' },
+    });
+    pageId = page.id;
   });
 
   afterAll(async () => {
     await prisma.attachment.deleteMany({});
+    await prisma.organization.deleteMany({ where: { slug: 'attach-test-org' } });
     await prisma.refreshToken.deleteMany({});
     await prisma.user.deleteMany({ where: { username: { in: ['attachuser', 'attachother'] } } });
     await prisma.$disconnect();
@@ -76,6 +102,7 @@ describe('Attachments API', () => {
       .post('/api/attachments')
       .set('Authorization', `Bearer ${token}`)
       .set('X-Requested-With', 'XMLHttpRequest')
+      .field('pageId', pageId)
       .attach('file', fileContent, { filename: 'test.txt', contentType: 'text/plain' });
 
     expect(res.status).toBe(201);
@@ -127,7 +154,10 @@ describe('Attachments API', () => {
   });
 
   it('should list attachments', async () => {
-    const res = await request(app).get('/api/attachments').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get(`/api/attachments?pageId=${pageId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest');
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);

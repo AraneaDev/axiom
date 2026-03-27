@@ -178,6 +178,7 @@ export interface WikiSpace {
   name: string;
   slug: string;
   description?: string;
+  isArchived?: boolean;
   _count?: { pages: number };
 }
 
@@ -191,6 +192,7 @@ export interface Page {
   isDraft: boolean;
   children?: PageTreeNode[];
   versions?: PageVersion[];
+  restrictions?: PageRestriction[];
   createdAt: string;
   updatedAt: string;
 }
@@ -210,7 +212,34 @@ export interface PageVersion {
   title: string;
   body: string;
   author: { id: string; username: string; displayName: string };
+  changeDescription?: string | null;
   createdAt: string;
+}
+
+export interface DiffChange {
+  value: string;
+  added: boolean;
+  removed: boolean;
+}
+
+export interface DiffResult {
+  from: {
+    version: number;
+    title: string;
+    body: string;
+    author: { id: string; username: string; displayName: string };
+    changeDescription?: string | null;
+    createdAt: string;
+  };
+  to: {
+    version: number;
+    title: string;
+    body: string;
+    author: { id: string; username: string; displayName: string };
+    changeDescription?: string | null;
+    createdAt: string;
+  };
+  changes: DiffChange[];
 }
 
 export interface PageTemplate {
@@ -219,7 +248,15 @@ export interface PageTemplate {
   name: string;
   body: string;
   description?: string;
+  isBuiltIn: boolean;
   createdAt: string;
+}
+
+export interface CommentReaction {
+  id: string;
+  reactionType: string;
+  userId: string;
+  user: { id: string; username: string; displayName: string };
 }
 
 export interface PageComment {
@@ -231,12 +268,23 @@ export interface PageComment {
   anchorText?: string;
   resolved: boolean;
   createdAt: string;
+  reactions?: CommentReaction[];
 }
 
 export interface PageLabel {
   id: string;
   pageId: string;
   label: string;
+}
+
+export interface PageRestriction {
+  id: string;
+  pageId: string;
+  type: 'VIEW' | 'EDIT';
+  userId?: string;
+  user?: { id: string; username: string; displayName: string };
+  teamRoleMin?: string;
+  createdAt: string;
 }
 
 export interface ApiToken {

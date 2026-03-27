@@ -1,8 +1,19 @@
 import DOMPurify from 'dompurify';
+import {
+  Info,
+  AlertTriangle,
+  StickyNote,
+  CheckCircle,
+  XCircle,
+  ChevronRight,
+  List as ListIcon,
+} from 'lucide-react';
 import { marked, type Token } from 'marked';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { MermaidBlock } from './MermaidBlock';
+
+import { cn } from '@/lib/utils';
 
 // Slug formula must match extractToc in PageView.tsx
 function headingSlug(text: string): string {
@@ -65,7 +76,23 @@ function collapseImageParagraphs(html: string): string {
 }
 
 function sanitize(raw: string, basePath?: string) {
-  const sanitized = DOMPurify.sanitize(raw, { ADD_ATTR: ['id', 'data-issue-key'] });
+  const sanitized = DOMPurify.sanitize(raw, {
+    ADD_ATTR: [
+      'id',
+      'data-issue-key',
+      'data-callout-type',
+      'data-title',
+      'data-open',
+      'data-collapsible',
+      'data-table-of-contents',
+      'data-type',
+      'data-checked',
+      'checked',
+      'disabled',
+      'type',
+    ],
+    ADD_TAGS: ['input'],
+  });
   const withIssueKeys = sanitized.replace(
     /<span[^>]*data-issue-key="([^"]+)"[^>]*>([^<]*)<\/span>/g,
     (_, key: string) => {
@@ -74,7 +101,11 @@ function sanitize(raw: string, basePath?: string) {
       return `<a href="${href}" class="issue-ref" data-issue-key="${key}">${key}</a>`;
     },
   );
-  return collapseImageParagraphs(linkifyMentionsAndRefs(withIssueKeys, basePath));
+  // Add task-list classes to <ul>/<li> elements containing checkboxes
+  const withTaskLists = collapseImageParagraphs(linkifyMentionsAndRefs(withIssueKeys, basePath));
+  return withTaskLists
+    .replace(/<li>((?:\s*<p>)?\s*<input[^>]*?type="checkbox")/gi, '<li class="task-list-item">$1')
+    .replace(/<ul>([\s\S]*?<li class="task-list-item")/g, '<ul class="task-list">$1');
 }
 
 function parseMarkdown(markdown: string, basePath?: string): Segment[] {
@@ -106,10 +137,218 @@ interface MarkdownRendererProps {
   basePath?: string;
 }
 
+// -- Read-only block components for TipTap custom nodes --
+
+type CalloutType = 'info' | 'warning' | 'note' | 'success' | 'error';
+
+const calloutIcons: Record<CalloutType, typeof Info> = {
+  info: Info,
+  warning: AlertTriangle,
+  note: StickyNote,
+  success: CheckCircle,
+  error: XCircle,
+};
+
+const calloutStyles: Record<CalloutType, { border: string; bg: string; icon: string }> = {
+  info: {
+    border: 'border-l-[var(--color-info)]',
+    bg: 'bg-[var(--color-info)]/10',
+    icon: 'text-[var(--color-info)]',
+  },
+  warning: {
+    border: 'border-l-[var(--color-warning)]',
+    bg: 'bg-[var(--color-warning)]/10',
+    icon: 'text-[var(--color-warning)]',
+  },
+  note: {
+    border: 'border-l-[var(--color-primary)]',
+    bg: 'bg-[var(--color-primary)]/10',
+    icon: 'text-[var(--color-primary)]',
+  },
+  success: {
+    border: 'border-l-[var(--color-success)]',
+    bg: 'bg-[var(--color-success)]/10',
+    icon: 'text-[var(--color-success)]',
+  },
+  error: {
+    border: 'border-l-[var(--color-danger)]',
+    bg: 'bg-[var(--color-danger)]/10',
+    icon: 'text-[var(--color-danger)]',
+  },
+};
+
+function ReadOnlyCallout({ type, html }: { type: CalloutType; html: string }) {
+  const Icon = calloutIcons[type] || Info;
+  const styles = calloutStyles[type] || calloutStyles.info;
+  return (
+    <div className={cn('my-3 rounded-r-md border-l-4 p-3 flex gap-3', styles.border, styles.bg)}>
+      <Icon className={cn('h-5 w-5 flex-shrink-0 mt-0.5', styles.icon)} />
+      <div
+        className="flex-1 min-w-0 prose prose-sm max-w-none"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </div>
+  );
+}
+
+function ReadOnlyCollapsible({
+  title,
+  html,
+  defaultOpen,
+}: {
+  title: string;
+  html: string;
+  defaultOpen: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <div className="my-3 rounded-md border border-border bg-surface">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-text hover:bg-surface-secondary rounded-t-md"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <ChevronRight
+          className={cn('h-4 w-4 transition-transform flex-shrink-0', isOpen && 'rotate-90')}
+        />
+        {title}
+      </button>
+      {isOpen && (
+        <div
+          className="border-t border-border px-3 py-2 prose prose-sm max-w-none"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReadOnlyTableOfContents({
+  headings,
+}: {
+  headings: { level: number; text: string; id: string }[];
+}) {
+  return (
+    <div className="my-3 rounded-md border border-border bg-surface-secondary p-4">
+      <div className="flex items-center gap-2 mb-2 text-sm font-medium text-text">
+        <ListIcon className="h-4 w-4" />
+        Table of Contents
+      </div>
+      {headings.length === 0 ? (
+        <p className="text-sm text-text-tertiary">No headings found.</p>
+      ) : (
+        <ul className="space-y-1">
+          {headings.map((h, i) => (
+            <li
+              key={`${h.id}-${i}`}
+              className={cn('text-sm', h.level === 2 && 'ml-4', h.level === 3 && 'ml-8')}
+            >
+              <a href={`#${h.id}`} className="text-primary hover:underline">
+                {h.text}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Extract TipTap custom blocks from HTML and render them as React components.
+ * Handles callouts, collapsibles, and table of contents blocks.
+ * @param html
+ * @param allHtml
+ */
+function processCustomBlocks(html: string, allHtml: string): React.ReactNode[] {
+  // Parse the full document HTML for headings (used by TOC blocks)
+  const tocHeadings: { level: number; text: string; id: string }[] = [];
+  const tocParser = document.createElement('div');
+  tocParser.innerHTML = allHtml;
+  tocParser.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((el) => {
+    const level = parseInt(el.tagName[1], 10);
+    const text = el.textContent || '';
+    const id = el.id || headingSlug(text);
+    if (text.trim()) {
+      tocHeadings.push({ level, text, id });
+    }
+  });
+
+  const parts: React.ReactNode[] = [];
+
+  // Use a DOM parser for reliable attribute extraction instead of fragile regexes
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+
+  // Walk top-level children and identify custom blocks
+  let htmlBuffer = '';
+  let partIndex = 0;
+
+  const flushBuffer = () => {
+    if (htmlBuffer.trim()) {
+      parts.push(
+        <div key={`html-${partIndex++}`} dangerouslySetInnerHTML={{ __html: htmlBuffer }} />,
+      );
+    }
+    htmlBuffer = '';
+  };
+
+  for (const child of Array.from(tempDiv.childNodes)) {
+    if (child instanceof HTMLElement) {
+      if (child.hasAttribute('data-callout-type') || child.classList.contains('callout-block')) {
+        flushBuffer();
+        const type = (child.getAttribute('data-callout-type') ||
+          child.getAttribute('data-type') ||
+          'info') as CalloutType;
+        parts.push(
+          <ReadOnlyCallout key={`callout-${partIndex++}`} type={type} html={child.innerHTML} />,
+        );
+        continue;
+      }
+
+      if (child.hasAttribute('data-collapsible') || child.classList.contains('collapsible-block')) {
+        flushBuffer();
+        const title = child.getAttribute('data-title') || 'Click to expand';
+        const open = child.getAttribute('data-open') !== 'false';
+        parts.push(
+          <ReadOnlyCollapsible
+            key={`collapsible-${partIndex++}`}
+            title={title}
+            html={child.innerHTML}
+            defaultOpen={open}
+          />,
+        );
+        continue;
+      }
+
+      if (
+        child.hasAttribute('data-table-of-contents') ||
+        child.classList.contains('table-of-contents-block')
+      ) {
+        flushBuffer();
+        parts.push(<ReadOnlyTableOfContents key={`toc-${partIndex++}`} headings={tocHeadings} />);
+        continue;
+      }
+    }
+
+    // Regular HTML node -- accumulate
+    if (child instanceof HTMLElement) {
+      htmlBuffer += child.outerHTML;
+    } else if (child.textContent?.trim()) {
+      htmlBuffer += child.textContent;
+    }
+  }
+
+  flushBuffer();
+
+  return parts.length > 0 ? parts : [<div key="full" dangerouslySetInnerHTML={{ __html: html }} />];
+}
+
 /**
  * Renders markdown content as sanitized HTML with mermaid diagram support.
  * Parses `@mentions` and !ISSUE-123 references into styled links.
  * Mermaid code fences are rendered as interactive diagram blocks.
+ * Supports TipTap custom blocks: callouts, collapsibles, task lists, and table of contents.
  * @param props - Renderer configuration.
  * @param props.content - Raw markdown string to render.
  * @param props.className - Additional CSS classes for the wrapper div.
@@ -118,6 +357,16 @@ interface MarkdownRendererProps {
 export function MarkdownRenderer({ content, className = '', basePath }: MarkdownRendererProps) {
   const segments = useMemo(() => parseMarkdown(content || '', basePath), [content, basePath]);
 
+  // Build full HTML for TOC heading extraction
+  const fullHtml = useMemo(
+    () =>
+      segments
+        .filter((s) => s.type === 'html')
+        .map((s) => s.content)
+        .join(''),
+    [segments],
+  );
+
   if (!content) return null;
 
   return (
@@ -125,7 +374,13 @@ export function MarkdownRenderer({ content, className = '', basePath }: Markdown
       {segments.map((seg, i) =>
         seg.type === 'html' ? (
           seg.content ? (
-            <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />
+            seg.content.includes('data-callout-type') ||
+            seg.content.includes('data-collapsible') ||
+            seg.content.includes('data-table-of-contents') ? (
+              <div key={i}>{processCustomBlocks(seg.content, fullHtml)}</div>
+            ) : (
+              <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />
+            )
           ) : null
         ) : (
           <MermaidBlock key={i} code={seg.content} />

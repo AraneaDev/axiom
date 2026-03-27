@@ -164,8 +164,101 @@ describe('Search API', () => {
     });
   });
 
-  // 6. Verify result URL fields contain org/team slugs
-  it('6. should include url fields with org and team slugs in results', async () => {
+  // 6. Filter wiki results by spaceId
+  it('6. should filter wiki results by spaceId', async () => {
+    const res = await request(app)
+      .get(`/api/search?q=UniqueSearchablePageXYZ&type=wiki&spaceId=${spaceId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const groups = res.body;
+    const wikiGroup = groups.find((g: { type: string }) => g.type === 'wiki');
+    expect(wikiGroup).toBeDefined();
+    expect(wikiGroup.items.length).toBeGreaterThan(0);
+    // All results should have the filtered spaceId
+    wikiGroup.items.forEach((item: { spaceId: string }) => {
+      expect(item.spaceId).toBe(spaceId);
+    });
+  });
+
+  // 7. Filter wiki results by spaceId returns empty for wrong space
+  it('7. should return no wiki results for non-matching spaceId', async () => {
+    const res = await request(app)
+      .get('/api/search?q=UniqueSearchablePageXYZ&type=wiki&spaceId=nonexistent-id')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const groups = res.body;
+    const wikiGroup = groups.find((g: { type: string }) => g.type === 'wiki');
+    expect(wikiGroup).toBeDefined();
+    expect(wikiGroup.items.length).toBe(0);
+  });
+
+  // 8. Filter wiki results by label
+  it('8. should filter wiki results by label', async () => {
+    // First, add a label to our test page
+    const searchRes = await request(app)
+      .get('/api/search?q=UniqueSearchablePageXYZ&type=wiki')
+      .set('Authorization', `Bearer ${token}`);
+    const wikiGroup = searchRes.body.find((g: { type: string }) => g.type === 'wiki');
+    const pageId = wikiGroup.items[0].id;
+
+    // Add label via wiki API
+    await request(app)
+      .post(`/api/wiki/pages/${pageId}/labels`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ label: 'test-search-label' });
+
+    // Now search with label filter
+    const res = await request(app)
+      .get('/api/search?q=UniqueSearchablePageXYZ&type=wiki&label=test-search-label')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const groups = res.body;
+    const filtered = groups.find((g: { type: string }) => g.type === 'wiki');
+    expect(filtered).toBeDefined();
+    expect(filtered.items.length).toBeGreaterThan(0);
+    // Verify the result has the label
+    expect(filtered.items[0].labels).toContain('test-search-label');
+  });
+
+  // 9. Filter wiki results by date range
+  it('9. should filter wiki results by date range', async () => {
+    // Pages updated today should appear with since=today
+    const today = new Date().toISOString().split('T')[0];
+    const res = await request(app)
+      .get(`/api/search?q=UniqueSearchablePageXYZ&type=wiki&since=${today}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const groups = res.body;
+    const wikiGroup = groups.find((g: { type: string }) => g.type === 'wiki');
+    expect(wikiGroup).toBeDefined();
+    expect(wikiGroup.items.length).toBeGreaterThan(0);
+
+    // Pages updated before 2020 should not appear
+    const oldRes = await request(app)
+      .get('/api/search?q=UniqueSearchablePageXYZ&type=wiki&until=2020-01-01')
+      .set('Authorization', `Bearer ${token}`);
+    expect(oldRes.status).toBe(200);
+    const oldGroups = oldRes.body;
+    const oldWikiGroup = oldGroups.find((g: { type: string }) => g.type === 'wiki');
+    expect(oldWikiGroup).toBeDefined();
+    expect(oldWikiGroup.items.length).toBe(0);
+  });
+
+  // 10. Accessible spaces endpoint
+  it('10. should return accessible spaces', async () => {
+    const res = await request(app)
+      .get('/api/search/spaces')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    const space = res.body.find((s: { id: string }) => s.id === spaceId);
+    expect(space).toBeDefined();
+    expect(space.name).toBe('Search Wiki Space');
+  });
+
+  // 11. Verify result URL fields contain org/team slugs
+  it('11. should include url fields with org and team slugs in results', async () => {
     const res = await request(app)
       .get('/api/search?q=UniqueSearchable')
       .set('Authorization', `Bearer ${token}`);

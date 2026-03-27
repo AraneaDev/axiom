@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   Edit,
+  Eye,
   History,
   ChevronRight,
   Plus,
@@ -25,6 +27,9 @@ import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
+import { PageRestrictions } from '@/components/wiki/PageRestrictions';
+import { StarButton } from '@/components/wiki/StarButton';
+import type { PageRestriction } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 
 interface PageCrumb {
@@ -111,6 +116,27 @@ interface PageLabel {
   label: string;
 }
 
+function ViewCount({ pageId }: { pageId: string }) {
+  const { data } = useQuery({
+    queryKey: ['pageAnalytics', pageId],
+    queryFn: () => wikiApi.getAnalytics(pageId),
+    enabled: !!pageId,
+    staleTime: 60_000,
+  });
+
+  if (!data) return null;
+
+  return (
+    <span
+      className="flex items-center gap-1 text-xs text-text-tertiary px-2"
+      title={`${data.uniqueViewers} unique viewer${data.uniqueViewers !== 1 ? 's' : ''}`}
+    >
+      <Eye className="h-3.5 w-3.5" />
+      {data.viewCount}
+    </span>
+  );
+}
+
 interface PageViewHeaderProps {
   page: {
     id: string;
@@ -118,10 +144,12 @@ interface PageViewHeaderProps {
     slug: string;
     parent?: PageCrumb;
     versions?: { createdAt: string; author?: { displayName: string } }[];
+    restrictions?: PageRestriction[];
   };
   basePath: string;
   pageSlug: string;
   spaceId: string;
+  teamId: string;
   labels: PageLabel[];
   onAddLabel: (label: string) => void;
   onRemoveLabel: (label: string) => void;
@@ -137,6 +165,7 @@ interface PageViewHeaderProps {
  * @param root0.basePath
  * @param root0.pageSlug
  * @param root0.spaceId
+ * @param root0.teamId
  * @param root0.labels
  * @param root0.onAddLabel
  * @param root0.onRemoveLabel
@@ -149,6 +178,7 @@ export function PageViewHeader({
   basePath,
   pageSlug,
   spaceId,
+  teamId,
   labels,
   onAddLabel,
   onRemoveLabel,
@@ -165,7 +195,14 @@ export function PageViewHeader({
 
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-text">{page.title}</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <ViewCount pageId={page.id} />
+          <StarButton pageId={page.id} />
+          <PageRestrictions
+            pageId={page.id}
+            teamId={teamId}
+            restrictions={page.restrictions ?? []}
+          />
           <ExportDropdown spaceId={spaceId} pageSlug={pageSlug} />
           <Link to={`${basePath}/${pageSlug}/history`}>
             <Button variant="ghost" size="sm">
@@ -206,7 +243,13 @@ export function PageViewHeader({
             className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2.5 py-0.5 text-xs font-medium text-primary"
           >
             <Tag className="h-3 w-3" />
-            {pl.label}
+            <Link
+              to={`/search?q=${encodeURIComponent(pl.label)}&type=wiki&label=${encodeURIComponent(pl.label)}`}
+              className="hover:underline"
+              title={`Search pages with label "${pl.label}"`}
+            >
+              {pl.label}
+            </Link>
             <Button
               variant="ghost"
               size="xs"

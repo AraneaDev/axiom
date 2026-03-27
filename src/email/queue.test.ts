@@ -13,31 +13,32 @@ let capturedWorkerProcessor: ((job: { data: Record<string, unknown> }) => Promis
   null;
 let capturedWorkerEvents: Record<string, (...args: unknown[]) => void> = {};
 
-// We need these as module-level fns that vi.mock factory can reference
-const _mockQueueAdd = vi.fn().mockResolvedValue({ id: 'job-1' });
-const _mockQueueClose = vi.fn().mockResolvedValue(undefined);
+// These must be declared with vi.hoisted so they're available inside hoisted vi.mock
+const { _mockQueueAdd, _mockQueueClose } = vi.hoisted(() => ({
+  _mockQueueAdd: vi.fn().mockResolvedValue({ id: 'job-1' }),
+  _mockQueueClose: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('bullmq', () => {
   const mockWorkerClose = vi.fn().mockResolvedValue(undefined);
   return {
-    Queue: vi.fn().mockImplementation(() => ({
-      add: (...args: unknown[]) => _mockQueueAdd(...args),
-      close: (...args: unknown[]) => _mockQueueClose(...args),
-    })),
-    Worker: vi
-      .fn()
-      .mockImplementation(
-        (_name: string, processor: (job: { data: Record<string, unknown> }) => Promise<void>) => {
-          capturedWorkerProcessor = processor;
-          capturedWorkerEvents = {};
-          return {
-            on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-              capturedWorkerEvents[event] = handler;
-            }),
-            close: mockWorkerClose,
-          };
-        },
-      ),
+    Queue: class MockQueue {
+      add = (...args: unknown[]) => _mockQueueAdd(...args);
+      close = (...args: unknown[]) => _mockQueueClose(...args);
+    },
+    Worker: class MockWorker {
+      on = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        capturedWorkerEvents[event] = handler;
+      });
+      close = mockWorkerClose;
+      constructor(
+        _name: string,
+        processor: (job: { data: Record<string, unknown> }) => Promise<void>,
+      ) {
+        capturedWorkerProcessor = processor;
+        capturedWorkerEvents = {};
+      }
+    },
   };
 });
 
