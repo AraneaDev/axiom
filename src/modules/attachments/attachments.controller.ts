@@ -26,7 +26,11 @@ export const upload = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const download = asyncHandler(async (req: Request, res: Response) => {
-  const { attachment, data } = await attachmentsService.downloadAttachment(param(req, 'id'));
+  if (!req.userId) throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
+  const { attachment, data } = await attachmentsService.downloadAttachment(
+    param(req, 'id'),
+    req.userId,
+  );
 
   res.setHeader('Content-Type', attachment.mimeType);
   res.setHeader('Content-Length', data.length);
@@ -38,7 +42,8 @@ export const download = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getMeta = asyncHandler(async (req: Request, res: Response) => {
-  const attachment = await attachmentsService.getAttachment(param(req, 'id'));
+  if (!req.userId) throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
+  const attachment = await attachmentsService.getAttachmentAuthorized(param(req, 'id'), req.userId);
   res.json(attachment);
 });
 
@@ -49,7 +54,8 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const preview = asyncHandler(async (req: Request, res: Response) => {
-  const result = await attachmentsService.preview(param(req, 'id'));
+  if (!req.userId) throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
+  const result = await attachmentsService.preview(param(req, 'id'), req.userId);
   if (result.type === 'redirect') {
     res.redirect(`/api/attachments/${param(req, 'id')}`);
   } else if (result.type === 'pdf') {
@@ -62,7 +68,8 @@ export const preview = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const convertToMarkdown = asyncHandler(async (req: Request, res: Response) => {
-  const result = await attachmentsService.convertToMarkdown(param(req, 'id'));
+  if (!req.userId) throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
+  const result = await attachmentsService.convertToMarkdown(param(req, 'id'), req.userId);
   res.json(result);
 });
 

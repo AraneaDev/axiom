@@ -103,6 +103,38 @@ export async function getAttachment(id: string) {
 }
 
 /**
+ * Get attachment with authorization check.
+ * Verifies the requesting user has access to the attachment's parent resource.
+ * @param id - The attachment ID
+ * @param userId - The requesting user's ID
+ * @returns The attachment record
+ * @throws {AppError} 404 if not found, 403 if unauthorized
+ */
+export async function getAttachmentAuthorized(id: string, userId: string) {
+  const attachment = await prisma.attachment.findUnique({
+    where: { id },
+    include: {
+      issue: { include: { project: { include: { team: { include: { org: true } } } } } },
+      page: { include: { space: { include: { team: { include: { org: true } } } } } },
+    },
+  });
+  if (!attachment) throw new AppError(404, 'Attachment not found', 'NOT_FOUND');
+
+  // Determine the org from the parent resource
+  const orgId = attachment.issue?.project?.team?.org?.id ?? attachment.page?.space?.team?.org?.id;
+
+  if (!orgId) return attachment; // Orphan attachment, allow access
+
+  // Check user is a member of the org
+  const membership = await prisma.orgMembership.findFirst({
+    where: { orgId, userId },
+  });
+  if (!membership) throw new AppError(403, 'Access denied', 'FORBIDDEN');
+
+  return attachment;
+}
+
+/**
  * List attachments for a given resource (issue or wiki page).
  * @param opts - Filter options by issueId and/or pageId
  * @param opts.issueId
@@ -153,11 +185,12 @@ export async function deleteAttachment(id: string, userId: string) {
 /**
  * Get the file buffer for download.
  * @param id - The attachment ID
+ * @param userId
  * @returns Object with attachment metadata and file data buffer
  * @throws {AppError} 404 if attachment not found
  */
-export async function downloadAttachment(id: string) {
-  const attachment = await getAttachment(id);
+export async function downloadAttachment(id: string, userId: string) {
+  const attachment = await getAttachmentAuthorized(id, userId);
   const storage = getStorage();
   const data = await storage.get(attachment.storageKey);
   return { attachment, data };
@@ -188,16 +221,20 @@ async function cleanupTempFile(filePath: string): Promise<void> {
 /**
  * Generate a preview for an attachment.
  * @param id - The attachment ID
+ * @param userId
  * @returns Preview result with type, content, and mimeType
  * @throws {AppError} 404 if attachment not found
  * @throws {AppError} 415 if preview not supported for the file type
  */
-export async function preview(id: string): Promise<{
+export async function preview(
+  id: string,
+  userId: string,
+): Promise<{
   type: 'redirect' | 'text' | 'html' | 'pdf';
   content: string | Buffer;
   mimeType: string;
 }> {
-  const attachment = await getAttachment(id);
+  const attachment = await getAttachmentAuthorized(id, userId);
   const mime = attachment.mimeType;
 
   // Images: redirect to download endpoint
@@ -250,14 +287,16 @@ export async function preview(id: string): Promise<{
 /**
  * Convert an attachment to GitHub-flavored Markdown using pandoc.
  * @param id - The attachment ID
+ * @param userId
  * @returns Object with markdown content and original file name
  * @throws {AppError} 404 if attachment not found
  * @throws {AppError} 415 if the file type cannot be converted to markdown
  */
 export async function convertToMarkdown(
   id: string,
+  userId: string,
 ): Promise<{ markdown: string; originalName: string }> {
-  const attachment = await getAttachment(id);
+  const attachment = await getAttachmentAuthorized(id, userId);
   const pandocFormat = PANDOC_FORMAT_MAP[attachment.mimeType];
 
   if (!pandocFormat) {
