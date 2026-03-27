@@ -56,6 +56,7 @@ model User {
   timeEntries             TimeEntry[]
   passwordResetTokens     PasswordResetToken[]
   pageRestrictions        PageRestriction[]    @relation("UserPageRestrictions")
+  commentReactions        CommentReaction[]    @relation("UserCommentReactions")
 
   @@map("users")
 }
@@ -1011,8 +1012,24 @@ model PageComment {
   resolved   Boolean  @default(false)
   createdAt  DateTime @default(now())
 
+  reactions  CommentReaction[]
+
   @@index([pageId])
   @@map("page_comments")
+}
+
+model CommentReaction {
+  id           String      @id @default(cuid())
+  commentId    String
+  comment      PageComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User        @relation("UserCommentReactions", fields: [userId], references: [id])
+  reactionType String
+  createdAt    DateTime    @default(now())
+
+  @@unique([commentId, userId, reactionType])
+  @@index([commentId])
+  @@map("comment_reactions")
 }
 
 model PageLabel {

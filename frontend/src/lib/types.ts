@@ -252,6 +252,13 @@ export interface PageTemplate {
   createdAt: string;
 }
 
+export interface CommentReaction {
+  id: string;
+  reactionType: string;
+  userId: string;
+  user: { id: string; username: string; displayName: string };
+}
+
 export interface PageComment {
   id: string;
   pageId: string;
@@ -261,6 +268,7 @@ export interface PageComment {
   anchorText?: string;
   resolved: boolean;
   createdAt: string;
+  reactions?: CommentReaction[];
 }
 
 export interface PageLabel {

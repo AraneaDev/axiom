@@ -37,3 +37,13 @@ export const deletePageComment = asyncHandler(async (req: Request, res: Response
   await svc.deletePageComment(param(req, 'commentId'));
   res.status(204).send();
 });
+
+export const toggleReaction = asyncHandler(async (req: Request, res: Response) => {
+  const { reactionType } = req.body;
+  if (!reactionType || typeof reactionType !== 'string') {
+    res.status(400).json({ error: { message: 'reactionType is required' } });
+    return;
+  }
+  const result = await svc.toggleReaction(param(req, 'commentId'), req.userId!, reactionType);
+  res.json(result);
+});

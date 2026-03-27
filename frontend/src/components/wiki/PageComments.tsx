@@ -9,8 +9,14 @@ import {
   Pencil,
   Check,
   X,
+  ThumbsUp,
+  Heart,
+  Eye,
+  Rocket,
+  HelpCircle,
+  Plus,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 import { wikiApi } from '@/api/wiki.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
@@ -18,8 +24,143 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
+import type { PageComment } from '@/lib/types';
 import { cn, formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
+
+const REACTION_ICONS = {
+  thumbsup: ThumbsUp,
+  heart: Heart,
+  eyes: Eye,
+  rocket: Rocket,
+  thinking: HelpCircle,
+  check: Check,
+} as const;
+
+const REACTION_TYPES = Object.keys(REACTION_ICONS) as (keyof typeof REACTION_ICONS)[];
+
+interface ReactionGroup {
+  type: string;
+  count: number;
+  userIds: string[];
+}
+
+function groupReactions(reactions: PageComment['reactions']): ReactionGroup[] {
+  if (!reactions?.length) return [];
+  const map = new Map<string, ReactionGroup>();
+  for (const r of reactions) {
+    const existing = map.get(r.reactionType);
+    if (existing) {
+      existing.count++;
+      existing.userIds.push(r.userId);
+    } else {
+      map.set(r.reactionType, { type: r.reactionType, count: 1, userIds: [r.userId] });
+    }
+  }
+  return Array.from(map.values());
+}
+
+function ReactionPicker({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (type: string) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="absolute bottom-full left-0 mb-1 flex items-center gap-1 rounded-lg border border-border bg-surface p-1 shadow-lg z-10"
+    >
+      {REACTION_TYPES.map((type) => {
+        const Icon = REACTION_ICONS[type];
+        return (
+          <button
+            key={type}
+            type="button"
+            className="rounded p-1.5 hover:bg-surface-hover transition-colors"
+            title={type}
+            onClick={() => {
+              onSelect(type);
+              onClose();
+            }}
+          >
+            <Icon className="h-4 w-4 text-text-secondary" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ReactionBar({
+  comment,
+  currentUserId,
+  onToggle,
+}: {
+  comment: PageComment;
+  currentUserId?: string;
+  onToggle: (commentId: string, reactionType: string) => void;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const groups = groupReactions(comment.reactions);
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {groups.map((group) => {
+        const Icon = REACTION_ICONS[group.type as keyof typeof REACTION_ICONS];
+        if (!Icon) return null;
+        const hasReacted = currentUserId ? group.userIds.includes(currentUserId) : false;
+        return (
+          <button
+            key={group.type}
+            type="button"
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs border transition-colors',
+              hasReacted
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border bg-surface-hover text-text-secondary hover:border-primary/50',
+            )}
+            onClick={() => onToggle(comment.id, group.type)}
+            title={group.type}
+          >
+            <Icon className="h-3 w-3" />
+            <span>{group.count}</span>
+          </button>
+        );
+      })}
+      <div className="relative">
+        <Button
+          variant="ghost"
+          size="xs"
+          title="Add reaction"
+          onClick={() => setShowPicker(!showPicker)}
+          className="rounded-full"
+        >
+          <Plus className="h-3 w-3" />
+        </Button>
+        {showPicker && (
+          <ReactionPicker
+            onSelect={(type) => onToggle(comment.id, type)}
+            onClose={() => setShowPicker(false)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface PageCommentsProps {
   pageId: string;
@@ -79,6 +220,12 @@ export function PageComments({ pageId }: PageCommentsProps) {
     },
     onError: (err: unknown) =>
       toast.error(err instanceof Error ? err.message : 'Failed to update comment'),
+  });
+
+  const reactionMutation = useMutation({
+    mutationFn: ({ commentId, reactionType }: { commentId: string; reactionType: string }) =>
+      wikiApi.toggleReaction(commentId, reactionType),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pageComments', pageId] }),
   });
 
   const activeComments = comments.filter((c) => !c.resolved).reverse();
@@ -181,6 +328,13 @@ export function PageComments({ pageId }: PageCommentsProps) {
             ) : (
               <MarkdownRenderer content={comment.body} className="text-sm" />
             )}
+            <ReactionBar
+              comment={comment}
+              currentUserId={user?.id}
+              onToggle={(cId, type) =>
+                reactionMutation.mutate({ commentId: cId, reactionType: type })
+              }
+            />
           </div>
         ))}
       </div>
@@ -245,6 +399,13 @@ export function PageComments({ pageId }: PageCommentsProps) {
                     </div>
                   </div>
                   <MarkdownRenderer content={comment.body} className="text-sm" />
+                  <ReactionBar
+                    comment={comment}
+                    currentUserId={user?.id}
+                    onToggle={(cId, type) =>
+                      reactionMutation.mutate({ commentId: cId, reactionType: type })
+                    }
+                  />
                 </div>
               ))}
             </div>

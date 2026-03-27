@@ -160,6 +160,14 @@ export const wikiApi = {
   deletePageComment: (commentId: string) => del(`/wiki/comments/${commentId}`),
 
   /**
+   * Toggle a reaction on a comment (add if not present, remove if already given).
+   * @param commentId
+   * @param reactionType
+   */
+  toggleReaction: (commentId: string, reactionType: string) =>
+    post<{ added: boolean }>(`/wiki/comments/${commentId}/reactions`, { reactionType }),
+
+  /**
    * List labels attached to a wiki page.
    * @param pageId
    */

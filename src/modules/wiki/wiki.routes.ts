@@ -102,6 +102,11 @@ router.delete(
   requireWikiCommentAccess(),
   commentsController.deletePageComment,
 );
+router.post(
+  '/comments/:commentId/reactions',
+  requireWikiCommentAccess(),
+  commentsController.toggleReaction,
+);
 
 // Page labels (require org membership via page lookup)
 router.get('/pages/:pageId/labels', requireWikiPageAccess(), labelsController.listPageLabels);
