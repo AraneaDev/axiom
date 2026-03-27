@@ -1052,6 +1052,7 @@ model PageTemplate {
   name        String
   body        String
   description String?
+  isBuiltIn   Boolean   @default(false)
   createdAt   DateTime  @default(now())
 
   @@map("page_templates")

@@ -1,5 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Eye, EyeOff, Paperclip, Save, X, FileText, Wifi, WifiOff } from 'lucide-react';
+import {
+  Eye,
+  EyeOff,
+  FileText,
+  FilePlus,
+  Paperclip,
+  Save,
+  Wifi,
+  WifiOff,
+  X,
+  BookTemplate,
+  ClipboardList,
+  RotateCcw,
+  Scale,
+  ScrollText,
+  Wrench,
+} from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -13,7 +29,8 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Dropdown, DropdownItem, Select } from '@/components/ui/Dropdown';
+import { Card } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Dropdown';
 import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
@@ -21,6 +38,14 @@ import { PresenceIndicators } from '@/components/wiki/PresenceIndicators';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
+
+const BLUEPRINT_ICONS: Record<string, typeof FileText> = {
+  'Meeting Notes': ClipboardList,
+  Retrospective: RotateCcw,
+  'Decision Record': Scale,
+  'Product Requirements': ScrollText,
+  Runbook: Wrench,
+};
 
 /**
  *
@@ -82,6 +107,8 @@ export default function PageEdit() {
   const [changeDescription, setChangeDescription] = useState('');
   const [error, setError] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(isNew);
+  const [hoveredTemplate, setHoveredTemplate] = useState<string | null>(null);
 
   // Flatten the page tree into select options with indentation
   function flattenTree(nodes: typeof pageTree, depth = 0): { value: string; label: string }[] {
@@ -229,28 +256,14 @@ export default function PageEdit() {
             </span>
           )}
           {isNew && templates.length > 0 && (
-            <Dropdown
-              align="right"
-              trigger={
-                <Button variant="ghost" size="sm">
-                  <FileText className="h-4 w-4" /> From template
-                </Button>
-              }
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowTemplatePicker(!showTemplatePicker)}
             >
-              {templates.map((tpl) => (
-                <DropdownItem
-                  key={tpl.id}
-                  onClick={() => {
-                    setBody(tpl.body);
-                    if (!title.trim()) {
-                      handleTitleChange(tpl.name);
-                    }
-                  }}
-                >
-                  <FileText className="h-4 w-4" /> {tpl.name}
-                </DropdownItem>
-              ))}
-            </Dropdown>
+              <BookTemplate className="h-4 w-4" />
+              {showTemplatePicker ? 'Hide templates' : 'Templates'}
+            </Button>
           )}
           <Button variant="secondary" size="sm" onClick={() => setShowPreview(!showPreview)}>
             {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -279,6 +292,150 @@ export default function PageEdit() {
           {error}
         </div>
       )}
+
+      {/* Template Picker */}
+      {isNew &&
+        showTemplatePicker &&
+        templates.length > 0 &&
+        (() => {
+          const builtIn = templates.filter((t) => t.isBuiltIn);
+          const custom = templates.filter((t) => !t.isBuiltIn);
+          const hoveredTpl = templates.find((t) => t.id === hoveredTemplate);
+
+          return (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <BookTemplate className="h-4 w-4 text-text-secondary" />
+                <span className="text-sm font-medium text-text">Choose a template</span>
+              </div>
+              <div className="flex gap-4">
+                <div className="flex-1 space-y-4">
+                  {/* Blank page option */}
+                  <button
+                    type="button"
+                    className={cn(
+                      'w-full flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left text-sm transition-colors',
+                      'hover:border-primary/50 hover:bg-surface-hover',
+                    )}
+                    onClick={() => {
+                      setBody('');
+                      setTitle('');
+                      setSlug('');
+                      setShowTemplatePicker(false);
+                    }}
+                    onMouseEnter={() => setHoveredTemplate(null)}
+                  >
+                    <FilePlus className="h-5 w-5 text-text-secondary shrink-0" />
+                    <div>
+                      <div className="font-medium text-text">Blank page</div>
+                      <div className="text-xs text-text-tertiary">Start from scratch</div>
+                    </div>
+                  </button>
+
+                  {/* Built-in templates */}
+                  {builtIn.length > 0 && (
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
+                        Built-in
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {builtIn.map((tpl) => {
+                          const Icon = BLUEPRINT_ICONS[tpl.name] ?? FileText;
+                          return (
+                            <button
+                              key={tpl.id}
+                              type="button"
+                              className={cn(
+                                'flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left text-sm transition-colors',
+                                'hover:border-primary/50 hover:bg-surface-hover',
+                                hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
+                              )}
+                              onClick={() => {
+                                setBody(tpl.body);
+                                if (!title.trim()) handleTitleChange(tpl.name);
+                                setShowTemplatePicker(false);
+                              }}
+                              onMouseEnter={() => setHoveredTemplate(tpl.id)}
+                              onMouseLeave={() => setHoveredTemplate(null)}
+                            >
+                              <Icon className="h-5 w-5 text-primary shrink-0" />
+                              <div className="min-w-0">
+                                <div className="font-medium text-text truncate">{tpl.name}</div>
+                                {tpl.description && (
+                                  <div className="text-xs text-text-tertiary truncate">
+                                    {tpl.description}
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom templates */}
+                  {custom.length > 0 && (
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
+                        Custom
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {custom.map((tpl) => (
+                          <button
+                            key={tpl.id}
+                            type="button"
+                            className={cn(
+                              'flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left text-sm transition-colors',
+                              'hover:border-primary/50 hover:bg-surface-hover',
+                              hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
+                            )}
+                            onClick={() => {
+                              setBody(tpl.body);
+                              if (!title.trim()) handleTitleChange(tpl.name);
+                              setShowTemplatePicker(false);
+                            }}
+                            onMouseEnter={() => setHoveredTemplate(tpl.id)}
+                            onMouseLeave={() => setHoveredTemplate(null)}
+                          >
+                            <FileText className="h-5 w-5 text-text-secondary shrink-0" />
+                            <div className="min-w-0">
+                              <div className="font-medium text-text truncate">{tpl.name}</div>
+                              {tpl.description && (
+                                <div className="text-xs text-text-tertiary truncate">
+                                  {tpl.description}
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Preview pane */}
+                {hoveredTpl && (
+                  <div className="w-80 shrink-0">
+                    <Card className="sticky top-4">
+                      <div className="px-4 py-3 border-b border-border">
+                        <div className="text-sm font-medium text-text">{hoveredTpl.name}</div>
+                        {hoveredTpl.description && (
+                          <div className="text-xs text-text-tertiary mt-0.5">
+                            {hoveredTpl.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4 max-h-64 overflow-auto">
+                        <MarkdownRenderer content={hoveredTpl.body} />
+                      </div>
+                    </Card>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
       <div className="space-y-4">
         <Input

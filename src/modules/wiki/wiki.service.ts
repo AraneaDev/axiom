@@ -10,6 +10,7 @@ import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects'
 import { logActivity } from '../activity/activity.service';
 
 import { canViewPage, canEditPage } from './wiki-permissions.service';
+import { seedBuiltInTemplates } from './wiki-templates.service';
 
 /**
  * Create a new wiki space within a team.
@@ -27,9 +28,14 @@ export async function createSpace(
 ) {
   await checkUnique('wikiSpace', { teamId, slug: data.slug }, 'Wiki space slug already taken');
 
-  return prisma.wikiSpace.create({
+  const space = await prisma.wikiSpace.create({
     data: { teamId, ...data },
   });
+
+  // Seed built-in page blueprints into new spaces
+  await seedBuiltInTemplates(space.id);
+
+  return space;
 }
 
 /**

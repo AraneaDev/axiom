@@ -248,6 +248,7 @@ export interface PageTemplate {
   name: string;
   body: string;
   description?: string;
+  isBuiltIn: boolean;
   createdAt: string;
 }
 
