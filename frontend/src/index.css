@@ -529,10 +529,10 @@ div[contenteditable].tiptap-editor {
   color: #7ee787;
 }
 
-/* TipTap task list styling */
+/* TipTap task list styling -- editor */
 ul[data-type='taskList'] {
-  list-style: none;
-  padding-left: 0;
+  list-style: none !important;
+  padding-left: 0 !important;
 }
 ul[data-type='taskList'] li {
   display: flex;
@@ -550,6 +550,21 @@ ul[data-type='taskList'] li > div {
 ul[data-type='taskList'] li[data-checked='true'] > div {
   text-decoration: line-through;
   opacity: 0.6;
+}
+
+/* Task list styling in prose/preview -- rendered as <ul> with <li> containing <input type="checkbox"> */
+.prose ul:has(> li > input[type='checkbox']) {
+  list-style: none !important;
+  padding-left: 0 !important;
+}
+.prose ul > li:has(> input[type='checkbox']) {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.prose ul > li > input[type='checkbox'] {
+  flex-shrink: 0;
+  margin-top: 0.3rem;
 }
 
 /* TipTap callout content -- prevent paragraph margins inside callout */

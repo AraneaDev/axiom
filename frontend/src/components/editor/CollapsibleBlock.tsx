@@ -35,8 +35,8 @@ export function CollapsibleBlock({ node, updateAttributes }: NodeViewProps) {
           />
         </button>
         {isOpen && (
-          <div className="border-t border-border px-3 py-2">
-            <NodeViewContent className="collapsible-content" />
+          <div className="border-t border-border px-2 py-1">
+            <NodeViewContent className="collapsible-content [&>p]:my-0.5" />
           </div>
         )}
       </div>
