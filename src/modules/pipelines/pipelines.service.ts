@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
 
 import { parsePipelineYaml, validatePipeline } from './pipeline-parser';
@@ -143,7 +144,9 @@ export async function triggerRun(pipelineId: string, repoId: string, userId: str
     },
   });
 
-  runPipeline(run).catch(console.error);
+  runPipeline(run).catch((err) =>
+    logger.error('Pipeline execution failed', { runId: run.id, pipelineId }, err),
+  );
   return run;
 }
 

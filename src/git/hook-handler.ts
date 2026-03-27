@@ -80,8 +80,12 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
             after: payload.after,
           });
         }
-      } catch {
-        // Protection check is best-effort in post-receive
+      } catch (err) {
+        logger.info('Branch protection check skipped in post-receive', {
+          repoId: repo.id,
+          branch,
+          err: String(err),
+        });
       }
     }
 
