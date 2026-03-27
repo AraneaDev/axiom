@@ -1,4 +1,5 @@
 import { Node, mergeAttributes, InputRule } from '@tiptap/core';
+import { PluginKey } from '@tiptap/pm/state';
 import { ReactRenderer } from '@tiptap/react';
 import Suggestion, { type SuggestionProps } from '@tiptap/suggestion';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
@@ -99,6 +100,7 @@ export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
     return [
       Suggestion<IssueReferenceItem>({
         editor: this.editor,
+        pluginKey: new PluginKey('issueReference'),
         char: '^',
         allowSpaces: false,
         items: async ({ query }): Promise<IssueReferenceItem[]> => {
