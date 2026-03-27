@@ -10,6 +10,7 @@ import { PageViewSidebar } from './PageViewSidebar';
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { Spinner } from '@/components/ui/Spinner';
 import { useModalState } from '@/hooks/useModalState';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import type { PageTreeNode } from '@/lib/types';
@@ -58,14 +59,14 @@ export default function WikiLayout() {
   const folderModal = useModalState();
   const [folderModalParent, setFolderModalParent] = useState<string | undefined>(undefined);
 
-  const { data: spaces } = useQuery({
+  const { data: spaces, isLoading: spacesLoading } = useQuery({
     queryKey: ['wikiSpaces', currentTeam?.id],
     queryFn: () => wikiApi.listSpaces(currentTeam!.id),
     enabled: !!currentTeam?.id,
   });
   const currentSpace = spaces?.find((s) => s.slug === spaceSlug);
 
-  const { data: tree } = useQuery({
+  const { data: tree, isLoading: treeLoading } = useQuery({
     queryKey: ['pageTree', currentSpace?.id],
     queryFn: () => wikiApi.getPageTree(currentSpace!.id),
     enabled: !!currentSpace?.id,
@@ -158,14 +159,20 @@ export default function WikiLayout() {
             </div>
 
             {/* Page tree */}
-            <PageViewSidebar
-              tree={tree}
-              basePath={basePath}
-              tocEntries={[]}
-              activeSlug={pageSlug}
-              onNewFolder={handleNewFolder}
-              embedded
-            />
+            {treeLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner className="h-4 w-4" />
+              </div>
+            ) : (
+              <PageViewSidebar
+                tree={tree}
+                basePath={basePath}
+                tocEntries={[]}
+                activeSlug={pageSlug}
+                onNewFolder={handleNewFolder}
+                embedded
+              />
+            )}
           </>
         ) : (
           <>
@@ -174,22 +181,28 @@ export default function WikiLayout() {
               <Library className="h-4 w-4 text-primary shrink-0" />
               <span className="text-sm font-semibold text-text">Wiki Spaces</span>
             </div>
-            {spaces?.map((s) => (
-              <Link
-                key={s.id}
-                to={`/${org}/${team}/wiki/${s.slug}`}
-                className={cn(
-                  'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
-                  s.slug === spaceSlug && 'bg-primary-light text-primary font-medium',
-                )}
-              >
-                <BookOpen className="h-3.5 w-3.5 text-text-secondary" />
-                <span className="truncate">{s.name}</span>
-                {s._count?.pages != null && (
-                  <span className="ml-auto text-xs text-text-tertiary">{s._count.pages}</span>
-                )}
-              </Link>
-            ))}
+            {spacesLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner className="h-4 w-4" />
+              </div>
+            ) : (
+              spaces?.map((s) => (
+                <Link
+                  key={s.id}
+                  to={`/${org}/${team}/wiki/${s.slug}`}
+                  className={cn(
+                    'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
+                    s.slug === spaceSlug && 'bg-primary-light text-primary font-medium',
+                  )}
+                >
+                  <BookOpen className="h-3.5 w-3.5 text-text-secondary" />
+                  <span className="truncate">{s.name}</span>
+                  {s._count?.pages != null && (
+                    <span className="ml-auto text-xs text-text-tertiary">{s._count.pages}</span>
+                  )}
+                </Link>
+              ))
+            )}
           </>
         )}
       </aside>

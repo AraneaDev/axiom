@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 
 import { searchApi } from '@/api/search.api';
+import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
 
@@ -34,7 +35,7 @@ export function CommandPalette() {
   }, [query]);
 
   /* ---- search query ---- */
-  const { data: results } = useQuery({
+  const { data: results, isLoading: searchLoading } = useQuery({
     queryKey: ['search', debouncedQuery],
     queryFn: () => searchApi.search(debouncedQuery),
     enabled: debouncedQuery.length > 1,
@@ -187,7 +188,12 @@ export function CommandPalette() {
 
         {/* Results */}
         <div className="max-h-80 overflow-y-auto py-2">
-          {debouncedQuery.length > 1 && flatItems.length === 0 && (
+          {searchLoading && (
+            <div className="flex items-center justify-center py-6">
+              <Spinner className="h-4 w-4" />
+            </div>
+          )}
+          {debouncedQuery.length > 1 && !searchLoading && flatItems.length === 0 && (
             <p className="px-4 py-6 text-center text-sm text-text-tertiary">
               No results found for &ldquo;{debouncedQuery}&rdquo;
             </p>
