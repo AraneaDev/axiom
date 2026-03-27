@@ -51,6 +51,7 @@ import { CollapsibleExtension } from './CollapsibleExtension';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
+import { SlashCommandExtension } from './SlashCommandExtension';
 import { TableOfContentsExtension } from './TableOfContentsExtension';
 
 import { Button } from '@/components/ui/Button';
@@ -156,6 +157,7 @@ export function CollaborativeEditor({
       CalloutExtension,
       CollapsibleExtension,
       TableOfContentsExtension,
+      SlashCommandExtension,
       // Yjs collaboration
       Collaboration.configure({
         document: ydoc,
