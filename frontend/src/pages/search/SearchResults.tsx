@@ -29,7 +29,7 @@ import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
-import type { SearchResult, SavedSearch } from '@/lib/types';
+import type { SearchResult, SearchResultItem, SavedSearch } from '@/lib/types';
 
 const SEARCH_TABS = [
   { key: 'all', label: 'All', icon: <Search className="h-4 w-4" /> },
@@ -234,22 +234,23 @@ export default function SearchResults() {
             )
           ) : (
             <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-              {/* eslint-disable @typescript-eslint/no-explicit-any */}
               {group.type === 'issues' &&
-                group.items.map((item: any) => <IssueRow key={item.id} item={item} />)}
+                group.items.map((item) => <IssueRow key={item.id} item={item} />)}
               {group.type === 'code' &&
-                group.items.map((item: any, idx: number) => (
-                  <CodeRow
-                    key={`${item.repoId}-${item.filePath}-${idx}`}
-                    item={item}
-                    query={query}
-                  />
-                ))}
+                group.items.map((item, idx) => {
+                  const codeItem = item as unknown as CodeItem;
+                  return (
+                    <CodeRow
+                      key={`${codeItem.repoId}-${codeItem.filePath}-${idx}`}
+                      item={codeItem}
+                      query={query}
+                    />
+                  );
+                })}
               {group.type === 'wiki' &&
-                group.items.map((item: any) => <WikiRow key={item.id} item={item} />)}
+                group.items.map((item) => <WikiRow key={item.id} item={item} />)}
               {group.type === 'repos' &&
-                group.items.map((item: any) => <RepoRow key={item.id} item={item} />)}
-              {/* eslint-enable @typescript-eslint/no-explicit-any */}
+                group.items.map((item) => <RepoRow key={item.id} item={item} />)}
             </div>
           )}
         </div>
@@ -277,16 +278,26 @@ export default function SearchResults() {
   );
 }
 
+// ─── Row Component Types ─────────────────────────────────────
+
+interface CodeItem extends SearchResultItem {
+  repoId: string;
+  repoName: string;
+  repoUrl: string;
+  filePath: string;
+  lineNumber: number;
+  lineContent: string;
+}
+
 // ─── Row Components ─────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function IssueRow({ item }: { item: any }) {
+function IssueRow({ item }: { item: SearchResultItem }) {
   return (
     <Link
       to={item.url ?? '#'}
       className="flex items-center gap-3 p-3 hover:bg-surface-secondary transition-colors"
     >
-      <IssueTypeIcon type={item.type} className="h-3.5 w-3.5" />
+      <IssueTypeIcon type={item.type ?? ''} className="h-3.5 w-3.5" />
       <span className="text-xs font-mono text-text-secondary">{item.key}</span>
       <span className="text-sm font-medium flex-1 truncate">{item.title}</span>
       <Badge size="sm">{item.status}</Badge>
@@ -312,8 +323,7 @@ function IssueRow({ item }: { item: any }) {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CodeRow({ item, query }: { item: any; query: string }) {
+function CodeRow({ item, query }: { item: CodeItem; query: string }) {
   const highlighted = highlightMatch(item.lineContent, query);
 
   return (
@@ -339,8 +349,7 @@ function CodeRow({ item, query }: { item: any; query: string }) {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function WikiRow({ item }: { item: any }) {
+function WikiRow({ item }: { item: SearchResultItem }) {
   return (
     <Link to={item.url ?? '#'} className="block p-3 hover:bg-surface-secondary transition-colors">
       <div className="flex items-center gap-3 mb-1">
@@ -358,8 +367,7 @@ function WikiRow({ item }: { item: any }) {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function RepoRow({ item }: { item: any }) {
+function RepoRow({ item }: { item: SearchResultItem }) {
   const isPublic = item.visibility === 'PUBLIC';
 
   return (
