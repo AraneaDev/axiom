@@ -1,228 +1,126 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working in this repository.
 
-## Build & Dev Commands
+## Quick Reference
 
-### Development Stack (Docker)
 ```bash
-npm run docker:dev          # Start PostgreSQL + API + Frontend (ports 5432, 3000, 7000)
+npm run docker:dev          # Start PostgreSQL + Redis + API + Frontend (ports 5432, 3000, 7000)
 npm run docker:dev:down     # Stop all containers
 npm run db:seed             # Seed demo data (idempotent, safe to re-run)
-./scripts/init-self-repo.sh # Initialize the self-hosted git repo after seeding
-```
-
-### Typechecking & Validation
-```bash
+npm run tunnel              # Expose dev stack via Cloudflare tunnel (free, no account)
 npm run check               # Full: typecheck + lint + format + test
 npx tsc --noEmit            # Backend typecheck only
 cd frontend && npx tsc --noEmit  # Frontend typecheck only
-```
-
-### Testing
-```bash
-npm run test                # Run Vitest (backend unit/integration)
-npm run test -- --run src/modules/auth/auth.test.ts  # Single test file
+npm run test                # Backend Vitest
 npm run e2e                 # Playwright E2E (requires dev stack running)
 ```
 
-### Running Without Docker
-```bash
-npm run dev                 # Backend with tsx watch (port 3000)
-cd frontend && npm run dev  # Vite dev server (port 7000)
-```
+**Seed credentials:** `tim / password123` (OWNER), `test / password123` (MEMBER)
+**Org:** Aranea.Dev > **Team:** Axiom > **Project:** Axiom MVP (prefix: AXM)
 
 ---
 
-## Architecture Overview
+## Documentation
 
-### Backend (Express + Prisma)
-```
-src/
-  index.ts              # Express app: middleware, route mounting, rate limiting
-  modules/              # Feature modules (controller → service → routes pattern)
-    auth/               # JWT access + refresh tokens
-    orgs/               # Organizations
-    teams/              # Teams within orgs
-    issues/             # Issues + sub-controllers (branches, commits, links, PRs)
-    repos/              # Repository CRUD + file browsing
-    pulls/              # Pull requests + reviews
-    wiki/               # Wiki spaces + pages + export
-    pipelines/          # CI/CD pipelines
-    releases/           # Release management
-    search/             # Full-text search
-  git/                  # Git infrastructure
-    smart-http.ts       # Smart HTTP protocol (git push/pull)
-    hook-handler.ts     # Post-receive hooks (commit-to-issue linking)
-    git-commands.ts     # Git CLI wrapper (spawn-based)
-    repo-manager.ts     # Bare repo lifecycle, disk paths
-    ssh-server.ts       # SSH git access
-  middleware/            # auth, RBAC, CSRF, error handling
-  utils/                # Shared utilities (pandoc export, validation, etc.)
-```
+Detailed docs live in `/docs/`. Read these before making changes in their domain:
 
-**Module pattern**: Each module has `*.routes.ts` (Express Router), `*.controller.ts` (request handlers), `*.service.ts` (business logic with Prisma). Controllers delegate to services; services never touch `req`/`res`.
+| Document | Covers |
+|----------|--------|
+| [Architecture](docs/architecture.md) | System diagram, tech stack, data flow, deployment model |
+| [Design Patterns](docs/design-patterns.md) | Non-negotiable rules, all shared UI components, custom hooks, backend module pattern, building checklists |
+| [Development Guide](docs/development-guide.md) | Dev commands, testing, linting, git conventions, commit message format |
+| [API Reference](docs/api-reference.md) | REST endpoint summary (auth, issues, repos, PRs, wiki) |
+| [MCP Server](docs/axiom-mcp-server.md) | 37 MCP tools, Claude Desktop/Code setup, discovery chains, example workflows |
+| [Getting Started](docs/getting-started.md) | New developer onboarding, prerequisites, installation |
 
-**Route mounting**: All API routes under `/api/*`, git protocol under `/git/*`, webhooks under `/hooks/*`.
+---
 
-**Rate limiting**: 300 req/min global, 15 req/min on auth endpoints.
+## Stack
 
-### Frontend (React 19 + Vite)
-```
-frontend/src/
-  App.tsx               # Routes, guards, lazy loading
-  api/                  # API client + per-module API helpers
-    client.ts           # fetch wrapper with auto token refresh
-  components/
-    layout/             # AppShell, Sidebar, Header, Breadcrumbs
-    ui/                 # Shared components (Button, Modal, Input, etc.)
-    editor/             # MarkdownRenderer, MarkdownEditor (TipTap)
-  pages/                # Route components (lazy loaded)
-  stores/               # Zustand stores (auth.store, ui.store)
-  hooks/                # Custom hooks (useKeyboard, useRepoContext)
-  lib/                  # Types, utils, guards
-```
-
-**URL pattern**: `/:org/:team/:project/issues/:num`, `/:org/:team/repos/:repo`, `/:org/:team/wiki/:space/:page`
-
-### Data Flow
-- Frontend API calls → `api/client.ts` (`get`/`post`/`patch`/`del`) → Express routes → controller → service → Prisma → PostgreSQL
-- Server state cached via TanStack Query; client state via Zustand
-- JWT tokens stored in `localStorage`, auto-refreshed on 401
-
-### Git Repository Storage
-Bare repos stored at `{REPOS_PATH}/{orgSlug}/{teamSlug}/{repoSlug}.git`. In dev, REPOS_PATH is `.data/repos/` (bind mount). In prod, a Docker named volume at `/data/repos`.
-
-### Wiki Export (Pandoc)
-`src/utils/pandoc.ts` converts wiki markdown to HTML, DOCX, EPUB, PDF (via weasyprint), LaTeX, plain text. Mermaid diagrams are pre-rendered to images via mermaid.ink for non-HTML formats; HTML exports include client-side mermaid.js.
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Runtime | Node.js | 25 (Docker: `node:25-alpine`) |
+| Backend | Express | 5 |
+| ORM | Prisma | 7 (client engine via `@prisma/adapter-pg`) |
+| Database | PostgreSQL | 16 |
+| Cache | Redis | 7 |
+| Frontend | React | 19 |
+| Build | Vite | 8 |
+| Routing | React Router | 7 |
+| State | TanStack Query (server) + Zustand (client) |
+| Editor | TipTap (markdown, collaborative via Yjs) |
+| Icons | Lucide React (exclusively) |
+| Styling | Tailwind CSS 4 with CSS variable design tokens |
 
 ---
 
 ## Design Rules (Non-Negotiable)
 
-### No Emojis -- Ever
-Never use emoji characters anywhere: no source code, no UI strings, no seed data, no comments, no commit messages. Use Lucide icons for all visual communication.
+These are enforced across the entire codebase. See [Design Patterns](docs/design-patterns.md) for the full list with examples.
 
-### Icons: Lucide Only
-All icons must come from `lucide-react`. No other icon libraries, no inline SVGs, no unicode symbols used decoratively.
+1. **No emojis** -- never, anywhere (code, UI, seed data, comments, commits). Use Lucide icons.
+2. **Lucide icons only** -- no other icon libraries, no inline SVGs, no unicode symbols.
+3. **Every button has an icon** -- no text-only buttons. Icon-only is fine with a `title` prop.
+4. **CSS variable tokens only** -- never use Tailwind palette colors directly (`text-primary` not `text-indigo-600`).
+5. **Check shared components first** -- before building any UI pattern, check `/frontend/src/components/ui/`.
 
-### Every Button Must Have an Icon
-Every `<Button>` (and every `<button>`) rendered in the UI must include a Lucide icon alongside its label. A text-only button is never acceptable.
+---
 
-```tsx
-// Correct
-<Button><Plus className="h-4 w-4" /> New Issue</Button>
-<Button variant="ghost"><Trash2 className="h-4 w-4" /> Delete</Button>
+## Architecture (Summary)
 
-// Wrong
-<Button>New Issue</Button>
-<button>Delete</button>
-```
+**Backend:** `src/modules/{feature}/` with `*.routes.ts` > `*.controller.ts` > `*.service.ts`. Controllers handle req/res; services contain business logic with Prisma. Routes mounted under `/api/*`, git protocol under `/git/*`.
 
-Icon-only buttons (no label) are allowed when the action is unambiguous and a `title` prop is provided for accessibility.
+**Frontend:** `frontend/src/pages/` (route components, lazy loaded), `frontend/src/components/` (shared UI + layout), `frontend/src/api/` (API client helpers). All API calls through `api/client.ts` (`get`/`post`/`patch`/`del`).
+
+**Prisma 7:** Config in `prisma.config.ts` at project root. Uses `@prisma/adapter-pg` (pg driver adapter). The `url` field was removed from `schema.prisma` -- connection URL comes from `prisma.config.ts` via `process.env.DATABASE_URL`. Scripts and tests must create `PrismaClient` with the adapter (see `src/config/database.ts` for the pattern).
+
+**Express 5:** Route wildcards use named syntax (`*path` not `*`). Wildcard params return `string[]` -- use `Array.isArray(p) ? p.join('/') : p` to get a path string. Inline regex constraints `(:param(a|b))` are no longer supported -- use separate routes instead.
+
+**URL patterns:**
+- Issues: `/:org/:team/:project/issues/:num`
+- Repos: `/:org/:team/repos/:repo`
+- Wiki: `/:org/:team/wiki/:space/:page`
+
+**Git storage:** Bare repos at `{REPOS_PATH}/{orgSlug}/{teamSlug}/{repoSlug}.git`
+
+**Real-time:** WebSocket server with JWT auth. Events broadcast for issue/PR/wiki/board/pipeline changes. Frontend auto-invalidates React Query cache via `useRealtimeInvalidation`.
 
 ---
 
 ## Frontend Conventions
 
-### Shared UI Components
-Before writing any UI pattern more than once, extract it into `/frontend/src/components/ui/`. Check what already exists before building:
+- **Routing:** Import from `'react-router'`, never `'react-router-dom'`
+- **Data fetching:** TanStack Query for all server state. No `useEffect` + `fetch`.
+- **State:** Zustand for client-only state (`useAuthStore`, `useUIStore`). Server state in React Query.
+- **Forms:** Controlled inputs with `useState`. Zod for validation.
+- **Components:** `forwardRef`, `cn()` for classNames, named exports, variant/size maps as objects.
 
-| Component | Use for |
-|-----------|---------|
-| `Button` | All clickable actions |
-| `Input` | Text inputs with label/hint/error |
-| `Textarea` | Multi-line text with label/hint/error |
-| `Modal` | Overlay dialogs (uses `createPortal`) |
-| `Dropdown` / `Select` | Menus and form selects |
-| `Tabs` | Tab bar navigation |
-| `Tooltip` | Hover hints |
-| `Progress` | Progress bars |
-| `Avatar` | User avatars |
-| `Badge` | Status/label chips |
-| `Spinner` / `PageLoader` | Loading states |
-| `EmptyState` | Zero-data placeholders |
-| `ErrorBoundary` | Error recovery |
-| `Toast` / `useToast` | Transient notifications (`.success()`, `.error()`, `.info()`) |
-| `CommandPalette` | Global search (Cmd+K) |
-| `MarkdownRenderer` | Rendered markdown with mermaid |
-| `MarkdownEditor` | TipTap WYSIWYG editor |
-
-### Component Conventions
-All shared UI components must follow the `Button.tsx` pattern:
-- `forwardRef` with proper generic types
-- `cn()` from `@/lib/utils` for className merging
-- Variant/size maps as plain objects (not arrays)
-- CSS variable design tokens -- never hardcoded colors (no `text-blue-500`, use `text-primary`)
-- Export named (not default)
-
-### Design Tokens
-Always use CSS variable tokens. Never use Tailwind palette colors directly in components.
-
-```tsx
-// Correct
-className="text-primary bg-surface border-border"
-
-// Wrong
-className="text-indigo-600 bg-white border-gray-200"
-```
-
-Available tokens: `text`, `text-secondary`, `text-tertiary`, `text-inverse`, `primary`, `primary-hover`, `primary-light`, `primary-muted`, `accent`, `accent-light`, `surface`, `surface-secondary`, `surface-tertiary`, `surface-elevated`, `surface-overlay`, `surface-inverse`, `border`, `border-light`, `border-focus`, `danger`, `danger-light`, `warning`, `warning-light`, `success`, `success-light`.
-
-### Routing
-React Router v7. Always import from `'react-router'`, never `'react-router-dom'`.
-
-### Data Fetching
-TanStack Query (`@tanstack/react-query`) for all server state. No `useEffect` + `fetch`. Query keys must be arrays and match the API resource hierarchy. Invalidate related queries on mutations (e.g., updating an issue should invalidate `['issue']`, `['board']`, and `['issues']`).
-
-### State Management
-Zustand for global client state (`useAuthStore`, `useUIStore`). Keep stores lean -- server state belongs in React Query, not Zustand.
-
-### API Client
-All API calls go through `/frontend/src/api/client.ts` helpers (`get`, `post`, `patch`, `del`). Access tokens are stored in `localStorage` and refreshed automatically. Never call `fetch` directly in components. Exception: binary blob downloads (e.g., pandoc export) use raw `fetch` with manual auth headers.
-
-### Forms
-Use controlled inputs with `useState`. Zod for validation where schemas are reused. No form libraries.
+See [Design Patterns](docs/design-patterns.md) for the full component catalog (40+ shared components) and custom hooks reference.
 
 ---
 
 ## Backend Conventions
 
-### Prisma
-Always include full relationship chains when the frontend needs to build URLs:
-- Issues: include `project.team.org` for `/:org/:team/:project/issues/:num`
-- Wiki pages: include `space.team.org` for `/:org/:team/wiki/:space/:page`
-
-### Auth
-JWT access + refresh tokens. JWT_SECRET must be >= 32 chars. Refresh tokens stored in DB (`refreshToken` table), cleared on logout. CSRF protection via `X-Requested-With: XMLHttpRequest` header on all mutating requests.
-
-### Error Handling
-Throw `AppError(statusCode, message)` from services. The global error handler in `middleware/errorHandler.ts` catches these and returns JSON `{ error: { message } }`.
+- **Prisma includes:** Always include full relationship chains for URL building (e.g., `project.team.org` for issues).
+- **Auth:** JWT access (15min) + refresh (7day) tokens. CSRF via `X-Requested-With` header.
+- **Errors:** Throw `AppError(statusCode, message)` from services. Global handler returns `{ error: { message } }`.
+- **Validation:** Zod schemas in `src/utils/validation/`. `z.record()` requires two args in Zod 4.
 
 ---
 
 ## Testing
 
-### Unit/Integration Tests (Vitest)
-- Located in `src/modules/**/*.test.ts`
-- Point at `axiom_test` DB (never `axiom`)
-- No mocked databases -- tests hit a real PostgreSQL instance
-- Use Prisma `upsert` to set up fixtures, never the register endpoint (requires invite when users exist)
-
-### E2E Tests (Playwright)
-- Located in `e2e/*.spec.ts`
-- Require dev stack running: `npm run docker:dev` + `npm run db:seed`
-- Run with `npm run e2e`
+- **Backend (Vitest):** `src/modules/**/*.test.ts` -- hits real PostgreSQL (`axiom_test` DB), no mocks.
+- **E2E (Playwright):** `e2e/*.spec.ts` -- requires `npm run docker:dev` + `npm run db:seed`.
+- **PrismaClient in tests:** Must use the adapter pattern (see `src/seed/seed-demo.test.ts`).
 
 ---
 
-## Seed Data
+## Docker Development
 
-Demo seed: `npm run db:seed` (idempotent, safe to re-run)
+The dev compose (`docker-compose.dev.yml`) runs: PostgreSQL, Redis, Mailserver (SMTP), API (tsx watch), Web (Vite HMR).
 
-| Username | Email | Password | Role |
-|----------|-------|----------|------|
-| tim | tim@aranea.dev | password123 | OWNER |
-| test | test@aranea.dev | password123 | MEMBER |
+Bind mounts for hot reload: `src/`, `prisma/`, `prisma.config.ts`, `scripts/`, `frontend/src/`, `frontend/vite.config.ts`.
 
-Org: `Aranea.Dev` (slug: `aranea-dev`) -- Team: `Axiom` (slug: `axiom`) -- Project: `Axiom MVP` (prefix: `AXM`)
+**Tunnel:** `npm run tunnel` starts a Cloudflare quick tunnel (free, no account) for sharing with coworkers. Uses the `tunnel` Docker Compose profile.

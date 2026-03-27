@@ -25,6 +25,9 @@ const SECTION_META: Record<string, { icon: React.ElementType; label: string }> =
   create: { icon: FolderKanban, label: 'Create' },
 };
 
+/** Segments inside repo file views (blob, tree, blame) where ref + path should be preserved as-is */
+const REPO_FILE_VIEWS = new Set(['blob', 'tree', 'blame']);
+
 /**
  * Project-level view segments that should NOT appear as breadcrumbs.
  * The ProjectNavBar handles indicating which view is active.
@@ -141,7 +144,12 @@ export function Breadcrumbs() {
     if (i === 2) {
       if (isProjectRoute) {
         if (projectsLoading) {
-          crumbs.push({ label: seg, path: projectBreadcrumbPath, icon: FolderKanban, loading: true });
+          crumbs.push({
+            label: seg,
+            path: projectBreadcrumbPath,
+            icon: FolderKanban,
+            loading: true,
+          });
         } else {
           crumbs.push({
             label: matchedProject?.name ?? deSlugify(seg),
@@ -178,7 +186,10 @@ export function Breadcrumbs() {
       crumbs.push({ label: meta.label, path, icon: meta.icon });
       return;
     }
-    crumbs.push({ label: deSlugify(seg), path });
+
+    // Inside repo file views (blob/tree/blame), preserve ref and filename casing exactly
+    const isInRepoFileView = segments.some((s, idx) => REPO_FILE_VIEWS.has(s) && i > idx);
+    crumbs.push({ label: isInRepoFileView ? seg : deSlugify(seg), path });
   });
 
   return (

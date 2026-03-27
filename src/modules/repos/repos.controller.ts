@@ -94,22 +94,32 @@ export const getCommit = asyncHandler(async (req: Request, res: Response) => {
   res.json(await reposService.getCommitDetail(param(req, 'repoId'), param(req, 'sha')));
 });
 
+/**
+ * Extract the wildcard *path param, which Express 5 returns as string[]
+ * @param req
+ */
+function wildcardPath(req: Request): string {
+  const p = req.params.path;
+  if (Array.isArray(p)) return p.join('/');
+  return p ?? '';
+}
+
 // Tree / File browser
 export const getTree = asyncHandler(async (req: Request, res: Response) => {
   const ref = param(req, 'ref');
-  const treePath = String(req.params.path ?? ''); // wildcard capture
+  const treePath = wildcardPath(req);
   res.json(await reposService.getTree(param(req, 'repoId'), ref, treePath));
 });
 
 export const getBlob = asyncHandler(async (req: Request, res: Response) => {
   const ref = param(req, 'ref');
-  const filePath = String(req.params.path ?? '');
+  const filePath = wildcardPath(req);
   res.json(await reposService.getBlob(param(req, 'repoId'), ref, filePath));
 });
 
 export const getBlame = asyncHandler(async (req: Request, res: Response) => {
   const ref = param(req, 'ref');
-  const filePath = String(req.params.path ?? '');
+  const filePath = wildcardPath(req);
   res.json(await reposService.getBlame(param(req, 'repoId'), ref, filePath));
 });
 
@@ -121,7 +131,7 @@ export const listTags = asyncHandler(async (req: Request, res: Response) => {
 // File editor
 export const updateBlob = asyncHandler(async (req: Request, res: Response) => {
   const data = validate(updateFileSchema, req.body);
-  const filePath = String(req.params.path ?? '');
+  const filePath = wildcardPath(req);
   const user = await prisma.user.findUnique({
     where: { id: req.userId! },
     select: { displayName: true, email: true },

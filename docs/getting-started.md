@@ -4,7 +4,7 @@ Welcome to Axiom! This guide will help you get the platform running locally.
 
 ## Prerequisites
 
-- Node.js >= 22.0.0
+- Node.js >= 24.0.0 (25 recommended)
 - PostgreSQL 16+
 - Git 2.40+
 
