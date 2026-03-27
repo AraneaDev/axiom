@@ -10,10 +10,12 @@ import {
   requireWikiRestrictionAccess,
 } from '../../middleware/rbac';
 
+import * as analyticsController from './wiki-analytics.controller';
 import * as commentsController from './wiki-comments.controller';
 import * as hydrateController from './wiki-hydrate.controller';
 import * as labelsController from './wiki-labels.controller';
 import * as permController from './wiki-permissions.controller';
+import * as starsController from './wiki-stars.controller';
 import * as templatesController from './wiki-templates.controller';
 import * as wikiController from './wiki.controller';
 
@@ -123,5 +125,14 @@ router.delete(
 // Move / Copy (require org membership via page lookup)
 router.post('/pages/:pageId/move', requireWikiPageAccess(), wikiController.movePage);
 router.post('/pages/:pageId/copy', requireWikiPageAccess(), wikiController.copyPage);
+
+// Starred pages
+router.get('/starred', starsController.getStarredPages);
+router.post('/pages/:pageId/star', requireWikiPageAccess(), starsController.toggleStar);
+router.get('/pages/:pageId/star', requireWikiPageAccess(), starsController.checkStarred);
+
+// Page analytics
+router.post('/pages/:pageId/view', requireWikiPageAccess(), analyticsController.recordView);
+router.get('/pages/:pageId/analytics', requireWikiPageAccess(), analyticsController.getAnalytics);
 
 export default router;

@@ -160,6 +160,15 @@ export default function PageView() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', page?.id] }),
   });
 
+  // Record page view when page loads
+  useEffect(() => {
+    if (page?.id) {
+      wikiApi.recordView(page.id).catch(() => {
+        // silently ignore view tracking errors
+      });
+    }
+  }, [page?.id]);
+
   const pageBody = page?.body ?? '';
   const tocEntries = useMemo(() => (pageBody ? extractToc(pageBody) : []), [pageBody]);
 

@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useQuery } from '@tanstack/react-query';
-import { BookOpen, ChevronDown, FolderPlus, Library, Plus } from 'lucide-react';
+import { BookOpen, ChevronDown, FolderPlus, Library, Plus, Star } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, Outlet, useOutletContext, useParams } from 'react-router';
 
@@ -71,6 +71,12 @@ export default function WikiLayout() {
     queryKey: ['pageTree', currentSpace?.id],
     queryFn: () => wikiApi.getPageTree(currentSpace!.id),
     enabled: !!currentSpace?.id,
+  });
+
+  const { data: starredPages } = useQuery({
+    queryKey: ['starredPages'],
+    queryFn: () => wikiApi.getStarredPages(),
+    staleTime: 30_000,
   });
 
   const basePath = `/${org}/${team}/wiki/${spaceSlug}`;
@@ -160,6 +166,34 @@ export default function WikiLayout() {
                 <FolderPlus className="h-3.5 w-3.5" />
               </Button>
             </div>
+
+            {/* Starred pages */}
+            {starredPages &&
+              starredPages.filter((s) => s.page.spaceId === currentSpace?.id).length > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-text-tertiary uppercase tracking-wide">
+                    <Star className="h-3 w-3" />
+                    Starred
+                  </div>
+                  <div className="space-y-0.5 mt-1">
+                    {starredPages
+                      .filter((s) => s.page.spaceId === currentSpace?.id)
+                      .map((s) => (
+                        <Link
+                          key={s.id}
+                          to={`${basePath}/${s.page.slug}`}
+                          className={cn(
+                            'flex items-center gap-2 px-2 py-1 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
+                            s.page.slug === pageSlug && 'bg-primary-light text-primary font-medium',
+                          )}
+                        >
+                          <Star className="h-3 w-3 fill-warning text-warning shrink-0" />
+                          <span className="truncate">{s.page.title}</span>
+                        </Link>
+                      ))}
+                  </div>
+                </div>
+              )}
 
             {/* Page tree */}
             {treeLoading ? (

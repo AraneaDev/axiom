@@ -198,7 +198,7 @@ describe('Sprints API', () => {
         .post(`/api/projects/${projectId}/sprints/${sprintId}/complete`)
         .set('Authorization', `Bearer ${token}`)
         .set('X-Requested-With', 'XMLHttpRequest')
-        .send();
+        .send({});
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('COMPLETED');
     });

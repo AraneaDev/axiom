@@ -46,6 +46,8 @@ model User {
   activities              Activity[]
   pageComments            PageComment[]
   savedFilters            SavedFilter[]
+  starredPages            StarredPage[]    @relation("UserStarredPages")
+  pageViews               PageView[]       @relation("UserPageViews")
   deployments             Deployment[]             @relation("DeployedBy")
   issueVotes              IssueVote[]
   notificationPreferences NotificationPreference[]
@@ -595,6 +597,8 @@ model Page {
   pageLabels   PageLabel[]
   attachments  Attachment[]
   restrictions PageRestriction[]
+  starredBy    StarredPage[]
+  views        PageView[]
 
   @@unique([spaceId, slug])
   @@map("pages")
@@ -1167,4 +1171,35 @@ model IssueWatcher {
 
   @@unique([issueId, userId])
   @@map("issue_watchers")
+}
+
+// ─── Starred Pages ──────────────────────────────────────────
+
+model StarredPage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("UserStarredPages", fields: [userId], references: [id], onDelete: Cascade)
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, pageId])
+  @@index([userId])
+  @@map("starred_pages")
+}
+
+// ─── Page Views ─────────────────────────────────────────────
+
+model PageView {
+  id       String   @id @default(cuid())
+  pageId   String
+  page     Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation("UserPageViews", fields: [userId], references: [id])
+  viewedAt DateTime @default(now())
+
+  @@index([pageId])
+  @@index([userId])
+  @@index([pageId, viewedAt])
+  @@map("page_views")
 }

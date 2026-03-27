@@ -256,6 +256,65 @@ export const wikiApi = {
   restoreVersion: (spaceId: string, pageSlug: string, version: number) =>
     post<Page>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/restore`, { version }),
 
+  // ─── Starred Pages ───────────────────────────────────────────
+
+  /**
+   * Toggle star on a wiki page (star if unstarred, unstar if starred).
+   * @param pageId
+   */
+  toggleStar: (pageId: string) => post<{ starred: boolean }>(`/wiki/pages/${pageId}/star`, {}),
+
+  /**
+   * Check if a page is starred by the current user.
+   * @param pageId
+   */
+  isStarred: (pageId: string) => get<{ starred: boolean }>(`/wiki/pages/${pageId}/star`),
+
+  /**
+   * Get all starred pages for the current user.
+   */
+  getStarredPages: () =>
+    get<
+      {
+        id: string;
+        starredAt: string;
+        page: {
+          id: string;
+          title: string;
+          slug: string;
+          spaceId: string;
+          space: {
+            id: string;
+            slug: string;
+            name: string;
+            team: { slug: string; org: { slug: string } };
+          };
+        };
+      }[]
+    >('/wiki/starred'),
+
+  // ─── Page Analytics ────────────────────────────────────────────
+
+  /**
+   * Record a page view (debounced server-side, max 1 per user per page per hour).
+   * @param pageId
+   */
+  recordView: (pageId: string) => post<void>(`/wiki/pages/${pageId}/view`, {}),
+
+  /**
+   * Get analytics for a wiki page (view count, unique viewers, recent viewers).
+   * @param pageId
+   */
+  getAnalytics: (pageId: string) =>
+    get<{
+      viewCount: number;
+      uniqueViewers: number;
+      recentViewers: {
+        user: { id: string; username: string; displayName: string; avatarUrl?: string };
+        viewedAt: string;
+      }[];
+    }>(`/wiki/pages/${pageId}/analytics`),
+
   /**
    * Export a wiki page as a downloadable file (HTML, DOCX, PDF, etc.). Uses raw fetch for blob download.
    * @param spaceId

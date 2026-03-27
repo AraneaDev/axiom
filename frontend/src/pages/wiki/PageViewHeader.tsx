@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   Edit,
+  Eye,
   History,
   ChevronRight,
   Plus,
@@ -26,6 +28,7 @@ import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { PageRestrictions } from '@/components/wiki/PageRestrictions';
+import { StarButton } from '@/components/wiki/StarButton';
 import type { PageRestriction } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 
@@ -113,6 +116,27 @@ interface PageLabel {
   label: string;
 }
 
+function ViewCount({ pageId }: { pageId: string }) {
+  const { data } = useQuery({
+    queryKey: ['pageAnalytics', pageId],
+    queryFn: () => wikiApi.getAnalytics(pageId),
+    enabled: !!pageId,
+    staleTime: 60_000,
+  });
+
+  if (!data) return null;
+
+  return (
+    <span
+      className="flex items-center gap-1 text-xs text-text-tertiary px-2"
+      title={`${data.uniqueViewers} unique viewer${data.uniqueViewers !== 1 ? 's' : ''}`}
+    >
+      <Eye className="h-3.5 w-3.5" />
+      {data.viewCount}
+    </span>
+  );
+}
+
 interface PageViewHeaderProps {
   page: {
     id: string;
@@ -171,7 +195,9 @@ export function PageViewHeader({
 
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-text">{page.title}</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <ViewCount pageId={page.id} />
+          <StarButton pageId={page.id} />
           <PageRestrictions
             pageId={page.id}
             teamId={teamId}
