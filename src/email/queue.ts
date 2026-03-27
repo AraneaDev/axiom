@@ -58,7 +58,7 @@ export function startEmailWorker(): void {
         title,
         body,
         link,
-        appUrl: process.env.VITE_API_URL?.replace(':3000', ':7000') || 'http://localhost:7000',
+        appUrl: process.env.FRONTEND_URL || 'http://localhost:7000',
       });
 
       await transporter.sendMail({

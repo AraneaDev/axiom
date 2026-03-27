@@ -304,7 +304,7 @@ export async function dispatchWebhook(
  */
 export function generatePostReceiveHook(
   repoId: string,
-  apiBaseUrl: string = 'http://localhost:3000',
+  apiBaseUrl: string = process.env.API_BASE_URL || 'http://localhost:3000',
 ): string {
   return `#!/bin/bash
 while read oldrev newrev refname; do
