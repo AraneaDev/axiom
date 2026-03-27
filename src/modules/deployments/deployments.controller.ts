@@ -34,7 +34,7 @@ export const updateEnvironment = asyncHandler(async (req: Request, res: Response
 export const deleteEnvironment = asyncHandler(async (req: Request, res: Response) => {
   const envId = param(req, 'envId');
   await svc.deleteEnvironment(envId);
-  res.status(204).end();
+  res.status(204).send();
 });
 
 export const createDeployment = asyncHandler(async (req: Request, res: Response) => {
@@ -94,5 +94,5 @@ export const updateEnvVariable = asyncHandler(async (req: Request, res: Response
 export const deleteEnvVariable = asyncHandler(async (req: Request, res: Response) => {
   const variableId = param(req, 'variableId');
   await svc.deleteEnvVariable(variableId);
-  res.status(204).end();
+  res.status(204).send();
 });

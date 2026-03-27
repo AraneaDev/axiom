@@ -11,8 +11,9 @@ import { getPage, getPageHistory } from './wiki.service';
  * partial failures degrade gracefully without blocking the response.
  * @param spaceId - The wiki space containing the page
  * @param pageSlug - The page slug within the space
+ * @param userId
  */
-export async function hydrateWikiPage(spaceId: string, pageSlug: string) {
+export async function hydrateWikiPage(spaceId: string, pageSlug: string, userId: string) {
   // Primary lookup -- must succeed or 404
   const page = await getPage(spaceId, pageSlug);
 
@@ -22,7 +23,7 @@ export async function hydrateWikiPage(spaceId: string, pageSlug: string) {
   // Fan out all secondary queries
   const results = await Promise.allSettled([
     listPageLabels(pageId),
-    listAttachments({ pageId }),
+    listAttachments({ pageId }, userId),
     getPageHistory(spaceId, pageSlug),
   ]);
 

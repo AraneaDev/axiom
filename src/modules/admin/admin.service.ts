@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import _path from 'path';
 
@@ -28,11 +28,13 @@ export async function isUserAdmin(userId: string): Promise<boolean> {
 function getDirectorySize(dirPath: string): number {
   try {
     if (!fs.existsSync(dirPath)) return 0;
-    const output = execSync(`du -sb "${dirPath}" 2>/dev/null | cut -f1`, {
+    const output = execFileSync('du', ['-sb', dirPath], {
       encoding: 'utf-8',
       timeout: 10_000,
     }).trim();
-    return parseInt(output, 10) || 0;
+    // du -sb output format is "SIZE\tPATH" — extract the size field
+    const sizeField = output.split('\t')[0];
+    return parseInt(sizeField, 10) || 0;
   } catch {
     return 0;
   }

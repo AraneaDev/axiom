@@ -1,6 +1,7 @@
 import { TeamRole } from '@prisma/client';
 import { Request, Response } from 'express';
 
+import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 import { validate, createTeamSchema, addTeamMemberSchema } from '../../utils/validation';
@@ -29,12 +30,10 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
 export const update = asyncHandler(async (req: Request, res: Response) => {
   const { name, description } = req.body;
   if (name !== undefined && typeof name !== 'string') {
-    res.status(400).json({ error: { message: 'name must be a string' } });
-    return;
+    throw new AppError(400, 'name must be a string');
   }
   if (description !== undefined && typeof description !== 'string') {
-    res.status(400).json({ error: { message: 'description must be a string' } });
-    return;
+    throw new AppError(400, 'description must be a string');
   }
   const team = await teamsService.updateTeam(param(req, 'teamId'), { name, description });
   res.json(team);

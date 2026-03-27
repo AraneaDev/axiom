@@ -5,7 +5,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { evaluateRules } from '../automation/automation.service';
-import { validateTransition } from '../workflows/workflow.service';
+import { validateTransition } from '../workflows/workflows.service';
 
 /**
  * Get the kanban board for a project, returning columns with their issues.

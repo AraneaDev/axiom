@@ -48,8 +48,9 @@ export const getMeta = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.userId) throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
   const { issueId, pageId } = req.query as { issueId?: string; pageId?: string };
-  const attachments = await attachmentsService.listAttachments({ issueId, pageId });
+  const attachments = await attachmentsService.listAttachments({ issueId, pageId }, req.userId);
   res.json(attachments);
 });
 

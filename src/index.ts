@@ -47,7 +47,7 @@ import statusChecksRoutes from './modules/status-checks/status-checks.routes';
 import teamsRoutes from './modules/teams/teams.routes';
 import usersRoutes from './modules/users/users.routes';
 import wikiRoutes from './modules/wiki/wiki.routes';
-import workflowRoutes from './modules/workflows/workflow.routes';
+import workflowRoutes from './modules/workflows/workflows.routes';
 import { createWebSocketServer } from './realtime/ws-server';
 import { logger } from './utils/logger';
 

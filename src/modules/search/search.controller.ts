@@ -40,5 +40,5 @@ export const deleteSavedSearch = asyncHandler(async (req: Request, res: Response
   const userId = req.userId!;
   const { id } = req.params;
   await searchService.deleteSavedSearch(id as string, userId);
-  res.status(204).end();
+  res.status(204).send();
 });

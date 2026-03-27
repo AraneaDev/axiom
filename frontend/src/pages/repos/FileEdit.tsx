@@ -8,6 +8,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
+import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 
@@ -69,7 +70,10 @@ export default function FileEdit() {
   if (isError) {
     return (
       <div className="p-6 text-danger">
-        Failed to load file. <Link to={blobUrl} className="text-primary underline">Go back</Link>
+        Failed to load file.{' '}
+        <Link to={blobUrl} className="text-primary underline">
+          Go back
+        </Link>
       </div>
     );
   }
@@ -110,8 +114,8 @@ export default function FileEdit() {
           <MarkdownEditor value={effectiveContent} onChange={handleContentChange} />
         </div>
       ) : (
-        <textarea
-          className="w-full min-h-96 rounded-lg border border-border bg-surface p-4 font-mono text-sm text-text resize-y focus:outline-none focus:ring-2 focus:ring-border-focus"
+        <Textarea
+          className="min-h-96 font-mono resize-y"
           value={effectiveContent}
           onChange={(e) => handleContentChange(e.target.value)}
           spellCheck={false}

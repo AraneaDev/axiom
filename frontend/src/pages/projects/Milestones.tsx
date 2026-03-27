@@ -251,21 +251,23 @@ export default function Milestones() {
         {(['open', 'closed', 'all'] as FilterTab[]).map((tab) => {
           const count =
             tab === 'open' ? openCount : tab === 'closed' ? closedCount : milestones.length;
+          const TabIcon = tab === 'open' ? Circle : tab === 'closed' ? CheckCircle2 : Flag;
           return (
             <button
               key={tab}
               onClick={() => setFilter(tab)}
               className={cn(
-                'px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors',
+                'flex items-center gap-1.5 px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors',
                 filter === tab
                   ? 'border-primary text-primary'
                   : 'border-transparent text-text-secondary hover:text-text',
               )}
             >
+              <TabIcon className="h-3.5 w-3.5" />
               {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               <span
                 className={cn(
-                  'ml-2 text-xs rounded-full px-1.5 py-0.5',
+                  'ml-0.5 text-xs rounded-full px-1.5 py-0.5',
                   filter === tab
                     ? 'bg-primary-light text-primary'
                     : 'bg-surface-tertiary text-text-tertiary',
@@ -347,15 +349,12 @@ export default function Milestones() {
             onChange={(e) => setNewDescription(e.target.value)}
             rows={3}
           />
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">Due Date</label>
-            <input
-              type="date"
-              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-border-focus"
-              value={newDueDate}
-              onChange={(e) => setNewDueDate(e.target.value)}
-            />
-          </div>
+          <Input
+            label="Due Date"
+            type="date"
+            value={newDueDate}
+            onChange={(e) => setNewDueDate(e.target.value)}
+          />
           <div className="flex items-center justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => createModal.close()}>
               <X className="h-4 w-4" />

@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import type { CommitInfo } from '@/api/repos.api';
 import { reposApi } from '@/api/repos.api';
 import { Button } from '@/components/ui/Button';
+import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 
 interface CommentingOn {
@@ -100,14 +101,14 @@ function InlineCommentForm({ onCancel, onSubmit, isPending }: InlineCommentFormP
 
   return (
     <div className="px-3 py-2 bg-surface-secondary border-t border-b border-border">
-      <textarea
+      <Textarea
         ref={textareaRef}
         autoFocus
         value={body}
         onChange={(e) => setBody(e.target.value)}
         placeholder="Leave a comment..."
         rows={3}
-        className="w-full rounded border border-border bg-surface text-text text-xs font-sans p-2 resize-none focus:outline-none focus:ring-1 focus:ring-border-focus"
+        className="text-xs resize-none"
       />
       <div className="flex items-center gap-2 mt-2 justify-end">
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={isPending}>
@@ -282,7 +283,13 @@ function UnifiedDiffView({ rawDiff, repoId, prNumber }: UnifiedDiffViewProps) {
       parsedLines.push({ raw: line, filePath: currentFile, lineNum: null, index: i });
       return;
     }
-    if (!line.startsWith('---') && !line.startsWith('+++') && !line.startsWith('index ') && !line.startsWith('new file') && !line.startsWith('deleted file')) {
+    if (
+      !line.startsWith('---') &&
+      !line.startsWith('+++') &&
+      !line.startsWith('index ') &&
+      !line.startsWith('new file') &&
+      !line.startsWith('deleted file')
+    ) {
       if (line.length > 0 || line === '') rightLineNum++;
     }
     parsedLines.push({ raw: line, filePath: currentFile, lineNum: null, index: i });

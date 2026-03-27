@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 
+import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
@@ -122,8 +123,7 @@ export const listComments = asyncHandler(async (req: Request, res: Response) => 
 export const updateComment = asyncHandler(async (req: Request, res: Response) => {
   const { body } = req.body;
   if (!body || typeof body !== 'string') {
-    res.status(400).json({ error: { message: 'body is required' } });
-    return;
+    throw new AppError(400, 'body is required');
   }
   const comment = await pullsService.updatePRComment(param(req, 'commentId'), req.userId!, body);
   res.json(comment);

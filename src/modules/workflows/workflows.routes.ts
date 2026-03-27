@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { requireProjectAccess } from '../../middleware/requireProjectAccess';
 
-import * as workflowController from './workflow.controller';
+import * as workflowController from './workflows.controller';
 
 const router = Router();
 

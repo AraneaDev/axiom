@@ -43,7 +43,7 @@ export async function hydrateIssueDetail(projectId: string, issueNumber: number,
     getCommits(projectId, issueNumber),
     getWorklogs(projectId, issueNumber),
     listActivities({ resourceType: 'issue', resourceId: issueId }),
-    listAttachments({ issueId }),
+    listAttachments({ issueId }, userId),
     listSprints(projectId),
     listFieldDefinitions(projectId),
   ]);

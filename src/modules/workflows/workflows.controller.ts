@@ -8,7 +8,7 @@ import {
   updateWorkflowRuleSchema,
 } from '../../utils/validation';
 
-import * as workflowService from './workflow.service';
+import * as workflowService from './workflows.service';
 
 export const create = asyncHandler(async (req: Request, res: Response) => {
   const data = validate(createWorkflowRuleSchema, req.body);

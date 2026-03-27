@@ -135,13 +135,47 @@ export async function getAttachmentAuthorized(id: string, userId: string) {
 }
 
 /**
- * List attachments for a given resource (issue or wiki page).
+ * List attachments for a given resource (issue or wiki page) with authorization check.
+ * Verifies the requesting user belongs to the same org as the parent resource.
  * @param opts - Filter options by issueId and/or pageId
  * @param opts.issueId
  * @param opts.pageId
+ * @param userId - The requesting user's ID
  * @returns List of attachment records
+ * @throws {AppError} 400 if neither issueId nor pageId is provided
+ * @throws {AppError} 403 if user does not have access to the parent resource
  */
-export async function listAttachments(opts: { issueId?: string; pageId?: string }) {
+export async function listAttachments(opts: { issueId?: string; pageId?: string }, userId: string) {
+  if (!opts.issueId && !opts.pageId) {
+    throw new AppError(400, 'issueId or pageId is required', 'MISSING_PARAM');
+  }
+
+  // Determine the org from the parent resource to enforce access control
+  let orgId: string | undefined;
+
+  if (opts.issueId) {
+    const issue = await prisma.issue.findUnique({
+      where: { id: opts.issueId },
+      include: { project: { include: { team: { include: { org: true } } } } },
+    });
+    if (!issue) throw new AppError(404, 'Issue not found', 'NOT_FOUND');
+    orgId = issue.project?.team?.org?.id;
+  } else if (opts.pageId) {
+    const page = await prisma.page.findUnique({
+      where: { id: opts.pageId },
+      include: { space: { include: { team: { include: { org: true } } } } },
+    });
+    if (!page) throw new AppError(404, 'Page not found', 'NOT_FOUND');
+    orgId = page.space?.team?.org?.id;
+  }
+
+  if (orgId) {
+    const membership = await prisma.orgMembership.findFirst({
+      where: { orgId, userId },
+    });
+    if (!membership) throw new AppError(403, 'Access denied', 'FORBIDDEN');
+  }
+
   const where: Record<string, string> = {};
   if (opts.issueId) where.issueId = opts.issueId;
   if (opts.pageId) where.pageId = opts.pageId;

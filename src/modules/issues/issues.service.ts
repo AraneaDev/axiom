@@ -16,7 +16,7 @@ import {
 import { logActivity } from '../activity/activity.service';
 import { evaluateRules } from '../automation/automation.service';
 import { createNotification } from '../notifications/notifications.service';
-import { validateTransition } from '../workflows/workflow.service';
+import { validateTransition } from '../workflows/workflows.service';
 
 // Re-export from sub-modules for backwards compatibility
 export { findIssueOrThrow } from './issue-utils';
