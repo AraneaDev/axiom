@@ -127,6 +127,7 @@ export const FileUpload = forwardRef<HTMLDivElement, FileUploadProps>(
       <div ref={ref} className={cn('space-y-2', className)}>
         <div
           role="button"
+          aria-label="Drop files here or click to upload"
           tabIndex={0}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
