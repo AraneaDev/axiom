@@ -16,6 +16,7 @@ import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FileUpload } from '@/components/ui/FileUpload';
@@ -429,11 +430,7 @@ export default function IssueDetail() {
             <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
               <Paperclip className="h-3.5 w-3.5" />
               Attachments
-              {attachments.length > 0 && (
-                <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary normal-case tracking-normal">
-                  {attachments.length}
-                </span>
-              )}
+              {attachments.length > 0 && <Badge size="sm">{attachments.length}</Badge>}
             </h2>
             <AttachmentList
               attachments={attachments}

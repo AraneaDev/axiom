@@ -7,6 +7,7 @@ import { issuesApi } from '@/api/issues.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
@@ -98,9 +99,9 @@ export function IssueDetailComments({
       <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-4">
         Comments
         {sortedComments.length > 0 && (
-          <span className="ml-2 inline-flex items-center rounded-full bg-surface-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary normal-case tracking-normal">
+          <Badge size="sm" className="ml-2">
             {sortedComments.length}
-          </span>
+          </Badge>
         )}
       </h2>
 
