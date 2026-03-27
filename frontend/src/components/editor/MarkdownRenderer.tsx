@@ -104,7 +104,7 @@ function sanitize(raw: string, basePath?: string) {
   // Add task-list classes to <ul>/<li> elements containing checkboxes
   const withTaskLists = collapseImageParagraphs(linkifyMentionsAndRefs(withIssueKeys, basePath));
   return withTaskLists
-    .replace(/<li>(\s*<input[^>]*?type="checkbox")/gi, '<li class="task-list-item">$1')
+    .replace(/<li>((?:\s*<p>)?\s*<input[^>]*?type="checkbox")/gi, '<li class="task-list-item">$1')
     .replace(/<ul>([\s\S]*?<li class="task-list-item")/g, '<ul class="task-list">$1');
 }
 
