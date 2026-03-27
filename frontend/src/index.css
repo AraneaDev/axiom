@@ -552,18 +552,15 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
   opacity: 0.6;
 }
 
-/* Task list styling in prose/preview -- marked GFM renders task lists with these classes */
-.prose ul.contains-task-list,
-ul.contains-task-list {
+/* Task list styling in prose/preview */
+.task-list {
   list-style: none !important;
   padding-left: 0.5rem !important;
 }
-.prose li.task-list-item,
-li.task-list-item {
+.task-list-item {
   list-style: none !important;
 }
-.prose li.task-list-item > input[type='checkbox'],
-li.task-list-item > input[type='checkbox'] {
+.task-list-item > input[type='checkbox'] {
   margin-right: 0.5rem;
 }
 

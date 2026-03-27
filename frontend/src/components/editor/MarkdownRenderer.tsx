@@ -98,7 +98,11 @@ function sanitize(raw: string, basePath?: string) {
       return `<a href="${href}" class="issue-ref" data-issue-key="${key}">${key}</a>`;
     },
   );
-  return collapseImageParagraphs(linkifyMentionsAndRefs(withIssueKeys, basePath));
+  // Add task-list classes to <ul>/<li> elements containing checkboxes
+  const withTaskLists = collapseImageParagraphs(linkifyMentionsAndRefs(withIssueKeys, basePath));
+  return withTaskLists
+    .replace(/<li>(\s*<input[^>]*type="checkbox")/g, '<li class="task-list-item">$1')
+    .replace(/<ul>\n(<li class="task-list-item")/g, '<ul class="task-list">\n$1');
 }
 
 function parseMarkdown(markdown: string, basePath?: string): Segment[] {
