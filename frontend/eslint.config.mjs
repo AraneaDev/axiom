@@ -1,5 +1,6 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import jsdoc from 'eslint-plugin-jsdoc';
@@ -11,6 +12,7 @@ export default tseslint.config(
   jsdoc.configs['flat/recommended-typescript'],
   {
     plugins: {
+      react,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
       'import-x': importX,
@@ -23,6 +25,7 @@ export default tseslint.config(
       // React
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'react/no-danger': 'warn',
 
       // Console
       'no-console': ['warn', { allow: ['warn', 'error'] }],
