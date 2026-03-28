@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Eye, GitPullRequest, GitMerge, XCircle, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
@@ -24,6 +24,7 @@ const STATUS_ICON = { OPEN: GitPullRequest, MERGED: GitMerge, CLOSED: XCircle };
  */
 export default function PRList() {
   const { org, teamSlug, currentRepo, basePath } = useRepoContext();
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>('OPEN');
   const [myReviews, setMyReviews] = useState(false);
   const { user } = useAuthStore();
@@ -123,13 +124,18 @@ export default function PRList() {
                       <>
                         {' '}
                         &middot;{' '}
-                        <Link
-                          to={`/${org}/${teamSlug}/members/${pr.author.username}`}
-                          className="hover:text-primary hover:underline"
-                          onClick={(e) => e.stopPropagation()}
+                        <span
+                          role="link"
+                          tabIndex={0}
+                          className="hover:text-primary hover:underline cursor-pointer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            navigate(`/${org}/${teamSlug}/members/${pr.author!.username}`);
+                          }}
                         >
                           {pr.author.displayName}
-                        </Link>
+                        </span>
                       </>
                     )}{' '}
                     &middot; {pr.sourceBranch} → {pr.targetBranch} &middot;{' '}

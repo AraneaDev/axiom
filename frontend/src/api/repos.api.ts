@@ -239,7 +239,9 @@ export const reposApi = {
     if (status) params.set('status', status);
     if (reviewerId) params.set('reviewerId', reviewerId);
     const q = params.toString();
-    return get<PullRequest[]>(`/repos/${repoId}/pulls${q ? `?${q}` : ''}`);
+    return get<{ data: PullRequest[]; total: number }>(
+      `/repos/${repoId}/pulls${q ? `?${q}` : ''}`,
+    ).then((r) => r.data);
   },
   /**
    * Get a single pull request by number.
