@@ -60,6 +60,44 @@ export const CollapsibleExtension = Node.create({
     return ReactNodeViewRenderer(CollapsibleBlock);
   },
 
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: any, node: any) {
+          const title = (node.attrs.title as string) || 'Click to expand';
+          state.wrapBlock('> ', `> [!DETAILS] ${title}\n> `, node, () => state.renderContent(node));
+        },
+        parse: {
+          updateDOM(element: HTMLElement) {
+            element.querySelectorAll('blockquote').forEach((bq: Element) => {
+              const firstP = bq.querySelector('p');
+              if (!firstP) return;
+              const firstNode = firstP.childNodes[0];
+              if (!firstNode || firstNode.nodeType !== 3) return;
+              const text = firstNode.textContent || '';
+              const match = text.match(/^\[!DETAILS\]\s*(.*?)(?:\n|$)/);
+              if (!match) return;
+              const title = match[1].trim() || 'Click to expand';
+              firstNode.textContent = text.slice(match[0].length);
+              if (!firstNode.textContent.trim()) {
+                const next = firstNode.nextSibling;
+                if (next?.nodeName === 'BR') next.remove();
+                if (!firstNode.textContent) firstNode.remove();
+              }
+              if (!firstP.innerHTML.trim()) firstP.remove();
+              const div = bq.ownerDocument!.createElement('div');
+              div.setAttribute('data-collapsible', '');
+              div.setAttribute('data-title', title);
+              div.setAttribute('data-open', 'true');
+              div.innerHTML = bq.innerHTML;
+              bq.replaceWith(div);
+            });
+          },
+        },
+      },
+    };
+  },
+
   addCommands() {
     return {
       setCollapsible:

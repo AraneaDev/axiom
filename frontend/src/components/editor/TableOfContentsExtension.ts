@@ -34,6 +34,28 @@ export const TableOfContentsExtension = Node.create({
     return ReactNodeViewRenderer(TableOfContentsBlock);
   },
 
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: any, node: any) {
+          state.write('[TOC]');
+          state.closeBlock(node);
+        },
+        parse: {
+          updateDOM(element: HTMLElement) {
+            element.querySelectorAll('p').forEach((p: Element) => {
+              if (p.textContent?.trim() === '[TOC]') {
+                const div = p.ownerDocument!.createElement('div');
+                div.setAttribute('data-table-of-contents', '');
+                p.replaceWith(div);
+              }
+            });
+          },
+        },
+      },
+    };
+  },
+
   addCommands() {
     return {
       insertTableOfContents:

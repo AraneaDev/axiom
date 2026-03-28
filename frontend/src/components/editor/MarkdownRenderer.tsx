@@ -108,6 +108,74 @@ function sanitize(raw: string, basePath?: string) {
     .replace(/<ul>([\s\S]*?<li class="task-list-item")/g, '<ul class="task-list">$1');
 }
 
+const GFM_ALERT_TYPES: Record<string, string> = {
+  NOTE: 'info',
+  WARNING: 'warning',
+  TIP: 'success',
+  CAUTION: 'error',
+  IMPORTANT: 'warning',
+};
+
+/**
+ * Transform GFM alert blockquotes and [TOC] markers in rendered HTML
+ * into custom block elements that processCustomBlocks can handle.
+ * Converts `> [!NOTE]` blockquotes into callout divs, `> [!DETAILS]` into
+ * collapsible divs, and `[TOC]` paragraphs into table-of-contents divs.
+ * @param html
+ */
+function transformGfmAlerts(html: string): string {
+  const container = document.createElement('div');
+  container.innerHTML = html;
+
+  container.querySelectorAll('blockquote').forEach((bq) => {
+    const firstP = bq.querySelector('p');
+    if (!firstP) return;
+    const firstNode = firstP.childNodes[0];
+    if (!firstNode || firstNode.nodeType !== Node.TEXT_NODE) return;
+    const text = firstNode.textContent || '';
+
+    const alertMatch = text.match(/^\[!(NOTE|WARNING|TIP|CAUTION|IMPORTANT)\]\s*/);
+    const detailsMatch = !alertMatch ? text.match(/^\[!DETAILS\]\s*(.*?)(?:\n|$)/) : null;
+
+    if (alertMatch) {
+      firstNode.textContent = text.slice(alertMatch[0].length);
+      if (!firstNode.textContent.trim()) {
+        if (firstNode.nextSibling?.nodeName === 'BR') firstNode.nextSibling.remove();
+        if (!firstNode.textContent) firstNode.remove();
+      }
+      if (!firstP.innerHTML.trim()) firstP.remove();
+      const div = document.createElement('div');
+      div.setAttribute('data-callout-type', GFM_ALERT_TYPES[alertMatch[1]] || 'info');
+      div.innerHTML = bq.innerHTML;
+      bq.replaceWith(div);
+    } else if (detailsMatch) {
+      const title = detailsMatch[1].trim() || 'Click to expand';
+      firstNode.textContent = text.slice(detailsMatch[0].length);
+      if (!firstNode.textContent.trim()) {
+        if (firstNode.nextSibling?.nodeName === 'BR') firstNode.nextSibling.remove();
+        if (!firstNode.textContent) firstNode.remove();
+      }
+      if (!firstP.innerHTML.trim()) firstP.remove();
+      const div = document.createElement('div');
+      div.setAttribute('data-collapsible', '');
+      div.setAttribute('data-title', title);
+      div.setAttribute('data-open', 'true');
+      div.innerHTML = bq.innerHTML;
+      bq.replaceWith(div);
+    }
+  });
+
+  container.querySelectorAll('p').forEach((p) => {
+    if (p.textContent?.trim() === '[TOC]') {
+      const div = document.createElement('div');
+      div.setAttribute('data-table-of-contents', '');
+      p.replaceWith(div);
+    }
+  });
+
+  return container.innerHTML;
+}
+
 function parseMarkdown(markdown: string, basePath?: string): Segment[] {
   const segments: Segment[] = [];
   let lastIndex = 0;
@@ -116,7 +184,7 @@ function parseMarkdown(markdown: string, basePath?: string): Segment[] {
     if (match.index! > lastIndex) {
       const text = markdown.slice(lastIndex, match.index);
       const raw = marked.parse(text, { async: false, gfm: true, breaks: true }) as string;
-      segments.push({ type: 'html', content: sanitize(raw, basePath) });
+      segments.push({ type: 'html', content: sanitize(transformGfmAlerts(raw), basePath) });
     }
     segments.push({ type: 'mermaid', content: match[1].trim() });
     lastIndex = match.index! + match[0].length;
@@ -125,7 +193,7 @@ function parseMarkdown(markdown: string, basePath?: string): Segment[] {
   if (lastIndex < markdown.length) {
     const text = markdown.slice(lastIndex);
     const raw = marked.parse(text, { async: false, gfm: true, breaks: true }) as string;
-    segments.push({ type: 'html', content: sanitize(raw, basePath) });
+    segments.push({ type: 'html', content: sanitize(transformGfmAlerts(raw), basePath) });
   }
 
   return segments;

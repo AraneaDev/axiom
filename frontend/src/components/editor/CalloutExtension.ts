@@ -50,6 +50,55 @@ export const CalloutExtension = Node.create({
     return ReactNodeViewRenderer(CalloutBlock);
   },
 
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: any, node: any) {
+          const typeMap: Record<string, string> = {
+            info: 'NOTE',
+            warning: 'WARNING',
+            note: 'NOTE',
+            success: 'TIP',
+            error: 'CAUTION',
+          };
+          const alertType = typeMap[node.attrs.type as string] || 'NOTE';
+          state.wrapBlock('> ', `> [!${alertType}]\n> `, node, () => state.renderContent(node));
+        },
+        parse: {
+          updateDOM(element: HTMLElement) {
+            element.querySelectorAll('blockquote').forEach((bq: Element) => {
+              const firstP = bq.querySelector('p');
+              if (!firstP) return;
+              const firstNode = firstP.childNodes[0];
+              if (!firstNode || firstNode.nodeType !== 3) return;
+              const text = firstNode.textContent || '';
+              const match = text.match(/^\[!(NOTE|WARNING|TIP|CAUTION|IMPORTANT)\]\s*/);
+              if (!match) return;
+              const reverseMap: Record<string, string> = {
+                NOTE: 'info',
+                WARNING: 'warning',
+                TIP: 'success',
+                CAUTION: 'error',
+                IMPORTANT: 'warning',
+              };
+              firstNode.textContent = text.slice(match[0].length);
+              if (!firstNode.textContent.trim()) {
+                const next = firstNode.nextSibling;
+                if (next?.nodeName === 'BR') next.remove();
+                if (!firstNode.textContent) firstNode.remove();
+              }
+              if (!firstP.innerHTML.trim()) firstP.remove();
+              const div = bq.ownerDocument!.createElement('div');
+              div.setAttribute('data-callout-type', reverseMap[match[1]] || 'info');
+              div.innerHTML = bq.innerHTML;
+              bq.replaceWith(div);
+            });
+          },
+        },
+      },
+    };
+  },
+
   addCommands() {
     return {
       setCallout:
