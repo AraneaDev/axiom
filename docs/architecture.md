@@ -343,12 +343,14 @@ Implemented in `src/git/ssh-server.ts` using the `ssh2` library. Listens on `SSH
 `POST /api/internal/hooks/post-receive` (in `src/git/hook-handler.ts`) is called by the `post-receive` hook script installed in each bare repo. It is secured by a shared `HOOK_SECRET` value sent in the `X-Hook-Secret` header.
 
 On each push, the hook handler:
-1. Parses commit messages for issue references (`Closes AXM-42`, `Fixes AXM-7`, `Refs AXM-3`)
-2. Creates `IssueCommit` records linking commits to issues with the appropriate `CommitRefType`
-3. Closes issues when `CLOSES` or `FIXES` ref types are detected
-4. Triggers pipeline runs via `triggerPipelineOnPush`
-5. Dispatches outbound webhooks to all active webhook URLs configured on the repository
-6. Invalidates relevant Redis cache keys via `cacheInvalidate`
+1. **Auto-links branches** -- Scans branch name for issue keys (e.g., `feature/AXM-42-fix`), creates `IssueBranch` records
+2. Parses commit messages for issue references (`Closes AXM-42`, `Fixes AXM-7`, `Refs AXM-3`)
+3. Creates `IssueCommit` records linking commits to issues with the appropriate `CommitRefType`
+4. Closes issues when `CLOSES` or `FIXES` ref types are detected
+5. **Executes smart commit directives** -- Parses `#time`, `#comment`, `#resolve`, `#close`, `#reopen`, `#assign`, `#label` directives and applies them to referenced issues (via `smart-commits.executor.ts`)
+6. Triggers pipeline runs via `triggerPipelineOnPush`
+7. Dispatches outbound webhooks to all active webhook URLs configured on the repository
+8. Invalidates relevant Redis cache keys via `cacheInvalidate`
 
 ### Repo Manager
 

@@ -1402,6 +1402,40 @@ Get activity feed for a specific issue.
 
 **Response 200:** Array of activity events.
 
+### GET /api/projects/:projectId/issues/:issueNumber/development
+
+Get aggregated development activity for an issue: branches, commits, PRs, and pipeline runs.
+
+**Response 200:**
+
+```json
+{
+  "branches": [{ "id": "...", "repoId": "...", "repoName": "my-repo", "branchName": "feature/AXM-42-fix", "createdAt": "..." }],
+  "commits": [{ "id": "...", "repoId": "...", "repoName": "my-repo", "sha": "abc123", "message": "fix login", "authorName": "Tim", "committedAt": "..." }],
+  "pullRequests": [{ "id": "...", "repoId": "...", "repoName": "my-repo", "number": 7, "title": "Fix login", "status": "OPEN", "authorName": "Tim", "createdAt": "..." }],
+  "pipelines": [{ "id": "...", "repoName": "my-repo", "pipelineName": "CI", "status": "SUCCESS", "ref": "feature/AXM-42-fix", "createdAt": "..." }]
+}
+```
+
+### Smart Commits
+
+Smart commit directives are processed automatically on `git push`. No API endpoint needed.
+
+**Syntax:** `<ISSUE-KEY> #<directive> <value>`
+
+**Directives:**
+- `#time <duration>` -- Log time (e.g., `2h`, `30m`, `1h30m`)
+- `#comment <text>` -- Add comment (text until next `#` directive)
+- `#resolve` / `#close` / `#reopen` -- Transition issue status
+- `#assign <username>` -- Reassign issue
+- `#label <name>` -- Add label
+
+**Example:** `AXM-42 #time 2h #comment Fixed login timeout #resolve`
+
+### Branch Auto-Linking
+
+Branches with issue keys in their name (e.g., `feature/AXM-42-login`) are automatically linked to the referenced issue on push. No API endpoint or configuration needed.
+
 ---
 
 ## Sprints
