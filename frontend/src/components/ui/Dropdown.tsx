@@ -1,5 +1,5 @@
 import { ChevronDown, X } from 'lucide-react';
-import { useState, useRef, useEffect, forwardRef, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useCallback, useId, forwardRef, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -26,6 +26,9 @@ interface DropdownProps {
 export function Dropdown({ trigger, children, align = 'left', className }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const generatedId = useId();
+  const menuId = `dropdown-menu-${generatedId}`;
 
   useEffect(() => {
     if (!open) return;
@@ -36,13 +39,52 @@ export function Dropdown({ trigger, children, align = 'left', className }: Dropd
     return () => window.removeEventListener('mousedown', handler);
   }, [open]);
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!open) return;
+      const menu = menuRef.current;
+      if (!menu) return;
+      const items = Array.from(
+        menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)'),
+      );
+      if (items.length === 0) return;
+      const focused = document.activeElement as HTMLElement;
+      const idx = items.indexOf(focused);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        items[(idx + 1) % items.length]?.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        items[(idx - 1 + items.length) % items.length]?.focus();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        items[0]?.focus();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        items[items.length - 1]?.focus();
+      } else if (e.key === 'Escape') {
+        setOpen(false);
+      }
+    },
+    [open],
+  );
+
   return (
-    <div ref={ref} className={cn('relative inline-block', className)}>
-      <div className="cursor-pointer" onClick={() => setOpen((o) => !o)}>
+    <div ref={ref} className={cn('relative inline-block', className)} onKeyDown={handleKeyDown}>
+      <div
+        className="cursor-pointer"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={open ? menuId : undefined}
+      >
         {trigger}
       </div>
       {open && (
         <div
+          ref={menuRef}
+          id={menuId}
+          role="menu"
           className={cn(
             'absolute z-40 mt-1 min-w-[10rem] rounded-lg border border-border bg-surface-elevated shadow-lg py-1 animate-slide-down',
             align === 'right' ? 'right-0' : 'left-0',
@@ -83,6 +125,7 @@ export function DropdownItem({
   return (
     <button
       type="button"
+      role="menuitem"
       onClick={onClick}
       disabled={disabled}
       className={cn(

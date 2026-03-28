@@ -55,9 +55,10 @@ export const TrHead = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTableRo
 TrHead.displayName = 'TrHead';
 
 export const Th = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCellElement>>(
-  ({ className, ...props }, ref) => (
+  ({ className, scope, ...props }, ref) => (
     <th
       ref={ref}
+      scope={scope ?? 'col'}
       className={cn(
         'px-4 py-3.5 text-left text-xs font-medium text-text-tertiary uppercase tracking-wide',
         className,

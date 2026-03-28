@@ -33,20 +33,36 @@ const sizes = {
  * @param props.size - Button size: xs, sm, md, lg. Defaults to md.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', disabled, ...props }, ref) => (
-    <button
-      ref={ref}
-      className={cn(
-        'inline-flex items-center justify-center font-medium rounded-md transition-all duration-150',
-        'focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1',
-        variants[variant],
-        sizes[size],
-        disabled && 'opacity-40 cursor-not-allowed pointer-events-none',
-        className,
-      )}
-      disabled={disabled}
-      {...props}
-    />
-  ),
+  ({ className, variant = 'primary', size = 'md', disabled, children, ...props }, ref) => {
+    if (
+      (import.meta as unknown as { env: { DEV: boolean } }).env.DEV &&
+      !props['aria-label'] &&
+      !props.title
+    ) {
+      const hasTextContent =
+        typeof children === 'string' ||
+        (Array.isArray(children) && children.some((c) => typeof c === 'string'));
+      if (!hasTextContent) {
+        console.warn('Button: icon-only buttons should have aria-label or title prop');
+      }
+    }
+    return (
+      <button
+        ref={ref}
+        className={cn(
+          'inline-flex items-center justify-center font-medium rounded-md transition-all duration-150',
+          'focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1',
+          variants[variant],
+          sizes[size],
+          disabled && 'opacity-40 cursor-not-allowed pointer-events-none',
+          className,
+        )}
+        disabled={disabled}
+        {...props}
+      >
+        {children}
+      </button>
+    );
+  },
 );
 Button.displayName = 'Button';
