@@ -262,18 +262,18 @@
 - [ ] **PR description templates** -- default template per repo
 - [ ] **Default reviewers** -- auto-assign reviewers per branch pattern
 - [ ] **Auto-merge** -- merge when all checks pass
-- [ ] **Close source branch** -- option to delete branch on merge
+- [x] **Close source branch** -- deleteSourceBranch option on merge endpoint with checkbox in merge UI, persists preference in localStorage
 - [ ] **PR activity feed** -- chronological log of comments, approvals, builds, pushes
 
 ### Code Review
 - [x] PR reviews (approved, changes requested, commented)
 - [x] Inline comments on files/lines
-- [ ] **Comment threads** -- nested replies on comments
+- [x] **Comment threads** -- nested replies via parentId on PRComment, threaded UI with reply button, collapse for 3+ replies
 - [ ] **PR tasks** -- create actionable tasks from comments; block merge until resolved
 - [x] **Code suggestions** -- ```suggestion blocks parsed and applied via applySuggestion() with one-click apply in PR UI
 - [ ] **Outdated comments** -- flag comments on subsequently modified code
 - [ ] **Review status per file** -- mark files as viewed/reviewed
-- [ ] **File tree in PR** -- navigate changed files via tree
+- [x] **File tree in PR** -- sticky sidebar with file list, status colors, +/- badges, click-to-scroll anchors, collapsible toggle
 
 ### Branch Protection
 - [x] Branch protection rules
@@ -381,6 +381,6 @@
 |---------|-----------------|-------------|-------------|-------|----------|
 | Issue Tracking (vs Jira) | 35 | 6 | 60 | 101 | 35% |
 | Wiki (vs Confluence) | 36 | 0 | 28 | 64 | 56% |
-| Git Hosting (vs Bitbucket) | 35 | 3 | 43 | 81 | 43% |
+| Git Hosting (vs Bitbucket) | 38 | 3 | 40 | 81 | 47% |
 | Cross-Product Integration | 4 | 0 | 5 | 9 | 44% |
-| **Total** | **110** | **9** | **136** | **255** | **43%** |
+| **Total** | **113** | **9** | **133** | **255** | **44%** |
