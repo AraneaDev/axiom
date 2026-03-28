@@ -157,6 +157,14 @@ export default function PRDetail() {
     },
   });
 
+  const replyMutation = useMutation({
+    mutationFn: ({ parentId, body }: { parentId: string; body: string }) =>
+      reposApi.addPRComment(currentRepo!.id, prNumber, { body, parentId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+    },
+  });
+
   const applySuggestionMutation = useMutation({
     mutationFn: (commentId: string) =>
       reposApi.applySuggestion(currentRepo!.id, prNumber, commentId),
@@ -274,6 +282,8 @@ export default function PRDetail() {
             onCommentBodyChange={setCommentBody}
             onSubmitComment={() => commentMutation.mutate()}
             isSubmittingComment={commentMutation.isPending}
+            onSubmitReply={(parentId, body) => replyMutation.mutate({ parentId, body })}
+            isSubmittingReply={replyMutation.isPending}
             onApprove={() => reviewMutation.mutate({ status: 'APPROVED', body: 'LGTM' })}
             onRequestChanges={() =>
               reviewMutation.mutate({

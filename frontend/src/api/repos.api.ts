@@ -324,11 +324,12 @@ export const reposApi = {
    * @param data.body
    * @param data.filePath
    * @param data.line
+   * @param data.parentId
    */
   addPRComment: (
     repoId: string,
     number: number,
-    data: { body: string; filePath?: string; line?: number },
+    data: { body: string; filePath?: string; line?: number; parentId?: string },
   ) => post(`/repos/${repoId}/pulls/${number}/comments`, data),
   /**
    * Update an existing PR comment.

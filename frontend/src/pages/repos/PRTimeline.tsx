@@ -1,4 +1,16 @@
-import { Check, X, ListChecks, Pencil, Trash2, Loader2, GitCommitHorizontal } from 'lucide-react';
+import {
+  Check,
+  X,
+  ListChecks,
+  Pencil,
+  Trash2,
+  Loader2,
+  GitCommitHorizontal,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
+import { useState } from 'react';
 
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
@@ -23,7 +35,34 @@ interface Comment {
   filePath?: string;
   line?: number;
   body: string;
+  parentId?: string | null;
   createdAt: string;
+}
+
+interface CommentThread {
+  root: Comment;
+  replies: Comment[];
+}
+
+function groupIntoThreads(comments: Comment[]): CommentThread[] {
+  const threads: CommentThread[] = [];
+  const replyMap = new Map<string, Comment[]>();
+
+  for (const c of comments) {
+    if (c.parentId) {
+      const arr = replyMap.get(c.parentId) || [];
+      arr.push(c);
+      replyMap.set(c.parentId, arr);
+    } else {
+      threads.push({ root: c, replies: [] });
+    }
+  }
+
+  for (const thread of threads) {
+    thread.replies = replyMap.get(thread.root.id) || [];
+  }
+
+  return threads;
 }
 
 interface PRTimelineProps {
@@ -57,6 +96,9 @@ interface PRTimelineProps {
   onCommentBodyChange: (val: string) => void;
   onSubmitComment: () => void;
   isSubmittingComment: boolean;
+  // Reply to comment
+  onSubmitReply: (parentId: string, body: string) => void;
+  isSubmittingReply: boolean;
   // Review actions
   onApprove: () => void;
   onRequestChanges: () => void;
@@ -87,6 +129,8 @@ interface PRTimelineProps {
  * @param root0.onCommentBodyChange
  * @param root0.onSubmitComment
  * @param root0.isSubmittingComment
+ * @param root0.onSubmitReply
+ * @param root0.isSubmittingReply
  * @param root0.onApprove
  * @param root0.onRequestChanges
  */
@@ -113,9 +157,33 @@ export function PRTimeline({
   onCommentBodyChange,
   onSubmitComment,
   isSubmittingComment,
+  onSubmitReply,
+  isSubmittingReply,
   onApprove,
   onRequestChanges,
 }: PRTimelineProps) {
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyBody, setReplyBody] = useState('');
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
+
+  const threads = groupIntoThreads(pr.comments ?? []);
+
+  const handleSubmitReply = (parentId: string) => {
+    if (!replyBody.trim()) return;
+    onSubmitReply(parentId, replyBody);
+    setReplyBody('');
+    setReplyingTo(null);
+  };
+
+  const toggleThreadExpand = (threadId: string) => {
+    setExpandedThreads((prev) => {
+      const next = new Set(prev);
+      if (next.has(threadId)) next.delete(threadId);
+      else next.add(threadId);
+      return next;
+    });
+  };
+
   return (
     <>
       {/* Reviews */}
@@ -184,7 +252,7 @@ export function PRTimeline({
         </div>
       )}
 
-      {/* Comments -- newest first */}
+      {/* Comments -- threaded, newest first */}
       {pr.comments && pr.comments.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -202,73 +270,211 @@ export function PRTimeline({
             )}
           </div>
           <div className="space-y-2">
-            {[...pr.comments].reverse().map((c) => (
-              <div key={c.id} className="rounded-lg border border-border bg-surface p-3 group">
-                {c.filePath && (
-                  <p className="text-xs font-mono text-text-secondary mb-1">
-                    {c.filePath}:{c.line}
-                  </p>
-                )}
-                {editingCommentId === c.id ? (
-                  <div className="space-y-2">
-                    <MarkdownEditor
-                      value={editCommentBody}
-                      onChange={onEditCommentBodyChange}
-                      compact
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        disabled={!editCommentBody.trim() || isSavingComment}
-                        onClick={() => onSaveEditComment(c.id)}
-                      >
-                        <Check className="h-4 w-4" /> Save
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={onCancelEditComment}>
-                        <X className="h-4 w-4" /> Cancel
-                      </Button>
+            {[...threads].reverse().map((thread) => {
+              const c = thread.root;
+              const replies = thread.replies;
+              const isExpanded = expandedThreads.has(c.id);
+              const hasHiddenReplies = replies.length > 3 && !isExpanded;
+              const visibleReplies = hasHiddenReplies ? [replies[0]] : replies;
+
+              return (
+                <div key={c.id}>
+                  {/* Root comment */}
+                  <div className="rounded-lg border border-border bg-surface p-3 group">
+                    {c.filePath && (
+                      <p className="text-xs font-mono text-text-secondary mb-1">
+                        {c.filePath}:{c.line}
+                      </p>
+                    )}
+                    {editingCommentId === c.id ? (
+                      <div className="space-y-2">
+                        <MarkdownEditor
+                          value={editCommentBody}
+                          onChange={onEditCommentBodyChange}
+                          compact
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            disabled={!editCommentBody.trim() || isSavingComment}
+                            onClick={() => onSaveEditComment(c.id)}
+                          >
+                            <Check className="h-4 w-4" /> Save
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={onCancelEditComment}>
+                            <X className="h-4 w-4" /> Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <MarkdownRenderer content={c.body} className="text-sm" />
+                        {pr.status === 'OPEN' && hasSuggestion(c.body) && (
+                          <SuggestionBlock
+                            commentId={c.id}
+                            body={c.body}
+                            isApplying={applyingComment === c.id}
+                            isSelected={selectedSuggestions.has(c.id)}
+                            onApply={onApplySuggestion}
+                            onToggleSelect={onToggleSuggestion}
+                          />
+                        )}
+                      </>
+                    )}
+                    <div className="flex items-center justify-between mt-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-text-secondary">{formatRelative(c.createdAt)}</p>
+                        {pr.status === 'OPEN' && (
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            title="Reply to comment"
+                            onClick={() => {
+                              setReplyingTo(replyingTo === c.id ? null : c.id);
+                              setReplyBody('');
+                            }}
+                          >
+                            <MessageSquare className="h-3 w-3" /> Reply
+                            {replies.length > 0 && ` (${replies.length})`}
+                          </Button>
+                        )}
+                      </div>
+                      {userId === c.authorId && editingCommentId !== c.id && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            title="Edit comment"
+                            onClick={() => onStartEditComment(c.id, c.body)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            title="Delete comment"
+                            onClick={() => onSetDeleteTarget(c.id)}
+                          >
+                            <Trash2 className="h-3 w-3 text-danger" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                ) : (
-                  <>
-                    <MarkdownRenderer content={c.body} className="text-sm" />
-                    {pr.status === 'OPEN' && hasSuggestion(c.body) && (
-                      <SuggestionBlock
-                        commentId={c.id}
-                        body={c.body}
-                        isApplying={applyingComment === c.id}
-                        isSelected={selectedSuggestions.has(c.id)}
-                        onApply={onApplySuggestion}
-                        onToggleSelect={onToggleSuggestion}
-                      />
-                    )}
-                  </>
-                )}
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-text-secondary">{formatRelative(c.createdAt)}</p>
-                  {userId === c.authorId && editingCommentId !== c.id && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        title="Edit comment"
-                        onClick={() => onStartEditComment(c.id, c.body)}
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        title="Delete comment"
-                        onClick={() => onSetDeleteTarget(c.id)}
-                      >
-                        <Trash2 className="h-3 w-3 text-danger" />
-                      </Button>
+
+                  {/* Inline reply form */}
+                  {replyingTo === c.id && (
+                    <div className="ml-6 border-l-2 border-border pl-4 mt-1">
+                      <div className="rounded-lg border border-border bg-surface p-3 space-y-2">
+                        <MarkdownEditor
+                          value={replyBody}
+                          onChange={setReplyBody}
+                          placeholder="Write a reply..."
+                          compact
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            disabled={!replyBody.trim() || isSubmittingReply}
+                            onClick={() => handleSubmitReply(c.id)}
+                          >
+                            {isSubmittingReply ? (
+                              <Spinner size="sm" />
+                            ) : (
+                              <>
+                                <MessageSquare className="h-4 w-4" /> Reply
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setReplyingTo(null);
+                              setReplyBody('');
+                            }}
+                          >
+                            <X className="h-4 w-4" /> Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Replies */}
+                  {replies.length > 0 && (
+                    <div className="ml-6 border-l-2 border-border pl-4 space-y-1 mt-1">
+                      {visibleReplies.map((reply) => (
+                        <div
+                          key={reply.id}
+                          className="rounded-lg border border-border bg-surface p-3 group"
+                        >
+                          {editingCommentId === reply.id ? (
+                            <div className="space-y-2">
+                              <MarkdownEditor
+                                value={editCommentBody}
+                                onChange={onEditCommentBodyChange}
+                                compact
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  disabled={!editCommentBody.trim() || isSavingComment}
+                                  onClick={() => onSaveEditComment(reply.id)}
+                                >
+                                  <Check className="h-4 w-4" /> Save
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={onCancelEditComment}>
+                                  <X className="h-4 w-4" /> Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <MarkdownRenderer content={reply.body} className="text-sm" />
+                          )}
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-xs text-text-secondary">
+                              {formatRelative(reply.createdAt)}
+                            </p>
+                            {userId === reply.authorId && editingCommentId !== reply.id && (
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  title="Edit comment"
+                                  onClick={() => onStartEditComment(reply.id, reply.body)}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  title="Delete comment"
+                                  onClick={() => onSetDeleteTarget(reply.id)}
+                                >
+                                  <Trash2 className="h-3 w-3 text-danger" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {hasHiddenReplies && (
+                        <Button variant="ghost" size="xs" onClick={() => toggleThreadExpand(c.id)}>
+                          <ChevronDown className="h-3 w-3" /> Show {replies.length - 1} more{' '}
+                          {replies.length - 1 === 1 ? 'reply' : 'replies'}
+                        </Button>
+                      )}
+                      {isExpanded && replies.length > 3 && (
+                        <Button variant="ghost" size="xs" onClick={() => toggleThreadExpand(c.id)}>
+                          <ChevronUp className="h-3 w-3" /> Collapse replies
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
