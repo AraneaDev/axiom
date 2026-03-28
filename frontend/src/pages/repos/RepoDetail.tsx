@@ -20,6 +20,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import EnvironmentsTab from './EnvironmentsTab';
 import InsightsTab from './InsightsTab';
 import PipelinesTab from './PipelinesTab';
+import PRList from './PRList';
 import ReleasesTab from './ReleasesTab';
 
 import { reposApi, type CommitInfo } from '@/api/repos.api';
@@ -46,7 +47,8 @@ export default function RepoDetail() {
   const TAB_SLUGS = ['branches', 'commits', 'releases', 'pipelines', 'environments', 'insights'];
   const pathParts = location.pathname.split('/');
   const lastSegment = pathParts[pathParts.length - 1];
-  const activeTab = TAB_SLUGS.includes(lastSegment) ? lastSegment : 'code';
+  const activeTab =
+    lastSegment === 'pulls' ? 'prs' : TAB_SLUGS.includes(lastSegment) ? lastSegment : 'code';
 
   const activeBranch = selectedBranch ?? currentRepo?.defaultBranch ?? 'main';
 
@@ -314,34 +316,7 @@ export default function RepoDetail() {
       )}
 
       {/* PRs tab */}
-      {activeTab === 'prs' && (
-        <div>
-          {prs && prs.length > 0 ? (
-            <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-              {prs.map((pr) => (
-                <Link
-                  key={pr.id}
-                  to={`${basePath}/pulls/${pr.number}`}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
-                >
-                  <GitPullRequest className="h-4 w-4 text-success shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{pr.title}</p>
-                    <p className="text-xs text-text-secondary">
-                      #{pr.number} &middot; {pr.sourceBranch} &rarr; {pr.targetBranch}
-                    </p>
-                  </div>
-                  <Badge variant="outline" size="sm">
-                    {pr.status}
-                  </Badge>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-text-secondary text-center py-8">No open pull requests.</p>
-          )}
-        </div>
-      )}
+      {activeTab === 'prs' && <PRList />}
 
       {/* Pipelines tab */}
       {activeTab === 'pipelines' && currentRepo && <PipelinesTab repoId={currentRepo.id} />}

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Eye, GitPullRequest, Plus, GitMerge, XCircle, AlertTriangle } from 'lucide-react';
+import { Eye, GitPullRequest, GitMerge, XCircle, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -46,10 +46,6 @@ export default function PRList() {
   if (isLoading)
     return (
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <Skeleton className="h-7 w-40" />
-          <Skeleton className="h-8 w-24 rounded-md" />
-        </div>
         <div className="flex gap-2 mb-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-8 w-20 rounded-md" />
@@ -72,15 +68,6 @@ export default function PRList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Pull Requests</h1>
-        <Link to={`${basePath}/pulls/new`}>
-          <Button size="sm">
-            <Plus className="h-4 w-4" /> New PR
-          </Button>
-        </Link>
-      </div>
-
       <div className="flex gap-2 mb-4">
         {(['OPEN', 'MERGED', 'CLOSED', ''] as const).map((s) => {
           const Icon = s ? STATUS_ICON[s] : GitPullRequest;
