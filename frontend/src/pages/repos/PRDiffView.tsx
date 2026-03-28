@@ -1,9 +1,25 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Rows3, Columns2, Plus, X, MessageSquare, FileText, ListTree } from 'lucide-react';
-import { useRef, useState } from 'react';
+import {
+  Rows3,
+  Columns2,
+  Plus,
+  X,
+  MessageSquare,
+  FileText,
+  FilePlus,
+  FileMinus,
+  FileEdit,
+  ChevronUp,
+  ChevronDown,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeft,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CommitInfo } from '@/api/repos.api';
 import { reposApi } from '@/api/repos.api';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
@@ -19,70 +35,26 @@ interface SplitLine {
   right: { num: number | null; content: string; type: 'same' | 'add' | 'empty' };
 }
 
-type FileStatus = 'added' | 'modified' | 'deleted';
-
-function getFileStatus(stat: { additions: number; deletions: number }): FileStatus {
-  if (stat.additions > 0 && stat.deletions === 0) return 'added';
-  if (stat.additions === 0 && stat.deletions > 0) return 'deleted';
-  return 'modified';
+function splitDiffByFile(rawDiff: string): { file: string; rawDiff: string }[] {
+  const chunks = rawDiff.split(/(?=^diff --git )/m);
+  return chunks.filter(Boolean).map((chunk) => {
+    const headerMatch = chunk.match(/^diff --git a\/(.+?) b\//);
+    return { file: headerMatch?.[1] ?? 'unknown', rawDiff: chunk };
+  });
 }
 
-const fileStatusColors: Record<FileStatus, string> = {
-  added: 'text-success',
-  modified: 'text-warning',
-  deleted: 'text-danger',
-};
+function getFileIcon(s: { additions: number; deletions: number }) {
+  if (s.additions > 0 && s.deletions > 0)
+    return <FileEdit className="h-3.5 w-3.5 text-warning shrink-0" />;
+  if (s.additions > 0) return <FilePlus className="h-3.5 w-3.5 text-success shrink-0" />;
+  return <FileMinus className="h-3.5 w-3.5 text-danger shrink-0" />;
+}
 
-function DiffFileTree({
-  stats,
-  activeFile,
-  onFileClick,
-}: {
-  stats: { file: string; additions: number; deletions: number }[];
-  activeFile: string | null;
-  onFileClick: (file: string) => void;
-}) {
-  return (
-    <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
-      <div className="flex items-center gap-2 mb-2">
-        <FileText className="h-3.5 w-3.5 text-text-secondary" />
-        <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-          {stats.length} files changed
-        </span>
-      </div>
-      <div className="space-y-0.5">
-        {stats.map((stat) => {
-          const status = getFileStatus(stat);
-          const fileName = stat.file.split('/').pop() || stat.file;
-          const dirPath = stat.file.includes('/')
-            ? stat.file.substring(0, stat.file.lastIndexOf('/'))
-            : '';
-          return (
-            <button
-              key={stat.file}
-              type="button"
-              onClick={() => onFileClick(stat.file)}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-left hover:bg-surface-tertiary transition-colors',
-                activeFile === stat.file && 'bg-primary-light text-primary',
-              )}
-              title={stat.file}
-            >
-              <FileText className={cn('h-3 w-3 shrink-0', fileStatusColors[status])} />
-              <span className="truncate flex-1">
-                {dirPath && <span className="text-text-tertiary">{dirPath}/</span>}
-                {fileName}
-              </span>
-              <span className="shrink-0 flex gap-1 text-xs">
-                {stat.additions > 0 && <span className="text-success">+{stat.additions}</span>}
-                {stat.deletions > 0 && <span className="text-danger">-{stat.deletions}</span>}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
+function getChangeType(s: { additions: number; deletions: number }) {
+  if (s.additions > 0 && s.deletions > 0) return 'Modified';
+  if (s.additions > 0 && s.deletions === 0) return 'Added';
+  if (s.deletions > 0 && s.additions === 0) return 'Deleted';
+  return 'Modified';
 }
 
 function parseDiffToSplit(raw: string): { file: string; lines: SplitLine[] }[] {
@@ -464,14 +436,32 @@ export function PRDiffView({
   repoId,
   prNumber,
 }: PRDiffViewProps) {
-  const [activeFile, setActiveFile] = useState<string | null>(null);
-  const [showFileTree, setShowFileTree] = useState(true);
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [fileListOpen, setFileListOpen] = useState(true);
 
-  function scrollToFile(file: string) {
-    const el = document.getElementById(`diff-${encodeURIComponent(file)}`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setActiveFile(file);
-  }
+  const stats = diff?.stats ?? [];
+  const diffText = diff?.diff;
+  const fileChunks = useMemo(() => (diffText ? splitDiffByFile(diffText) : []), [diffText]);
+  const fileCount = stats.length;
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveFileIndex((prev) => (prev < fileCount - 1 ? prev + 1 : prev));
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveFileIndex((prev) => (prev > 0 ? prev - 1 : prev));
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [fileCount]);
+
+  const activeStat = stats[activeFileIndex];
+  const activeChunk = activeStat ? fileChunks.find((c) => c.file === activeStat.file) : null;
 
   return (
     <>
@@ -491,38 +481,27 @@ export function PRDiffView({
         </div>
       )}
 
-      {/* Diff stats */}
-      {diff?.stats && diff.stats.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold mb-2">Changed Files ({diff.stats.length})</h2>
-          <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-            {diff.stats.map((s) => (
-              <div key={s.file} className="flex items-center gap-3 px-4 py-2 text-sm">
-                <span className="flex-1 font-mono text-xs truncate">{s.file}</span>
-                <span className="text-success text-xs">+{s.additions}</span>
-                <span className="text-danger text-xs">-{s.deletions}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Diff content */}
-      {diff?.diff && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold">Diff</h2>
-            <div className="flex items-center gap-2">
-              {diff.stats && diff.stats.length > 1 && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => setShowFileTree(!showFileTree)}
-                  title="Toggle file tree"
-                >
-                  <ListTree className="h-4 w-4" />
-                </Button>
+      {/* File navigation + diff carousel */}
+      {stats.length > 0 && (
+        <div className="rounded-lg border border-border bg-surface overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2 bg-surface-secondary border-b border-border">
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setFileListOpen(!fileListOpen)}
+              title={fileListOpen ? 'Collapse file list' : 'Expand file list'}
+            >
+              {fileListOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeft className="h-4 w-4" />
               )}
+            </Button>
+            <FileText className="h-4 w-4 text-text-tertiary" />
+            <span className="text-sm font-medium text-text-secondary">
+              File {activeFileIndex + 1} of {stats.length}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
               <div className="flex items-center rounded-lg border border-border bg-surface overflow-hidden">
                 <Button
                   size="sm"
@@ -541,49 +520,94 @@ export function PRDiffView({
                   <Columns2 className="h-3.5 w-3.5" /> Split
                 </Button>
               </div>
-            </div>
-          </div>
-          <div className="flex gap-4">
-            {showFileTree && diff.stats && diff.stats.length > 1 && (
-              <div className="w-64 shrink-0 hidden lg:block">
-                <DiffFileTree
-                  stats={diff.stats}
-                  activeFile={activeFile}
-                  onFileClick={scrollToFile}
-                />
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setActiveFileIndex((p) => Math.max(0, p - 1))}
+                  disabled={activeFileIndex === 0}
+                  title="Previous file (k)"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setActiveFileIndex((p) => Math.min(stats.length - 1, p + 1))}
+                  disabled={activeFileIndex === stats.length - 1}
+                  title="Next file (j)"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
               </div>
-            )}
-            <div className="flex-1 min-w-0">
-              {diffView === 'unified' ? (
-                repoId ? (
-                  <UnifiedDiffView rawDiff={diff.diff} repoId={repoId} prNumber={prNumber} />
-                ) : (
-                  <pre className="rounded-lg border border-border bg-surface p-4 text-xs font-mono overflow-x-auto max-h-[600px] overflow-y-auto">
-                    {diff.diff.split('\n').map((line: string, i: number) => (
-                      <div
-                        key={i}
-                        className={
-                          line.startsWith('+') && !line.startsWith('+++')
-                            ? 'text-success bg-success-light'
-                            : line.startsWith('-') && !line.startsWith('---')
-                              ? 'text-danger bg-danger-light'
-                              : line.startsWith('@@')
-                                ? 'text-primary bg-primary-light'
-                                : ''
-                        }
-                      >
-                        {line}
-                      </div>
-                    ))}
-                  </pre>
-                )
-              ) : repoId ? (
-                <SplitDiffView rawDiff={diff.diff} repoId={repoId} prNumber={prNumber} />
-              ) : (
-                <SplitDiffView rawDiff={diff.diff} repoId="" prNumber={prNumber} />
-              )}
             </div>
           </div>
+          {fileListOpen && (
+            <div className="max-h-64 overflow-y-auto divide-y divide-border">
+              {stats.map((s, i) => (
+                <Button
+                  key={s.file}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveFileIndex(i)}
+                  className={cn(
+                    'w-full justify-start rounded-none px-4 py-1.5',
+                    i === activeFileIndex ? 'bg-primary-light' : '',
+                  )}
+                >
+                  {i === activeFileIndex && (
+                    <ChevronRight className="h-3 w-3 text-primary shrink-0" />
+                  )}
+                  {getFileIcon(s)}
+                  <span className="font-mono text-xs truncate">{s.file}</span>
+                  <Badge
+                    className="ml-auto"
+                    variant={
+                      getChangeType(s) === 'Added'
+                        ? 'success'
+                        : getChangeType(s) === 'Deleted'
+                          ? 'danger'
+                          : 'warning'
+                    }
+                    size="sm"
+                  >
+                    {getChangeType(s)}
+                  </Badge>
+                  <span className="text-success text-xs">+{s.additions}</span>
+                  <span className="text-danger text-xs">-{s.deletions}</span>
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Active file diff */}
+      {activeChunk && repoId && (
+        <div className="rounded-lg border border-border bg-surface overflow-hidden">
+          <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
+            {activeStat && getFileIcon(activeStat)}
+            <span className="truncate">{activeStat?.file}</span>
+            {activeStat && (
+              <span className="flex items-center gap-2 text-xs shrink-0 ml-auto">
+                <span className="text-success">+{activeStat.additions}</span>
+                <span className="text-danger">-{activeStat.deletions}</span>
+              </span>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            {diffView === 'unified' ? (
+              <UnifiedDiffView rawDiff={activeChunk.rawDiff} repoId={repoId} prNumber={prNumber} />
+            ) : (
+              <SplitDiffView rawDiff={activeChunk.rawDiff} repoId={repoId} prNumber={prNumber} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {!diff?.diff && stats.length === 0 && (
+        <div className="text-sm text-text-secondary text-center py-8">
+          No diff available for this pull request.
         </div>
       )}
     </>

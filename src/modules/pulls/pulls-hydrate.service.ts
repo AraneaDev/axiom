@@ -25,7 +25,7 @@ export async function hydratePRDetail(repoId: string, prNumber: number) {
   // Fan out all secondary queries
   const results = await Promise.allSettled([
     getMergeChecks(repoId, prNumber),
-    getPRDiff(repoId, prNumber).then((d) => ({ stats: d.stats })),
+    getPRDiff(repoId, prNumber),
     getPRCommits(repoId, prNumber),
     listReviews(repoId, prNumber),
     listPRComments(repoId, prNumber),
