@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
   ChevronRight,
@@ -9,11 +10,14 @@ import {
   Hash,
   MoreHorizontal,
   Plus,
+  Trash2,
 } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
+import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import type { PageTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -81,7 +85,16 @@ function TableOfContents({ entries }: { entries: TocEntry[] }) {
  * @param nodes
  * @param targetSlug
  * @param ancestors
+ * @param node
  */
+function countDescendants(node: PageTreeNode): number {
+  let count = node.children.length;
+  for (const child of node.children) {
+    count += countDescendants(child);
+  }
+  return count;
+}
+
 function collectAncestorIds(
   nodes: PageTreeNode[],
   targetSlug: string,
@@ -107,6 +120,7 @@ function TreeNode({
   expanded,
   onToggle,
   onNewFolder,
+  onDelete,
 }: {
   node: PageTreeNode;
   basePath: string;
@@ -115,6 +129,7 @@ function TreeNode({
   expanded: Set<string>;
   onToggle: (id: string) => void;
   onNewFolder?: (parentId?: string) => void;
+  onDelete?: (node: PageTreeNode) => void;
 }) {
   const hasChildren = node.children.length > 0;
   const isExpanded = expanded.has(node.id);
@@ -187,6 +202,9 @@ function TreeNode({
             <DropdownItem onClick={() => onNewFolder?.(node.id)}>
               <FolderPlus className="h-3.5 w-3.5" /> New Folder
             </DropdownItem>
+            <DropdownItem onClick={() => onDelete?.(node)} danger>
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </DropdownItem>
           </Dropdown>
         </div>
       </div>
@@ -204,6 +222,7 @@ function TreeNode({
             expanded={expanded}
             onToggle={onToggle}
             onNewFolder={onNewFolder}
+            onDelete={onDelete}
           />
         ))}
     </div>
@@ -219,6 +238,7 @@ interface PageViewSidebarProps {
   /** When true, hides the built-in header (New Page / New Folder buttons) */
   embedded?: boolean;
   className?: string;
+  spaceId?: string;
 }
 
 /**
@@ -231,6 +251,7 @@ interface PageViewSidebarProps {
  * @param root0.onNewFolder
  * @param root0.embedded
  * @param root0.className
+ * @param root0.spaceId
  */
 export function PageViewSidebar({
   tree,
@@ -240,7 +261,25 @@ export function PageViewSidebar({
   onNewFolder,
   embedded,
   className,
+  spaceId,
 }: PageViewSidebarProps) {
+  const [deleteTarget, setDeleteTarget] = useState<PageTreeNode | null>(null);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const deleteMutation = useMutation({
+    mutationFn: () => wikiApi.deletePage(spaceId!, deleteTarget!.slug),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wikiPageTree'] });
+      queryClient.invalidateQueries({ queryKey: ['page'] });
+      const wasActive = deleteTarget?.slug === activeSlug;
+      setDeleteTarget(null);
+      if (wasActive) {
+        navigate(basePath);
+      }
+    },
+  });
+
   const defaultExpanded = useMemo(() => {
     if (!tree || !activeSlug) return new Set<string>();
     const ids = collectAncestorIds(tree, activeSlug);
@@ -290,9 +329,25 @@ export function PageViewSidebar({
             expanded={expanded}
             onToggle={handleToggle}
             onNewFolder={onNewFolder}
+            onDelete={setDeleteTarget}
           />
         ))}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteMutation.mutate()}
+        title={`Delete "${deleteTarget?.title}"?`}
+        description={
+          deleteTarget && countDescendants(deleteTarget) > 0
+            ? `This will also delete ${countDescendants(deleteTarget)} child page${countDescendants(deleteTarget) === 1 ? '' : 's'}. This action cannot be undone.`
+            : 'This action cannot be undone.'
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteMutation.isPending}
+      />
 
       {/* Table of contents -- only in standalone mode, not when embedded in WikiLayout */}
       {!embedded && tocEntries.length > 0 && (

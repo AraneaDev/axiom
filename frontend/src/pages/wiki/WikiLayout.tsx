@@ -236,6 +236,7 @@ export default function WikiLayout() {
                 activeSlug={pageSlug}
                 onNewFolder={handleNewFolder}
                 embedded
+                spaceId={currentSpace?.id}
               />
             )}
           </>
