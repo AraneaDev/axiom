@@ -244,6 +244,15 @@ export const wikiApi = {
    */
   copyPage: (pageId: string, data: { targetSpaceId?: string; newSlug?: string }) =>
     post<Page>(`/wiki/pages/${pageId}/copy`, data),
+  /**
+   * Reorder a page within the hierarchy.
+   * @param pageId
+   * @param data
+   * @param data.parentId
+   * @param data.position
+   */
+  reorderPage: (pageId: string, data: { parentId: string | null; position: number }) =>
+    patch(`/wiki/pages/${pageId}/reorder`, data),
 
   /**
    * Compare two versions of a wiki page and return a structured diff.
