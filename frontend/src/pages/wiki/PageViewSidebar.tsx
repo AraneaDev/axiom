@@ -1,4 +1,16 @@
 /* eslint-disable react-refresh/only-export-components */
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+  useDraggable,
+  useDroppable,
+} from '@dnd-kit/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
@@ -7,12 +19,13 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  GripVertical,
   Hash,
   MoreHorizontal,
   Plus,
   Trash2,
 } from 'lucide-react';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 
 import { wikiApi } from '@/api/wiki.api';
@@ -112,6 +125,36 @@ function collectAncestorIds(
   return null;
 }
 
+type DropZone = 'before' | 'child' | 'after';
+
+interface DropTarget {
+  nodeId: string;
+  zone: DropZone;
+}
+
+function findNodeById(nodes: PageTreeNode[], id: string): PageTreeNode | undefined {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const found = findNodeById(node.children, id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function findSiblings(tree: PageTreeNode[], target: PageTreeNode): PageTreeNode[] {
+  if (!target.parentId) return tree;
+  const parent = findNodeById(tree, target.parentId);
+  return parent?.children ?? tree;
+}
+
+function isDescendant(node: PageTreeNode, targetId: string): boolean {
+  for (const child of node.children) {
+    if (child.id === targetId) return true;
+    if (isDescendant(child, targetId)) return true;
+  }
+  return false;
+}
+
 function TreeNode({
   node,
   basePath,
@@ -121,6 +164,7 @@ function TreeNode({
   onToggle,
   onNewFolder,
   onDelete,
+  dropTarget,
 }: {
   node: PageTreeNode;
   basePath: string;
@@ -130,13 +174,40 @@ function TreeNode({
   onToggle: (id: string) => void;
   onNewFolder?: (parentId?: string) => void;
   onDelete?: (node: PageTreeNode) => void;
+  dropTarget?: DropTarget | null;
 }) {
   const hasChildren = node.children.length > 0;
   const isExpanded = expanded.has(node.id);
   const isActive = node.slug === activeSlug;
 
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    isDragging,
+  } = useDraggable({
+    id: node.id,
+  });
+  const { setNodeRef: setDropRef } = useDroppable({
+    id: node.id,
+  });
+  const nodeRef = (el: HTMLElement | null) => {
+    setDragRef(el);
+    setDropRef(el);
+  };
+
   return (
-    <div>
+    <div ref={nodeRef} {...attributes} className={cn('relative', isDragging && 'opacity-30')}>
+      {/* Drop indicators */}
+      {dropTarget?.nodeId === node.id && dropTarget.zone === 'before' && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary z-10" />
+      )}
+      {dropTarget?.nodeId === node.id && dropTarget.zone === 'child' && (
+        <div className="absolute inset-0 rounded-md bg-primary/10 border border-primary/30 z-0 pointer-events-none" />
+      )}
+      {dropTarget?.nodeId === node.id && dropTarget.zone === 'after' && (
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary z-10" />
+      )}
       <div
         className={cn(
           'group flex items-center gap-1 py-1 px-1 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
@@ -177,6 +248,16 @@ function TreeNode({
         <Link to={`${basePath}/${node.slug}`} className="truncate flex-1 py-0.5">
           {node.title}
         </Link>
+
+        {/* Drag handle */}
+        <button
+          {...listeners}
+          type="button"
+          className="shrink-0 cursor-grab opacity-0 group-hover:opacity-100 p-0.5 text-text-tertiary"
+          title="Drag to reorder"
+        >
+          <GripVertical className="h-3 w-3" />
+        </button>
 
         {/* Context menu */}
         <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -223,6 +304,7 @@ function TreeNode({
             onToggle={onToggle}
             onNewFolder={onNewFolder}
             onDelete={onDelete}
+            dropTarget={dropTarget}
           />
         ))}
     </div>
@@ -300,6 +382,131 @@ export function PageViewSidebar({
     });
   }, []);
 
+  // DnD state
+  const [activeNode, setActiveNode] = useState<PageTreeNode | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const pointerYRef = useRef(0);
+  const expandTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // Track pointer position for zone detection
+  useEffect(() => {
+    const handler = (e: PointerEvent) => {
+      pointerYRef.current = e.clientY;
+    };
+    window.addEventListener('pointermove', handler);
+    return () => window.removeEventListener('pointermove', handler);
+  }, []);
+
+  const reorderMutation = useMutation({
+    mutationFn: (data: { pageId: string; parentId: string | null; position: number }) =>
+      wikiApi.reorderPage(data.pageId, { parentId: data.parentId, position: data.position }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wikiPageTree'] });
+    },
+  });
+
+  function handleDragStart(event: DragStartEvent) {
+    const node = tree ? findNodeById(tree, event.active.id as string) : undefined;
+    setActiveNode(node || null);
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    if (!event.over) {
+      setDropTarget(null);
+      return;
+    }
+
+    const overId = event.over.id as string;
+    const overRect = event.over.rect;
+    const relativeY = pointerYRef.current - overRect.top;
+    const height = overRect.height;
+
+    let zone: DropZone;
+    if (relativeY < height * 0.25) zone = 'before';
+    else if (relativeY > height * 0.75) zone = 'after';
+    else zone = 'child';
+
+    // Prevent dropping onto self or descendants
+    if (activeNode) {
+      if (overId === activeNode.id) {
+        setDropTarget(null);
+        return;
+      }
+      if (zone === 'child' && isDescendant(activeNode, overId)) {
+        setDropTarget(null);
+        return;
+      }
+    }
+
+    // Auto-expand collapsed nodes when hovering in child zone
+    if (zone === 'child' && !expanded.has(overId)) {
+      if (!expandTimeoutRef.current) {
+        expandTimeoutRef.current = setTimeout(() => {
+          handleToggle(overId);
+          expandTimeoutRef.current = undefined;
+        }, 500);
+      }
+    } else {
+      clearTimeout(expandTimeoutRef.current);
+      expandTimeoutRef.current = undefined;
+    }
+
+    setDropTarget({ nodeId: overId, zone });
+  }
+
+  function handleDragEnd(_event: DragEndEvent) {
+    clearTimeout(expandTimeoutRef.current);
+    expandTimeoutRef.current = undefined;
+
+    if (!activeNode || !dropTarget || !tree) {
+      setActiveNode(null);
+      setDropTarget(null);
+      return;
+    }
+
+    const targetNode = findNodeById(tree, dropTarget.nodeId);
+    if (!targetNode) {
+      setActiveNode(null);
+      setDropTarget(null);
+      return;
+    }
+
+    let parentId: string | null;
+    let position: number;
+
+    if (dropTarget.zone === 'child') {
+      parentId = targetNode.id;
+      position = 0;
+      // Auto-expand the target so moved page is visible
+      if (!expanded.has(targetNode.id)) {
+        handleToggle(targetNode.id);
+      }
+    } else {
+      parentId = targetNode.parentId ?? null;
+      const siblings = findSiblings(tree, targetNode);
+      const targetIdx = siblings.findIndex((s) => s.id === targetNode.id);
+      position = dropTarget.zone === 'before' ? targetIdx : targetIdx + 1;
+      // Adjust if moving within same parent and from earlier position
+      if (parentId === (activeNode.parentId ?? null)) {
+        const currentIdx = siblings.findIndex((s) => s.id === activeNode.id);
+        if (currentIdx !== -1 && currentIdx < position) position--;
+      }
+    }
+
+    reorderMutation.mutate({ pageId: activeNode.id, parentId, position });
+    setActiveNode(null);
+    setDropTarget(null);
+  }
+
+  function handleDragCancel() {
+    clearTimeout(expandTimeoutRef.current);
+    expandTimeoutRef.current = undefined;
+    setActiveNode(null);
+    setDropTarget(null);
+  }
+
   return (
     <div className={cn('', className)}>
       {!embedded && (
@@ -319,20 +526,37 @@ export function PageViewSidebar({
           </div>
         </div>
       )}
-      <div className="space-y-0.5 mb-6">
-        {tree?.map((node) => (
-          <TreeNode
-            key={node.id}
-            node={node}
-            basePath={basePath}
-            activeSlug={activeSlug}
-            expanded={expanded}
-            onToggle={handleToggle}
-            onNewFolder={onNewFolder}
-            onDelete={setDeleteTarget}
-          />
-        ))}
-      </div>
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <div className="space-y-0.5 mb-6">
+          {tree?.map((node) => (
+            <TreeNode
+              key={node.id}
+              node={node}
+              basePath={basePath}
+              activeSlug={activeSlug}
+              expanded={expanded}
+              onToggle={handleToggle}
+              onNewFolder={onNewFolder}
+              onDelete={setDeleteTarget}
+              dropTarget={dropTarget}
+            />
+          ))}
+        </div>
+        <DragOverlay>
+          {activeNode && (
+            <div className="flex items-center gap-2 rounded-md bg-surface border border-border px-3 py-1.5 shadow-lg text-sm">
+              <FileText className="h-3.5 w-3.5 text-text-secondary" />
+              {activeNode.title}
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       <ConfirmDialog
         open={!!deleteTarget}
