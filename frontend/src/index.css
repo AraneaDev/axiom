@@ -46,6 +46,16 @@
   --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
   --shadow-glow: 0 0 0 3px rgba(109, 93, 202, 0.15);
 
+  /* Card color coding */
+  --card-color-critical: var(--color-danger);
+  --card-color-high: oklch(0.65 0.18 25);
+  --card-color-medium: oklch(0.75 0.15 85);
+  --card-color-low: oklch(0.7 0.12 145);
+  --card-color-bug: var(--color-danger);
+  --card-color-story: oklch(0.65 0.15 250);
+  --card-color-task: oklch(0.7 0.12 145);
+  --card-color-epic: oklch(0.6 0.2 300);
+
   /* Radii */
   --radius-sm: 6px;
   --radius-md: 8px;

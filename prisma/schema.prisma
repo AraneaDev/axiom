@@ -394,6 +394,7 @@ model Project {
   updatedAt DateTime @updatedAt
 
   issueTemplates Json? // JSON array of issue templates
+  cardColorBy    String? // "priority", "type", or null
 
   issues                 Issue[]
   labels                 Label[]
@@ -418,6 +419,7 @@ model BoardColumn {
   position  Int
   isDefault Boolean @default(false)
   isDone    Boolean @default(false)
+  wipLimit  Int?
 
   issues            Issue[]
   workflowRulesFrom WorkflowRule[] @relation("fromColumn")

@@ -89,10 +89,11 @@ export async function listProjects(teamId: string) {
  * @param data
  * @param data.name
  * @param data.description
+ * @param data.cardColorBy
  */
 export async function updateProject(
   projectId: string,
-  data: { name?: string; description?: string },
+  data: { name?: string; description?: string; cardColorBy?: string | null },
 ) {
   return prisma.project.update({ where: { id: projectId }, data });
 }

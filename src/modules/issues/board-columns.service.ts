@@ -9,10 +9,11 @@ import { findOrThrow } from '../../utils/find-or-throw';
  * @param data.name
  * @param data.position
  * @param data.isDone
+ * @param data.wipLimit
  */
 export async function createColumn(
   projectId: string,
-  data: { name: string; position?: number; isDone?: boolean },
+  data: { name: string; position?: number; isDone?: boolean; wipLimit?: number | null },
 ) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
@@ -35,6 +36,7 @@ export async function createColumn(
       name: data.name,
       position,
       isDone: data.isDone ?? false,
+      ...(data.wipLimit !== undefined && { wipLimit: data.wipLimit }),
     },
   });
 }
@@ -46,11 +48,12 @@ export async function createColumn(
  * @param data
  * @param data.name
  * @param data.isDone
+ * @param data.wipLimit
  */
 export async function updateColumn(
   projectId: string,
   columnId: string,
-  data: { name?: string; isDone?: boolean },
+  data: { name?: string; isDone?: boolean; wipLimit?: number | null },
 ) {
   const column = await findOrThrow(
     prisma.boardColumn.findUnique({ where: { id: columnId } }),
@@ -63,6 +66,7 @@ export async function updateColumn(
     data: {
       ...(data.name !== undefined && { name: data.name }),
       ...(data.isDone !== undefined && { isDone: data.isDone }),
+      ...(data.wipLimit !== undefined && { wipLimit: data.wipLimit }),
     },
   });
 }
