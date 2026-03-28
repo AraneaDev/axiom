@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -104,7 +105,7 @@ export function IssueListTable({
 
   if (viewMode === 'list') {
     return (
-      <div className="rounded-lg border border-border bg-surface overflow-hidden">
+      <Card className="overflow-hidden">
         {/* Select all header */}
         <div className="flex items-center gap-3 px-4 py-2 bg-surface-secondary/50 border-b border-border">
           <Checkbox
@@ -167,7 +168,7 @@ export function IssueListTable({
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     );
   }
 

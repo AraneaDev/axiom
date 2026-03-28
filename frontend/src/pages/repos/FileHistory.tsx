@@ -4,6 +4,7 @@ import { Link, Navigate, useParams } from 'react-router';
 
 import { reposApi } from '@/api/repos.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -91,7 +92,7 @@ export default function FileHistory() {
 
       {/* Commit list */}
       {commits && commits.length > 0 ? (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {commits.map((c) => (
             <Link
               key={c.sha}
@@ -108,7 +109,7 @@ export default function FileHistory() {
               <code className="text-xs text-text-secondary font-mono">{c.shortSha}</code>
             </Link>
           ))}
-        </div>
+        </Card>
       ) : (
         <p className="text-sm text-text-secondary text-center py-8">
           No commits found for this file.

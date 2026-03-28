@@ -8,6 +8,7 @@ import { issuesApi } from '@/api/issues.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { PageLoader, Spinner } from '@/components/ui/Spinner';
@@ -15,12 +16,18 @@ import { useToast } from '@/components/ui/Toast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 
-
 /**
  *
  */
 export default function IssueCreate() {
-  const { org, teamSlug, projectSlug, currentTeam, currentProject, isLoading: loadingContext } = useProjectContext();
+  const {
+    org,
+    teamSlug,
+    projectSlug,
+    currentTeam,
+    currentProject,
+    isLoading: loadingContext,
+  } = useProjectContext();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -160,7 +167,7 @@ export default function IssueCreate() {
 
         {/* Sidebar - right side */}
         <div className="w-72 shrink-0 space-y-4">
-          <div className="rounded-lg border border-border bg-surface p-4 space-y-4">
+          <Card className="p-4 space-y-4">
             <Select
               label="Type"
               value={type}
@@ -197,7 +204,14 @@ export default function IssueCreate() {
               id="labels"
               label="Labels"
               value={selectedLabels.join(', ')}
-              onChange={(e) => setSelectedLabels(e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+              onChange={(e) =>
+                setSelectedLabels(
+                  e.target.value
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                )
+              }
               placeholder="bug, frontend, urgent"
               hint="Comma-separated label names"
             />
@@ -209,7 +223,7 @@ export default function IssueCreate() {
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
             />
-          </div>
+          </Card>
         </div>
       </div>
     </div>

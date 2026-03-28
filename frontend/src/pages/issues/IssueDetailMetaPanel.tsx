@@ -6,6 +6,7 @@ import { IssueLinkedSection } from './IssueLinkedSection';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import type { Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -69,7 +70,7 @@ export function IssueDetailMetaPanel({
   return (
     <>
       {/* Sub-issues */}
-      <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
+      <Card className="p-4 shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold">Sub-issues</h3>
           <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
@@ -129,7 +130,7 @@ export function IssueDetailMetaPanel({
         ) : (
           <p className="text-xs text-text-tertiary">No sub-issues yet.</p>
         )}
-      </div>
+      </Card>
 
       {/* Development Card */}
       <IssueDevelopmentCard

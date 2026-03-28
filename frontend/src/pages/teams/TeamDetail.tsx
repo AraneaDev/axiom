@@ -21,6 +21,7 @@ import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useTeamContext } from '@/hooks/useTeamContext';
@@ -344,39 +345,39 @@ export default function TeamDetail() {
         <div className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto space-y-6">
           {/* Quick Stats */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border border-border bg-surface p-3 text-center">
+            <Card className="p-3 text-center">
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <FolderKanban className="h-3.5 w-3.5 text-primary" />
                 <span className="text-lg font-bold text-text">{projects?.length ?? 0}</span>
               </div>
               <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Projects</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-3 text-center">
+            </Card>
+            <Card className="p-3 text-center">
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <BookOpen className="h-3.5 w-3.5 text-primary" />
                 <span className="text-lg font-bold text-text">{spaces?.length ?? 0}</span>
               </div>
               <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Wiki</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-3 text-center">
+            </Card>
+            <Card className="p-3 text-center">
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <GitPullRequest className="h-3.5 w-3.5 text-success" />
                 <span className="text-lg font-bold text-text">{openPRs?.length ?? 0}</span>
               </div>
               <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Open PRs</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-3 text-center">
+            </Card>
+            <Card className="p-3 text-center">
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <GitBranch className="h-3.5 w-3.5 text-primary" />
                 <span className="text-lg font-bold text-text">{repos?.length ?? 0}</span>
               </div>
               <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Repos</p>
-            </div>
+            </Card>
           </div>
 
           {/* Team Members */}
           {teamDetail?.members && (
-            <section className="rounded-lg border border-border bg-surface p-4">
+            <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
                   Members ({teamDetail.members.length})
@@ -427,11 +428,11 @@ export default function TeamDetail() {
                   </Link>
                 )}
               </div>
-            </section>
+            </Card>
           )}
 
           {/* Recent Activity */}
-          <section className="rounded-lg border border-border bg-surface p-4">
+          <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
                 Recent Activity
@@ -501,7 +502,7 @@ export default function TeamDetail() {
                 })}
               </div>
             )}
-          </section>
+          </Card>
         </div>
       </div>
     </div>

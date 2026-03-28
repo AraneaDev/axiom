@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react';
 import { usersApi } from '@/api/users.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Spinner } from '@/components/ui/Spinner';
@@ -56,7 +57,7 @@ export default function Profile() {
         },
       ]}
     >
-      <div className="rounded-lg border border-border bg-surface p-6 mb-6">
+      <Card className="p-6 mb-6">
         <div className="flex items-center gap-4">
           <Avatar name={user?.displayName ?? 'User'} size="lg" />
           <div>
@@ -65,9 +66,9 @@ export default function Profile() {
             <p className="text-sm text-text-tertiary">{user?.email}</p>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div className="rounded-lg border border-border bg-surface p-6">
+      <Card className="p-6">
         <h2 className="text-sm font-semibold text-text mb-4">Account details</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
@@ -104,7 +105,7 @@ export default function Profile() {
             {saved && <span className="text-sm text-success">Saved!</span>}
           </div>
         </form>
-      </div>
+      </Card>
     </SettingsPage>
   );
 }

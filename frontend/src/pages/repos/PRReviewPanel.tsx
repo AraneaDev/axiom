@@ -23,6 +23,7 @@ import { Link } from 'react-router';
 import type { StatusCheck, CodeOwnerStatus } from '@/api/status-checks.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Spinner } from '@/components/ui/Spinner';
 
@@ -132,7 +133,7 @@ export function PRReviewPanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+      <Card className="p-4 space-y-3">
         <div>
           <p className="text-xs text-text-secondary uppercase font-semibold mb-1">Merge status</p>
           {pr.status === 'OPEN' ? (
@@ -311,11 +312,11 @@ export function PRReviewPanel({
             </Button>
           </>
         )}
-      </div>
+      </Card>
 
       {/* Code Owners */}
       {codeOwners && codeOwners.owners.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+        <Card className="p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-text-secondary" />
             <p className="text-xs text-text-secondary uppercase font-semibold">Code Owners</p>
@@ -344,10 +345,10 @@ export function PRReviewPanel({
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
-      <div className="rounded-lg border border-border bg-surface p-4">
+      <Card className="p-4">
         <p className="text-xs text-text-secondary uppercase font-semibold mb-1">Branches</p>
         <p className="text-sm">
           <Link
@@ -366,7 +367,7 @@ export function PRReviewPanel({
             <code className="bg-surface-secondary px-1 rounded">{pr.targetBranch}</code>
           </Link>
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

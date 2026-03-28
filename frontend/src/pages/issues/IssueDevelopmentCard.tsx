@@ -18,6 +18,7 @@ import CreateBranchModal from './CreateBranchModal';
 
 import { developmentPanelApi } from '@/api/development-panel.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
 
@@ -91,7 +92,7 @@ export default function IssueDevelopmentCard({
   const hasDev = branches.length + prs.length + commits.length + pipelines.length > 0;
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
+    <Card className="p-4">
       <div className="flex items-center gap-2 mb-3">
         <GitBranch className="h-4 w-4 text-text-secondary" />
         <h3 className="text-sm font-semibold">Development</h3>
@@ -284,6 +285,6 @@ export default function IssueDevelopmentCard({
           }}
         />
       )}
-    </div>
+    </Card>
   );
 }

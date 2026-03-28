@@ -22,6 +22,7 @@ import { healthApi } from '@/api/health.api';
 import type { HealthStatus } from '@/api/health.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { PageLoader } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +51,7 @@ function formatUptime(seconds: number): string {
 
 function HealthSkeleton() {
   return (
-    <div className="rounded-lg border border-border bg-surface p-5 animate-pulse">
+    <Card className="p-5 animate-pulse">
       <div className="flex items-center gap-2 mb-4">
         <div className="h-4 w-4 rounded bg-surface-tertiary" />
         <div className="h-4 w-32 rounded bg-surface-tertiary" />
@@ -63,7 +64,7 @@ function HealthSkeleton() {
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -138,7 +139,7 @@ function HealthPanel() {
   ];
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-5">
+    <Card className="p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-primary" />
@@ -182,7 +183,7 @@ function HealthPanel() {
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -200,12 +201,7 @@ function StatCard({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        'rounded-lg border border-border bg-surface p-5 flex items-start gap-4',
-        className,
-      )}
-    >
+    <Card className={cn('p-5 flex items-start gap-4', className)}>
       <div className="rounded-lg bg-primary-light p-2.5">
         <Icon className="h-5 w-5 text-primary" />
       </div>
@@ -213,7 +209,7 @@ function StatCard({
         <p className="text-sm text-text-secondary">{label}</p>
         <p className="text-2xl font-bold text-text mt-0.5 tabular-nums">{value}</p>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -281,7 +277,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Database info */}
-      <div className="rounded-lg border border-border bg-surface p-5">
+      <Card className="p-5">
         <div className="flex items-center gap-2 mb-3">
           <HardDrive className="h-4 w-4 text-primary" />
           <h3 className="font-semibold text-sm text-text">Storage Breakdown</h3>
@@ -304,7 +300,7 @@ export default function AdminDashboard() {
             <p className="text-lg font-semibold text-text mt-1">{stats.databaseSize}</p>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

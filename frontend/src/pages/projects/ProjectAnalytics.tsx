@@ -15,6 +15,7 @@ import { Link } from 'react-router';
 import { projectsApi } from '@/api/projects.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
@@ -46,30 +47,30 @@ function AnalyticsSkeleton() {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="rounded-lg border border-border bg-surface p-4">
+          <Card key={i} className="p-4">
             <Skeleton className="h-3 w-20 mb-2" />
             <Skeleton className="h-8 w-16" />
-          </div>
+          </Card>
         ))}
       </div>
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="rounded-lg border border-border bg-surface p-5">
+        <Card className="p-5">
           <Skeleton className="h-5 w-32 mb-4" />
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-6 w-full mb-3" />
           ))}
-        </div>
-        <div className="rounded-lg border border-border bg-surface p-5">
+        </Card>
+        <Card className="p-5">
           <Skeleton className="h-5 w-32 mb-4" />
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-6 w-full mb-3" />
           ))}
-        </div>
+        </Card>
       </div>
-      <div className="rounded-lg border border-border bg-surface p-5">
+      <Card className="p-5">
         <Skeleton className="h-5 w-40 mb-4" />
         <Skeleton className="h-40 w-full" />
-      </div>
+      </Card>
     </div>
   );
 }
@@ -168,7 +169,7 @@ export default function ProjectAnalytics() {
       {/* Issue distributions */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* By Status */}
-        <div className="rounded-lg border border-border bg-surface p-5">
+        <Card className="p-5">
           <h2 className="text-sm font-semibold text-text mb-4 flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-text-secondary" />
             Issues by Status
@@ -200,10 +201,10 @@ export default function ProjectAnalytics() {
                 ))}
             </div>
           )}
-        </div>
+        </Card>
 
         {/* By Priority */}
-        <div className="rounded-lg border border-border bg-surface p-5">
+        <Card className="p-5">
           <h2 className="text-sm font-semibold text-text mb-4 flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-text-secondary" />
             Issues by Priority
@@ -238,11 +239,11 @@ export default function ProjectAnalytics() {
                 ))}
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Activity trend (last 30 days) */}
-      <div className="rounded-lg border border-border bg-surface p-5">
+      <Card className="p-5">
         <h2 className="text-sm font-semibold text-text mb-4 flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-text-secondary" />
           Activity Trend (Last 30 Days)
@@ -299,10 +300,10 @@ export default function ProjectAnalytics() {
             {analytics.issuesOverTime[analytics.issuesOverTime.length - 1]?.date.slice(5) ?? ''}
           </span>
         </div>
-      </div>
+      </Card>
 
       {/* Team workload */}
-      <div className="rounded-lg border border-border bg-surface p-5">
+      <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-text flex items-center gap-2">
             <Users className="h-4 w-4 text-text-secondary" />
@@ -407,7 +408,7 @@ export default function ProjectAnalytics() {
             </div>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -422,12 +423,12 @@ function SummaryCard({
   value: string | number;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
+    <Card className="p-4">
       <div className="flex items-center gap-1.5 mb-1">
         {icon}
         <span className="text-xs text-text-secondary">{label}</span>
       </div>
       <div className="text-2xl font-bold tabular-nums">{value}</div>
-    </div>
+    </Card>
   );
 }

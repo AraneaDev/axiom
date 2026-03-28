@@ -11,6 +11,7 @@ import { sprintsApi } from '@/api/sprints.api';
 import { BurndownChart } from '@/components/BurndownChart';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -232,9 +233,9 @@ export default function Backlog() {
             <ListSkeleton rows={6} />
           </div>
           <div className="space-y-4">
-            <div className="rounded-lg border border-border bg-surface p-4">
+            <Card className="p-4">
               <Skeleton className="h-40 w-full rounded-md" />
-            </div>
+            </Card>
           </div>
         </div>
       </div>
@@ -342,21 +343,21 @@ export default function Backlog() {
 
         {/* Sidebar: velocity chart */}
         <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-surface p-4">
+          <Card className="p-4">
             <VelocityChart data={velocityData} />
-          </div>
+          </Card>
 
           {/* Burndown chart for active sprint */}
           {sortedSprints
             .filter((s) => s.status === 'ACTIVE')
             .map((s) => (
-              <div key={s.id} className="rounded-lg border border-border bg-surface p-4">
+              <Card key={s.id} className="p-4">
                 <BurndownChart sprint={s} />
-              </div>
+              </Card>
             ))}
 
           {/* Sprint summary */}
-          <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+          <Card className="p-4 space-y-3">
             <h3 className="text-sm font-semibold">Sprint Summary</h3>
             {sortedSprints.filter((s) => s.status !== 'COMPLETED').length === 0 ? (
               <p className="text-xs text-text-tertiary">No active or planned sprints.</p>
@@ -431,7 +432,7 @@ export default function Backlog() {
                   );
                 })
             )}
-          </div>
+          </Card>
         </div>
       </div>
 

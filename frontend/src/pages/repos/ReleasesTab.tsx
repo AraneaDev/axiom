@@ -24,6 +24,7 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -328,7 +329,7 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
       ) : (
         <>
           {drafts.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface mb-4 overflow-hidden">
+            <Card className="mb-4 overflow-hidden">
               <div className="px-4 py-2 bg-surface-secondary border-b border-border">
                 <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
                   Drafts
@@ -339,10 +340,10 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
                   <ReleaseRow key={r.id} release={r} />
                 ))}
               </div>
-            </div>
+            </Card>
           )}
           {published.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface overflow-hidden">
+            <Card className="overflow-hidden">
               <div className="px-4 py-2 bg-surface-secondary border-b border-border">
                 <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
                   Published
@@ -353,7 +354,7 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
                   <ReleaseRow key={r.id} release={r} />
                 ))}
               </div>
-            </div>
+            </Card>
           )}
         </>
       )}

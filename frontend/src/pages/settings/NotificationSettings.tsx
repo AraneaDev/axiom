@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Bell, Mail, Monitor } from 'lucide-react';
 
 import { notificationsApi, type NotificationPreference } from '@/api/notifications.api';
+import { Card } from '@/components/ui/Card';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
@@ -70,7 +71,7 @@ export default function NotificationSettings() {
           <Skeleton className="h-7 w-52 mb-2" />
           <Skeleton className="h-4 w-72" />
         </div>
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center justify-between px-4 py-4">
               <div>
@@ -83,7 +84,7 @@ export default function NotificationSettings() {
               </div>
             </div>
           ))}
-        </div>
+        </Card>
       </div>
     );
 
@@ -130,7 +131,7 @@ export default function NotificationSettings() {
         },
       ]}
     >
-      <div className="rounded-lg border border-border bg-surface">
+      <Card>
         <div className="grid grid-cols-[1fr_80px_80px] items-center gap-4 px-4 py-3 border-b border-border bg-surface-secondary text-xs font-semibold text-text-secondary uppercase tracking-wide">
           <span>Event</span>
           <span className="text-center flex items-center justify-center gap-1">
@@ -163,7 +164,7 @@ export default function NotificationSettings() {
             </div>
           );
         })}
-      </div>
+      </Card>
 
       <p className="text-xs text-text-tertiary mt-4 flex items-center gap-1.5">
         <Mail className="h-3.5 w-3.5" />

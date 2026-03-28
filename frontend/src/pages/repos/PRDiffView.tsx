@@ -21,6 +21,7 @@ import type { CommitInfo } from '@/api/repos.api';
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
@@ -172,7 +173,7 @@ function ActiveFileDiff({
 
   if (!activeFile || activeFile.hunks.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-surface overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
           {activeStat && getFileIcon(activeStat)}
           <span className="truncate">{activeStat?.file}</span>
@@ -180,7 +181,7 @@ function ActiveFileDiff({
         <div className="px-4 py-8 text-center text-sm text-text-secondary">
           Binary file or no diff available.
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -260,7 +261,7 @@ function ActiveFileDiff({
             : '';
 
     return (
-      <div className="rounded-lg border border-border bg-surface overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
           {activeStat && getFileIcon(activeStat)}
           <span className="truncate">{activeStat?.file}</span>
@@ -307,14 +308,14 @@ function ActiveFileDiff({
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     );
   }
 
   // Unified view with parsed hunks
   let lineNum = 0;
   return (
-    <div className="rounded-lg border border-border bg-surface overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
         {activeStat && getFileIcon(activeStat)}
         <span className="truncate">{activeStat?.file}</span>
@@ -406,7 +407,7 @@ function ActiveFileDiff({
           </table>
         </pre>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -472,7 +473,7 @@ export function PRDiffView({
       {commits && commits.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold mb-2">Commits ({commits.length})</h2>
-          <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+          <Card className="divide-y divide-border">
             {commits.map((c: CommitInfo) => (
               <div key={c.sha} className="flex items-center gap-3 px-4 py-2">
                 <code className="text-xs text-text-secondary font-mono">{c.shortSha}</code>
@@ -480,13 +481,13 @@ export function PRDiffView({
                 <span className="text-xs text-text-secondary">{c.author}</span>
               </div>
             ))}
-          </div>
+          </Card>
         </div>
       )}
 
       {/* File navigation + diff carousel */}
       {stats.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface overflow-hidden">
+        <Card className="overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2 bg-surface-secondary border-b border-border">
             <Button
               variant="ghost"
@@ -582,7 +583,7 @@ export function PRDiffView({
               ))}
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Active file diff */}

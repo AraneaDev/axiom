@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { customFieldsApi, type CustomFieldDefinition } from '@/api/custom-fields.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -165,7 +166,7 @@ export default function CustomFieldSettings() {
     >
       {/* Add form */}
       {showAddForm && (
-        <div className="rounded-lg border border-border bg-surface p-4 mb-4 space-y-3">
+        <Card className="p-4 mb-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Name"
@@ -208,7 +209,7 @@ export default function CustomFieldSettings() {
               <X className="h-4 w-4" /> Cancel
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Field list */}
@@ -227,10 +228,7 @@ export default function CustomFieldSettings() {
       ) : (
         <div className="space-y-2">
           {fields.map((field) => (
-            <div
-              key={field.id}
-              className="rounded-lg border border-border bg-surface p-4 flex items-center gap-3"
-            >
+            <Card key={field.id} className="p-4 flex items-center gap-3">
               <GripVertical className="h-4 w-4 text-text-tertiary shrink-0" />
 
               {editingId === field.id ? (
@@ -311,7 +309,7 @@ export default function CustomFieldSettings() {
                   </Button>
                 </>
               )}
-            </div>
+            </Card>
           ))}
         </div>
       )}

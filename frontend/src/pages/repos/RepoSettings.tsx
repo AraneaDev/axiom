@@ -9,6 +9,7 @@ import WebhooksSettings from './WebhooksSettings';
 import { reposApi } from '@/api/repos.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -90,12 +91,12 @@ export default function RepoSettings() {
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-7 w-56" />
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="rounded-lg border border-border bg-surface p-6 space-y-4">
+          <Card key={i} className="p-6 space-y-4">
             <Skeleton className="h-5 w-24" />
             <Skeleton className="h-9 w-full rounded-md" />
             <Skeleton className="h-9 w-full rounded-md" />
             <Skeleton className="h-8 w-32 rounded-md" />
-          </div>
+          </Card>
         ))}
       </div>
     );
@@ -125,7 +126,7 @@ export default function RepoSettings() {
       </div>
 
       {/* General settings */}
-      <div className="rounded-lg border border-border bg-surface p-6 mb-6">
+      <Card className="p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">General</h2>
         <div className="space-y-4">
           <Input label="Repository name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -153,10 +154,10 @@ export default function RepoSettings() {
           </Button>
           {updateMutation.isSuccess && <p className="text-sm text-success mt-2">Settings saved.</p>}
         </div>
-      </div>
+      </Card>
 
       {/* Merge settings */}
-      <div className="rounded-lg border border-border bg-surface p-6 mb-6">
+      <Card className="p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <GitMerge className="h-5 w-5" /> Merge Settings
         </h2>
@@ -185,20 +186,20 @@ export default function RepoSettings() {
             <p className="text-sm text-success mt-2">Merge settings saved.</p>
           )}
         </div>
-      </div>
+      </Card>
 
       {/* Branch Protection */}
-      <div className="rounded-lg border border-border bg-surface p-6 mb-6">
+      <Card className="p-6 mb-6">
         <BranchProtectionSettings repoId={currentRepo.id} />
-      </div>
+      </Card>
 
       {/* Webhooks */}
-      <div className="rounded-lg border border-border bg-surface p-6 mb-6">
+      <Card className="p-6 mb-6">
         <WebhooksSettings repoId={currentRepo.id} />
-      </div>
+      </Card>
 
       {/* PR Template */}
-      <div className="rounded-lg border border-border bg-surface p-6 mb-6">
+      <Card className="p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <FileText className="h-5 w-5" /> PR Template
         </h2>
@@ -226,7 +227,7 @@ export default function RepoSettings() {
             <p className="text-sm text-success mt-2">PR template saved.</p>
           )}
         </div>
-      </div>
+      </Card>
 
       {/* Danger zone */}
       <div className="rounded-lg border border-danger bg-surface p-6">

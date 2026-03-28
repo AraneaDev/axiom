@@ -485,7 +485,7 @@ export default function PageEdit() {
           {showPreview && (
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-text">Preview</label>
-              <div className="rounded-lg border border-border bg-surface p-4 min-h-[300px] overflow-auto">
+              <Card className="p-4 min-h-[300px] overflow-auto">
                 {body ? (
                   <MarkdownRenderer content={body} />
                 ) : (
@@ -493,7 +493,7 @@ export default function PageEdit() {
                     Start typing to see a preview...
                   </p>
                 )}
-              </div>
+              </Card>
             </div>
           )}
         </div>

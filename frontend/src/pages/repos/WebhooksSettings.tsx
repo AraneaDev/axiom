@@ -8,6 +8,7 @@ import { WebhookFormModal } from './WebhookForm';
 import { webhooksApi, WEBHOOK_EVENTS, type Webhook as WebhookType } from '@/api/webhooks.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
@@ -93,7 +94,7 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
       )}
 
       {webhooks.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {webhooks.map((wh) => (
             <div key={wh.id}>
               <div className="flex items-center gap-3 px-4 py-3">
@@ -156,7 +157,7 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
               )}
             </div>
           ))}
-        </div>
+        </Card>
       )}
 
       {/* Create / Edit form modal */}

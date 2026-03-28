@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router';
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -103,7 +104,7 @@ export default function PRList() {
           }
         />
       ) : (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {prs.map((pr) => {
             const Icon = STATUS_ICON[pr.status] ?? GitPullRequest;
             return (
@@ -149,7 +150,7 @@ export default function PRList() {
               </Link>
             );
           })}
-        </div>
+        </Card>
       )}
     </div>
   );

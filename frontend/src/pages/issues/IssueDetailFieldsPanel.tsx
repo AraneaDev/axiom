@@ -7,6 +7,7 @@ import { ParentIssuePicker } from './ParentIssuePicker';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Spinner } from '@/components/ui/Spinner';
@@ -55,7 +56,7 @@ export function IssueDetailFieldsPanel({
   isUpdating,
 }: IssueDetailFieldsPanelProps) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
+    <Card className="p-4">
       {/* Compact 2-column grid for short fields */}
       <div className="grid grid-cols-2 gap-3">
         {/* Status */}
@@ -360,6 +361,6 @@ export function IssueDetailFieldsPanel({
           onUpdate={onUpdate}
         />
       </div>
-    </div>
+    </Card>
   );
 }

@@ -16,6 +16,7 @@ import { reposApi } from '@/api/repos.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
@@ -249,11 +250,11 @@ export default function FileView() {
 
       {/* Content */}
       {isMarkdown ? (
-        <div className="rounded-lg border border-border bg-surface p-6 prose max-w-none">
+        <Card className="p-6 prose max-w-none">
           <MarkdownRenderer content={blob?.content ?? ''} />
-        </div>
+        </Card>
       ) : (
-        <div className="rounded-lg border border-border bg-surface overflow-x-auto">
+        <Card className="overflow-x-auto">
           <pre className="text-sm font-mono m-0 p-0">
             <table className="w-full border-collapse">
               <tbody>
@@ -270,7 +271,7 @@ export default function FileView() {
               </tbody>
             </table>
           </pre>
-        </div>
+        </Card>
       )}
     </div>
   );

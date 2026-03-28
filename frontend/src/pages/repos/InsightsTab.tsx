@@ -7,6 +7,7 @@ import {
   CodeFrequencyPoint,
   LanguageBreakdown,
 } from '@/api/insights.api';
+import { Card } from '@/components/ui/Card';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { formatRelative } from '@/lib/utils';
@@ -272,17 +273,17 @@ export default function InsightsTab({ repoId }: InsightsTabProps) {
   return (
     <div className="space-y-8">
       {/* Commit Frequency */}
-      <section className="rounded-lg border border-border bg-surface p-6">
+      <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <Activity className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Commit Frequency</h2>
           <span className="text-sm text-text-secondary ml-auto">Last 90 days</span>
         </div>
         {loadingCommits ? <PageLoader /> : <CommitFrequencyChart data={commitFreq ?? []} />}
-      </section>
+      </Card>
 
       {/* Contributors */}
-      <section className="rounded-lg border border-border bg-surface p-6">
+      <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <Users className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Contributors</h2>
@@ -320,19 +321,19 @@ export default function InsightsTab({ repoId }: InsightsTabProps) {
         ) : (
           <p className="text-sm text-text-secondary">No contributor data available.</p>
         )}
-      </section>
+      </Card>
 
       {/* Language Breakdown */}
-      <section className="rounded-lg border border-border bg-surface p-6">
+      <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <Code className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Languages</h2>
         </div>
         {loadingLangs ? <PageLoader /> : <LanguageBar data={languages ?? []} />}
-      </section>
+      </Card>
 
       {/* Code Frequency */}
-      <section className="rounded-lg border border-border bg-surface p-6">
+      <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Code Frequency</h2>
@@ -355,7 +356,7 @@ export default function InsightsTab({ repoId }: InsightsTabProps) {
             </div>
           </>
         )}
-      </section>
+      </Card>
     </div>
   );
 }

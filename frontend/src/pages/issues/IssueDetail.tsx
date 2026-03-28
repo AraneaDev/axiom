@@ -18,6 +18,7 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
@@ -379,7 +380,7 @@ export default function IssueDetail() {
           </div>
 
           {/* Body */}
-          <div className="rounded-lg border border-border bg-surface p-5 mb-8">
+          <Card className="p-5 mb-8">
             {bodyDraftState.isEditing ? (
               <div className="space-y-2">
                 <MarkdownEditor
@@ -423,7 +424,7 @@ export default function IssueDetail() {
                 </Button>
               </div>
             )}
-          </div>
+          </Card>
 
           {/* Attachments */}
           <div className="mb-8">

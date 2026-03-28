@@ -26,6 +26,7 @@ import type { SearchType, SearchFilters } from '@/api/search.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -264,7 +265,7 @@ export default function SearchResults() {
 
       {/* Wiki filters */}
       {(activeType === 'wiki' || activeType === 'all') && (
-        <div className="flex items-center gap-2 flex-wrap mb-4 p-3 rounded-lg border border-border bg-surface">
+        <Card className="flex items-center gap-2 flex-wrap mb-4 p-3">
           <Filter className="h-4 w-4 text-text-tertiary shrink-0" />
           <span className="text-xs font-medium text-text-secondary mr-1">Wiki filters:</span>
 
@@ -393,7 +394,7 @@ export default function SearchResults() {
               </button>
             </Badge>
           )}
-        </div>
+        </Card>
       )}
 
       {error && (
@@ -425,7 +426,7 @@ export default function SearchResults() {
               />
             )
           ) : (
-            <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+            <Card className="divide-y divide-border">
               {group.type === 'issues' &&
                 group.items.map((item) => <IssueRow key={item.id} item={item} />)}
               {group.type === 'code' &&
@@ -443,7 +444,7 @@ export default function SearchResults() {
                 group.items.map((item) => <WikiRow key={item.id} item={item} />)}
               {group.type === 'repos' &&
                 group.items.map((item) => <RepoRow key={item.id} item={item} />)}
-            </div>
+            </Card>
           )}
         </div>
       ))}

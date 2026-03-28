@@ -1,6 +1,7 @@
 import { Filter, User, X, Timer, Columns } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -90,7 +91,7 @@ export function IssueListFilters({
   activeFilterCount,
 }: IssueListFiltersProps) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-3 mb-4 flex flex-wrap gap-4 items-start">
+    <Card className="p-3 mb-4 flex flex-wrap gap-4 items-start">
       <div>
         <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
           Type
@@ -258,6 +259,6 @@ export function IssueListFilters({
           <X className="h-3 w-3" /> Clear all
         </Button>
       )}
-    </div>
+    </Card>
   );
 }

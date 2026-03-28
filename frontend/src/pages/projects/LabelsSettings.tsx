@@ -7,6 +7,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -145,7 +146,7 @@ export default function LabelsSettings() {
     >
       {/* Add form */}
       {showAddForm && (
-        <div className="rounded-lg border border-border bg-surface p-4 mb-4 space-y-3">
+        <Card className="p-4 mb-4 space-y-3">
           <div className="flex items-end gap-3">
             <div className="flex-1">
               <Input
@@ -215,7 +216,7 @@ export default function LabelsSettings() {
               {formName || 'label'}
             </Badge>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Label list */}
@@ -234,10 +235,7 @@ export default function LabelsSettings() {
       ) : (
         <div className="space-y-2">
           {labels.map((label) => (
-            <div
-              key={label.id}
-              className="rounded-lg border border-border bg-surface p-4 flex items-center gap-3"
-            >
+            <Card key={label.id} className="p-4 flex items-center gap-3">
               {editingName === label.name ? (
                 <div className="flex-1 space-y-3">
                   <div className="flex items-end gap-3">
@@ -346,7 +344,7 @@ export default function LabelsSettings() {
                   </Button>
                 </>
               )}
-            </div>
+            </Card>
           ))}
         </div>
       )}

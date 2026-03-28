@@ -15,6 +15,7 @@ import { Link, useParams } from 'react-router';
 
 import { pipelinesApi, type RunStatus, type Pipeline } from '@/api/pipelines.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -209,7 +210,7 @@ export default function PipelinesTab({ repoId }: Props) {
         />
       ) : (
         <>
-          <div className="rounded-lg border border-border bg-surface overflow-hidden mb-6">
+          <Card className="overflow-hidden mb-6">
             <div className="divide-y divide-border">
               {pipelines.map((p) => {
                 const lastRun = p.runs?.[0];
@@ -267,12 +268,12 @@ export default function PipelinesTab({ repoId }: Props) {
                 );
               })}
             </div>
-          </div>
+          </Card>
 
           {recentRuns.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold mb-2">Recent Runs</h3>
-              <div className="rounded-lg border border-border bg-surface overflow-hidden">
+              <Card className="overflow-hidden">
                 <div className="divide-y divide-border">
                   {recentRuns.map((run) => (
                     <Link
@@ -300,7 +301,7 @@ export default function PipelinesTab({ repoId }: Props) {
                     </Link>
                   ))}
                 </div>
-              </div>
+              </Card>
             </div>
           )}
         </>

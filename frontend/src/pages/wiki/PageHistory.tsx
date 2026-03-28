@@ -9,6 +9,7 @@ import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageLoader } from '@/components/ui/Spinner';
 import { formatDate } from '@/lib/utils';
@@ -99,7 +100,7 @@ export default function PageHistory() {
           </Link>
         </div>
       </div>
-      <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+      <Card className="divide-y divide-border">
         {versions?.map((v) => (
           <div key={v.id} className="flex items-center gap-3 p-4">
             <input
@@ -137,7 +138,7 @@ export default function PageHistory() {
             )}
           </div>
         ))}
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={restoreTarget !== null}

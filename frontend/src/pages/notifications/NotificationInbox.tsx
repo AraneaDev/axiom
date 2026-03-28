@@ -21,6 +21,7 @@ import { notificationsApi } from '@/api/notifications.api';
 import type { Notification } from '@/api/notifications.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
@@ -175,7 +176,7 @@ export default function NotificationInbox() {
         />
       ) : (
         <>
-          <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+          <Card className="divide-y divide-border">
             {sorted.map((notification) => {
               const Icon = notificationIcon(notification.type);
               const rowClass = cn(
@@ -256,7 +257,7 @@ export default function NotificationInbox() {
                 </div>
               );
             })}
-          </div>
+          </Card>
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">

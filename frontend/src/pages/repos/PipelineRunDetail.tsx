@@ -17,6 +17,7 @@ import { useParams, Link } from 'react-router';
 import { pipelinesApi, type RunStatus, type PipelineJob } from '@/api/pipelines.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { usePipelineLogs } from '@/hooks/usePipelineLogs';
@@ -83,7 +84,7 @@ function JobCard({ job, isLive }: JobCardProps) {
   const [expandedStep, setExpandedStep] = useState<string | null>(null);
 
   return (
-    <div className="rounded-lg border border-border bg-surface overflow-hidden">
+    <Card className="overflow-hidden">
       <Button
         variant="ghost"
         onClick={() => setExpanded(!expanded)}
@@ -137,7 +138,7 @@ function JobCard({ job, isLive }: JobCardProps) {
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 

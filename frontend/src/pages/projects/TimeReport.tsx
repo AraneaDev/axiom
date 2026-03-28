@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { projectsApi } from '@/api/projects.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Progress } from '@/components/ui/Progress';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -27,12 +28,12 @@ function TimeReportSkeleton() {
         <Skeleton className="h-7 w-48 mb-2" />
         <Skeleton className="h-4 w-64" />
       </div>
-      <div className="rounded-lg border border-border bg-surface p-5">
+      <Card className="p-5">
         <Skeleton className="h-5 w-32 mb-4" />
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-8 w-full mb-3" />
         ))}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -98,7 +99,7 @@ export default function TimeReport() {
       </PageHeader>
 
       {/* Member breakdown */}
-      <div className="rounded-lg border border-border bg-surface p-5">
+      <Card className="p-5">
         <h2 className="text-sm font-semibold text-text mb-4 flex items-center gap-2">
           <Users className="h-4 w-4 text-text-secondary" />
           Time by Member
@@ -180,10 +181,10 @@ export default function TimeReport() {
             </Table>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Issue breakdown */}
-      <div className="rounded-lg border border-border bg-surface p-5">
+      <Card className="p-5">
         <h2 className="text-sm font-semibold text-text mb-4 flex items-center gap-2">
           <Timer className="h-4 w-4 text-text-secondary" />
           Time by Issue
@@ -269,7 +270,7 @@ export default function TimeReport() {
             </Table>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

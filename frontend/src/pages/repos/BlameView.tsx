@@ -4,6 +4,7 @@ import { Link, Navigate, useParams } from 'react-router';
 
 import { reposApi, BlameLine } from '@/api/repos.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -96,7 +97,7 @@ export default function BlameView() {
       </div>
 
       {/* Blame table */}
-      <div className="rounded-lg border border-border bg-surface overflow-x-auto">
+      <Card className="overflow-x-auto">
         <pre className="text-sm font-mono m-0 p-0">
           <table className="w-full border-collapse">
             <tbody>
@@ -135,7 +136,7 @@ export default function BlameView() {
             </tbody>
           </table>
         </pre>
-      </div>
+      </Card>
     </div>
   );
 }

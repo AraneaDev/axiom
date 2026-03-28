@@ -6,6 +6,7 @@ import { Link, Navigate, useParams, useNavigate } from 'react-router';
 import { reposApi } from '@/api/repos.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
@@ -110,9 +111,9 @@ export default function FileEdit() {
 
       {/* Editor */}
       {isMarkdown ? (
-        <div className="rounded-lg border border-border bg-surface min-h-96">
+        <Card className="min-h-96">
           <MarkdownEditor value={effectiveContent} onChange={handleContentChange} />
-        </div>
+        </Card>
       ) : (
         <Textarea
           className="min-h-96 font-mono resize-y"
@@ -123,7 +124,7 @@ export default function FileEdit() {
       )}
 
       {/* Commit panel */}
-      <div className="rounded-lg border border-border bg-surface p-4 flex flex-col gap-3">
+      <Card className="p-4 flex flex-col gap-3">
         <div className="text-sm font-medium text-text">Commit changes</div>
         <div className="flex items-center gap-2 text-sm text-text-secondary">
           <span className="font-medium">Branch:</span>
@@ -150,7 +151,7 @@ export default function FileEdit() {
             <Save className="h-4 w-4" /> {mutation.isPending ? 'Saving...' : 'Save'}
           </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

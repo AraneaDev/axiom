@@ -12,6 +12,7 @@ import { Link, useParams, useNavigate } from 'react-router';
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -111,7 +112,7 @@ export default function FileBrowser() {
         ))}
       </div>
 
-      <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+      <Card className="divide-y divide-border">
         {path && (
           <Link
             to={`${basePath}/tree/${encodeURIComponent(ref!)}/${parts.slice(0, -1).join('/')}`}
@@ -147,7 +148,7 @@ export default function FileBrowser() {
               )}
             </Link>
           ))}
-      </div>
+      </Card>
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { sprintReportApi } from '@/api/sprint-report.api';
 import type { SprintReportIssue, SprintReportScopeChange } from '@/api/sprint-report.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useProjectContext } from '@/hooks/useProjectContext';
@@ -75,7 +76,7 @@ function IssueTable({
   if (issues.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-border bg-surface">
+    <Card>
       <div className="px-4 py-3 border-b border-border-light">
         <h3 className="text-sm font-medium text-text">
           {title} ({issues.length})
@@ -117,7 +118,7 @@ function IssueTable({
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -137,7 +138,7 @@ function ScopeChangesSection({
   if (changes.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-border bg-surface">
+    <Card>
       <div className="px-4 py-3 border-b border-border-light">
         <h3 className="text-sm font-medium text-text flex items-center gap-2">
           <ArrowUpDown className="h-4 w-4" /> Scope Changes ({changes.length})
@@ -170,7 +171,7 @@ function ScopeChangesSection({
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
