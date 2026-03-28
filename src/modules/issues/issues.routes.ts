@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth';
 import { requireProjectAccess } from '../../middleware/requireProjectAccess';
 
 import * as boardColumnsCtrl from './board-columns.controller';
+import * as devPanelCtrl from './development-panel.controller';
 import * as branchesCtrl from './issue-branches.controller';
 import * as commitsCtrl from './issue-commits.controller';
 import * as linksCtrl from './issue-links.controller';
@@ -68,6 +69,9 @@ router.post('/:projectId/issues/:issueNumber/branches', branchesCtrl.createBranc
 
 // Issue pull requests
 router.get('/:projectId/issues/:issueNumber/pull-requests', issuesController.listPullRequests);
+
+// Development panel (aggregated view)
+router.get('/:projectId/issues/:issueNumber/development', devPanelCtrl.getDevelopmentPanel);
 
 // Issue votes
 router.post('/:projectId/issues/:issueNumber/votes/toggle', votesCtrl.toggle);
