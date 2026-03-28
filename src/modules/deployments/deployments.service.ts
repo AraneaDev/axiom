@@ -207,9 +207,17 @@ export async function getDeployment(deploymentId: string) {
  * Find deployments by commit SHA across all environments of a repository.
  * @param repoId - The repository ID
  * @param commitSha - The commit SHA to search for
+ * @param opts - Pagination options (limit, offset)
+ * @param opts.limit
+ * @param opts.offset
  * @returns List of deployments matching the commit SHA with environment and user details
  */
-export async function getDeploymentsByCommit(repoId: string, commitSha: string) {
+export async function getDeploymentsByCommit(
+  repoId: string,
+  commitSha: string,
+  opts?: { limit?: number; offset?: number },
+) {
+  const { take, skip } = parseServicePagination(opts, 20);
   return prisma.deployment.findMany({
     where: {
       commitSha,
@@ -220,6 +228,8 @@ export async function getDeploymentsByCommit(repoId: string, commitSha: string) 
       deployedBy: { select: USER_BASIC_SELECT },
     },
     orderBy: { createdAt: 'desc' },
+    take,
+    skip,
   });
 }
 

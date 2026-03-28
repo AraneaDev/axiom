@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { parseServicePagination } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 const VALID_REACTION_TYPES = ['thumbsup', 'heart', 'eyes', 'rocket', 'thinking', 'check'] as const;
@@ -41,15 +42,21 @@ export async function addPageComment(
 }
 
 /**
- * List all comments on a wiki page, ordered chronologically.
+ * List comments on a wiki page, ordered chronologically.
  * @param pageId - The page to list comments for
+ * @param opts - Pagination options (limit, offset)
+ * @param opts.limit
+ * @param opts.offset
  * @returns List of comment records with user relations
  */
-export async function listPageComments(pageId: string) {
+export async function listPageComments(pageId: string, opts?: { limit?: number; offset?: number }) {
+  const { take, skip } = parseServicePagination(opts, 50);
   return prisma.pageComment.findMany({
     where: { pageId },
     include: COMMENT_INCLUDE,
     orderBy: { createdAt: 'asc' },
+    take,
+    skip,
   });
 }
 

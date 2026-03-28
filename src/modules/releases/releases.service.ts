@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
+import { parseServicePagination } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 import { generateChangelog, type CommitEntry } from './changelog';
@@ -8,15 +9,18 @@ import { generateChangelog, type CommitEntry } from './changelog';
 /**
  * List releases for a repository with optional draft/prerelease filters.
  * @param repoId - The repository ID
- * @param opts - Optional filters for draft and prerelease status
+ * @param opts - Optional filters for draft and prerelease status, plus pagination
  * @param opts.draft
  * @param opts.prerelease
+ * @param opts.limit
+ * @param opts.offset
  * @returns List of releases with author details
  */
 export async function listReleases(
   repoId: string,
-  opts: { draft?: boolean; prerelease?: boolean },
+  opts: { draft?: boolean; prerelease?: boolean; limit?: number; offset?: number } = {},
 ) {
+  const { take, skip } = parseServicePagination(opts, 20);
   return prisma.release.findMany({
     where: {
       repoId,
@@ -25,6 +29,8 @@ export async function listReleases(
     },
     include: { author: { select: USER_BASIC_SELECT } },
     orderBy: { createdAt: 'desc' },
+    take,
+    skip,
   });
 }
 
