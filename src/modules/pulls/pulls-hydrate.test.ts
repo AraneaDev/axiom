@@ -151,10 +151,10 @@ describe('PR Detail Hydration API', () => {
       expect(res.body.mergeChecks).toHaveProperty('canMerge');
     }
 
-    // Verify diff returns stats only (not full content)
+    // Verify diff returns stats and raw diff text
     if (res.body.diff) {
       expect(res.body.diff).toHaveProperty('stats');
-      expect(res.body.diff).not.toHaveProperty('diff');
+      expect(res.body.diff).toHaveProperty('diff');
     }
 
     // Commits should be an array
