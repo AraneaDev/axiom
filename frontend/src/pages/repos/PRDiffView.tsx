@@ -15,7 +15,7 @@ import {
   PanelLeftClose,
   PanelLeft,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CommitInfo } from '@/api/repos.api';
 import { reposApi } from '@/api/repos.api';
@@ -219,8 +219,8 @@ function SplitDiffView({ rawDiff, repoId, prNumber }: SplitDiffViewProps) {
                   const isCommentTarget =
                     commentingOn?.filePath === f.file && commentingOn?.line === lineNum;
                   return (
-                    <>
-                      <tr key={i} className="group relative">
+                    <Fragment key={i}>
+                      <tr className="group relative">
                         <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-border bg-surface-secondary relative">
                           {row.left.num ?? ''}
                           {lineNum !== null && (
@@ -244,7 +244,7 @@ function SplitDiffView({ rawDiff, repoId, prNumber }: SplitDiffViewProps) {
                         </td>
                       </tr>
                       {isCommentTarget && (
-                        <tr key={`comment-${i}`}>
+                        <tr>
                           <td colSpan={4}>
                             <InlineCommentForm
                               onCancel={() => setCommentingOn(null)}
@@ -256,7 +256,7 @@ function SplitDiffView({ rawDiff, repoId, prNumber }: SplitDiffViewProps) {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -368,8 +368,8 @@ function UnifiedDiffView({ rawDiff, repoId, prNumber }: UnifiedDiffViewProps) {
                     ? 'text-primary bg-primary-light'
                     : '';
             return (
-              <>
-                <div key={i} className={`group relative flex ${lineClass}`}>
+              <Fragment key={i}>
+                <div className={`group relative flex ${lineClass}`}>
                   <span className="flex-1 px-4 py-0 whitespace-pre">{pl.raw}</span>
                   {pl.lineNum !== null && (
                     <button
@@ -384,7 +384,7 @@ function UnifiedDiffView({ rawDiff, repoId, prNumber }: UnifiedDiffViewProps) {
                   )}
                 </div>
                 {isCommentTarget && (
-                  <div key={`comment-${i}`} className="block">
+                  <div className="block">
                     <InlineCommentForm
                       onCancel={() => setCommentingOn(null)}
                       onSubmit={(body) =>
@@ -398,7 +398,7 @@ function UnifiedDiffView({ rawDiff, repoId, prNumber }: UnifiedDiffViewProps) {
                     />
                   </div>
                 )}
-              </>
+              </Fragment>
             );
           })}
         </pre>
