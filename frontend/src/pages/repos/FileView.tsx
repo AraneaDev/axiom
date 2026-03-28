@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { common, createLowlight } from 'lowlight';
-import { ChevronRight, ChevronDown, Copy, Clock, FileWarning, GitBranch, Pencil } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronDown,
+  Copy,
+  Clock,
+  FileWarning,
+  GitBranch,
+  Pencil,
+} from 'lucide-react';
 import React from 'react';
 import { Link, Navigate, useParams, useNavigate } from 'react-router';
 
@@ -195,7 +203,7 @@ export default function FileView() {
             <ChevronRight className="h-3 w-3 text-text-secondary" />
             {i < parts.length - 1 ? (
               <Link
-                to={`${basePath}/tree/${ref}/${parts.slice(0, i + 1).join('/')}`}
+                to={`${basePath}/tree/${encodeURIComponent(ref!)}/${parts.slice(0, i + 1).join('/')}`}
                 className="text-primary hover:underline"
               >
                 {p}
@@ -214,17 +222,17 @@ export default function FileView() {
           {!isMarkdown && ` · ${lines.length} lines`}
         </span>
         <div className="flex items-center gap-2">
-          <Link to={`${basePath}/edit/${ref}/${filePath}`}>
+          <Link to={`${basePath}/edit/${encodeURIComponent(ref!)}/${filePath}`}>
             <Button variant="ghost" size="sm">
               <Pencil className="h-4 w-4" /> Edit
             </Button>
           </Link>
-          <Link to={`${basePath}/blame/${ref}/${filePath}`}>
+          <Link to={`${basePath}/blame/${encodeURIComponent(ref!)}/${filePath}`}>
             <Button variant="ghost" size="sm">
               <GitBranch className="h-4 w-4" /> Blame
             </Button>
           </Link>
-          <Link to={`${basePath}/history/${ref}/${filePath}`}>
+          <Link to={`${basePath}/history/${encodeURIComponent(ref!)}/${filePath}`}>
             <Button variant="ghost" size="sm">
               <Clock className="h-4 w-4" /> History
             </Button>

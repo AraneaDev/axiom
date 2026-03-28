@@ -39,7 +39,7 @@ export default function BlameView() {
         title="Blame not available"
         description={`Could not load blame for ${filePath}.`}
         action={
-          <Link to={`${basePath}/blob/${ref}/${filePath}`}>
+          <Link to={`${basePath}/blob/${encodeURIComponent(ref!)}/${filePath}`}>
             <Button variant="secondary">
               <ArrowLeft className="h-4 w-4" /> Back to file
             </Button>
@@ -74,7 +74,7 @@ export default function BlameView() {
             <ChevronRight className="h-3 w-3 text-text-secondary" />
             {i < parts.length - 1 ? (
               <Link
-                to={`${basePath}/tree/${ref}/${parts.slice(0, i + 1).join('/')}`}
+                to={`${basePath}/tree/${encodeURIComponent(ref!)}/${parts.slice(0, i + 1).join('/')}`}
                 className="text-primary hover:underline"
               >
                 {p}
@@ -88,7 +88,7 @@ export default function BlameView() {
       </div>
 
       <div className="flex items-center gap-2 mb-4">
-        <Link to={`${basePath}/blob/${ref}/${filePath}`}>
+        <Link to={`${basePath}/blob/${encodeURIComponent(ref!)}/${filePath}`}>
           <Button variant="ghost" size="sm">
             <FileText className="h-4 w-4" /> Normal view
           </Button>

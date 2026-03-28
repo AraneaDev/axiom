@@ -42,7 +42,7 @@ export default function FileEdit() {
   // Once blob loads, initialize content state (only once)
   const effectiveContent = content ?? blob?.content ?? '';
 
-  const blobUrl = `${basePath}/blob/${ref}/${filePath}`;
+  const blobUrl = `${basePath}/blob/${encodeURIComponent(ref!)}/${filePath}`;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -94,7 +94,7 @@ export default function FileEdit() {
             <ChevronRight className="h-3 w-3 text-text-secondary" />
             {i < parts.length - 1 ? (
               <Link
-                to={`${basePath}/tree/${ref}/${parts.slice(0, i + 1).join('/')}`}
+                to={`${basePath}/tree/${encodeURIComponent(ref!)}/${parts.slice(0, i + 1).join('/')}`}
                 className="text-primary hover:underline"
               >
                 {p}
