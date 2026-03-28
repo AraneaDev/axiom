@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save, Trash2, Settings, AlertTriangle, GitMerge } from 'lucide-react';
+import { ArrowLeft, FileText, Save, Trash2, Settings, AlertTriangle, GitMerge } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
@@ -31,6 +31,7 @@ export default function RepoSettings() {
   const [defaultMergeStrategy, setDefaultMergeStrategy] = useState('MERGE');
   const [initialized, setInitialized] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [prTemplate, setPrTemplate] = useState('');
 
   // Initialize form values once repo loads
   if (currentRepo && !initialized) {
@@ -39,6 +40,7 @@ export default function RepoSettings() {
     setVisibility(currentRepo.visibility);
     setDefaultBranch(currentRepo.defaultBranch);
     setDefaultMergeStrategy(currentRepo.defaultMergeStrategy ?? 'MERGE');
+    setPrTemplate(currentRepo.prTemplate ?? '');
     setInitialized(true);
   }
 
@@ -63,6 +65,14 @@ export default function RepoSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['repos'] });
       toast.success('Merge settings saved');
+    },
+  });
+
+  const prTemplateMutation = useMutation({
+    mutationFn: (data: { prTemplate: string | null }) => reposApi.update(currentRepo!.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repos'] });
+      toast.success('PR template saved');
     },
   });
 
@@ -185,6 +195,37 @@ export default function RepoSettings() {
       {/* Webhooks */}
       <div className="rounded-lg border border-border bg-surface p-6 mb-6">
         <WebhooksSettings repoId={currentRepo.id} />
+      </div>
+
+      {/* PR Template */}
+      <div className="rounded-lg border border-border bg-surface p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <FileText className="h-5 w-5" /> PR Template
+        </h2>
+        <p className="text-xs text-text-secondary mb-3">
+          This Markdown template will pre-fill the description when creating a new pull request.
+        </p>
+        <div className="space-y-4">
+          <MarkdownEditor
+            value={prTemplate}
+            onChange={setPrTemplate}
+            placeholder="Enter a default PR description template..."
+          />
+          <Button
+            onClick={() =>
+              prTemplateMutation.mutate({
+                prTemplate: prTemplate.trim() || null,
+              })
+            }
+            disabled={prTemplateMutation.isPending}
+          >
+            <Save className="h-4 w-4" />{' '}
+            {prTemplateMutation.isPending ? 'Saving...' : 'Save PR template'}
+          </Button>
+          {prTemplateMutation.isSuccess && (
+            <p className="text-sm text-success mt-2">PR template saved.</p>
+          )}
+        </div>
       </div>
 
       {/* Danger zone */}

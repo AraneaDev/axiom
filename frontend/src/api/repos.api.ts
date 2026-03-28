@@ -10,6 +10,7 @@ export interface Repo {
   defaultBranch: string;
   defaultMergeStrategy?: string;
   codeOwnersEnabled?: boolean;
+  prTemplate?: string | null;
   diskPath?: string;
   size?: number;
 }

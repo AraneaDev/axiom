@@ -256,6 +256,7 @@ model Repository {
 
   defaultMergeStrategy String  @default("MERGE")
   codeOwnersEnabled    Boolean @default(false)
+  prTemplate           String? // Markdown template for PR descriptions
 
   pullRequests           PullRequest[]
   webhooks               Webhook[]
