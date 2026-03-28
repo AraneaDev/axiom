@@ -71,7 +71,7 @@ export const addPRCommentSchema = z.object({
   body: z.string().min(1),
   filePath: z.string().optional(),
   line: z.number().int().optional(),
-  replyToId: z.string().optional(),
+  parentId: z.string().optional(),
 });
 
 export const applySuggestionSchema = z.object({

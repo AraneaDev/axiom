@@ -40,6 +40,7 @@ function extractSuggestion(body: string): string | null {
  * @param data.body
  * @param data.filePath
  * @param data.line
+ * @param data.parentId
  * @returns The created PR comment record
  * @throws {AppError} 404 if PR not found
  */
@@ -51,6 +52,7 @@ export async function addPRComment(
     body: string;
     filePath?: string;
     line?: number;
+    parentId?: string;
   },
 ) {
   const pr = await findOrThrow(
@@ -60,6 +62,13 @@ export async function addPRComment(
     'Pull request not found',
   );
 
+  if (data.parentId) {
+    const parent = await prisma.pRComment.findUnique({ where: { id: data.parentId } });
+    if (!parent || parent.prId !== pr.id) throw new AppError(400, 'Invalid parent comment');
+    data.filePath = parent.filePath ?? undefined;
+    data.line = parent.line ?? undefined;
+  }
+
   const comment = await prisma.pRComment.create({
     data: {
       prId: pr.id,
@@ -67,6 +76,7 @@ export async function addPRComment(
       body: data.body,
       filePath: data.filePath,
       line: data.line,
+      parentId: data.parentId,
     },
   });
 
