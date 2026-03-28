@@ -135,20 +135,22 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
       });
     }
 
-    // Auto-link branch to issue if branch name contains an issue key
-    if (!isTag && !isDelete) {
-      try {
-        await autoLinkBranch(payload.ref, repo.id, payload.after);
-      } catch (err) {
-        logger.error('branch auto-link error', { repoId: repo.id }, err as Error);
-      }
-    }
+    // Resolve pusher from first new commit's author email (reused for branch auto-link)
+    let pusherId: string | null = null;
 
     // Auto-link commits to issues via commit message references
     if (!isTag && !isDelete) {
       try {
         const ISSUE_REF_RE = /(?:(closes?|fixes?)\s+)?[#^](?:([A-Z]+-)?(\d+))/gi;
         const recentCommits = await gitCmd.log(repo.diskPath!, payload.after, 50, 0);
+
+        // Resolve pusher from latest commit author
+        if (recentCommits.length > 0 && recentCommits[0].authorEmail) {
+          const pusherUser = await prisma.user.findFirst({
+            where: { email: recentCommits[0].authorEmail },
+          });
+          if (pusherUser) pusherId = pusherUser.id;
+        }
 
         for (const commit of recentCommits) {
           const matches = [...commit.message.matchAll(ISSUE_REF_RE)];
@@ -207,15 +209,22 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
               }
             }
           }
-        }
 
-        // Execute smart commit directives (time, comment, transition, assign, label)
-        for (const commit of recentCommits) {
+          // Execute smart commit directives only for new commits (skip already-processed)
           try {
-            const commitUser = commit.authorEmail
-              ? await prisma.user.findFirst({ where: { email: commit.authorEmail } })
-              : null;
-            await executeSmartCommit(commit.message, repo.id, commitUser?.id ?? null);
+            const alreadyProcessed = await prisma.issueCommit.findFirst({
+              where: { sha: commit.sha, repoId: repo.id },
+              select: { createdAt: true },
+            });
+            // If commit was already linked before this push (createdAt > 5s ago), skip smart commits
+            const isNew =
+              !alreadyProcessed || Date.now() - alreadyProcessed.createdAt.getTime() < 5000;
+            if (isNew) {
+              const commitUser = commit.authorEmail
+                ? await prisma.user.findFirst({ where: { email: commit.authorEmail } })
+                : null;
+              await executeSmartCommit(commit.message, repo.id, commitUser?.id ?? null);
+            }
           } catch (err) {
             logger.error(
               'smart commit execution error',
@@ -226,6 +235,15 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
         }
       } catch (err) {
         logger.error('commit->issue linking error', { repoId: repo.id }, err as Error);
+      }
+    }
+
+    // Auto-link branch to issue if branch name contains an issue key
+    if (!isTag && !isDelete) {
+      try {
+        await autoLinkBranch(payload.ref, repo.id, pusherId);
+      } catch (err) {
+        logger.error('branch auto-link error', { repoId: repo.id }, err as Error);
       }
     }
 
@@ -242,8 +260,12 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
   }
 });
 
-async function autoLinkBranch(ref: string, repoId: string, afterSha: string): Promise<void> {
+async function autoLinkBranch(ref: string, repoId: string, pusherId: string | null): Promise<void> {
   if (!ref.startsWith('refs/heads/')) return;
+  if (!pusherId) {
+    logger.warn('branch auto-link skipped: could not resolve pusher', { repoId, ref });
+    return;
+  }
 
   const branchName = ref.replace('refs/heads/', '');
   const match = branchName.match(ISSUE_KEY_IN_BRANCH);
@@ -256,31 +278,18 @@ async function autoLinkBranch(ref: string, repoId: string, afterSha: string): Pr
   const [, prefix, numStr] = keyMatch;
   const issueNumber = parseInt(numStr, 10);
 
+  // Scope to projects in the same team as the repo
   const issue = await prisma.issue.findFirst({
     where: {
       number: issueNumber,
-      project: { prefix },
+      project: {
+        prefix,
+        team: { repos: { some: { id: repoId } } },
+      },
     },
   });
 
   if (!issue) return;
-
-  // Look up pusher from the latest commit author email
-  let pusherId: string | null = null;
-  try {
-    const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-    if (repo?.diskPath) {
-      const commits = await gitCmd.log(repo.diskPath, afterSha, 1, 0);
-      if (commits.length > 0 && commits[0].authorEmail) {
-        const user = await prisma.user.findFirst({ where: { email: commits[0].authorEmail } });
-        if (user) pusherId = user.id;
-      }
-    }
-  } catch {
-    // If we can't determine pusher, skip linking
-  }
-
-  if (!pusherId) return;
 
   await prisma.issueBranch.upsert({
     where: {

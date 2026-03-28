@@ -23,7 +23,7 @@ export async function executeSmartCommit(
 
 async function executeDirectivesForIssue(
   result: SmartCommitResult,
-  _repoId: string,
+  repoId: string,
   authorUserId: string | null,
 ): Promise<void> {
   const match = result.issueKey.match(/^([A-Z]+)-(\d+)$/);
@@ -32,10 +32,14 @@ async function executeDirectivesForIssue(
   const [, prefix, numStr] = match;
   const issueNumber = parseInt(numStr, 10);
 
+  // Scope to projects in the same team as the repo to avoid cross-org matches
   const issue = await prisma.issue.findFirst({
     where: {
       number: issueNumber,
-      project: { prefix },
+      project: {
+        prefix,
+        team: { repos: { some: { id: repoId } } },
+      },
     },
     include: {
       project: { include: { columns: true } },
