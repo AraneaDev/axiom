@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { Download, Eye, Paperclip, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -30,36 +31,29 @@ function isImage(mimeType: string): boolean {
 }
 
 function AuthImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const { data: blobUrl } = useQuery({
+    queryKey: ['auth-image', src],
+    queryFn: async () => {
+      const token = getAccessToken();
+      const res = await fetch(src, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    },
+    staleTime: Infinity,
+    gcTime: 5 * 60_000,
+  });
 
   useEffect(() => {
-    let revoke: string | null = null;
-    const token = getAccessToken();
-    fetch(src, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      .then((res) => (res.ok ? res.blob() : null))
-      .then((blob) => {
-        if (blob) {
-          revoke = URL.createObjectURL(blob);
-          setBlobUrl(revoke);
-        }
-      })
-      .catch(() => {});
     return () => {
-      if (revoke) URL.revokeObjectURL(revoke);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [src]);
+  }, [blobUrl]);
 
-  if (!blobUrl) {
-    return (
-      <div
-        className={cn('flex items-center justify-center bg-surface-tertiary rounded', className)}
-      >
-        <Paperclip className="h-4 w-4 text-text-tertiary" />
-      </div>
-    );
-  }
-
-  return <img src={blobUrl} alt={alt} className={className} />;
+  if (!blobUrl) return null;
+  return <img src={blobUrl} alt={alt} className={className} loading="lazy" />;
 }
 
 interface AttachmentListProps {
