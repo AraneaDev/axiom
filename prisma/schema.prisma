@@ -331,11 +331,15 @@ model PRComment {
   body      String // markdown
   filePath  String? // for inline comments
   line      Int? // for inline comments
+  parentId  String?
+  parent    PRComment?  @relation("commentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   PRComment[] @relation("commentThread")
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
   @@index([prId])
   @@index([authorId])
+  @@index([parentId])
   @@map("pr_comments")
 }
 
