@@ -9,7 +9,7 @@ export interface SmartCommitResult {
 }
 
 const ISSUE_KEY_PATTERN = /[A-Z]+-\d+/g;
-const DIRECTIVE_PATTERN = /#(time|comment|resolve|close|reopen|assign|label)\s*/gi;
+const DIRECTIVE_PATTERN = /#(time|comment|resolve|close|reopen|assign|label)\s*/i;
 
 /**
  *
@@ -23,7 +23,7 @@ export function parseSmartCommit(message: string): SmartCommitResult[] {
 
   return issueKeys.map((issueKey) => ({
     issueKey,
-    directives,
+    directives: [...directives],
   }));
 }
 
