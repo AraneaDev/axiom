@@ -1,3 +1,4 @@
+import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 
 /**
@@ -14,7 +15,7 @@ export function Skeleton({ className }: { className?: string }) {
  */
 export function CardSkeleton() {
   return (
-    <div className="rounded-lg border border-border bg-surface p-5">
+    <Card className="p-5">
       <div className="flex items-center gap-3 mb-3">
         <Skeleton className="h-10 w-10 rounded-md" />
         <div className="flex-1">
@@ -24,7 +25,7 @@ export function CardSkeleton() {
       </div>
       <Skeleton className="h-3 w-full mb-2" />
       <Skeleton className="h-3 w-3/4" />
-    </div>
+    </Card>
   );
 }
 
@@ -35,7 +36,7 @@ export function CardSkeleton() {
  */
 export function ListSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+    <Card className="divide-y divide-border">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 p-4">
           <Skeleton className="h-5 w-5 rounded-full" />
@@ -46,7 +47,7 @@ export function ListSkeleton({ rows = 5 }: { rows?: number }) {
           <Skeleton className="h-5 w-16 rounded-full" />
         </div>
       ))}
-    </div>
+    </Card>
   );
 }
 
@@ -58,7 +59,7 @@ export function ListSkeleton({ rows = 5 }: { rows?: number }) {
  */
 export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
   return (
-    <div className="rounded-lg border border-border bg-surface">
+    <Card>
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-4 p-3 border-b border-border last:border-0">
           {Array.from({ length: cols }).map((_, j) => (
@@ -69,7 +70,7 @@ export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
           ))}
         </div>
       ))}
-    </div>
+    </Card>
   );
 }
 
@@ -136,13 +137,13 @@ export function DetailSkeleton() {
             <Skeleton className="h-4 w-48" />
           </div>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-5 mb-8 space-y-3">
+        <Card className="p-5 mb-8 space-y-3">
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-5/6" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-2/3" />
-        </div>
+        </Card>
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="flex items-start gap-3">
@@ -194,7 +195,7 @@ export function RepoSkeleton() {
           <Skeleton key={i} className="h-8 w-24 rounded-md" />
         ))}
       </div>
-      <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+      <Card className="divide-y divide-border">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-2">
             <Skeleton className="h-4 w-4 rounded" />
@@ -202,7 +203,7 @@ export function RepoSkeleton() {
             <Skeleton className="ml-auto h-3 w-14" />
           </div>
         ))}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -216,7 +217,7 @@ export function CardGridSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-lg border border-border bg-surface p-5">
+        <Card key={i} className="p-5">
           <div className="flex items-center gap-3 mb-2">
             <Skeleton className="h-5 w-5 rounded" />
             <Skeleton className="h-5 w-32" />
@@ -224,7 +225,7 @@ export function CardGridSkeleton({ count = 6 }: { count?: number }) {
           <Skeleton className="h-3 w-full mb-2" />
           <Skeleton className="h-3 w-3/4 mb-2" />
           <Skeleton className="h-3 w-16 mt-2" />
-        </div>
+        </Card>
       ))}
     </div>
   );

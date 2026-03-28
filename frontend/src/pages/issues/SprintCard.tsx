@@ -22,6 +22,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Modal } from '@/components/ui/Modal';
@@ -236,8 +237,7 @@ export function SprintCard({ sprint, org, team, project, projectId, allSprints }
   };
 
   return (
-    <div
-      className="rounded-lg border border-border bg-surface"
+    <Card
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
@@ -394,6 +394,6 @@ export function SprintCard({ sprint, org, team, project, projectId, allSprints }
           </div>
         </Modal>
       )}
-    </div>
+    </Card>
   );
 }

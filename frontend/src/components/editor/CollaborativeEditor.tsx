@@ -56,6 +56,7 @@ import { SmartLinkExtension } from './SmartLinkExtension';
 import { TableOfContentsExtension } from './TableOfContentsExtension';
 
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 
 const lowlight = createLowlight(common);
@@ -219,7 +220,7 @@ export function CollaborativeEditor({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface overflow-hidden">
+    <Card className="overflow-hidden">
       {/* Toolbar */}
       <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-surface-secondary flex-wrap">
         <ToolbarButton
@@ -356,6 +357,6 @@ export function CollaborativeEditor({
 
       {/* Editor */}
       <EditorContent editor={editor} />
-    </div>
+    </Card>
   );
 }

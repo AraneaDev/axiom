@@ -300,8 +300,7 @@ export default function Backlog() {
           ))}
 
           {/* Backlog panel */}
-          <div
-            className="rounded-lg border border-border bg-surface"
+          <Card
             onDragOver={(e) => {
               e.preventDefault();
               e.dataTransfer.dropEffect = 'move';
@@ -338,7 +337,7 @@ export default function Backlog() {
                 ))
               )}
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Sidebar: velocity chart */}

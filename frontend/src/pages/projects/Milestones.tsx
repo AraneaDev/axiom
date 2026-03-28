@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { milestonesApi, type Milestone } from '@/api/milestones.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -57,7 +58,7 @@ function MilestoneCard({
   const isOpen = milestone.status === 'OPEN';
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-5 flex flex-col gap-3">
+    <Card className="p-5 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
           <Flag
@@ -147,7 +148,7 @@ function MilestoneCard({
           />
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -291,10 +292,7 @@ export default function Milestones() {
       ) : isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div
-              key={i}
-              className="rounded-lg border border-border bg-surface p-5 h-28 animate-pulse"
-            />
+            <Card key={i} className="p-5 h-28 animate-pulse"></Card>
           ))}
         </div>
       ) : filteredMilestones.length === 0 ? (

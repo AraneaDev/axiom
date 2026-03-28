@@ -6,6 +6,7 @@ import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 
@@ -68,33 +69,31 @@ export default function TeamList() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {teams.map((team) => (
-            <Link
-              key={team.id}
-              to={`/${org}/${team.slug}`}
-              className="rounded-lg border border-border bg-surface p-5 hover:border-primary/50 hover:shadow-sm transition-all"
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex items-center justify-center h-10 w-10 rounded-md bg-primary-light text-primary">
-                  <Users className="h-5 w-5" />
+            <Link key={team.id} to={`/${org}/${team.slug}`}>
+              <Card className="p-5 hover:border-primary/50 hover:shadow-sm transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-md bg-primary-light text-primary">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">{team.name}</h3>
+                    <p className="text-xs text-text-secondary">/{team.slug}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold">{team.name}</h3>
-                  <p className="text-xs text-text-secondary">/{team.slug}</p>
+                {team.description && (
+                  <div className="text-sm text-text-secondary line-clamp-2 mb-3">
+                    <MarkdownRenderer content={team.description} />
+                  </div>
+                )}
+                <div className="flex gap-4 text-xs text-text-secondary">
+                  <span className="flex items-center gap-1">
+                    <Users className="h-3 w-3" /> {team._count?.members ?? 0} members
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <FolderKanban className="h-3 w-3" /> {team._count?.projects ?? 0} projects
+                  </span>
                 </div>
-              </div>
-              {team.description && (
-                <div className="text-sm text-text-secondary line-clamp-2 mb-3">
-                  <MarkdownRenderer content={team.description} />
-                </div>
-              )}
-              <div className="flex gap-4 text-xs text-text-secondary">
-                <span className="flex items-center gap-1">
-                  <Users className="h-3 w-3" /> {team._count?.members ?? 0} members
-                </span>
-                <span className="flex items-center gap-1">
-                  <FolderKanban className="h-3 w-3" /> {team._count?.projects ?? 0} projects
-                </span>
-              </div>
+              </Card>
             </Link>
           ))}
         </div>

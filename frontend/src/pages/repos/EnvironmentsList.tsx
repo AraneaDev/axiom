@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { deploymentsApi } from '@/api/deployments.api';
 import type { DeploymentEnvironment } from '@/api/deployments.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -98,9 +99,9 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
               now - new Date(env.lastDeployedAt).getTime() < 24 * 60 * 60 * 1000;
 
             return (
-              <div
+              <Card
                 key={env.id}
-                className="rounded-lg border border-border bg-surface p-4 hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer"
+                className="p-4 hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer"
                 onClick={() => onSelectEnv(env)}
               >
                 <div className="flex items-center justify-between">
@@ -170,7 +171,7 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
                     </Button>
                   </div>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
