@@ -6,13 +6,17 @@ import {
   Plus,
   ChevronDown,
   ChevronRight,
+  CheckCircle2,
+  XCircle,
+  Loader,
+  Workflow,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
 import CreateBranchModal from './CreateBranchModal';
 
-import { issuesApi } from '@/api/issues.api';
+import { developmentPanelApi } from '@/api/development-panel.api';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
@@ -39,6 +43,14 @@ const PR_STATUS_COLORS: Record<string, string> = {
   CLOSED: 'bg-danger/10 text-danger border-danger/20',
 };
 
+const PIPELINE_STATUS_ICON: Record<string, { icon: typeof CheckCircle2; className: string }> = {
+  passed: { icon: CheckCircle2, className: 'text-success' },
+  success: { icon: CheckCircle2, className: 'text-success' },
+  failed: { icon: XCircle, className: 'text-destructive' },
+  running: { icon: Loader, className: 'text-warning' },
+  pending: { icon: Loader, className: 'text-warning' },
+};
+
 /**
  *
  * @param root0
@@ -60,28 +72,23 @@ export default function IssueDevelopmentCard({
     branches: true,
     prs: true,
     commits: false,
+    pipelines: false,
   });
   const qc = useQueryClient();
 
   const toggle = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const { data: branches = [], isLoading: loadingBranches } = useQuery({
-    queryKey: ['issue-branches', projectId, issueNumber],
-    queryFn: () => issuesApi.listIssueBranches(projectId, issueNumber),
+  const { data, isLoading } = useQuery({
+    queryKey: ['development-panel', projectId, issueNumber],
+    queryFn: () => developmentPanelApi.getSummary(projectId, issueNumber),
   });
 
-  const { data: prs = [], isLoading: loadingPRs } = useQuery({
-    queryKey: ['issue-prs', projectId, issueNumber],
-    queryFn: () => issuesApi.listIssuePRs(projectId, issueNumber),
-  });
+  const branches = data?.branches ?? [];
+  const prs = data?.pullRequests ?? [];
+  const commits = data?.commits ?? [];
+  const pipelines = data?.pipelines ?? [];
 
-  const { data: commits = [], isLoading: loadingCommits } = useQuery({
-    queryKey: ['issue-commits', projectId, issueNumber],
-    queryFn: () => issuesApi.listIssueCommits(projectId, issueNumber),
-  });
-
-  const isLoading = loadingBranches || loadingPRs || loadingCommits;
-  const hasDev = branches.length + prs.length + commits.length > 0;
+  const hasDev = branches.length + prs.length + commits.length + pipelines.length > 0;
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
@@ -114,12 +121,12 @@ export default function IssueDevelopmentCard({
             {branches.map((b) => (
               <Link
                 key={b.id}
-                to={`/${org}/${teamSlug}/repos/${b.repo.slug}/tree/${b.branchName}`}
+                to={`/${org}/${teamSlug}/repos/${b.repoSlug}/tree/${b.branchName}`}
                 className="flex items-center gap-2 text-xs py-0.5 hover:bg-surface-secondary rounded px-1 -mx-1 transition-colors"
               >
                 <GitBranch className="h-3 w-3 text-text-tertiary flex-shrink-0" />
                 <span className="font-mono text-primary truncate">{b.branchName}</span>
-                <span className="text-text-tertiary ml-auto flex-shrink-0">{b.repo.name}</span>
+                <span className="text-text-tertiary ml-auto flex-shrink-0">{b.repoName}</span>
               </Link>
             ))}
             <Button
@@ -165,18 +172,18 @@ export default function IssueDevelopmentCard({
               {prs.map((p) => (
                 <Link
                   key={p.id}
-                  to={`/${org}/${teamSlug}/repos/${p.pr.repo.slug}/pulls/${p.pr.number}`}
+                  to={`/${org}/${teamSlug}/repos/${p.repoSlug}/pulls/${p.number}`}
                   className="flex items-center gap-2 text-xs py-0.5 hover:bg-surface-secondary rounded px-1 -mx-1 transition-colors"
                 >
                   <GitPullRequest className="h-3 w-3 text-text-tertiary flex-shrink-0" />
-                  <span className="text-primary truncate flex-1">{p.pr.title}</span>
+                  <span className="text-primary truncate flex-1">{p.title}</span>
                   <span
                     className={cn(
                       'px-1.5 py-0.5 rounded-full border text-[10px]',
-                      PR_STATUS_COLORS[p.pr.status] ?? '',
+                      PR_STATUS_COLORS[p.status] ?? '',
                     )}
                   >
-                    {p.pr.status}
+                    {p.status}
                   </span>
                 </Link>
               ))}
@@ -187,7 +194,7 @@ export default function IssueDevelopmentCard({
 
       {/* Commits */}
       {commits.length > 0 && (
-        <div>
+        <div className="mb-2">
           <Button
             variant="ghost"
             size="xs"
@@ -206,7 +213,7 @@ export default function IssueDevelopmentCard({
               {commits.slice(0, 5).map((c) => (
                 <Link
                   key={c.id}
-                  to={`/${org}/${teamSlug}/repos/${c.repo.slug}/commit/${c.sha}`}
+                  to={`/${org}/${teamSlug}/repos/${c.repoSlug}/commit/${c.sha}`}
                   className="flex items-center gap-2 text-xs py-0.5 hover:bg-surface-secondary rounded px-1 -mx-1 transition-colors"
                 >
                   <GitCommit className="h-3 w-3 text-text-tertiary flex-shrink-0" />
@@ -216,6 +223,47 @@ export default function IssueDevelopmentCard({
                   </span>
                 </Link>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pipelines */}
+      {pipelines.length > 0 && (
+        <div>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => toggle('pipelines')}
+            className="flex items-center gap-1 text-xs font-semibold text-text-secondary mb-1.5 w-full hover:text-text"
+          >
+            {expanded.pipelines ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+            Pipelines <span className="ml-auto text-text-tertiary">{pipelines.length}</span>
+          </Button>
+          {expanded.pipelines && (
+            <div className="space-y-1">
+              {pipelines.map((p) => {
+                const statusKey = p.status.toLowerCase();
+                const statusConfig = PIPELINE_STATUS_ICON[statusKey] ?? {
+                  icon: Loader,
+                  className: 'text-text-tertiary',
+                };
+                const StatusIcon = statusConfig.icon;
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-2 text-xs py-0.5 rounded px-1 -mx-1"
+                  >
+                    <Workflow className="h-3 w-3 text-text-tertiary flex-shrink-0" />
+                    <span className="text-text truncate flex-1">{p.pipelineName}</span>
+                    <StatusIcon className={cn('h-3 w-3 flex-shrink-0', statusConfig.className)} />
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -231,7 +279,7 @@ export default function IssueDevelopmentCard({
           repos={repos}
           onClose={() => setShowBranchModal(false)}
           onCreated={() => {
-            qc.invalidateQueries({ queryKey: ['issue-branches', projectId, issueNumber] });
+            qc.invalidateQueries({ queryKey: ['development-panel', projectId, issueNumber] });
             setShowBranchModal(false);
           }}
         />
