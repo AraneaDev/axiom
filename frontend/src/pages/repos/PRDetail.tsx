@@ -24,6 +24,9 @@ export default function PRDetail() {
   const queryClient = useQueryClient();
   const [commentBody, setCommentBody] = useState('');
   const [mergeStrategy, setMergeStrategy] = useState('');
+  const [deleteSourceBranch, setDeleteSourceBranch] = useState(() => {
+    return localStorage.getItem('pr-delete-branch-preference') === 'true';
+  });
   const [diffView, setDiffView] = useState<'unified' | 'split'>('unified');
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
   const [applyingComment, setApplyingComment] = useState<string | null>(null);
@@ -134,7 +137,8 @@ export default function PRDetail() {
   });
 
   const mergeMutation = useMutation({
-    mutationFn: () => reposApi.mergePR(currentRepo!.id, prNumber, mergeStrategy),
+    mutationFn: () =>
+      reposApi.mergePR(currentRepo!.id, prNumber, { strategy: mergeStrategy, deleteSourceBranch }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] }),
   });
 
@@ -309,6 +313,9 @@ export default function PRDetail() {
           isMerging={mergeMutation.isPending}
           mergeError={mergeMutation.isError ? mergeMutation.error : null}
           onClose={() => closeMutation.mutate()}
+          deleteSourceBranch={deleteSourceBranch}
+          onSetDeleteSourceBranch={setDeleteSourceBranch}
+          defaultBranch={currentRepo?.defaultBranch}
         />
       </div>
     </div>

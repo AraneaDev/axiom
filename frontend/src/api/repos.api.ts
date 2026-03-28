@@ -270,13 +270,18 @@ export const reposApi = {
   updatePR: (repoId: string, number: number, data: { title?: string; body?: string }) =>
     patch(`/repos/${repoId}/pulls/${number}`, data),
   /**
-   * Merge a pull request with an optional merge strategy.
+   * Merge a pull request with an optional merge strategy and branch deletion.
    * @param repoId
    * @param number
-   * @param strategy
+   * @param data
+   * @param data.strategy
+   * @param data.deleteSourceBranch
    */
-  mergePR: (repoId: string, number: number, strategy?: string) =>
-    post(`/repos/${repoId}/pulls/${number}/merge`, { strategy }),
+  mergePR: (
+    repoId: string,
+    number: number,
+    data: { strategy?: string; deleteSourceBranch?: boolean },
+  ) => post(`/repos/${repoId}/pulls/${number}/merge`, data),
   /**
    * Check if a PR meets merge requirements (reviews, CI).
    * @param repoId

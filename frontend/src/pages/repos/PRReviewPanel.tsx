@@ -15,7 +15,9 @@ import {
   ExternalLink,
   Users,
   Loader2,
+  Scissors,
 } from 'lucide-react';
+import { useEffect } from 'react';
 import { Link } from 'react-router';
 
 import type { StatusCheck, CodeOwnerStatus } from '@/api/status-checks.api';
@@ -79,6 +81,9 @@ interface PRReviewPanelProps {
   isMerging: boolean;
   mergeError: Error | null;
   onClose: () => void;
+  deleteSourceBranch: boolean;
+  onSetDeleteSourceBranch: (value: boolean) => void;
+  defaultBranch?: string;
 }
 
 /**
@@ -97,6 +102,9 @@ interface PRReviewPanelProps {
  * @param root0.isMerging
  * @param root0.mergeError
  * @param root0.onClose
+ * @param root0.deleteSourceBranch
+ * @param root0.onSetDeleteSourceBranch
+ * @param root0.defaultBranch
  */
 export function PRReviewPanel({
   pr,
@@ -112,7 +120,16 @@ export function PRReviewPanel({
   isMerging,
   mergeError,
   onClose,
+  deleteSourceBranch,
+  onSetDeleteSourceBranch,
+  defaultBranch,
 }: PRReviewPanelProps) {
+  const isDefaultBranch = !!defaultBranch && pr.sourceBranch === defaultBranch;
+
+  useEffect(() => {
+    localStorage.setItem('pr-delete-branch-preference', String(deleteSourceBranch));
+  }, [deleteSourceBranch]);
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
@@ -267,6 +284,18 @@ export function PRReviewPanel({
                 </DropdownItem>
               </Dropdown>
             </div>
+            {!isDefaultBranch && (
+              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteSourceBranch}
+                  onChange={(e) => onSetDeleteSourceBranch(e.target.checked)}
+                  className="rounded border-border"
+                />
+                <Scissors className="h-3 w-3" />
+                Delete source branch
+              </label>
+            )}
             {mergeChecks && !mergeChecks.canMerge && (
               <p className="text-xs text-danger">
                 Merge requirements not met. Check review and CI status above.
