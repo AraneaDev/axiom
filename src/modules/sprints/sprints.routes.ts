@@ -23,6 +23,9 @@ router.patch('/:projectId/sprints/:sprintId', sprintsController.update);
 router.post('/:projectId/sprints/:sprintId/start', sprintsController.start);
 router.post('/:projectId/sprints/:sprintId/complete', sprintsController.complete);
 
+// Sprint report
+router.get('/:projectId/sprints/:sprintId/report', sprintsController.report);
+
 // Sprint issue management
 router.post('/:projectId/sprints/:sprintId/issues', sprintsController.addIssues);
 router.delete('/:projectId/sprints/:sprintId/issues/:issueId', sprintsController.removeIssue);

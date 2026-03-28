@@ -189,7 +189,7 @@ export async function startSprint(sprintId: string) {
 
   return prisma.sprint.update({
     where: { id: sprintId },
-    data: { status: 'ACTIVE' },
+    data: { status: 'ACTIVE', committedAt: new Date() },
     include: {
       issues: {
         include: {
@@ -236,8 +236,16 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
     .filter((i: IssueWithColumn) => !i.column?.isDone)
     .map((i: IssueWithColumn) => i.id);
 
-  // Move incomplete issues
+  // Record REMOVED events for incomplete issues before moving them
   if (incompleteIssueIds.length > 0) {
+    await prisma.sprintIssueHistory.createMany({
+      data: incompleteIssueIds.map((issueId) => ({
+        sprintId,
+        issueId,
+        action: 'REMOVED' as const,
+      })),
+    });
+
     await prisma.issue.updateMany({
       where: { id: { in: incompleteIssueIds } },
       data: { sprintId: moveToSprintId ?? null },
@@ -277,6 +285,11 @@ export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
     data: { sprintId },
   });
 
+  // Record ADDED history events
+  await prisma.sprintIssueHistory.createMany({
+    data: issueIds.map((issueId) => ({ sprintId, issueId, action: 'ADDED' as const })),
+  });
+
   return getSprint(sprintId);
 }
 
@@ -287,7 +300,17 @@ export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
  * @throws {AppError} 404 if issue not found
  */
 export async function removeIssueFromSprint(issueId: string) {
-  await findOrThrow(prisma.issue.findUnique({ where: { id: issueId } }), 'Issue not found');
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({ where: { id: issueId } }),
+    'Issue not found',
+  );
+
+  // Record REMOVED history event before clearing sprint
+  if (issue.sprintId) {
+    await prisma.sprintIssueHistory.create({
+      data: { sprintId: issue.sprintId, issueId, action: 'REMOVED' },
+    });
+  }
 
   return prisma.issue.update({
     where: { id: issueId },

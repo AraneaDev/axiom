@@ -12,6 +12,7 @@ import {
   Pencil,
   Check,
   X,
+  BarChart3,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -163,6 +164,7 @@ interface SprintCardProps {
  * @param root0.allSprints
  */
 export function SprintCard({ sprint, org, team, project, projectId, allSprints }: SprintCardProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { invalidateSprints } = useIssueInvalidation(projectId);
@@ -266,6 +268,16 @@ export function SprintCard({ sprint, org, team, project, projectId, allSprints }
         {sprint.status === 'PLANNING' && (
           <Button variant="outline" size="xs" onClick={() => startMutation.mutate()}>
             <Play className="h-3 w-3" /> Start Sprint
+          </Button>
+        )}
+        {(sprint.status === 'ACTIVE' || sprint.status === 'COMPLETED') && (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => navigate(`/${org}/${team}/${project}/sprints/${sprint.id}/report`)}
+            title="Sprint Report"
+          >
+            <BarChart3 className="h-3 w-3" /> Report
           </Button>
         )}
         {sprint.status === 'ACTIVE' && (

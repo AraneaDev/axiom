@@ -486,6 +486,7 @@ model Issue {
   votes             IssueVote[]
   watchers          IssueWatcher[]
   timeEntries       TimeEntry[]
+  sprintHistory     SprintIssueHistory[]
 
   @@unique([projectId, number])
   @@index([assigneeId])
@@ -891,6 +892,11 @@ enum SprintStatus {
   COMPLETED
 }
 
+enum SprintIssueAction {
+  ADDED
+  REMOVED
+}
+
 enum CommitStatusState {
   PENDING
   SUCCESS
@@ -908,20 +914,36 @@ enum DeploymentStatus {
 // ─── Platform Expansion Models ───────────────────────────────
 
 model Sprint {
-  id        String       @id @default(cuid())
-  projectId String
-  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name      String
-  goal      String?
-  startDate DateTime
-  endDate   DateTime
-  status    SprintStatus @default(PLANNING)
-  createdAt DateTime     @default(now())
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  goal        String?
+  startDate   DateTime
+  endDate     DateTime
+  status      SprintStatus @default(PLANNING)
+  committedAt DateTime?
+  createdAt   DateTime     @default(now())
 
-  issues Issue[]
+  issues       Issue[]
+  issueHistory SprintIssueHistory[]
 
   @@index([projectId])
   @@map("sprints")
+}
+
+model SprintIssueHistory {
+  id        String              @id @default(cuid())
+  sprintId  String
+  sprint    Sprint              @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  issueId   String
+  issue     Issue               @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  action    SprintIssueAction
+  timestamp DateTime            @default(now())
+
+  @@index([sprintId])
+  @@index([issueId])
+  @@map("sprint_issue_history")
 }
 
 model CustomFieldDefinition {

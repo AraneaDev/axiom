@@ -10,6 +10,7 @@ import {
   addSprintIssuesSchema,
 } from '../../utils/validation';
 
+import * as sprintReportService from './sprint-report.service';
 import * as sprintsService from './sprints.service';
 
 export const create = asyncHandler(async (req: Request, res: Response) => {
@@ -67,4 +68,12 @@ export const velocity = asyncHandler(async (req: Request, res: Response) => {
 export const backlog = asyncHandler(async (req: Request, res: Response) => {
   const issues = await sprintsService.getBacklog(param(req, 'projectId'));
   res.json(issues);
+});
+
+export const report = asyncHandler(async (req: Request, res: Response) => {
+  const data = await sprintReportService.getSprintReport(
+    param(req, 'projectId'),
+    param(req, 'sprintId'),
+  );
+  res.json(data);
 });
