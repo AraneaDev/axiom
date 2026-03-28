@@ -30,11 +30,6 @@ interface CommentingOn {
   line: number;
 }
 
-interface SplitLine {
-  left: { num: number | null; content: string; type: 'same' | 'del' | 'empty' };
-  right: { num: number | null; content: string; type: 'same' | 'add' | 'empty' };
-}
-
 function parseDiff(raw: string) {
   const files: {
     header: string;
@@ -104,77 +99,6 @@ function getChangeType(s: { additions: number; deletions: number }) {
   return 'Modified';
 }
 
-function parseDiffToSplit(raw: string): { file: string; lines: SplitLine[] }[] {
-  const files: { file: string; lines: SplitLine[] }[] = [];
-  const chunks = raw.split(/^diff --git /m).filter(Boolean);
-
-  for (const chunk of chunks) {
-    const linesRaw = chunk.split('\n');
-    const headerMatch = linesRaw[0]?.match(/a\/(.+?) b\//);
-    const file = headerMatch?.[1] ?? 'unknown';
-    const splitLines: SplitLine[] = [];
-
-    let leftNum = 0;
-    let rightNum = 0;
-
-    for (const line of linesRaw) {
-      if (line.startsWith('@@')) {
-        const hunkMatch = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-        if (hunkMatch) {
-          leftNum = parseInt(hunkMatch[1], 10) - 1;
-          rightNum = parseInt(hunkMatch[2], 10) - 1;
-        }
-        splitLines.push({
-          left: { num: null, content: line, type: 'same' },
-          right: { num: null, content: line, type: 'same' },
-        });
-        continue;
-      }
-      if (
-        line.startsWith('---') ||
-        line.startsWith('+++') ||
-        line.startsWith('index ') ||
-        line.startsWith('new file') ||
-        line.startsWith('deleted file')
-      ) {
-        continue;
-      }
-      if (line.startsWith('-')) {
-        leftNum++;
-        splitLines.push({
-          left: { num: leftNum, content: line.slice(1), type: 'del' },
-          right: { num: null, content: '', type: 'empty' },
-        });
-      } else if (line.startsWith('+')) {
-        rightNum++;
-        splitLines.push({
-          left: { num: null, content: '', type: 'empty' },
-          right: { num: rightNum, content: line.slice(1), type: 'add' },
-        });
-      } else if (line.length > 0 || line === '') {
-        leftNum++;
-        rightNum++;
-        splitLines.push({
-          left: {
-            num: leftNum,
-            content: line.startsWith(' ') ? line.slice(1) : line,
-            type: 'same',
-          },
-          right: {
-            num: rightNum,
-            content: line.startsWith(' ') ? line.slice(1) : line,
-            type: 'same',
-          },
-        });
-      }
-    }
-    if (splitLines.length > 0) {
-      files.push({ file, lines: splitLines });
-    }
-  }
-  return files;
-}
-
 interface InlineCommentFormProps {
   onCancel: () => void;
   onSubmit: (body: string) => void;
@@ -209,108 +133,6 @@ function InlineCommentForm({ onCancel, onSubmit, isPending }: InlineCommentFormP
           <MessageSquare className="h-3.5 w-3.5" /> Comment
         </Button>
       </div>
-    </div>
-  );
-}
-
-interface SplitDiffViewProps {
-  rawDiff: string;
-  repoId: string;
-  prNumber: number;
-}
-
-function SplitDiffView({ rawDiff, repoId, prNumber }: SplitDiffViewProps) {
-  const files = parseDiffToSplit(rawDiff);
-  const [commentingOn, setCommentingOn] = useState<CommentingOn | null>(null);
-  const queryClient = useQueryClient();
-  const toast = useToast();
-
-  const addCommentMutation = useMutation({
-    mutationFn: (data: { body: string; filePath: string; line: number }) =>
-      reposApi.addPRComment(repoId, prNumber, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pr', repoId, prNumber] });
-      setCommentingOn(null);
-      toast.success('Comment added');
-    },
-    onError: () => {
-      toast.error('Failed to add comment');
-    },
-  });
-
-  const bgClass = (type: string) =>
-    type === 'del'
-      ? 'bg-danger-light text-danger'
-      : type === 'add'
-        ? 'bg-success-light text-success'
-        : type === 'empty'
-          ? 'bg-surface-secondary'
-          : '';
-
-  return (
-    <div className="space-y-4">
-      {files.map((f) => (
-        <div
-          key={f.file}
-          id={`diff-${encodeURIComponent(f.file)}`}
-          className="rounded-lg border border-border overflow-hidden"
-        >
-          <div className="bg-surface-secondary px-3 py-1.5 text-xs font-mono text-text-secondary border-b border-border">
-            {f.file}
-          </div>
-          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-            <table className="w-full text-xs font-mono border-collapse">
-              <tbody>
-                {f.lines.map((row, i) => {
-                  const lineNum = row.right.num ?? row.left.num;
-                  const isCommentTarget =
-                    commentingOn?.filePath === f.file && commentingOn?.line === lineNum;
-                  return (
-                    <Fragment key={i}>
-                      <tr className="group relative">
-                        <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-border bg-surface-secondary relative">
-                          {row.left.num ?? ''}
-                          {lineNum !== null && (
-                            <button
-                              title="Add comment"
-                              onClick={() => setCommentingOn({ filePath: f.file, line: lineNum })}
-                              className="absolute left-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center h-4 w-4 rounded bg-primary text-text-inverse"
-                            >
-                              <Plus className="h-2.5 w-2.5" />
-                            </button>
-                          )}
-                        </td>
-                        <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.left.type)}`}>
-                          {row.left.content}
-                        </td>
-                        <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-l border-border bg-surface-secondary">
-                          {row.right.num ?? ''}
-                        </td>
-                        <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.right.type)}`}>
-                          {row.right.content}
-                        </td>
-                      </tr>
-                      {isCommentTarget && (
-                        <tr>
-                          <td colSpan={4}>
-                            <InlineCommentForm
-                              onCancel={() => setCommentingOn(null)}
-                              onSubmit={(body) =>
-                                addCommentMutation.mutate({ body, filePath: f.file, line: lineNum })
-                              }
-                              isPending={addCommentMutation.isPending}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -363,6 +185,80 @@ function ActiveFileDiff({
   }
 
   if (diffView === 'split') {
+    // Convert parsed hunks into paired split rows
+    const splitRows: {
+      left: { num: number | null; content: string; type: 'same' | 'del' | 'empty' };
+      right: { num: number | null; content: string; type: 'same' | 'add' | 'empty' };
+      hunkHeader?: string;
+    }[] = [];
+
+    let leftNum = 0;
+    let rightNum = 0;
+
+    for (const hunk of activeFile.hunks) {
+      const hunkMatch = hunk.header.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (hunkMatch) {
+        leftNum = parseInt(hunkMatch[1], 10) - 1;
+        rightNum = parseInt(hunkMatch[2], 10) - 1;
+      }
+      splitRows.push({
+        left: { num: null, content: '', type: 'same' },
+        right: { num: null, content: '', type: 'same' },
+        hunkHeader: hunk.header,
+      });
+
+      // Group consecutive del/add lines for side-by-side pairing
+      let i = 0;
+      while (i < hunk.lines.length) {
+        const line = hunk.lines[i];
+        if (line.type === 'ctx') {
+          leftNum++;
+          rightNum++;
+          splitRows.push({
+            left: { num: leftNum, content: line.content, type: 'same' },
+            right: { num: rightNum, content: line.content, type: 'same' },
+          });
+          i++;
+        } else {
+          // Collect consecutive del then add
+          const dels: typeof hunk.lines = [];
+          const adds: typeof hunk.lines = [];
+          while (i < hunk.lines.length && hunk.lines[i].type === 'del') {
+            dels.push(hunk.lines[i]);
+            i++;
+          }
+          while (i < hunk.lines.length && hunk.lines[i].type === 'add') {
+            adds.push(hunk.lines[i]);
+            i++;
+          }
+          const maxLen = Math.max(dels.length, adds.length);
+          for (let j = 0; j < maxLen; j++) {
+            const del = dels[j];
+            const add = adds[j];
+            if (del) leftNum++;
+            if (add) rightNum++;
+            splitRows.push({
+              left: del
+                ? { num: leftNum, content: del.content, type: 'del' }
+                : { num: null, content: '', type: 'empty' },
+              right: add
+                ? { num: rightNum, content: add.content, type: 'add' }
+                : { num: null, content: '', type: 'empty' },
+            });
+          }
+        }
+      }
+    }
+
+    const bgClass = (type: string) =>
+      type === 'del'
+        ? 'bg-danger/10 text-danger'
+        : type === 'add'
+          ? 'bg-success/10 text-success'
+          : type === 'empty'
+            ? 'bg-surface-secondary'
+            : '';
+
     return (
       <div className="rounded-lg border border-border bg-surface overflow-hidden">
         <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
@@ -376,7 +272,40 @@ function ActiveFileDiff({
           )}
         </div>
         <div className="overflow-x-auto">
-          <SplitDiffView rawDiff={activeChunk.rawDiff} repoId={repoId} prNumber={prNumber} />
+          <table className="w-full text-xs font-mono border-collapse">
+            <tbody>
+              {splitRows.map((row, i) => {
+                if (row.hunkHeader) {
+                  return (
+                    <tr key={i}>
+                      <td
+                        colSpan={4}
+                        className="px-4 py-1 text-text-tertiary bg-primary-light text-xs"
+                      >
+                        {row.hunkHeader}
+                      </td>
+                    </tr>
+                  );
+                }
+                return (
+                  <tr key={i} className="group">
+                    <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-border bg-surface-secondary">
+                      {row.left.num ?? ''}
+                    </td>
+                    <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.left.type)}`}>
+                      {row.left.content}
+                    </td>
+                    <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-l border-border bg-surface-secondary">
+                      {row.right.num ?? ''}
+                    </td>
+                    <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.right.type)}`}>
+                      {row.right.content}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     );
