@@ -191,30 +191,32 @@ function TreeNode({
   const { setNodeRef: setDropRef } = useDroppable({
     id: node.id,
   });
-  const nodeRef = (el: HTMLElement | null) => {
-    setDragRef(el);
-    setDropRef(el);
-  };
 
   return (
-    <div ref={nodeRef} {...attributes} className={cn('relative', isDragging && 'opacity-30')}>
-      {/* Drop indicators */}
-      {dropTarget?.nodeId === node.id && dropTarget.zone === 'before' && (
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary z-10" />
-      )}
-      {dropTarget?.nodeId === node.id && dropTarget.zone === 'child' && (
-        <div className="absolute inset-0 rounded-md bg-primary/10 border border-primary/30 z-0 pointer-events-none" />
-      )}
-      {dropTarget?.nodeId === node.id && dropTarget.zone === 'after' && (
-        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary z-10" />
-      )}
+    <div className={cn(isDragging && 'opacity-30')}>
+      {/* Row — droppable ref is on the row only, not the children wrapper */}
       <div
+        ref={(el: HTMLElement | null) => {
+          setDragRef(el);
+          setDropRef(el);
+        }}
+        {...attributes}
         className={cn(
-          'group flex items-center gap-1 py-1 px-1 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
+          'group relative flex items-center gap-1 py-1 px-1 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
           isActive && 'bg-primary-light text-primary font-medium',
         )}
         style={{ paddingLeft: `${depth * 16 + 4}px` }}
       >
+        {/* Drop indicators */}
+        {dropTarget?.nodeId === node.id && dropTarget.zone === 'before' && (
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary z-10" />
+        )}
+        {dropTarget?.nodeId === node.id && dropTarget.zone === 'child' && (
+          <div className="absolute inset-0 rounded-md bg-primary/10 border border-primary/30 z-0 pointer-events-none" />
+        )}
+        {dropTarget?.nodeId === node.id && dropTarget.zone === 'after' && (
+          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary z-10" />
+        )}
         {/* Collapse toggle */}
         {hasChildren ? (
           <button
@@ -352,7 +354,7 @@ export function PageViewSidebar({
   const deleteMutation = useMutation({
     mutationFn: () => wikiApi.deletePage(spaceId!, deleteTarget!.slug),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['wikiPageTree'] });
+      queryClient.invalidateQueries({ queryKey: ['pageTree'] });
       queryClient.invalidateQueries({ queryKey: ['page'] });
       const wasActive = deleteTarget?.slug === activeSlug;
       setDeleteTarget(null);
@@ -403,7 +405,7 @@ export function PageViewSidebar({
     mutationFn: (data: { pageId: string; parentId: string | null; position: number }) =>
       wikiApi.reorderPage(data.pageId, { parentId: data.parentId, position: data.position }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['wikiPageTree'] });
+      queryClient.invalidateQueries({ queryKey: ['pageTree'] });
     },
   });
 
