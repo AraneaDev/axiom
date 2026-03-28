@@ -42,6 +42,7 @@ import { editorProjectIds, nextEditorInstanceId } from './editor-state';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
 import { SlashCommandExtension } from './SlashCommandExtension';
+import { SmartLinkExtension } from './SmartLinkExtension';
 import { TableOfContentsExtension } from './TableOfContentsExtension';
 
 import { Button } from '@/components/ui/Button';
@@ -151,6 +152,7 @@ export function MarkdownEditor({
       CollapsibleExtension,
       TableOfContentsExtension,
       SlashCommandExtension,
+      SmartLinkExtension,
     ],
     content: value || '',
     onUpdate: ({ editor: e }) => {
