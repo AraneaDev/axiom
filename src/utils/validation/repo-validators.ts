@@ -51,6 +51,7 @@ export const updatePRSchema = z.object({
 
 export const mergePRSchema = z.object({
   strategy: z.enum(['merge', 'squash', 'rebase']).default('merge'),
+  deleteSourceBranch: z.boolean().optional().default(false),
 });
 
 export const submitReviewSchema = z.object({

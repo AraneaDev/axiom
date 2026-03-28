@@ -52,12 +52,13 @@ export const close = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const merge = asyncHandler(async (req: Request, res: Response) => {
-  const body = validate(mergePRSchema, req.body);
+  const { strategy, deleteSourceBranch } = validate(mergePRSchema, req.body);
   res.json(
     await pullsService.mergePR(
       param(req, 'repoId'),
       parseInt(param(req, 'number'), 10),
-      body.strategy,
+      strategy,
+      deleteSourceBranch,
     ),
   );
 });

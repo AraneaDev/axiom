@@ -359,6 +359,7 @@ export async function getMergeChecks(repoId: string, prNumber: number) {
  * @param repoId - The repository the PR belongs to
  * @param prNumber - The PR number within the repository
  * @param strategy - Merge strategy (merge, squash, or rebase); defaults to repo setting or 'merge'
+ * @param deleteSourceBranch
  * @returns The merged pull request record
  * @throws {AppError} 404 if PR not found
  * @throws {AppError} 400 if PR is not open or branches no longer exist
@@ -369,6 +370,7 @@ export async function mergePR(
   repoId: string,
   prNumber: number,
   strategy?: 'merge' | 'squash' | 'rebase',
+  deleteSourceBranch = false,
 ) {
   const pr = await findOrThrow(
     prisma.pullRequest.findUnique({
@@ -505,6 +507,18 @@ export async function mergePR(
     }
   }
 
+  let branchDeleted = false;
+  if (deleteSourceBranch) {
+    try {
+      if (pr.sourceBranch !== (repo?.defaultBranch ?? 'main')) {
+        await gitCmd.deleteBranch(diskPath, pr.sourceBranch);
+        branchDeleted = true;
+      }
+    } catch {
+      // Don't fail the merge if branch deletion fails
+    }
+  }
+
   await logActivity('pull_request', pr.id, 'merged', pr.authorId, {
     number: prNumber,
     strategy: effectiveStrategy,
@@ -512,7 +526,7 @@ export async function mergePR(
 
   broadcastToRoom(`repo:${repoId}`, { type: 'pr:merged', repoId, prId: pr.id });
 
-  return mergedPr;
+  return { ...mergedPr, branchDeleted };
 }
 
 /**
