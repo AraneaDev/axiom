@@ -1,12 +1,11 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { GitBranch, X } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { issuesApi } from '@/api/issues.api';
-import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
+import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 
 interface Repo {
   id: string;
@@ -74,39 +73,39 @@ export default function CreateBranchModal({
   });
 
   return (
-    <Modal open={true} onClose={onClose} title="Create Branch" size="md">
-      <div className="space-y-4">
-        {repos.length > 1 && (
-          <Select
-            label="Repository"
-            value={repoId}
-            onChange={(v) => setRepoId(v as string)}
-            options={repos.map((r) => ({ value: r.id, label: r.name }))}
-          />
-        )}
-        <Input
-          label="Branch Name"
-          value={branchName}
-          onChange={(e) => setBranchName(e.target.value)}
-          placeholder="feature/..."
-          className="font-mono"
+    <FormModal
+      open={true}
+      onClose={onClose}
+      title="Create Branch"
+      size="md"
+      onSubmit={() => mutation.mutate()}
+      isPending={mutation.isPending}
+      error={error}
+      submitLabel="Create Branch"
+      submitIcon={<GitBranch className="h-4 w-4" />}
+      disabled={!branchName}
+    >
+      {repos.length > 1 && (
+        <Select
+          label="Repository"
+          value={repoId}
+          onChange={(v) => setRepoId(v as string)}
+          options={repos.map((r) => ({ value: r.id, label: r.name }))}
         />
-        <Input
-          label="Start Point"
-          value={startPoint}
-          onChange={(e) => setStartPoint(e.target.value)}
-          placeholder={selectedRepo?.defaultBranch ?? 'main'}
-        />
-        {error && <p className="text-sm text-danger bg-danger-light p-2 rounded">{error}</p>}
-      </div>
-      <ModalFooter>
-        <Button variant="secondary" onClick={onClose}>
-          <X className="h-4 w-4" /> Cancel
-        </Button>
-        <Button onClick={() => mutation.mutate()} disabled={!branchName || mutation.isPending}>
-          <GitBranch className="h-4 w-4" /> {mutation.isPending ? 'Creating...' : 'Create Branch'}
-        </Button>
-      </ModalFooter>
-    </Modal>
+      )}
+      <Input
+        label="Branch Name"
+        value={branchName}
+        onChange={(e) => setBranchName(e.target.value)}
+        placeholder="feature/..."
+        className="font-mono"
+      />
+      <Input
+        label="Start Point"
+        value={startPoint}
+        onChange={(e) => setStartPoint(e.target.value)}
+        placeholder={selectedRepo?.defaultBranch ?? 'main'}
+      />
+    </FormModal>
   );
 }

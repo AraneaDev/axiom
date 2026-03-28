@@ -5,8 +5,8 @@ import { useState } from 'react';
 import { issuesApi } from '@/api/issues.api';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
+import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { PRIORITY_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
@@ -69,81 +69,79 @@ export default function IssueLinkModal({ projectId, issueNumber, onClose, onLink
       ?.issues ?? [];
 
   return (
-    <Modal open={true} onClose={onClose} title="Link Issue" size="md">
-      <div className="space-y-3">
-        <Select
-          label="Relationship"
-          value={linkType}
-          onChange={(v) => setLinkType(v as string)}
-          options={LINK_TYPES}
-        />
-        <Input
-          label="Search issues"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setSelected(null);
-          }}
-          placeholder="Type to search..."
-        />
-        {issues.length > 0 && !selected && (
-          <div className="border border-border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
-            {issues.map(
-              (issue: { id: string; number: number; title: string; priority: string }) => (
-                <Button
-                  key={issue.id}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    setSelected({
-                      id: issue.id,
-                      number: issue.number,
-                      title: issue.title,
-                      projectId,
-                    })
-                  }
-                  className="w-full justify-start rounded-none"
-                >
-                  <Hash className="h-3 w-3 text-text-tertiary" />
-                  <span className="text-text-tertiary font-mono text-xs">{issue.number}</span>
-                  <span className="flex-1 truncate text-left">{issue.title}</span>
-                  <span
-                    className={cn(
-                      'text-xs px-1.5 py-0.5 rounded-full',
-                      PRIORITY_COLORS[issue.priority as keyof typeof PRIORITY_COLORS] ?? '',
-                    )}
-                  >
-                    {issue.priority}
-                  </span>
-                </Button>
-              ),
-            )}
-          </div>
-        )}
-        {selected && (
-          <div className="flex items-center gap-2 p-2 bg-primary-light border border-primary/20 rounded-lg text-sm">
-            <span className="font-medium truncate flex-1">{selected.title}</span>
+    <FormModal
+      open={true}
+      onClose={onClose}
+      title="Link Issue"
+      size="md"
+      onSubmit={() => mutation.mutate()}
+      isPending={mutation.isPending}
+      error={error}
+      submitLabel="Add Link"
+      submitIcon={<Link2 className="h-4 w-4" />}
+      disabled={!selected}
+    >
+      <Select
+        label="Relationship"
+        value={linkType}
+        onChange={(v) => setLinkType(v as string)}
+        options={LINK_TYPES}
+      />
+      <Input
+        label="Search issues"
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setSelected(null);
+        }}
+        placeholder="Type to search..."
+      />
+      {issues.length > 0 && !selected && (
+        <div className="border border-border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+          {issues.map((issue: { id: string; number: number; title: string; priority: string }) => (
             <Button
+              key={issue.id}
               variant="ghost"
-              size="xs"
-              onClick={() => setSelected(null)}
-              className="text-text-tertiary hover:text-danger"
-              title="Remove selection"
+              size="sm"
+              onClick={() =>
+                setSelected({
+                  id: issue.id,
+                  number: issue.number,
+                  title: issue.title,
+                  projectId,
+                })
+              }
+              className="w-full justify-start rounded-none"
             >
-              <X className="h-3.5 w-3.5" />
+              <Hash className="h-3 w-3 text-text-tertiary" />
+              <span className="text-text-tertiary font-mono text-xs">{issue.number}</span>
+              <span className="flex-1 truncate text-left">{issue.title}</span>
+              <span
+                className={cn(
+                  'text-xs px-1.5 py-0.5 rounded-full',
+                  PRIORITY_COLORS[issue.priority as keyof typeof PRIORITY_COLORS] ?? '',
+                )}
+              >
+                {issue.priority}
+              </span>
             </Button>
-          </div>
-        )}
-        {error && <p className="text-sm text-danger">{error}</p>}
-      </div>
-      <ModalFooter>
-        <Button variant="secondary" onClick={onClose}>
-          <X className="h-4 w-4" /> Cancel
-        </Button>
-        <Button onClick={() => mutation.mutate()} disabled={!selected || mutation.isPending}>
-          <Link2 className="h-4 w-4" /> Add Link
-        </Button>
-      </ModalFooter>
-    </Modal>
+          ))}
+        </div>
+      )}
+      {selected && (
+        <div className="flex items-center gap-2 p-2 bg-primary-light border border-primary/20 rounded-lg text-sm">
+          <span className="font-medium truncate flex-1">{selected.title}</span>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => setSelected(null)}
+            className="text-text-tertiary hover:text-danger"
+            title="Remove selection"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+    </FormModal>
   );
 }
