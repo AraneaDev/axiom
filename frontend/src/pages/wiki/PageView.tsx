@@ -48,9 +48,9 @@ function TocSidebar({ tocEntries }: { tocEntries: { level: number; text: string;
           </h3>
         </div>
         <nav className="p-3 space-y-1">
-          {tocEntries.map((entry) => (
+          {tocEntries.map((entry, i) => (
             <button
-              key={entry.id}
+              key={`${entry.id}-${i}`}
               type="button"
               onClick={() => {
                 const el = document.getElementById(entry.id);
