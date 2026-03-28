@@ -302,7 +302,11 @@ export default function RepoDetail() {
       {activeTab === 'branches' && branches && (
         <div className="rounded-lg border border-border bg-surface divide-y divide-border">
           {branches.map((branch) => (
-            <div key={branch.name} className="flex items-center gap-3 px-4 py-3">
+            <Link
+              key={branch.name}
+              to={`${basePath}/tree/${encodeURIComponent(branch.name)}`}
+              className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
+            >
               <GitBranch className="h-4 w-4 text-text-secondary shrink-0" />
               <span className="text-sm font-medium flex-1">{branch.name}</span>
               {branch.name === currentRepo.defaultBranch && (
@@ -310,7 +314,7 @@ export default function RepoDetail() {
                   default
                 </Badge>
               )}
-            </div>
+            </Link>
           ))}
         </div>
       )}
