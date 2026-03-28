@@ -606,3 +606,77 @@ export async function copyPage(
     include: { versions: true },
   });
 }
+
+async function getDescendantIds(pageId: string): Promise<string[]> {
+  const children = await prisma.page.findMany({
+    where: { parentId: pageId },
+    select: { id: true },
+  });
+  const ids: string[] = [];
+  for (const child of children) {
+    ids.push(child.id);
+    ids.push(...(await getDescendantIds(child.id)));
+  }
+  return ids;
+}
+
+/**
+ *
+ * @param pageId
+ * @param parentId
+ * @param position
+ */
+export async function reorderPage(pageId: string, parentId: string | null, position: number) {
+  const page = await prisma.page.findUnique({ where: { id: pageId }, include: { space: true } });
+  if (!page) throw new AppError(404, 'Page not found');
+
+  if (parentId) {
+    if (parentId === pageId) throw new AppError(400, 'Cannot make a page its own parent');
+    const descendants = await getDescendantIds(pageId);
+    if (descendants.includes(parentId)) {
+      throw new AppError(400, 'Cannot move a page under its own descendant');
+    }
+  }
+
+  const oldParentId = page.parentId;
+
+  await prisma.page.update({
+    where: { id: pageId },
+    data: { parentId, position },
+  });
+
+  const newSiblings = await prisma.page.findMany({
+    where: { spaceId: page.spaceId, parentId, id: { not: pageId } },
+    orderBy: { position: 'asc' },
+    select: { id: true },
+  });
+
+  const ordered = [...newSiblings.map((s) => s.id)];
+  ordered.splice(Math.min(position, ordered.length), 0, pageId);
+
+  await Promise.all(
+    ordered.map((id, idx) => prisma.page.update({ where: { id }, data: { position: idx } })),
+  );
+
+  if (oldParentId !== parentId) {
+    const oldSiblings = await prisma.page.findMany({
+      where: { spaceId: page.spaceId, parentId: oldParentId },
+      orderBy: { position: 'asc' },
+      select: { id: true },
+    });
+    await Promise.all(
+      oldSiblings.map((s, idx) =>
+        prisma.page.update({ where: { id: s.id }, data: { position: idx } }),
+      ),
+    );
+  }
+
+  await cacheInvalidate(`wiki:tree:${page.spaceId}`);
+  broadcastToRoom(`space:${page.spaceId}`, {
+    type: 'wiki:updated',
+    spaceId: page.spaceId,
+    pageId,
+  });
+
+  return { success: true };
+}

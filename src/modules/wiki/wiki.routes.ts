@@ -127,9 +127,10 @@ router.delete(
   permController.removeRestriction,
 );
 
-// Move / Copy (require org membership via page lookup)
+// Move / Copy / Reorder (require org membership via page lookup)
 router.post('/pages/:pageId/move', requireWikiPageAccess(), wikiController.movePage);
 router.post('/pages/:pageId/copy', requireWikiPageAccess(), wikiController.copyPage);
+router.patch('/pages/:pageId/reorder', requireWikiPageAccess(), wikiController.reorderPage);
 
 // Starred pages
 router.get('/starred', starsController.getStarredPages);

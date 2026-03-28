@@ -78,6 +78,7 @@ export {
   createPageCommentSchema,
   addPageLabelSchema,
   movePageSchema,
+  reorderPageSchema,
   copyPageSchema,
   restoreVersionSchema,
   setRestrictionsSchema,

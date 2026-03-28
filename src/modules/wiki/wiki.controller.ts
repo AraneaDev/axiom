@@ -8,6 +8,7 @@ import {
   createPageSchema,
   updatePageSchema,
   movePageSchema,
+  reorderPageSchema,
   copyPageSchema,
   restoreVersionSchema,
 } from '../../utils/validation';
@@ -131,4 +132,10 @@ export const copyPage = asyncHandler(async (req: Request, res: Response) => {
     data.newSlug,
   );
   res.status(201).json(page);
+});
+
+export const reorderPage = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(reorderPageSchema, req.body);
+  const result = await wikiService.reorderPage(param(req, 'pageId'), data.parentId, data.position);
+  res.json(result);
 });

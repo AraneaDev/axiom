@@ -88,6 +88,11 @@ export const movePageSchema = z.object({
   targetParentId: z.string().nullable().optional(),
 });
 
+export const reorderPageSchema = z.object({
+  parentId: z.string().nullable(),
+  position: z.number().int().min(0),
+});
+
 export const copyPageSchema = z.object({
   targetSpaceId: z.string().optional(),
   newSlug: z
