@@ -41,7 +41,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 1. Users
   // ────────────────────────────────────────────────────────────
-  console.warn('  [1/14] Users');
+  console.warn('  [1/13] Users');
   const passwordHash = await bcrypt.hash('password123', 12);
 
   const userData = [
@@ -64,7 +64,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 2. Organization + memberships
   // ────────────────────────────────────────────────────────────
-  console.warn('  [2/14] Organization');
+  console.warn('  [2/13] Organization');
   const org = await prisma.organization.upsert({
     where: { slug: 'aranea-dev' },
     update: {},
@@ -92,7 +92,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 3. Team + memberships
   // ────────────────────────────────────────────────────────────
-  console.warn('  [3/14] Team');
+  console.warn('  [3/13] Team');
 
   const team = await prisma.team.upsert({
     where: { orgId_slug: { orgId: org.id, slug: 'axiom' } },
@@ -122,7 +122,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 4. Project + board columns + labels
   // ────────────────────────────────────────────────────────────
-  console.warn('  [4/14] Project');
+  console.warn('  [4/13] Project');
 
   const columnDefs = [
     { name: 'Backlog', position: 0, isDefault: true, isDone: false },
@@ -179,7 +179,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 5. Issues
   // ────────────────────────────────────────────────────────────
-  console.warn('  [5/14] Issues');
+  console.warn('  [5/13] Issues');
 
   type IssueSeed = {
     title: string;
@@ -265,7 +265,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 6. Comments
   // ────────────────────────────────────────────────────────────
-  console.warn('  [6/14] Comments');
+  console.warn('  [6/13] Comments');
 
   type CommentSeed = {
     issueTitle: string;
@@ -332,7 +332,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 7. Wiki space + pages
   // ────────────────────────────────────────────────────────────
-  console.warn('  [7/14] Wiki');
+  console.warn('  [7/13] Wiki');
 
   // Wiki pages are sourced entirely from docs/*.md (auto-import block below)
 
@@ -419,7 +419,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 8. Repository (self-referential bare clone)
   // ────────────────────────────────────────────────────────────
-  console.warn('  [8/14] Repository');
+  console.warn('  [8/13] Repository');
 
   const selfReposBase = process.env.REPOS_PATH ?? '/data/repos';
   const selfDiskPath = path.join(selfReposBase, 'aranea-dev', 'axiom', 'axiom.git');
@@ -512,7 +512,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 9. Sprints
   // ────────────────────────────────────────────────────────────
-  console.warn('  [9/14] Sprints');
+  console.warn('  [9/13] Sprints');
 
   const sprintStartDate = new Date();
   sprintStartDate.setDate(sprintStartDate.getDate() - 14);
@@ -625,7 +625,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 10. Board settings (WIP limits + card colors)
   // ────────────────────────────────────────────────────────────
-  console.warn('  [10/14] Board settings');
+  console.warn('  [10/13] Board settings');
 
   // Set WIP limits on Review and In Progress columns
   if (columns['In Progress']) {
@@ -652,7 +652,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 11. PR template
   // ────────────────────────────────────────────────────────────
-  console.warn('  [11/14] PR template');
+  console.warn('  [11/13] PR template');
 
   await prisma.repository.update({
     where: { id: selfRepo.id },
@@ -682,7 +682,7 @@ What does this PR do? Why is it needed?
   // ────────────────────────────────────────────────────────────
   // 12. Space permissions
   // ────────────────────────────────────────────────────────────
-  console.warn('  [12/14] Space permissions');
+  console.warn('  [12/13] Space permissions');
 
   const existingPerm = await prisma.spacePermission.findFirst({
     where: { spaceId: wikiSpace.id },
@@ -711,23 +711,22 @@ What does this PR do? Why is it needed?
   // ────────────────────────────────────────────────────────────
   // 13. Development links (branches + commits)
   // ────────────────────────────────────────────────────────────
-  console.warn('  [13/14] Development links');
+  console.warn('  [13/13] Development links');
 
   let devLinksCreated = 0;
 
-  // Link some issues to branches and commits
-  const devLinkSeeds = [
-    { issueIdx: 0, branchName: 'fix/AXM-1-file-browser-empty', commitSha: 'a1b2c3d', commitMsg: 'fix: append trailing slash to git ls-tree path' },
-    { issueIdx: 1, branchName: 'fix/AXM-2-file-view-blank', commitSha: 'e4f5g6h', commitMsg: 'fix: add error state fallback to file viewer' },
-    { issueIdx: 3, branchName: 'feature/AXM-4-commit-detail', commitSha: 'i7j8k9l', commitMsg: 'feat: add commit detail page with diff view' },
-    { issueIdx: 19, branchName: 'feature/AXM-20-dark-mode', commitSha: 'm1n2o3p', commitMsg: 'feat: add dark mode toggle and theme persistence' },
+  // Link some issues to branches (branches are display-only labels in the dev panel)
+  const branchSeeds = [
+    { issueIdx: 0, branchName: 'fix/AXM-1-file-browser-empty' },
+    { issueIdx: 1, branchName: 'fix/AXM-2-file-view-blank' },
+    { issueIdx: 3, branchName: 'feature/AXM-4-commit-detail' },
+    { issueIdx: 19, branchName: 'feature/AXM-20-dark-mode' },
   ];
 
-  for (const seed of devLinkSeeds) {
+  for (const seed of branchSeeds) {
     const issue = createdIssues[seed.issueIdx];
     if (!issue) continue;
 
-    // Branch link
     const existingBranch = await prisma.issueBranch.findFirst({
       where: { issueId: issue.id, repoId: selfRepo.id, branchName: seed.branchName },
     });
@@ -742,88 +741,8 @@ What does this PR do? Why is it needed?
       });
       devLinksCreated++;
     }
-
-    // Commit link
-    const existingCommit = await prisma.issueCommit.findFirst({
-      where: { issueId: issue.id, sha: seed.commitSha },
-    });
-    if (!existingCommit) {
-      await prisma.issueCommit.create({
-        data: {
-          issueId: issue.id,
-          repoId: selfRepo.id,
-          sha: seed.commitSha,
-          message: seed.commitMsg,
-          authorName: 'Tim Schipper',
-          authorEmail: 'tim@aranea.dev',
-          committedAt: new Date(),
-          refType: 'REFS',
-        },
-      });
-      devLinksCreated++;
-    }
   }
-  console.warn(`        ${devLinksCreated} dev links created (branches + commits)`);
-
-  // ────────────────────────────────────────────────────────────
-  // 14. Pipeline + runs
-  // ────────────────────────────────────────────────────────────
-  console.warn('  [14/14] Pipelines');
-
-  const existingPipeline = await prisma.pipeline.findFirst({
-    where: { repoId: selfRepo.id, name: 'CI' },
-  });
-
-  let pipeline: { id: string };
-  if (existingPipeline) {
-    pipeline = existingPipeline;
-  } else {
-    pipeline = await prisma.pipeline.create({
-      data: {
-        repoId: selfRepo.id,
-        name: 'CI',
-        slug: 'ci',
-        yamlContent: `steps:\n  - name: Install\n    script: npm ci\n  - name: Lint\n    script: npm run lint\n  - name: Typecheck\n    script: npx tsc --noEmit\n  - name: Test\n    script: npm test`,
-      },
-    });
-  }
-
-  // Create a couple pipeline runs if none exist
-  const existingRuns = await prisma.pipelineRun.count({
-    where: { pipelineId: pipeline.id },
-  });
-
-  if (existingRuns === 0) {
-    const runSeeds = [
-      { status: 'SUCCESS' as const, ref: 'master', sha: 'abc123def', triggerType: 'PUSH' as const },
-      { status: 'SUCCESS' as const, ref: 'feature/AXM-4-commit-detail', sha: 'i7j8k9l', triggerType: 'PUSH' as const },
-      { status: 'FAILURE' as const, ref: 'feature/AXM-20-dark-mode', sha: 'm1n2o3p', triggerType: 'PUSH' as const },
-    ];
-
-    for (let i = 0; i < runSeeds.length; i++) {
-      const seed = runSeeds[i];
-      const startedAt = new Date();
-      startedAt.setHours(startedAt.getHours() - (runSeeds.length - i) * 2);
-      const finishedAt = new Date(startedAt);
-      finishedAt.setMinutes(finishedAt.getMinutes() + 3);
-
-      await prisma.pipelineRun.create({
-        data: {
-          pipeline: { connect: { id: pipeline.id } },
-          repo: { connect: { id: selfRepo.id } },
-          status: seed.status,
-          triggerRef: seed.ref,
-          commitSha: seed.sha,
-          triggerType: seed.triggerType,
-          startedAt,
-          finishedAt,
-        },
-      });
-    }
-    console.warn('        CI pipeline + 3 runs (2 success, 1 failed)');
-  } else {
-    console.warn('        Pipeline runs already exist');
-  }
+  console.warn(`        ${devLinksCreated} branch links created`);
 
   console.warn('\nDemo seed complete!');
   console.warn('Login at http://localhost:7000/login');
