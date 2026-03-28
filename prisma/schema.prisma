@@ -57,6 +57,7 @@ model User {
   passwordResetTokens     PasswordResetToken[]
   pageRestrictions        PageRestriction[]    @relation("UserPageRestrictions")
   commentReactions        CommentReaction[]    @relation("UserCommentReactions")
+  spacePermissions        SpacePermission[]    @relation("SpacePermissions")
 
   @@map("users")
 }
@@ -576,9 +577,33 @@ model WikiSpace {
 
   pages         Page[]
   pageTemplates PageTemplate[]
+  permissions   SpacePermission[]
 
   @@unique([teamId, slug])
   @@map("wiki_spaces")
+}
+
+enum SpacePermissionLevel {
+  VIEW
+  EDIT
+  ADMIN
+}
+
+model SpacePermission {
+  id       String               @id @default(cuid())
+  spaceId  String
+  space    WikiSpace            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId   String?
+  user     User?                @relation("SpacePermissions", fields: [userId], references: [id], onDelete: Cascade)
+  teamRole String?              // "ADMIN", "MEMBER", "VIEWER" -- applies to all users with this team role
+  level    SpacePermissionLevel
+
+  createdAt DateTime @default(now())
+
+  @@unique([spaceId, userId])
+  @@unique([spaceId, teamRole])
+  @@index([spaceId])
+  @@map("space_permissions")
 }
 
 model Page {

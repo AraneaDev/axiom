@@ -10,6 +10,8 @@ import {
   requireWikiRestrictionAccess,
 } from '../../middleware/rbac';
 
+import * as spacePermController from './space-permissions.controller';
+import { requireSpacePermission } from './space-permissions.middleware';
 import * as analyticsController from './wiki-analytics.controller';
 import * as commentsController from './wiki-comments.controller';
 import * as hydrateController from './wiki-hydrate.controller';
@@ -31,59 +33,113 @@ router.post(
 );
 router.get('/team/:teamId/spaces', requireTeamPermission('wiki:view'), wikiController.listSpaces);
 
-// Space operations (require org membership via space lookup)
-router.get('/spaces/:spaceId', requireWikiSpaceAccess(), wikiController.getSpace);
-router.patch('/spaces/:spaceId', requireWikiSpaceAccess(), wikiController.updateSpace);
-router.get('/spaces/:spaceId/tree', requireWikiSpaceAccess(), wikiController.pageTree);
+// Space operations (require org membership via space lookup + space permissions)
+router.get(
+  '/spaces/:spaceId',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('VIEW'),
+  wikiController.getSpace,
+);
+router.patch(
+  '/spaces/:spaceId',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('ADMIN'),
+  wikiController.updateSpace,
+);
+router.get(
+  '/spaces/:spaceId/tree',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('VIEW'),
+  wikiController.pageTree,
+);
 
-// Pages (require org membership via space lookup)
-router.post('/spaces/:spaceId/pages', requireWikiSpaceAccess(), wikiController.createPage);
-router.get('/spaces/:spaceId/pages/:pageSlug', requireWikiSpaceAccess(), wikiController.getPage);
+// Space permission management (require ADMIN level)
+router.get(
+  '/spaces/:spaceId/permissions',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('ADMIN'),
+  spacePermController.listPermissions,
+);
+router.put(
+  '/spaces/:spaceId/permissions',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('ADMIN'),
+  spacePermController.upsertPermission,
+);
+router.delete(
+  '/spaces/:spaceId/permissions/:permissionId',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('ADMIN'),
+  spacePermController.deletePermission,
+);
+
+// Pages (require org membership via space lookup + space permissions)
+router.post(
+  '/spaces/:spaceId/pages',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('EDIT'),
+  wikiController.createPage,
+);
+router.get(
+  '/spaces/:spaceId/pages/:pageSlug',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('VIEW'),
+  wikiController.getPage,
+);
 router.patch(
   '/spaces/:spaceId/pages/:pageSlug',
   requireWikiSpaceAccess(),
+  requireSpacePermission('EDIT'),
   wikiController.updatePage,
 );
 router.delete(
   '/spaces/:spaceId/pages/:pageSlug',
   requireWikiSpaceAccess(),
+  requireSpacePermission('EDIT'),
   wikiController.deletePage,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/hydrate',
   requireWikiSpaceAccess(),
+  requireSpacePermission('VIEW'),
   hydrateController.hydrateWikiPage,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/history',
   requireWikiSpaceAccess(),
+  requireSpacePermission('VIEW'),
   wikiController.pageHistory,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/export',
   requireWikiSpaceAccess(),
+  requireSpacePermission('VIEW'),
   wikiController.exportPage,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/diff',
   requireWikiSpaceAccess(),
+  requireSpacePermission('VIEW'),
   wikiController.diffVersions,
 );
 router.post(
   '/spaces/:spaceId/pages/:pageSlug/restore',
   requireWikiSpaceAccess(),
+  requireSpacePermission('EDIT'),
   wikiController.restoreVersion,
 );
 
-// Templates (space-scoped require space access, template-scoped require template access)
+// Templates (space-scoped require space access + permissions, template-scoped require template access)
 router.post(
   '/spaces/:spaceId/templates',
   requireWikiSpaceAccess(),
+  requireSpacePermission('EDIT'),
   templatesController.createTemplate,
 );
 router.get(
   '/spaces/:spaceId/templates',
   requireWikiSpaceAccess(),
+  requireSpacePermission('VIEW'),
   templatesController.listTemplates,
 );
 router.get('/templates/:templateId', requireWikiTemplateAccess(), templatesController.getTemplate);
@@ -116,7 +172,12 @@ router.delete(
   requireWikiPageAccess(),
   labelsController.removePageLabel,
 );
-router.get('/spaces/:spaceId/labels', requireWikiSpaceAccess(), labelsController.searchByLabel);
+router.get(
+  '/spaces/:spaceId/labels',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('VIEW'),
+  labelsController.searchByLabel,
+);
 
 // Page restrictions (require org membership via page lookup)
 router.get('/pages/:pageId/restrictions', requireWikiPageAccess(), permController.getRestrictions);
