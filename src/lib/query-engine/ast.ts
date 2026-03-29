@@ -33,6 +33,6 @@ export interface FieldDefinition {
 export type FieldRegistry = Record<string, FieldDefinition>;
 
 export interface QueryContext {
-  currentUserId: string;
-  projectId: string;
+  currentUserId?: string;
+  projectId?: string;
 }

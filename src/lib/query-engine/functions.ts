@@ -26,7 +26,7 @@ export function parseDuration(arg: { type: 'duration'; value: number; unit: stri
 }
 
 export const builtinFunctions: Record<string, FunctionResolver> = {
-  currentuser: (_args, context) => context.currentUserId,
+  currentuser: (_args, context) => context.currentUserId ?? null,
 
   currentsprint: (_args, context) => {
     return `__currentSprint__${context.projectId}`;

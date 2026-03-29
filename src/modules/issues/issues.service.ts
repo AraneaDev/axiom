@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
+import { parse, compileToPrisma } from '../../lib/query-engine';
+import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
@@ -191,6 +193,29 @@ export async function getIssue(projectId: string, issueNumber: number) {
 }
 
 /**
+ * Detect whether a query string uses structured query syntax.
+ * Plain text queries (e.g. "login bug") fall through to simple text search.
+ * @param q
+ */
+function isStructuredQuery(q: string): boolean {
+  return /[=><!]|(?:^|\s)(?:AND|OR|NOT|IN)(?:\s|$)|\w+:/.test(q);
+}
+
+/**
+ * Apply plain-text search to a Prisma WHERE clause (number match OR title contains).
+ * @param where
+ * @param q
+ */
+function applyPlainTextSearch(where: Prisma.IssueWhereInput, q: string): void {
+  const num = parseInt(q, 10);
+  if (!isNaN(num)) {
+    where.OR = [{ number: num }, { title: { contains: q, mode: 'insensitive' } }];
+  } else {
+    where.title = { contains: q, mode: 'insensitive' };
+  }
+}
+
+/**
  * List issues in a project with optional filtering and pagination.
  * @param projectId - The project to list issues from
  * @param filters - Optional filters for type, priority, assignee, column, label, and pagination
@@ -229,26 +254,36 @@ export async function listIssues(
   return cacheable(cacheKey, 30, async () => {
     const { take, skip } = parseServicePagination(filters, 50);
     const where: Prisma.IssueWhereInput = { projectId };
-    if (filters?.q) {
-      const q = filters.q;
-      // Search by number (if numeric) or title (contains)
-      const num = parseInt(q, 10);
-      if (!isNaN(num)) {
-        where.OR = [{ number: num }, { title: { contains: q, mode: 'insensitive' } }];
-      } else {
-        where.title = { contains: q, mode: 'insensitive' };
+
+    if (filters?.q && isStructuredQuery(filters.q)) {
+      // Structured query: parse through the query engine
+      try {
+        const ast = parse(filters.q);
+        const engineWhere = compileToPrisma(ast, issueFieldRegistry, { projectId });
+        Object.assign(where, engineWhere);
+      } catch {
+        // If parse fails, fall back to plain text search
+        applyPlainTextSearch(where, filters.q);
       }
+    } else if (filters?.q) {
+      // Plain text: search by number or title
+      applyPlainTextSearch(where, filters.q);
     }
-    if (filters?.type) where.type = filters.type as Prisma.IssueWhereInput['type'];
-    if (filters?.priority) where.priority = filters.priority as Prisma.IssueWhereInput['priority'];
-    if (filters?.assigneeId) where.assigneeId = filters.assigneeId;
-    if (filters?.columnId) where.columnId = filters.columnId;
-    if (filters?.sprintId === 'none') {
-      where.sprintId = null;
-    } else if (filters?.sprintId) {
-      where.sprintId = filters.sprintId;
+
+    // Individual filter params (backwards compat — only applied when no structured q)
+    if (!filters?.q || !isStructuredQuery(filters.q)) {
+      if (filters?.type) where.type = filters.type as Prisma.IssueWhereInput['type'];
+      if (filters?.priority)
+        where.priority = filters.priority as Prisma.IssueWhereInput['priority'];
+      if (filters?.assigneeId) where.assigneeId = filters.assigneeId;
+      if (filters?.columnId) where.columnId = filters.columnId;
+      if (filters?.sprintId === 'none') {
+        where.sprintId = null;
+      } else if (filters?.sprintId) {
+        where.sprintId = filters.sprintId;
+      }
+      if (filters?.label) where.labels = { some: { name: filters.label } };
     }
-    if (filters?.label) where.labels = { some: { name: filters.label } };
 
     const [issues, total] = await Promise.all([
       prisma.issue.findMany({
