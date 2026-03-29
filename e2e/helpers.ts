@@ -15,7 +15,8 @@ export async function login(page: Page, user = DEMO_USERS.admin) {
   await page.getByLabel('Email or username').fill(user.login);
   await page.getByLabel('Password').fill(user.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL('/');
+  // Wait for redirect away from /login (may land on '/' or '/axiom' depending on state)
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
 }
 
 /** Log out via the header user menu. */

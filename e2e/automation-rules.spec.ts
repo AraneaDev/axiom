@@ -14,112 +14,96 @@ test.describe('Automation Rules', () => {
 
   test('shows automation rules page', async ({ page }) => {
     await page.goto(AUTOMATION_URL);
-    await expect(
-      page.getByText(/automation|rules/i).first()
-    ).toBeVisible({ timeout: 10_000 });
+    // Use level=1 to avoid ambiguity with sidebar nav text
+    await expect(page.getByRole('heading', { name: /automation rules/i, level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
+    // The seeded rule should be listed
+    await expect(page.getByText('Auto-label critical bugs')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('can create automation rule with query condition', async ({ page }) => {
+  test('can open the new rule form', async ({ page }) => {
     await page.goto(AUTOMATION_URL);
-    await expect(page.getByText(/automation|rules/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /automation rules/i, level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Click create / add rule button
-    const createButton = page
-      .getByRole('button', { name: /create|add|new rule/i })
-      .first()
-      .or(page.locator('[data-testid="create-rule"], [data-testid="add-rule"]').first());
-    await createButton.click();
+    // Click "New Rule" button
+    await page.getByRole('button', { name: /new rule/i }).click();
 
-    // Fill in rule name
-    const nameInput = page
-      .getByRole('textbox', { name: /name/i })
-      .first()
-      .or(page.locator('input[placeholder*="name" i], [data-testid="rule-name"]').first());
+    // Form fields should appear — use placeholder since Input label isn't aria-linked
+    await expect(page.getByPlaceholder(/auto-label bugs/i)).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('can create automation rule', async ({ page }) => {
+    await page.goto(AUTOMATION_URL);
+    await expect(page.getByRole('heading', { name: /automation rules/i, level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Click "New Rule"
+    await page.getByRole('button', { name: /new rule/i }).click();
+
+    // Fill in rule name via placeholder
+    const nameInput = page.getByPlaceholder(/auto-label bugs/i);
     await expect(nameInput).toBeVisible({ timeout: 10_000 });
     await nameInput.fill('E2E High Priority Bug Rule');
 
-    // Select a trigger
-    const triggerSelect = page
-      .getByRole('combobox', { name: /trigger/i })
-      .first()
-      .or(page.locator('select[name*="trigger"], [data-testid="rule-trigger"]').first());
-    if (await triggerSelect.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await triggerSelect.selectOption({ index: 1 });
-    }
-
-    // Enter condition using query syntax
-    const conditionInput = page
-      .getByRole('textbox', { name: /condition/i })
-      .first()
-      .or(page.locator('input[placeholder*="condition" i], textarea[placeholder*="condition" i], [data-testid="rule-condition"]').first());
-    if (await conditionInput.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await conditionInput.fill('type = Bug AND priority = High');
-    }
-
-    // Add an action (if there is an add-action button)
-    const addActionButton = page
-      .getByRole('button', { name: /add action/i })
-      .first()
-      .or(page.locator('[data-testid="add-action"]').first());
-    if (await addActionButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await addActionButton.click();
-      // Select first available action type
-      const actionSelect = page
-        .getByRole('combobox', { name: /action/i })
-        .first()
-        .or(page.locator('select[name*="action"]').first());
-      if (await actionSelect.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await actionSelect.selectOption({ index: 1 });
-      }
+    // First action row is already present (type: add_label), fill in label name
+    const labelInput = page.getByPlaceholder(/label name/i);
+    if (await labelInput.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await labelInput.fill('high-priority');
     }
 
     // Save the rule
-    const saveButton = page
-      .getByRole('button', { name: /save|create|submit/i })
-      .first();
-    await saveButton.click();
+    await page.getByRole('button', { name: /save rule/i }).click();
 
     // Rule should appear in the list
     await expect(page.getByText('E2E High Priority Bug Rule')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('validates invalid conditions', async ({ page }) => {
+  test('can add a condition to a rule', async ({ page }) => {
     await page.goto(AUTOMATION_URL);
-    await expect(page.getByText(/automation|rules/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /automation rules/i, level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    const createButton = page
-      .getByRole('button', { name: /create|add|new rule/i })
-      .first()
-      .or(page.locator('[data-testid="create-rule"], [data-testid="add-rule"]').first());
-    await createButton.click();
+    await page.getByRole('button', { name: /new rule/i }).click();
 
-    // Fill a rule name
-    const nameInput = page
-      .getByRole('textbox', { name: /name/i })
-      .first()
-      .or(page.locator('input[placeholder*="name" i], [data-testid="rule-name"]').first());
+    const nameInput = page.getByPlaceholder(/auto-label bugs/i);
     await expect(nameInput).toBeVisible({ timeout: 10_000 });
-    await nameInput.fill('E2E Invalid Condition Rule');
+    await nameInput.fill('E2E Condition Rule');
 
-    // Enter invalid condition syntax
-    const conditionInput = page
-      .getByRole('textbox', { name: /condition/i })
-      .first()
-      .or(page.locator('input[placeholder*="condition" i], textarea[placeholder*="condition" i], [data-testid="rule-condition"]').first());
-    if (await conditionInput.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await conditionInput.fill('type = AND =');
+    // Click "Add Condition"
+    await page.getByRole('button', { name: /add condition/i }).click();
+
+    // A condition row should now be visible — it has a value input with placeholder "Value"
+    await expect(page.getByPlaceholder(/^value$/i).first()).toBeVisible({ timeout: 10_000 });
+
+    // Fill the action label and save
+    const labelInput = page.getByPlaceholder(/label name/i);
+    if (await labelInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await labelInput.fill('test-label');
     }
+    await page.getByRole('button', { name: /save rule/i }).click();
 
-    // Attempt to save
-    const saveButton = page
-      .getByRole('button', { name: /save|create|submit/i })
-      .first();
-    await saveButton.click();
+    await expect(page.getByText('E2E Condition Rule')).toBeVisible({ timeout: 10_000 });
+  });
 
-    // An error message should appear
-    await expect(
-      page.getByText(/invalid|error|syntax/i).first()
-        .or(page.locator('[role="alert"], [data-testid*="error"], .error-message').first())
-    ).toBeVisible({ timeout: 10_000 });
+  test('can toggle a rule enabled/disabled', async ({ page }) => {
+    await page.goto(AUTOMATION_URL);
+    await expect(page.getByText('Auto-label critical bugs')).toBeVisible({ timeout: 10_000 });
+
+    // The seeded rule is enabled — click Disable
+    await page.getByRole('button', { name: /disable/i }).first().click();
+
+    // Should now show "Disabled" status
+    await expect(page.getByText('Disabled').first()).toBeVisible({ timeout: 10_000 });
+
+    // Re-enable
+    await page.getByRole('button', { name: /enable/i }).first().click();
+
+    // Should show "Active" again
+    await expect(page.getByText('Active').first()).toBeVisible({ timeout: 10_000 });
   });
 });

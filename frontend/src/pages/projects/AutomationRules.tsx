@@ -87,7 +87,7 @@ function RuleForm({
   const [trigger, setTrigger] = useState(initial?.trigger ?? 'issue:created');
   const [conditions, setConditions] = useState<AutomationCondition[]>(initial?.conditions ?? []);
   const [actions, setActions] = useState<AutomationAction[]>(
-    initial?.actions.length ? initial.actions : [emptyAction()],
+    initial?.actions?.length ? initial.actions : [emptyAction()],
   );
 
   const updateCondition = (idx: number, patch: Partial<AutomationCondition>) => {
@@ -443,8 +443,9 @@ export default function AutomationRules() {
                 </div>
                 <p className="text-xs text-text-secondary">
                   Trigger: {triggerLabel(rule.trigger)}
-                  {rule.conditions.length > 0 && ` | ${rule.conditions.length} condition(s)`}
-                  {` | ${rule.actions.length} action(s)`}
+                  {(rule.conditions?.length ?? 0) > 0 &&
+                    ` | ${rule.conditions.length} condition(s)`}
+                  {` | ${rule.actions?.length ?? 0} action(s)`}
                 </p>
               </div>
               <div className="flex items-center gap-1">

@@ -17,7 +17,7 @@ export default async function globalSetup() {
   await adminPool.end();
 
   // 2. Push Prisma schema to E2E database
-  execSync(`DATABASE_URL="${E2E_DB_URL}" npx prisma db push --skip-generate`, {
+  execSync(`DATABASE_URL="${E2E_DB_URL}" npx prisma db push`, {
     stdio: 'inherit',
     cwd: process.cwd(),
   });
@@ -172,9 +172,23 @@ export default async function globalSetup() {
       },
     });
 
-    // Seed built-in templates
-    const { seedBuiltInTemplates } = await import('../src/modules/wiki/wiki-templates.service');
-    await seedBuiltInTemplates(space.id);
+    // Seed built-in templates inline (can't import TS service from Playwright)
+    const blueprints = [
+      { name: 'Meeting Notes', description: 'Capture attendees, agenda, discussion notes, and action items', body: '## Date\n\n{{now()}}\n\n## Facilitator\n\n{{currentUser.displayName}}\n\n## Team\n\n{{team.name}}\n\n## Attendees\n\n- @\n\n## Agenda\n\n1. \n\n## Discussion Notes\n\n## Action Items\n\n- [Owner] - [Task] - [Due Date]\n\n## Decisions Made\n' },
+      { name: 'Retrospective', description: 'Sprint retrospective with what went well, improvements, and action items', body: '## Sprint Retrospective\n\n**Date:** {{now()}}\n**Facilitator:** {{currentUser.displayName}}\n**Team:** {{team.name}}\n\n## What Went Well\n\n- \n\n## What Could Be Improved\n\n- \n\n## Action Items\n\n- [ ] \n' },
+      { name: 'Decision Record', description: 'Document a decision with context, options considered, and consequences', body: '## Decision Record\n\n**Date:** {{now()}}\n**Author:** {{currentUser.displayName}}\n**Status:** Proposed\n\n## Context\n\n## Options Considered\n\n### Option 1\n\n### Option 2\n\n## Decision\n\n## Consequences\n' },
+      { name: 'Product Requirements', description: 'Define goals, user stories, technical requirements, and timeline', body: '## Product Requirements\n\n**Author:** {{currentUser.displayName}}\n**Date:** {{now()}}\n**Project:** {{project.name}}\n\n## Goals\n\n## User Stories\n\n## Technical Requirements\n\n## Timeline\n' },
+      { name: 'Runbook', description: 'Operational runbook with common issues, monitoring, and contacts', body: '## Runbook\n\n**Team:** {{team.name}}\n**Last Updated:** {{now()}}\n\n## Architecture\n\n## Common Issues\n\n## Monitoring\n\n## Contacts\n' },
+    ];
+    await prisma.pageTemplate.createMany({
+      data: blueprints.map((bp) => ({
+        spaceId: space.id,
+        name: bp.name,
+        body: bp.body,
+        description: bp.description,
+        isBuiltIn: true,
+      })),
+    });
 
     // Create a sample wiki page
     await prisma.page.create({
@@ -201,7 +215,10 @@ export default async function globalSetup() {
         projectId: project.id,
         name: 'Auto-label critical bugs',
         trigger: 'issue:created',
-        condition: 'type = Bug AND priority = Critical',
+        conditions: [
+          { field: 'type', operator: 'equals', value: 'Bug' },
+          { field: 'priority', operator: 'equals', value: 'Critical' },
+        ],
         actions: [{ type: 'add_label', name: 'needs-triage' }],
         enabled: true,
       },

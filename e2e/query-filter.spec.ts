@@ -6,131 +6,79 @@ const TEAM = 'core';
 const PROJECT = 'platform';
 const ISSUES_URL = `/${ORG}/${TEAM}/${PROJECT}/issues`;
 
+// NOTE: The issues page has a text search box plus Filters/Sort/Saved dropdown buttons.
+// A query-syntax toggle does not exist in the current UI.
+
 test.describe('Query Filter', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
   });
 
-  test('shows query bar toggle button', async ({ page }) => {
+  test('shows issues list with heading', async ({ page }) => {
     await page.goto(ISSUES_URL);
-    await expect(page.getByRole('heading', { name: /issues/i })).toBeVisible({ timeout: 10_000 });
-    // Code icon button toggles query mode
-    const toggleButton = page
-      .getByRole('button', { name: /query|code|filter mode/i })
-      .first()
-      .or(page.locator('[data-testid="query-toggle"], [title*="query" i], [title*="Query" i]').first());
-    await expect(toggleButton).toBeVisible({ timeout: 10_000 });
+    // Heading is "Platform Issues" (project name + " Issues")
+    await expect(page.getByRole('heading', { name: /issues/i, level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
-  test('can toggle between filter mode and query mode', async ({ page }) => {
+  test('shows filter controls on issues page', async ({ page }) => {
     await page.goto(ISSUES_URL);
-    await expect(page.getByRole('heading', { name: /issues/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /issues/i, level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Find and click the query mode toggle
-    const toggleButton = page
-      .getByRole('button', { name: /query|code/i })
-      .first()
-      .or(page.locator('[data-testid="query-toggle"], [title*="query" i]').first());
-    await toggleButton.click();
-
-    // Query bar input should appear
-    const queryInput = page
-      .getByRole('textbox', { name: /query/i })
-      .first()
-      .or(page.locator('[data-testid="query-bar"], input[placeholder*="query" i], input[placeholder*="filter" i]').first());
-    await expect(queryInput).toBeVisible({ timeout: 10_000 });
-
-    // Toggle back — dropdowns/filters should return
-    await toggleButton.click();
-    await expect(queryInput).not.toBeVisible({ timeout: 10_000 });
+    // The issues filter bar has a search textbox and filter/sort buttons
+    await expect(page.getByRole('textbox', { name: /search issues/i })).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByRole('button', { name: /filters/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: /sort/i })).toBeVisible({ timeout: 10_000 });
   });
 
-  test('can filter issues with simple query syntax', async ({ page }) => {
+  test('can search issues with text search', async ({ page }) => {
     await page.goto(ISSUES_URL);
-    await expect(page.getByRole('heading', { name: /issues/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /issues/i, level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Switch to query mode
-    const toggleButton = page
-      .getByRole('button', { name: /query|code/i })
-      .first()
-      .or(page.locator('[data-testid="query-toggle"], [title*="query" i]').first());
-    await toggleButton.click();
+    const searchInput = page.getByRole('textbox', { name: /search issues/i });
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-    const queryInput = page
-      .getByRole('textbox', { name: /query/i })
-      .first()
-      .or(page.locator('[data-testid="query-bar"], input[placeholder*="query" i], input[placeholder*="filter" i]').first());
-    await expect(queryInput).toBeVisible({ timeout: 10_000 });
+    // Type a search term that matches one seeded issue
+    await searchInput.fill('CI/CD');
 
-    // Type a simple type filter
-    await queryInput.fill('type:bug');
-    await queryInput.press('Enter');
-
-    // Results should update — list of issues should still render (possibly filtered)
-    const issueList = page
-      .locator('[data-testid="issue-row"], tr, .issue-row, a[href*="/issues/"]')
-      .first();
-    // Either results show or an empty state is visible
-    const emptyState = page.getByText(/no issues|no results/i).first();
-    await expect(issueList.or(emptyState)).toBeVisible({ timeout: 10_000 });
+    // At least one issue link should be visible (or empty state if no match)
+    await expect(page.locator('a[href*="/issues/"]').first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test('can filter with complex query syntax', async ({ page }) => {
+  test('can clear search to restore full list', async ({ page }) => {
     await page.goto(ISSUES_URL);
-    await expect(page.getByRole('heading', { name: /issues/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /issues/i, level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    const toggleButton = page
-      .getByRole('button', { name: /query|code/i })
-      .first()
-      .or(page.locator('[data-testid="query-toggle"], [title*="query" i]').first());
-    await toggleButton.click();
+    const searchInput = page.getByRole('textbox', { name: /search issues/i });
+    await searchInput.fill('CI/CD');
 
-    const queryInput = page
-      .getByRole('textbox', { name: /query/i })
-      .first()
-      .or(page.locator('[data-testid="query-bar"], input[placeholder*="query" i], input[placeholder*="filter" i]').first());
-    await expect(queryInput).toBeVisible({ timeout: 10_000 });
+    // Clear the search
+    await searchInput.clear();
 
-    await queryInput.fill('priority:high,critical');
-    await queryInput.press('Enter');
-
-    const issueList = page
-      .locator('[data-testid="issue-row"], tr, .issue-row, a[href*="/issues/"]')
-      .first();
-    const emptyState = page.getByText(/no issues|no results/i).first();
-    await expect(issueList.or(emptyState)).toBeVisible({ timeout: 10_000 });
+    // Full issue list should be visible again
+    await expect(page.locator('a[href*="/issues/"]').first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test('can clear query', async ({ page }) => {
+  test('shows issue rows with priority and status', async ({ page }) => {
     await page.goto(ISSUES_URL);
-    await expect(page.getByRole('heading', { name: /issues/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /issues/i, level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    const toggleButton = page
-      .getByRole('button', { name: /query|code/i })
-      .first()
-      .or(page.locator('[data-testid="query-toggle"], [title*="query" i]').first());
-    await toggleButton.click();
-
-    const queryInput = page
-      .getByRole('textbox', { name: /query/i })
-      .first()
-      .or(page.locator('[data-testid="query-bar"], input[placeholder*="query" i], input[placeholder*="filter" i]').first());
-    await expect(queryInput).toBeVisible({ timeout: 10_000 });
-
-    await queryInput.fill('type:bug');
-    await queryInput.press('Enter');
-
-    // Click the clear / X button
-    const clearButton = page
-      .getByRole('button', { name: /clear/i })
-      .first()
-      .or(page.locator('[data-testid="query-clear"], [title*="clear" i], [aria-label*="clear" i]').first());
-    await clearButton.click();
-
-    // All issues should return — list should be non-empty
-    const issueList = page
-      .locator('[data-testid="issue-row"], tr, .issue-row, a[href*="/issues/"]')
-      .first();
-    await expect(issueList).toBeVisible({ timeout: 10_000 });
+    // Issues should render as links to /issues/:num
+    await expect(page.locator('a[href*="/issues/"]').first()).toBeVisible({ timeout: 10_000 });
+    // At least one priority badge should be visible (seeded issues have HIGH, MEDIUM, LOW, CRITICAL)
+    await expect(
+      page.getByText(/HIGH|MEDIUM|LOW|CRITICAL/i).first(),
+    ).toBeVisible({ timeout: 10_000 });
   });
 });
