@@ -1,4 +1,35 @@
 import { prisma } from '../../config/database';
+import { broadcastToRoom } from '../../realtime/broadcast';
+
+// Matches issue keys like AXM-123
+const ISSUE_KEY_RE = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
+
+/**
+ * Extract valid issue IDs from page content by matching issue key patterns
+ * and resolving them against the database.
+ * @param content - The page body content to scan for issue keys
+ * @returns Array of resolved issue IDs
+ */
+export async function extractIssueIdsFromContent(content: string): Promise<string[]> {
+  const keys = new Set<string>();
+  let match;
+  while ((match = ISSUE_KEY_RE.exec(content)) !== null) {
+    keys.add(match[1]);
+  }
+  if (keys.size === 0) return [];
+
+  const conditions = [...keys].map((key) => {
+    const [prefix, numStr] = key.split('-');
+    return { project: { prefix }, number: parseInt(numStr, 10) };
+  });
+
+  const issues = await prisma.issue.findMany({
+    where: { OR: conditions },
+    select: { id: true },
+  });
+
+  return issues.map((i) => i.id);
+}
 
 /**
  *
@@ -13,11 +44,15 @@ export async function addLink(
   linkType: 'EMBED' | 'MENTION',
   userId: string,
 ) {
-  return prisma.wikiPageIssueLink.upsert({
+  const result = await prisma.wikiPageIssueLink.upsert({
     where: { pageId_issueId_linkType: { pageId, issueId, linkType } },
     create: { pageId, issueId, linkType, createdById: userId },
     update: {},
   });
+
+  broadcastToRoom(`issue:${issueId}`, { type: 'issue:development-updated', issueId });
+
+  return result;
 }
 
 export const addEmbedLink = (pageId: string, issueId: string, userId: string) =>
@@ -49,6 +84,7 @@ export async function syncMentionLinks(pageId: string, issueIds: string[], userI
   const newSet = new Set(issueIds);
 
   const toAdd = issueIds.filter((id) => !existingSet.has(id));
+  const removedIssueIds = existing.filter((l) => !newSet.has(l.issueId)).map((l) => l.issueId);
   const toRemove = existing.filter((l) => !newSet.has(l.issueId)).map((l) => l.id);
 
   await prisma.$transaction([
@@ -61,6 +97,11 @@ export async function syncMentionLinks(pageId: string, issueIds: string[], userI
       ? [prisma.wikiPageIssueLink.deleteMany({ where: { id: { in: toRemove } } })]
       : []),
   ]);
+
+  const allAffectedIssueIds = new Set([...toAdd, ...removedIssueIds]);
+  for (const issueId of allAffectedIssueIds) {
+    broadcastToRoom(`issue:${issueId}`, { type: 'issue:development-updated', issueId });
+  }
 }
 
 /**

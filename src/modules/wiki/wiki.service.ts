@@ -9,6 +9,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
+import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
 import { canViewPage, canEditPage } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
 
@@ -151,6 +152,11 @@ export async function createPage(
   await cacheInvalidate(`wiki:tree:${spaceId}`);
   await logActivity('wiki_page', page.id, 'created', authorId, { title: data.title });
 
+  if (data.body) {
+    const issueIds = await extractIssueIdsFromContent(data.body);
+    await syncMentionLinks(page.id, issueIds, authorId);
+  }
+
   broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
 
   return page;
@@ -257,6 +263,11 @@ export async function updatePage(
 
   await cacheInvalidate(`wiki:tree:${spaceId}`);
   await logActivity('wiki_page', page.id, 'updated', authorId, { title: updated.title });
+
+  if (data.body) {
+    const issueIds = await extractIssueIdsFromContent(data.body);
+    await syncMentionLinks(page.id, issueIds, authorId);
+  }
 
   broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
 
