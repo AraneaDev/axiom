@@ -57,7 +57,7 @@ export default function PageEdit() {
   const { user } = useAuthStore();
 
   const [searchParams] = useSearchParams();
-  const { currentSpace } = useWikiContext();
+  const { currentSpace, currentTeam } = useWikiContext();
 
   const { data: templates = [] } = useQuery({
     queryKey: ['wikiTemplates', currentSpace?.id],
@@ -221,6 +221,24 @@ export default function PageEdit() {
     onError: (err: unknown) => setError(err instanceof Error ? err.message : 'Failed to save'),
   });
 
+  async function applyTemplate(tpl: { name: string; body: string }) {
+    let resolvedBody = tpl.body;
+    if (currentSpace && currentTeam) {
+      try {
+        const result = await wikiApi.resolveTemplate(tpl.body, {
+          teamId: currentTeam.id,
+          spaceId: currentSpace.id,
+        });
+        resolvedBody = result.body;
+      } catch {
+        // Fall back to raw template body if resolution fails
+      }
+    }
+    setBody(resolvedBody);
+    if (!title.trim()) handleTitleChange(tpl.name);
+    setShowTemplatePicker(false);
+  }
+
   if (!currentSpace || (!isNew && isLoading)) return <PageLoader />;
 
   return (
@@ -350,11 +368,7 @@ export default function PageEdit() {
                                 'hover:border-primary/50 hover:bg-surface-hover',
                                 hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
                               )}
-                              onClick={() => {
-                                setBody(tpl.body);
-                                if (!title.trim()) handleTitleChange(tpl.name);
-                                setShowTemplatePicker(false);
-                              }}
+                              onClick={() => applyTemplate(tpl)}
                               onMouseEnter={() => setHoveredTemplate(tpl.id)}
                               onMouseLeave={() => setHoveredTemplate(null)}
                             >
@@ -390,11 +404,7 @@ export default function PageEdit() {
                               'hover:border-primary/50 hover:bg-surface-hover',
                               hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
                             )}
-                            onClick={() => {
-                              setBody(tpl.body);
-                              if (!title.trim()) handleTitleChange(tpl.name);
-                              setShowTemplatePicker(false);
-                            }}
+                            onClick={() => applyTemplate(tpl)}
                             onMouseEnter={() => setHoveredTemplate(tpl.id)}
                             onMouseLeave={() => setHoveredTemplate(null)}
                           >

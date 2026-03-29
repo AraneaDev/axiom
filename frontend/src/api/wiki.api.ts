@@ -333,6 +333,19 @@ export const wikiApi = {
     }>(`/wiki/pages/${pageId}/analytics`),
 
   /**
+   * Resolve template variables in a body string using the given context.
+   * @param body - The template body containing variable placeholders
+   * @param context - Resolution context (teamId, spaceId, optional projectId)
+   * @param context.teamId
+   * @param context.spaceId
+   * @param context.projectId
+   */
+  resolveTemplate: (
+    body: string,
+    context: { teamId: string; spaceId: string; projectId?: string },
+  ) => post<{ body: string }>('/wiki/resolve-template', { body, context }),
+
+  /**
    * Export a wiki page as a downloadable file (HTML, DOCX, PDF, etc.). Uses raw fetch for blob download.
    * @param spaceId
    * @param pageSlug
