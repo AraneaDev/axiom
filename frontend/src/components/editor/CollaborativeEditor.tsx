@@ -49,6 +49,7 @@ import type * as Y from 'yjs';
 import { CalloutExtension } from './CalloutExtension';
 import { CollapsibleExtension } from './CollapsibleExtension';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
+import { IssueEmbedExtension } from './IssueEmbedExtension';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
 import { SlashCommandExtension } from './SlashCommandExtension';
@@ -161,6 +162,7 @@ export function CollaborativeEditor({
       TableOfContentsExtension,
       SlashCommandExtension,
       SmartLinkExtension,
+      IssueEmbedExtension,
       // Yjs collaboration
       Collaboration.configure({
         document: ydoc,

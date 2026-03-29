@@ -39,6 +39,7 @@ import { Markdown } from 'tiptap-markdown';
 import { CalloutExtension } from './CalloutExtension';
 import { CollapsibleExtension } from './CollapsibleExtension';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
+import { IssueEmbedExtension } from './IssueEmbedExtension';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
 import { SlashCommandExtension } from './SlashCommandExtension';
@@ -154,6 +155,7 @@ export function MarkdownEditor({
       TableOfContentsExtension,
       SlashCommandExtension,
       SmartLinkExtension,
+      IssueEmbedExtension,
     ],
     content: value || '',
     onUpdate: ({ editor: e }) => {
