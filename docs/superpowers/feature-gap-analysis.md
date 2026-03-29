@@ -45,10 +45,10 @@
 - [ ] **Scrum board** -- separate board type with sprint-centric views
 - [x] **Swimlanes** -- groupIssues() supports groupBy assignee, priority, epic, type with dropdown UI
 - [ ] **Quick filters** -- toggleable JQL-based filters on boards
-- [ ] **WIP limits** -- column constraints with visual indicators
+- [x] **WIP limits** -- BoardColumn.wipLimit field with count vs limit display in column headers and visual overflow indicators
 - [ ] **Sub-columns** -- split a column (e.g., "In Progress" > "Working" + "Peer Review")
 - [ ] **Card layout configuration** -- choose which fields display on cards
-- [ ] **Card colors** -- color by priority, type, assignee, or custom rule
+- [x] **Card colors** -- Project.cardColorBy setting with color by priority or type, 4px left border on cards with color legend
 - [x] Board filtering with type, priority, assignee filters and saved quick filters (SavedFilter model fully implemented)
 
 ### Sprints & Backlog
@@ -79,7 +79,7 @@
 - [x] Velocity chart
 - [x] Burndown chart
 - [x] Time reports
-- [ ] **Sprint report** -- completed vs incomplete with scope change tracking
+- [x] **Sprint report** -- SprintReport component with completed vs incomplete issues and scope change tracking via sprint-report.service.ts
 - [ ] **Cumulative flow diagram** -- stacked area chart of statuses over time
 - [ ] **Control chart** -- cycle time / lead time per issue
 - [ ] **Epic report** -- progress across sprints
@@ -145,7 +145,7 @@
 - [ ] **Space types** -- personal spaces, knowledge base spaces
 - [ ] **Space categories** -- tag spaces for filtering
 - [ ] **Space directory** -- searchable listing of all spaces
-- [ ] **Space archive** -- soft-hide inactive spaces
+- [x] **Space archive** -- WikiSpace.isArchived field for soft-hiding inactive spaces
 - [ ] **Page aliases** -- alternative URLs
 - [x] **Page copying** -- copyPage() duplicates to same or different space with new slug
 - [x] **Page moving** -- movePage() relocates to different parent/space with slug uniqueness and circular reference checks
@@ -202,7 +202,7 @@
 - [x] **Change description** -- changeDescription field on page update, shown in version history
 
 ### Permissions
-- [ ] **Space permissions** -- granular per-space (view, add, edit, delete, admin)
+- [x] **Space permissions** -- SpacePermission model with VIEW/EDIT/ADMIN levels, SpacePermissions.tsx UI, lock icon in sidebar
 - [x] **Page restrictions** -- per-page view/edit restrictions with getRestrictions/setRestrictions/removeRestriction endpoints and UI
 - [ ] **Inherited restrictions** -- child pages inherit parent restrictions
 - [ ] **Anonymous/public access** -- for public-facing spaces
@@ -259,7 +259,7 @@
 - [x] PR statuses (open, merged, closed)
 - [x] Merge strategies (merge, squash, rebase)
 - [x] Link issues to PRs
-- [ ] **PR description templates** -- default template per repo
+- [x] **PR description templates** -- Repository.prTemplate field with editor in RepoSettings and auto-populate on PR creation
 - [ ] **Default reviewers** -- auto-assign reviewers per branch pattern
 - [ ] **Auto-merge** -- merge when all checks pass
 - [x] **Close source branch** -- deleteSourceBranch option on merge endpoint with checkbox in merge UI, persists preference in localStorage
@@ -301,7 +301,7 @@
 - [ ] **Pipes/reusable components** -- pre-built pipeline plugins
 - [ ] **Conditional steps** -- based on branch, variable, file changes
 - [ ] **Pipeline badges** -- build status badges for README
-- [ ] **Scheduled pipelines** -- cron-triggered builds
+- [x] **Scheduled pipelines** -- SCHEDULE in TriggerType enum for cron-triggered builds
 - [x] **Manual triggers** -- TriggerType enum includes MANUAL, used in pipeline service
 - [ ] **Pipeline dashboard** -- filter by branch/status
 
@@ -322,7 +322,7 @@
 ### Other Bitbucket Features
 - [ ] **Snippets** -- shareable code fragments (like GitHub Gists)
 - [x] **Code search** -- searchCode() for cross-repo code search with dedicated API endpoint
-- [ ] **Smart commits** -- trigger Jira actions from commit messages
+- [x] **Smart commits** -- smart-commits.service.ts parses commit messages for issue keys with #time, #comment, #resolve commands; executed via git hook-handler
 - [ ] **Code insights** -- display coverage, SAST, analysis results inline in PR diffs
 - [ ] **Git LFS** -- large file storage support
 - [ ] **Access/deploy keys** -- per-repo read-only SSH keys for CI
@@ -333,15 +333,15 @@
 
 ## 4. Cross-Product Integration Gaps
 
-- [ ] **Smart Links** -- rich previews when pasting URLs across products
-- [ ] **Development panel in issues** -- unified view of branches, commits, PRs, builds, deployments linked to an issue
-- [ ] **Smart commits** -- update issues from commit messages (`AXM-123 #time 2h #comment Fixed #resolve`)
-- [ ] **Auto-link branches to issues** -- via issue key in branch name
+- [x] **Smart Links** -- SmartLinkExtension with SmartLinkNode for rich previews when pasting internal URLs in editors
+- [x] **Development panel in issues** -- IssueDevelopmentCard.tsx with unified view of branches, commits, PRs, and pipeline runs via development-panel.service.ts
+- [x] **Smart commits** -- update issues from commit messages (`AXM-123 #time 2h #comment Fixed #resolve`) via smart-commits service and git hook
+- [x] **Auto-link branches to issues** -- autoLinkBranch() in hook-handler parses issue key from branch name on push
 - [x] **Cross-product search** -- cross-resource search across issues, wiki pages, repos, and code with SearchResults UI
 - [x] Issue-PR linking (manual)
 - [x] Issue-commit linking
 - [x] Issue-branch linking
-- [ ] **Wiki-issue linking** -- embed issue lists/status in wiki pages
+- [x] **Wiki-issue linking** -- WikiPageIssueLink model with bidirectional MENTION/EMBED links, IssueEmbedExtension in editor, linked issues UI on wiki pages, dev panel wiki section
 
 ---
 
@@ -349,24 +349,24 @@
 
 ### High Priority (Core Workflow Gaps)
 1. **Query language** -- power users need structured search (JQL equivalent)
-2. **PR comment threads** -- nested replies for code review discussions
+2. ~~**PR comment threads**~~ -- DONE: nested replies via parentId on PRComment
 3. ~~**Version comparison in wiki**~~ -- DONE: diffVersions API
 4. ~~**Page restrictions**~~ -- DONE: per-page view/edit restrictions
-5. **PR description templates** -- consistency in code review
+5. ~~**PR description templates**~~ -- DONE: Repository.prTemplate with editor UI
 
 ### Medium Priority (Productivity Gaps)
 6. Components for issues
 7. Fix Version / Affects Version
-8. WIP limits on board columns
+8. ~~WIP limits on board columns~~ -- DONE: BoardColumn.wipLimit with visual indicators
 9. Card layout configuration
 10. Quick filters on boards
 11. Dashboard customization with gadgets
-12. More report types (cumulative flow, control chart, epic report)
+12. More report types (cumulative flow, control chart, epic report) -- Sprint report DONE
 
 ### Lower Priority (Nice-to-Have)
 13. Blog posts in wiki
 14. Snippets (code sharing)
-15. Smart commits
+15. ~~Smart commits~~ -- DONE: smart-commits service with git hook integration
 16. Macros system for wiki
 17. Space categories/directory
 18. Code insights / analysis annotations
@@ -379,8 +379,8 @@
 
 | Product | Implemented [x] | Partial [~] | Missing [ ] | Total | Coverage |
 |---------|-----------------|-------------|-------------|-------|----------|
-| Issue Tracking (vs Jira) | 35 | 6 | 60 | 101 | 35% |
-| Wiki (vs Confluence) | 36 | 0 | 28 | 64 | 56% |
-| Git Hosting (vs Bitbucket) | 38 | 3 | 40 | 81 | 47% |
-| Cross-Product Integration | 4 | 0 | 5 | 9 | 44% |
-| **Total** | **113** | **9** | **133** | **255** | **44%** |
+| Issue Tracking (vs Jira) | 38 | 6 | 57 | 101 | 38% |
+| Wiki (vs Confluence) | 38 | 0 | 26 | 64 | 59% |
+| Git Hosting (vs Bitbucket) | 41 | 3 | 37 | 81 | 51% |
+| Cross-Product Integration | 9 | 0 | 0 | 9 | 100% |
+| **Total** | **126** | **9** | **120** | **255** | **49%** |
