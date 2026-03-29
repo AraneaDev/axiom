@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -104,7 +105,7 @@ export function IssueListTable({
 
   if (viewMode === 'list') {
     return (
-      <div className="rounded-lg border border-border bg-surface overflow-hidden">
+      <Card className="overflow-hidden">
         {/* Select all header */}
         <div className="flex items-center gap-3 px-4 py-2 bg-surface-secondary/50 border-b border-border">
           <Checkbox
@@ -167,18 +168,18 @@ export function IssueListTable({
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     );
   }
 
   return (
     <div className="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
       {issues.map((issue) => (
-        <div
+        <Card
           key={issue.id}
           data-issue-row
           className={cn(
-            'relative rounded-lg border border-border bg-surface p-4 hover:shadow-md hover:-translate-y-px hover:border-primary/30 transition-all duration-150',
+            'relative p-4 hover:shadow-md hover:-translate-y-px hover:border-primary/30 transition-all duration-150',
             selectedIds.has(issue.id) && 'border-primary/50 bg-primary-light/5',
           )}
         >
@@ -219,7 +220,7 @@ export function IssueListTable({
               </div>
             </div>
           </Link>
-        </div>
+        </Card>
       ))}
     </div>
   );

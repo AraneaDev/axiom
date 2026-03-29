@@ -9,6 +9,7 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
@@ -140,7 +141,7 @@ export function IssueDetailComments({
               <div className="relative z-10 shrink-0">
                 <Avatar name={comment.author.displayName} size="sm" />
               </div>
-              <div className="flex-1 rounded-lg border border-border bg-surface overflow-hidden">
+              <Card className="flex-1 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2 bg-surface-secondary/40 border-b border-border-light">
                   {orgSlug && teamSlug ? (
                     <Link
@@ -225,7 +226,7 @@ export function IssueDetailComments({
                     />
                   )}
                 </div>
-              </div>
+              </Card>
             </div>
           ))}
         </div>

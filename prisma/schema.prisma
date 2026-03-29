@@ -57,6 +57,8 @@ model User {
   passwordResetTokens     PasswordResetToken[]
   pageRestrictions        PageRestriction[]    @relation("UserPageRestrictions")
   commentReactions        CommentReaction[]    @relation("UserCommentReactions")
+  spacePermissions        SpacePermission[]    @relation("SpacePermissions")
+  wikiPageIssueLinks      WikiPageIssueLink[]  @relation("WikiPageIssueLinks")
 
   @@map("users")
 }
@@ -255,6 +257,7 @@ model Repository {
 
   defaultMergeStrategy String  @default("MERGE")
   codeOwnersEnabled    Boolean @default(false)
+  prTemplate           String? // Markdown template for PR descriptions
 
   pullRequests           PullRequest[]
   webhooks               Webhook[]
@@ -392,6 +395,7 @@ model Project {
   updatedAt DateTime @updatedAt
 
   issueTemplates Json? // JSON array of issue templates
+  cardColorBy    String? // "priority", "type", or null
 
   issues                 Issue[]
   labels                 Label[]
@@ -416,6 +420,7 @@ model BoardColumn {
   position  Int
   isDefault Boolean @default(false)
   isDone    Boolean @default(false)
+  wipLimit  Int?
 
   issues            Issue[]
   workflowRulesFrom WorkflowRule[] @relation("fromColumn")
@@ -485,6 +490,8 @@ model Issue {
   votes             IssueVote[]
   watchers          IssueWatcher[]
   timeEntries       TimeEntry[]
+  sprintHistory     SprintIssueHistory[]
+  wikiIssueLinks    WikiPageIssueLink[]
 
   @@unique([projectId, number])
   @@index([assigneeId])
@@ -576,9 +583,33 @@ model WikiSpace {
 
   pages         Page[]
   pageTemplates PageTemplate[]
+  permissions   SpacePermission[]
 
   @@unique([teamId, slug])
   @@map("wiki_spaces")
+}
+
+enum SpacePermissionLevel {
+  VIEW
+  EDIT
+  ADMIN
+}
+
+model SpacePermission {
+  id       String               @id @default(cuid())
+  spaceId  String
+  space    WikiSpace            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId   String?
+  user     User?                @relation("SpacePermissions", fields: [userId], references: [id], onDelete: Cascade)
+  teamRole String?              // "ADMIN", "MEMBER", "VIEWER" -- applies to all users with this team role
+  level    SpacePermissionLevel
+
+  createdAt DateTime @default(now())
+
+  @@unique([spaceId, userId])
+  @@unique([spaceId, teamRole])
+  @@index([spaceId])
+  @@map("space_permissions")
 }
 
 model Page {
@@ -602,8 +633,9 @@ model Page {
   pageLabels   PageLabel[]
   attachments  Attachment[]
   restrictions PageRestriction[]
-  starredBy    StarredPage[]
-  views        PageView[]
+  starredBy       StarredPage[]
+  views           PageView[]
+  wikiIssueLinks  WikiPageIssueLink[]
 
   @@unique([spaceId, slug])
   @@map("pages")
@@ -751,6 +783,28 @@ model IssueBranch {
   @@map("issue_branches")
 }
 
+enum WikiIssueLinkType {
+  MENTION
+  EMBED
+}
+
+model WikiPageIssueLink {
+  id          String            @id @default(cuid())
+  pageId      String
+  page        Page              @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  issueId     String
+  issue       Issue             @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  linkType    WikiIssueLinkType
+  createdAt   DateTime          @default(now())
+  createdById String
+  createdBy   User              @relation("WikiPageIssueLinks", fields: [createdById], references: [id])
+
+  @@unique([pageId, issueId, linkType])
+  @@index([pageId])
+  @@index([issueId])
+  @@map("wiki_page_issue_links")
+}
+
 model Release {
   id           String     @id @default(cuid())
   repoId       String
@@ -866,6 +920,11 @@ enum SprintStatus {
   COMPLETED
 }
 
+enum SprintIssueAction {
+  ADDED
+  REMOVED
+}
+
 enum CommitStatusState {
   PENDING
   SUCCESS
@@ -883,20 +942,36 @@ enum DeploymentStatus {
 // ─── Platform Expansion Models ───────────────────────────────
 
 model Sprint {
-  id        String       @id @default(cuid())
-  projectId String
-  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name      String
-  goal      String?
-  startDate DateTime
-  endDate   DateTime
-  status    SprintStatus @default(PLANNING)
-  createdAt DateTime     @default(now())
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  goal        String?
+  startDate   DateTime
+  endDate     DateTime
+  status      SprintStatus @default(PLANNING)
+  committedAt DateTime?
+  createdAt   DateTime     @default(now())
 
-  issues Issue[]
+  issues       Issue[]
+  issueHistory SprintIssueHistory[]
 
   @@index([projectId])
   @@map("sprints")
+}
+
+model SprintIssueHistory {
+  id        String              @id @default(cuid())
+  sprintId  String
+  sprint    Sprint              @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  issueId   String
+  issue     Issue               @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  action    SprintIssueAction
+  timestamp DateTime            @default(now())
+
+  @@index([sprintId])
+  @@index([issueId])
+  @@map("sprint_issue_history")
 }
 
 model CustomFieldDefinition {

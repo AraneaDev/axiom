@@ -76,7 +76,7 @@ export default function PRDetail() {
         queryClient.setQueryData(key, value);
       }
     }
-    // Seed diff stats -- the hydration only returns { stats } not the full diff
+    // Seed diff data (stats + raw diff text)
     if (hd.diff !== null && hd.diff !== undefined) {
       queryClient.setQueryData(['prDiff', currentRepo?.id, prNumber], hd.diff);
     }

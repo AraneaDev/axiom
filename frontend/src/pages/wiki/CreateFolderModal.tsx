@@ -1,12 +1,11 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { FolderPlus, X } from 'lucide-react';
+import { FolderPlus } from 'lucide-react';
 import { useState } from 'react';
 
 import { wikiApi } from '@/api/wiki.api';
-import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
+import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import type { PageTreeNode } from '@/lib/types';
 
@@ -90,53 +89,43 @@ export function CreateFolderModal({
   });
 
   return (
-    <Modal open={open} onClose={onClose} title="New Folder">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          createMutation.mutate();
-        }}
-        className="space-y-4"
-      >
-        <Input
-          id="folder-name"
-          label="Folder Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Folder name"
-          required
-        />
+    <FormModal
+      open={open}
+      onClose={onClose}
+      title="New Folder"
+      onSubmit={() => createMutation.mutate()}
+      isPending={createMutation.isPending}
+      error={error}
+      submitLabel="Create Folder"
+      submitIcon={<FolderPlus className="h-4 w-4" />}
+      disabled={!name.trim()}
+    >
+      <Input
+        id="folder-name"
+        label="Folder Name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Folder name"
+        required
+      />
 
-        {initialParentId && parentName ? (
-          <p className="text-sm text-text-secondary">
-            Creating in: <span className="font-medium text-text">{parentName}</span>
-          </p>
-        ) : (
-          pageTree.length > 0 && (
-            <Select
-              label="Parent Page"
-              id="folder-parent"
-              value={selectedParentId}
-              onChange={(v) => setSelectedParentId(v as string)}
-              options={parentOptions}
-              placeholder="None (top level)"
-            />
-          )
-        )}
-
-        {error && <p className="text-sm text-danger bg-danger-light p-3 rounded-lg">{error}</p>}
-
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button type="submit" disabled={createMutation.isPending || !name.trim()}>
-            <FolderPlus className="h-4 w-4" />{' '}
-            {createMutation.isPending ? 'Creating...' : 'Create Folder'}
-          </Button>
-        </ModalFooter>
-      </form>
-    </Modal>
+      {initialParentId && parentName ? (
+        <p className="text-sm text-text-secondary">
+          Creating in: <span className="font-medium text-text">{parentName}</span>
+        </p>
+      ) : (
+        pageTree.length > 0 && (
+          <Select
+            label="Parent Page"
+            id="folder-parent"
+            value={selectedParentId}
+            onChange={(v) => setSelectedParentId(v as string)}
+            options={parentOptions}
+            placeholder="None (top level)"
+          />
+        )
+      )}
+    </FormModal>
   );
 }
 

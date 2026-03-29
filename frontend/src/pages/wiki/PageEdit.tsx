@@ -314,7 +314,7 @@ export default function PageEdit() {
                   <button
                     type="button"
                     className={cn(
-                      'w-full flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left text-sm transition-colors',
+                      'w-full bg-surface flex items-center gap-3 px-4 py-3 text-left text-sm transition-colors rounded-lg border border-border',
                       'hover:border-primary/50 hover:bg-surface-hover',
                     )}
                     onClick={() => {
@@ -346,7 +346,7 @@ export default function PageEdit() {
                               key={tpl.id}
                               type="button"
                               className={cn(
-                                'flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left text-sm transition-colors',
+                                'flex bg-surface items-center gap-3 rounded-lg border border-border px-4 py-3 text-left text-sm transition-colors',
                                 'hover:border-primary/50 hover:bg-surface-hover',
                                 hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
                               )}
@@ -386,7 +386,7 @@ export default function PageEdit() {
                             key={tpl.id}
                             type="button"
                             className={cn(
-                              'flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left text-sm transition-colors',
+                              'flex bg-surface items-center gap-3 rounded-lg border border-border px-4 py-3 text-left text-sm transition-colors',
                               'hover:border-primary/50 hover:bg-surface-hover',
                               hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
                             )}
@@ -485,7 +485,7 @@ export default function PageEdit() {
           {showPreview && (
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-text">Preview</label>
-              <div className="rounded-lg border border-border bg-surface p-4 min-h-[300px] overflow-auto">
+              <Card className="p-4 min-h-[300px] overflow-auto">
                 {body ? (
                   <MarkdownRenderer content={body} />
                 ) : (
@@ -493,7 +493,7 @@ export default function PageEdit() {
                     Start typing to see a preview...
                   </p>
                 )}
-              </div>
+              </Card>
             </div>
           )}
         </div>

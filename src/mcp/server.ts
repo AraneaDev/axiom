@@ -5,6 +5,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/database';
 
 import { mcpContext } from './context';
+import { registerIntegrationTools } from './tools/integration-tools';
 import { registerIssueTools } from './tools/issue-tools';
 import { registerOrgTools } from './tools/org-tools';
 import { registerRepoTools } from './tools/repo-tools';
@@ -49,6 +50,14 @@ function createMcpServer(userId: string) {
     return sprint?.project?.team?.orgId;
   }
 
+  async function getOrgIdFromPage(pageId: string) {
+    const page = await prisma.page.findUnique({
+      where: { id: pageId },
+      include: { space: { include: { team: { select: { orgId: true } } } } },
+    });
+    return page?.space?.team?.orgId;
+  }
+
   const ctx: McpToolContext = {
     server,
     userId,
@@ -56,6 +65,7 @@ function createMcpServer(userId: string) {
     getOrgIdFromProject,
     getOrgIdFromRepo,
     getOrgIdFromSprint,
+    getOrgIdFromPage,
   };
 
   registerOrgTools(ctx);
@@ -63,6 +73,7 @@ function createMcpServer(userId: string) {
   registerWikiTools(ctx);
   registerRepoTools(ctx);
   registerSearchTools(ctx);
+  registerIntegrationTools(ctx);
 
   return server;
 }

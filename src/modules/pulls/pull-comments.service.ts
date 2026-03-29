@@ -10,6 +10,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
+import { parseServicePagination } from '../../utils/pagination';
 import { logActivity } from '../activity/activity.service';
 
 const execFileAsync = promisify(execFile);
@@ -89,13 +90,20 @@ export async function addPRComment(
 }
 
 /**
- * List all comments on a pull request, ordered chronologically.
+ * List comments on a pull request, ordered chronologically.
  * @param repoId - The repository the PR belongs to
  * @param prNumber - The PR number within the repository
+ * @param opts - Pagination options (limit, offset)
+ * @param opts.limit
+ * @param opts.offset
  * @returns List of PR comment records
  * @throws {AppError} 404 if PR not found
  */
-export async function listPRComments(repoId: string, prNumber: number) {
+export async function listPRComments(
+  repoId: string,
+  prNumber: number,
+  opts?: { limit?: number; offset?: number },
+) {
   const pr = await findOrThrow(
     prisma.pullRequest.findUnique({
       where: { repoId_number: { repoId, number: prNumber } },
@@ -103,9 +111,12 @@ export async function listPRComments(repoId: string, prNumber: number) {
     'Pull request not found',
   );
 
+  const { take, skip } = parseServicePagination(opts, 100);
   return prisma.pRComment.findMany({
     where: { prId: pr.id },
     orderBy: { createdAt: 'asc' },
+    take,
+    skip,
   });
 }
 

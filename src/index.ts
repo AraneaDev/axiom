@@ -2,7 +2,6 @@ import { createServer } from 'http';
 
 import cors from 'cors';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
 
@@ -14,6 +13,7 @@ import { auditMiddleware } from './middleware/auditMiddleware';
 import { authenticate } from './middleware/auth';
 import { csrfGuard } from './middleware/csrfGuard';
 import { errorHandler } from './middleware/errorHandler';
+import { globalLimiter, authLimiter, searchLimiter, gitLimiter } from './middleware/rate-limit.js';
 import activityRoutes from './modules/activity/activity.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import attachmentsRoutes from './modules/attachments/attachments.routes';
@@ -29,6 +29,7 @@ import invitationsRoutes from './modules/invitations/invitations.routes';
 import issueTemplatesRoutes from './modules/issue-templates/issue-templates.routes';
 import issuesRoutes from './modules/issues/issues.routes';
 import labelsRoutes from './modules/labels/labels.routes';
+import linksRoutes from './modules/links/links.routes';
 import milestonesRoutes from './modules/milestones/milestones.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import orgsRoutes from './modules/orgs/orgs.routes';
@@ -86,27 +87,12 @@ app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '5mb' }));
 
 // Rate limiting
-const globalLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => env.NODE_ENV === 'test',
-});
-const authLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 15,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    error: { message: 'Too many requests, please try again later.', code: 'RATE_LIMITED' },
-  },
-  skip: () => env.NODE_ENV === 'test',
-});
 app.use(globalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/search', searchLimiter);
+app.use('/git', gitLimiter);
 
 // CSRF protection: require X-Requested-With header on state-changing requests
 app.use('/api', csrfGuard);
@@ -148,6 +134,7 @@ app.use('/api/projects', automationRoutes);
 app.use('/api/projects', labelsRoutes);
 app.use('/api/projects', issueTemplatesRoutes);
 app.use('/api/projects', milestonesRoutes);
+app.use('/api/links', linksRoutes);
 app.use('/api', customFieldsDirectRoutes);
 app.use('/api/attachments', attachmentsRoutes);
 app.use('/api/notifications', notificationsRoutes);

@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
+import { parseServicePagination } from '../../utils/pagination';
 import { logActivity } from '../activity/activity.service';
 import { createNotification } from '../notifications/notifications.service';
 
@@ -79,13 +80,20 @@ export async function submitReview(
 }
 
 /**
- * List all reviews for a pull request, ordered by most recent first.
+ * List reviews for a pull request, ordered by most recent first.
  * @param repoId - The repository the PR belongs to
  * @param prNumber - The PR number within the repository
+ * @param opts - Pagination options (limit, offset)
+ * @param opts.limit
+ * @param opts.offset
  * @returns List of review records
  * @throws {AppError} 404 if PR not found
  */
-export async function listReviews(repoId: string, prNumber: number) {
+export async function listReviews(
+  repoId: string,
+  prNumber: number,
+  opts?: { limit?: number; offset?: number },
+) {
   const pr = await findOrThrow(
     prisma.pullRequest.findUnique({
       where: { repoId_number: { repoId, number: prNumber } },
@@ -93,8 +101,11 @@ export async function listReviews(repoId: string, prNumber: number) {
     'Pull request not found',
   );
 
+  const { take, skip } = parseServicePagination(opts, 50);
   return prisma.pRReview.findMany({
     where: { prId: pr.id },
     orderBy: { createdAt: 'desc' },
+    take,
+    skip,
   });
 }

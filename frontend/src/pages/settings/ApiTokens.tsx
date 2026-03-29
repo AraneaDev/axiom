@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { usersApi } from '@/api/users.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -140,7 +141,7 @@ export default function ApiTokens() {
       )}
 
       {showForm && (
-        <div className="rounded-lg border border-border bg-surface p-4 mb-6">
+        <Card className="p-4 mb-6">
           {error && (
             <div className="mb-3 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
               {error}
@@ -180,7 +181,7 @@ export default function ApiTokens() {
               </Button>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {!tokens?.length ? (
@@ -191,7 +192,7 @@ export default function ApiTokens() {
           description="Create a token for API and MCP access."
         />
       ) : (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {tokens.map((t) => (
             <div key={t.id} className="flex items-center gap-3 p-4">
               <KeyRound className="h-4 w-4 text-text-secondary" />
@@ -219,7 +220,7 @@ export default function ApiTokens() {
               </Button>
             </div>
           ))}
-        </div>
+        </Card>
       )}
 
       <ConfirmDialog

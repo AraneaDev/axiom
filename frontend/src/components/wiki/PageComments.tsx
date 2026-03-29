@@ -23,6 +23,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import type { PageComment } from '@/lib/types';
 import { cn, formatRelative } from '@/lib/utils';
@@ -80,27 +81,26 @@ function ReactionPicker({
   }, [onClose]);
 
   return (
-    <div
-      ref={ref}
-      className="absolute bottom-full left-0 mb-1 flex items-center gap-1 rounded-lg border border-border bg-surface p-1 shadow-lg z-10"
-    >
-      {REACTION_TYPES.map((type) => {
-        const Icon = REACTION_ICONS[type];
-        return (
-          <button
-            key={type}
-            type="button"
-            className="rounded p-1.5 hover:bg-surface-hover transition-colors"
-            title={type}
-            onClick={() => {
-              onSelect(type);
-              onClose();
-            }}
-          >
-            <Icon className="h-4 w-4 text-text-secondary" />
-          </button>
-        );
-      })}
+    <div ref={ref} className="absolute bottom-full left-0 mb-1 z-10">
+      <Card className="flex items-center gap-1 p-1 shadow-lg">
+        {REACTION_TYPES.map((type) => {
+          const Icon = REACTION_ICONS[type];
+          return (
+            <button
+              key={type}
+              type="button"
+              className="rounded p-1.5 hover:bg-surface-hover transition-colors"
+              title={type}
+              onClick={() => {
+                onSelect(type);
+                onClose();
+              }}
+            >
+              <Icon className="h-4 w-4 text-text-secondary" />
+            </button>
+          );
+        })}
+      </Card>
     </div>
   );
 }
@@ -256,10 +256,7 @@ export function PageComments({ pageId }: PageCommentsProps) {
       {/* Active comments */}
       <div className="space-y-3">
         {activeComments.map((comment) => (
-          <div
-            key={comment.id}
-            className="rounded-lg border border-border bg-surface p-3 space-y-2"
-          >
+          <Card key={comment.id} className="p-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Avatar name={comment.user.displayName} size="sm" />
@@ -335,7 +332,7 @@ export function PageComments({ pageId }: PageCommentsProps) {
                 reactionMutation.mutate({ commentId: cId, reactionType: type })
               }
             />
-          </div>
+          </Card>
         ))}
       </div>
 
@@ -358,12 +355,7 @@ export function PageComments({ pageId }: PageCommentsProps) {
           {showResolved && (
             <div className="space-y-2 mt-2">
               {resolvedComments.map((comment) => (
-                <div
-                  key={comment.id}
-                  className={cn(
-                    'rounded-lg border border-border bg-surface p-3 space-y-2 opacity-60',
-                  )}
-                >
+                <Card key={comment.id} className="p-3 space-y-2 opacity-60">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Avatar name={comment.user.displayName} size="sm" />
@@ -406,7 +398,7 @@ export function PageComments({ pageId }: PageCommentsProps) {
                       reactionMutation.mutate({ commentId: cId, reactionType: type })
                     }
                   />
-                </div>
+                </Card>
               ))}
             </div>
           )}

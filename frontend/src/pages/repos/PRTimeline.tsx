@@ -18,6 +18,7 @@ import { hasSuggestion } from '@/components/suggestion-utils';
 import { SuggestionBlock } from '@/components/SuggestionBlock';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { formatRelative } from '@/lib/utils';
@@ -192,10 +193,7 @@ export function PRTimeline({
           <h2 className="text-sm font-semibold mb-2">Reviews</h2>
           <div className="space-y-2">
             {pr.reviews.map((r) => (
-              <div
-                key={r.id}
-                className="rounded-lg border border-border bg-surface p-3 flex items-start gap-3"
-              >
+              <Card key={r.id} className="p-3 flex items-start gap-3">
                 <Badge
                   variant={
                     r.status === 'APPROVED'
@@ -213,7 +211,7 @@ export function PRTimeline({
                 </Badge>
                 {r.body && <p className="text-sm flex-1">{r.body}</p>}
                 <span className="text-xs text-text-secondary">{formatRelative(r.createdAt)}</span>
-              </div>
+              </Card>
             ))}
           </div>
         </div>
@@ -280,7 +278,7 @@ export function PRTimeline({
               return (
                 <div key={c.id}>
                   {/* Root comment */}
-                  <div className="rounded-lg border border-border bg-surface p-3 group">
+                  <Card className="p-3 group">
                     {c.filePath && (
                       <p className="text-xs font-mono text-text-secondary mb-1">
                         {c.filePath}:{c.line}
@@ -360,12 +358,12 @@ export function PRTimeline({
                         </div>
                       )}
                     </div>
-                  </div>
+                  </Card>
 
                   {/* Inline reply form */}
                   {replyingTo === c.id && (
                     <div className="ml-6 border-l-2 border-border pl-4 mt-1">
-                      <div className="rounded-lg border border-border bg-surface p-3 space-y-2">
+                      <Card className="p-3 space-y-2">
                         <MarkdownEditor
                           value={replyBody}
                           onChange={setReplyBody}
@@ -397,7 +395,7 @@ export function PRTimeline({
                             <X className="h-4 w-4" /> Cancel
                           </Button>
                         </div>
-                      </div>
+                      </Card>
                     </div>
                   )}
 
@@ -405,10 +403,7 @@ export function PRTimeline({
                   {replies.length > 0 && (
                     <div className="ml-6 border-l-2 border-border pl-4 space-y-1 mt-1">
                       {visibleReplies.map((reply) => (
-                        <div
-                          key={reply.id}
-                          className="rounded-lg border border-border bg-surface p-3 group"
-                        >
+                        <Card key={reply.id} className="p-3 group">
                           {editingCommentId === reply.id ? (
                             <div className="space-y-2">
                               <MarkdownEditor
@@ -457,7 +452,7 @@ export function PRTimeline({
                               </div>
                             )}
                           </div>
-                        </div>
+                        </Card>
                       ))}
                       {hasHiddenReplies && (
                         <Button variant="ghost" size="xs" onClick={() => toggleThreadExpand(c.id)}>

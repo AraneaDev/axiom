@@ -9,6 +9,7 @@ import { teamsApi } from '@/api/teams.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -141,7 +142,7 @@ export default function TeamMembers() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
         <div className="space-y-6">
-          <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+          <Card className="divide-y divide-border">
             {members.map(
               (m: {
                 id: string;
@@ -182,13 +183,13 @@ export default function TeamMembers() {
                 </div>
               ),
             )}
-          </div>
+          </Card>
 
           {/* Pending Invitations */}
           {pendingInvitations.length > 0 && (
             <div>
               <h2 className="text-lg font-semibold mb-3">Pending Invitations</h2>
-              <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+              <Card className="divide-y divide-border">
                 {pendingInvitations.map((inv: Invitation) => (
                   <div key={inv.id} className="flex items-center gap-3 p-4">
                     <div className="h-8 w-8 rounded-full bg-surface-secondary flex items-center justify-center">
@@ -225,14 +226,14 @@ export default function TeamMembers() {
                     </div>
                   </div>
                 ))}
-              </div>
+              </Card>
             </div>
           )}
         </div>
 
         {/* Team summary sidebar */}
         <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-surface p-4">
+          <Card className="p-4">
             <p className="text-xs text-text-secondary uppercase font-semibold mb-3">Team Summary</p>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -256,7 +257,7 @@ export default function TeamMembers() {
                 </div>
               )}
             </div>
-          </div>
+          </Card>
         </div>
       </div>
 

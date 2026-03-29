@@ -19,6 +19,7 @@ import {
   Minus,
   ImageIcon,
   GitBranch,
+  CircleDot,
 } from 'lucide-react';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
 
@@ -116,6 +117,17 @@ const commands: CommandDefinition[] = [
     category: 'Blocks',
     icon: Minus,
     action: (editor) => editor.chain().focus().setHorizontalRule().run(),
+  },
+  {
+    name: 'Issue Embed',
+    category: 'Blocks',
+    icon: CircleDot,
+    action: (editor) => {
+      const key = window.prompt('Issue key (e.g. AXM-123):');
+      if (key) {
+        editor.chain().focus().setIssueEmbed({ issueKey: key.trim().toUpperCase() }).run();
+      }
+    },
   },
   // Media
   {

@@ -12,6 +12,7 @@ import {
   Pencil,
   Check,
   X,
+  BarChart3,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -21,6 +22,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Modal } from '@/components/ui/Modal';
@@ -163,6 +165,7 @@ interface SprintCardProps {
  * @param root0.allSprints
  */
 export function SprintCard({ sprint, org, team, project, projectId, allSprints }: SprintCardProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { invalidateSprints } = useIssueInvalidation(projectId);
@@ -234,8 +237,7 @@ export function SprintCard({ sprint, org, team, project, projectId, allSprints }
   };
 
   return (
-    <div
-      className="rounded-lg border border-border bg-surface"
+    <Card
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
@@ -266,6 +268,16 @@ export function SprintCard({ sprint, org, team, project, projectId, allSprints }
         {sprint.status === 'PLANNING' && (
           <Button variant="outline" size="xs" onClick={() => startMutation.mutate()}>
             <Play className="h-3 w-3" /> Start Sprint
+          </Button>
+        )}
+        {(sprint.status === 'ACTIVE' || sprint.status === 'COMPLETED') && (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => navigate(`/${org}/${team}/${project}/sprints/${sprint.id}/report`)}
+            title="Sprint Report"
+          >
+            <BarChart3 className="h-3 w-3" /> Report
           </Button>
         )}
         {sprint.status === 'ACTIVE' && (
@@ -382,6 +394,6 @@ export function SprintCard({ sprint, org, team, project, projectId, allSprints }
           </div>
         </Modal>
       )}
-    </div>
+    </Card>
   );
 }

@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { common, createLowlight } from 'lowlight';
-import { ChevronRight, ChevronDown, Copy, Clock, FileWarning, GitBranch, Pencil } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronDown,
+  Copy,
+  Clock,
+  FileWarning,
+  GitBranch,
+  Pencil,
+} from 'lucide-react';
 import React from 'react';
 import { Link, Navigate, useParams, useNavigate } from 'react-router';
 
@@ -8,6 +16,7 @@ import { reposApi } from '@/api/repos.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
@@ -195,7 +204,7 @@ export default function FileView() {
             <ChevronRight className="h-3 w-3 text-text-secondary" />
             {i < parts.length - 1 ? (
               <Link
-                to={`${basePath}/tree/${ref}/${parts.slice(0, i + 1).join('/')}`}
+                to={`${basePath}/tree/${encodeURIComponent(ref!)}/${parts.slice(0, i + 1).join('/')}`}
                 className="text-primary hover:underline"
               >
                 {p}
@@ -214,17 +223,17 @@ export default function FileView() {
           {!isMarkdown && ` · ${lines.length} lines`}
         </span>
         <div className="flex items-center gap-2">
-          <Link to={`${basePath}/edit/${ref}/${filePath}`}>
+          <Link to={`${basePath}/edit/${encodeURIComponent(ref!)}/${filePath}`}>
             <Button variant="ghost" size="sm">
               <Pencil className="h-4 w-4" /> Edit
             </Button>
           </Link>
-          <Link to={`${basePath}/blame/${ref}/${filePath}`}>
+          <Link to={`${basePath}/blame/${encodeURIComponent(ref!)}/${filePath}`}>
             <Button variant="ghost" size="sm">
               <GitBranch className="h-4 w-4" /> Blame
             </Button>
           </Link>
-          <Link to={`${basePath}/history/${ref}/${filePath}`}>
+          <Link to={`${basePath}/history/${encodeURIComponent(ref!)}/${filePath}`}>
             <Button variant="ghost" size="sm">
               <Clock className="h-4 w-4" /> History
             </Button>
@@ -241,11 +250,11 @@ export default function FileView() {
 
       {/* Content */}
       {isMarkdown ? (
-        <div className="rounded-lg border border-border bg-surface p-6 prose max-w-none">
+        <Card className="p-6 prose max-w-none">
           <MarkdownRenderer content={blob?.content ?? ''} />
-        </div>
+        </Card>
       ) : (
-        <div className="rounded-lg border border-border bg-surface overflow-x-auto">
+        <Card className="overflow-x-auto">
           <pre className="text-sm font-mono m-0 p-0">
             <table className="w-full border-collapse">
               <tbody>
@@ -262,7 +271,7 @@ export default function FileView() {
               </tbody>
             </table>
           </pre>
-        </div>
+        </Card>
       )}
     </div>
   );

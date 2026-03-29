@@ -7,6 +7,7 @@ import { labelsApi } from '@/api/labels.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -242,7 +243,7 @@ export default function IssueTemplates() {
     >
       {/* Add form */}
       {showAddForm && (
-        <div className="rounded-lg border border-border bg-surface p-4 mb-4">
+        <Card className="p-4 mb-4">
           {templateForm}
           <div className="flex items-center gap-2 pt-3">
             <Button
@@ -256,7 +257,7 @@ export default function IssueTemplates() {
               <X className="h-4 w-4" /> Cancel
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Template list */}
@@ -275,7 +276,7 @@ export default function IssueTemplates() {
       ) : (
         <div className="space-y-2">
           {templates.map((template) => (
-            <div key={template.id} className="rounded-lg border border-border bg-surface p-4">
+            <Card key={template.id} className="p-4">
               {editingId === template.id ? (
                 <div>
                   {templateForm}
@@ -342,7 +343,7 @@ export default function IssueTemplates() {
                   </Button>
                 </div>
               )}
-            </div>
+            </Card>
           ))}
         </div>
       )}

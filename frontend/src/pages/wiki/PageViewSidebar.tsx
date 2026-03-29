@@ -21,6 +21,7 @@ import {
   FolderPlus,
   GripVertical,
   Hash,
+  Lock,
   MoreHorizontal,
   Plus,
   Trash2,
@@ -323,6 +324,8 @@ interface PageViewSidebarProps {
   embedded?: boolean;
   className?: string;
   spaceId?: string;
+  /** When true, shows a lock icon indicating the space has custom permissions */
+  hasPermissions?: boolean;
 }
 
 /**
@@ -336,6 +339,7 @@ interface PageViewSidebarProps {
  * @param root0.embedded
  * @param root0.className
  * @param root0.spaceId
+ * @param root0.hasPermissions
  */
 export function PageViewSidebar({
   tree,
@@ -346,6 +350,7 @@ export function PageViewSidebar({
   embedded,
   className,
   spaceId,
+  hasPermissions,
 }: PageViewSidebarProps) {
   const [deleteTarget, setDeleteTarget] = useState<PageTreeNode | null>(null);
   const queryClient = useQueryClient();
@@ -513,8 +518,13 @@ export function PageViewSidebar({
     <div className={cn('', className)}>
       {!embedded && (
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-1.5">
             Pages
+            {hasPermissions && (
+              <span title="This space has custom access permissions">
+                <Lock className="h-3 w-3 text-warning" />
+              </span>
+            )}
           </h3>
           <div className="flex gap-1">
             <Link to={`${basePath}/new/edit`}>

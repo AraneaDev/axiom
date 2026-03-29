@@ -12,6 +12,7 @@ import { Link, useParams, useNavigate } from 'react-router';
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -76,7 +77,9 @@ export default function FileBrowser() {
             {branches?.map((branch) => (
               <DropdownItem
                 key={branch.name}
-                onClick={() => navigate(`${basePath}/tree/${branch.name}/${path}`)}
+                onClick={() =>
+                  navigate(`${basePath}/tree/${encodeURIComponent(branch.name)}/${path}`)
+                }
                 className={branch.name === ref ? 'bg-surface-tertiary font-medium' : ''}
               >
                 <GitBranch className="h-3.5 w-3.5 shrink-0" />
@@ -99,17 +102,20 @@ export default function FileBrowser() {
         {crumbs.map((c) => (
           <span key={c.path} className="flex items-center gap-1">
             <ChevronRight className="h-3 w-3 text-text-secondary" />
-            <Link to={`${basePath}/tree/${ref}/${c.path}`} className="text-primary hover:underline">
+            <Link
+              to={`${basePath}/tree/${encodeURIComponent(ref!)}/${c.path}`}
+              className="text-primary hover:underline"
+            >
               {c.name}
             </Link>
           </span>
         ))}
       </div>
 
-      <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+      <Card className="divide-y divide-border">
         {path && (
           <Link
-            to={`${basePath}/tree/${ref}/${parts.slice(0, -1).join('/')}`}
+            to={`${basePath}/tree/${encodeURIComponent(ref!)}/${parts.slice(0, -1).join('/')}`}
             className="flex items-center gap-3 px-4 py-2 hover:bg-surface-secondary text-sm text-text-secondary"
           >
             ..
@@ -124,8 +130,8 @@ export default function FileBrowser() {
               key={entry.sha + entry.name}
               to={
                 entry.type === 'tree'
-                  ? `${basePath}/tree/${ref}/${path ? path + '/' : ''}${entry.name}`
-                  : `${basePath}/blob/${ref}/${path ? path + '/' : ''}${entry.name}`
+                  ? `${basePath}/tree/${encodeURIComponent(ref!)}/${path ? path + '/' : ''}${entry.name}`
+                  : `${basePath}/blob/${encodeURIComponent(ref!)}/${path ? path + '/' : ''}${entry.name}`
               }
               className="flex items-center gap-3 px-4 py-2 hover:bg-surface-secondary transition-colors"
             >
@@ -142,7 +148,7 @@ export default function FileBrowser() {
               )}
             </Link>
           ))}
-      </div>
+      </Card>
     </div>
   );
 }

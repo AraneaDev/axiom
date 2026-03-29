@@ -20,6 +20,7 @@ const AutomationRules = lazy(() => import('@/pages/projects/AutomationRules'));
 const LabelsSettings = lazy(() => import('@/pages/projects/LabelsSettings'));
 const IssueTemplates = lazy(() => import('@/pages/projects/IssueTemplates'));
 const Milestones = lazy(() => import('@/pages/projects/Milestones'));
+const SprintReport = lazy(() => import('@/pages/issues/SprintReport'));
 
 const WikiLayout = lazy(() => import('@/pages/wiki/WikiLayout'));
 const WikiHome = lazy(() => import('@/pages/wiki/WikiHome'));
@@ -80,6 +81,14 @@ export function projectRoutes() {
           element={
             <ErrorBoundary>
               <Backlog />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="sprints/:sprintId/report"
+          element={
+            <ErrorBoundary>
+              <SprintReport />
             </ErrorBoundary>
           }
         />

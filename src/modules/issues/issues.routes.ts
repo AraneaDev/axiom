@@ -2,8 +2,10 @@ import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import { requireProjectAccess } from '../../middleware/requireProjectAccess';
+import * as wikiLinkController from '../wiki/wiki-issue-links.controller';
 
 import * as boardColumnsCtrl from './board-columns.controller';
+import * as devPanelCtrl from './development-panel.controller';
 import * as branchesCtrl from './issue-branches.controller';
 import * as commitsCtrl from './issue-commits.controller';
 import * as linksCtrl from './issue-links.controller';
@@ -69,6 +71,9 @@ router.post('/:projectId/issues/:issueNumber/branches', branchesCtrl.createBranc
 // Issue pull requests
 router.get('/:projectId/issues/:issueNumber/pull-requests', issuesController.listPullRequests);
 
+// Development panel (aggregated view)
+router.get('/:projectId/issues/:issueNumber/development', devPanelCtrl.getDevelopmentPanel);
+
 // Issue votes
 router.post('/:projectId/issues/:issueNumber/votes/toggle', votesCtrl.toggle);
 router.get('/:projectId/issues/:issueNumber/votes', votesCtrl.getVotes);
@@ -88,5 +93,11 @@ router.get('/:projectId/issues/:issueNumber/progress', issuesController.getProgr
 // Roadmap
 router.use('/:projectId/roadmap', requireProjectAccess);
 router.get('/:projectId/roadmap', issuesController.roadmap);
+
+// Wiki links for issues
+router.get(
+  '/:projectId/issues/:issueNumber/wiki-links',
+  wikiLinkController.listLinkedPagesForIssue,
+);
 
 export default router;

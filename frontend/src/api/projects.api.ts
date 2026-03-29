@@ -33,9 +33,12 @@ export const projectsApi = {
    * @param data
    * @param data.name
    * @param data.description
+   * @param data.cardColorBy
    */
-  update: (projectId: string, data: { name?: string; description?: string }) =>
-    patch<Project>(`/projects/${projectId}`, data),
+  update: (
+    projectId: string,
+    data: { name?: string; description?: string; cardColorBy?: string | null },
+  ) => patch<Project>(`/projects/${projectId}`, data),
   /**
    * Delete a project.
    * @param projectId

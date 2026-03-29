@@ -10,6 +10,7 @@ export interface Repo {
   defaultBranch: string;
   defaultMergeStrategy?: string;
   codeOwnersEnabled?: boolean;
+  prTemplate?: string | null;
   diskPath?: string;
   size?: number;
 }
@@ -188,7 +189,7 @@ export const reposApi = {
    * @param path
    */
   getTree: (repoId: string, ref: string, path: string = '') =>
-    get<TreeEntry[]>(`/repos/${repoId}/tree/${ref}${path ? '/' + path : ''}`),
+    get<TreeEntry[]>(`/repos/${repoId}/tree/${encodeURIComponent(ref)}${path ? '/' + path : ''}`),
   /**
    * Get a file's content and size at a given ref and path.
    * @param repoId
@@ -196,7 +197,9 @@ export const reposApi = {
    * @param path
    */
   getBlob: (repoId: string, ref: string, path: string) =>
-    get<{ content: string; size: number }>(`/repos/${repoId}/blob/${ref}/${path}`),
+    get<{ content: string; size: number }>(
+      `/repos/${repoId}/blob/${encodeURIComponent(ref)}/${path}`,
+    ),
   /**
    * Get git blame information for a file.
    * @param repoId
@@ -204,7 +207,7 @@ export const reposApi = {
    * @param path
    */
   getBlame: (repoId: string, ref: string, path: string) =>
-    get<BlameLine[]>(`/repos/${repoId}/blame/${ref}/${path}`),
+    get<BlameLine[]>(`/repos/${repoId}/blame/${encodeURIComponent(ref)}/${path}`),
 
   /**
    * Get commit history for a single file.
@@ -238,7 +241,9 @@ export const reposApi = {
     if (status) params.set('status', status);
     if (reviewerId) params.set('reviewerId', reviewerId);
     const q = params.toString();
-    return get<PullRequest[]>(`/repos/${repoId}/pulls${q ? `?${q}` : ''}`);
+    return get<{ data: PullRequest[]; total: number }>(
+      `/repos/${repoId}/pulls${q ? `?${q}` : ''}`,
+    ).then((r) => r.data);
   },
   /**
    * Get a single pull request by number.
@@ -417,7 +422,7 @@ export const reposApi = {
     ref: string,
     filePath: string,
     data: { content: string; message: string; branch: string },
-  ) => patch<{ sha: string }>(`/repos/${repoId}/blob/${ref}/${filePath}`, data),
+  ) => patch<{ sha: string }>(`/repos/${repoId}/blob/${encodeURIComponent(ref)}/${filePath}`, data),
 
   /**
    * List webhooks configured on a repository.

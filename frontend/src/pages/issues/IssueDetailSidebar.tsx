@@ -5,6 +5,7 @@ import { IssueDetailMetaPanel } from './IssueDetailMetaPanel';
 
 import { type ActivityEvent } from '@/api/activity.api';
 import { ActivityFeed } from '@/components/ActivityFeed';
+import { Card } from '@/components/ui/Card';
 import type { Issue, Sprint } from '@/lib/types';
 
 interface TeamMember {
@@ -119,13 +120,13 @@ export function IssueDetailSidebar({
       </IssueDetailMetaPanel>
 
       {activities.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface p-4">
+        <Card className="p-4">
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2.5 flex items-center gap-2">
             <History className="h-3.5 w-3.5" />
             History
           </h3>
           <ActivityFeed activities={activities} />
-        </div>
+        </Card>
       )}
     </div>
   );

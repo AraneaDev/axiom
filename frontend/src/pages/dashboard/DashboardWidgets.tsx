@@ -12,13 +12,13 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 
-
 import type { DashboardIssue, DashboardPR, DashboardActivity } from '@/api/dashboard.api';
 import { projectsApi } from '@/api/projects.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { BurndownChart } from '@/components/BurndownChart';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { PRIORITY_COLORS } from '@/lib/constants';
 import { cn, formatRelative } from '@/lib/utils';
@@ -51,7 +51,7 @@ export function Widget({
   className?: string;
 }) {
   return (
-    <div className={cn('rounded-lg border border-border bg-surface flex flex-col', className)}>
+    <Card className={cn('flex flex-col', className)}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-primary" />
@@ -72,7 +72,7 @@ export function Widget({
         )}
       </div>
       <div className="overflow-y-auto max-h-80">{children}</div>
-    </div>
+    </Card>
   );
 }
 

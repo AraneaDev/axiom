@@ -8,6 +8,7 @@ import { useWikiContext } from './WikiLayout';
 import { wikiApi } from '@/api/wiki.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CardGridSkeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
@@ -74,10 +75,10 @@ export default function WikiHome() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {displaySpaces.map((s) => (
-            <div
+            <Card
               key={s.id}
               className={cn(
-                'rounded-lg border border-border bg-surface p-5 transition-all',
+                'p-5 transition-all',
                 s.isArchived ? 'opacity-60' : 'hover:border-primary/50 hover:shadow-sm',
               )}
             >
@@ -109,7 +110,7 @@ export default function WikiHome() {
                   {s.isArchived ? 'Unarchive' : 'Archive'}
                 </Button>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}

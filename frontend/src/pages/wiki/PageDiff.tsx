@@ -8,6 +8,7 @@ import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { PageLoader } from '@/components/ui/Spinner';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -70,7 +71,7 @@ export default function PageDiff() {
       {diff && (
         <>
           <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="rounded-lg border border-border bg-surface p-4">
+            <Card className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant="default">v{diff.from.version}</Badge>
                 <span className="text-sm font-medium">{diff.from.title}</span>
@@ -85,8 +86,8 @@ export default function PageDiff() {
                   {diff.from.changeDescription}
                 </p>
               )}
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-4">
+            </Card>
+            <Card className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant="primary">v{diff.to.version}</Badge>
                 <span className="text-sm font-medium">{diff.to.title}</span>
@@ -101,12 +102,12 @@ export default function PageDiff() {
                   {diff.to.changeDescription}
                 </p>
               )}
-            </div>
+            </Card>
           </div>
 
           {/* Title diff */}
           {diff.from.title !== diff.to.title && (
-            <div className="mb-4 rounded-lg border border-border bg-surface p-4">
+            <Card className="mb-4 p-4">
               <h3 className="text-sm font-semibold mb-2">Title changed</h3>
               <div className="flex gap-4 text-sm">
                 <span className="bg-danger-light text-danger px-2 py-1 rounded line-through">
@@ -116,11 +117,11 @@ export default function PageDiff() {
                   {diff.to.title}
                 </span>
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Body diff */}
-          <div className="rounded-lg border border-border bg-surface overflow-hidden">
+          <Card className="overflow-hidden">
             <div className="px-4 py-2 border-b border-border bg-surface-secondary">
               <h3 className="text-sm font-semibold">Content changes</h3>
             </div>
@@ -148,7 +149,7 @@ export default function PageDiff() {
                 ));
               })}
             </div>
-          </div>
+          </Card>
         </>
       )}
     </div>

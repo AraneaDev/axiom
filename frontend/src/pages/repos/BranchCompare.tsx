@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
@@ -90,7 +91,7 @@ export default function BranchCompare() {
             <Badge variant="outline">{base}</Badge>
           </h2>
           {headCommits.length > 0 ? (
-            <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+            <Card className="divide-y divide-border">
               {headCommits.map((c) => (
                 <Link
                   key={c.sha}
@@ -102,7 +103,7 @@ export default function BranchCompare() {
                   <code className="text-xs text-text-secondary font-mono">{c.shortSha}</code>
                 </Link>
               ))}
-            </div>
+            </Card>
           ) : (
             <p className="text-sm text-text-secondary text-center py-8">No differences found.</p>
           )}

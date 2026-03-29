@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { usersApi } from '@/api/users.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -115,7 +116,7 @@ export default function SshKeys() {
       }
     >
       {showForm && (
-        <div className="rounded-lg border border-border bg-surface p-5">
+        <Card className="p-5">
           <h3 className="text-sm font-semibold text-text mb-4">Add new SSH key</h3>
           {error && (
             <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
@@ -158,7 +159,7 @@ export default function SshKeys() {
               </Button>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {!keys?.length ? (
@@ -169,7 +170,7 @@ export default function SshKeys() {
           description="Add an SSH key to clone repos over SSH."
         />
       ) : (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {keys.map((k) => (
             <div
               key={k.id}
@@ -195,7 +196,7 @@ export default function SshKeys() {
               </Button>
             </div>
           ))}
-        </div>
+        </Card>
       )}
 
       {/* Danger zone */}

@@ -66,7 +66,7 @@ Obtain an access token by calling `POST /api/auth/login` with your Axiom credent
 
 ---
 
-## Available Tools (37)
+## Available Tools (44)
 
 ### Organization (3 tools)
 
@@ -217,7 +217,7 @@ Add one or more issues to a sprint.
 
 ---
 
-### Repositories & Git (9 tools)
+### Repositories & Git (13 tools)
 
 #### `list_repos`
 
@@ -282,6 +282,54 @@ Get a diff between two refs.
 |`repoId`|string|yes|Repository ID|
 |`base`|string|yes|Base branch/tag/SHA|
 |`head`|string|yes|Head branch/tag/SHA|
+
+#### `search_code`
+
+Search for text or regex patterns across all files in a repository. Returns matching file paths and line numbers.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`repoId`|string|yes|Repository ID|
+|`query`|string|yes|Search string or regex pattern|
+|`ref`|string|no|Branch, tag, or SHA (default: `HEAD`)|
+|`path`|string|no|Limit search to a subdirectory|
+|`limit`|number|no|Max results (default: 20)|
+
+Example: `search_code(repoId, query: "loginTimeout", ref: "main")`
+
+#### `get_pr_diff`
+
+Get the full unified diff for a pull request.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`repoId`|string|yes|Repository ID|
+|`pullNumber`|number|yes|PR number|
+
+Example: `get_pr_diff(repoId, pullNumber: 12)`
+
+#### `get_pr_comments`
+
+List all review comments and general comments on a pull request.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`repoId`|string|yes|Repository ID|
+|`pullNumber`|number|yes|PR number|
+
+Example: `get_pr_comments(repoId, pullNumber: 12)`
+
+#### `get_recent_merges`
+
+List recently merged pull requests for a repository within a date range.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`repoId`|string|yes|Repository ID|
+|`since`|string|no|ISO date string -- only include merges after this date|
+|`limit`|number|no|Max results (default: 10)|
+
+Example: `get_recent_merges(repoId, since: "2026-03-01T00:00:00Z")`
 
 ---
 
@@ -447,6 +495,43 @@ Search across issues and wiki pages by keyword.
 
 ---
 
+### Cross-Product Integration (3 tools)
+
+#### `get_development_summary`
+
+Get a consolidated development summary for an issue: linked PRs, branches, commits, and current CI status.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`projectId`|string|yes|Project ID|
+|`issueNumber`|number|yes|Issue number|
+
+Example: `get_development_summary(projectId, issueNumber: 45)`
+
+#### `list_wiki_issue_links`
+
+List all wiki pages linked to a specific issue, or all issues linked to a specific wiki page.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`issueId`|string|conditional|Issue ID (provide this or `pageId`)|
+|`pageId`|string|conditional|Wiki page ID (provide this or `issueId`)|
+
+Example: `list_wiki_issue_links(issueId: "abc-123")`
+
+#### `link_wiki_to_issue`
+
+Create a bidirectional link between a wiki page and an issue for traceability.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`pageId`|string|yes|Wiki page ID|
+|`issueId`|string|yes|Issue ID|
+
+Example: `link_wiki_to_issue(pageId: "page-1", issueId: "issue-1")`
+
+---
+
 ## Discovery Chain
 
 Most tools require IDs (`projectId`, `teamId`, etc.). Use this chain to find them:
@@ -527,6 +612,24 @@ browse_files(repoId)         -> explore code
 1. list_repos(teamId) -> find the repo
 2. list_pipelines(repoId) -> verify CI is green
 3. create_release(repoId, tagName: "v1.0.0", targetBranch: "main", body: "...") -> publish
+```
+
+### Investigate and triage
+
+```
+search("login timeout error") -> get_issue(AXM-45) -> get_development_summary(AXM-45) -> search_code("loginTimeout") -> list_wiki_issue_links(issueId)
+```
+
+### Code review context
+
+```
+get_pull_request(PR #12) -> get_pr_diff(PR #12) -> get_pr_comments(PR #12) -> get_issue(linked issues) -> list_wiki_issue_links(issueId) -> get_wiki_page(design doc)
+```
+
+### Doc sync after merges
+
+```
+get_recent_merges(repoId, since) -> get_issue(linked issues) -> list_wiki_issue_links(issueId) -> update_wiki_page() -> link_wiki_to_issue()
 ```
 
 ---

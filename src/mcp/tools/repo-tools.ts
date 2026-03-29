@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
+import { grepFiles } from '../../git/git-search-commands';
 import { repoExists } from '../../git/repo-manager';
 import * as pipelinesService from '../../modules/pipelines/pipelines.service';
 import * as pullsService from '../../modules/pulls/pulls.service';
@@ -465,6 +466,184 @@ export function registerRepoTools(ctx: McpToolContext) {
         const message = err instanceof Error ? err.message : 'Create release failed';
         return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
       }
+    },
+  );
+
+  // Code search
+
+  server.tool(
+    'search_code',
+    'Search file contents in a repository using git grep',
+    {
+      query: z.string().describe('Search pattern (fixed string)'),
+      repoId: z.string().describe('Repository ID to search in'),
+      filePattern: z.string().optional().describe('Glob pattern to filter files (e.g. "*.ts")'),
+    },
+    async ({ query, repoId, filePattern }) => {
+      const repo = await prisma.repository.findUnique({
+        where: { id: repoId },
+        include: { team: true },
+      });
+      if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
+        return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('search_code', repo.team.orgId);
+      const results = await grepFiles(repo.diskPath, query, { filePattern, maxResults: 100 });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] };
+    },
+  );
+
+  // PR diff
+
+  server.tool(
+    'get_pr_diff',
+    'Get the full diff for a pull request',
+    {
+      repoId: z.string().describe('Repository ID'),
+      pullNumber: z.number().describe('Pull request number'),
+    },
+    async ({ repoId, pullNumber }) => {
+      const orgId = await getOrgIdFromRepo(repoId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('get_pr_diff', orgId);
+
+      const repo = await prisma.repository.findUnique({ where: { id: repoId } });
+      if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
+        return { content: [{ type: 'text' as const, text: 'Repository not found on disk' }] };
+
+      const pr = await prisma.pullRequest.findUnique({
+        where: { repoId_number: { repoId, number: pullNumber } },
+      });
+      if (!pr) return { content: [{ type: 'text' as const, text: 'Pull request not found' }] };
+
+      try {
+        let diffOutput = await gitCmd.diff(repo.diskPath, pr.targetBranch, pr.sourceBranch);
+        const MAX_SIZE = 100 * 1024; // 100KB
+        let truncated = false;
+        if (diffOutput.length > MAX_SIZE) {
+          diffOutput = diffOutput.slice(0, MAX_SIZE);
+          truncated = true;
+        }
+        const stats = await gitCmd.diffStat(repo.diskPath, pr.targetBranch, pr.sourceBranch);
+        const result = truncated
+          ? `${diffOutput}\n\n--- Output truncated at 100KB. Use get_diff with specific refs for targeted diffs. ---`
+          : diffOutput;
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify({ diff: result, stats }, null, 2) },
+          ],
+        };
+      } catch {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Could not compute diff -- branches may have been deleted',
+            },
+          ],
+        };
+      }
+    },
+  );
+
+  // PR comments
+
+  server.tool(
+    'get_pr_comments',
+    'Get comments on a pull request, including inline file comments and threads',
+    {
+      repoId: z.string().describe('Repository ID'),
+      pullNumber: z.number().describe('Pull request number'),
+    },
+    async ({ repoId, pullNumber }) => {
+      const orgId = await getOrgIdFromRepo(repoId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('get_pr_comments', orgId);
+
+      const pr = await prisma.pullRequest.findUnique({
+        where: { repoId_number: { repoId, number: pullNumber } },
+      });
+      if (!pr) return { content: [{ type: 'text' as const, text: 'Pull request not found' }] };
+
+      const comments = await prisma.pRComment.findMany({
+        where: { prId: pr.id },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const authorIds = [...new Set(comments.map((c) => c.authorId))];
+      const authors = await prisma.user.findMany({
+        where: { id: { in: authorIds } },
+        select: { id: true, username: true, displayName: true },
+      });
+      const authorMap = new Map(authors.map((a) => [a.id, a]));
+
+      const result = comments.map((c) => ({
+        id: c.id,
+        body: c.body,
+        filePath: c.filePath,
+        line: c.line,
+        parentId: c.parentId,
+        author: authorMap.get(c.authorId) ?? { id: c.authorId, username: null, displayName: null },
+        createdAt: c.createdAt,
+      }));
+
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  // Recent merges
+
+  server.tool(
+    'get_recent_merges',
+    'Get recently merged pull requests for a repository, optionally filtered by date',
+    {
+      repoId: z.string().describe('Repository ID'),
+      since: z
+        .string()
+        .optional()
+        .describe('ISO date string to filter merges after (uses updatedAt)'),
+      limit: z.number().optional().default(10).describe('Max results to return'),
+    },
+    async ({ repoId, since, limit }) => {
+      const orgId = await getOrgIdFromRepo(repoId);
+      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      await assertMcpPermission('get_recent_merges', orgId);
+
+      const take = Math.min(limit, 100);
+      const where: Record<string, unknown> = { repoId, status: 'MERGED' };
+      if (since) {
+        where.updatedAt = { gte: new Date(since) };
+      }
+
+      const prs = await prisma.pullRequest.findMany({
+        where,
+        take,
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          number: true,
+          title: true,
+          sourceBranch: true,
+          targetBranch: true,
+          authorId: true,
+          mergeStrategy: true,
+          createdAt: true,
+          updatedAt: true,
+          linkedIssues: {
+            include: {
+              issue: {
+                select: {
+                  id: true,
+                  number: true,
+                  title: true,
+                  status: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return { content: [{ type: 'text' as const, text: JSON.stringify(prs, null, 2) }] };
     },
   );
 }

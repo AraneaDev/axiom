@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Settings, Palette } from 'lucide-react';
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link } from 'react-router';
 
@@ -8,6 +8,7 @@ import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
 import { ColumnManager } from './ColumnManager';
 
 import { issuesApi } from '@/api/issues.api';
+import { projectsApi } from '@/api/projects.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -19,6 +20,34 @@ import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
 import type { BoardColumn, Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
+
+const PRIORITY_CARD_COLORS: Record<string, string> = {
+  CRITICAL: 'var(--card-color-critical)',
+  HIGH: 'var(--card-color-high)',
+  MEDIUM: 'var(--card-color-medium)',
+  LOW: 'var(--card-color-low)',
+};
+
+const TYPE_CARD_COLORS: Record<string, string> = {
+  BUG: 'var(--card-color-bug)',
+  STORY: 'var(--card-color-story)',
+  TASK: 'var(--card-color-task)',
+  EPIC: 'var(--card-color-epic)',
+};
+
+const PRIORITY_LEGEND: { key: string; label: string; color: string }[] = [
+  { key: 'CRITICAL', label: 'Critical', color: 'var(--card-color-critical)' },
+  { key: 'HIGH', label: 'High', color: 'var(--card-color-high)' },
+  { key: 'MEDIUM', label: 'Medium', color: 'var(--card-color-medium)' },
+  { key: 'LOW', label: 'Low', color: 'var(--card-color-low)' },
+];
+
+const TYPE_LEGEND: { key: string; label: string; color: string }[] = [
+  { key: 'BUG', label: 'Bug', color: 'var(--card-color-bug)' },
+  { key: 'STORY', label: 'Story', color: 'var(--card-color-story)' },
+  { key: 'TASK', label: 'Task', color: 'var(--card-color-task)' },
+  { key: 'EPIC', label: 'Epic', color: 'var(--card-color-epic)' },
+];
 
 function applyFilters(issues: Issue[], filters: Filters): Issue[] {
   let result = issues;
@@ -83,6 +112,7 @@ function IssueCard({
   project,
   columnId,
   onDragStart,
+  cardColorBy,
 }: {
   issue: Issue;
   org: string;
@@ -90,7 +120,15 @@ function IssueCard({
   project: string;
   columnId: string;
   onDragStart: (e: React.DragEvent, issue: Issue, columnId: string) => void;
+  cardColorBy?: string | null;
 }) {
+  const borderColor =
+    cardColorBy === 'priority'
+      ? (PRIORITY_CARD_COLORS[issue.priority] ?? undefined)
+      : cardColorBy === 'type'
+        ? (TYPE_CARD_COLORS[issue.type] ?? undefined)
+        : undefined;
+
   return (
     <Link
       to={`/${org}/${team}/${project}/issues/${issue.number}`}
@@ -100,6 +138,7 @@ function IssueCard({
         onDragStart(e, issue, columnId);
       }}
       className="block rounded-md border border-border bg-surface p-3 hover:shadow-md hover:border-primary/50 hover:bg-surface-secondary transition-all cursor-grab active:cursor-grabbing"
+      style={borderColor ? { borderLeftWidth: '4px', borderLeftColor: borderColor } : undefined}
     >
       <div className="flex items-center gap-1.5 mb-1.5">
         <IssueTypeIcon type={issue.type} className="h-3.5 w-3.5" />
@@ -170,6 +209,7 @@ function Column({
   dragSourceColumnId,
   groupBy,
   filters,
+  cardColorBy,
 }: {
   column: BoardColumn;
   org: string;
@@ -182,6 +222,7 @@ function Column({
   dragSourceColumnId: string | null;
   groupBy: GroupBy;
   filters: Filters;
+  cardColorBy?: string | null;
 }) {
   const isOver = dragOverColumnId === column.id;
   const isDragging = dragSourceColumnId !== null;
@@ -192,14 +233,30 @@ function Column({
     [column.issues, filters],
   );
   const lanes = useMemo(() => groupIssues(filteredIssues, groupBy), [filteredIssues, groupBy]);
+  const isOverWipLimit =
+    column.wipLimit !== null &&
+    column.wipLimit !== undefined &&
+    filteredIssues.length > column.wipLimit;
 
   return (
     <div className="flex flex-col w-72 shrink-0">
-      <div className="flex items-center justify-between mb-2 px-1">
+      <div
+        className={cn(
+          'flex items-center justify-between mb-2 px-1 rounded',
+          isOverWipLimit && 'border border-danger bg-danger/5',
+        )}
+      >
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-text">{column.name}</h3>
-          <span className="text-xs text-text-secondary bg-surface-tertiary rounded-full px-1.5">
-            {filteredIssues.length}
+          <span
+            className={cn(
+              'text-xs bg-surface-tertiary rounded-full px-1.5',
+              isOverWipLimit ? 'text-danger font-semibold' : 'text-text-secondary',
+            )}
+          >
+            {column.wipLimit != null
+              ? `${filteredIssues.length} / ${column.wipLimit}`
+              : filteredIssues.length}
           </span>
         </div>
       </div>
@@ -227,6 +284,7 @@ function Column({
                 project={project}
                 columnId={column.id}
                 onDragStart={onDragStart}
+                cardColorBy={cardColorBy}
               />
             ))}
           </SwimLaneSection>
@@ -252,6 +310,7 @@ export default function Board() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [showColumnManager, setShowColumnManager] = useState(false);
+  const [showColorMenu, setShowColorMenu] = useState(false);
 
   const {
     data: columns,
@@ -261,6 +320,17 @@ export default function Board() {
     queryKey: ['board', currentProject?.id],
     queryFn: () => issuesApi.getBoard(currentProject!.id),
     enabled: !!currentProject?.id,
+  });
+
+  const cardColorBy = currentProject?.cardColorBy ?? null;
+
+  const updateProjectMutation = useMutation({
+    mutationFn: (data: { cardColorBy?: string | null }) =>
+      projectsApi.update(currentProject!.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project'] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
   });
 
   // Extract unique assignees and labels from all board issues
@@ -359,6 +429,39 @@ export default function Board() {
   return (
     <div className="px-6 py-4">
       <PageHeader title={`${currentProject?.name} Board`} prefix={currentProject?.prefix}>
+        <div className="relative">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowColorMenu((o) => !o)}
+            className={cardColorBy ? 'border-primary text-primary' : ''}
+          >
+            <Palette className="h-4 w-4" /> Color by
+          </Button>
+          {showColorMenu && (
+            <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-border rounded-md shadow-md py-1 min-w-[140px] animate-slide-down">
+              {[
+                { value: null, label: 'None' },
+                { value: 'priority', label: 'Priority' },
+                { value: 'type', label: 'Type' },
+              ].map((opt) => (
+                <button
+                  key={opt.value ?? 'none'}
+                  onClick={() => {
+                    updateProjectMutation.mutate({ cardColorBy: opt.value });
+                    setShowColorMenu(false);
+                  }}
+                  className={cn(
+                    'w-full text-left px-3 py-1.5 text-sm hover:bg-surface-secondary transition-colors',
+                    cardColorBy === opt.value && 'text-primary font-semibold',
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <Button variant="secondary" size="sm" onClick={() => setShowColumnManager(true)}>
           <Settings className="h-4 w-4" /> Columns
         </Button>
@@ -377,6 +480,21 @@ export default function Board() {
         allAssignees={allAssignees}
         allLabels={allLabels}
       />
+
+      {cardColorBy && (
+        <div className="flex items-center gap-3 mb-2 px-1">
+          <span className="text-xs text-text-secondary font-medium">Color by {cardColorBy}:</span>
+          {(cardColorBy === 'priority' ? PRIORITY_LEGEND : TYPE_LEGEND).map((item) => (
+            <div key={item.key} className="flex items-center gap-1.5">
+              <span
+                className="inline-block w-3 h-3 rounded-sm"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="text-xs text-text-secondary">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div
         className="flex gap-4 overflow-x-auto pb-4"
@@ -400,6 +518,7 @@ export default function Board() {
             dragSourceColumnId={dragSourceColumnId}
             groupBy={groupBy}
             filters={filters}
+            cardColorBy={cardColorBy}
           />
         ))}
       </div>

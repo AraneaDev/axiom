@@ -16,6 +16,7 @@ import { teamsApi } from '@/api/teams.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useTeamContext } from '@/hooks/useTeamContext';
@@ -73,7 +74,7 @@ export default function MemberProfile() {
         {/* Main content */}
         <div className="space-y-6">
           {/* Profile header */}
-          <div className="rounded-lg border border-border bg-surface p-6">
+          <Card className="p-6">
             <div className="flex items-center gap-4">
               <Avatar name={profile.displayName} src={profile.avatarUrl ?? undefined} size="lg" />
               <div>
@@ -84,10 +85,10 @@ export default function MemberProfile() {
                 <Badge variant={ROLE_BADGE[profile.role] ?? 'default'}>{profile.role}</Badge>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Recent Activity */}
-          <div className="rounded-lg border border-border bg-surface">
+          <Card>
             <div className="px-4 py-3 border-b border-border-light">
               <h2 className="text-sm font-semibold">Recent Activity</h2>
             </div>
@@ -120,13 +121,13 @@ export default function MemberProfile() {
                 ))}
               </div>
             )}
-          </div>
+          </Card>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-4">
           {/* Stats */}
-          <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+          <Card className="p-4 space-y-3">
             <p className="text-xs text-text-secondary uppercase font-semibold">Stats</p>
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary flex items-center gap-2">
@@ -140,10 +141,10 @@ export default function MemberProfile() {
               </span>
               <span className="text-sm font-semibold">{profile.openPRsCount}</span>
             </div>
-          </div>
+          </Card>
 
           {/* Details */}
-          <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+          <Card className="p-4 space-y-3">
             <p className="text-xs text-text-secondary uppercase font-semibold">Details</p>
             <div className="flex items-center gap-2 text-sm">
               <Mail className="h-4 w-4 text-text-tertiary" />
@@ -169,7 +170,7 @@ export default function MemberProfile() {
                 Account created {formatDate(profile.createdAt)}
               </span>
             </div>
-          </div>
+          </Card>
         </div>
       </div>
     </div>

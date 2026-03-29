@@ -97,7 +97,9 @@ export const createProjectSchema = z.object({
     .regex(/^[A-Z]+$/),
 });
 
-export const updateProjectSchema = createProjectSchema.partial();
+export const updateProjectSchema = createProjectSchema.partial().extend({
+  cardColorBy: z.enum(['priority', 'type']).nullable().optional(),
+});
 
 // ─── Comments ───────────────────────────────────────────────
 

@@ -334,8 +334,11 @@ export const issuesApi = {
   createColumn: (projectId: string, data: { name: string; position?: number; isDone?: boolean }) =>
     post<BoardColumn>(`/projects/${projectId}/board/columns`, data),
 
-  updateColumn: (projectId: string, columnId: string, data: { name?: string; isDone?: boolean }) =>
-    patch<BoardColumn>(`/projects/${projectId}/board/columns/${columnId}`, data),
+  updateColumn: (
+    projectId: string,
+    columnId: string,
+    data: { name?: string; isDone?: boolean; wipLimit?: number | null },
+  ) => patch<BoardColumn>(`/projects/${projectId}/board/columns/${columnId}`, data),
 
   deleteColumn: (projectId: string, columnId: string) =>
     del(`/projects/${projectId}/board/columns/${columnId}`),

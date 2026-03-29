@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ChevronRight,
+  CircleDot,
   Hash,
   Plus,
   FileText,
@@ -20,11 +21,13 @@ import { useWikiContext } from './WikiLayout';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import { hydrateApi } from '@/api/hydrate.api';
+import { wikiIssueLinksApi } from '@/api/wiki-issue-links.api';
 import { wikiApi } from '@/api/wiki.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FileUpload } from '@/components/ui/FileUpload';
@@ -41,7 +44,7 @@ function TocSidebar({ tocEntries }: { tocEntries: { level: number; text: string;
   if (!tocEntries.length) return null;
   return (
     <aside className="hidden xl:block w-[340px] shrink-0 sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
-      <div className="rounded-lg border border-border bg-surface overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="px-4 py-3 border-b border-border bg-surface-secondary/50">
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
             On This Page
@@ -64,7 +67,7 @@ function TocSidebar({ tocEntries }: { tocEntries: { level: number; text: string;
             </button>
           ))}
         </nav>
-      </div>
+      </Card>
     </aside>
   );
 }
@@ -158,6 +161,12 @@ export default function PageView() {
   const deleteAttachmentMutation = useMutation({
     mutationFn: (id: string) => attachmentsApi.remove(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', page?.id] }),
+  });
+
+  const { data: linkedIssues = [] } = useQuery({
+    queryKey: ['wikiLinkedIssues', page?.id],
+    queryFn: () => wikiIssueLinksApi.listForPage(page!.id),
+    enabled: !!page?.id,
   });
 
   // Record page view when page loads
@@ -293,7 +302,7 @@ export default function PageView() {
               <div className="mb-8">
                 <Link
                   to={`${basePath}/${welcomePage.slug}`}
-                  className="group block rounded-lg border border-border bg-surface overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all"
+                  className="group block bg-surface rounded-lg border border-border overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all"
                 >
                   <div className="px-6 py-4 border-b border-border-light bg-surface-secondary/50 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -324,7 +333,7 @@ export default function PageView() {
                   <Link
                     key={node.id}
                     to={`${basePath}/${node.slug}`}
-                    className="group flex items-start gap-3 p-4 rounded-lg border border-border bg-surface hover:border-primary/40 hover:shadow-sm transition-all"
+                    className="group bg-surface flex items-start gap-3 p-4 rounded-lg border border-border hover:border-primary/40 hover:shadow-sm transition-all"
                   >
                     <div className="h-8 w-8 rounded-md bg-primary-light flex items-center justify-center shrink-0 mt-0.5">
                       <FileText className="h-4 w-4 text-primary" />
@@ -369,11 +378,11 @@ export default function PageView() {
       />
 
       <div className="flex gap-6 items-start">
-        <div className="flex-1 min-w-0 rounded-lg border border-border bg-surface p-6">
+        <Card className="flex-1 min-w-0 p-6">
           <div className="prose max-w-none leading-relaxed">
             <MarkdownRenderer content={page.body} />
           </div>
-        </div>
+        </Card>
         <TocSidebar tocEntries={tocEntries} />
       </div>
 
@@ -415,6 +424,37 @@ export default function PageView() {
           onUpload={() => queryClient.invalidateQueries({ queryKey: ['attachments', page.id] })}
         />
       </div>
+
+      {/* Linked Issues */}
+      {linkedIssues.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
+            <CircleDot className="h-3.5 w-3.5" />
+            Linked Issues
+            <Badge size="sm">{linkedIssues.length}</Badge>
+          </h2>
+          <div className="grid gap-2">
+            {linkedIssues.map((link) => (
+              <Link
+                key={link.id}
+                to={`/${link.issue.project.team.org.slug}/${link.issue.project.team.slug}/${link.issue.project.slug}/issues/${link.issue.number}`}
+                className="flex items-center gap-3 p-3 rounded-lg border border-border bg-surface hover:border-primary/40 hover:shadow-sm transition-all"
+              >
+                <CircleDot className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-xs font-mono font-medium text-text-secondary shrink-0">
+                  {link.issue.project.prefix}-{link.issue.number}
+                </span>
+                <span className="text-sm font-medium text-text truncate">{link.issue.title}</span>
+                {link.issue.column && (
+                  <Badge size="sm" variant="outline" className="ml-auto shrink-0">
+                    {link.issue.column.name}
+                  </Badge>
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Comments */}
       <div className="mt-8 border-t border-border-light pt-6">

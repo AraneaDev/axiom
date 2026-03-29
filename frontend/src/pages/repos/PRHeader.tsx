@@ -5,6 +5,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { formatRelative } from '@/lib/utils';
 
 const STATUS_BADGE: Record<string, 'primary' | 'success' | 'default'> = {
@@ -97,7 +98,7 @@ export function PRHeader({
 
       {/* Description */}
       {(pr.body || editingDescription) && (
-        <div className="rounded-lg border border-border bg-surface p-4">
+        <Card className="p-4">
           {editingDescription ? (
             <div className="space-y-2">
               <MarkdownEditor value={descriptionBody} onChange={onDescriptionBodyChange} />
@@ -125,7 +126,7 @@ export function PRHeader({
               )}
             </div>
           )}
-        </div>
+        </Card>
       )}
     </>
   );

@@ -25,6 +25,7 @@ interface ColumnRow {
   isDone: boolean;
   isDefault: boolean;
   issueCount: number;
+  wipLimit: number | null;
 }
 
 /**
@@ -45,6 +46,7 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
       isDone: c.isDone,
       isDefault: c.isDefault,
       issueCount: c.issues.length,
+      wipLimit: c.wipLimit,
     })),
   );
   const [newName, setNewName] = useState('');
@@ -60,7 +62,14 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
     onSuccess: (col) => {
       setRows((prev) => [
         ...prev,
-        { id: col.id, name: col.name, isDone: col.isDone, isDefault: col.isDefault, issueCount: 0 },
+        {
+          id: col.id,
+          name: col.name,
+          isDone: col.isDone,
+          isDefault: col.isDefault,
+          issueCount: 0,
+          wipLimit: col.wipLimit ?? null,
+        },
       ]);
       setNewName('');
       setNewIsDone(false);
@@ -75,7 +84,7 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
       data,
     }: {
       columnId: string;
-      data: { name?: string; isDone?: boolean };
+      data: { name?: string; isDone?: boolean; wipLimit?: number | null };
     }) => issuesApi.updateColumn(projectId, columnId, data),
     onSuccess: () => invalidateList(),
     onError: (err: Error) => toast.error(err.message || 'Failed to update column'),
@@ -123,6 +132,13 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
     const newVal = !row.isDone;
     updateMutation.mutate({ columnId: row.id, data: { isDone: newVal } });
     setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, isDone: newVal } : r)));
+  };
+
+  const handleWipLimitChange = (row: ColumnRow, value: string) => {
+    const parsed = value === '' ? null : parseInt(value, 10);
+    const wipLimit = parsed !== null && isNaN(parsed) ? null : parsed;
+    updateMutation.mutate({ columnId: row.id, data: { wipLimit } });
+    setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, wipLimit } : r)));
   };
 
   const handleDragStart = useCallback((index: number) => {
@@ -236,6 +252,16 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
                     </>
                   )}
                 </Button>
+
+                <input
+                  type="number"
+                  min={0}
+                  value={row.wipLimit ?? ''}
+                  onChange={(e) => handleWipLimitChange(row, e.target.value)}
+                  placeholder="No limit"
+                  className="w-20 text-xs px-1.5 py-0.5 rounded border border-border bg-surface text-text placeholder:text-text-tertiary shrink-0 text-center"
+                  title="WIP limit"
+                />
 
                 {row.isDefault && (
                   <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary-light text-primary shrink-0">

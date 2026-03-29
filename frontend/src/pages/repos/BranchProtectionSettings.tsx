@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -98,7 +99,7 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
       )}
 
       {rules.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {rules.map((rule) => (
             <div key={rule.id} className="px-4 py-3">
               <div className="flex items-center gap-3">
@@ -162,7 +163,7 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
               </div>
             </div>
           ))}
-        </div>
+        </Card>
       )}
 
       {formModal.isOpen && (

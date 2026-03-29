@@ -150,6 +150,7 @@ export async function listRepos(teamId: string, opts?: { limit?: number; offset?
  * @param data.description
  * @param data.visibility
  * @param data.defaultBranch
+ * @param data.prTemplate
  * @returns The updated repository record
  */
 export async function updateRepo(
@@ -159,6 +160,7 @@ export async function updateRepo(
     description?: string;
     visibility?: 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
     defaultBranch?: string;
+    prTemplate?: string | null;
   },
 ) {
   return prisma.repository.update({ where: { id: repoId }, data });

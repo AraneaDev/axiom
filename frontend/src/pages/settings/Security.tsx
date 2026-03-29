@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -38,7 +39,7 @@ export default function Security() {
     >
       <div className="space-y-4">
         {/* 2FA status */}
-        <div className="rounded-lg border border-border bg-surface p-4">
+        <Card className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-primary" />
@@ -60,12 +61,12 @@ export default function Security() {
               </Button>
             </Link>
           )}
-        </div>
+        </Card>
 
         {/* SSH Keys link */}
         <Link
           to="/settings/ssh-keys"
-          className="rounded-lg border border-border bg-surface p-4 flex items-center gap-3 hover:border-primary/50 transition-all block"
+          className="bg-surface rounded-lg border border-border p-4 flex items-center gap-3 hover:border-primary/50 transition-all block"
         >
           <Key className="h-5 w-5 text-text-secondary" />
           <div className="flex-1">
@@ -77,7 +78,7 @@ export default function Security() {
         {/* API Tokens link */}
         <Link
           to="/settings/tokens"
-          className="rounded-lg border border-border bg-surface p-4 flex items-center gap-3 hover:border-primary/50 transition-all block"
+          className="bg-surface rounded-lg border border-border p-4 flex items-center gap-3 hover:border-primary/50 transition-all block"
         >
           <KeyRound className="h-5 w-5 text-text-secondary" />
           <div className="flex-1">

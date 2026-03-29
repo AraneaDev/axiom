@@ -14,6 +14,7 @@ import { Link } from 'react-router';
 import { adminApi } from '@/api/admin.api';
 import type { SystemSettings as SystemSettingsType } from '@/api/admin.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 
 // ─── Setting Row ────────────────────────────────────────────
@@ -75,7 +76,7 @@ export default function SystemSettings() {
           </div>
         </div>
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="rounded-lg border border-border bg-surface p-5 space-y-3">
+          <Card key={i} className="p-5 space-y-3">
             <Skeleton className="h-4 w-32 mb-3" />
             {Array.from({ length: i === 0 ? 4 : 2 }).map((_, j) => (
               <div key={j} className="flex items-center justify-between py-3">
@@ -83,7 +84,7 @@ export default function SystemSettings() {
                 <Skeleton className="h-5 w-40 rounded" />
               </div>
             ))}
-          </div>
+          </Card>
         ))}
       </div>
     );
@@ -106,7 +107,7 @@ export default function SystemSettings() {
       </div>
 
       {/* Settings */}
-      <div className="rounded-lg border border-border bg-surface p-5">
+      <Card className="p-5">
         <div className="flex items-center gap-2 mb-4">
           <Server className="h-4 w-4 text-primary" />
           <h3 className="font-semibold text-sm text-text">Server Configuration</h3>
@@ -117,9 +118,9 @@ export default function SystemSettings() {
           <SettingRow icon={Server} label="Port" value={String(settings.port)} />
           <SettingRow icon={Globe} label="CORS Origin" value={settings.corsOrigin} />
         </div>
-      </div>
+      </Card>
 
-      <div className="rounded-lg border border-border bg-surface p-5">
+      <Card className="p-5">
         <div className="flex items-center gap-2 mb-4">
           <Database className="h-4 w-4 text-primary" />
           <h3 className="font-semibold text-sm text-text">Storage</h3>
@@ -128,7 +129,7 @@ export default function SystemSettings() {
           <SettingRow icon={FolderOpen} label="Repositories Path" value={settings.reposPath} />
           <SettingRow icon={FolderOpen} label="Storage Path" value={settings.storagePath} />
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 
 import { issuesApi } from '@/api/issues.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -265,7 +266,7 @@ export default function Roadmap() {
             <Skeleton className="h-8 w-28 rounded-md" />
           </div>
         </div>
-        <div className="rounded-lg border border-border bg-surface overflow-hidden">
+        <Card className="overflow-hidden">
           <div className="flex border-b border-border bg-surface-secondary">
             <Skeleton className="w-72 h-10 shrink-0" />
             <Skeleton className="flex-1 h-10" />
@@ -283,7 +284,7 @@ export default function Roadmap() {
               </div>
             </div>
           ))}
-        </div>
+        </Card>
       </div>
     );
 
@@ -314,7 +315,7 @@ export default function Roadmap() {
           description="Create issues with type Epic to see them on the roadmap timeline."
         />
       ) : (
-        <div className="rounded-lg border border-border bg-surface overflow-hidden">
+        <Card className="overflow-hidden">
           {/* Header */}
           <div className="flex border-b border-border bg-surface-secondary">
             <div className="w-72 shrink-0 px-3 py-2 text-xs font-semibold text-text-secondary uppercase border-r border-border-light flex items-center gap-1.5">
@@ -373,7 +374,7 @@ export default function Roadmap() {
               />
             ))}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

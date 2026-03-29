@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { Eye, GitPullRequest, Plus, GitMerge, XCircle, AlertTriangle } from 'lucide-react';
+import { Eye, GitPullRequest, GitMerge, XCircle, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { reposApi } from '@/api/repos.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -24,6 +25,7 @@ const STATUS_ICON = { OPEN: GitPullRequest, MERGED: GitMerge, CLOSED: XCircle };
  */
 export default function PRList() {
   const { org, teamSlug, currentRepo, basePath } = useRepoContext();
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>('OPEN');
   const [myReviews, setMyReviews] = useState(false);
   const { user } = useAuthStore();
@@ -46,10 +48,6 @@ export default function PRList() {
   if (isLoading)
     return (
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <Skeleton className="h-7 w-40" />
-          <Skeleton className="h-8 w-24 rounded-md" />
-        </div>
         <div className="flex gap-2 mb-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-8 w-20 rounded-md" />
@@ -72,15 +70,6 @@ export default function PRList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Pull Requests</h1>
-        <Link to={`${basePath}/pulls/new`}>
-          <Button size="sm">
-            <Plus className="h-4 w-4" /> New PR
-          </Button>
-        </Link>
-      </div>
-
       <div className="flex gap-2 mb-4">
         {(['OPEN', 'MERGED', 'CLOSED', ''] as const).map((s) => {
           const Icon = s ? STATUS_ICON[s] : GitPullRequest;
@@ -115,7 +104,7 @@ export default function PRList() {
           }
         />
       ) : (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {prs.map((pr) => {
             const Icon = STATUS_ICON[pr.status] ?? GitPullRequest;
             return (
@@ -136,13 +125,18 @@ export default function PRList() {
                       <>
                         {' '}
                         &middot;{' '}
-                        <Link
-                          to={`/${org}/${teamSlug}/members/${pr.author.username}`}
-                          className="hover:text-primary hover:underline"
-                          onClick={(e) => e.stopPropagation()}
+                        <span
+                          role="link"
+                          tabIndex={0}
+                          className="hover:text-primary hover:underline cursor-pointer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            navigate(`/${org}/${teamSlug}/members/${pr.author!.username}`);
+                          }}
                         >
                           {pr.author.displayName}
-                        </Link>
+                        </span>
                       </>
                     )}{' '}
                     &middot; {pr.sourceBranch} → {pr.targetBranch} &middot;{' '}
@@ -156,7 +150,7 @@ export default function PRList() {
               </Link>
             );
           })}
-        </div>
+        </Card>
       )}
     </div>
   );

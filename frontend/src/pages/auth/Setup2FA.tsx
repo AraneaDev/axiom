@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 
 import { authApi } from '@/api/auth.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
 
@@ -41,7 +42,7 @@ export default function Setup2FA() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-secondary">
-      <div className="w-full max-w-md rounded-lg border border-border bg-surface p-8 shadow-sm">
+      <Card className="w-full max-w-md p-8 shadow-sm">
         <h1 className="text-2xl font-bold text-center mb-1">Set up two-factor authentication</h1>
         <p className="text-sm text-text-secondary text-center mb-6">
           Scan this QR code with your authenticator app, then enter the 6-digit code.
@@ -87,7 +88,7 @@ export default function Setup2FA() {
             )}
           </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

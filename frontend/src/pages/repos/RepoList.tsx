@@ -6,6 +6,7 @@ import { reposApi } from '@/api/repos.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useTeamContext } from '@/hooks/useTeamContext';
@@ -73,7 +74,7 @@ export default function RepoList() {
           description="Create your first repository."
         />
       ) : (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {repos.map((repo) => {
             const Icon = VIS_ICON[repo.visibility];
             return (
@@ -101,7 +102,7 @@ export default function RepoList() {
               </Link>
             );
           })}
-        </div>
+        </Card>
       )}
     </div>
   );

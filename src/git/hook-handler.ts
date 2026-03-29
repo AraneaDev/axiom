@@ -5,11 +5,14 @@ import { Request, Response, NextFunction, Router } from 'express';
 
 import { prisma } from '../config/database';
 import { cacheInvalidate } from '../config/redis';
+import { executeSmartCommit } from '../modules/issues/smart-commits.executor';
 import { triggerPipelineOnPush } from '../pipelines/trigger';
 import { broadcastToRoom } from '../realtime/broadcast';
 import { logger } from '../utils/logger';
 
 import * as gitCmd from './git-commands';
+
+const ISSUE_KEY_IN_BRANCH = /([A-Z]+-\d+)/;
 
 export const HOOK_SECRET = process.env.HOOK_SECRET || crypto.randomBytes(32).toString('hex');
 
@@ -132,11 +135,22 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
       });
     }
 
+    // Resolve pusher from first new commit's author email (reused for branch auto-link)
+    let pusherId: string | null = null;
+
     // Auto-link commits to issues via commit message references
     if (!isTag && !isDelete) {
       try {
         const ISSUE_REF_RE = /(?:(closes?|fixes?)\s+)?[#^](?:([A-Z]+-)?(\d+))/gi;
         const recentCommits = await gitCmd.log(repo.diskPath!, payload.after, 50, 0);
+
+        // Resolve pusher from latest commit author
+        if (recentCommits.length > 0 && recentCommits[0].authorEmail) {
+          const pusherUser = await prisma.user.findFirst({
+            where: { email: recentCommits[0].authorEmail },
+          });
+          if (pusherUser) pusherId = pusherUser.id;
+        }
 
         for (const commit of recentCommits) {
           const matches = [...commit.message.matchAll(ISSUE_REF_RE)];
@@ -195,9 +209,41 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
               }
             }
           }
+
+          // Execute smart commit directives only for new commits (skip already-processed)
+          try {
+            const alreadyProcessed = await prisma.issueCommit.findFirst({
+              where: { sha: commit.sha, repoId: repo.id },
+              select: { createdAt: true },
+            });
+            // If commit was already linked before this push (createdAt > 5s ago), skip smart commits
+            const isNew =
+              !alreadyProcessed || Date.now() - alreadyProcessed.createdAt.getTime() < 5000;
+            if (isNew) {
+              const commitUser = commit.authorEmail
+                ? await prisma.user.findFirst({ where: { email: commit.authorEmail } })
+                : null;
+              await executeSmartCommit(commit.message, repo.id, commitUser?.id ?? null);
+            }
+          } catch (err) {
+            logger.error(
+              'smart commit execution error',
+              { repoId: repo.id, sha: commit.sha },
+              err as Error,
+            );
+          }
         }
       } catch (err) {
         logger.error('commit->issue linking error', { repoId: repo.id }, err as Error);
+      }
+    }
+
+    // Auto-link branch to issue if branch name contains an issue key
+    if (!isTag && !isDelete) {
+      try {
+        await autoLinkBranch(payload.ref, repo.id, pusherId);
+      } catch (err) {
+        logger.error('branch auto-link error', { repoId: repo.id }, err as Error);
       }
     }
 
@@ -213,6 +259,55 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
     next(err);
   }
 });
+
+async function autoLinkBranch(ref: string, repoId: string, pusherId: string | null): Promise<void> {
+  if (!ref.startsWith('refs/heads/')) return;
+  if (!pusherId) {
+    logger.warn('branch auto-link skipped: could not resolve pusher', { repoId, ref });
+    return;
+  }
+
+  const branchName = ref.replace('refs/heads/', '');
+  const match = branchName.match(ISSUE_KEY_IN_BRANCH);
+  if (!match) return;
+
+  const issueKey = match[1];
+  const keyMatch = issueKey.match(/^([A-Z]+)-(\d+)$/);
+  if (!keyMatch) return;
+
+  const [, prefix, numStr] = keyMatch;
+  const issueNumber = parseInt(numStr, 10);
+
+  // Scope to projects in the same team as the repo
+  const issue = await prisma.issue.findFirst({
+    where: {
+      number: issueNumber,
+      project: {
+        prefix,
+        team: { repos: { some: { id: repoId } } },
+      },
+    },
+  });
+
+  if (!issue) return;
+
+  await prisma.issueBranch.upsert({
+    where: {
+      issueId_repoId_branchName: {
+        issueId: issue.id,
+        repoId,
+        branchName,
+      },
+    },
+    create: {
+      issueId: issue.id,
+      repoId,
+      branchName,
+      createdById: pusherId,
+    },
+    update: {},
+  });
+}
 
 /**
  * Dispatch a webhook with HMAC-SHA256 signature and retry logic.

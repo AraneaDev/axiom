@@ -189,7 +189,8 @@ export function Breadcrumbs() {
 
     // Inside repo file views (blob/tree/blame), preserve ref and filename casing exactly
     const isInRepoFileView = segments.some((s, idx) => REPO_FILE_VIEWS.has(s) && i > idx);
-    crumbs.push({ label: isInRepoFileView ? seg : deSlugify(seg), path });
+    const decoded = decodeURIComponent(seg);
+    crumbs.push({ label: isInRepoFileView ? decoded : deSlugify(decoded), path });
   });
 
   return (

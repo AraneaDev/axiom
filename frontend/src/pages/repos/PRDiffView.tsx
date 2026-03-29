@@ -1,10 +1,27 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Rows3, Columns2, Plus, X, MessageSquare, FileText, ListTree } from 'lucide-react';
-import { useRef, useState } from 'react';
+import {
+  Rows3,
+  Columns2,
+  Plus,
+  X,
+  MessageSquare,
+  FileText,
+  FilePlus,
+  FileMinus,
+  FileEdit,
+  ChevronUp,
+  ChevronDown,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeft,
+} from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CommitInfo } from '@/api/repos.api';
 import { reposApi } from '@/api/repos.api';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
@@ -14,146 +31,73 @@ interface CommentingOn {
   line: number;
 }
 
-interface SplitLine {
-  left: { num: number | null; content: string; type: 'same' | 'del' | 'empty' };
-  right: { num: number | null; content: string; type: 'same' | 'add' | 'empty' };
-}
+function parseDiff(raw: string) {
+  const files: {
+    header: string;
+    oldFile: string;
+    newFile: string;
+    hunks: { header: string; lines: { type: 'add' | 'del' | 'ctx'; content: string }[] }[];
+  }[] = [];
 
-type FileStatus = 'added' | 'modified' | 'deleted';
+  const fileSections = raw.split(/^diff --git /m).filter(Boolean);
 
-function getFileStatus(stat: { additions: number; deletions: number }): FileStatus {
-  if (stat.additions > 0 && stat.deletions === 0) return 'added';
-  if (stat.additions === 0 && stat.deletions > 0) return 'deleted';
-  return 'modified';
-}
+  for (const section of fileSections) {
+    const lines = section.split('\n');
+    const header = 'diff --git ' + lines[0];
 
-const fileStatusColors: Record<FileStatus, string> = {
-  added: 'text-success',
-  modified: 'text-warning',
-  deleted: 'text-danger',
-};
+    let oldFile = '';
+    let newFile = '';
+    const hunks: (typeof files)[0]['hunks'] = [];
 
-function DiffFileTree({
-  stats,
-  activeFile,
-  onFileClick,
-}: {
-  stats: { file: string; additions: number; deletions: number }[];
-  activeFile: string | null;
-  onFileClick: (file: string) => void;
-}) {
-  return (
-    <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
-      <div className="flex items-center gap-2 mb-2">
-        <FileText className="h-3.5 w-3.5 text-text-secondary" />
-        <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-          {stats.length} files changed
-        </span>
-      </div>
-      <div className="space-y-0.5">
-        {stats.map((stat) => {
-          const status = getFileStatus(stat);
-          const fileName = stat.file.split('/').pop() || stat.file;
-          const dirPath = stat.file.includes('/')
-            ? stat.file.substring(0, stat.file.lastIndexOf('/'))
-            : '';
-          return (
-            <button
-              key={stat.file}
-              type="button"
-              onClick={() => onFileClick(stat.file)}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-left hover:bg-surface-tertiary transition-colors',
-                activeFile === stat.file && 'bg-primary-light text-primary',
-              )}
-              title={stat.file}
-            >
-              <FileText className={cn('h-3 w-3 shrink-0', fileStatusColors[status])} />
-              <span className="truncate flex-1">
-                {dirPath && <span className="text-text-tertiary">{dirPath}/</span>}
-                {fileName}
-              </span>
-              <span className="shrink-0 flex gap-1 text-xs">
-                {stat.additions > 0 && <span className="text-success">+{stat.additions}</span>}
-                {stat.deletions > 0 && <span className="text-danger">-{stat.deletions}</span>}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function parseDiffToSplit(raw: string): { file: string; lines: SplitLine[] }[] {
-  const files: { file: string; lines: SplitLine[] }[] = [];
-  const chunks = raw.split(/^diff --git /m).filter(Boolean);
-
-  for (const chunk of chunks) {
-    const linesRaw = chunk.split('\n');
-    const headerMatch = linesRaw[0]?.match(/a\/(.+?) b\//);
-    const file = headerMatch?.[1] ?? 'unknown';
-    const splitLines: SplitLine[] = [];
-
-    let leftNum = 0;
-    let rightNum = 0;
-
-    for (const line of linesRaw) {
-      if (line.startsWith('@@')) {
-        const hunkMatch = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-        if (hunkMatch) {
-          leftNum = parseInt(hunkMatch[1], 10) - 1;
-          rightNum = parseInt(hunkMatch[2], 10) - 1;
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.startsWith('--- ')) {
+        oldFile = line.slice(4);
+      } else if (line.startsWith('+++ ')) {
+        newFile = line.slice(4);
+      } else if (line.startsWith('@@')) {
+        hunks.push({ header: line, lines: [] });
+      } else if (hunks.length > 0) {
+        const currentHunk = hunks[hunks.length - 1];
+        if (line.startsWith('+')) {
+          currentHunk.lines.push({ type: 'add', content: line.slice(1) });
+        } else if (line.startsWith('-')) {
+          currentHunk.lines.push({ type: 'del', content: line.slice(1) });
+        } else {
+          currentHunk.lines.push({
+            type: 'ctx',
+            content: line.startsWith(' ') ? line.slice(1) : line,
+          });
         }
-        splitLines.push({
-          left: { num: null, content: line, type: 'same' },
-          right: { num: null, content: line, type: 'same' },
-        });
-        continue;
-      }
-      if (
-        line.startsWith('---') ||
-        line.startsWith('+++') ||
-        line.startsWith('index ') ||
-        line.startsWith('new file') ||
-        line.startsWith('deleted file')
-      ) {
-        continue;
-      }
-      if (line.startsWith('-')) {
-        leftNum++;
-        splitLines.push({
-          left: { num: leftNum, content: line.slice(1), type: 'del' },
-          right: { num: null, content: '', type: 'empty' },
-        });
-      } else if (line.startsWith('+')) {
-        rightNum++;
-        splitLines.push({
-          left: { num: null, content: '', type: 'empty' },
-          right: { num: rightNum, content: line.slice(1), type: 'add' },
-        });
-      } else if (line.length > 0 || line === '') {
-        leftNum++;
-        rightNum++;
-        splitLines.push({
-          left: {
-            num: leftNum,
-            content: line.startsWith(' ') ? line.slice(1) : line,
-            type: 'same',
-          },
-          right: {
-            num: rightNum,
-            content: line.startsWith(' ') ? line.slice(1) : line,
-            type: 'same',
-          },
-        });
       }
     }
-    if (splitLines.length > 0) {
-      files.push({ file, lines: splitLines });
-    }
+
+    files.push({ header, oldFile, newFile, hunks });
   }
+
   return files;
+}
+
+function splitDiffByFile(rawDiff: string): { file: string; rawDiff: string }[] {
+  const chunks = rawDiff.split(/(?=^diff --git )/m);
+  return chunks.filter(Boolean).map((chunk) => {
+    const headerMatch = chunk.match(/^diff --git a\/(.+?) b\//);
+    return { file: headerMatch?.[1] ?? 'unknown', rawDiff: chunk };
+  });
+}
+
+function getFileIcon(s: { additions: number; deletions: number }) {
+  if (s.additions > 0 && s.deletions > 0)
+    return <FileEdit className="h-3.5 w-3.5 text-warning shrink-0" />;
+  if (s.additions > 0) return <FilePlus className="h-3.5 w-3.5 text-success shrink-0" />;
+  return <FileMinus className="h-3.5 w-3.5 text-danger shrink-0" />;
+}
+
+function getChangeType(s: { additions: number; deletions: number }) {
+  if (s.additions > 0 && s.deletions > 0) return 'Modified';
+  if (s.additions > 0 && s.deletions === 0) return 'Added';
+  if (s.deletions > 0 && s.additions === 0) return 'Deleted';
+  return 'Modified';
 }
 
 interface InlineCommentFormProps {
@@ -194,14 +138,19 @@ function InlineCommentForm({ onCancel, onSubmit, isPending }: InlineCommentFormP
   );
 }
 
-interface SplitDiffViewProps {
-  rawDiff: string;
+function ActiveFileDiff({
+  activeChunk,
+  activeStat,
+  diffView,
+  repoId,
+  prNumber,
+}: {
+  activeChunk: { file: string; rawDiff: string };
+  activeStat?: { file: string; additions: number; deletions: number };
+  diffView: 'unified' | 'split';
   repoId: string;
   prNumber: number;
-}
-
-function SplitDiffView({ rawDiff, repoId, prNumber }: SplitDiffViewProps) {
-  const files = parseDiffToSplit(rawDiff);
+}) {
   const [commentingOn, setCommentingOn] = useState<CommentingOn | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -219,219 +168,246 @@ function SplitDiffView({ rawDiff, repoId, prNumber }: SplitDiffViewProps) {
     },
   });
 
-  const bgClass = (type: string) =>
-    type === 'del'
-      ? 'bg-danger-light text-danger'
-      : type === 'add'
-        ? 'bg-success-light text-success'
-        : type === 'empty'
-          ? 'bg-surface-secondary'
-          : '';
+  const parsed = useMemo(() => parseDiff(activeChunk.rawDiff), [activeChunk.rawDiff]);
+  const activeFile = parsed[0];
 
-  return (
-    <div className="space-y-4">
-      {files.map((f) => (
-        <div
-          key={f.file}
-          id={`diff-${encodeURIComponent(f.file)}`}
-          className="rounded-lg border border-border overflow-hidden"
-        >
-          <div className="bg-surface-secondary px-3 py-1.5 text-xs font-mono text-text-secondary border-b border-border">
-            {f.file}
-          </div>
-          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-            <table className="w-full text-xs font-mono border-collapse">
-              <tbody>
-                {f.lines.map((row, i) => {
-                  const lineNum = row.right.num ?? row.left.num;
-                  const isCommentTarget =
-                    commentingOn?.filePath === f.file && commentingOn?.line === lineNum;
-                  return (
-                    <>
-                      <tr key={i} className="group relative">
-                        <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-border bg-surface-secondary relative">
-                          {row.left.num ?? ''}
-                          {lineNum !== null && (
-                            <button
-                              title="Add comment"
-                              onClick={() => setCommentingOn({ filePath: f.file, line: lineNum })}
-                              className="absolute left-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center h-4 w-4 rounded bg-primary text-text-inverse"
-                            >
-                              <Plus className="h-2.5 w-2.5" />
-                            </button>
-                          )}
-                        </td>
-                        <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.left.type)}`}>
-                          {row.left.content}
-                        </td>
-                        <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-l border-border bg-surface-secondary">
-                          {row.right.num ?? ''}
-                        </td>
-                        <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.right.type)}`}>
-                          {row.right.content}
-                        </td>
-                      </tr>
-                      {isCommentTarget && (
-                        <tr key={`comment-${i}`}>
-                          <td colSpan={4}>
-                            <InlineCommentForm
-                              onCancel={() => setCommentingOn(null)}
-                              onSubmit={(body) =>
-                                addCommentMutation.mutate({ body, filePath: f.file, line: lineNum })
-                              }
-                              isPending={addCommentMutation.isPending}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+  if (!activeFile || activeFile.hunks.length === 0) {
+    return (
+      <Card className="overflow-hidden">
+        <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
+          {activeStat && getFileIcon(activeStat)}
+          <span className="truncate">{activeStat?.file}</span>
         </div>
-      ))}
-    </div>
-  );
-}
+        <div className="px-4 py-8 text-center text-sm text-text-secondary">
+          Binary file or no diff available.
+        </div>
+      </Card>
+    );
+  }
 
-interface UnifiedDiffViewProps {
-  rawDiff: string;
-  repoId: string;
-  prNumber: number;
-}
+  if (diffView === 'split') {
+    // Convert parsed hunks into paired split rows
+    const splitRows: {
+      left: { num: number | null; content: string; type: 'same' | 'del' | 'empty' };
+      right: { num: number | null; content: string; type: 'same' | 'add' | 'empty' };
+      hunkHeader?: string;
+    }[] = [];
 
-function UnifiedDiffView({ rawDiff, repoId, prNumber }: UnifiedDiffViewProps) {
-  const [commentingOn, setCommentingOn] = useState<CommentingOn | null>(null);
-  const queryClient = useQueryClient();
-  const toast = useToast();
+    let leftNum = 0;
+    let rightNum = 0;
 
-  const addCommentMutation = useMutation({
-    mutationFn: (data: { body: string; filePath: string; line: number }) =>
-      reposApi.addPRComment(repoId, prNumber, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pr', repoId, prNumber] });
-      setCommentingOn(null);
-      toast.success('Comment added');
-    },
-    onError: () => {
-      toast.error('Failed to add comment');
-    },
-  });
-
-  // Parse unified diff into file-grouped sections for anchor support
-  const fileGroups: {
-    file: string;
-    lines: { raw: string; filePath: string; lineNum: number | null; index: number }[];
-  }[] = [];
-
-  let currentFile = '';
-  let rightLineNum = 0;
-  let currentGroup: (typeof fileGroups)[0] | null = null;
-
-  rawDiff.split('\n').forEach((line, i) => {
-    const fileMatch = line.match(/^diff --git a\/.+? b\/(.+)$/);
-    if (fileMatch) {
-      currentFile = fileMatch[1];
-      rightLineNum = 0;
-      currentGroup = { file: currentFile, lines: [] };
-      fileGroups.push(currentGroup);
-      currentGroup.lines.push({ raw: line, filePath: currentFile, lineNum: null, index: i });
-      return;
-    }
-    if (!currentGroup) {
-      currentGroup = { file: '', lines: [] };
-      fileGroups.push(currentGroup);
-    }
-    if (line.startsWith('@@')) {
-      const hunkMatch = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-      if (hunkMatch) rightLineNum = parseInt(hunkMatch[1], 10) - 1;
-      currentGroup.lines.push({ raw: line, filePath: currentFile, lineNum: null, index: i });
-      return;
-    }
-    if (line.startsWith('+') && !line.startsWith('+++')) {
-      rightLineNum++;
-      currentGroup.lines.push({
-        raw: line,
-        filePath: currentFile,
-        lineNum: rightLineNum,
-        index: i,
+    for (const hunk of activeFile.hunks) {
+      const hunkMatch = hunk.header.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (hunkMatch) {
+        leftNum = parseInt(hunkMatch[1], 10) - 1;
+        rightNum = parseInt(hunkMatch[2], 10) - 1;
+      }
+      splitRows.push({
+        left: { num: null, content: '', type: 'same' },
+        right: { num: null, content: '', type: 'same' },
+        hunkHeader: hunk.header,
       });
-      return;
-    }
-    if (line.startsWith('-') && !line.startsWith('---')) {
-      currentGroup.lines.push({ raw: line, filePath: currentFile, lineNum: null, index: i });
-      return;
-    }
-    if (
-      !line.startsWith('---') &&
-      !line.startsWith('+++') &&
-      !line.startsWith('index ') &&
-      !line.startsWith('new file') &&
-      !line.startsWith('deleted file')
-    ) {
-      if (line.length > 0 || line === '') rightLineNum++;
-    }
-    currentGroup.lines.push({ raw: line, filePath: currentFile, lineNum: null, index: i });
-  });
 
+      // Group consecutive del/add lines for side-by-side pairing
+      let i = 0;
+      while (i < hunk.lines.length) {
+        const line = hunk.lines[i];
+        if (line.type === 'ctx') {
+          leftNum++;
+          rightNum++;
+          splitRows.push({
+            left: { num: leftNum, content: line.content, type: 'same' },
+            right: { num: rightNum, content: line.content, type: 'same' },
+          });
+          i++;
+        } else {
+          // Collect consecutive del then add
+          const dels: typeof hunk.lines = [];
+          const adds: typeof hunk.lines = [];
+          while (i < hunk.lines.length && hunk.lines[i].type === 'del') {
+            dels.push(hunk.lines[i]);
+            i++;
+          }
+          while (i < hunk.lines.length && hunk.lines[i].type === 'add') {
+            adds.push(hunk.lines[i]);
+            i++;
+          }
+          const maxLen = Math.max(dels.length, adds.length);
+          for (let j = 0; j < maxLen; j++) {
+            const del = dels[j];
+            const add = adds[j];
+            if (del) leftNum++;
+            if (add) rightNum++;
+            splitRows.push({
+              left: del
+                ? { num: leftNum, content: del.content, type: 'del' }
+                : { num: null, content: '', type: 'empty' },
+              right: add
+                ? { num: rightNum, content: add.content, type: 'add' }
+                : { num: null, content: '', type: 'empty' },
+            });
+          }
+        }
+      }
+    }
+
+    const bgClass = (type: string) =>
+      type === 'del'
+        ? 'bg-danger/10 text-danger'
+        : type === 'add'
+          ? 'bg-success/10 text-success'
+          : type === 'empty'
+            ? 'bg-surface-secondary'
+            : '';
+
+    return (
+      <Card className="overflow-hidden">
+        <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
+          {activeStat && getFileIcon(activeStat)}
+          <span className="truncate">{activeStat?.file}</span>
+          {activeStat && (
+            <span className="flex items-center gap-2 text-xs shrink-0 ml-auto">
+              <span className="text-success">+{activeStat.additions}</span>
+              <span className="text-danger">-{activeStat.deletions}</span>
+            </span>
+          )}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-mono border-collapse">
+            <tbody>
+              {splitRows.map((row, i) => {
+                if (row.hunkHeader) {
+                  return (
+                    <tr key={i}>
+                      <td
+                        colSpan={4}
+                        className="px-4 py-1 text-text-tertiary bg-primary-light text-xs"
+                      >
+                        {row.hunkHeader}
+                      </td>
+                    </tr>
+                  );
+                }
+                return (
+                  <tr key={i} className="group">
+                    <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-border bg-surface-secondary">
+                      {row.left.num ?? ''}
+                    </td>
+                    <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.left.type)}`}>
+                      {row.left.content}
+                    </td>
+                    <td className="w-10 text-right text-text-tertiary select-none px-1 border-r border-l border-border bg-surface-secondary">
+                      {row.right.num ?? ''}
+                    </td>
+                    <td className={`w-1/2 px-2 py-0 whitespace-pre ${bgClass(row.right.type)}`}>
+                      {row.right.content}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    );
+  }
+
+  // Unified view with parsed hunks
+  let lineNum = 0;
   return (
-    <div className="space-y-4">
-      {fileGroups.map((fg) => (
-        <pre
-          key={fg.file || fg.lines[0]?.index}
-          id={fg.file ? `diff-${encodeURIComponent(fg.file)}` : undefined}
-          className="rounded-lg border border-border bg-surface text-xs font-mono overflow-x-auto max-h-[600px] overflow-y-auto"
-        >
-          {fg.lines.map((pl, i) => {
-            const isCommentTarget =
-              commentingOn?.filePath === pl.filePath && commentingOn?.line === pl.lineNum;
-            const lineClass =
-              pl.raw.startsWith('+') && !pl.raw.startsWith('+++')
-                ? 'text-success bg-success-light'
-                : pl.raw.startsWith('-') && !pl.raw.startsWith('---')
-                  ? 'text-danger bg-danger-light'
-                  : pl.raw.startsWith('@@')
-                    ? 'text-primary bg-primary-light'
-                    : '';
-            return (
-              <>
-                <div key={i} className={`group relative flex ${lineClass}`}>
-                  <span className="flex-1 px-4 py-0 whitespace-pre">{pl.raw}</span>
-                  {pl.lineNum !== null && (
-                    <button
-                      title="Add comment"
-                      onClick={() =>
-                        setCommentingOn({ filePath: pl.filePath, line: pl.lineNum as number })
-                      }
-                      className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center h-4 w-4 rounded bg-primary text-text-inverse shrink-0 mr-1 self-center"
-                    >
-                      <Plus className="h-2.5 w-2.5" />
-                    </button>
-                  )}
-                </div>
-                {isCommentTarget && (
-                  <div key={`comment-${i}`} className="block">
-                    <InlineCommentForm
-                      onCancel={() => setCommentingOn(null)}
-                      onSubmit={(body) =>
-                        addCommentMutation.mutate({
-                          body,
-                          filePath: pl.filePath,
-                          line: pl.lineNum as number,
-                        })
-                      }
-                      isPending={addCommentMutation.isPending}
-                    />
-                  </div>
-                )}
-              </>
-            );
-          })}
+    <Card className="overflow-hidden">
+      <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
+        {activeStat && getFileIcon(activeStat)}
+        <span className="truncate">{activeStat?.file}</span>
+        {activeStat && (
+          <span className="flex items-center gap-2 text-xs shrink-0 ml-auto">
+            <span className="text-success">+{activeStat.additions}</span>
+            <span className="text-danger">-{activeStat.deletions}</span>
+          </span>
+        )}
+      </div>
+      <div className="overflow-x-auto">
+        <pre className="text-xs font-mono m-0 p-0">
+          <table className="w-full border-collapse">
+            <tbody>
+              {activeFile.hunks.map((hunk, hi) => {
+                const hunkMatch = hunk.header.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+                if (hunkMatch) lineNum = parseInt(hunkMatch[1], 10) - 1;
+                return (
+                  <Fragment key={hi}>
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="px-4 py-1 text-text-tertiary bg-primary-light text-xs"
+                      >
+                        {hunk.header}
+                      </td>
+                    </tr>
+                    {hunk.lines.map((line, li) => {
+                      if (line.type === 'add' || line.type === 'ctx') lineNum++;
+                      const currentLine = line.type !== 'del' ? lineNum : null;
+                      const isCommentTarget =
+                        commentingOn?.filePath === activeChunk.file &&
+                        commentingOn?.line === currentLine;
+                      return (
+                        <Fragment key={`${hi}-${li}`}>
+                          <tr
+                            className={cn(
+                              'group',
+                              line.type === 'add'
+                                ? 'bg-success/10'
+                                : line.type === 'del'
+                                  ? 'bg-danger/10'
+                                  : '',
+                            )}
+                          >
+                            <td className="w-6 text-center text-text-tertiary select-none px-1 relative">
+                              {line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}
+                              {currentLine !== null && (
+                                <button
+                                  title="Add comment"
+                                  onClick={() =>
+                                    setCommentingOn({
+                                      filePath: activeChunk.file,
+                                      line: currentLine,
+                                    })
+                                  }
+                                  className="absolute left-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center h-4 w-4 rounded bg-primary text-text-inverse"
+                                >
+                                  <Plus className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                            </td>
+                            <td className="pl-2 whitespace-pre leading-5">{line.content || ' '}</td>
+                          </tr>
+                          {isCommentTarget && (
+                            <tr>
+                              <td colSpan={3}>
+                                <InlineCommentForm
+                                  onCancel={() => setCommentingOn(null)}
+                                  onSubmit={(body) =>
+                                    addCommentMutation.mutate({
+                                      body,
+                                      filePath: activeChunk.file,
+                                      line: currentLine,
+                                    })
+                                  }
+                                  isPending={addCommentMutation.isPending}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </pre>
-      ))}
-    </div>
+      </div>
+    </Card>
   );
 }
 
@@ -464,14 +440,32 @@ export function PRDiffView({
   repoId,
   prNumber,
 }: PRDiffViewProps) {
-  const [activeFile, setActiveFile] = useState<string | null>(null);
-  const [showFileTree, setShowFileTree] = useState(true);
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [fileListOpen, setFileListOpen] = useState(true);
 
-  function scrollToFile(file: string) {
-    const el = document.getElementById(`diff-${encodeURIComponent(file)}`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setActiveFile(file);
-  }
+  const stats = diff?.stats ?? [];
+  const diffText = diff?.diff;
+  const fileChunks = useMemo(() => (diffText ? splitDiffByFile(diffText) : []), [diffText]);
+  const fileCount = stats.length;
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveFileIndex((prev) => (prev < fileCount - 1 ? prev + 1 : prev));
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveFileIndex((prev) => (prev > 0 ? prev - 1 : prev));
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [fileCount]);
+
+  const activeStat = stats[activeFileIndex];
+  const activeChunk = activeStat ? fileChunks.find((c) => c.file === activeStat.file) : null;
 
   return (
     <>
@@ -479,7 +473,7 @@ export function PRDiffView({
       {commits && commits.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold mb-2">Commits ({commits.length})</h2>
-          <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+          <Card className="divide-y divide-border">
             {commits.map((c: CommitInfo) => (
               <div key={c.sha} className="flex items-center gap-3 px-4 py-2">
                 <code className="text-xs text-text-secondary font-mono">{c.shortSha}</code>
@@ -487,43 +481,32 @@ export function PRDiffView({
                 <span className="text-xs text-text-secondary">{c.author}</span>
               </div>
             ))}
-          </div>
+          </Card>
         </div>
       )}
 
-      {/* Diff stats */}
-      {diff?.stats && diff.stats.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold mb-2">Changed Files ({diff.stats.length})</h2>
-          <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-            {diff.stats.map((s) => (
-              <div key={s.file} className="flex items-center gap-3 px-4 py-2 text-sm">
-                <span className="flex-1 font-mono text-xs truncate">{s.file}</span>
-                <span className="text-success text-xs">+{s.additions}</span>
-                <span className="text-danger text-xs">-{s.deletions}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Diff content */}
-      {diff?.diff && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold">Diff</h2>
-            <div className="flex items-center gap-2">
-              {diff.stats && diff.stats.length > 1 && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => setShowFileTree(!showFileTree)}
-                  title="Toggle file tree"
-                >
-                  <ListTree className="h-4 w-4" />
-                </Button>
+      {/* File navigation + diff carousel */}
+      {stats.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2 bg-surface-secondary border-b border-border">
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setFileListOpen(!fileListOpen)}
+              title={fileListOpen ? 'Collapse file list' : 'Expand file list'}
+            >
+              {fileListOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeft className="h-4 w-4" />
               )}
-              <div className="flex items-center rounded-lg border border-border bg-surface overflow-hidden">
+            </Button>
+            <FileText className="h-4 w-4 text-text-tertiary" />
+            <span className="text-sm font-medium text-text-secondary">
+              File {activeFileIndex + 1} of {stats.length}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <Card className="flex items-center overflow-hidden">
                 <Button
                   size="sm"
                   variant={diffView === 'unified' ? 'primary' : 'ghost'}
@@ -540,50 +523,83 @@ export function PRDiffView({
                 >
                   <Columns2 className="h-3.5 w-3.5" /> Split
                 </Button>
+              </Card>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setActiveFileIndex((p) => Math.max(0, p - 1))}
+                  disabled={activeFileIndex === 0}
+                  title="Previous file (k)"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setActiveFileIndex((p) => Math.min(stats.length - 1, p + 1))}
+                  disabled={activeFileIndex === stats.length - 1}
+                  title="Next file (j)"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </div>
-          <div className="flex gap-4">
-            {showFileTree && diff.stats && diff.stats.length > 1 && (
-              <div className="w-64 shrink-0 hidden lg:block">
-                <DiffFileTree
-                  stats={diff.stats}
-                  activeFile={activeFile}
-                  onFileClick={scrollToFile}
-                />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              {diffView === 'unified' ? (
-                repoId ? (
-                  <UnifiedDiffView rawDiff={diff.diff} repoId={repoId} prNumber={prNumber} />
-                ) : (
-                  <pre className="rounded-lg border border-border bg-surface p-4 text-xs font-mono overflow-x-auto max-h-[600px] overflow-y-auto">
-                    {diff.diff.split('\n').map((line: string, i: number) => (
-                      <div
-                        key={i}
-                        className={
-                          line.startsWith('+') && !line.startsWith('+++')
-                            ? 'text-success bg-success-light'
-                            : line.startsWith('-') && !line.startsWith('---')
-                              ? 'text-danger bg-danger-light'
-                              : line.startsWith('@@')
-                                ? 'text-primary bg-primary-light'
-                                : ''
-                        }
-                      >
-                        {line}
-                      </div>
-                    ))}
-                  </pre>
-                )
-              ) : repoId ? (
-                <SplitDiffView rawDiff={diff.diff} repoId={repoId} prNumber={prNumber} />
-              ) : (
-                <SplitDiffView rawDiff={diff.diff} repoId="" prNumber={prNumber} />
-              )}
+          {fileListOpen && (
+            <div className="max-h-64 overflow-y-auto divide-y divide-border">
+              {stats.map((s, i) => (
+                <Button
+                  key={s.file}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveFileIndex(i)}
+                  className={cn(
+                    'w-full justify-start rounded-none px-4 py-1.5',
+                    i === activeFileIndex ? 'bg-primary-light' : '',
+                  )}
+                >
+                  {i === activeFileIndex && (
+                    <ChevronRight className="h-3 w-3 text-primary shrink-0" />
+                  )}
+                  {getFileIcon(s)}
+                  <span className="font-mono text-xs truncate">{s.file}</span>
+                  <Badge
+                    className="ml-auto"
+                    variant={
+                      getChangeType(s) === 'Added'
+                        ? 'success'
+                        : getChangeType(s) === 'Deleted'
+                          ? 'danger'
+                          : 'warning'
+                    }
+                    size="sm"
+                  >
+                    {getChangeType(s)}
+                  </Badge>
+                  <span className="text-success text-xs">+{s.additions}</span>
+                  <span className="text-danger text-xs">-{s.deletions}</span>
+                </Button>
+              ))}
             </div>
-          </div>
+          )}
+        </Card>
+      )}
+
+      {/* Active file diff */}
+      {activeChunk && repoId && (
+        <ActiveFileDiff
+          activeChunk={activeChunk}
+          activeStat={activeStat}
+          diffView={diffView}
+          repoId={repoId}
+          prNumber={prNumber}
+        />
+      )}
+
+      {!diff?.diff && stats.length === 0 && (
+        <div className="text-sm text-text-secondary text-center py-8">
+          No diff available for this pull request.
         </div>
       )}
     </>

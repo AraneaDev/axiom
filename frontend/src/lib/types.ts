@@ -45,6 +45,7 @@ export interface Project {
   slug: string;
   description?: string;
   prefix: string;
+  cardColorBy?: string | null;
   _count?: { issues: number };
 }
 
@@ -92,6 +93,7 @@ export interface BoardColumn {
   position: number;
   isDefault: boolean;
   isDone: boolean;
+  wipLimit: number | null;
   issues: Issue[];
 }
 

@@ -23,6 +23,13 @@ export default function PRCreate() {
   const [body, setBody] = useState('');
   const [sourceBranch, setSourceBranch] = useState('');
   const [targetBranch, setTargetBranch] = useState('');
+  const [templateApplied, setTemplateApplied] = useState(false);
+
+  // Pre-fill body with PR template if available (once)
+  if (currentRepo?.prTemplate && !templateApplied && !body) {
+    setBody(currentRepo.prTemplate);
+    setTemplateApplied(true);
+  }
 
   const { data: branches } = useQuery({
     queryKey: ['branches', currentRepo?.id],
@@ -105,11 +112,7 @@ export default function PRCreate() {
 
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-text">Description</label>
-          <MarkdownEditor
-            value={body}
-            onChange={setBody}
-            placeholder="Describe your changes..."
-          />
+          <MarkdownEditor value={body} onChange={setBody} placeholder="Describe your changes..." />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-2">

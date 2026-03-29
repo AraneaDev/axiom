@@ -25,6 +25,13 @@ export const MCP_TOOL_PERMISSIONS: Record<string, Action> = {
   get_page_tree: 'wiki:view',
   create_wiki_page: 'wiki:edit',
   search: 'issue:view',
+  get_development_summary: 'issue:view',
+  list_wiki_issue_links: 'wiki:view',
+  link_wiki_to_issue: 'wiki:edit',
+  search_code: 'repo:read',
+  get_pr_diff: 'repo:read',
+  get_pr_comments: 'repo:read',
+  get_recent_merges: 'repo:read',
 };
 
 /**

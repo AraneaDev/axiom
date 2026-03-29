@@ -41,7 +41,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 1. Users
   // ────────────────────────────────────────────────────────────
-  console.warn('  [1/8] Users');
+  console.warn('  [1/13] Users');
   const passwordHash = await bcrypt.hash('password123', 12);
 
   const userData = [
@@ -64,7 +64,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 2. Organization + memberships
   // ────────────────────────────────────────────────────────────
-  console.warn('  [2/8] Organization');
+  console.warn('  [2/13] Organization');
   const org = await prisma.organization.upsert({
     where: { slug: 'aranea-dev' },
     update: {},
@@ -92,7 +92,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 3. Team + memberships
   // ────────────────────────────────────────────────────────────
-  console.warn('  [3/8] Team');
+  console.warn('  [3/13] Team');
 
   const team = await prisma.team.upsert({
     where: { orgId_slug: { orgId: org.id, slug: 'axiom' } },
@@ -122,7 +122,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 4. Project + board columns + labels
   // ────────────────────────────────────────────────────────────
-  console.warn('  [4/8] Project');
+  console.warn('  [4/13] Project');
 
   const columnDefs = [
     { name: 'Backlog', position: 0, isDefault: true, isDone: false },
@@ -179,7 +179,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 5. Issues
   // ────────────────────────────────────────────────────────────
-  console.warn('  [5/8] Issues');
+  console.warn('  [5/13] Issues');
 
   type IssueSeed = {
     title: string;
@@ -265,7 +265,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 6. Comments
   // ────────────────────────────────────────────────────────────
-  console.warn('  [6/8] Comments');
+  console.warn('  [6/13] Comments');
 
   type CommentSeed = {
     issueTitle: string;
@@ -332,7 +332,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 7. Wiki space + pages
   // ────────────────────────────────────────────────────────────
-  console.warn('  [7/8] Wiki');
+  console.warn('  [7/13] Wiki');
 
   // Wiki pages are sourced entirely from docs/*.md (auto-import block below)
 
@@ -419,13 +419,12 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 8. Repository (self-referential bare clone)
   // ────────────────────────────────────────────────────────────
-  console.warn('  [8/8] Repository');
+  console.warn('  [8/13] Repository');
 
-  {
-    const selfReposBase = process.env.REPOS_PATH ?? '/data/repos';
-    const selfDiskPath = path.join(selfReposBase, 'aranea-dev', 'axiom', 'axiom.git');
+  const selfReposBase = process.env.REPOS_PATH ?? '/data/repos';
+  const selfDiskPath = path.join(selfReposBase, 'aranea-dev', 'axiom', 'axiom.git');
 
-    const _selfRepo = await prisma.repository.upsert({
+  const selfRepo = await prisma.repository.upsert({
       where: { teamId_slug: { teamId: team.id, slug: 'axiom' } },
       update: { diskPath: selfDiskPath, description: 'The Axiom platform source code' },
       create: {
@@ -509,7 +508,241 @@ async function main() {
       console.warn(`        dev API token created (deterministic)`);
       console.warn(`        git remote "axiom" -> ${remoteUrl}`);
     }
+
+  // ────────────────────────────────────────────────────────────
+  // 9. Sprints
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [9/13] Sprints');
+
+  const sprintStartDate = new Date();
+  sprintStartDate.setDate(sprintStartDate.getDate() - 14);
+  const sprintEndDate = new Date();
+  sprintEndDate.setDate(sprintEndDate.getDate() - 1);
+
+  const existingCompletedSprint = await prisma.sprint.findFirst({
+    where: { projectId: project.id, name: 'Sprint 1' },
+  });
+
+  let completedSprint: { id: string };
+  if (existingCompletedSprint) {
+    completedSprint = existingCompletedSprint;
+  } else {
+    completedSprint = await prisma.sprint.create({
+      data: {
+        projectId: project.id,
+        name: 'Sprint 1',
+        goal: 'Complete core repository browsing features and fix critical bugs',
+        startDate: sprintStartDate,
+        endDate: sprintEndDate,
+        status: 'COMPLETED',
+        committedAt: sprintStartDate,
+      },
+    });
+
+    // Add done issues to completed sprint and record history
+    const doneIssues = createdIssues.slice(0, 10);
+    for (const issue of doneIssues) {
+      await prisma.issue.update({
+        where: { id: issue.id },
+        data: { sprintId: completedSprint.id },
+      });
+      await prisma.sprintIssueHistory.create({
+        data: {
+          sprintId: completedSprint.id,
+          issueId: issue.id,
+          action: 'ADDED',
+          timestamp: sprintStartDate,
+        },
+      });
+    }
+
+    // Simulate mid-sprint scope change: one issue added late
+    const lateAddIssue = createdIssues[10];
+    if (lateAddIssue) {
+      const midSprintDate = new Date(sprintStartDate);
+      midSprintDate.setDate(midSprintDate.getDate() + 5);
+      await prisma.issue.update({
+        where: { id: lateAddIssue.id },
+        data: { sprintId: completedSprint.id },
+      });
+      await prisma.sprintIssueHistory.create({
+        data: {
+          sprintId: completedSprint.id,
+          issueId: lateAddIssue.id,
+          action: 'ADDED',
+          timestamp: midSprintDate,
+        },
+      });
+    }
   }
+
+  // Active sprint
+  const activeSprintStart = new Date();
+  activeSprintStart.setDate(activeSprintStart.getDate() - 3);
+  const activeSprintEnd = new Date();
+  activeSprintEnd.setDate(activeSprintEnd.getDate() + 11);
+
+  const existingActiveSprint = await prisma.sprint.findFirst({
+    where: { projectId: project.id, name: 'Sprint 2' },
+  });
+
+  if (!existingActiveSprint) {
+    const activeSprint = await prisma.sprint.create({
+      data: {
+        projectId: project.id,
+        name: 'Sprint 2',
+        goal: 'PR review improvements and dark mode',
+        startDate: activeSprintStart,
+        endDate: activeSprintEnd,
+        status: 'ACTIVE',
+        committedAt: activeSprintStart,
+      },
+    });
+
+    // Add some in-progress/todo issues to active sprint
+    const activeIssueIndices = [12, 19]; // Inline PR comments, Dark mode
+    for (const idx of activeIssueIndices) {
+      const issue = createdIssues[idx];
+      if (!issue) continue;
+      await prisma.issue.update({
+        where: { id: issue.id },
+        data: { sprintId: activeSprint.id },
+      });
+      await prisma.sprintIssueHistory.create({
+        data: {
+          sprintId: activeSprint.id,
+          issueId: issue.id,
+          action: 'ADDED',
+          timestamp: activeSprintStart,
+        },
+      });
+    }
+    console.warn('        Sprint 1 (COMPLETED), Sprint 2 (ACTIVE)');
+  } else {
+    console.warn('        Sprints already exist');
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 10. Board settings (WIP limits + card colors)
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [10/13] Board settings');
+
+  // Set WIP limits on Review and In Progress columns
+  if (columns['In Progress']) {
+    await prisma.boardColumn.update({
+      where: { id: columns['In Progress'] },
+      data: { wipLimit: 5 },
+    });
+  }
+  if (columns['Review']) {
+    await prisma.boardColumn.update({
+      where: { id: columns['Review'] },
+      data: { wipLimit: 3 },
+    });
+  }
+
+  // Set card color by priority
+  await prisma.project.update({
+    where: { id: project.id },
+    data: { cardColorBy: 'priority' },
+  });
+  console.warn('        WIP limits: In Progress=5, Review=3');
+  console.warn('        Card colors: by priority');
+
+  // ────────────────────────────────────────────────────────────
+  // 11. PR template
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [11/13] PR template');
+
+  await prisma.repository.update({
+    where: { id: selfRepo.id },
+    data: {
+      prTemplate: `## Summary
+
+What does this PR do? Why is it needed?
+
+## Changes
+
+-
+
+## Testing
+
+- [ ] Unit tests added/updated
+- [ ] Manual testing done
+- [ ] No regressions found
+
+## Screenshots
+
+(if applicable)
+`,
+    },
+  });
+  console.warn('        PR template set on axiom repo');
+
+  // ────────────────────────────────────────────────────────────
+  // 12. Space permissions
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [12/13] Space permissions');
+
+  const existingPerm = await prisma.spacePermission.findFirst({
+    where: { spaceId: wikiSpace.id },
+  });
+
+  if (!existingPerm) {
+    await prisma.spacePermission.create({
+      data: {
+        spaceId: wikiSpace.id,
+        teamRole: 'ADMIN',
+        level: 'ADMIN',
+      },
+    });
+    await prisma.spacePermission.create({
+      data: {
+        spaceId: wikiSpace.id,
+        teamRole: 'MEMBER',
+        level: 'EDIT',
+      },
+    });
+    console.warn('        ADMIN -> ADMIN, MEMBER -> EDIT');
+  } else {
+    console.warn('        Permissions already exist');
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 13. Development links (branches + commits)
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [13/13] Development links');
+
+  let devLinksCreated = 0;
+
+  // Link some issues to branches (branches are display-only labels in the dev panel)
+  const branchSeeds = [
+    { issueIdx: 0, branchName: 'fix/AXM-1-file-browser-empty' },
+    { issueIdx: 1, branchName: 'fix/AXM-2-file-view-blank' },
+    { issueIdx: 3, branchName: 'feature/AXM-4-commit-detail' },
+    { issueIdx: 19, branchName: 'feature/AXM-20-dark-mode' },
+  ];
+
+  for (const seed of branchSeeds) {
+    const issue = createdIssues[seed.issueIdx];
+    if (!issue) continue;
+
+    const existingBranch = await prisma.issueBranch.findFirst({
+      where: { issueId: issue.id, repoId: selfRepo.id, branchName: seed.branchName },
+    });
+    if (!existingBranch) {
+      await prisma.issueBranch.create({
+        data: {
+          issueId: issue.id,
+          repoId: selfRepo.id,
+          branchName: seed.branchName,
+          createdById: users.tim.id,
+        },
+      });
+      devLinksCreated++;
+    }
+  }
+  console.warn(`        ${devLinksCreated} branch links created`);
 
   console.warn('\nDemo seed complete!');
   console.warn('Login at http://localhost:7000/login');

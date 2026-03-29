@@ -20,12 +20,14 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import EnvironmentsTab from './EnvironmentsTab';
 import InsightsTab from './InsightsTab';
 import PipelinesTab from './PipelinesTab';
+import PRList from './PRList';
 import ReleasesTab from './ReleasesTab';
 
 import { reposApi, type CommitInfo } from '@/api/repos.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { CopyInput } from '@/components/ui/CopyInput';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { RepoSkeleton } from '@/components/ui/Skeleton';
@@ -46,7 +48,8 @@ export default function RepoDetail() {
   const TAB_SLUGS = ['branches', 'commits', 'releases', 'pipelines', 'environments', 'insights'];
   const pathParts = location.pathname.split('/');
   const lastSegment = pathParts[pathParts.length - 1];
-  const activeTab = TAB_SLUGS.includes(lastSegment) ? lastSegment : 'code';
+  const activeTab =
+    lastSegment === 'pulls' ? 'prs' : TAB_SLUGS.includes(lastSegment) ? lastSegment : 'code';
 
   const activeBranch = selectedBranch ?? currentRepo?.defaultBranch ?? 'main';
 
@@ -250,7 +253,7 @@ export default function RepoDetail() {
           </div>
 
           {tree && (
-            <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+            <Card className="divide-y divide-border">
               {tree
                 .sort((a, b) =>
                   a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'tree' ? -1 : 1,
@@ -278,14 +281,14 @@ export default function RepoDetail() {
                     )}
                   </Link>
                 ))}
-            </div>
+            </Card>
           )}
         </>
       )}
 
       {/* README */}
       {activeTab === 'code' && readmeBlob?.content && (
-        <div className="rounded-lg border border-border bg-surface p-6">
+        <Card className="p-6">
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
             <FileText className="h-4 w-4 text-text-tertiary" />
             <span className="text-sm font-medium text-text-secondary">{readmeEntry?.name}</span>
@@ -293,14 +296,18 @@ export default function RepoDetail() {
           <div className="prose max-w-none">
             <MarkdownRenderer content={readmeBlob.content} />
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Branches tab */}
       {activeTab === 'branches' && branches && (
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        <Card className="divide-y divide-border">
           {branches.map((branch) => (
-            <div key={branch.name} className="flex items-center gap-3 px-4 py-3">
+            <Link
+              key={branch.name}
+              to={`${basePath}/tree/${encodeURIComponent(branch.name)}`}
+              className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
+            >
               <GitBranch className="h-4 w-4 text-text-secondary shrink-0" />
               <span className="text-sm font-medium flex-1">{branch.name}</span>
               {branch.name === currentRepo.defaultBranch && (
@@ -308,40 +315,13 @@ export default function RepoDetail() {
                   default
                 </Badge>
               )}
-            </div>
+            </Link>
           ))}
-        </div>
+        </Card>
       )}
 
       {/* PRs tab */}
-      {activeTab === 'prs' && (
-        <div>
-          {prs && prs.length > 0 ? (
-            <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-              {prs.map((pr) => (
-                <Link
-                  key={pr.id}
-                  to={`${basePath}/pulls/${pr.number}`}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
-                >
-                  <GitPullRequest className="h-4 w-4 text-success shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{pr.title}</p>
-                    <p className="text-xs text-text-secondary">
-                      #{pr.number} &middot; {pr.sourceBranch} &rarr; {pr.targetBranch}
-                    </p>
-                  </div>
-                  <Badge variant="outline" size="sm">
-                    {pr.status}
-                  </Badge>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-text-secondary text-center py-8">No open pull requests.</p>
-          )}
-        </div>
-      )}
+      {activeTab === 'prs' && <PRList />}
 
       {/* Pipelines tab */}
       {activeTab === 'pipelines' && currentRepo && <PipelinesTab repoId={currentRepo.id} />}
@@ -376,7 +356,7 @@ export default function RepoDetail() {
             </div>
           )}
           {allCommits.length > 0 ? (
-            <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+            <Card className="divide-y divide-border">
               {allCommits.map((c) => (
                 <Link
                   key={c.sha}
@@ -395,7 +375,7 @@ export default function RepoDetail() {
                   </code>
                 </Link>
               ))}
-            </div>
+            </Card>
           ) : (
             commits && (
               <p className="text-sm text-text-secondary text-center py-8">No commits found.</p>

@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import IssueLinkModal from './IssueLinkModal';
 
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 
 interface IssueLinkResource {
   id: string;
@@ -50,7 +51,7 @@ export function IssueLinkedSection({
 
   const content =
     links.length > 0 ? (
-      <div className="rounded-lg border border-border bg-surface p-4">
+      <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold">Linked Issues</h3>
           <Button variant="ghost" size="sm" onClick={() => setShowLinkModal(true)}>
@@ -89,9 +90,9 @@ export function IssueLinkedSection({
             );
           })}
         </div>
-      </div>
+      </Card>
     ) : (
-      <div className="rounded-lg border border-border bg-surface p-4">
+      <Card className="p-4">
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-sm font-semibold">Linked Issues</h3>
           <Button variant="ghost" size="sm" onClick={() => setShowLinkModal(true)}>
@@ -99,7 +100,7 @@ export function IssueLinkedSection({
           </Button>
         </div>
         <p className="text-xs text-text-tertiary">No linked issues yet.</p>
-      </div>
+      </Card>
     );
 
   return (

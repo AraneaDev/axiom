@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 
 interface HelpItem {
@@ -66,7 +67,7 @@ export function SettingsPage({
 
       {hasHelp && (
         <aside className="hidden lg:block w-80 shrink-0 mt-[4.25rem]">
-          <div className="sticky top-20 rounded-lg border border-border bg-surface p-5 shadow-sm">
+          <Card className="sticky top-20 p-5 shadow-sm">
             {helpTitle && <h3 className="text-sm font-semibold text-text mb-2">{helpTitle}</h3>}
             {helpDescription && (
               <p className="text-sm text-text-secondary leading-relaxed">{helpDescription}</p>
@@ -83,7 +84,7 @@ export function SettingsPage({
                 ))}
               </ul>
             )}
-          </div>
+          </Card>
         </aside>
       )}
     </div>

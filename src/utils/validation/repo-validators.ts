@@ -14,7 +14,9 @@ export const createRepoSchema = z.object({
   defaultBranch: z.string().max(100).optional(),
 });
 
-export const updateRepoSchema = createRepoSchema.partial();
+export const updateRepoSchema = createRepoSchema.partial().extend({
+  prTemplate: z.string().max(10000).nullable().optional(),
+});
 
 export const forkRepoSchema = z.object({
   targetTeamId: z.string().min(1),

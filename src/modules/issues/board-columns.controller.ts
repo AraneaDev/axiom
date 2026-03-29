@@ -7,19 +7,25 @@ import { param } from '../../utils/params';
 import * as svc from './board-columns.service';
 
 export const create = asyncHandler(async (req: Request, res: Response) => {
-  const { name, position, isDone } = req.body;
+  const { name, position, isDone, wipLimit } = req.body;
   if (!name || typeof name !== 'string') {
     throw new AppError(400, 'name is required');
   }
-  const column = await svc.createColumn(param(req, 'projectId'), { name, position, isDone });
+  const column = await svc.createColumn(param(req, 'projectId'), {
+    name,
+    position,
+    isDone,
+    wipLimit,
+  });
   res.status(201).json(column);
 });
 
 export const update = asyncHandler(async (req: Request, res: Response) => {
-  const { name, isDone } = req.body;
+  const { name, isDone, wipLimit } = req.body;
   const column = await svc.updateColumn(param(req, 'projectId'), param(req, 'columnId'), {
     name,
     isDone,
+    wipLimit,
   });
   res.json(column);
 });

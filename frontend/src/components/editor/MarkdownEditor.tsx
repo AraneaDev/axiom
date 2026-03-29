@@ -39,12 +39,15 @@ import { Markdown } from 'tiptap-markdown';
 import { CalloutExtension } from './CalloutExtension';
 import { CollapsibleExtension } from './CollapsibleExtension';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
+import { IssueEmbedExtension } from './IssueEmbedExtension';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
 import { SlashCommandExtension } from './SlashCommandExtension';
+import { SmartLinkExtension } from './SmartLinkExtension';
 import { TableOfContentsExtension } from './TableOfContentsExtension';
 
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 
 const lowlight = createLowlight(common);
@@ -151,6 +154,8 @@ export function MarkdownEditor({
       CollapsibleExtension,
       TableOfContentsExtension,
       SlashCommandExtension,
+      SmartLinkExtension,
+      IssueEmbedExtension,
     ],
     content: value || '',
     onUpdate: ({ editor: e }) => {
@@ -201,7 +206,7 @@ export function MarkdownEditor({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface overflow-hidden">
+    <Card className="overflow-hidden">
       {/* Toolbar */}
       <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-surface-secondary flex-wrap">
         <ToolbarButton
@@ -357,6 +362,6 @@ export function MarkdownEditor({
       <div style={{ ['--editor-min-h' as string]: compact ? '120px' : '300px' }}>
         <EditorContent editor={editor} />
       </div>
-    </div>
+    </Card>
   );
 }

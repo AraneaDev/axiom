@@ -30,6 +30,7 @@ import { statusChecksApi } from '@/api/status-checks.api';
 import type { StatusCheck } from '@/api/status-checks.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -206,7 +207,7 @@ export default function CommitDetail() {
 
       {/* Status checks */}
       {commitStatuses && commitStatuses.statuses.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface mb-4 p-4">
+        <Card className="mb-4 p-4">
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-sm font-semibold">Status Checks</h2>
             <Badge
@@ -251,7 +252,7 @@ export default function CommitDetail() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Deployment badges */}
@@ -280,7 +281,7 @@ export default function CommitDetail() {
 
       {/* File navigation bar */}
       {stats.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface mb-4 overflow-hidden">
+        <Card className="mb-4 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2 bg-surface-secondary border-b border-border">
             <Button
               variant="ghost"
@@ -356,7 +357,7 @@ export default function CommitDetail() {
               ))}
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Diff -- carousel: show only active file */}
@@ -370,15 +371,12 @@ export default function CommitDetail() {
           );
           if (!activeFile)
             return (
-              <div className="rounded-lg border border-border bg-surface p-8 text-center text-text-secondary text-sm">
+              <Card className="p-8 text-center text-text-secondary text-sm">
                 No diff available for this file.
-              </div>
+              </Card>
             );
           return (
-            <div
-              key={activeFileIndex}
-              className="rounded-lg border border-border bg-surface mb-4 overflow-hidden"
-            >
+            <Card key={activeFileIndex} className="mb-4 overflow-hidden">
               <div className="px-4 py-2 bg-surface-secondary border-b border-border text-sm font-mono flex items-center gap-2">
                 {getFileIcon(activeStat)}
                 <span className="truncate">{activeStat.file}</span>
@@ -426,7 +424,7 @@ export default function CommitDetail() {
                   </table>
                 </pre>
               </div>
-            </div>
+            </Card>
           );
         })()}
 

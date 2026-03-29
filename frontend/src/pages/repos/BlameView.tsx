@@ -4,6 +4,7 @@ import { Link, Navigate, useParams } from 'react-router';
 
 import { reposApi, BlameLine } from '@/api/repos.api';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -39,7 +40,7 @@ export default function BlameView() {
         title="Blame not available"
         description={`Could not load blame for ${filePath}.`}
         action={
-          <Link to={`${basePath}/blob/${ref}/${filePath}`}>
+          <Link to={`${basePath}/blob/${encodeURIComponent(ref!)}/${filePath}`}>
             <Button variant="secondary">
               <ArrowLeft className="h-4 w-4" /> Back to file
             </Button>
@@ -74,7 +75,7 @@ export default function BlameView() {
             <ChevronRight className="h-3 w-3 text-text-secondary" />
             {i < parts.length - 1 ? (
               <Link
-                to={`${basePath}/tree/${ref}/${parts.slice(0, i + 1).join('/')}`}
+                to={`${basePath}/tree/${encodeURIComponent(ref!)}/${parts.slice(0, i + 1).join('/')}`}
                 className="text-primary hover:underline"
               >
                 {p}
@@ -88,7 +89,7 @@ export default function BlameView() {
       </div>
 
       <div className="flex items-center gap-2 mb-4">
-        <Link to={`${basePath}/blob/${ref}/${filePath}`}>
+        <Link to={`${basePath}/blob/${encodeURIComponent(ref!)}/${filePath}`}>
           <Button variant="ghost" size="sm">
             <FileText className="h-4 w-4" /> Normal view
           </Button>
@@ -96,7 +97,7 @@ export default function BlameView() {
       </div>
 
       {/* Blame table */}
-      <div className="rounded-lg border border-border bg-surface overflow-x-auto">
+      <Card className="overflow-x-auto">
         <pre className="text-sm font-mono m-0 p-0">
           <table className="w-full border-collapse">
             <tbody>
@@ -135,7 +136,7 @@ export default function BlameView() {
             </tbody>
           </table>
         </pre>
-      </div>
+      </Card>
     </div>
   );
 }
