@@ -954,7 +954,7 @@ List issues in a project.
 | `labelName` | string | Filter by label name |
 | `milestoneId` | string | Filter by milestone |
 | `sprintId` | string | Filter by sprint |
-| `q` | string | Full-text search |
+| `q` | string | Structured query string (see [Query Language Reference](#query-language-reference)). Supports simple mode (`type:bug priority:high`) and complex mode (`type = Bug AND priority IN (High, Critical)`). When provided, replaces all individual filter params. |
 | `page` | integer | Page number |
 | `limit` | integer | Items per page |
 | `sort` | string | Sort field (`createdAt`, `priority`, `number`) |
@@ -1849,10 +1849,34 @@ Create an automation rule.
   "name": "Assign on critical label",
   "trigger": "LABEL_ADDED",
   "triggerValue": "critical",
+  "condition": "type = Bug AND priority IN (High, Critical)",
   "action": "ASSIGN_USER",
   "actionValue": "usr_01HZ..."
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Display name for the rule |
+| `trigger` | string | Event that fires the rule |
+| `triggerValue` | string | Value associated with the trigger (e.g. label name) |
+| `condition` | string | Optional query string condition evaluated before running the action (e.g. `"type = Bug AND priority IN (High, Critical)"`). Validated on creation. |
+| `conditions` | array | **Deprecated.** Legacy JSON condition format. Use `condition` instead. |
+| `action` | string | Action type to execute (see action types below) |
+| `actionValue` | string | Value for the action (depends on action type) |
+
+**Action types:**
+
+| Action | Description | `actionValue` |
+|--------|-------------|---------------|
+| `ASSIGN_USER` | Assign the issue to a user | User ID |
+| `SET_STATUS` | Set the issue status | Status name |
+| `SET_PRIORITY` | Set the issue priority | Priority name |
+| `ADD_LABEL` | Add a label to the issue | Label name |
+| `set_field` | Set any issue field by name | JSON object: `{ "field": "storyPoints", "value": 3 }` |
+| `create_issue` | Create a new linked issue | JSON object with issue fields |
+| `send_email` | Send an email notification | JSON object: `{ "to": "user@example.com", "subject": "...", "body": "..." }` |
+| `webhook` | Send an HTTP POST to a URL | JSON object: `{ "url": "https://...", "headers": { ... } }` |
 
 **Response 201:** Automation rule object.
 
@@ -1864,7 +1888,7 @@ List automation rules.
 
 ### PATCH /api/projects/:projectId/automation-rules/:ruleId
 
-Update an automation rule.
+Update an automation rule. Accepts the same fields as the POST body (all optional).
 
 **Response 200:** Updated rule object.
 
@@ -2973,6 +2997,38 @@ Delete a wiki template.
 
 **Response 204:** No content.
 
+### POST /api/wiki/resolve-template
+
+Resolve template variables in a wiki template body. All `{{expression}}` placeholders are evaluated against the supplied context and returned as a plain string. **Auth required.**
+
+**Request body:**
+
+```json
+{
+  "body": "# {{project.name}} — Sprint {{sprint.name}}\n\nCreated by {{currentUser()}} on {{now()}}",
+  "context": {
+    "teamId": "team_01HZ...",
+    "spaceId": "space_01HZ...",
+    "projectId": "proj_01HZ..."
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `body` | string | Template body containing `{{expression}}` placeholders |
+| `context.teamId` | string | Team ID used for resolving team-scoped variables |
+| `context.spaceId` | string | Wiki space ID |
+| `context.projectId` | string | Optional project ID for resolving project-scoped variables |
+
+**Response 200:**
+
+```json
+{
+  "body": "# Axiom MVP — Sprint 3\n\nCreated by tim on 2026-03-29"
+}
+```
+
 ### POST /api/wiki/pages/:pageId/comments
 
 Add a comment to a wiki page.
@@ -3233,6 +3289,108 @@ Update a notification preference.
   "email": false,
   "inApp": true
 }
+```
+
+---
+
+## Query Language Reference
+
+The query engine is used in two places:
+
+- The `q` parameter on `GET /api/projects/:projectId/issues` for structured issue filtering.
+- The `condition` field on automation rules for conditional execution.
+
+### Simple Mode
+
+Key-value pairs separated by spaces. All conditions are ANDed together.
+
+```
+type:bug priority:high assignee:@me
+```
+
+Field names and values are case-insensitive. Multi-word values must be quoted:
+
+```
+status:"In Progress" label:"needs review"
+```
+
+### Complex Mode
+
+Full boolean expressions with parentheses for grouping.
+
+```
+type = Bug AND (priority IN (High, Critical) OR storyPoints > 5)
+```
+
+```
+status != Done AND assignee = currentUser() AND created >= now(-7d)
+```
+
+### Field Reference
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `type` | string | Issue type name (e.g. `Bug`, `Feature`, `Task`) |
+| `status` | string | Status name (e.g. `Todo`, `In Progress`, `Done`) |
+| `priority` | string | `Low`, `Medium`, `High`, `Critical` |
+| `assignee` | string | Username, user ID, or `@me` / `currentUser()` |
+| `creator` | string | Username or user ID |
+| `label` | string | Label name |
+| `sprint` | string | Sprint name or `currentSprint()` |
+| `project` | string | Project ID or slug |
+| `storyPoints` | number | Story point estimate |
+| `created` | date | Creation timestamp |
+| `updated` | date | Last-updated timestamp |
+| `dueDate` | date | Due date |
+| `number` | number | Issue number within the project |
+| `title` | string | Issue title (use `~` for contains) |
+
+### Operator Reference
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `=` | Equal | `priority = High` |
+| `!=` | Not equal | `status != Done` |
+| `>` | Greater than | `storyPoints > 3` |
+| `<` | Less than | `storyPoints < 8` |
+| `>=` | Greater than or equal | `created >= now(-7d)` |
+| `<=` | Less than or equal | `dueDate <= now()` |
+| `~` | Contains (substring) | `title ~ "login"` |
+| `IN` | Matches any value in list | `priority IN (High, Critical)` |
+| `NOT IN` | Matches none of the values | `status NOT IN (Done, Cancelled)` |
+
+Operators are case-insensitive (`IN`, `in`, and `In` are all valid).
+
+### Function Reference
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `currentUser()` | Resolves to the authenticated user. Alias: `@me` | `assignee = currentUser()` |
+| `currentSprint()` | Resolves to the active sprint in the project | `sprint = currentSprint()` |
+| `now()` | Current timestamp, with optional offset | `created >= now(-7d)` |
+| `startOfDay()` | Midnight of the current day | `created >= startOfDay()` |
+| `startOfWeek()` | Midnight of the first day of the current week | `updated >= startOfWeek()` |
+| `empty()` | Matches null / unset fields | `assignee = empty()` |
+
+**`now()` offset syntax:** `now(-Nd)` subtracts N days; `now(+Nd)` adds N days. Unit `d` (days) is the only supported unit.
+
+### Examples
+
+```
+# All open bugs assigned to me
+type:bug status:open assignee:@me
+
+# High-priority unassigned issues due this week
+priority IN (High, Critical) AND assignee = empty() AND dueDate <= now(+7d)
+
+# Issues updated in the last 24 hours, excluding Done
+updated >= now(-1d) AND status != Done
+
+# Large story points in the current sprint
+sprint = currentSprint() AND storyPoints >= 8
+
+# Title contains "auth" created this week
+title ~ "auth" AND created >= startOfWeek()
 ```
 
 **Response 200:** Updated preferences array.
