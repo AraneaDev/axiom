@@ -1,4 +1,7 @@
 import { prisma } from '../../config/database';
+import { evaluate, parse } from '../../lib/query-engine';
+import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
+import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 export type AutomationTrigger =
@@ -24,23 +27,29 @@ export interface AutomationAction {
 }
 
 export interface AutomationContext {
-  issue?: {
-    id: string;
-    type: string;
-    priority: string;
-    assigneeId?: string | null;
-    columnId?: string | null;
-    [key: string]: unknown;
-  };
+  issue: any;
+  actorId: string;
   from?: string | null;
   to?: string;
   label?: string;
+  automationDepth?: number;
+  issueCreationCount?: number;
 }
+
+export const AUTOMATION_ISSUE_INCLUDE = {
+  assignee: { select: { id: true, username: true, displayName: true, email: true } },
+  creator: { select: { id: true, username: true, displayName: true, email: true } },
+  labels: { select: { name: true } },
+  sprint: { select: { id: true, name: true, goal: true } },
+  column: { select: { id: true, name: true } },
+  project: { select: { id: true, name: true, key: true } },
+} as const;
 
 interface CreateRuleData {
   name: string;
   trigger: AutomationTrigger;
-  conditions: AutomationCondition[];
+  condition?: string;
+  conditions?: AutomationCondition[];
   actions: AutomationAction[];
   enabled?: boolean;
 }
@@ -53,12 +62,21 @@ interface CreateRuleData {
 export async function createRule(projectId: string, data: CreateRuleData) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
 
+  if (data.condition) {
+    try {
+      parse(data.condition);
+    } catch (e: any) {
+      throw new AppError(400, `Invalid condition: ${e.message}`);
+    }
+  }
+
   return prisma.automationRule.create({
     data: {
       projectId,
       name: data.name,
       trigger: data.trigger,
-      conditions: JSON.parse(JSON.stringify(data.conditions)),
+      condition: data.condition,
+      conditions: data.conditions ? JSON.parse(JSON.stringify(data.conditions)) : undefined,
       actions: JSON.parse(JSON.stringify(data.actions)),
       enabled: data.enabled ?? true,
     },
@@ -87,11 +105,20 @@ export async function updateRule(ruleId: string, data: Partial<CreateRuleData>) 
     'Automation rule not found',
   );
 
+  if (data.condition) {
+    try {
+      parse(data.condition);
+    } catch (e: any) {
+      throw new AppError(400, `Invalid condition: ${e.message}`);
+    }
+  }
+
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.trigger !== undefined) updateData.trigger = data.trigger;
+  if (data.condition !== undefined) updateData.condition = data.condition;
   if (data.conditions !== undefined)
-    updateData.conditions = JSON.parse(JSON.stringify(data.conditions));
+    updateData.conditions = data.conditions ? JSON.parse(JSON.stringify(data.conditions)) : null;
   if (data.actions !== undefined) updateData.actions = JSON.parse(JSON.stringify(data.actions));
   if (data.enabled !== undefined) updateData.enabled = data.enabled;
 
@@ -134,26 +161,47 @@ export async function toggleRule(ruleId: string) {
  * @param projectId
  * @param trigger
  * @param context
+ * @param options
+ * @param options.skipAutomation
  */
 export async function evaluateRules(
   projectId: string,
   trigger: AutomationTrigger,
   context: AutomationContext,
+  options?: { skipAutomation?: boolean },
 ) {
+  if (options?.skipAutomation || (context.automationDepth ?? 0) > 0) return;
+
   const rules = await prisma.automationRule.findMany({
     where: { projectId, trigger, enabled: true },
   });
 
   for (const rule of rules) {
-    const conditions = rule.conditions as unknown as AutomationCondition[];
-    if (!matchesConditions(conditions, context)) continue;
+    if (!matchesCondition(rule, context)) continue;
 
     const actions = rule.actions as unknown as AutomationAction[];
     await executeActions(projectId, actions, context);
   }
 }
 
-function matchesConditions(conditions: AutomationCondition[], context: AutomationContext): boolean {
+function matchesCondition(rule: any, context: AutomationContext): boolean {
+  if (rule.condition) {
+    const ast = parse(rule.condition);
+    return evaluate(ast, context.issue, issueFieldRegistry, {
+      currentUserId: context.actorId,
+      projectId: context.issue.projectId,
+    });
+  }
+  if (rule.conditions) {
+    return matchesConditionsLegacy(rule.conditions as AutomationCondition[], context);
+  }
+  return true;
+}
+
+function matchesConditionsLegacy(
+  conditions: AutomationCondition[],
+  context: AutomationContext,
+): boolean {
   if (!conditions || conditions.length === 0) return true;
 
   const issue = (context.issue ?? {}) as Record<string, string | string[] | undefined>;
