@@ -15,6 +15,7 @@ import { requireSpacePermission } from './space-permissions.middleware';
 import * as analyticsController from './wiki-analytics.controller';
 import * as commentsController from './wiki-comments.controller';
 import * as hydrateController from './wiki-hydrate.controller';
+import * as linkController from './wiki-issue-links.controller';
 import * as labelsController from './wiki-labels.controller';
 import * as permController from './wiki-permissions.controller';
 import * as starsController from './wiki-stars.controller';
@@ -201,5 +202,18 @@ router.get('/pages/:pageId/star', requireWikiPageAccess(), starsController.check
 // Page analytics
 router.post('/pages/:pageId/view', requireWikiPageAccess(), analyticsController.recordView);
 router.get('/pages/:pageId/analytics', requireWikiPageAccess(), analyticsController.getAnalytics);
+
+// Wiki-Issue Links
+router.get(
+  '/pages/:pageId/linked-issues',
+  requireWikiPageAccess(),
+  linkController.listLinkedIssues,
+);
+router.post('/pages/:pageId/linked-issues', requireWikiPageAccess(), linkController.addLink);
+router.delete(
+  '/pages/:pageId/linked-issues/:issueId',
+  requireWikiPageAccess(),
+  linkController.removeLink,
+);
 
 export default router;

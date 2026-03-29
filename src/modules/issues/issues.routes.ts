@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import { requireProjectAccess } from '../../middleware/requireProjectAccess';
+import * as wikiLinkController from '../wiki/wiki-issue-links.controller';
 
 import * as boardColumnsCtrl from './board-columns.controller';
 import * as devPanelCtrl from './development-panel.controller';
@@ -92,5 +93,11 @@ router.get('/:projectId/issues/:issueNumber/progress', issuesController.getProgr
 // Roadmap
 router.use('/:projectId/roadmap', requireProjectAccess);
 router.get('/:projectId/roadmap', issuesController.roadmap);
+
+// Wiki links for issues
+router.get(
+  '/:projectId/issues/:issueNumber/wiki-links',
+  wikiLinkController.listLinkedPagesForIssue,
+);
 
 export default router;
