@@ -248,6 +248,50 @@ Use raw `<table>` elements only for specialized displays (code diffs, blame view
 <MarkdownEditor value={body} onChange={setBody} compact />
 ```
 
+### Query Bar
+
+**QueryBar** -- structured filter input for issue lists
+```tsx
+import { QueryBar } from '@/components/issues/QueryBar';
+
+<QueryBar
+  value={queryString}
+  onChange={setQueryString}
+  error={parseError}
+/>
+```
+
+Located at `frontend/src/components/issues/QueryBar.tsx`.
+
+Props:
+
+| Prop | Type | Purpose |
+|------|------|---------|
+| `value` | `string` | Current query string |
+| `onChange` | `(v: string) => void` | Called on every keystroke |
+| `error` | `string \| undefined` | Parse/compile error shown inline below the input |
+
+Used in `IssueListFilters` alongside a query/filter mode toggle. When the user switches to query mode the `QueryBar` replaces the individual filter dropdowns. When `error` is set the input border turns danger and the message appears below.
+
+### Template Variable Panel
+
+**TemplateVariablePanel** -- collapsible reference panel for wiki template editors
+```tsx
+import { TemplateVariablePanel } from '@/components/wiki/TemplateVariablePanel';
+
+<TemplateVariablePanel onInsert={(variable) => editor.insertText(variable)} />
+```
+
+Located at `frontend/src/components/wiki/TemplateVariablePanel.tsx`.
+
+Props:
+
+| Prop | Type | Purpose |
+|------|------|---------|
+| `onInsert` | `(variable: string) => void` | Called with the full `{{...}}` expression when the user clicks a variable |
+
+The panel renders collapsible groups (one per context category: Page, User, Team, Space). Clicking any variable calls `onInsert` with the ready-to-paste expression. Groups are collapsed by default and expand on click.
+
 ### Notifications
 
 **Toast / useToast** -- transient notifications (4s auto-dismiss)
@@ -372,6 +416,44 @@ throw new AppError(403, 'Not authorized', 'INSUFFICIENT_PERMISSIONS');
 import { parseServicePagination } from '../../utils/pagination';
 const { take, skip } = parseServicePagination(opts);  // defaults: take=25, skip=0, max take=100
 ```
+
+---
+
+## Field Registry Pattern
+
+The field registry is a plain object that defines every filterable/sortable field for a given resource type. The query engine compiler and evaluator both accept a registry so the same parser can serve multiple resource types.
+
+### Type definition
+
+```ts
+// src/lib/query-engine/types.ts
+export type FieldDefinition = {
+  type: 'enum' | 'string' | 'number' | 'date' | 'relation' | 'user';
+  column: string;
+  values?: string[];          // enum only: allowed values
+  ordinal?: Record<string, number>; // enum only: sort order map
+  join?: string;              // relation: Prisma include key
+  many?: boolean;             // relation: true for one-to-many
+  aliasField?: string;        // alternate name accepted in queries
+};
+
+export type FieldRegistry = Record<string, FieldDefinition>;
+```
+
+### Usage
+
+```ts
+import { issueFieldRegistry } from './fields/issue-fields';
+import { compileQuery } from './compiler';
+import { evaluateQuery } from './evaluator';
+
+const compiled = compileQuery(ast, issueFieldRegistry);
+const results  = evaluateQuery(issues, compiled);
+```
+
+### Extensibility
+
+One registry per resource type. To filter a new resource, create `src/lib/query-engine/fields/<resource>-fields.ts` exporting a `FieldRegistry` constant, then pass it to the compiler and evaluator. No changes to the parser or core engine are needed.
 
 ---
 
