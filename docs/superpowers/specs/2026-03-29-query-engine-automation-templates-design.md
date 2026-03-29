@@ -47,6 +47,7 @@ type Expression =
   | { type: 'and'; left: Expression; right: Expression }
   | { type: 'or'; left: Expression; right: Expression }
   | { type: 'not'; operand: Expression }
+  | { type: 'freetext'; value: string }  // Unstructured text → PostgreSQL FTS
 
 type ComparisonOp = '=' | '!=' | '>' | '<' | '>=' | '<=' | '~'  // ~ = contains (substring match)
 
@@ -66,15 +67,7 @@ type Value =
 
 ### 2.2b Free Text
 
-Tokens that don't match `field:value` or `field OPERATOR value` patterns are collected as free text and emitted as a separate AST node:
-
-```typescript
-type Expression =
-  // ... existing nodes ...
-  | { type: 'freetext'; value: string }
-```
-
-Free text is passed to PostgreSQL FTS unchanged. When compiling to Prisma, the compiler generates a `to_tsvector`/`to_tsquery` clause ANDed with the structured conditions.
+Tokens that don't match `field:value` or `field OPERATOR value` patterns are collected as free text and emitted as a `freetext` AST node (included in the `Expression` union above). Free text is passed to PostgreSQL FTS unchanged. When compiling to Prisma, the compiler generates a `to_tsvector`/`to_tsquery` clause ANDed with the structured conditions.
 
 ### 2.2c Duration Offsets
 
@@ -277,7 +270,9 @@ Combined with the existing 4 (`set_status`, `set_assignee`, `add_label`, `add_co
 
 - **`set_field` recursion prevention:** When `executeActions` calls `updateIssue`, it passes a `skipAutomation: true` flag to prevent the update from re-triggering `evaluateRules`. This flag is threaded through the service call and checked at the top of `evaluateRules`.
 - **`webhook` SSRF protection:** Webhook URLs are validated against an allowlist of permitted schemes (`https://` only) and blocked from private/internal IP ranges (RFC 1918, loopback, link-local). The URL is resolved via DNS before the request is made and the resolved IP is checked against the blocklist.
-- **`create_issue` guard:** Limited to one issue creation per rule execution. The created issue does not re-trigger the same rule (tracked via an `automationSourceRuleId` field on the execution context).
+- **`create_issue` guard:** Limited to one issue creation per trigger event (across all matching rules). The created issue does not re-trigger any rules for that event (tracked via an `automationDepth` counter on the execution context; depth > 0 skips all automation).
+- **Actions go through the service layer:** All actions (`set_status`, `set_assignee`, `set_field`, `create_issue`, etc.) must call the corresponding service methods (e.g., `issuesService.updateIssue()`) rather than raw Prisma calls. This ensures activity logging, cache invalidation, real-time broadcasting, and `skipAutomation` flag threading all work correctly. The current `executeActions` implementation uses raw Prisma and must be refactored as a prerequisite.
+- **Partial execution is acceptable:** Actions execute sequentially without transaction wrapping. If action 3 of 4 fails, actions 1-2 remain committed. This matches the behavior of other automation systems (Jira, GitHub Actions) where partial execution is preferable to all-or-nothing rollback.
 
 ### 4.4 Template Expressions in Actions
 
@@ -319,9 +314,17 @@ interface AutomationTemplateContext {
 }
 ```
 
-### 4.6 Hydrated Issue Requirement
+### 4.6 Trigger Site Requirements
 
-All automation trigger sites (`createIssue`, `updateIssue`, `moveIssueToColumn`) must pass a fully hydrated issue to `evaluateRules`. A shared Prisma include constant defines the required shape:
+All automation trigger sites (`createIssue`, `updateIssue`, `moveIssueToColumn`) must pass:
+1. A fully hydrated issue (see include below)
+2. The acting user's ID (`actorId`) — used to populate `actor` in the template context and as `creatorId` for `create_issue` actions
+
+The `evaluateRules` signature becomes: `evaluateRules(projectId, trigger, context)` where context includes `{ issue, actorId, from?, to?, label? }`.
+
+**Note on `label:added` trigger:** The current code fires this trigger whenever `data.labels` is present in an update, even if labels were removed. This must be fixed: the trigger site should diff the before/after label sets and only fire `label:added` for genuinely added labels, passing each added label name in the context.
+
+A shared Prisma include constant defines the required issue shape:
 
 ```typescript
 const AUTOMATION_ISSUE_INCLUDE = {
