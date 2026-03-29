@@ -1022,7 +1022,8 @@ model AutomationRule {
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name       String
   trigger    String
-  conditions Json
+  condition  String?
+  conditions Json?
   actions    Json
   enabled    Boolean  @default(true)
   createdAt  DateTime @default(now())
