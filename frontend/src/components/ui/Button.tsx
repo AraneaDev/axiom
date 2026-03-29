@@ -1,10 +1,22 @@
-import { forwardRef, type ButtonHTMLAttributes } from 'react';
+import { forwardRef, isValidElement, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
   size?: 'xs' | 'sm' | 'md' | 'lg';
+}
+
+/**
+ * Recursively check whether React children contain any visible text.
+ * @param node
+ */
+function hasText(node: ReactNode): boolean {
+  if (typeof node === 'string') return node.trim().length > 0;
+  if (typeof node === 'number') return true;
+  if (Array.isArray(node)) return node.some(hasText);
+  if (isValidElement(node)) return hasText((node.props as { children?: ReactNode }).children);
+  return false;
 }
 
 const variants = {
@@ -39,10 +51,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       !props['aria-label'] &&
       !props.title
     ) {
-      const hasTextContent =
-        typeof children === 'string' ||
-        (Array.isArray(children) && children.some((c) => typeof c === 'string'));
-      if (!hasTextContent) {
+      if (!hasText(children)) {
         console.warn('Button: icon-only buttons should have aria-label or title prop');
       }
     }
