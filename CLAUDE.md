@@ -31,7 +31,7 @@ Detailed docs live in `/docs/`. Read these before making changes in their domain
 | [Design Patterns](docs/design-patterns.md) | Non-negotiable rules, all shared UI components, custom hooks, backend module pattern, building checklists |
 | [Development Guide](docs/development-guide.md) | Dev commands, testing, linting, git conventions, commit message format |
 | [API Reference](docs/api-reference.md) | REST endpoint summary (auth, issues, repos, PRs, wiki) |
-| [MCP Server](docs/axiom-mcp-server.md) | 37 MCP tools, Claude Desktop/Code setup, discovery chains, example workflows |
+| [MCP Server](docs/axiom-mcp-server.md) | 44 MCP tools, Claude Desktop/Code setup, discovery chains, query language, example workflows |
 | [Getting Started](docs/getting-started.md) | New developer onboarding, prerequisites, installation |
 
 ---
@@ -71,6 +71,8 @@ These are enforced across the entire codebase. See [Design Patterns](docs/design
 
 **Backend:** `src/modules/{feature}/` with `*.routes.ts` > `*.controller.ts` > `*.service.ts`. Controllers handle req/res; services contain business logic with Prisma. Routes mounted under `/api/*`, git protocol under `/git/*`.
 
+**Query Engine:** `src/lib/query-engine/` -- shared lexer/parser/AST pipeline powering issue search, automation conditions, and template variables. Two backends: AST-to-Prisma compiler (search) and AST-to-Boolean evaluator (automation). Extend by adding fields to `issueFieldRegistry` in `fields/issue-fields.ts`. Tests: `cd src/lib/query-engine && npx vitest run --config vitest.config.ts` (no DB needed).
+
 **Frontend:** `frontend/src/pages/` (route components, lazy loaded), `frontend/src/components/` (shared UI + layout), `frontend/src/api/` (API client helpers). All API calls through `api/client.ts` (`get`/`post`/`patch`/`del`).
 
 **Prisma 7:** Config in `prisma.config.ts` at project root. Uses `@prisma/adapter-pg` (pg driver adapter). The `url` field was removed from `schema.prisma` -- connection URL comes from `prisma.config.ts` via `process.env.DATABASE_URL`. Scripts and tests must create `PrismaClient` with the adapter (see `src/config/database.ts` for the pattern).
@@ -85,6 +87,10 @@ These are enforced across the entire codebase. See [Design Patterns](docs/design
 **Git storage:** Bare repos at `{REPOS_PATH}/{orgSlug}/{teamSlug}/{repoSlug}.git`
 
 **Real-time:** WebSocket server with JWT auth. Events broadcast for issue/PR/wiki/board/pipeline changes. Frontend auto-invalidates React Query cache via `useRealtimeInvalidation`.
+
+**Automation:** Rules in `src/modules/automation/`. Conditions use query strings (`type = Bug AND priority > Medium`). 8 action types (set_status, set_assignee, add_label, add_comment, set_field, create_issue, send_email, webhook). Actions support `{{expression}}` template variables. Trigger sites pass hydrated issues via `AUTOMATION_ISSUE_INCLUDE`.
+
+**Template Variables:** `{{expression}}` syntax shared by automation actions and wiki templates. Dot-path traversal (`{{issue.assignee.displayName}}`), built-in functions (`now()`, `currentUser()`, `empty()`). Wiki templates resolved server-side via `POST /api/wiki/resolve-template`.
 
 ---
 
