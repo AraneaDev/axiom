@@ -121,7 +121,14 @@ export async function getLinksForPage(pageId: string) {
           type: true,
           column: { select: { id: true, name: true } },
           assignee: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
-          project: { select: { id: true, prefix: true } },
+          project: {
+            select: {
+              id: true,
+              prefix: true,
+              slug: true,
+              team: { select: { slug: true, org: { select: { slug: true } } } },
+            },
+          },
         },
       },
     },
