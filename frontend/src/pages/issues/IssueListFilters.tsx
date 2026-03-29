@@ -1,5 +1,7 @@
-import { Filter, User, X, Timer, Columns } from 'lucide-react';
+import { Filter, User, X, Timer, Columns, Code } from 'lucide-react';
+import { useState } from 'react';
 
+import { QueryBar } from '@/components/issues/QueryBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -44,6 +46,8 @@ interface IssueListFiltersProps {
   allSprints: Sprint[];
   allColumns: Column[];
   activeFilterCount: number;
+  queryString?: string;
+  onQueryChange?: (q: string) => void;
 }
 
 function toggleFilter(arr: string[], val: string, setter: (v: string[]) => void) {
@@ -70,6 +74,8 @@ function toggleFilter(arr: string[], val: string, setter: (v: string[]) => void)
  * @param root0.allSprints
  * @param root0.allColumns
  * @param root0.activeFilterCount
+ * @param root0.queryString
+ * @param root0.onQueryChange
  */
 export function IssueListFilters({
   typeFilter,
@@ -89,175 +95,199 @@ export function IssueListFilters({
   allSprints,
   allColumns,
   activeFilterCount,
+  queryString = '',
+  onQueryChange,
 }: IssueListFiltersProps) {
+  const [queryMode, setQueryMode] = useState(false);
+
   return (
-    <Card className="p-3 mb-4 flex flex-wrap gap-4 items-start">
-      <div>
-        <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
-          Type
-        </p>
-        <div className="flex flex-wrap gap-1">
-          {Object.entries(ISSUE_TYPE_LABELS).map(([key, label]) => (
-            <Button
-              key={key}
-              variant="outline"
-              size="xs"
-              onClick={() => toggleFilter(typeFilter, key, setTypeFilter)}
-              className={cn(
-                typeFilter.includes(key)
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border text-text-secondary hover:border-border-focus',
-              )}
-            >
-              <IssueTypeIcon type={key} className="h-3 w-3" /> {label}
-            </Button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
-          Priority
-        </p>
-        <div className="flex flex-wrap gap-1">
-          {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
-            <Button
-              key={key}
-              variant="outline"
-              size="xs"
-              onClick={() => toggleFilter(priorityFilter, key, setPriorityFilter)}
-              className={cn(
-                priorityFilter.includes(key)
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border text-text-secondary hover:border-border-focus',
-              )}
-            >
-              <Filter className="h-3 w-3" /> {label}
-            </Button>
-          ))}
-        </div>
-      </div>
-      {allAssignees.length > 0 && (
-        <div>
-          <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
-            Assignee
-          </p>
-          <div className="flex flex-wrap gap-1">
-            {allAssignees.map((a) => (
-              <Button
-                key={a.id}
-                variant="outline"
-                size="xs"
-                onClick={() => toggleFilter(assigneeFilter, a.id, setAssigneeFilter)}
-                className={cn(
-                  assigneeFilter.includes(a.id)
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-text-secondary hover:border-border-focus',
-                )}
-              >
-                <User className="h-3 w-3" /> {a.displayName}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-      {allLabels.length > 0 && (
-        <div>
-          <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
-            Label
-          </p>
-          <div className="flex flex-wrap gap-1">
-            {allLabels.map((l) => (
-              <Button
-                key={l.id}
-                variant="outline"
-                size="xs"
-                onClick={() => toggleFilter(labelFilter, l.id, setLabelFilter)}
-                className={cn(
-                  labelFilter.includes(l.id)
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-text-secondary hover:border-border-focus',
-                )}
-              >
-                <Filter className="h-3 w-3" /> {l.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-      <div>
-        <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
-          Sprint
-        </p>
-        <div className="flex flex-wrap gap-1">
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() => setSprintFilter(sprintFilter === 'none' ? '' : 'none')}
-            className={cn(
-              sprintFilter === 'none'
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-border text-text-secondary hover:border-border-focus',
-            )}
-          >
-            <Timer className="h-3 w-3" /> No sprint
-          </Button>
-          {allSprints.map((s) => (
-            <Button
-              key={s.id}
-              variant="outline"
-              size="xs"
-              onClick={() => setSprintFilter(sprintFilter === s.id ? '' : s.id)}
-              className={cn(
-                sprintFilter === s.id
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border text-text-secondary hover:border-border-focus',
-              )}
-            >
-              <Timer className="h-3 w-3" /> {s.name}
-            </Button>
-          ))}
-        </div>
-      </div>
-      {allColumns.length > 0 && (
-        <div>
-          <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
-            Status
-          </p>
-          <div className="flex flex-wrap gap-1">
-            {allColumns.map((c) => (
-              <Button
-                key={c.id}
-                variant="outline"
-                size="xs"
-                onClick={() => setColumnFilter(columnFilter === c.id ? '' : c.id)}
-                className={cn(
-                  columnFilter === c.id
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-text-secondary hover:border-border-focus',
-                )}
-              >
-                <Columns className="h-3 w-3" /> {c.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-      {activeFilterCount > 0 && (
+    <Card className="p-3 mb-4 flex flex-col gap-3">
+      <div className="flex items-center gap-2">
         <Button
           variant="ghost"
           size="xs"
-          onClick={() => {
-            setTypeFilter([]);
-            setPriorityFilter([]);
-            setAssigneeFilter([]);
-            setLabelFilter([]);
-            setSprintFilter('');
-            setColumnFilter('');
-          }}
-          className="text-text-tertiary hover:text-danger self-end"
+          title={queryMode ? 'Switch to filter mode' : 'Switch to query mode'}
+          onClick={() => setQueryMode(!queryMode)}
+          className={cn(queryMode && 'text-primary bg-primary/10')}
         >
-          <X className="h-3 w-3" /> Clear all
+          <Code className="h-3.5 w-3.5" />
         </Button>
+        {queryMode ? (
+          <div className="flex-1">
+            <QueryBar value={queryString} onChange={(q) => onQueryChange?.(q)} />
+          </div>
+        ) : null}
+      </div>
+      {!queryMode && (
+        <div className="flex flex-wrap gap-4 items-start">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+              Type
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(ISSUE_TYPE_LABELS).map(([key, label]) => (
+                <Button
+                  key={key}
+                  variant="outline"
+                  size="xs"
+                  onClick={() => toggleFilter(typeFilter, key, setTypeFilter)}
+                  className={cn(
+                    typeFilter.includes(key)
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-text-secondary hover:border-border-focus',
+                  )}
+                >
+                  <IssueTypeIcon type={key} className="h-3 w-3" /> {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+              Priority
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
+                <Button
+                  key={key}
+                  variant="outline"
+                  size="xs"
+                  onClick={() => toggleFilter(priorityFilter, key, setPriorityFilter)}
+                  className={cn(
+                    priorityFilter.includes(key)
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-text-secondary hover:border-border-focus',
+                  )}
+                >
+                  <Filter className="h-3 w-3" /> {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          {allAssignees.length > 0 && (
+            <div>
+              <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+                Assignee
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {allAssignees.map((a) => (
+                  <Button
+                    key={a.id}
+                    variant="outline"
+                    size="xs"
+                    onClick={() => toggleFilter(assigneeFilter, a.id, setAssigneeFilter)}
+                    className={cn(
+                      assigneeFilter.includes(a.id)
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-text-secondary hover:border-border-focus',
+                    )}
+                  >
+                    <User className="h-3 w-3" /> {a.displayName}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          {allLabels.length > 0 && (
+            <div>
+              <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+                Label
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {allLabels.map((l) => (
+                  <Button
+                    key={l.id}
+                    variant="outline"
+                    size="xs"
+                    onClick={() => toggleFilter(labelFilter, l.id, setLabelFilter)}
+                    className={cn(
+                      labelFilter.includes(l.id)
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-text-secondary hover:border-border-focus',
+                    )}
+                  >
+                    <Filter className="h-3 w-3" /> {l.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+              Sprint
+            </p>
+            <div className="flex flex-wrap gap-1">
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => setSprintFilter(sprintFilter === 'none' ? '' : 'none')}
+                className={cn(
+                  sprintFilter === 'none'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-text-secondary hover:border-border-focus',
+                )}
+              >
+                <Timer className="h-3 w-3" /> No sprint
+              </Button>
+              {allSprints.map((s) => (
+                <Button
+                  key={s.id}
+                  variant="outline"
+                  size="xs"
+                  onClick={() => setSprintFilter(sprintFilter === s.id ? '' : s.id)}
+                  className={cn(
+                    sprintFilter === s.id
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-text-secondary hover:border-border-focus',
+                  )}
+                >
+                  <Timer className="h-3 w-3" /> {s.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+          {allColumns.length > 0 && (
+            <div>
+              <p className="text-xs uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
+                Status
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {allColumns.map((c) => (
+                  <Button
+                    key={c.id}
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setColumnFilter(columnFilter === c.id ? '' : c.id)}
+                    className={cn(
+                      columnFilter === c.id
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-text-secondary hover:border-border-focus',
+                    )}
+                  >
+                    <Columns className="h-3 w-3" /> {c.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          {activeFilterCount > 0 && (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => {
+                setTypeFilter([]);
+                setPriorityFilter([]);
+                setAssigneeFilter([]);
+                setLabelFilter([]);
+                setSprintFilter('');
+                setColumnFilter('');
+              }}
+              className="text-text-tertiary hover:text-danger self-end"
+            >
+              <X className="h-3 w-3" /> Clear all
+            </Button>
+          )}
+        </div>
       )}
     </Card>
   );
