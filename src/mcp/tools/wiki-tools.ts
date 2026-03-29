@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
+import { resolveWikiTemplate } from '../../modules/wiki/wiki-template-resolver.service';
 import * as wikiService from '../../modules/wiki/wiki.service';
 import { assertMcpPermission } from '../mcp-permissions';
 
@@ -66,10 +67,14 @@ export function registerWikiTools(ctx: McpToolContext) {
       spaceId: z.string(),
       title: z.string(),
       slug: z.string(),
-      body: z.string().default(''),
+      body: z.string().optional().default(''),
       parentId: z.string().optional(),
+      templateId: z
+        .string()
+        .optional()
+        .describe('Create page from template with auto-resolved variables'),
     },
-    async ({ spaceId, title, slug, body, parentId }) => {
+    async ({ spaceId, title, slug, body, parentId, templateId }) => {
       const space = await prisma.wikiSpace.findUnique({ where: { id: spaceId } });
       if (!space) return { content: [{ type: 'text' as const, text: 'Space not found' }] };
       const team = await prisma.team.findUnique({ where: { id: space.teamId } });
@@ -77,14 +82,27 @@ export function registerWikiTools(ctx: McpToolContext) {
       const existing = await prisma.page.findUnique({ where: { spaceId_slug: { spaceId, slug } } });
       if (existing)
         return { content: [{ type: 'text' as const, text: 'Page slug already exists' }] };
+
+      let pageBody = body ?? '';
+      if (!body && templateId) {
+        const template = await prisma.pageTemplate.findUnique({ where: { id: templateId } });
+        if (template) {
+          pageBody = await resolveWikiTemplate(template.body, {
+            teamId: space.teamId,
+            spaceId,
+            userId,
+          });
+        }
+      }
+
       const page = await prisma.page.create({
         data: {
           spaceId,
           title,
           slug,
-          body,
+          body: pageBody,
           parentId,
-          versions: { create: { version: 1, title, body, authorId: userId } },
+          versions: { create: { version: 1, title, body: pageBody, authorId: userId } },
         },
       });
       return { content: [{ type: 'text' as const, text: JSON.stringify(page, null, 2) }] };
