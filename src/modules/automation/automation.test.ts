@@ -160,4 +160,68 @@ describe('Automation API', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(listRes.body.length).toBe(1);
   });
+
+  // ---- Query Engine Conditions ----
+
+  it('9. should create rule with condition string', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/automation-rules`)
+      .set('Authorization', `Bearer ${token}`)
+      .set(XHR)
+      .send({
+        name: 'Condition string rule',
+        trigger: 'issue:created',
+        condition: 'type = Bug AND priority IN (High, Critical)',
+        actions: [{ type: 'add_label', name: 'needs-triage' }],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.condition).toBe('type = Bug AND priority IN (High, Critical)');
+  });
+
+  it('10. should reject invalid condition syntax', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/automation-rules`)
+      .set('Authorization', `Bearer ${token}`)
+      .set(XHR)
+      .send({
+        name: 'Bad condition rule',
+        trigger: 'issue:created',
+        condition: 'type = AND =',
+        actions: [{ type: 'add_label', name: 'broken' }],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.message ?? res.body.message).toBeTruthy();
+  });
+
+  it('11. should create rule with set_field action type', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/automation-rules`)
+      .set('Authorization', `Bearer ${token}`)
+      .set(XHR)
+      .send({
+        name: 'Set field on creation',
+        trigger: 'issue:created',
+        conditions: [],
+        actions: [{ type: 'set_field', field: 'priority', value: 'HIGH' }],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.actions).toEqual([{ type: 'set_field', field: 'priority', value: 'HIGH' }]);
+  });
+
+  it('12. should support template expressions in comment actions', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/automation-rules`)
+      .set('Authorization', `Bearer ${token}`)
+      .set(XHR)
+      .send({
+        name: 'Template comment rule',
+        trigger: 'issue:created',
+        conditions: [],
+        actions: [
+          { type: 'add_comment', body: 'Issue created: {{issue.title}} ({{issue.number}})' },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.actions[0].body).toBe('Issue created: {{issue.title}} ({{issue.number}})');
+  });
 });
