@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { getLinksForIssue } from '../wiki/wiki-issue-links.service';
 
 export interface DevelopmentSummary {
   branches: Array<{
@@ -36,6 +37,21 @@ export interface DevelopmentSummary {
     ref: string;
     createdAt: Date;
   }>;
+  wikiPages: Array<{
+    id: string;
+    linkType: string;
+    page: {
+      id: string;
+      title: string;
+      slug: string;
+      space: {
+        id: string;
+        name: string;
+        slug: string;
+        team: { slug: string; org: { slug: string } };
+      };
+    };
+  }>;
 }
 
 /**
@@ -58,7 +74,7 @@ export async function getDevelopmentSummary(
 
   const issueId = issue.id;
 
-  const [branches, commits, issuePRs, pipelineRuns] = await Promise.all([
+  const [branches, commits, issuePRs, pipelineRuns, wikiLinks] = await Promise.all([
     prisma.issueBranch.findMany({
       where: { issueId },
       include: { repo: { select: { name: true } } },
@@ -107,6 +123,8 @@ export async function getDevelopmentSummary(
           take: 20,
         });
       }),
+
+    getLinksForIssue(issueId),
   ]);
 
   // Resolve PR author names
@@ -154,6 +172,11 @@ export async function getDevelopmentSummary(
       status: r.status,
       ref: r.triggerRef,
       createdAt: r.createdAt,
+    })),
+    wikiPages: wikiLinks.map((l) => ({
+      id: l.id,
+      linkType: l.linkType,
+      page: l.page,
     })),
   };
 }

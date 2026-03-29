@@ -10,6 +10,7 @@ import {
   XCircle,
   Loader,
   Workflow,
+  FileText,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -88,8 +89,10 @@ export default function IssueDevelopmentCard({
   const prs = data?.pullRequests ?? [];
   const commits = data?.commits ?? [];
   const pipelines = data?.pipelines ?? [];
+  const wikiPages = data?.wikiPages ?? [];
 
-  const hasDev = branches.length + prs.length + commits.length + pipelines.length > 0;
+  const hasDev =
+    branches.length + prs.length + commits.length + pipelines.length + wikiPages.length > 0;
 
   return (
     <Card className="p-4">
@@ -265,6 +268,42 @@ export default function IssueDevelopmentCard({
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Wiki Pages */}
+      {wikiPages.length > 0 && (
+        <div className="mb-2">
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => toggle('wikiPages')}
+            className="flex items-center gap-1 text-xs font-semibold text-text-secondary mb-1.5 w-full hover:text-text"
+          >
+            {expanded.wikiPages ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+            Wiki Pages <span className="ml-auto text-text-tertiary">{wikiPages.length}</span>
+          </Button>
+          {expanded.wikiPages && (
+            <div className="space-y-1">
+              {wikiPages.map((w) => (
+                <Link
+                  key={w.id}
+                  to={`/${w.page.space.team.org.slug}/${w.page.space.team.slug}/wiki/${w.page.space.slug}/${w.page.slug}`}
+                  className="flex items-center gap-2 text-xs py-0.5 hover:bg-surface-secondary rounded px-1 -mx-1 transition-colors"
+                >
+                  <FileText className="h-3 w-3 text-text-tertiary flex-shrink-0" />
+                  <span className="text-primary truncate flex-1">{w.page.title}</span>
+                  <span className="text-text-tertiary ml-auto flex-shrink-0">
+                    {w.page.space.name}
+                  </span>
+                </Link>
+              ))}
             </div>
           )}
         </div>

@@ -38,6 +38,21 @@ export interface DevelopmentSummary {
     ref: string;
     createdAt: string;
   }>;
+  wikiPages: Array<{
+    id: string;
+    linkType: string;
+    page: {
+      id: string;
+      title: string;
+      slug: string;
+      space: {
+        id: string;
+        name: string;
+        slug: string;
+        team: { slug: string; org: { slug: string } };
+      };
+    };
+  }>;
 }
 
 export const developmentPanelApi = {
