@@ -347,6 +347,10 @@ async function main() {
     },
   });
 
+  // Seed built-in page templates (idempotent — skips existing)
+  const { seedBuiltInTemplates } = await import('../src/modules/wiki/wiki-templates.service');
+  await seedBuiltInTemplates(wikiSpace.id);
+
   let totalPages = 0;
 
   // Auto-import markdown files from docs/ as wiki pages
