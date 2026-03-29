@@ -1,8 +1,13 @@
 import { prisma } from '../../config/database';
-import { evaluate, parse } from '../../lib/query-engine';
+import { emailQueue } from '../../email/queue';
+import { evaluate, parse, resolveTemplate } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { logger } from '../../utils/logger';
+import * as issuesService from '../issues/issues.service';
+
+import { executeWebhook } from './webhook';
 
 export type AutomationTrigger =
   | 'issue:created'
@@ -19,11 +24,28 @@ export interface AutomationCondition {
 }
 
 export interface AutomationAction {
-  type: 'set_status' | 'set_assignee' | 'add_label' | 'add_comment';
+  type:
+    | 'set_status'
+    | 'set_assignee'
+    | 'add_label'
+    | 'add_comment'
+    | 'set_field'
+    | 'create_issue'
+    | 'send_email'
+    | 'webhook';
   columnId?: string;
   userId?: string;
   name?: string;
   body?: string;
+  field?: string;
+  value?: string;
+  title?: string;
+  to?: string;
+  subject?: string;
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  data?: Record<string, unknown>;
 }
 
 export interface AutomationContext {
@@ -230,6 +252,25 @@ function matchesConditionsLegacy(
   return true;
 }
 
+async function buildTemplateContext(context: AutomationContext) {
+  const { issue, actorId } = context;
+  const actor = await prisma.user.findUnique({
+    where: { id: actorId },
+    select: { username: true, displayName: true, email: true },
+  });
+  return {
+    issue: {
+      ...issue,
+      labels: issue.labels?.map((l: any) => l.name) ?? [],
+    },
+    trigger: context.from !== undefined ? 'issue:status_changed' : 'issue:created',
+    from: context.from,
+    to: context.to,
+    label: context.label,
+    actor: actor ?? { username: 'system', displayName: 'System', email: '' },
+  };
+}
+
 async function executeActions(
   projectId: string,
   actions: AutomationAction[],
@@ -238,57 +279,108 @@ async function executeActions(
   const issue = context.issue;
   if (!issue?.id) return;
 
+  const templateCtx = await buildTemplateContext(context);
+
   for (const action of actions) {
-    switch (action.type) {
-      case 'set_status':
-        if (action.columnId) {
-          await prisma.issue.update({
-            where: { id: issue.id },
-            data: { columnId: action.columnId },
-          });
-        }
-        break;
-      case 'set_assignee':
-        if (action.userId) {
-          await prisma.issue.update({
-            where: { id: issue.id },
-            data: { assigneeId: action.userId },
-          });
-        }
-        break;
-      case 'add_label':
-        if (action.name) {
-          await prisma.issue.update({
-            where: { id: issue.id },
-            data: {
-              labels: {
-                connectOrCreate: {
-                  where: { projectId_name: { projectId, name: action.name } },
-                  create: { projectId, name: action.name },
-                },
-              },
-            },
-          });
-        }
-        break;
-      case 'add_comment':
-        if (action.body) {
-          // Use the first project member as the "system" commenter
-          const membership = await prisma.teamMembership.findFirst({
-            where: { team: { projects: { some: { id: projectId } } } },
-            orderBy: { createdAt: 'asc' },
-          });
-          if (membership) {
-            await prisma.comment.create({
+    try {
+      switch (action.type) {
+        case 'set_status':
+          if (action.columnId) {
+            await prisma.issue.update({
+              where: { id: issue.id },
+              data: { columnId: action.columnId },
+            });
+          }
+          break;
+        case 'set_assignee':
+          if (action.userId) {
+            await prisma.issue.update({
+              where: { id: issue.id },
+              data: { assigneeId: action.userId },
+            });
+          }
+          break;
+        case 'add_label':
+          if (action.name) {
+            await prisma.issue.update({
+              where: { id: issue.id },
               data: {
-                issueId: issue.id,
-                authorId: membership.userId,
-                body: action.body,
+                labels: {
+                  connectOrCreate: {
+                    where: { projectId_name: { projectId, name: action.name } },
+                    create: { projectId, name: action.name },
+                  },
+                },
               },
             });
           }
-        }
-        break;
+          break;
+        case 'add_comment':
+          if (action.body) {
+            const resolvedBody = resolveTemplate(action.body, templateCtx);
+            await prisma.comment.create({
+              data: {
+                issueId: issue.id,
+                authorId: context.actorId,
+                body: resolvedBody,
+              },
+            });
+          }
+          break;
+        case 'set_field':
+          if (action.field && action.value !== undefined) {
+            const resolvedValue = resolveTemplate(action.value, templateCtx);
+            await prisma.issue.update({
+              where: { id: issue.id },
+              data: { [action.field]: resolvedValue },
+            });
+          }
+          break;
+        case 'create_issue':
+          if (action.title) {
+            const depth = context.automationDepth ?? 0;
+            const count = context.issueCreationCount ?? 0;
+            if (depth >= 1 || count >= 5) break;
+            const resolvedTitle = resolveTemplate(action.title, templateCtx);
+            const resolvedIssueBody = action.body
+              ? resolveTemplate(action.body, templateCtx)
+              : undefined;
+            await issuesService.createIssue(
+              projectId,
+              context.actorId,
+              { title: resolvedTitle, body: resolvedIssueBody },
+              { skipAutomation: true },
+            );
+          }
+          break;
+        case 'send_email':
+          if (action.to && action.subject) {
+            const resolvedSubject = resolveTemplate(action.subject, templateCtx);
+            const resolvedEmailBody = action.body ? resolveTemplate(action.body, templateCtx) : '';
+            await emailQueue.add('automation-email', {
+              to: action.to,
+              subject: resolvedSubject,
+              html: resolvedEmailBody,
+            });
+          }
+          break;
+        case 'webhook':
+          if (action.url) {
+            await executeWebhook(
+              action.url,
+              action.data ?? templateCtx,
+              action.method ?? 'POST',
+              action.headers,
+            );
+          }
+          break;
+      }
+    } catch (err) {
+      logger.error(
+        `Automation action ${action.type} failed`,
+        { projectId, issueId: issue.id },
+        err as Error,
+      );
     }
   }
 }
