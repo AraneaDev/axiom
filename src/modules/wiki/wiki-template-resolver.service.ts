@@ -21,7 +21,7 @@ export async function resolveWikiTemplate(body: string, context: ResolveContext)
     }),
     prisma.wikiSpace.findUniqueOrThrow({
       where: { id: context.spaceId },
-      select: { name: true, key: true, team: { select: { name: true, slug: true } } },
+      select: { name: true, slug: true, team: { select: { name: true, slug: true } } },
     }),
   ]);
 
@@ -29,14 +29,14 @@ export async function resolveWikiTemplate(body: string, context: ResolveContext)
   if (context.projectId) {
     project = await prisma.project.findUnique({
       where: { id: context.projectId },
-      select: { name: true, key: true },
+      select: { name: true, prefix: true },
     });
   }
 
   const templateContext = {
     currentUser: user,
     team: space.team,
-    space: { name: space.name, key: space.key },
+    space: { name: space.name, slug: space.slug },
     project: project ?? undefined,
   };
 

@@ -8,7 +8,7 @@ export const resolveTemplate = asyncHandler(async (req: Request, res: Response) 
   const { body, context } = req.body;
   const resolved = await resolveWikiTemplate(body, {
     ...context,
-    userId: req.user!.id,
+    userId: req.userId!,
   });
   res.json({ body: resolved });
 });
