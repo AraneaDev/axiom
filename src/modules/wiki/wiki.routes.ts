@@ -19,6 +19,7 @@ import * as linkController from './wiki-issue-links.controller';
 import * as labelsController from './wiki-labels.controller';
 import * as permController from './wiki-permissions.controller';
 import * as starsController from './wiki-stars.controller';
+import * as templateResolverController from './wiki-template-resolver.controller';
 import * as templatesController from './wiki-templates.controller';
 import * as wikiController from './wiki.controller';
 
@@ -129,6 +130,9 @@ router.post(
   requireSpacePermission('EDIT'),
   wikiController.restoreVersion,
 );
+
+// Template variable resolution
+router.post('/resolve-template', templateResolverController.resolveTemplate);
 
 // Templates (space-scoped require space access + permissions, template-scoped require template access)
 router.post(
