@@ -4,7 +4,7 @@ import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
-import { evaluateRules } from '../automation/automation.service';
+import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
 import { validateTransition } from '../workflows/workflows.service';
 
 /**
@@ -45,6 +45,8 @@ export async function getBoard(projectId: string) {
  * @param issueNumber - The issue number within the project
  * @param columnId - The target column to move the issue to
  * @param position - The position within the target column
+ * @param options
+ * @param options.skipAutomation
  * @returns The updated issue
  * @throws {AppError} 404 if issue not found
  * @throws {AppError} 400 if workflow transition is invalid
@@ -54,6 +56,7 @@ export async function moveIssue(
   issueNumber: number,
   columnId: string,
   position: number,
+  options?: { skipAutomation?: boolean },
 ) {
   const issue = await findOrThrow(
     prisma.issue.findFirst({
@@ -73,18 +76,26 @@ export async function moveIssue(
   await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
 
   // Fire automation rules (non-blocking)
-  if (columnId !== issue.columnId) {
-    evaluateRules(projectId, 'issue:status_changed', {
-      issue: updated,
-      from: issue.columnId,
-      to: columnId,
-    }).catch((err) => {
-      logger.error(
-        'Failed to evaluate automation rules for issue:status_changed',
-        { projectId },
-        err as Error,
-      );
-    });
+  if (columnId !== issue.columnId && !options?.skipAutomation) {
+    prisma.issue
+      .findUnique({ where: { id: issue.id }, include: AUTOMATION_ISSUE_INCLUDE })
+      .then((hydrated) => {
+        if (hydrated) {
+          return evaluateRules(projectId, 'issue:status_changed', {
+            issue: hydrated,
+            actorId: issue.creatorId,
+            from: issue.columnId,
+            to: columnId,
+          });
+        }
+      })
+      .catch((err) => {
+        logger.error(
+          'Failed to evaluate automation rules for issue:status_changed',
+          { projectId },
+          err as Error,
+        );
+      });
   }
 
   broadcastToRoom(`project:${projectId}`, { type: 'board:moved', projectId, issueId: issue.id });

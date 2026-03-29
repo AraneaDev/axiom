@@ -359,8 +359,10 @@ async function executeActions(
             const resolvedEmailBody = action.body ? resolveTemplate(action.body, templateCtx) : '';
             await emailQueue.add('automation-email', {
               to: action.to,
-              subject: resolvedSubject,
-              html: resolvedEmailBody,
+              recipientName: action.to,
+              type: 'automation',
+              title: resolvedSubject,
+              body: resolvedEmailBody,
             });
           }
           break;

@@ -16,7 +16,7 @@ import {
   PROJECT_TEAM_ORG_INCLUDE,
 } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
-import { evaluateRules } from '../automation/automation.service';
+import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
 import { createNotification } from '../notifications/notifications.service';
 import { validateTransition } from '../workflows/workflows.service';
 
@@ -41,6 +41,8 @@ export { bulkUpdate } from './issue-bulk.service';
  * @param data.assigneeId
  * @param data.labels
  * @param data.dueDate
+ * @param options
+ * @param options.skipAutomation
  * @returns The created issue with assignee, creator, labels, column relations and computed key
  * @throws {AppError} 404 if project not found
  */
@@ -56,6 +58,7 @@ export async function createIssue(
     labels?: string[];
     dueDate?: string;
   },
+  options?: { skipAutomation?: boolean },
 ) {
   const project = await findOrThrow(
     prisma.project.findUnique({ where: { id: projectId } }),
@@ -134,13 +137,25 @@ export async function createIssue(
   }
 
   // Fire automation rules (non-blocking)
-  evaluateRules(projectId, 'issue:created', { issue }).catch((err) => {
-    logger.error(
-      'Failed to evaluate automation rules for issue:created',
-      { projectId },
-      err as Error,
-    );
-  });
+  if (!options?.skipAutomation) {
+    prisma.issue
+      .findUnique({ where: { id: issue.id }, include: AUTOMATION_ISSUE_INCLUDE })
+      .then((hydrated) => {
+        if (hydrated) {
+          return evaluateRules(projectId, 'issue:created', {
+            issue: hydrated,
+            actorId: creatorId,
+          });
+        }
+      })
+      .catch((err) => {
+        logger.error(
+          'Failed to evaluate automation rules for issue:created',
+          { projectId },
+          err as Error,
+        );
+      });
+  }
 
   broadcastToRoom(`project:${projectId}`, { type: 'issue:created', projectId, issueId: issue.id });
 
@@ -329,6 +344,8 @@ export async function listIssues(
  * @param data.timeEstimate
  * @param data.timeSpent
  * @param userId - The user performing the update (used for activity logging)
+ * @param options
+ * @param options.skipAutomation
  * @returns The updated issue with assignee, labels, column, and sprint relations
  * @throws {AppError} 404 if issue not found
  * @throws {AppError} 400 if workflow transition is invalid
@@ -352,13 +369,17 @@ export async function updateIssue(
     timeSpent?: number | null;
   },
   userId?: string,
+  options?: { skipAutomation?: boolean },
 ) {
   const issue = await findOrThrow(
     prisma.issue.findUnique({
       where: { projectId_number: { projectId, number: issueNumber } },
+      include: { labels: { select: { name: true } } },
     }),
     'Issue not found',
   );
+
+  const previousLabels = (issue as any).labels?.map((l: any) => l.name) ?? [];
 
   // Validate workflow transition before updating column
   if (data.columnId !== undefined && data.columnId !== issue.columnId) {
@@ -458,36 +479,52 @@ export async function updateIssue(
   }
 
   // Fire automation rules (non-blocking)
-  if (data.columnId !== undefined && data.columnId !== issue.columnId) {
-    evaluateRules(projectId, 'issue:status_changed', {
-      issue: updated,
-      from: issue.columnId,
-      to: data.columnId,
-    }).catch((err) => {
-      logger.error(
-        'Failed to evaluate automation rules for issue:status_changed',
-        { projectId },
-        err as Error,
-      );
-    });
-  }
-  if (data.assigneeId !== undefined && data.assigneeId !== issue.assigneeId) {
-    evaluateRules(projectId, 'issue:assigned', { issue: updated }).catch((err) => {
-      logger.error(
-        'Failed to evaluate automation rules for issue:assigned',
-        { projectId },
-        err as Error,
-      );
-    });
-  }
-  if (data.labels !== undefined) {
-    evaluateRules(projectId, 'label:added', { issue: updated }).catch((err) => {
-      logger.error(
-        'Failed to evaluate automation rules for label:added',
-        { projectId },
-        err as Error,
-      );
-    });
+  if (!options?.skipAutomation) {
+    prisma.issue
+      .findUnique({ where: { id: issue.id }, include: AUTOMATION_ISSUE_INCLUDE })
+      .then((hydrated) => {
+        if (!hydrated) return;
+        const ctx = { issue: hydrated, actorId };
+
+        if (data.columnId !== undefined && data.columnId !== issue.columnId) {
+          evaluateRules(projectId, 'issue:status_changed', {
+            ...ctx,
+            from: issue.columnId,
+            to: data.columnId,
+          }).catch((err) => {
+            logger.error(
+              'Failed to evaluate automation rules for issue:status_changed',
+              { projectId },
+              err as Error,
+            );
+          });
+        }
+        if (data.assigneeId !== undefined && data.assigneeId !== issue.assigneeId) {
+          evaluateRules(projectId, 'issue:assigned', ctx).catch((err) => {
+            logger.error(
+              'Failed to evaluate automation rules for issue:assigned',
+              { projectId },
+              err as Error,
+            );
+          });
+        }
+        if (data.labels !== undefined) {
+          const currentLabels = hydrated.labels?.map((l: any) => l.name) ?? [];
+          const addedLabels = currentLabels.filter((l: string) => !previousLabels.includes(l));
+          for (const label of addedLabels) {
+            evaluateRules(projectId, 'label:added', { ...ctx, label }).catch((err) => {
+              logger.error(
+                'Failed to evaluate automation rules for label:added',
+                { projectId },
+                err as Error,
+              );
+            });
+          }
+        }
+      })
+      .catch((err) => {
+        logger.error('Failed to hydrate issue for automation rules', { projectId }, err as Error);
+      });
   }
 
   broadcastToRoom(`project:${projectId}`, { type: 'issue:updated', projectId, issueId: issue.id });
