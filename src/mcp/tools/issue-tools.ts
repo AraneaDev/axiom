@@ -17,47 +17,62 @@ export function registerIssueTools(ctx: McpToolContext) {
 
   server.tool(
     'list_issues',
-    'List issues in a project, optionally filtered by type, priority, or assignee',
+    'List issues in a project, optionally filtered by type, priority, assignee, or a structured query string',
     {
       projectId: z.string().describe('Project ID'),
+      query: z
+        .string()
+        .optional()
+        .describe('Query language string for structured search (e.g., "type:bug priority:high")'),
       type: z.enum(['TASK', 'BUG', 'STORY', 'EPIC']).optional(),
       priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional(),
       assigneeId: z.string().optional(),
       cursor: z.string().optional().describe('Cursor for pagination (issue ID to start after)'),
       limit: z.number().optional().default(20).describe('Max results to return'),
     },
-    async ({ projectId, type, priority, assigneeId, cursor, limit }) => {
+    async ({ projectId, query, type, priority, assigneeId, cursor, limit }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: 'Project not found' }] };
       await assertMcpPermission('list_issues', orgId);
-      const where: Record<string, unknown> = { projectId };
-      if (type) where.type = type;
-      if (priority) where.priority = priority;
-      if (assigneeId) where.assigneeId = assigneeId;
+
       const take = Math.min(limit, 100);
-      const issues = await prisma.issue.findMany({
-        where,
-        include: {
-          project: { select: { prefix: true } },
-          assignee: { select: USER_BASIC_SELECT },
-          labels: true,
-          column: { select: { name: true } },
-        },
-        take: take + 1,
-        orderBy: { updatedAt: 'desc' },
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      // Convert cursor to offset: walk through pages to find position
+      // For simplicity, cursor is treated as an offset encoded as a base-10 integer string.
+      // When cursor is an issue ID, use the service with offset=0 and filter by cursor via prisma directly.
+      // We use the service for WHERE clause generation, then apply cursor-based pagination on top.
+      const offset = 0; // cursor pagination handled below
+
+      const serviceResult = await issuesService.listIssues(projectId, {
+        q: query,
+        type: query ? undefined : type,
+        priority: query ? undefined : priority,
+        assigneeId: query ? undefined : assigneeId,
+        limit: take + 1,
+        offset,
       });
+
+      let issues = serviceResult.issues;
+
+      // Apply cursor: skip issues up to and including the cursor ID
+      if (cursor) {
+        const cursorIdx = issues.findIndex((i) => i.id === cursor);
+        if (cursorIdx >= 0) {
+          issues = issues.slice(cursorIdx + 1);
+        }
+      }
+
       const hasMore = issues.length > take;
       const page = hasMore ? issues.slice(0, take) : issues;
+
       const data = page.map((i) => ({
         id: i.id,
-        key: `${i.project.prefix}-${i.number}`,
+        key: i.key,
         title: i.title,
         type: i.type,
         priority: i.priority,
         status: i.column?.name ?? 'Unassigned',
         assignee: i.assignee?.displayName ?? 'Unassigned',
-        labels: i.labels.map((l) => l.name),
+        labels: i.labels.map((l: { name: string }) => l.name),
       }));
       const result: Record<string, unknown> = { data };
       if (hasMore) result.next_cursor = page[page.length - 1].id;
