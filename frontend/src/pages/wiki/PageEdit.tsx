@@ -10,6 +10,7 @@ import {
   WifiOff,
   X,
   BookTemplate,
+  Braces,
   ClipboardList,
   RotateCcw,
   Scale,
@@ -35,6 +36,7 @@ import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { PresenceIndicators } from '@/components/wiki/PresenceIndicators';
+import { TemplateVariablePanel } from '@/components/wiki/TemplateVariablePanel';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -108,6 +110,7 @@ export default function PageEdit() {
   const [error, setError] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(isNew);
+  const [showVariablePanel, setShowVariablePanel] = useState(false);
   const [hoveredTemplate, setHoveredTemplate] = useState<string | null>(null);
 
   // Flatten the page tree into select options with indentation
@@ -283,6 +286,16 @@ export default function PageEdit() {
               {showTemplatePicker ? 'Hide templates' : 'Templates'}
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowVariablePanel(!showVariablePanel)}
+            className={cn(showVariablePanel && 'text-primary bg-primary/10')}
+            title="Toggle template variable reference"
+          >
+            <Braces className="h-4 w-4" />
+            Variables
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => setShowPreview(!showPreview)}>
             {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             {showPreview ? 'Hide Preview' : 'Preview'}
@@ -477,34 +490,43 @@ export default function PageEdit() {
           />
         )}
 
-        <div className={cn('gap-4', showPreview ? 'grid grid-cols-2' : '')}>
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-text">Content</label>
-            {useCollab && collab.ydoc && collab.provider ? (
-              <CollaborativeEditor
-                ydoc={collab.ydoc}
-                provider={collab.provider}
-                fragmentName={collab.fragmentName}
-                onChange={setBody}
-                placeholder="Write your content..."
-              />
-            ) : (
-              <MarkdownEditor value={body} onChange={setBody} placeholder="Write your content..." />
+        <div className="flex gap-0">
+          <div className={cn('flex-1 gap-4', showPreview ? 'grid grid-cols-2' : '')}>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-text">Content</label>
+              {useCollab && collab.ydoc && collab.provider ? (
+                <CollaborativeEditor
+                  ydoc={collab.ydoc}
+                  provider={collab.provider}
+                  fragmentName={collab.fragmentName}
+                  onChange={setBody}
+                  placeholder="Write your content..."
+                />
+              ) : (
+                <MarkdownEditor
+                  value={body}
+                  onChange={setBody}
+                  placeholder="Write your content..."
+                />
+              )}
+            </div>
+            {showPreview && (
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-text">Preview</label>
+                <Card className="p-4 min-h-[300px] overflow-auto">
+                  {body ? (
+                    <MarkdownRenderer content={body} />
+                  ) : (
+                    <p className="text-text-tertiary italic text-sm">
+                      Start typing to see a preview...
+                    </p>
+                  )}
+                </Card>
+              </div>
             )}
           </div>
-          {showPreview && (
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-text">Preview</label>
-              <Card className="p-4 min-h-[300px] overflow-auto">
-                {body ? (
-                  <MarkdownRenderer content={body} />
-                ) : (
-                  <p className="text-text-tertiary italic text-sm">
-                    Start typing to see a preview...
-                  </p>
-                )}
-              </Card>
-            </div>
+          {showVariablePanel && (
+            <TemplateVariablePanel onInsert={(variable) => setBody((b) => b + variable)} />
           )}
         </div>
 
