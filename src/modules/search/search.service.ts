@@ -5,6 +5,8 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { repoExists } from '../../git/repo-manager';
+import { parse, compileToPrisma } from '../../lib/query-engine';
+import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { parseServicePagination } from '../../utils/pagination';
 import {
   PROJECT_URL_WITH_NAME_SELECT,
@@ -142,7 +144,7 @@ export async function search(params: SearchParams) {
   const results: SearchResultSection[] = [];
 
   if (params.type === 'issues' || params.type === 'all') {
-    const issueResults = await searchIssues(freeText, filters, params);
+    const issueResults = await searchIssues(freeText, filters, params, params.q);
     results.push(issueResults);
   }
 
@@ -174,11 +176,8 @@ async function searchIssues(
   freeText: string,
   filters: Record<string, string>,
   params: SearchParams,
+  rawQuery?: string,
 ) {
-  const tsq = toTsQuery(freeText);
-  const useFts = tsq.length > 0;
-
-  // Build where clause with structured filters
   const where: Prisma.IssueWhereInput = {};
   const andClauses: Prisma.IssueWhereInput[] = [];
 
@@ -190,57 +189,81 @@ async function searchIssues(
     where.projectId = params.projectId;
   }
 
-  if (filters.type) {
-    const issueType = filters.type.toUpperCase();
-    if (['TASK', 'BUG', 'STORY', 'EPIC'].includes(issueType)) {
-      andClauses.push({ type: issueType as 'TASK' | 'BUG' | 'STORY' | 'EPIC' });
+  // Try query engine for structured queries
+  let usedQueryEngine = false;
+  if (rawQuery && /[=><!]|(?:^|\s)(?:AND|OR|NOT|IN)(?:\s|$)|\w+:/.test(rawQuery)) {
+    try {
+      const ast = parse(rawQuery);
+      const engineWhere = compileToPrisma(ast, issueFieldRegistry, {
+        projectId: params.projectId,
+      });
+      // Merge engine-generated clauses into AND
+      if (Object.keys(engineWhere).length > 0) {
+        andClauses.push(engineWhere as Prisma.IssueWhereInput);
+        usedQueryEngine = true;
+      }
+    } catch {
+      // Fall through to legacy structured filter parsing below
     }
   }
 
-  if (filters.priority) {
-    const priority = filters.priority.toUpperCase();
-    if (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(priority)) {
-      andClauses.push({ priority: priority as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' });
+  // Legacy structured filter parsing (used as fallback or when no structured syntax)
+  if (!usedQueryEngine) {
+    if (filters.type) {
+      const issueType = filters.type.toUpperCase();
+      if (['TASK', 'BUG', 'STORY', 'EPIC'].includes(issueType)) {
+        andClauses.push({ type: issueType as 'TASK' | 'BUG' | 'STORY' | 'EPIC' });
+      }
     }
-  }
 
-  if (filters.assignee) {
-    andClauses.push({
-      assignee: {
-        OR: [
-          { username: { equals: filters.assignee, mode: 'insensitive' } },
-          { displayName: { contains: filters.assignee, mode: 'insensitive' } },
-        ],
-      },
-    });
-  }
+    if (filters.priority) {
+      const priority = filters.priority.toUpperCase();
+      if (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(priority)) {
+        andClauses.push({ priority: priority as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' });
+      }
+    }
 
-  if (filters.status) {
-    andClauses.push({
-      column: { name: { equals: filters.status, mode: 'insensitive' } },
-    });
-  }
+    if (filters.assignee) {
+      andClauses.push({
+        assignee: {
+          OR: [
+            { username: { equals: filters.assignee, mode: 'insensitive' } },
+            { displayName: { contains: filters.assignee, mode: 'insensitive' } },
+          ],
+        },
+      });
+    }
 
-  if (filters.label) {
-    andClauses.push({
-      labels: { some: { name: { equals: filters.label, mode: 'insensitive' } } },
-    });
-  }
+    if (filters.status) {
+      andClauses.push({
+        column: { name: { equals: filters.status, mode: 'insensitive' } },
+      });
+    }
 
-  if (filters.project) {
-    andClauses.push({
-      project: {
-        OR: [
-          { slug: { equals: filters.project, mode: 'insensitive' } },
-          { prefix: { equals: filters.project.toUpperCase() } },
-        ],
-      },
-    });
+    if (filters.label) {
+      andClauses.push({
+        labels: { some: { name: { equals: filters.label, mode: 'insensitive' } } },
+      });
+    }
+
+    if (filters.project) {
+      andClauses.push({
+        project: {
+          OR: [
+            { slug: { equals: filters.project, mode: 'insensitive' } },
+            { prefix: { equals: filters.project.toUpperCase() } },
+          ],
+        },
+      });
+    }
   }
 
   if (andClauses.length > 0) {
     where.AND = andClauses;
   }
+
+  const tsq = toTsQuery(freeText);
+  const useFts = tsq.length > 0;
 
   // If we have free text, use PostgreSQL full-text search via $queryRaw for ranking
   if (useFts) {
