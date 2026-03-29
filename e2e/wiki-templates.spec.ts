@@ -47,18 +47,19 @@ test.describe('Wiki Templates', () => {
 
     await page.getByRole('button', { name: /meeting notes/i }).click();
 
-    const editor = page.locator('.ProseMirror, [contenteditable="true"]').first();
-    await expect(editor).toBeVisible({ timeout: 10_000 });
+    // Wait for template to be applied — "Facilitator" heading appears in the editor
+    await expect(page.getByText('Facilitator').first()).toBeVisible({ timeout: 10_000 });
 
-    // Raw template variable placeholder should NOT appear — it should be resolved
-    await expect(page.getByText('{{currentUser.displayName}}')).not.toBeVisible({
-      timeout: 5_000,
-    });
+    // The admin user's display name should appear (resolved from {{currentUser.displayName}})
+    await expect(page.getByText(DEMO_USERS.admin.display).first()).toBeVisible({ timeout: 10_000 });
 
-    // The logged-in user's display name should appear instead
-    await expect(
-      page.getByText(new RegExp(DEMO_USERS.admin.display, 'i')).first(),
-    ).toBeVisible({ timeout: 10_000 });
+    // Raw template variables should NOT appear anywhere on the page
+    await expect(page.getByText('{{currentUser.displayName}}')).not.toBeVisible({ timeout: 3_000 });
+    await expect(page.getByText('{{team.name}}')).not.toBeVisible({ timeout: 3_000 });
+
+    // Team name should be resolved (E2E seed team is "Core")
+    // Use the heading "Team" followed by the resolved value
+    await expect(page.getByText('Team').first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('can hide template picker', async ({ page }) => {

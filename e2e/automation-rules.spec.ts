@@ -90,6 +90,87 @@ test.describe('Automation Rules', () => {
     await expect(page.getByText('E2E Condition Rule')).toBeVisible({ timeout: 10_000 });
   });
 
+  test('API accepts condition string format', async ({ request }) => {
+    // Login via API to get JWT token
+    const loginRes = await request.post('/api/auth/login', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      data: { login: 'admin', password: 'password123' },
+    });
+    const { accessToken } = await loginRes.json();
+    const h = { 'X-Requested-With': 'XMLHttpRequest', 'Authorization': `Bearer ${accessToken}` };
+
+    const orgs = await (await request.get('/api/orgs', { headers: h })).json();
+    const teams = await (await request.get(`/api/teams/org/${orgs[0].id}`, { headers: h })).json();
+    const projects = await (await request.get(`/api/projects/team/${teams.data[0].id}`, { headers: h })).json();
+    const projectId = projects[0].id;
+
+    // Create rule with query-string condition
+    const createRes = await request.post(`/api/projects/${projectId}/automation-rules`, {
+      headers: h,
+      data: {
+        name: 'E2E Query Condition Rule',
+        trigger: 'issue:created',
+        condition: 'type = Bug AND priority IN (High, Critical)',
+        actions: [{ type: 'add_label', name: 'auto-triaged' }],
+      },
+    });
+    expect(createRes.status()).toBe(201);
+    const rule = await createRes.json();
+    expect(rule.condition).toBe('type = Bug AND priority IN (High, Critical)');
+  });
+
+  test('API rejects invalid condition syntax', async ({ request }) => {
+    const loginRes = await request.post('/api/auth/login', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      data: { login: 'admin', password: 'password123' },
+    });
+    const { accessToken } = await loginRes.json();
+    const h = { 'X-Requested-With': 'XMLHttpRequest', 'Authorization': `Bearer ${accessToken}` };
+
+    const orgs = await (await request.get('/api/orgs', { headers: h })).json();
+    const teams = await (await request.get(`/api/teams/org/${orgs[0].id}`, { headers: h })).json();
+    const projects = await (await request.get(`/api/projects/team/${teams.data[0].id}`, { headers: h })).json();
+    const projectId = projects[0].id;
+
+    const createRes = await request.post(`/api/projects/${projectId}/automation-rules`, {
+      headers: h,
+      data: {
+        name: 'E2E Invalid Condition',
+        trigger: 'issue:created',
+        condition: 'type = AND =',
+        actions: [{ type: 'add_label', name: 'test' }],
+      },
+    });
+    expect(createRes.status()).toBe(400);
+  });
+
+  test('API resolves wiki template variables', async ({ request }) => {
+    const loginRes = await request.post('/api/auth/login', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      data: { login: 'admin', password: 'password123' },
+    });
+    const { accessToken } = await loginRes.json();
+    const h = { 'X-Requested-With': 'XMLHttpRequest', 'Authorization': `Bearer ${accessToken}` };
+
+    const orgs = await (await request.get('/api/orgs', { headers: h })).json();
+    const teams = await (await request.get(`/api/teams/org/${orgs[0].id}`, { headers: h })).json();
+    const teamId = teams.data[0].id;
+    const spaceId = teams.data[0].wikiSpaces[0].id;
+
+    const res = await request.post('/api/wiki/resolve-template', {
+      headers: h,
+      data: {
+        body: 'Hello {{currentUser.displayName}}, team: {{team.name}}',
+        context: { teamId, spaceId },
+      },
+    });
+    expect(res.status()).toBe(200);
+    const data = await res.json();
+    expect(data.body).toContain('Admin User');
+    expect(data.body).toContain('Core');
+    expect(data.body).not.toContain('{{');
+  });
+
   test('can toggle a rule enabled/disabled', async ({ page }) => {
     await page.goto(AUTOMATION_URL);
     await expect(page.getByText('Auto-label critical bugs')).toBeVisible({ timeout: 10_000 });
