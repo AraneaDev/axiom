@@ -2,7 +2,13 @@ export const meetingNotes = {
   name: 'Meeting Notes',
   description: 'Capture attendees, agenda, discussion notes, and action items',
   body: `## Date
-[Date]
+{{now()}}
+
+## Facilitator
+{{currentUser.displayName}}
+
+## Team
+{{team.name}}
 
 ## Attendees
 - @

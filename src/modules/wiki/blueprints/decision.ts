@@ -4,8 +4,8 @@ export const decision = {
   body: `## Decision: [Title]
 
 **Status:** PROPOSED | ACCEPTED | REJECTED
-**Date:** [Date]
-**Decider:** [Name]
+**Date:** {{now()}}
+**Decider:** {{currentUser.displayName}}
 
 ### Context
 [What is the issue that we're seeing that is motivating this decision?]

@@ -3,6 +3,10 @@ export const runbook = {
   description: 'Operational runbook with common issues, monitoring, and contacts',
   body: `## [Service/System Name] Runbook
 
+**Team:** {{team.name}}
+**Author:** {{currentUser.displayName}}
+**Last Updated:** {{now()}}
+
 ### Overview
 [What this service does]
 
