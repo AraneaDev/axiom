@@ -4,17 +4,18 @@
 
 1. [System Overview](#system-overview)
 2. [Backend Architecture](#backend-architecture)
-3. [Database Schema](#database-schema)
-4. [Authentication and Authorization](#authentication-and-authorization)
-5. [Real-time Architecture](#real-time-architecture)
-6. [Git Hosting Architecture](#git-hosting-architecture)
-7. [Frontend Architecture](#frontend-architecture)
-8. [Caching Strategy](#caching-strategy)
-9. [File Storage](#file-storage)
-10. [Email](#email)
-11. [Error Handling](#error-handling)
-12. [Security Model](#security-model)
-13. [Development Infrastructure](#development-infrastructure)
+3. [Shared Libraries](#shared-libraries)
+4. [Database Schema](#database-schema)
+5. [Authentication and Authorization](#authentication-and-authorization)
+6. [Real-time Architecture](#real-time-architecture)
+7. [Git Hosting Architecture](#git-hosting-architecture)
+8. [Frontend Architecture](#frontend-architecture)
+9. [Caching Strategy](#caching-strategy)
+10. [File Storage](#file-storage)
+11. [Email](#email)
+12. [Error Handling](#error-handling)
+13. [Security Model](#security-model)
+14. [Development Infrastructure](#development-infrastructure)
 
 ---
 
@@ -122,8 +123,119 @@ Controllers receive `req`/`res` and call service functions. Services never touch
 - `src/storage/` — File storage abstraction
 - `src/email/` — BullMQ-backed email queue (started only when `SMTP_HOST` is set)
 - `src/mcp/` — Model Context Protocol server (loaded dynamically to handle missing SDK gracefully)
+- `src/lib/` — Shared cross-cutting libraries (query engine, etc.)
 - `src/utils/` — Logger, Pandoc export, param helpers, validation
 - `src/config/` — `database.ts` (Prisma), `redis.ts` (ioredis), `env.ts` (typed env vars)
+
+---
+
+## Shared Libraries
+
+### Query Engine (`src/lib/query-engine/`)
+
+The query engine is a reusable text-query compiler used by issue search, automation conditions, and wiki template resolution. It exposes a single structured pipeline:
+
+```
+Query string
+    │
+    ▼
+Lexer  (tokenises field:value, operators, quoted strings, parentheses)
+    │
+    ▼
+Parser  (recursive-descent, builds AST nodes: AND / OR / NOT / Comparison / FullText)
+    │
+    ▼
+AST
+    │
+    ├──► Prisma Compiler  (AST → Prisma WhereInput, used by issue search)
+    │
+    ├──► Boolean Evaluator  (AST → evaluates against a hydrated object, used by automation conditions)
+    │
+    └──► Template Resolver  (resolves {{expression}} placeholders in action strings / wiki templates)
+```
+
+**Two compiler backends:**
+
+| Backend | Input | Output | Used by |
+|---------|-------|--------|---------|
+| Prisma compiler | Query AST | `Prisma.IssueWhereInput` | Issue list / search endpoint |
+| Boolean evaluator | Query AST + issue object | `true` / `false` | Automation condition matching |
+
+**Field registry:** Each backend registers a set of known field names and their type mappings. Adding support for a new filterable field means registering it in the field registry — the lexer, parser, and AST are unaffected.
+
+**Template expression resolver:** Handles `{{expression}}` substitution in automation action values and wiki page templates. Expressions are evaluated against a typed context object and may reference context properties or built-in functions.
+
+```mermaid
+graph TD
+    IssueSearch["Issue Search\n/api/projects/:id/issues?q=..."] -->|query string| QE
+    AutomationEngine["Automation Engine\nsrc/modules/automation/"] -->|condition string| QE
+    WikiTemplates["Wiki Templates\n/api/wiki/templates/:id/resolve"] -->|template body| QE
+
+    subgraph QE["Query Engine (src/lib/query-engine/)"]
+        Lexer --> Parser --> AST
+        AST --> PrismaCompiler["Prisma Compiler"]
+        AST --> BooleanEval["Boolean Evaluator"]
+        AST --> TemplateResolver["Template Resolver"]
+    end
+
+    PrismaCompiler -->|WhereInput| Prisma["Prisma ORM"]
+    BooleanEval -->|true/false| AutomationEngine
+    TemplateResolver -->|resolved string| AutomationEngine
+    TemplateResolver -->|resolved body| WikiTemplates
+```
+
+### Automation Architecture
+
+Automation rules are stored as `AutomationRule` records and evaluated at trigger sites throughout the codebase. The automation module lives in `src/modules/automation/`.
+
+**Condition format:** Rule conditions are stored as query strings in `AutomationRule.condition` (e.g., `status:open AND priority:high`). These strings are compiled by the query engine's boolean evaluator against a hydrated issue object at trigger time. The legacy `AutomationRule.conditions` JSON field is retained for backward-compatibility migration only.
+
+**Trigger sites:** Automation is triggered from issue mutation services (create, update, status change, assignment, label change). Each trigger site:
+1. Fetches a fully hydrated issue using the `AUTOMATION_ISSUE_INCLUDE` constant (ensures all relation fields needed by condition evaluation are present)
+2. Evaluates each active rule's condition string against the issue object
+3. For matching rules, executes each action in order
+4. Passes a `skipAutomation` flag on internal mutations to prevent infinite loops
+
+**Action types:**
+
+| Action type | Description |
+|-------------|-------------|
+| `set_status` | Change issue status to a named column |
+| `set_assignee` | Assign or unassign the issue |
+| `add_label` | Add a label by name |
+| `add_comment` | Post a comment (body supports `{{...}}` templates) |
+| `set_field` | Set a custom field value |
+| `create_issue` | Create a linked child issue |
+| `send_email` | Send an email to a specified address |
+| `webhook` | POST a JSON payload to an external URL (SSRF-protected) |
+
+**Template expressions in actions:** Action field values support `{{expression}}` syntax resolved via the template resolver. At execution time the resolver receives an `AutomationTemplateContext` containing the triggering issue and actor.
+
+**SSRF protection:** The `webhook` action validates the target URL against a blocklist of private IP ranges and loopback addresses before dispatching the request.
+
+### Template Variables
+
+The `{{expression}}` syntax is shared between automation actions and wiki page templates. The template resolver parses content for `{{...}}` blocks and substitutes each expression against the supplied context.
+
+**Context types:**
+
+| Context | Used by | Available as |
+|---------|---------|--------------|
+| `AutomationTemplateContext` | Automation actions | `issue`, `actor` |
+| `WikiTemplateContext` | Wiki template resolution | `currentUser`, `page` |
+
+**Built-in functions available in all contexts:**
+
+| Function | Returns |
+|----------|---------|
+| `currentUser()` | Display name of the authenticated user |
+| `now()` | Current timestamp (ISO 8601) |
+| `empty()` | Empty string (useful for clearing fields) |
+| `currentSprint()` | Name of the active sprint in the current project |
+| `startOfDay()` | Midnight of the current day (ISO 8601) |
+| `startOfWeek()` | Midnight of the current Monday (ISO 8601) |
+
+**Wiki template resolution endpoint:** `POST /api/wiki/templates/:id/resolve` accepts a `WikiTemplateContext` payload and returns the template body with all `{{...}}` expressions substituted. This allows the frontend to preview a resolved template before inserting it into a page.
 
 ---
 
@@ -195,7 +307,7 @@ erDiagram
 
 **Projects and Issues:** `Project`, `BoardColumn`, `Issue` (types: TASK/BUG/STORY/EPIC; priorities: CRITICAL/HIGH/MEDIUM/LOW), `Label`, `Comment`, `IssueLink` (types: BLOCKS/IS_BLOCKED_BY/RELATES_TO/DUPLICATES), `IssueCommit`, `IssuePullRequest`, `IssueBranch`, `IssueVote`, `IssueWatcher`, `TimeEntry`
 
-**Planning:** `Sprint`, `Milestone`, `CustomFieldDefinition`, `CustomFieldValue`, `WorkflowRule`, `AutomationRule`, `SavedFilter`
+**Planning:** `Sprint`, `Milestone`, `CustomFieldDefinition`, `CustomFieldValue`, `WorkflowRule`, `AutomationRule` (`condition String?` — query string format; `conditions Json?` — deprecated, kept for migration), `SavedFilter`
 
 **Wiki:** `WikiSpace`, `Page`, `PageVersion`, `PageComment`, `PageLabel`, `PageTemplate`
 
