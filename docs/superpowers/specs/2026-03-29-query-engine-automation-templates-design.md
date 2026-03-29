@@ -48,7 +48,7 @@ type Expression =
   | { type: 'or'; left: Expression; right: Expression }
   | { type: 'not'; operand: Expression }
 
-type ComparisonOp = '=' | '!=' | '>' | '<' | '>=' | '<='
+type ComparisonOp = '=' | '!=' | '>' | '<' | '>=' | '<=' | '~'  // ~ = contains (substring match)
 
 type Value =
   | { type: 'string'; value: string }
@@ -56,6 +56,31 @@ type Value =
   | { type: 'function'; name: string; args: Value[] }
   | { type: 'null' }
 ```
+
+**Note on `~` (contains):** Maps to Prisma `contains` (case-insensitive). Example: `title ~ "login"`. This preserves the existing automation `contains` operator.
+
+### 2.2a Aliases & Case Sensitivity
+
+- **`@me`** — alias for `currentUser()`. The lexer recognizes `@me` as a special token and emits a `currentUser()` function value. Only valid on the right side of a comparison.
+- **Case insensitive** — field names, operators (`AND`/`and`), enum values (`Bug`/`bug`/`BUG`), and function names are all case-insensitive. The parser normalizes to lowercase internally. Enum values are matched against the field registry's `values` array case-insensitively.
+
+### 2.2b Free Text
+
+Tokens that don't match `field:value` or `field OPERATOR value` patterns are collected as free text and emitted as a separate AST node:
+
+```typescript
+type Expression =
+  // ... existing nodes ...
+  | { type: 'freetext'; value: string }
+```
+
+Free text is passed to PostgreSQL FTS unchanged. When compiling to Prisma, the compiler generates a `to_tsvector`/`to_tsquery` clause ANDed with the structured conditions.
+
+### 2.2c Duration Offsets
+
+Functions that accept duration offsets use a compact syntax: `now(-7d)`, `now(-2w)`, `now(-3h)`.
+
+Supported units: `m` (minutes), `h` (hours), `d` (days), `w` (weeks). The parser recognizes `-?[0-9]+[mhdw]` as a duration literal and converts to a millisecond offset applied to the function's base datetime.
 
 ### 2.3 Built-in Functions
 
@@ -158,7 +183,7 @@ The existing regex tokenizer is removed; the query engine handles both structure
 
 ### 3.4 MCP Integration
 
-`list_issues` tool gains an optional `query` parameter:
+`list_issues` tool (in `src/mcp/tools/issue-tools.ts`) gains an optional `query` parameter:
 
 ```typescript
 server.tool('list_issues', 'List and filter issues', {
@@ -174,6 +199,8 @@ server.tool('list_issues', 'List and filter issues', {
 ```
 
 When `query` is provided, it takes precedence over individual filter params.
+
+**Important:** The MCP `list_issues` tool currently queries Prisma directly. It must be refactored to call `issuesService.listIssues()` so that query parsing flows through the same pipeline as the REST API. This is a prerequisite for this feature.
 
 ### 3.5 Frontend Changes
 
@@ -212,12 +239,28 @@ The `conditions` JSON array is replaced by a single `condition` string field on 
 model AutomationRule {
   // ... existing fields
   condition  String?    // NEW — query string
-  conditions Json?      // DEPRECATED — kept temporarily for migration
+  conditions Json?      // DEPRECATED — made nullable, kept temporarily for migration
   actions    Json       // Unchanged — action objects now support {{expressions}}
 }
 ```
 
-**Migration:** A data migration script converts existing JSON conditions to query strings. The mapping is 1:1 — `equals` → `=`, `not_equals` → `!=`, `in` → `IN`, multiple conditions → `AND`.
+**Migration (two-phase):**
+
+1. **Schema migration** — Add `condition String?` column. Alter `conditions` from `Json` (non-nullable) to `Json?` (nullable):
+   ```sql
+   ALTER TABLE "AutomationRule" ADD COLUMN "condition" TEXT;
+   ALTER TABLE "AutomationRule" ALTER COLUMN "conditions" DROP NOT NULL;
+   ```
+
+2. **Data migration script** — Convert existing JSON conditions to query strings. Operator mapping:
+   - `equals` → `=`
+   - `not_equals` → `!=`
+   - `in` → `IN`
+   - `not_in` → `NOT IN`
+   - `contains` → `~`
+   - Multiple conditions → `AND`
+
+   After conversion, set `conditions = NULL` on migrated rows. The service reads `condition` (string) first; falls back to `conditions` (JSON) if present for any unmigrated rows. The `conditions` column is dropped in a later release after confirming all rows are migrated.
 
 ### 4.3 New Actions
 
@@ -229,6 +272,12 @@ model AutomationRule {
 | `webhook` | `url`, `method?`, `headers?` | POST issue data to external URL. URL supports template expressions. |
 
 Combined with the existing 4 (`set_status`, `set_assignee`, `add_label`, `add_comment`), that gives 8 actions total.
+
+**Guardrails:**
+
+- **`set_field` recursion prevention:** When `executeActions` calls `updateIssue`, it passes a `skipAutomation: true` flag to prevent the update from re-triggering `evaluateRules`. This flag is threaded through the service call and checked at the top of `evaluateRules`.
+- **`webhook` SSRF protection:** Webhook URLs are validated against an allowlist of permitted schemes (`https://` only) and blocked from private/internal IP ranges (RFC 1918, loopback, link-local). The URL is resolved via DNS before the request is made and the resolved IP is checked against the blocklist.
+- **`create_issue` guard:** Limited to one issue creation per rule execution. The created issue does not re-trigger the same rule (tracked via an `automationSourceRuleId` field on the execution context).
 
 ### 4.4 Template Expressions in Actions
 
@@ -270,7 +319,28 @@ interface AutomationTemplateContext {
 }
 ```
 
-### 4.6 Expression Evaluator
+### 4.6 Hydrated Issue Requirement
+
+All automation trigger sites (`createIssue`, `updateIssue`, `moveIssueToColumn`) must pass a fully hydrated issue to `evaluateRules`. A shared Prisma include constant defines the required shape:
+
+```typescript
+const AUTOMATION_ISSUE_INCLUDE = {
+  assignee: { select: { id: true, username: true, displayName: true, email: true } },
+  creator: { select: { id: true, username: true, displayName: true, email: true } },
+  labels: { select: { name: true } },
+  sprint: { select: { id: true, name: true, goal: true } },
+  column: { select: { id: true, name: true } },
+  project: { select: { id: true, name: true, key: true } },
+} as const;
+```
+
+If the trigger site already has the issue loaded with a subset of these includes, it re-fetches with the full include before calling `evaluateRules`.
+
+### 4.7 Condition Validation
+
+Automation rule conditions are validated at **creation/update time** — the query string is parsed and compiled to verify it is syntactically valid and references known fields. Invalid conditions are rejected with a 400 error and a message indicating the parse error position.
+
+### 4.8 Expression Evaluator
 
 The template expression parser is lightweight — separate from the query parser but sharing the same function resolution:
 
@@ -375,7 +445,32 @@ When `templateId` is provided, the backend fetches the template, resolves variab
 
 ---
 
-## 6. Module Structure
+## 6. Error Handling
+
+### 6.1 Parse Errors
+
+The parser returns structured errors with position information:
+
+```typescript
+interface QueryParseError {
+  message: string;       // Human-readable: "Unexpected token ')' at position 15"
+  position: number;      // Character offset in the query string
+  token?: string;        // The problematic token
+}
+```
+
+The API returns parse errors as 400 responses with the error detail, allowing the frontend to highlight the error position in the query bar.
+
+### 6.2 Runtime Errors
+
+- **Unknown field:** Returns 400 with `"Unknown field 'foo'. Available fields: type, priority, ..."`.
+- **Type mismatch:** Returns 400 with `"Cannot use '>' on enum field 'type'. Use '=' or 'IN'."` (unless the field has `ordinal: true`).
+- **Function errors:** `currentSprint()` returns null if no active sprint exists — the comparison evaluates to false rather than erroring.
+- **Template expression errors:** Unresolvable paths (e.g., `{{issue.nonexistent}}`) render as empty string and log a warning. No user-facing error — templates degrade gracefully.
+
+---
+
+## 7. Module Structure
 
 ```
 src/lib/query-engine/
@@ -399,7 +494,7 @@ src/lib/query-engine/
 
 ---
 
-## 7. Decisions Log
+## 8. Decisions Log
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
@@ -414,7 +509,7 @@ src/lib/query-engine/
 
 ---
 
-## 8. Out of Scope
+## 9. Out of Scope
 
 - Querying wiki pages, PRs, or repos (future — add field registries)
 - Saved filters as named references in queries
