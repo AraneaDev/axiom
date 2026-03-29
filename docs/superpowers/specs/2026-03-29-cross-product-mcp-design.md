@@ -30,9 +30,12 @@ model WikiPageIssueLink {
   linkType    WikiIssueLinkType
   createdAt   DateTime            @default(now())
   createdById String
-  createdBy   User                @relation(fields: [createdById], references: [id])
+  createdBy   User                @relation("WikiPageIssueLinks", fields: [createdById], references: [id])
 
   @@unique([pageId, issueId, linkType])
+  @@index([pageId])
+  @@index([issueId])
+  @@map("wiki_page_issue_links")
 }
 
 enum WikiIssueLinkType {
@@ -41,7 +44,10 @@ enum WikiIssueLinkType {
 }
 ```
 
-No changes to existing models beyond adding the reverse relations on `Page`, `Issue`, and `User`.
+**Reverse relations added to existing models:**
+- `Page`: `wikiIssueLinks WikiPageIssueLink[]`
+- `Issue`: `wikiIssueLinks WikiPageIssueLink[]`
+- `User`: `wikiPageIssueLinks WikiPageIssueLink[] @relation("WikiPageIssueLinks")`
 
 ### Service: wiki-issue-links.service.ts
 
@@ -59,10 +65,12 @@ No changes to existing models beyond adding the reverse relations on `Page`, `Is
 
 SmartLinkExtension already resolves issue URLs to rich previews. No editor changes needed for display.
 
-On page save, the backend:
-1. Parses page content for issue references (keys like `AXM-123` and issue URLs)
-2. Resolves to issue IDs
+On page save, the wiki service layer (`wiki.service.ts` `updatePage()`):
+1. Parses page content for issue references (keys like `AXM-123`, issue URLs, and `:::issue AXM-123:::` directives)
+2. Resolves keys to issue IDs via project prefix lookup
 3. Calls `syncMentionLinks()` to reconcile -- adds new links, removes links for references no longer in content
+
+This is done in the service layer so both REST API and MCP `update_wiki_page` paths trigger it. Also called from `createPage()` for initial content.
 
 Mention links stay in sync automatically with page content.
 
@@ -70,11 +78,11 @@ Mention links stay in sync automatically with page content.
 
 New TipTap node extension: `IssueEmbedExtension`.
 
-**Insertion:** Via slash command `/issue` in SlashCommandExtension menu (Embed category). Opens issue search dialog reusing existing issue search/filter components.
+**Insertion:** Via slash command `/issue` in SlashCommandExtension menu (Embed category), with `CircleDot` Lucide icon. Opens issue search dialog reusing existing issue search/filter components.
 
 **Rendering:** Card showing issue key, title, status badge, priority icon, assignee avatar. Read-only in editor. Re-fetches data on page load for live status.
 
-**Serialization:** Markdown fenced directive: `` ```issue:AXM-123``` ``. Round-trips cleanly between editor and markdown.
+**Serialization:** Custom directive syntax: `:::issue AXM-123:::`. Avoids collision with fenced code blocks. Requires custom markdown-it rule for parse (directive -> IssueEmbedBlock node) and serialize (node -> directive). Same pattern used by CalloutExtension and CollapsibleExtension for custom block types.
 
 **Link management:** On insert, backend creates EMBED link. On removal from editor content, link cleaned up on next save via sync mechanism.
 
@@ -94,15 +102,49 @@ Seven new tools completing three target agent workflows. All follow existing pat
 |------|------|-------|--------|-----------|
 | `search_code` | repo-tools.ts | query, orgId, optional repoId/filePattern | Matching files + line snippets | Investigate, Review |
 | `get_development_summary` | integration-tools.ts | projectId, issueNumber | Branches, commits, PRs, pipeline runs | Investigate, Review |
-| `get_pr_diff` | repo-tools.ts | repoId, pullNumber | Unified diff string | Review |
+| `get_pr_diff` | repo-tools.ts | repoId, pullNumber | Unified diff string (truncated at 100KB with warning) | Review |
 | `get_pr_comments` | repo-tools.ts | repoId, pullNumber | Comments with file/line context, threads | Review |
 | `get_recent_merges` | repo-tools.ts | repoId, optional since (ISO date), limit | Recently merged PRs with linked issues | Doc sync |
 | `list_wiki_issue_links` | integration-tools.ts | pageId or issueId (one required) | Links in either direction with type | All three |
 | `link_wiki_to_issue` | integration-tools.ts | pageId, issueId, linkType | Created link record | Doc sync |
 
+### MCP Permission Mappings
+
+All 7 tools must be registered in `mcp-permissions.ts`:
+
+| Tool | Permission |
+|------|-----------|
+| `search_code` | `repo:read` |
+| `get_development_summary` | `issue:view` |
+| `get_pr_diff` | `repo:read` |
+| `get_pr_comments` | `repo:read` |
+| `get_recent_merges` | `repo:read` |
+| `list_wiki_issue_links` | `wiki:view` |
+| `link_wiki_to_issue` | `wiki:edit` |
+
 ### New File: integration-tools.ts
 
-Cross-product tools that span modules: `get_development_summary`, `list_wiki_issue_links`, `link_wiki_to_issue`. Registered in `createMcpServer()` alongside existing tool files.
+Located at `src/mcp/tools/integration-tools.ts`. Cross-product tools that span modules: `get_development_summary`, `list_wiki_issue_links`, `link_wiki_to_issue`. Registered via `registerIntegrationTools(ctx)` in `createMcpServer()` alongside existing tool files.
+
+### McpToolContext Helper
+
+Add `getOrgIdFromPage(pageId)` to `src/mcp/tools/types.ts` following the existing pattern (page -> space -> team -> org). Used by `list_wiki_issue_links` and `link_wiki_to_issue` for permission checks.
+
+### Git Infrastructure: search_code
+
+`search_code` requires a new `grepFiles(repoPath, query, opts)` function in `src/git/git-search-commands.ts`. Wraps `git grep` with:
+- Pattern search across repo at HEAD
+- Optional file pattern filter (`-- '*.ts'`)
+- Line number + context output
+- Result limit to prevent huge responses
+
+### Note on get_development_summary
+
+Directly reuses `getDevelopmentSummary()` from `src/modules/issues/development-panel.service.ts` -- no reimplementation needed. The existing function already returns the exact shape the MCP tool needs.
+
+### Note on get_pr_diff vs get_pull_request
+
+`get_pull_request` returns PR metadata + diff stat summary. `get_pr_diff` returns the full unified diff (for agent code analysis). The diff is truncated at 100KB with a warning to avoid flooding MCP context.
 
 ### Discovery Chains
 
@@ -167,6 +209,10 @@ link_wiki_to_issue(pageId, AXM-45, MENTION)      → ensures link exists
 - Dev panel wiki pages section
 - 7 new MCP tools
 - integration-tools.ts MCP tool file
+- `git grep` wrapper in `src/git/git-search-commands.ts`
+- `getOrgIdFromPage` helper in MCP context
+- MCP permission mappings for all 7 tools
+- Real-time WebSocket event (`issue:development-updated`) on wiki-issue link changes so dev panel auto-refreshes via `useRealtimeInvalidation`
 - Update MCP docs (axiom-mcp-server.md)
 
 **Out of scope:**
