@@ -543,6 +543,210 @@ Add a sidebar link inside the appropriate section of `frontend/src/components/la
 
 ---
 
+## Extending the Query Engine
+
+The query engine lives in `src/lib/query-engine/`. It parses, compiles, and evaluates structured filter expressions against issue data. To add a new filterable field, edit the field registry.
+
+### Adding a field to `issueFieldRegistry`
+
+Open `src/lib/query-engine/fields/issue-fields.ts` and add an entry to the `issueFieldRegistry` object. The key is the field name users type in filter expressions.
+
+```ts
+// src/lib/query-engine/fields/issue-fields.ts
+export const issueFieldRegistry: FieldRegistry = {
+  // existing fields...
+
+  dueDate: {
+    type: 'date',
+    column: 'dueDate',
+  },
+
+  milestone: {
+    type: 'relation',
+    column: 'milestoneId',
+    join: 'milestone',
+  },
+
+  voteCount: {
+    type: 'number',
+    column: 'voteCount',
+  },
+};
+```
+
+**Field types:**
+
+| Type | Use for |
+|------|---------|
+| `enum` | Fields with a fixed set of string values (status, priority, type) |
+| `string` | Free-text fields (title, description) |
+| `number` | Numeric fields (count, estimate) |
+| `date` | Date/datetime fields |
+| `relation` | Foreign key fields resolved via a join |
+| `user` | User assignment fields (assignee, reporter) |
+
+**Field options:**
+
+| Option | Purpose |
+|--------|---------|
+| `column` | The Prisma model field name to filter on |
+| `values` | Allowed enum values (for `enum` type) |
+| `ordinal` | Map of enum value to sort order (for ordering by enum fields) |
+| `join` | Relation name to include when the field requires a JOIN |
+| `many` | `true` if the relation is one-to-many (e.g., labels) |
+| `aliasField` | Alternative field name accepted in queries (display alias) |
+
+### Adding a field registry for a new resource type
+
+To support filtering on a different resource (e.g., wiki pages, pull requests), create a new registry file following the same pattern:
+
+```ts
+// src/lib/query-engine/fields/pr-fields.ts
+import type { FieldRegistry } from '../types';
+
+export const prFieldRegistry: FieldRegistry = {
+  state: {
+    type: 'enum',
+    column: 'state',
+    values: ['OPEN', 'MERGED', 'CLOSED'],
+  },
+  author: {
+    type: 'user',
+    column: 'authorId',
+  },
+};
+```
+
+Then pass your registry to the compiler and evaluator instead of `issueFieldRegistry`. The parser is resource-agnostic and requires no changes.
+
+---
+
+## Adding Automation Actions
+
+Automation actions are executed in `src/modules/automation/automation.service.ts` inside the `executeActions` function.
+
+### Adding a new action type
+
+Add a case to the `switch` statement in `executeActions`:
+
+```ts
+case 'SET_MILESTONE': {
+  const milestoneId = resolveTemplate(action.value, templateCtx);
+  await issueService.updateIssue(issue.id, { milestoneId }, actorId);
+  break;
+}
+```
+
+**Template expressions:** use `resolveTemplate(text, templateCtx)` to interpolate dynamic values into any string before using it. This handles `{{dot.path}}` traversal and `{{functionName()}}` built-ins.
+
+**Service layer routing:** actions must call service methods (e.g., `issueService.updateIssue`), never raw Prisma directly. This ensures side effects (realtime events, audit log) fire correctly.
+
+**Guards to respect:**
+
+| Guard | Purpose |
+|-------|---------|
+| `skipAutomation` flag on the issue | Prevents re-triggering while an automation is already running on that issue |
+| Depth counter | Limits recursive automation chains to prevent infinite loops |
+| Creation limits | Caps the number of sub-issues or comments that can be created in a single automation run |
+
+Always check these guards before performing any write in a new action case.
+
+---
+
+## Query Engine Testing
+
+Unit tests for the query engine live in `src/lib/query-engine/__tests__/`. These tests are fully standalone -- no database or running server required.
+
+### Running the tests
+
+```bash
+cd src/lib/query-engine && npx vitest run --config vitest.config.ts
+```
+
+Or from the project root using the standard test runner (the query engine tests are included via glob):
+
+```bash
+npm run test:run
+```
+
+### Test pattern
+
+Every test follows the same three-step pattern:
+
+```ts
+import { parseQuery } from '../parser';
+import { compileQuery } from '../compiler';
+import { evaluateQuery } from '../evaluator';
+import { issueFieldRegistry } from '../fields/issue-fields';
+
+it('filters by status', () => {
+  // 1. Parse -- convert query string to AST
+  const ast = parseQuery('status = OPEN');
+
+  // 2. Compile -- validate AST against field registry, build filter structure
+  const compiled = compileQuery(ast, issueFieldRegistry);
+
+  // 3. Evaluate -- apply compiled filter to in-memory data
+  const results = evaluateQuery(issues, compiled);
+
+  expect(results).toHaveLength(2);
+  expect(results.every((i) => i.status === 'OPEN')).toBe(true);
+});
+```
+
+Because evaluation is pure (no I/O), fixtures are plain objects defined inline. For compiler tests, assert on the compiled structure. For parser tests, assert on the AST shape.
+
+---
+
+## Template Variable Syntax
+
+Template variables are used in automation action values and wiki page templates. They are resolved at runtime by `resolveTemplate(text, context)` in `src/lib/template-engine/`.
+
+### Syntax forms
+
+**Dot-path traversal** -- access nested context properties:
+
+```
+{{issue.title}}
+{{issue.assignee.displayName}}
+{{trigger.field}}
+{{actor.username}}
+```
+
+**Built-in function calls** -- call zero-argument functions:
+
+```
+{{now()}}          -- current ISO timestamp
+{{currentUser()}}  -- username of the acting user
+{{empty()}}        -- empty string (useful for clearing a field)
+```
+
+### Available context shapes
+
+**`AutomationTemplateContext`** -- available inside automation action values:
+
+| Path | Value |
+|------|-------|
+| `{{issue.*}}` | Any field on the issue being processed |
+| `{{trigger.field}}` | The field name that triggered the rule |
+| `{{trigger.oldValue}}` | Previous value before the triggering change |
+| `{{trigger.newValue}}` | New value after the triggering change |
+| `{{actor.username}}` | User who caused the triggering event |
+
+**`WikiTemplateContext`** -- available in wiki page templates:
+
+| Path | Value |
+|------|-------|
+| `{{currentUser()}}` | Username of the person creating the page |
+| `{{team.name}}` | Name of the current team |
+| `{{space.name}}` | Name of the wiki space |
+
+### Unresolved references
+
+If a path does not exist in the context, `resolveTemplate` leaves the placeholder unchanged (it does not throw). This makes it safe to use templates even when partial context is available.
+
+---
+
 ## Git Conventions
 
 ### Commit message format
