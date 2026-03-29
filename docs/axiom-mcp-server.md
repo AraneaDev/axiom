@@ -105,6 +105,9 @@ List issues in a project with optional filters.
 |`priority`|`CRITICAL\|HIGH\|MEDIUM\|LOW`|no|Filter by priority|
 |`assigneeId`|string|no|Filter by assignee user ID|
 |`limit`|number|no|Max results (default: 20)|
+|`query`|string|no|Structured query string for filtering issues. Supports hybrid syntax: simple mode (`type:bug priority:high assignee:@me`) and complex mode (`type = Bug AND (priority > Medium OR storyPoints > 5)`). When provided, takes precedence over individual filter params.|
+
+Example: `list_issues(projectId, query: "type:bug priority:high assignee:@me")`
 
 #### `get_issue`
 
@@ -452,6 +455,7 @@ Create a new wiki page in a space.
 |`slug`|string|yes|URL-friendly slug (e.g. `getting-started`)|
 |`body`|string|no|Markdown content|
 |`parentId`|string|no|Parent page ID for nesting|
+|`templateId`|string|no|Create page from a template with auto-resolved variables. Template variables like `{{currentUser.displayName}}`, `{{team.name}}`, `{{now()}}` are resolved using the requesting user's context. If both `body` and `templateId` are provided, `body` wins.|
 
 #### `update_wiki_page`
 
@@ -532,6 +536,38 @@ Example: `link_wiki_to_issue(pageId: "page-1", issueId: "issue-1")`
 
 ---
 
+## Query Language
+
+The `query` parameter on `list_issues` accepts a hybrid syntax that covers both quick shorthand and expressive boolean expressions.
+
+**Simple mode** -- space-separated `field:value` pairs, implicitly ANDed:
+
+```
+type:bug
+priority:high,critical
+assignee:@me
+status:in-progress
+```
+
+**Complex mode** -- explicit operators and grouping:
+
+```
+type = Bug AND (priority > Medium OR storyPoints > 5)
+created > now(-7d) AND status != Done
+assignee = @me AND sprint = active
+```
+
+Simple and complex syntax can be combined in the same string. For full operator and field reference see [api-reference.md](api-reference.md#query-language).
+
+**Example MCP calls:**
+
+```
+list_issues(projectId, query: "type:bug priority:high,critical assignee:@me")
+list_issues(projectId, query: "created > now(-7d) AND status != Done")
+```
+
+---
+
 ## Discovery Chain
 
 Most tools require IDs (`projectId`, `teamId`, etc.). Use this chain to find them:
@@ -604,6 +640,13 @@ browse_files(repoId)         -> explore code
 2. get_wiki_page(spaceId, pageSlug) -> read requirements
 3. list_projects(teamId) -> find target project
 4. create_issue(...) x N -> create one issue per requirement
+```
+
+### Create a wiki page from a template
+
+```
+1. list_wiki_spaces(teamId) -> get spaceId
+2. create_wiki_page(spaceId, title: "Sprint Retro", slug: "sprint-retro-26", templateId: "...") -> page created with resolved variables (currentUser, team, now() etc.)
 ```
 
 ### Create a release
