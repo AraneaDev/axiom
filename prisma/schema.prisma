@@ -58,6 +58,7 @@ model User {
   pageRestrictions        PageRestriction[]    @relation("UserPageRestrictions")
   commentReactions        CommentReaction[]    @relation("UserCommentReactions")
   spacePermissions        SpacePermission[]    @relation("SpacePermissions")
+  wikiPageIssueLinks      WikiPageIssueLink[]  @relation("WikiPageIssueLinks")
 
   @@map("users")
 }
@@ -490,6 +491,7 @@ model Issue {
   watchers          IssueWatcher[]
   timeEntries       TimeEntry[]
   sprintHistory     SprintIssueHistory[]
+  wikiIssueLinks    WikiPageIssueLink[]
 
   @@unique([projectId, number])
   @@index([assigneeId])
@@ -631,8 +633,9 @@ model Page {
   pageLabels   PageLabel[]
   attachments  Attachment[]
   restrictions PageRestriction[]
-  starredBy    StarredPage[]
-  views        PageView[]
+  starredBy       StarredPage[]
+  views           PageView[]
+  wikiIssueLinks  WikiPageIssueLink[]
 
   @@unique([spaceId, slug])
   @@map("pages")
@@ -778,6 +781,28 @@ model IssueBranch {
 
   @@unique([issueId, repoId, branchName])
   @@map("issue_branches")
+}
+
+enum WikiIssueLinkType {
+  MENTION
+  EMBED
+}
+
+model WikiPageIssueLink {
+  id          String            @id @default(cuid())
+  pageId      String
+  page        Page              @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  issueId     String
+  issue       Issue             @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  linkType    WikiIssueLinkType
+  createdAt   DateTime          @default(now())
+  createdById String
+  createdBy   User              @relation("WikiPageIssueLinks", fields: [createdById], references: [id])
+
+  @@unique([pageId, issueId, linkType])
+  @@index([pageId])
+  @@index([issueId])
+  @@map("wiki_page_issue_links")
 }
 
 model Release {
