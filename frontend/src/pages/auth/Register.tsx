@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuthStore } from '@/stores/auth.store';
@@ -37,7 +38,7 @@ export default function Register() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-secondary">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-sm">
+      <Card className="w-full max-w-sm p-8 shadow-sm">
         <h1 className="text-2xl font-bold text-center mb-1">Create account</h1>
         <p className="text-sm text-text-secondary text-center mb-6">Get started with Axiom</p>
 
@@ -99,7 +100,7 @@ export default function Register() {
             Sign in
           </Link>
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

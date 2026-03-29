@@ -150,7 +150,7 @@ export default function TeamDetail() {
                   <Link
                     key={p.id}
                     to={`/${org}/${teamSlug}/${p.slug}/board`}
-                    className="group flex items-center gap-4 rounded-lg border border-border bg-surface p-4 hover:border-primary/50 hover:shadow-sm transition-all"
+                    className="group bg-surface flex items-center gap-4 rounded-lg border border-border p-4 hover:border-primary/50 hover:shadow-sm transition-all"
                   >
                     <div className="h-10 w-10 rounded-lg bg-primary-light flex items-center justify-center shrink-0">
                       <FolderKanban className="h-5 w-5 text-primary" />
@@ -200,7 +200,7 @@ export default function TeamDetail() {
                   <Link
                     key={s.id}
                     to={`/${org}/${teamSlug}/wiki/${s.slug}`}
-                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
+                    className="group bg-surface flex items-center gap-3 rounded-lg border border-border px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
                   >
                     <BookOpen className="h-4 w-4 text-text-secondary shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -260,7 +260,7 @@ export default function TeamDetail() {
                   <Link
                     key={pr.id}
                     to={`/${org}/${teamSlug}/repos/${pr.repo.slug}/pulls/${pr.number}`}
-                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
+                    className="group bg-surface flex items-center gap-3 rounded-lg border border-border px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
                   >
                     <GitPullRequest className="h-4 w-4 text-success shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -311,7 +311,7 @@ export default function TeamDetail() {
                   <Link
                     key={r.id}
                     to={`/${org}/${teamSlug}/repos/${r.slug}`}
-                    className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
+                    className="group bg-surface flex items-center gap-3 rounded-lg border border-border px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
                   >
                     <GitBranch className="h-4 w-4 text-text-secondary shrink-0" />
                     <div className="flex-1 min-w-0">

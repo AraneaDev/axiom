@@ -175,11 +175,11 @@ export function IssueListTable({
   return (
     <div className="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
       {issues.map((issue) => (
-        <div
+        <Card
           key={issue.id}
           data-issue-row
           className={cn(
-            'relative rounded-lg border border-border bg-surface p-4 hover:shadow-md hover:-translate-y-px hover:border-primary/30 transition-all duration-150',
+            'relative p-4 hover:shadow-md hover:-translate-y-px hover:border-primary/30 transition-all duration-150',
             selectedIds.has(issue.id) && 'border-primary/50 bg-primary-light/5',
           )}
         >
@@ -220,7 +220,7 @@ export function IssueListTable({
               </div>
             </div>
           </Link>
-        </div>
+        </Card>
       ))}
     </div>
   );

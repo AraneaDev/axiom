@@ -506,7 +506,7 @@ export function PRDiffView({
               File {activeFileIndex + 1} of {stats.length}
             </span>
             <div className="ml-auto flex items-center gap-2">
-              <div className="flex items-center rounded-lg border border-border bg-surface overflow-hidden">
+              <Card className="flex items-center overflow-hidden">
                 <Button
                   size="sm"
                   variant={diffView === 'unified' ? 'primary' : 'ghost'}
@@ -523,7 +523,7 @@ export function PRDiffView({
                 >
                   <Columns2 className="h-3.5 w-3.5" /> Split
                 </Button>
-              </div>
+              </Card>
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
