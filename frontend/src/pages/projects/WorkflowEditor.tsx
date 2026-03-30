@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowRight, GitBranch, Plus, Trash2, Workflow } from 'lucide-react';
 import { useState } from 'react';
 
@@ -11,6 +11,7 @@ import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import type { BoardColumn } from '@/lib/types';
 
@@ -19,7 +20,6 @@ import type { BoardColumn } from '@/lib/types';
  */
 export default function WorkflowEditor() {
   const { currentProject } = useProjectContext();
-  const queryClient = useQueryClient();
   const toast = useToast();
 
   const [fromColumnId, setFromColumnId] = useState('');
@@ -43,26 +43,26 @@ export default function WorkflowEditor() {
     enabled: !!currentProject?.id,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: { fromColumnId: string; toColumnId: string }) =>
+  const createMutation = useMutationWithToast(
+    (data: { fromColumnId: string; toColumnId: string }) =>
       workflowsApi.createRule(currentProject!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow-rules', currentProject?.id] });
-      setFromColumnId('');
-      setToColumnId('');
-      toast.success('Workflow rule created');
+    {
+      successMessage: 'Workflow rule created',
+      invalidateKeys: [['workflow-rules', currentProject?.id]],
+      onSuccess: () => {
+        setFromColumnId('');
+        setToColumnId('');
+      },
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const deleteMutation = useMutation({
-    mutationFn: (ruleId: string) => workflowsApi.deleteRule(currentProject!.id, ruleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow-rules', currentProject?.id] });
-      toast.success('Workflow rule deleted');
+  const deleteMutation = useMutationWithToast(
+    (ruleId: string) => workflowsApi.deleteRule(currentProject!.id, ruleId),
+    {
+      successMessage: 'Workflow rule deleted',
+      invalidateKeys: [['workflow-rules', currentProject?.id]],
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
   const columnOptions = (columns ?? []).map((col: BoardColumn) => ({
     value: col.id,

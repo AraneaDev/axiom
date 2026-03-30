@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Coins, KeyRound, Plus, Trash2, Copy, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -12,15 +12,13 @@ import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatDate } from '@/lib/utils';
 
 /**
  *
  */
 export default function ApiTokens() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState('issues:read,wiki:read');
@@ -37,27 +35,25 @@ export default function ApiTokens() {
     queryFn: usersApi.listApiTokens,
   });
 
-  const createMutation = useMutation({
-    mutationFn: () =>
-      usersApi.createApiToken({ name, scopes: scopes.split(',').map((s) => s.trim()) }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['apiTokens'] });
-      setNewToken(data.token ?? null);
-      setShowForm(false);
-      setName('');
-      toast.success('Token created');
+  const createMutation = useMutationWithToast(
+    () => usersApi.createApiToken({ name, scopes: scopes.split(',').map((s) => s.trim()) }),
+    {
+      successMessage: 'Token created',
+      errorMessage: null,
+      invalidateKeys: [['apiTokens']],
+      onSuccess: (data) => {
+        setNewToken(data.token ?? null);
+        setShowForm(false);
+        setName('');
+      },
+      onError: (err) => setError(err.message || 'Failed to create token'),
     },
-    onError: (err: unknown) =>
-      setError(err instanceof Error ? err.message : 'Failed to create token'),
-  });
+  );
 
-  const deleteMutation = useMutation({
-    mutationFn: (tokenId: string) => usersApi.deleteApiToken(tokenId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['apiTokens'] });
-      toast.success('Token revoked');
-    },
-  });
+  const deleteMutation = useMutationWithToast(
+    (tokenId: string) => usersApi.deleteApiToken(tokenId),
+    { successMessage: 'Token revoked', invalidateKeys: [['apiTokens']] },
+  );
 
   function handleRevoke(tokenId: string) {
     deleteMutation.mutate(tokenId);

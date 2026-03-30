@@ -1,4 +1,3 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, BookOpen, Eye, EyeOff, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -11,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CardGridSkeleton } from '@/components/ui/Skeleton';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { cn } from '@/lib/utils';
 
 /**
@@ -21,15 +21,12 @@ export default function WikiHome() {
   const { org, team: teamSlug } = useParams();
   const { spaces, currentTeam } = useWikiContext();
   const [showArchived, setShowArchived] = useState(false);
-  const queryClient = useQueryClient();
 
-  const archiveMutation = useMutation({
-    mutationFn: ({ spaceId, isArchived }: { spaceId: string; isArchived: boolean }) =>
+  const archiveMutation = useMutationWithToast(
+    ({ spaceId, isArchived }: { spaceId: string; isArchived: boolean }) =>
       wikiApi.updateSpace(spaceId, { isArchived }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['wikiSpaces', currentTeam?.id] });
-    },
-  });
+    { successMessage: null, invalidateKeys: [['wikiSpaces', currentTeam?.id]] },
+  );
 
   if (!spaces)
     return (

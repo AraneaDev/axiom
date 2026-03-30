@@ -1,4 +1,3 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, User } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
@@ -9,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Spinner } from '@/components/ui/Spinner';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -16,14 +16,13 @@ import { useAuthStore } from '@/stores/auth.store';
  */
 export default function Profile() {
   const { user } = useAuthStore();
-  const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [saved, setSaved] = useState(false);
 
-  const mutation = useMutation({
-    mutationFn: () => usersApi.updateMe({ displayName }),
+  const mutation = useMutationWithToast(() => usersApi.updateMe({ displayName }), {
+    successMessage: null,
+    invalidateKeys: [['me']],
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['me'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     },

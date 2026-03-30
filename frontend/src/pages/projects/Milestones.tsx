@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Flag,
@@ -26,8 +26,8 @@ import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Tabs } from '@/components/ui/Tabs';
 import { Textarea } from '@/components/ui/Textarea';
-import { useToast } from '@/components/ui/Toast';
 import { useModalState } from '@/hooks/useModalState';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -162,8 +162,6 @@ function MilestoneCard({
  */
 export default function Milestones() {
   const { currentProject } = useProjectContext();
-  const queryClient = useQueryClient();
-  const toast = useToast();
 
   const [filter, setFilter] = useState<FilterTab>('open');
   const createModal = useModalState();
@@ -182,38 +180,36 @@ export default function Milestones() {
     enabled: !!currentProject?.id,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: { title: string; description?: string; dueDate?: string }) =>
+  const createMutation = useMutationWithToast(
+    (data: { title: string; description?: string; dueDate?: string }) =>
       milestonesApi.create(currentProject!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['milestones', currentProject?.id] });
-      toast.success('Milestone created');
-      createModal.close();
-      setNewTitle('');
-      setNewDescription('');
-      setNewDueDate('');
+    {
+      successMessage: 'Milestone created',
+      errorMessage: 'Failed to create milestone',
+      invalidateKeys: [['milestones', currentProject?.id]],
+      onSuccess: () => {
+        createModal.close();
+        setNewTitle('');
+        setNewDescription('');
+        setNewDueDate('');
+      },
     },
-    onError: () => toast.error('Failed to create milestone'),
-  });
+  );
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
-      milestonesApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['milestones', currentProject?.id] });
-      toast.success('Milestone updated');
+  const updateMutation = useMutationWithToast(
+    ({ id, data }: { id: string; data: Record<string, unknown> }) => milestonesApi.update(id, data),
+    {
+      successMessage: 'Milestone updated',
+      errorMessage: 'Failed to update milestone',
+      invalidateKeys: [['milestones', currentProject?.id]],
     },
-    onError: () => toast.error('Failed to update milestone'),
-  });
+  );
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => milestonesApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['milestones', currentProject?.id] });
-      toast.success('Milestone deleted');
-      setConfirmDelete(null);
-    },
-    onError: () => toast.error('Failed to delete milestone'),
+  const deleteMutation = useMutationWithToast((id: string) => milestonesApi.delete(id), {
+    successMessage: 'Milestone deleted',
+    errorMessage: 'Failed to delete milestone',
+    invalidateKeys: [['milestones', currentProject?.id]],
+    onSuccess: () => setConfirmDelete(null),
   });
 
   function handleCreate(e: React.FormEvent) {

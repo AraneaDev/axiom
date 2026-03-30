@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ChevronRight,
@@ -34,9 +34,9 @@ import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
 import { PageComments } from '@/components/wiki/PageComments';
 import { useModalState } from '@/hooks/useModalState';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { PageTreeNode } from '@/lib/types';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -87,7 +87,6 @@ export default function PageView() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const toast = useToast();
   const basePath = `/${org}/${team}/wiki/${spaceSlug}`;
 
   const { currentSpace, currentTeam, tree, setTocEntries } = useWikiContext();
@@ -158,9 +157,9 @@ export default function PageView() {
         (hydrationQuery.isSuccess && hydrationQuery.data?.attachments === null)),
   });
 
-  const deleteAttachmentMutation = useMutation({
-    mutationFn: (id: string) => attachmentsApi.remove(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', page?.id] }),
+  const deleteAttachmentMutation = useMutationWithToast((id: string) => attachmentsApi.remove(id), {
+    successMessage: null,
+    invalidateKeys: [['attachments', page?.id]],
   });
 
   const { data: linkedIssues = [] } = useQuery({
@@ -187,52 +186,46 @@ export default function PageView() {
     return () => setTocEntries([]);
   }, [pageSlug, tocEntries, setTocEntries]);
 
-  const addLabelMutation = useMutation({
-    mutationFn: (label: string) => wikiApi.addPageLabel(page!.id, label),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pageLabels', page?.id] });
+  const addLabelMutation = useMutationWithToast(
+    (label: string) => wikiApi.addPageLabel(page!.id, label),
+    {
+      successMessage: null,
+      errorMessage: 'Failed to add label',
+      invalidateKeys: [['pageLabels', page?.id]],
     },
-    onError: (err: unknown) =>
-      toast.error(err instanceof Error ? err.message : 'Failed to add label'),
-  });
+  );
 
-  const removeLabelMutation = useMutation({
-    mutationFn: (label: string) => wikiApi.removePageLabel(page!.id, label),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pageLabels', page?.id] }),
-  });
+  const removeLabelMutation = useMutationWithToast(
+    (label: string) => wikiApi.removePageLabel(page!.id, label),
+    { successMessage: null, invalidateKeys: [['pageLabels', page?.id]] },
+  );
 
-  const deleteMutation = useMutation({
-    mutationFn: () => wikiApi.deletePage(currentSpace!.id, pageSlug!),
-    onSuccess: () => {
-      toast.success('Page deleted');
-      navigate(`/${org}/${team}/wiki/${spaceSlug}`);
+  const deleteMutation = useMutationWithToast(
+    () => wikiApi.deletePage(currentSpace!.id, pageSlug!),
+    {
+      successMessage: 'Page deleted',
+      errorMessage: 'Failed to delete page',
+      onSuccess: () => navigate(`/${org}/${team}/wiki/${spaceSlug}`),
     },
-    onError: (err: unknown) =>
-      toast.error(err instanceof Error ? err.message : 'Failed to delete page'),
+  );
+
+  const copyMutation = useMutationWithToast(() => wikiApi.copyPage(page!.id, {}), {
+    successMessage: 'Page copied',
+    errorMessage: 'Failed to copy page',
+    invalidateKeys: [['pageTree', currentSpace?.id]],
+    onSuccess: (copied) => navigate(`${basePath}/${copied.slug}`),
   });
 
-  const copyMutation = useMutation({
-    mutationFn: () => wikiApi.copyPage(page!.id, {}),
-    onSuccess: (copied) => {
-      toast.success('Page copied');
-      queryClient.invalidateQueries({ queryKey: ['pageTree', currentSpace?.id] });
-      navigate(`${basePath}/${copied.slug}`);
-    },
-    onError: (err: unknown) =>
-      toast.error(err instanceof Error ? err.message : 'Failed to copy page'),
-  });
-
-  const moveMutation = useMutation({
-    mutationFn: (data: { targetParentId?: string | null }) =>
+  const moveMutation = useMutationWithToast(
+    (data: { targetParentId?: string | null }) =>
       wikiApi.movePage(page!.id, { targetParentId: data.targetParentId }),
-    onSuccess: () => {
-      toast.success('Page moved');
-      queryClient.invalidateQueries({ queryKey: ['pageTree', currentSpace?.id] });
-      moveModal.close();
+    {
+      successMessage: 'Page moved',
+      errorMessage: 'Failed to move page',
+      invalidateKeys: [['pageTree', currentSpace?.id]],
+      onSuccess: () => moveModal.close(),
     },
-    onError: (err: unknown) =>
-      toast.error(err instanceof Error ? err.message : 'Failed to move page'),
-  });
+  );
 
   // Fetch first page content for welcome preview
   const firstPageSlug = tree?.[0]?.slug;

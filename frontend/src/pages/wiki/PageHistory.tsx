@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, GitCompare, History, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageLoader } from '@/components/ui/Spinner';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatDate } from '@/lib/utils';
 
 /**
@@ -23,7 +24,6 @@ export default function PageHistory() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
   const { currentSpace } = useWikiContext();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const [selectedVersions, setSelectedVersions] = useState<number[]>([]);
   const [restoreTarget, setRestoreTarget] = useState<number | null>(null);
@@ -38,14 +38,14 @@ export default function PageHistory() {
     enabled: !!currentSpace?.id && !!pageSlug,
   });
 
-  const restoreMutation = useMutation({
-    mutationFn: (version: number) => wikiApi.restoreVersion(currentSpace!.id, pageSlug!, version),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pageHistory'] });
-      queryClient.invalidateQueries({ queryKey: ['page'] });
-      setRestoreTarget(null);
+  const restoreMutation = useMutationWithToast(
+    (version: number) => wikiApi.restoreVersion(currentSpace!.id, pageSlug!, version),
+    {
+      successMessage: null,
+      invalidateKeys: [['pageHistory'], ['page']],
+      onSuccess: () => setRestoreTarget(null),
     },
-  });
+  );
 
   function handleVersionToggle(version: number) {
     setSelectedVersions((prev) => {

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Bot,
@@ -25,7 +25,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 
 const TRIGGER_OPTIONS = [
@@ -277,8 +277,6 @@ function RuleForm({
  */
 export default function AutomationRules() {
   const { currentProject } = useProjectContext();
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
 
@@ -292,48 +290,45 @@ export default function AutomationRules() {
     enabled: !!currentProject?.id,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: {
+  const createMutation = useMutationWithToast(
+    (data: {
       name: string;
       trigger: string;
       conditions: AutomationCondition[];
       actions: AutomationAction[];
     }) => automationApi.createRule(currentProject!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['automation-rules', currentProject?.id] });
-      setShowForm(false);
-      toast.success('Automation rule created');
+    {
+      successMessage: 'Automation rule created',
+      invalidateKeys: [['automation-rules', currentProject?.id]],
+      onSuccess: () => setShowForm(false),
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const updateMutation = useMutation({
-    mutationFn: ({ ruleId, data }: { ruleId: string; data: Partial<AutomationRule> }) =>
+  const updateMutation = useMutationWithToast(
+    ({ ruleId, data }: { ruleId: string; data: Partial<AutomationRule> }) =>
       automationApi.updateRule(currentProject!.id, ruleId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['automation-rules', currentProject?.id] });
-      setEditingRule(null);
-      toast.success('Automation rule updated');
+    {
+      successMessage: 'Automation rule updated',
+      invalidateKeys: [['automation-rules', currentProject?.id]],
+      onSuccess: () => setEditingRule(null),
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const deleteMutation = useMutation({
-    mutationFn: (ruleId: string) => automationApi.deleteRule(currentProject!.id, ruleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['automation-rules', currentProject?.id] });
-      toast.success('Automation rule deleted');
+  const deleteMutation = useMutationWithToast(
+    (ruleId: string) => automationApi.deleteRule(currentProject!.id, ruleId),
+    {
+      successMessage: 'Automation rule deleted',
+      invalidateKeys: [['automation-rules', currentProject?.id]],
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const toggleMutation = useMutation({
-    mutationFn: (ruleId: string) => automationApi.toggleRule(currentProject!.id, ruleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['automation-rules', currentProject?.id] });
+  const toggleMutation = useMutationWithToast(
+    (ruleId: string) => automationApi.toggleRule(currentProject!.id, ruleId),
+    {
+      successMessage: null,
+      invalidateKeys: [['automation-rules', currentProject?.id]],
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
   const triggerLabel = (trigger: string) =>
     TRIGGER_OPTIONS.find((t) => t.value === trigger)?.label ?? trigger;

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Eye,
   EyeOff,
@@ -38,6 +38,7 @@ import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { PresenceIndicators } from '@/components/wiki/PresenceIndicators';
 import { TemplateVariablePanel } from '@/components/wiki/TemplateVariablePanel';
 import { useCollaboration } from '@/hooks/useCollaboration';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -88,9 +89,9 @@ export default function PageEdit() {
     enabled: !!existingPage?.id,
   });
 
-  const deleteAttachmentMutation = useMutation({
-    mutationFn: (id: string) => attachmentsApi.remove(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', existingPage?.id] }),
+  const deleteAttachmentMutation = useMutationWithToast((id: string) => attachmentsApi.remove(id), {
+    successMessage: null,
+    invalidateKeys: [['attachments', existingPage?.id]],
   });
 
   // Real-time collaboration (only for existing pages, not new ones)
@@ -191,8 +192,8 @@ export default function PageEdit() {
     }
   }
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
+  const saveMutation = useMutationWithToast(
+    async () => {
       if (!currentSpace) throw new Error('Space not found');
       if (isNew) {
         return wikiApi.createPage(currentSpace.id, {
@@ -210,19 +211,22 @@ export default function PageEdit() {
         });
       }
     },
-    onSuccess: () => {
-      // Clear draft on successful save
-      try {
-        localStorage.removeItem(draftKey);
-      } catch {
-        /* ignore storage errors */
-      }
-      queryClient.invalidateQueries({ queryKey: ['page'] });
-      queryClient.invalidateQueries({ queryKey: ['page-tree'] });
-      navigate(`/${org}/${team}/wiki/${spaceSlug}/${isNew ? slug : pageSlug}`);
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['page'], ['page-tree']],
+      onSuccess: () => {
+        // Clear draft on successful save
+        try {
+          localStorage.removeItem(draftKey);
+        } catch {
+          /* ignore storage errors */
+        }
+        navigate(`/${org}/${team}/wiki/${spaceSlug}/${isNew ? slug : pageSlug}`);
+      },
+      onError: (err) => setError(err.message || 'Failed to save'),
     },
-    onError: (err: unknown) => setError(err instanceof Error ? err.message : 'Failed to save'),
-  });
+  );
 
   async function applyTemplate(tpl: { name: string; body: string }) {
     let resolvedBody = tpl.body;

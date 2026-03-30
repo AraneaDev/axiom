@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Lock, Plus, Shield, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 
@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { Table, TableContainer, Thead, Tbody, Tr, TrHead, Th, Td } from '@/components/ui/Table';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 const LEVELS = ['VIEW', 'EDIT', 'ADMIN'] as const;
 const TEAM_ROLES = ['ADMIN', 'MEMBER', 'VIEWER'] as const;
@@ -26,7 +27,6 @@ interface SpacePermissionsProps {
  * @param root0.spaceId
  */
 export function SpacePermissions({ spaceId }: SpacePermissionsProps) {
-  const queryClient = useQueryClient();
   const [newType, setNewType] = useState<'user' | 'role'>('role');
   const [newUserId, setNewUserId] = useState('');
   const [newTeamRole, setNewTeamRole] = useState<string>(TEAM_ROLES[1]);
@@ -38,34 +38,33 @@ export function SpacePermissions({ spaceId }: SpacePermissionsProps) {
     queryFn: () => spacePermissionsApi.list(spaceId),
   });
 
-  const upsertMutation = useMutation({
-    mutationFn: (data: { userId?: string; teamRole?: string; level: string }) =>
+  const upsertMutation = useMutationWithToast(
+    (data: { userId?: string; teamRole?: string; level: string }) =>
       spacePermissionsApi.upsert(spaceId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['space-permissions', spaceId] });
-      setNewUserId('');
-      setShowAddForm(false);
+    {
+      successMessage: null,
+      invalidateKeys: [['space-permissions', spaceId]],
+      onSuccess: () => {
+        setNewUserId('');
+        setShowAddForm(false);
+      },
     },
-  });
+  );
 
-  const removeMutation = useMutation({
-    mutationFn: (permissionId: string) => spacePermissionsApi.remove(spaceId, permissionId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['space-permissions', spaceId] });
-    },
-  });
+  const removeMutation = useMutationWithToast(
+    (permissionId: string) => spacePermissionsApi.remove(spaceId, permissionId),
+    { successMessage: null, invalidateKeys: [['space-permissions', spaceId]] },
+  );
 
-  const updateLevelMutation = useMutation({
-    mutationFn: (data: { permission: SpacePermission; level: string }) =>
+  const updateLevelMutation = useMutationWithToast(
+    (data: { permission: SpacePermission; level: string }) =>
       spacePermissionsApi.upsert(spaceId, {
         userId: data.permission.userId ?? undefined,
         teamRole: data.permission.teamRole ?? undefined,
         level: data.level,
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['space-permissions', spaceId] });
-    },
-  });
+    { successMessage: null, invalidateKeys: [['space-permissions', spaceId]] },
+  );
 
   function handleAdd() {
     if (newType === 'user') {

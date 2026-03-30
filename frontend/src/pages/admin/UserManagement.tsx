@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Users,
   Search,
@@ -30,6 +30,7 @@ import { TableSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, Tr, TrHead } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatRelative } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
@@ -179,7 +180,6 @@ export default function UserManagement() {
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
   const [resetPasswordTarget, setResetPasswordTarget] = useState<AdminUser | null>(null);
 
-  const queryClient = useQueryClient();
   const toast = useToast();
 
   const { data, isLoading, error } = useQuery({
@@ -192,29 +192,28 @@ export default function UserManagement() {
       }),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (userId: string) => adminApi.deleteUser(userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      toast.success('User deleted successfully');
-      setDeleteTarget(null);
-    },
-    onError: () => {
-      toast.error('Failed to delete user');
-    },
+  const deleteMutation = useMutationWithToast((userId: string) => adminApi.deleteUser(userId), {
+    successMessage: 'User deleted successfully',
+    errorMessage: 'Failed to delete user',
+    invalidateKeys: [['admin', 'users']],
+    onSuccess: () => setDeleteTarget(null),
   });
 
-  const deactivateMutation = useMutation({
-    mutationFn: ({ userId, deactivated }: { userId: string; deactivated: boolean }) =>
+  const deactivateMutation = useMutationWithToast(
+    ({ userId, deactivated }: { userId: string; deactivated: boolean }) =>
       deactivated ? adminApi.reactivateUser(userId) : adminApi.deactivateUser(userId),
-    onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      toast.success(vars.deactivated ? 'User reactivated' : 'User deactivated');
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['admin', 'users']],
+      onSuccess: (_data, vars) => {
+        toast.success(vars.deactivated ? 'User reactivated' : 'User deactivated');
+      },
+      onError: (_err, vars) => {
+        toast.error(vars.deactivated ? 'Failed to reactivate user' : 'Failed to deactivate user');
+      },
     },
-    onError: (_err, vars) => {
-      toast.error(vars.deactivated ? 'Failed to reactivate user' : 'Failed to deactivate user');
-    },
-  });
+  );
 
   const handleViewUser = async (user: AdminUser) => {
     try {

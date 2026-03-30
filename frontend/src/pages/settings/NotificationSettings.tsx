@@ -1,12 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Bell, Mail, Monitor } from 'lucide-react';
 
 import { notificationsApi, type NotificationPreference } from '@/api/notifications.api';
 import { Card } from '@/components/ui/Card';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
 import { Toggle } from '@/components/ui/Toggle';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 const EVENT_TYPE_LABELS: Record<string, { label: string; description: string }> = {
   issue_assigned: {
@@ -35,30 +35,25 @@ const EVENT_TYPE_LABELS: Record<string, { label: string; description: string }> 
  *
  */
 export default function NotificationSettings() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
-
   const { data, isLoading, error } = useQuery({
     queryKey: ['notificationPreferences'],
     queryFn: notificationsApi.getPreferences,
   });
 
-  const mutation = useMutation({
-    mutationFn: ({
+  const mutation = useMutationWithToast(
+    ({
       eventType,
       settings,
     }: {
       eventType: string;
       settings: { inApp?: boolean; email?: boolean };
     }) => notificationsApi.updatePreference(eventType, settings),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notificationPreferences'] });
-      toast.success('Preference updated');
+    {
+      successMessage: 'Preference updated',
+      errorMessage: 'Failed to update preference',
+      invalidateKeys: [['notificationPreferences']],
     },
-    onError: () => {
-      toast.error('Failed to update preference');
-    },
-  });
+  );
 
   function handleToggle(pref: NotificationPreference, field: 'inApp' | 'email', value: boolean) {
     mutation.mutate({ eventType: pref.eventType, settings: { [field]: value } });

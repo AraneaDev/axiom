@@ -11,7 +11,6 @@ import {
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
   ChevronRight,
@@ -33,6 +32,7 @@ import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { PageTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import type { TocEntry } from '@/lib/wiki-types';
@@ -348,21 +348,22 @@ export function PageViewSidebar({
   hasPermissions,
 }: PageViewSidebarProps) {
   const [deleteTarget, setDeleteTarget] = useState<PageTreeNode | null>(null);
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const deleteMutation = useMutation({
-    mutationFn: () => wikiApi.deletePage(spaceId!, deleteTarget!.slug),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pageTree'] });
-      queryClient.invalidateQueries({ queryKey: ['page'] });
-      const wasActive = deleteTarget?.slug === activeSlug;
-      setDeleteTarget(null);
-      if (wasActive) {
-        navigate(basePath);
-      }
+  const deleteMutation = useMutationWithToast(
+    () => wikiApi.deletePage(spaceId!, deleteTarget!.slug),
+    {
+      successMessage: null,
+      invalidateKeys: [['pageTree'], ['page']],
+      onSuccess: () => {
+        const wasActive = deleteTarget?.slug === activeSlug;
+        setDeleteTarget(null);
+        if (wasActive) {
+          navigate(basePath);
+        }
+      },
     },
-  });
+  );
 
   const defaultExpanded = useMemo(() => {
     if (!tree || !activeSlug) return new Set<string>();
@@ -401,13 +402,11 @@ export function PageViewSidebar({
     return () => window.removeEventListener('pointermove', handler);
   }, []);
 
-  const reorderMutation = useMutation({
-    mutationFn: (data: { pageId: string; parentId: string | null; position: number }) =>
+  const reorderMutation = useMutationWithToast(
+    (data: { pageId: string; parentId: string | null; position: number }) =>
       wikiApi.reorderPage(data.pageId, { parentId: data.parentId, position: data.position }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pageTree'] });
-    },
-  });
+    { successMessage: null, invalidateKeys: [['pageTree']] },
+  );
 
   function handleDragStart(event: DragStartEvent) {
     const node = tree ? findNodeById(tree, event.active.id as string) : undefined;

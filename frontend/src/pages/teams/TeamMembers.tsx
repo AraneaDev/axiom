@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { UserMinus, UserPlus, Mail, Copy, X, Clock, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -16,6 +16,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useModalState } from '@/hooks/useModalState';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import { formatDate } from '@/lib/utils';
 
@@ -30,7 +31,6 @@ const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
  */
 export default function TeamMembers() {
   const { org, teamSlug, currentOrg, currentTeam } = useTeamContext();
-  const queryClient = useQueryClient();
   const toast = useToast();
   const inviteModal = useModalState();
   const [inviteEmail, setInviteEmail] = useState('');
@@ -56,39 +56,39 @@ export default function TeamMembers() {
     (inv: Invitation) => inv.status === 'PENDING' && new Date(inv.expiresAt) > new Date(),
   );
 
-  const removeMutation = useMutation({
-    mutationFn: (memberId: string) => teamsApi.removeMember(currentTeam!.id, memberId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['team', currentTeam?.id] }),
-  });
+  const removeMutation = useMutationWithToast(
+    (memberId: string) => teamsApi.removeMember(currentTeam!.id, memberId),
+    { successMessage: null, invalidateKeys: [['team', currentTeam?.id]] },
+  );
 
-  const roleMutation = useMutation({
-    mutationFn: ({ memberId, role }: { memberId: string; role: string }) =>
+  const roleMutation = useMutationWithToast(
+    ({ memberId, role }: { memberId: string; role: string }) =>
       teamsApi.updateMemberRole(currentTeam!.id, memberId, role),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['team', currentTeam?.id] }),
-  });
+    { successMessage: null, invalidateKeys: [['team', currentTeam?.id]] },
+  );
 
-  const inviteMutation = useMutation({
-    mutationFn: (data: { email: string; role: string; teamId: string }) =>
+  const inviteMutation = useMutationWithToast(
+    (data: { email: string; role: string; teamId: string }) =>
       orgsApi.createInvitation(currentOrg!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invitations', currentOrg?.id, currentTeam?.id] });
-      inviteModal.close();
-      setInviteEmail('');
-      setInviteRole('MEMBER');
-      toast.success('Invitation sent');
+    {
+      successMessage: 'Invitation sent',
+      errorMessage: 'Failed to send invitation',
+      invalidateKeys: [['invitations', currentOrg?.id, currentTeam?.id]],
+      onSuccess: () => {
+        inviteModal.close();
+        setInviteEmail('');
+        setInviteRole('MEMBER');
+      },
     },
-    onError: (err: Error) => {
-      toast.error(err.message || 'Failed to send invitation');
-    },
-  });
+  );
 
-  const revokeMutation = useMutation({
-    mutationFn: (invitationId: string) => orgsApi.revokeInvitation(currentOrg!.id, invitationId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invitations', currentOrg?.id, currentTeam?.id] });
-      toast.success('Invitation revoked');
+  const revokeMutation = useMutationWithToast(
+    (invitationId: string) => orgsApi.revokeInvitation(currentOrg!.id, invitationId),
+    {
+      successMessage: 'Invitation revoked',
+      invalidateKeys: [['invitations', currentOrg?.id, currentTeam?.id]],
     },
-  });
+  );
 
   function handleInviteSubmit(e: React.FormEvent) {
     e.preventDefault();

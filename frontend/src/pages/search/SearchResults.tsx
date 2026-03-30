@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Search,
@@ -33,7 +33,7 @@ import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { SearchResult, SearchResultItem, SavedSearch } from '@/lib/types';
 
 const SEARCH_TABS = [
@@ -52,8 +52,6 @@ export default function SearchResults() {
   const query = searchParams.get('q') || '';
   const activeType = (searchParams.get('type') || 'all') as SearchType;
   const [inputValue, setInputValue] = useState(query);
-  const toast = useToast();
-  const queryClient = useQueryClient();
 
   // Wiki filter state from URL params
   const spaceId = searchParams.get('spaceId') || '';
@@ -95,20 +93,15 @@ export default function SearchResults() {
     queryFn: () => searchApi.getSavedSearches(),
   });
 
-  const saveMutation = useMutation({
-    mutationFn: (name: string) => searchApi.createSavedSearch(name, { q: query, type: activeType }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-searches'] });
-      toast.success('Search saved');
-    },
-  });
+  const saveMutation = useMutationWithToast(
+    (name: string) => searchApi.createSavedSearch(name, { q: query, type: activeType }),
+    { successMessage: 'Search saved', invalidateKeys: [['saved-searches']] },
+  );
 
-  const deleteSavedMutation = useMutation({
-    mutationFn: (id: string) => searchApi.deleteSavedSearch(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-searches'] });
-    },
-  });
+  const deleteSavedMutation = useMutationWithToast(
+    (id: string) => searchApi.deleteSavedSearch(id),
+    { successMessage: null, invalidateKeys: [['saved-searches']] },
+  );
 
   // Count results per type for tab labels
   const tabsWithCounts = useMemo(() => {

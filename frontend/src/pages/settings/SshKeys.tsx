@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Key, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -12,15 +12,13 @@ import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatDate } from '@/lib/utils';
 
 /**
  *
  */
 export default function SshKeys() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [publicKey, setPublicKey] = useState('');
@@ -36,25 +34,21 @@ export default function SshKeys() {
     queryFn: usersApi.listSshKeys,
   });
 
-  const addMutation = useMutation({
-    mutationFn: () => usersApi.addSshKey({ title, publicKey }),
+  const addMutation = useMutationWithToast(() => usersApi.addSshKey({ title, publicKey }), {
+    successMessage: 'SSH key added',
+    errorMessage: null,
+    invalidateKeys: [['sshKeys']],
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sshKeys'] });
       setShowForm(false);
       setTitle('');
       setPublicKey('');
-      toast.success('SSH key added');
     },
-    onError: (err: unknown) =>
-      setError(err instanceof Error ? err.message : 'Failed to add SSH key'),
+    onError: (err) => setError(err.message || 'Failed to add SSH key'),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (keyId: string) => usersApi.deleteSshKey(keyId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sshKeys'] });
-      toast.success('SSH key deleted');
-    },
+  const deleteMutation = useMutationWithToast((keyId: string) => usersApi.deleteSshKey(keyId), {
+    successMessage: 'SSH key deleted',
+    invalidateKeys: [['sshKeys']],
   });
 
   function handleDelete(keyId: string) {

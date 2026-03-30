@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { FolderPlus } from 'lucide-react';
 import { useState } from 'react';
 
@@ -6,7 +6,7 @@ import { wikiApi } from '@/api/wiki.api';
 import { Select } from '@/components/ui/Dropdown';
 import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { PageTreeNode } from '@/lib/types';
 
 interface CreateFolderModalProps {
@@ -47,7 +47,6 @@ export function CreateFolderModal({
   parentId: initialParentId,
   onCreated,
 }: CreateFolderModalProps) {
-  const toast = useToast();
   const [name, setName] = useState('');
   const [selectedParentId, setSelectedParentId] = useState<string>(initialParentId ?? '');
   const [error, setError] = useState('');
@@ -62,8 +61,8 @@ export function CreateFolderModal({
 
   const parentOptions = [{ value: '', label: 'None (top level)' }, ...flattenTree(pageTree)];
 
-  const createMutation = useMutation({
-    mutationFn: () => {
+  const createMutation = useMutationWithToast(
+    () => {
       const slug = name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -75,18 +74,21 @@ export function CreateFolderModal({
         ...(selectedParentId ? { parentId: selectedParentId } : {}),
       });
     },
-    onSuccess: () => {
-      toast.success('Folder created');
-      setName('');
-      setSelectedParentId(initialParentId ?? '');
-      setError('');
-      onCreated();
-      onClose();
+    {
+      successMessage: 'Folder created',
+      errorMessage: null,
+      onSuccess: () => {
+        setName('');
+        setSelectedParentId(initialParentId ?? '');
+        setError('');
+        onCreated();
+        onClose();
+      },
+      onError: (err) => {
+        setError(err.message || 'Failed to create folder');
+      },
     },
-    onError: (err: unknown) => {
-      setError(err instanceof Error ? err.message : 'Failed to create folder');
-    },
-  });
+  );
 
   return (
     <FormModal

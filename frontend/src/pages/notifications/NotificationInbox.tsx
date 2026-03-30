@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Bell,
@@ -25,6 +25,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { cn, formatRelative } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
@@ -65,7 +66,6 @@ const FILTER_TABS = [
 export default function NotificationInbox() {
   const [filter, setFilter] = useState<FilterTab>('all');
   const [page, setPage] = useState(0);
-  const queryClient = useQueryClient();
 
   const unreadOnly = filter === 'unread';
 
@@ -79,18 +79,14 @@ export default function NotificationInbox() {
       }),
   });
 
-  const markReadMutation = useMutation({
-    mutationFn: (id: string) => notificationsApi.markRead(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    },
+  const markReadMutation = useMutationWithToast((id: string) => notificationsApi.markRead(id), {
+    successMessage: null,
+    invalidateKeys: [['notifications']],
   });
 
-  const markAllReadMutation = useMutation({
-    mutationFn: () => notificationsApi.markAllRead(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    },
+  const markAllReadMutation = useMutationWithToast(() => notificationsApi.markAllRead(), {
+    successMessage: null,
+    invalidateKeys: [['notifications']],
   });
 
   const notifications = data?.notifications ?? [];
