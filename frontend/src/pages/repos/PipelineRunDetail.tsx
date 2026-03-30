@@ -18,6 +18,7 @@ import { pipelinesApi, type RunStatus, type PipelineJob } from '@/api/pipelines.
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { usePipelineLogs } from '@/hooks/usePipelineLogs';
@@ -187,7 +188,7 @@ export default function PipelineRunDetail() {
   });
 
   if (isLoading) return <PageLoader />;
-  if (!run) return <div className="p-8 text-center text-text-secondary">Run not found</div>;
+  if (!run) return <EmptyState title="Run not found" />;
 
   return (
     <div>

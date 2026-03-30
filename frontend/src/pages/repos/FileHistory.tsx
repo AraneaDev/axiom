@@ -111,9 +111,7 @@ export default function FileHistory() {
           ))}
         </Card>
       ) : (
-        <p className="text-sm text-text-secondary text-center py-8">
-          No commits found for this file.
-        </p>
+        <EmptyState title="No commits found for this file" />
       )}
     </div>
   );

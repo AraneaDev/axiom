@@ -279,7 +279,7 @@ export default function IssueDetail() {
       />
     );
   }
-  if (!issue) return <div className="text-center py-16 text-text-secondary">Issue not found</div>;
+  if (!issue) return <EmptyState title="Issue not found" />;
 
   function startEditTitle() {
     titleDraftState.startEditing(issue!.title);

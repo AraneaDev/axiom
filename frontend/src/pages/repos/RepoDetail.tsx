@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { CopyInput } from '@/components/ui/CopyInput';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { RepoSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { useRepoContext } from '@/hooks/useRepoContext';
@@ -377,9 +378,7 @@ export default function RepoDetail() {
               ))}
             </Card>
           ) : (
-            commits && (
-              <p className="text-sm text-text-secondary text-center py-8">No commits found.</p>
-            )
+            commits && <EmptyState title="No commits found" />
           )}
           {commitsHasMore && allCommits.length > 0 && (
             <div className="flex justify-center mt-4">

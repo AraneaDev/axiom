@@ -105,7 +105,7 @@ export default function BranchCompare() {
               ))}
             </Card>
           ) : (
-            <p className="text-sm text-text-secondary text-center py-8">No differences found.</p>
+            <EmptyState title="No differences found" />
           )}
         </div>
       )}
