@@ -4,6 +4,7 @@ import { forwardRef, useCallback, useRef, useState, type DragEvent } from 'react
 import { Button } from './Button';
 import { Spinner } from './Spinner';
 
+import { formatSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const ALLOWED_TYPES = [
@@ -26,12 +27,6 @@ const ALLOWED_TYPES = [
 ];
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 interface FileUploadProps {
   onUpload: (attachment: unknown) => void;

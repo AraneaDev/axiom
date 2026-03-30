@@ -10,21 +10,8 @@ import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
 import { getAccessToken } from '@/api/client';
 import { canPreview } from '@/lib/attachment-utils';
-import { cn } from '@/lib/utils';
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+import { formatSize } from '@/lib/format';
+import { cn, formatDate } from '@/lib/utils';
 
 function isImage(mimeType: string): boolean {
   return mimeType.startsWith('image/');

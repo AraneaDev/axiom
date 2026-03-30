@@ -9,17 +9,12 @@ import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
 import { getAccessToken } from '@/api/client';
 import { canConvertToMarkdown, getPreviewType } from '@/lib/attachment-utils';
+import { formatSize } from '@/lib/format';
 
 interface AttachmentPreviewProps {
   attachment: AttachmentMeta | null;
   open: boolean;
   onClose: () => void;
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 async function fetchAuthBlob(url: string): Promise<string> {

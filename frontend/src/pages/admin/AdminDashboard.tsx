@@ -24,17 +24,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { PageLoader } from '@/components/ui/Spinner';
+import { formatSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
-
-// ─── Helpers ────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  const value = bytes / Math.pow(1024, i);
-  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
 
 // ─── Uptime Formatter ────────────────────────────────────────
 
@@ -273,7 +264,7 @@ export default function AdminDashboard() {
         <StatCard icon={GitFork} label="Repositories" value={stats.totalRepos} />
         <StatCard icon={CircleDot} label="Issues" value={stats.totalIssues} />
         <StatCard icon={FileText} label="Wiki Pages" value={stats.totalWikiPages} />
-        <StatCard icon={HardDrive} label="Storage" value={formatBytes(stats.storage.totalBytes)} />
+        <StatCard icon={HardDrive} label="Storage" value={formatSize(stats.storage.totalBytes)} />
       </div>
 
       {/* Database info */}
@@ -286,13 +277,13 @@ export default function AdminDashboard() {
           <div className="rounded-lg bg-surface-secondary p-3">
             <p className="text-xs text-text-tertiary">Git Repositories</p>
             <p className="text-lg font-semibold text-text mt-1">
-              {formatBytes(stats.storage.reposBytes)}
+              {formatSize(stats.storage.reposBytes)}
             </p>
           </div>
           <div className="rounded-lg bg-surface-secondary p-3">
             <p className="text-xs text-text-tertiary">File Storage</p>
             <p className="text-lg font-semibold text-text mt-1">
-              {formatBytes(stats.storage.storageBytes)}
+              {formatSize(stats.storage.storageBytes)}
             </p>
           </div>
           <div className="rounded-lg bg-surface-secondary p-3">
