@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
-import { param } from '../../utils/params';
+import { param, paramInt } from '../../utils/params';
 
 import * as activityService from './activity.service';
 
@@ -20,7 +20,7 @@ export const listProjectActivity = asyncHandler(async (req: Request, res: Respon
 
 export const listIssueActivity = asyncHandler(async (req: Request, res: Response) => {
   const projectId = param(req, 'projectId');
-  const issueNumber = parseInt(param(req, 'issueNumber'), 10);
+  const issueNumber = paramInt(req, 'issueNumber');
 
   // Resolve issue ID from project + number
   const issueId = await activityService.getIssueIdByNumber(projectId, issueNumber);

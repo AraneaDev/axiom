@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
-import { param } from '../../utils/params';
+import { param, paramInt } from '../../utils/params';
 import {
   validate,
   createPRSchema,
@@ -24,7 +24,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const get = asyncHandler(async (req: Request, res: Response) => {
-  res.json(await pullsService.getPR(param(req, 'repoId'), parseInt(param(req, 'number'), 10)));
+  res.json(await pullsService.getPR(param(req, 'repoId'), paramInt(req, 'number')));
 });
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
@@ -42,13 +42,11 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
 
 export const update = asyncHandler(async (req: Request, res: Response) => {
   const body = validate(updatePRSchema, req.body);
-  res.json(
-    await pullsService.updatePR(param(req, 'repoId'), parseInt(param(req, 'number'), 10), body),
-  );
+  res.json(await pullsService.updatePR(param(req, 'repoId'), paramInt(req, 'number'), body));
 });
 
 export const close = asyncHandler(async (req: Request, res: Response) => {
-  res.json(await pullsService.closePR(param(req, 'repoId'), parseInt(param(req, 'number'), 10)));
+  res.json(await pullsService.closePR(param(req, 'repoId'), paramInt(req, 'number')));
 });
 
 export const merge = asyncHandler(async (req: Request, res: Response) => {
@@ -56,7 +54,7 @@ export const merge = asyncHandler(async (req: Request, res: Response) => {
   res.json(
     await pullsService.mergePR(
       param(req, 'repoId'),
-      parseInt(param(req, 'number'), 10),
+      paramInt(req, 'number'),
       strategy,
       deleteSourceBranch,
     ),
@@ -64,25 +62,19 @@ export const merge = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const mergeChecks = asyncHandler(async (req: Request, res: Response) => {
-  res.json(
-    await pullsService.getMergeChecks(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-  );
+  res.json(await pullsService.getMergeChecks(param(req, 'repoId'), paramInt(req, 'number')));
 });
 
 export const getDiff = asyncHandler(async (req: Request, res: Response) => {
-  res.json(await pullsService.getPRDiff(param(req, 'repoId'), parseInt(param(req, 'number'), 10)));
+  res.json(await pullsService.getPRDiff(param(req, 'repoId'), paramInt(req, 'number')));
 });
 
 export const getCommits = asyncHandler(async (req: Request, res: Response) => {
-  res.json(
-    await pullsService.getPRCommits(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-  );
+  res.json(await pullsService.getPRCommits(param(req, 'repoId'), paramInt(req, 'number')));
 });
 
 export const getLinkedIssues = asyncHandler(async (req: Request, res: Response) => {
-  res.json(
-    await pullsService.getLinkedIssues(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-  );
+  res.json(await pullsService.getLinkedIssues(param(req, 'repoId'), paramInt(req, 'number')));
 });
 
 // Reviews
@@ -90,7 +82,7 @@ export const submitReview = asyncHandler(async (req: Request, res: Response) => 
   const body = validate(submitReviewSchema, req.body);
   const review = await pullsService.submitReview(
     param(req, 'repoId'),
-    parseInt(param(req, 'number'), 10),
+    paramInt(req, 'number'),
     req.userId!,
     body,
   );
@@ -98,9 +90,7 @@ export const submitReview = asyncHandler(async (req: Request, res: Response) => 
 });
 
 export const listReviews = asyncHandler(async (req: Request, res: Response) => {
-  res.json(
-    await pullsService.listReviews(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-  );
+  res.json(await pullsService.listReviews(param(req, 'repoId'), paramInt(req, 'number')));
 });
 
 // PR Comments
@@ -108,7 +98,7 @@ export const addComment = asyncHandler(async (req: Request, res: Response) => {
   const body = validate(addPRCommentSchema, req.body);
   const comment = await pullsService.addPRComment(
     param(req, 'repoId'),
-    parseInt(param(req, 'number'), 10),
+    paramInt(req, 'number'),
     req.userId!,
     body,
   );
@@ -116,9 +106,7 @@ export const addComment = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const listComments = asyncHandler(async (req: Request, res: Response) => {
-  res.json(
-    await pullsService.listPRComments(param(req, 'repoId'), parseInt(param(req, 'number'), 10)),
-  );
+  res.json(await pullsService.listPRComments(param(req, 'repoId'), paramInt(req, 'number')));
 });
 
 export const updateComment = asyncHandler(async (req: Request, res: Response) => {
@@ -140,7 +128,7 @@ export const applySuggestion = asyncHandler(async (req: Request, res: Response) 
   const body = validate(applySuggestionSchema, req.body);
   const result = await pullsService.applySuggestion(
     param(req, 'repoId'),
-    parseInt(param(req, 'number'), 10),
+    paramInt(req, 'number'),
     body.commentId,
     req.userId!,
   );
@@ -151,7 +139,7 @@ export const batchApplySuggestions = asyncHandler(async (req: Request, res: Resp
   const body = validate(batchApplySuggestionsSchema, req.body);
   const result = await pullsService.batchApplySuggestions(
     param(req, 'repoId'),
-    parseInt(param(req, 'number'), 10),
+    paramInt(req, 'number'),
     body.commentIds,
     req.userId!,
   );

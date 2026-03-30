@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
-import { param } from '../../utils/params';
+import { param, paramInt } from '../../utils/params';
 import {
   validate,
   createIssueSchema,
@@ -22,10 +22,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const get = asyncHandler(async (req: Request, res: Response) => {
-  const issue = await issuesService.getIssue(
-    param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
-  );
+  const issue = await issuesService.getIssue(param(req, 'projectId'), paramInt(req, 'issueNumber'));
   res.json(issue);
 });
 
@@ -50,7 +47,7 @@ export const update = asyncHandler(async (req: Request, res: Response) => {
   const data = validate(updateIssueSchema, req.body);
   const issue = await issuesService.updateIssue(
     param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
+    paramInt(req, 'issueNumber'),
     data,
     req.userId!,
   );
@@ -60,7 +57,7 @@ export const update = asyncHandler(async (req: Request, res: Response) => {
 export const remove = asyncHandler(async (req: Request, res: Response) => {
   await issuesService.deleteIssue(
     param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
+    paramInt(req, 'issueNumber'),
     req.userId!,
   );
   res.status(204).send();
@@ -69,10 +66,7 @@ export const remove = asyncHandler(async (req: Request, res: Response) => {
 export const addComment = asyncHandler(async (req: Request, res: Response) => {
   const parsed = validate(createCommentSchema, req.body);
   const commentBody = String(parsed.body);
-  const issue = await issuesService.getIssue(
-    param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
-  );
+  const issue = await issuesService.getIssue(param(req, 'projectId'), paramInt(req, 'issueNumber'));
   const comment = await issuesService.addComment(issue.id, req.userId!, commentBody);
   res.status(201).json(comment);
 });
@@ -99,7 +93,7 @@ export const board = asyncHandler(async (req: Request, res: Response) => {
 export const listPullRequests = asyncHandler(async (req: Request, res: Response) => {
   const prs = await issuesService.getIssuePullRequests(
     param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
+    paramInt(req, 'issueNumber'),
   );
   res.json(prs);
 });
@@ -108,7 +102,7 @@ export const moveIssue = asyncHandler(async (req: Request, res: Response) => {
   const { columnId, position } = req.body;
   const issue = await issuesService.moveIssue(
     param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
+    paramInt(req, 'issueNumber'),
     columnId,
     position,
   );
@@ -119,7 +113,7 @@ export const setParent = asyncHandler(async (req: Request, res: Response) => {
   const { parentIssueNumber } = req.body;
   const issue = await issuesService.setParent(
     param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
+    paramInt(req, 'issueNumber'),
     parentIssueNumber !== undefined && parentIssueNumber !== null
       ? parseInt(parentIssueNumber, 10)
       : null,
@@ -130,7 +124,7 @@ export const setParent = asyncHandler(async (req: Request, res: Response) => {
 export const getChildren = asyncHandler(async (req: Request, res: Response) => {
   const children = await issuesService.getChildren(
     param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
+    paramInt(req, 'issueNumber'),
   );
   res.json(children);
 });
@@ -138,7 +132,7 @@ export const getChildren = asyncHandler(async (req: Request, res: Response) => {
 export const getProgress = asyncHandler(async (req: Request, res: Response) => {
   const progress = await issuesService.getEpicProgress(
     param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
+    paramInt(req, 'issueNumber'),
   );
   res.json(progress);
 });
@@ -152,7 +146,7 @@ export const logWork = asyncHandler(async (req: Request, res: Response) => {
   const data = validate(logWorkSchema, req.body);
   const result = await issuesService.logWork(
     param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
+    paramInt(req, 'issueNumber'),
     req.userId!,
     data.minutes,
     data.description,
@@ -163,7 +157,7 @@ export const logWork = asyncHandler(async (req: Request, res: Response) => {
 export const getWorklogs = asyncHandler(async (req: Request, res: Response) => {
   const worklogs = await issuesService.getWorklogs(
     param(req, 'projectId'),
-    parseInt(param(req, 'issueNumber'), 10),
+    paramInt(req, 'issueNumber'),
   );
   res.json(worklogs);
 });

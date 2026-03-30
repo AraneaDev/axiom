@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler';
-import { param } from '../../utils/params';
+import { param, paramInt } from '../../utils/params';
 
 import {
   hydrateIssueDetail as hydrateIssueDetailService,
@@ -10,7 +10,7 @@ import {
 
 export const hydrateIssueDetail = asyncHandler(async (req: Request, res: Response) => {
   const projectId = param(req, 'projectId');
-  const issueNumber = parseInt(param(req, 'issueNumber'), 10);
+  const issueNumber = paramInt(req, 'issueNumber');
   const result = await hydrateIssueDetailService(projectId, issueNumber, req.userId!);
   res.json(result);
 });
