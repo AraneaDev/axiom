@@ -7,10 +7,7 @@ import {
 } from '@/api/custom-fields.api';
 import { CustomFieldRenderer } from '@/components/CustomFieldRenderer';
 import { Spinner } from '@/components/ui/Spinner';
-
-interface TeamMember {
-  user: { id: string; displayName: string };
-}
+import type { TeamMember } from '@/lib/issue-types';
 
 interface CustomFieldEditorProps {
   issueId: string;

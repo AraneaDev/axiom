@@ -7,23 +7,7 @@ import IssueLinkModal from './IssueLinkModal';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-
-interface IssueLinkResource {
-  id: string;
-  number: number;
-  title: string;
-  project: { slug: string; prefix: string; team: { slug: string; org: { slug: string } } };
-}
-
-interface IssueLink {
-  id: string;
-  type: string;
-  fromId: string;
-  fromKey: string;
-  toKey: string;
-  from: IssueLinkResource;
-  to: IssueLinkResource;
-}
+import type { IssueLink } from '@/lib/issue-types';
 
 interface IssueLinkedSectionProps {
   issueId: string;

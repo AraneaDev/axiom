@@ -2,7 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { BookOpen, ChevronDown, FolderPlus, Library, Plus, Search, Star } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import { Link, Outlet, useNavigate, useOutletContext, useParams } from 'react-router';
+import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
 import { CreateFolderModal } from './CreateFolderModal';
 import { PageViewSidebar } from './PageViewSidebar';
@@ -16,12 +16,9 @@ import { useModalState } from '@/hooks/useModalState';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import type { PageTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import type { TocEntry } from '@/lib/wiki-types';
 
-interface TocEntry {
-  level: number;
-  text: string;
-  id: string;
-}
+export { useWikiContext } from '@/hooks/useWikiContext';
 
 interface WikiContextValue {
   currentOrg: { id: string; slug: string; name: string } | undefined;
@@ -39,13 +36,6 @@ interface WikiContextValue {
     | undefined;
   tree: PageTreeNode[] | undefined;
   setTocEntries: (entries: TocEntry[]) => void;
-}
-
-/**
- * Hook for child routes to access wiki context from WikiLayout.
- */
-export function useWikiContext() {
-  return useOutletContext<WikiContextValue>();
 }
 
 /**

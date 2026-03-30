@@ -6,31 +6,8 @@ import { IssueDetailMetaPanel } from './IssueDetailMetaPanel';
 import { type ActivityEvent } from '@/api/activity.api';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Card } from '@/components/ui/Card';
+import type { IssueLink, TeamMember } from '@/lib/issue-types';
 import type { Issue, Sprint } from '@/lib/types';
-
-interface TeamMember {
-  user: { id: string; displayName: string };
-}
-
-interface IssueLink {
-  id: string;
-  type: string;
-  fromId: string;
-  fromKey: string;
-  toKey: string;
-  from: {
-    id: string;
-    number: number;
-    title: string;
-    project: { slug: string; prefix: string; team: { slug: string; org: { slug: string } } };
-  };
-  to: {
-    id: string;
-    number: number;
-    title: string;
-    project: { slug: string; prefix: string; team: { slug: string; org: { slug: string } } };
-  };
-}
 
 interface IssueDetailSidebarProps {
   issue: Issue;

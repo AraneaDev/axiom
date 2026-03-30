@@ -8,28 +8,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import type { IssueLink } from '@/lib/issue-types';
 import type { Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
-
-interface IssueLink {
-  id: string;
-  type: string;
-  fromId: string;
-  fromKey: string;
-  toKey: string;
-  from: {
-    id: string;
-    number: number;
-    title: string;
-    project: { slug: string; prefix: string; team: { slug: string; org: { slug: string } } };
-  };
-  to: {
-    id: string;
-    number: number;
-    title: string;
-    project: { slug: string; prefix: string; team: { slug: string; org: { slug: string } } };
-  };
-}
 
 interface IssueDetailMetaPanelProps {
   issue: Issue;

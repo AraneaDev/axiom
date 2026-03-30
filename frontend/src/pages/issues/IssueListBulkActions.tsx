@@ -4,14 +4,11 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { PRIORITY_LABELS } from '@/lib/constants';
+import type { TeamMember } from '@/lib/issue-types';
 
 interface BoardColumn {
   id: string;
   name: string;
-}
-
-interface TeamMember {
-  user: { id: string; displayName: string };
 }
 
 interface Sprint {

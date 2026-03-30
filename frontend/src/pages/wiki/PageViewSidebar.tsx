@@ -35,12 +35,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import type { PageTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
-
-interface TocEntry {
-  level: number;
-  text: string;
-  id: string;
-}
+import type { TocEntry } from '@/lib/wiki-types';
 
 /**
  *

@@ -13,12 +13,9 @@ import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { Spinner } from '@/components/ui/Spinner';
 import { ISSUE_TYPE_LABELS, PRIORITY_LABELS } from '@/lib/constants';
+import type { TeamMember } from '@/lib/issue-types';
 import type { Issue, Sprint } from '@/lib/types';
 import { cn } from '@/lib/utils';
-
-interface TeamMember {
-  user: { id: string; displayName: string };
-}
 
 interface IssueDetailFieldsPanelProps {
   issue: Issue;
