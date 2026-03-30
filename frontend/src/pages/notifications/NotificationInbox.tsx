@@ -25,23 +25,11 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
-import { cn } from '@/lib/utils';
+import { cn, formatRelative } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
 
 type FilterTab = 'all' | 'unread' | 'mentions' | 'watching';
-
-function timeAgo(dateStr: string): string {
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-}
 
 function notificationIcon(type: string) {
   if (type.includes('comment') || type.includes('mention')) return MessageSquare;
@@ -221,7 +209,7 @@ export default function NotificationInbox() {
                   </div>
 
                   <span className="text-xs text-text-tertiary whitespace-nowrap flex-shrink-0">
-                    {timeAgo(notification.createdAt)}
+                    {formatRelative(notification.createdAt)}
                   </span>
 
                   {!notification.read && (
