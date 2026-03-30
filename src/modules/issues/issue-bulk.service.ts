@@ -1,9 +1,9 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
-import { cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { invalidateIssueCache } from '../../utils/issue-cache';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
@@ -115,6 +115,6 @@ export async function bulkUpdate(
     },
   });
 
-  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
+  await invalidateIssueCache(projectId);
   return { updated: results.length, issues: results };
 }

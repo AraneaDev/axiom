@@ -1,12 +1,13 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
-import { cacheable, cacheInvalidate } from '../../config/redis';
+import { cacheable } from '../../config/redis';
 import { parse, compileToPrisma } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { invalidateIssueCache, ISSUE_LIST_TTL } from '../../utils/issue-cache';
 import { formatIssueKey } from '../../utils/issue-key';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
@@ -127,7 +128,7 @@ export async function createIssue(
 
   if (!issue) throw new AppError(500, 'Failed to create issue');
 
-  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
+  await invalidateIssueCache(projectId);
   await logActivity('issue', issue.id, 'created', creatorId, { title: data.title });
 
   // Notify @mentioned users in the issue body
@@ -267,7 +268,7 @@ export async function listIssues(
   );
 
   const cacheKey = `issues:${projectId}:${filters?.offset ?? 0}:${filters?.q || ''}:${filters?.type || ''}:${filters?.priority || ''}:${filters?.assigneeId || ''}:${filters?.columnId || ''}:${filters?.sprintId || ''}:${filters?.label || ''}`;
-  return cacheable(cacheKey, 30, async () => {
+  return cacheable(cacheKey, ISSUE_LIST_TTL, async () => {
     const { take, skip } = parseServicePagination(filters, 50);
     const where: Prisma.IssueWhereInput = { projectId };
 
@@ -427,7 +428,7 @@ export async function updateIssue(
     },
   });
 
-  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
+  await invalidateIssueCache(projectId);
 
   // Log granular activity events
   // We need a userId -- pull it from the issue's last updater context
@@ -548,7 +549,7 @@ export async function deleteIssue(projectId: string, issueNumber: number, userId
     'Issue not found',
   );
   await prisma.issue.delete({ where: { id: issue.id } });
-  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
+  await invalidateIssueCache(projectId);
   if (userId) {
     await logActivity('issue', issue.id, 'deleted', userId, {
       title: issue.title,

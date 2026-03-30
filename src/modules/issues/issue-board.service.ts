@@ -1,7 +1,8 @@
 import { prisma } from '../../config/database';
-import { cacheable, cacheInvalidate } from '../../config/redis';
+import { cacheable } from '../../config/redis';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { invalidateIssueCache, BOARD_TTL } from '../../utils/issue-cache';
 import { formatIssueKey } from '../../utils/issue-key';
 import { logger } from '../../utils/logger';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
@@ -14,7 +15,7 @@ import { validateTransition } from '../workflows/workflows.service';
  * @returns Board columns with issues, each issue having a computed key
  */
 export async function getBoard(projectId: string) {
-  return cacheable(`board:${projectId}`, 30, async () => {
+  return cacheable(`board:${projectId}`, BOARD_TTL, async () => {
     const columns = await prisma.boardColumn.findMany({
       where: { projectId },
       include: {
@@ -74,7 +75,7 @@ export async function moveIssue(
     data: { columnId, position },
   });
 
-  await cacheInvalidate(`issues:${projectId}:*`, `board:${projectId}`);
+  await invalidateIssueCache(projectId);
 
   // Fire automation rules (non-blocking)
   if (columnId !== issue.columnId && !options?.skipAutomation) {
