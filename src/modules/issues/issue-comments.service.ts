@@ -1,6 +1,6 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { assertAuthor } from '../../utils/assert-author';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
@@ -85,7 +85,7 @@ export async function updateComment(commentId: string, userId: string, body: str
     prisma.comment.findUnique({ where: { id: commentId } }),
     'Comment not found',
   );
-  if (comment.authorId !== userId) throw new AppError(403, 'You can only edit your own comments');
+  assertAuthor(comment, userId, 'edit');
 
   return prisma.comment.update({
     where: { id: commentId },
@@ -106,7 +106,7 @@ export async function deleteComment(commentId: string, userId: string) {
     prisma.comment.findUnique({ where: { id: commentId } }),
     'Comment not found',
   );
-  if (comment.authorId !== userId) throw new AppError(403, 'You can only delete your own comments');
+  assertAuthor(comment, userId, 'delete');
 
   await prisma.comment.delete({ where: { id: commentId } });
 }

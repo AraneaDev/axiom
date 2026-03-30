@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { assertAuthor } from '../../utils/assert-author';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
@@ -74,7 +75,7 @@ export async function updatePageComment(commentId: string, userId: string, body:
     prisma.pageComment.findUnique({ where: { id: commentId } }),
     'Comment not found',
   );
-  if (comment.userId !== userId) throw new AppError(403, 'You can only edit your own comments');
+  assertAuthor(comment, userId, 'edit');
 
   return prisma.pageComment.update({
     where: { id: commentId },

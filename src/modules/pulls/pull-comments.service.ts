@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { AppError } from '../../middleware/errorHandler';
+import { assertAuthor } from '../../utils/assert-author';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
@@ -124,7 +125,7 @@ export async function updatePRComment(commentId: string, userId: string, body: s
     prisma.pRComment.findUnique({ where: { id: commentId } }),
     'Comment not found',
   );
-  if (comment.authorId !== userId) throw new AppError(403, 'You can only edit your own comments');
+  assertAuthor(comment, userId, 'edit');
 
   return prisma.pRComment.update({
     where: { id: commentId },
@@ -144,7 +145,7 @@ export async function deletePRComment(commentId: string, userId: string) {
     prisma.pRComment.findUnique({ where: { id: commentId } }),
     'Comment not found',
   );
-  if (comment.authorId !== userId) throw new AppError(403, 'You can only delete your own comments');
+  assertAuthor(comment, userId, 'delete');
 
   await prisma.pRComment.delete({ where: { id: commentId } });
 }
