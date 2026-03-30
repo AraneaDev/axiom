@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageLoader } from '@/components/ui/Spinner';
 import { formatDate } from '@/lib/utils';
@@ -103,11 +104,9 @@ export default function PageHistory() {
       <Card className="divide-y divide-border">
         {versions?.map((v) => (
           <div key={v.id} className="flex items-center gap-3 p-4">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={selectedVersions.includes(v.version)}
               onChange={() => handleVersionToggle(v.version)}
-              className="h-4 w-4 rounded border-border text-primary accent-primary"
               aria-label={`Select version ${v.version} for comparison`}
             />
             <Badge variant="primary">v{v.version}</Badge>

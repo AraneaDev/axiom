@@ -6,8 +6,11 @@ import { spacePermissionsApi, type SpacePermission } from '@/api/space-permissio
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { Table, TableContainer, Thead, Tbody, Tr, TrHead, Th, Td } from '@/components/ui/Table';
 
 const LEVELS = ['VIEW', 'EDIT', 'ADMIN'] as const;
 const TEAM_ROLES = ['ADMIN', 'MEMBER', 'VIEWER'] as const;
@@ -111,23 +114,19 @@ export function SpacePermissions({ spaceId }: SpacePermissionsProps) {
       </div>
 
       {permissions && permissions.length > 0 && (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-secondary">
-                <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary">
-                  User / Role
-                </th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary">
-                  Level
-                </th>
-                <th className="w-10 px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-light">
+        <TableContainer>
+          <Table>
+            <Thead>
+              <TrHead>
+                <Th>User / Role</Th>
+                <Th>Level</Th>
+                <Th className="w-10" />
+              </TrHead>
+            </Thead>
+            <Tbody>
               {permissions.map((perm) => (
-                <tr key={perm.id} className="hover:bg-surface-secondary transition-colors">
-                  <td className="px-3 py-2">
+                <Tr key={perm.id}>
+                  <Td>
                     {perm.user ? (
                       <div className="flex items-center gap-2">
                         <Avatar
@@ -146,26 +145,20 @@ export function SpacePermissions({ spaceId }: SpacePermissionsProps) {
                         </Badge>
                       </div>
                     )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <select
+                  </Td>
+                  <Td>
+                    <Select
                       value={perm.level}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         updateLevelMutation.mutate({
                           permission: perm,
-                          level: e.target.value,
+                          level: val as string,
                         })
                       }
-                      className="bg-surface border border-border rounded px-2 py-1 text-xs text-text focus:outline-none focus:ring-1 focus:ring-primary"
-                    >
-                      {LEVELS.map((l) => (
-                        <option key={l} value={l}>
-                          {l}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-2">
+                      options={LEVELS.map((l) => ({ value: l, label: l }))}
+                    />
+                  </Td>
+                  <Td>
                     <Button
                       variant="ghost"
                       size="xs"
@@ -175,59 +168,47 @@ export function SpacePermissions({ spaceId }: SpacePermissionsProps) {
                     >
                       <Trash2 className="h-3.5 w-3.5 text-danger" />
                     </Button>
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </Tbody>
+          </Table>
+        </TableContainer>
       )}
 
       {showAddForm && (
         <div className="rounded-lg border border-border p-3 bg-surface-secondary space-y-3">
           <div className="flex items-center gap-2">
-            <select
+            <Select
               value={newType}
-              onChange={(e) => setNewType(e.target.value as 'user' | 'role')}
-              className="bg-surface border border-border rounded px-2 py-1.5 text-xs text-text focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="role">Team Role</option>
-              <option value="user">User ID</option>
-            </select>
+              onChange={(val) => setNewType(val as 'user' | 'role')}
+              options={[
+                { value: 'role', label: 'Team Role' },
+                { value: 'user', label: 'User ID' },
+              ]}
+            />
 
             {newType === 'user' ? (
-              <input
+              <Input
                 type="text"
                 value={newUserId}
                 onChange={(e) => setNewUserId(e.target.value)}
                 placeholder="User ID"
-                className="flex-1 bg-surface border border-border rounded px-2 py-1.5 text-xs text-text placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="flex-1"
               />
             ) : (
-              <select
+              <Select
                 value={newTeamRole}
-                onChange={(e) => setNewTeamRole(e.target.value)}
-                className="bg-surface border border-border rounded px-2 py-1.5 text-xs text-text focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                {TEAM_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setNewTeamRole(val as string)}
+                options={TEAM_ROLES.map((r) => ({ value: r, label: r }))}
+              />
             )}
 
-            <select
+            <Select
               value={newLevel}
-              onChange={(e) => setNewLevel(e.target.value as (typeof LEVELS)[number])}
-              className="bg-surface border border-border rounded px-2 py-1.5 text-xs text-text focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              {LEVELS.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setNewLevel(val as (typeof LEVELS)[number])}
+              options={LEVELS.map((l) => ({ value: l, label: l }))}
+            />
           </div>
 
           <div className="flex items-center gap-2">

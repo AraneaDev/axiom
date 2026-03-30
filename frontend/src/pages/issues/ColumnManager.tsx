@@ -253,13 +253,12 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
                   )}
                 </Button>
 
-                <input
+                <Input
                   type="number"
                   min={0}
                   value={row.wipLimit ?? ''}
                   onChange={(e) => handleWipLimitChange(row, e.target.value)}
-                  placeholder="No limit"
-                  className="w-20 text-xs px-1.5 py-0.5 rounded border border-border bg-surface text-text placeholder:text-text-tertiary shrink-0 text-center"
+                  className="w-16"
                   title="WIP limit"
                 />
 

@@ -15,7 +15,6 @@ import {
   ExternalLink,
   Users,
   Loader2,
-  Scissors,
 } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link } from 'react-router';
@@ -24,6 +23,7 @@ import type { StatusCheck, CodeOwnerStatus } from '@/api/status-checks.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Spinner } from '@/components/ui/Spinner';
 
@@ -286,16 +286,11 @@ export function PRReviewPanel({
               </Dropdown>
             </div>
             {!isDefaultBranch && (
-              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={deleteSourceBranch}
-                  onChange={(e) => onSetDeleteSourceBranch(e.target.checked)}
-                  className="rounded border-border"
-                />
-                <Scissors className="h-3 w-3" />
-                Delete source branch
-              </label>
+              <Checkbox
+                label="Delete source branch"
+                checked={deleteSourceBranch}
+                onChange={(e) => onSetDeleteSourceBranch(e.target.checked)}
+              />
             )}
             {mergeChecks && !mergeChecks.canMerge && (
               <p className="text-xs text-danger">
