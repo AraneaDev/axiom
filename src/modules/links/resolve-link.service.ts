@@ -1,5 +1,10 @@
 import { prisma } from '../../config/database';
 import { formatIssueKey } from '../../utils/issue-key';
+import {
+  PROJECT_TEAM_ORG_INCLUDE,
+  REPO_TEAM_ORG_INCLUDE,
+  SPACE_TEAM_ORG_INCLUDE,
+} from '../../utils/prisma-selects';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,10 +116,7 @@ async function resolveIssue(parsed: ParsedUrl): Promise<LinkPreview | null> {
         },
       },
     },
-    include: {
-      project: { include: { team: { include: { org: true } } } },
-      column: true,
-    },
+    include: { ...PROJECT_TEAM_ORG_INCLUDE, column: true },
   });
 
   if (!issue) return null;
@@ -145,9 +147,7 @@ async function resolvePr(parsed: ParsedUrl): Promise<LinkPreview | null> {
         },
       },
     },
-    include: {
-      repo: { include: { team: { include: { org: true } } } },
-    },
+    include: REPO_TEAM_ORG_INCLUDE,
   });
 
   if (!pr) return null;
@@ -178,9 +178,7 @@ async function resolveWiki(parsed: ParsedUrl): Promise<LinkPreview | null> {
         },
       },
     },
-    include: {
-      space: { include: { team: { include: { org: true } } } },
-    },
+    include: SPACE_TEAM_ORG_INCLUDE,
   });
 
   if (!page) return null;

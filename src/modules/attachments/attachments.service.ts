@@ -9,6 +9,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { getStorage } from '../../storage/storage';
+import { PROJECT_TEAM_ORG_INCLUDE, SPACE_TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
 const execFileAsync = promisify(execFile);
@@ -114,8 +115,8 @@ export async function getAttachmentAuthorized(id: string, userId: string) {
   const attachment = await prisma.attachment.findUnique({
     where: { id },
     include: {
-      issue: { include: { project: { include: { team: { include: { org: true } } } } } },
-      page: { include: { space: { include: { team: { include: { org: true } } } } } },
+      issue: { include: PROJECT_TEAM_ORG_INCLUDE },
+      page: { include: SPACE_TEAM_ORG_INCLUDE },
     },
   });
   if (!attachment) throw new AppError(404, 'Attachment not found', 'NOT_FOUND');
@@ -156,14 +157,14 @@ export async function listAttachments(opts: { issueId?: string; pageId?: string 
   if (opts.issueId) {
     const issue = await prisma.issue.findUnique({
       where: { id: opts.issueId },
-      include: { project: { include: { team: { include: { org: true } } } } },
+      include: PROJECT_TEAM_ORG_INCLUDE,
     });
     if (!issue) throw new AppError(404, 'Issue not found', 'NOT_FOUND');
     orgId = issue.project?.team?.org?.id;
   } else if (opts.pageId) {
     const page = await prisma.page.findUnique({
       where: { id: opts.pageId },
-      include: { space: { include: { team: { include: { org: true } } } } },
+      include: SPACE_TEAM_ORG_INCLUDE,
     });
     if (!page) throw new AppError(404, 'Page not found', 'NOT_FOUND');
     orgId = page.space?.team?.org?.id;

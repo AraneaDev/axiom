@@ -62,3 +62,13 @@ export const TEAM_ORG_INCLUDE = { team: { include: { org: true } } } as const;
 export const PROJECT_TEAM_ORG_INCLUDE = {
   project: { include: { team: { include: { org: true } } } },
 } as const;
+
+/** Include chain for repo → team → org (used in PR/repo URL building) */
+export const REPO_TEAM_ORG_INCLUDE = {
+  repo: { include: { team: { include: { org: true } } } },
+} as const;
+
+/** Include chain for space → team → org (used in wiki URL building) */
+export const SPACE_TEAM_ORG_INCLUDE = {
+  space: { include: { team: { include: { org: true } } } },
+} as const;
