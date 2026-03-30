@@ -17,6 +17,7 @@ import { Link } from 'react-router';
 import { get } from '@/api/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { statusColorClass } from '@/lib/status-colors';
 import type { SearchResult, SearchResultItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -35,18 +36,6 @@ const PRIORITY_CONFIG: Record<string, { icon: typeof ArrowUp; className: string 
   MEDIUM: { icon: Minus, className: 'text-warning' },
   LOW: { icon: ArrowDown, className: 'text-success' },
 };
-
-/**
- * Map status strings to badge variant styles.
- * @param status
- */
-function statusBadgeClass(status: string): string {
-  const s = status.toUpperCase();
-  if (s === 'OPEN' || s === 'IN PROGRESS' || s === 'TO DO') return 'bg-primary/15 text-primary';
-  if (s === 'DONE' || s === 'MERGED' || s === 'PUBLISHED') return 'bg-success/15 text-success';
-  if (s === 'CLOSED' || s === 'DRAFT') return 'bg-muted text-muted-foreground';
-  return 'bg-muted text-muted-foreground';
-}
 
 interface IssueData {
   key: string;
@@ -166,7 +155,7 @@ export default function IssueEmbedNode({ node }: NodeViewProps) {
             <span
               className={cn(
                 'rounded px-1.5 py-0.5 text-xs font-medium',
-                statusBadgeClass(issue.status),
+                statusColorClass(issue.status),
               )}
             >
               {issue.status}

@@ -11,6 +11,7 @@ import {
 import type { ComponentType, SVGProps } from 'react';
 import { Link } from 'react-router';
 
+import { statusColorClass } from '@/lib/status-colors';
 import { cn } from '@/lib/utils';
 
 /** Map icon name strings to Lucide icon components. */
@@ -25,18 +26,6 @@ const ICON_MAP: Record<
   'git-pull-request': GitPullRequest,
   'file-text': FileText,
 };
-
-/**
- * Map status strings to CSS color classes using design tokens.
- * @param status
- */
-function statusColorClass(status: string): string {
-  const s = status.toUpperCase();
-  if (s === 'OPEN' || s === 'IN PROGRESS' || s === 'TO DO') return 'bg-primary/15 text-primary';
-  if (s === 'MERGED' || s === 'DONE' || s === 'PUBLISHED') return 'bg-success/15 text-success';
-  if (s === 'CLOSED' || s === 'DRAFT') return 'bg-muted text-muted-foreground';
-  return 'bg-muted text-muted-foreground';
-}
 
 /**
  * Inline React node view for a resolved smart link preview.
