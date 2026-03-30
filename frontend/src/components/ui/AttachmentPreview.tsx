@@ -7,7 +7,7 @@ import { Modal, ModalFooter } from './Modal';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
-import { getAccessToken } from '@/api/client';
+import { fetchWithAuth } from '@/api/client';
 import { canConvertToMarkdown, getPreviewType } from '@/lib/attachment-utils';
 import { formatSize } from '@/lib/format';
 
@@ -18,20 +18,14 @@ interface AttachmentPreviewProps {
 }
 
 async function fetchAuthBlob(url: string): Promise<string> {
-  const token = getAccessToken();
-  const res = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await fetchWithAuth(url);
   if (!res.ok) throw new Error('Failed to fetch');
   const blob = await res.blob();
   return URL.createObjectURL(blob);
 }
 
 async function fetchAuthText(url: string): Promise<string> {
-  const token = getAccessToken();
-  const res = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await fetchWithAuth(url);
   if (!res.ok) throw new Error('Failed to fetch');
   return res.text();
 }
@@ -179,10 +173,7 @@ function AttachmentPreviewInner({
 
   const handleDownload = async () => {
     const url = attachmentsApi.getDownloadUrl(attachment.id);
-    const token = getAccessToken();
-    const res = await fetch(url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await fetchWithAuth(url);
     if (!res.ok) return;
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);

@@ -19,7 +19,7 @@ import { IssueListBulkActions } from './IssueListBulkActions';
 import { IssueListFilters } from './IssueListFilters';
 import { IssueListTable } from './IssueListTable';
 
-import { getAccessToken } from '@/api/client';
+import { fetchWithAuth } from '@/api/client';
 import { hydrateApi } from '@/api/hydrate.api';
 import { issuesApi } from '@/api/issues.api';
 import { savedFiltersApi } from '@/api/saved-filters.api';
@@ -273,9 +273,8 @@ export default function IssueList() {
           variant="secondary"
           size="sm"
           onClick={async () => {
-            const token = getAccessToken();
-            const res = await fetch(`/api/projects/${currentProject!.id}/issues/export`, {
-              headers: { Authorization: `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
+            const res = await fetchWithAuth(`/api/projects/${currentProject!.id}/issues/export`, {
+              headers: { 'X-Requested-With': 'XMLHttpRequest' },
             });
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);

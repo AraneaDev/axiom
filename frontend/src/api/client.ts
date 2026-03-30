@@ -118,6 +118,21 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   return res.json();
 }
 
+/**
+ * Fetch with auth headers. Use for blob/download endpoints where get() doesn't work.
+ * @param url
+ * @param init
+ */
+export async function fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, {
+    ...init,
+    headers: {
+      ...init?.headers,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+  });
+}
+
 // Convenience methods
 export const get = <T = unknown>(path: string) => api<T>(path);
 export const post = <T = unknown>(path: string, body: unknown) =>

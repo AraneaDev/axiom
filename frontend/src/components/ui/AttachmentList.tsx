@@ -8,7 +8,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
-import { getAccessToken } from '@/api/client';
+import { fetchWithAuth } from '@/api/client';
 import { canPreview } from '@/lib/attachment-utils';
 import { formatSize } from '@/lib/format';
 import { cn, formatDate } from '@/lib/utils';
@@ -21,10 +21,7 @@ function AuthImage({ src, alt, className }: { src: string; alt: string; classNam
   const { data: blobUrl } = useQuery({
     queryKey: ['auth-image', src],
     queryFn: async () => {
-      const token = getAccessToken();
-      const res = await fetch(src, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await fetchWithAuth(src);
       if (!res.ok) return null;
       const blob = await res.blob();
       return URL.createObjectURL(blob);
@@ -71,10 +68,7 @@ export function AttachmentList({
 
   const handleDownload = async (attachment: AttachmentMeta) => {
     const url = attachmentsApi.getDownloadUrl(attachment.id);
-    const token = getAccessToken();
-    const res = await fetch(url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await fetchWithAuth(url);
     if (!res.ok) return;
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
