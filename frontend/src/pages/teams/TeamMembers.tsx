@@ -17,6 +17,7 @@ import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useModalState } from '@/hooks/useModalState';
 import { useTeamContext } from '@/hooks/useTeamContext';
+import { formatDate } from '@/lib/utils';
 
 const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
   ADMIN: 'primary',
@@ -204,7 +205,7 @@ export default function TeamMembers() {
                     <Badge variant={ROLE_BADGE[inv.role] ?? 'default'}>{inv.role}</Badge>
                     <div className="flex items-center gap-1 text-xs text-text-tertiary">
                       <Clock className="h-3 w-3" />
-                      <span>Expires {new Date(inv.expiresAt).toLocaleDateString()}</span>
+                      <span>Expires {formatDate(inv.expiresAt)}</span>
                     </div>
                     <div className="flex gap-1">
                       <Button

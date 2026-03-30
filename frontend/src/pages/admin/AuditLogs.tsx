@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/Input';
 import { Pagination } from '@/components/ui/Pagination';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
+import { formatTimestamp } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const ACTION_OPTIONS = [
@@ -69,18 +70,6 @@ function parseResource(resource: string): { type: string; id?: string } {
   const idx = resource.indexOf(':');
   if (idx === -1) return { type: resource };
   return { type: resource.slice(0, idx), id: resource.slice(idx + 1) };
-}
-
-function formatTimestamp(ts: string): string {
-  const d = new Date(ts);
-  return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
 }
 
 function AuditLogRow({ log }: { log: AuditLogEntry }) {

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { formatTimestamp } from '@/lib/format';
 
 function formatJson(str: string): string {
   try {
@@ -100,7 +101,7 @@ export function WebhookDeliveriesPanel({
                 <Clock className="h-3 w-3" /> {d.duration}ms
               </span>
               <span className="text-xs text-text-tertiary shrink-0">
-                {new Date(d.createdAt).toLocaleString()}
+                {formatTimestamp(d.createdAt)}
               </span>
               {expandedId === d.id ? (
                 <ChevronDown className="h-3 w-3 text-text-tertiary shrink-0" />

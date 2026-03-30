@@ -31,7 +31,7 @@ import { useDraftState } from '@/hooks/useDraftState';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
 import type { Issue, Sprint } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 
 const STATUS_BADGE: Record<string, 'default' | 'primary' | 'success'> = {
   PLANNING: 'default',
@@ -221,8 +221,8 @@ export function SprintCard({ sprint, org, team, project, projectId, allSprints }
 
   const totalPoints =
     sprint._storyPoints ?? sprint.issues.reduce((s, i) => s + (i.storyPoints ?? 0), 0);
-  const startStr = new Date(sprint.startDate).toLocaleDateString();
-  const endStr = new Date(sprint.endDate).toLocaleDateString();
+  const startStr = formatDate(sprint.startDate);
+  const endStr = formatDate(sprint.endDate);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();

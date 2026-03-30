@@ -20,7 +20,8 @@ import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useProjectContext } from '@/hooks/useProjectContext';
-import { cn } from '@/lib/utils';
+import { formatTimestamp } from '@/lib/format';
+import { cn, formatDate } from '@/lib/utils';
 
 function StatCard({
   label,
@@ -148,7 +149,7 @@ function ScopeChangesSection({
         {changes.map((change, idx) => (
           <div key={`${change.issueId}-${idx}`} className="flex items-center gap-3 px-4 py-2.5">
             <span className="text-[10px] text-text-tertiary tabular-nums whitespace-nowrap">
-              {new Date(change.timestamp).toLocaleString()}
+              {formatTimestamp(change.timestamp)}
             </span>
             {change.action === 'ADDED' ? (
               <Badge variant="success" className="text-[9px] flex items-center gap-1">
@@ -226,8 +227,8 @@ export default function SprintReport() {
   if (!data) return null;
 
   const { sprint, summary, completedIssues, incompleteIssues, scopeChanges } = data;
-  const startStr = new Date(sprint.startDate).toLocaleDateString();
-  const endStr = new Date(sprint.endDate).toLocaleDateString();
+  const startStr = formatDate(sprint.startDate);
+  const endStr = formatDate(sprint.endDate);
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
