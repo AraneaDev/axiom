@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
-import { param } from '../../utils/params';
+import { param, paramInt } from '../../utils/params';
 
 import * as statusChecksService from './status-checks.service';
 
@@ -31,7 +31,7 @@ export const getCommitStatuses = asyncHandler(async (req: Request, res: Response
 export const getPRStatuses = asyncHandler(async (req: Request, res: Response) => {
   const result = await statusChecksService.getStatusesForPR(
     param(req, 'repoId'),
-    parseInt(param(req, 'number')),
+    paramInt(req, 'number'),
   );
   res.json(result);
 });
