@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
-import { PRIORITY_COLORS } from '@/lib/constants';
-import { cn } from '@/lib/utils';
+import { PriorityBadge } from '@/components/ui/PriorityBadge';
 
 const LINK_TYPES = [
   { value: 'BLOCKS', label: 'Blocks' },
@@ -116,14 +115,7 @@ export default function IssueLinkModal({ projectId, issueNumber, onClose, onLink
               <Hash className="h-3 w-3 text-text-tertiary" />
               <span className="text-text-tertiary font-mono text-xs">{issue.number}</span>
               <span className="flex-1 truncate text-left">{issue.title}</span>
-              <span
-                className={cn(
-                  'text-xs px-1.5 py-0.5 rounded-full',
-                  PRIORITY_COLORS[issue.priority as keyof typeof PRIORITY_COLORS] ?? '',
-                )}
-              >
-                {issue.priority}
-              </span>
+              <PriorityBadge priority={issue.priority} />
             </Button>
           ))}
         </div>

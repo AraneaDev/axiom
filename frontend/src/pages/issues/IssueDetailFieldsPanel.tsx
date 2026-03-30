@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { Spinner } from '@/components/ui/Spinner';
-import { PRIORITY_COLORS, PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
+import { ISSUE_TYPE_LABELS, PRIORITY_LABELS } from '@/lib/constants';
 import type { Issue, Sprint } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -140,11 +141,7 @@ export function IssueDetailFieldsPanel({
               className="hover:opacity-80"
             >
               <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" />
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[issue.priority]}`}
-              >
-                {PRIORITY_LABELS[issue.priority]}
-              </span>
+              <PriorityBadge priority={issue.priority} />
             </Button>
           )}
         </div>

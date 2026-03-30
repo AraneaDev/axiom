@@ -26,12 +26,12 @@ import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Modal } from '@/components/ui/Modal';
+import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { useToast } from '@/components/ui/Toast';
 import { useDraftState } from '@/hooks/useDraftState';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
-import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
 import type { Issue, Sprint } from '@/lib/types';
-import { cn, formatDate } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 
 const STATUS_BADGE: Record<string, 'default' | 'primary' | 'success'> = {
   PLANNING: 'default',
@@ -84,11 +84,7 @@ function IssueRow({
           {issue.storyPoints} SP
         </span>
       )}
-      <span
-        className={cn('text-[10px] px-1.5 py-0.5 rounded-full', PRIORITY_COLORS[issue.priority])}
-      >
-        {PRIORITY_LABELS[issue.priority]}
-      </span>
+      <PriorityBadge priority={issue.priority} className="text-[10px]" />
       {issue.column && <Badge variant="default">{issue.column.name}</Badge>}
       <div className="relative">
         <Button

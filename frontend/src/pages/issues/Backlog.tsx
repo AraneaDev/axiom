@@ -15,13 +15,12 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { VelocityChart } from '@/components/VelocityChart';
 import { useProjectContext } from '@/hooks/useProjectContext';
-import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
 import type { Issue, Sprint } from '@/lib/types';
-import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
 
 const STATUS_BADGE: Record<string, 'default' | 'primary' | 'success'> = {
@@ -73,11 +72,7 @@ function BacklogIssueRow({
           {issue.storyPoints} SP
         </span>
       )}
-      <span
-        className={cn('text-[10px] px-1.5 py-0.5 rounded-full', PRIORITY_COLORS[issue.priority])}
-      >
-        {PRIORITY_LABELS[issue.priority]}
-      </span>
+      <PriorityBadge priority={issue.priority} className="text-[10px]" />
       {issue.column && <Badge variant="default">{issue.column.name}</Badge>}
       <div className="relative">
         <Button

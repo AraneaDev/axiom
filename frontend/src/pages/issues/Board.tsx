@@ -13,10 +13,11 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { BoardSkeleton } from '@/components/ui/Skeleton';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import { useProjectContext } from '@/hooks/useProjectContext';
-import { PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
+import { PRIORITY_LABELS } from '@/lib/constants';
 import type { BoardColumn, Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
@@ -143,11 +144,7 @@ function IssueCard({
       <div className="flex items-center gap-1.5 mb-1.5">
         <IssueTypeIcon type={issue.type} className="h-3.5 w-3.5" />
         <span className="text-xs text-text-secondary font-mono">{issue.key}</span>
-        <span
-          className={`ml-auto text-xs px-1.5 py-0.5 rounded-full ${PRIORITY_COLORS[issue.priority]}`}
-        >
-          {issue.priority[0]}
-        </span>
+        <PriorityBadge priority={issue.priority} display="short" className="ml-auto" />
       </div>
       <p className="text-sm font-medium line-clamp-2 mb-2">{issue.title}</p>
       <div className="flex items-center justify-between">

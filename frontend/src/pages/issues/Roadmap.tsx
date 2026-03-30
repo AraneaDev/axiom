@@ -9,9 +9,9 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useProjectContext } from '@/hooks/useProjectContext';
-import { PRIORITY_COLORS } from '@/lib/constants';
 import type { RoadmapEpic, Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -140,11 +140,11 @@ function EpicBar({
                   >
                     {child.key} {child.title}
                   </Link>
-                  <span
-                    className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${PRIORITY_COLORS[child.priority]}`}
-                  >
-                    {child.priority[0]}
-                  </span>
+                  <PriorityBadge
+                    priority={child.priority}
+                    display="short"
+                    className="ml-auto text-[10px] shrink-0"
+                  />
                 </div>
                 <div className="flex-1 relative min-h-[32px]">
                   <div

@@ -22,7 +22,8 @@ import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { cn } from '@/lib/utils';
 
-const PRIORITY_COLORS: Record<string, string> = {
+// Chart-specific colors (plain bg classes for chart segments, different from badge colors in @/lib/constants)
+const CHART_PRIORITY_COLORS: Record<string, string> = {
   URGENT: 'bg-danger',
   HIGH: 'bg-warning',
   MEDIUM: 'bg-primary',
@@ -230,7 +231,7 @@ export default function ProjectAnalytics() {
                       <div
                         className={cn(
                           'h-full rounded-full transition-all duration-500',
-                          PRIORITY_COLORS[item.priority] ?? 'bg-primary',
+                          CHART_PRIORITY_COLORS[item.priority] ?? 'bg-primary',
                         )}
                         style={{ width: `${(item.count / maxPriorityCount) * 100}%` }}
                       />

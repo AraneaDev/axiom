@@ -19,8 +19,8 @@ import { BurndownChart } from '@/components/BurndownChart';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
+import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { Spinner } from '@/components/ui/Spinner';
-import { PRIORITY_COLORS } from '@/lib/constants';
 import { cn, formatRelative } from '@/lib/utils';
 
 // ─── Widget wrapper ─────────────────────────────────────────
@@ -122,14 +122,7 @@ export function MyIssuesWidget({ issues }: { issues: DashboardIssue[] }) {
                     {issue.key}
                   </span>
                   <span className="text-sm truncate flex-1">{issue.title}</span>
-                  <span
-                    className={cn(
-                      'text-xs px-2 py-0.5 rounded-full shrink-0',
-                      PRIORITY_COLORS[issue.priority as keyof typeof PRIORITY_COLORS],
-                    )}
-                  >
-                    {issue.priority}
-                  </span>
+                  <PriorityBadge priority={issue.priority} className="shrink-0" />
                   {issue.column && (
                     <span className="text-xs text-text-tertiary shrink-0">{issue.column.name}</span>
                   )}
