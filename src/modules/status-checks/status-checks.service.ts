@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { getRepoDiskPath } from '../../utils/repo-disk';
 
 /**
  * Create or update a commit status check.
@@ -73,18 +74,12 @@ export async function getStatusesForPR(repoId: string, prNumber: number) {
   );
 
   // Resolve head SHA from source branch
-  const { repoExists } = await import('../../git/repo-manager');
   const { resolveRef } = await import('../../git/git-commands');
-  const repo = await findOrThrow(
-    prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
-  );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
-  if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
+  const diskPath = await getRepoDiskPath(repoId);
 
   let headSha: string;
   try {
-    headSha = await resolveRef(repo.diskPath, `refs/heads/${pr.sourceBranch}`);
+    headSha = await resolveRef(diskPath, `refs/heads/${pr.sourceBranch}`);
   } catch {
     throw new AppError(404, 'Source branch not found');
   }

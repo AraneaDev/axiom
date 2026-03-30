@@ -5,25 +5,15 @@ import { promisify } from 'util';
 
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
-import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
 import { parseServicePagination } from '../../utils/pagination';
+import { getRepoDisk } from '../../utils/repo-disk';
 import { logActivity } from '../activity/activity.service';
 
 const execFileAsync = promisify(execFile);
-
-async function getRepoDisk(repoId: string): Promise<{ diskPath: string; defaultBranch: string }> {
-  const repo = await findOrThrow(
-    prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
-  );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
-  if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
-  return { diskPath: repo.diskPath, defaultBranch: repo.defaultBranch };
-}
 
 const SUGGESTION_RE = /```suggestion\n([\s\S]*?)```/;
 

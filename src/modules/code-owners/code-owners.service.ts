@@ -1,8 +1,7 @@
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
-import { repoExists } from '../../git/repo-manager';
-import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { getRepoDiskPath } from '../../utils/repo-disk';
 
 export interface CodeOwnerRule {
   pattern: string;
@@ -16,19 +15,14 @@ export interface CodeOwnerRule {
  * @param ref
  */
 export async function parseCodeOwners(repoId: string, ref: string): Promise<CodeOwnerRule[]> {
-  const repo = await findOrThrow(
-    prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
-  );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
-  if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
+  const diskPath = await getRepoDiskPath(repoId);
 
   const paths = ['CODEOWNERS', '.github/CODEOWNERS', 'docs/CODEOWNERS'];
 
   let content: string | null = null;
   for (const p of paths) {
     try {
-      content = await gitCmd.showBlob(repo.diskPath, ref, p);
+      content = await gitCmd.showBlob(diskPath, ref, p);
       break;
     } catch {
       // File not found at this path, try next
@@ -156,15 +150,10 @@ export async function getOwnersForPR(repoId: string, prNumber: number) {
     'Pull request not found',
   );
 
-  const repo = await findOrThrow(
-    prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
-  );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
-  if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
+  const diskPath = await getRepoDiskPath(repoId);
 
   // Get changed files
-  const stats = await gitCmd.diffStat(repo.diskPath, pr.targetBranch, pr.sourceBranch);
+  const stats = await gitCmd.diffStat(diskPath, pr.targetBranch, pr.sourceBranch);
   const filePaths = stats.map((s) => s.file);
 
   // Get owners using target branch CODEOWNERS (the branch we're merging into)

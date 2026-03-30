@@ -7,12 +7,12 @@ import { CommitRefType } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
-import { repoExists } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
+import { getRepoDisk } from '../../utils/repo-disk';
 import { logActivity } from '../activity/activity.service';
 import { enforceMergeProtection } from '../repos/protection.service';
 
@@ -65,16 +65,6 @@ async function parseAndLinkIssues(prId: string, repoId: string, text: string): P
 }
 
 const execFileAsync = promisify(execFile);
-
-async function getRepoDisk(repoId: string): Promise<{ diskPath: string; defaultBranch: string }> {
-  const repo = await findOrThrow(
-    prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
-  );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
-  if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not on disk');
-  return { diskPath: repo.diskPath, defaultBranch: repo.defaultBranch };
-}
 
 /**
  * Create a new pull request, validating branches exist and have diverging commits.

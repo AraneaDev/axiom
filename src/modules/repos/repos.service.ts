@@ -19,6 +19,7 @@ import { checkUnique } from '../../utils/check-unique';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
+import { getRepoDiskPath } from '../../utils/repo-disk';
 
 const execFileAsync = promisify(execFile);
 
@@ -284,16 +285,6 @@ export async function forkRepoById(repoId: string, targetTeamId: string, newSlug
 }
 
 // ─── Git operations (proxied through service) ───────────────
-
-async function getRepoDiskPath(repoId: string): Promise<string> {
-  const repo = await findOrThrow(
-    prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
-  );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
-  if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not found on disk');
-  return repo.diskPath;
-}
 
 async function getRepoWithDefault(repoId: string) {
   const repo = await findOrThrow(

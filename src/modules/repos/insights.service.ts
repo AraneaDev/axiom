@@ -1,10 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-import { prisma } from '../../config/database';
-import { repoExists } from '../../git/repo-manager';
-import { AppError } from '../../middleware/errorHandler';
-import { findOrThrow } from '../../utils/find-or-throw';
+import { getRepoDiskPath } from '../../utils/repo-disk';
 
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER = 10 * 1024 * 1024;
@@ -20,16 +17,6 @@ async function git(args: string[], opts: ExecOptions): Promise<string> {
     maxBuffer: opts.maxBuffer ?? MAX_BUFFER,
   });
   return stdout;
-}
-
-async function getRepoDiskPath(repoId: string): Promise<string> {
-  const repo = await findOrThrow(
-    prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
-  );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
-  if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not found on disk');
-  return repo.diskPath;
 }
 
 // ─── Extension to language mapping ──────────────────────────
