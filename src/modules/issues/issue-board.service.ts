@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { formatIssueKey } from '../../utils/issue-key';
 import { logger } from '../../utils/logger';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
@@ -33,7 +34,7 @@ export async function getBoard(projectId: string) {
       ...col,
       issues: col.issues.map((i: (typeof col.issues)[number]) => ({
         ...i,
-        key: `${project!.prefix}-${i.number}`,
+        key: formatIssueKey(project!.prefix, i.number),
       })),
     }));
   }); // end cacheable
@@ -160,10 +161,10 @@ export async function getRoadmap(projectId: string) {
 
     return {
       ...epic,
-      key: `${project.prefix}-${epic.number}`,
+      key: formatIssueKey(project.prefix, epic.number),
       children: children.map((c: (typeof children)[number]) => ({
         ...c,
-        key: `${project.prefix}-${c.number}`,
+        key: formatIssueKey(project.prefix, c.number),
       })),
       progress: { total, completed, percentage },
       startDate: startDate.toISOString(),

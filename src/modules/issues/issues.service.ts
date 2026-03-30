@@ -7,6 +7,7 @@ import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { formatIssueKey } from '../../utils/issue-key';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
 import { parseServicePagination } from '../../utils/pagination';
@@ -159,7 +160,7 @@ export async function createIssue(
 
   broadcastToRoom(`project:${projectId}`, { type: 'issue:created', projectId, issueId: issue.id });
 
-  return { ...issue, key: `${project.prefix}-${issue.number}` };
+  return { ...issue, key: formatIssueKey(project.prefix, issue.number) };
 }
 
 /**
@@ -200,9 +201,9 @@ export async function getIssue(projectId: string, issueNumber: number) {
 
   return {
     ...issue,
-    key: `${project.prefix}-${issue.number}`,
+    key: formatIssueKey(project.prefix, issue.number),
     parent: issue.parent
-      ? { ...issue.parent, key: `${project.prefix}-${issue.parent.number}` }
+      ? { ...issue.parent, key: formatIssueKey(project.prefix, issue.parent.number) }
       : null,
   };
 }
@@ -318,7 +319,7 @@ export async function listIssues(
     return {
       issues: issues.map((i: (typeof issues)[number]) => ({
         ...i,
-        key: `${project.prefix}-${i.number}`,
+        key: formatIssueKey(project.prefix, i.number),
       })),
       total,
     };

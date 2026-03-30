@@ -7,6 +7,7 @@ import { prisma } from '../../config/database';
 import { repoExists } from '../../git/repo-manager';
 import { parse, compileToPrisma } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
+import { formatIssueKey } from '../../utils/issue-key';
 import { parseServicePagination } from '../../utils/pagination';
 import {
   PROJECT_URL_WITH_NAME_SELECT,
@@ -328,7 +329,7 @@ async function searchIssues(
     total,
     items: issues.map((i: (typeof issues)[number]) => ({
       ...i,
-      key: `${i.project.prefix}-${i.number}`,
+      key: formatIssueKey(i.project.prefix, i.number),
       url: `/${i.project.team.org.slug}/${i.project.team.slug}/${i.project.slug}/issues/${i.number}`,
       projectName: i.project.name,
       status: i.column?.name ?? 'Backlog',

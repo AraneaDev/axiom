@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { formatIssueKey } from '../../utils/issue-key';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,7 +126,7 @@ async function resolveIssue(parsed: ParsedUrl): Promise<LinkPreview | null> {
   return {
     type: 'issue',
     title: issue.title,
-    key: `${issue.project.prefix}-${issue.number}`,
+    key: formatIssueKey(issue.project.prefix, issue.number),
     status: issue.column?.name ?? 'Unknown',
     icon: issue.type.toLowerCase(),
     url: `/${org}/${team}/${project}/issues/${issue.number}`,

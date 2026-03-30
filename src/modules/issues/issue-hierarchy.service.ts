@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { formatIssueKey } from '../../utils/issue-key';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 import { findIssueOrThrow } from './issue-utils';
@@ -117,6 +118,6 @@ export async function getChildren(projectId: string, issueNumber: number) {
 
   return children.map((c: (typeof children)[number]) => ({
     ...c,
-    key: `${project.prefix}-${c.number}`,
+    key: formatIssueKey(project.prefix, c.number),
   }));
 }

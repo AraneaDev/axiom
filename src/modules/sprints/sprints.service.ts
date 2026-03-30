@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { formatIssueKey } from '../../utils/issue-key';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 type BasicUser = { id: string; username: string; displayName: string };
@@ -380,6 +381,6 @@ export async function getBacklog(projectId: string) {
 
   return (issues as IssueWithRelations[]).map((i: IssueWithRelations) => ({
     ...i,
-    key: `${project.prefix}-${i.number}`,
+    key: formatIssueKey(project.prefix, i.number),
   }));
 }
