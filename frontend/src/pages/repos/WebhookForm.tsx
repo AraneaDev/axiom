@@ -1,4 +1,3 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Save, X, Shield } from 'lucide-react';
 import { useState } from 'react';
 
@@ -7,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 /**
  *
@@ -25,8 +24,6 @@ export function WebhookFormModal({
   webhook: WebhookType | null;
   onClose: () => void;
 }) {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const isEdit = !!webhook;
 
   const [url, setUrl] = useState(webhook?.url ?? '');
@@ -35,8 +32,8 @@ export function WebhookFormModal({
   const [active, setActive] = useState(webhook?.active ?? true);
   const [error, setError] = useState('');
 
-  const mutation = useMutation({
-    mutationFn: () => {
+  const mutation = useMutationWithToast(
+    () => {
       if (isEdit) {
         return webhooksApi.update(repoId, webhook.id, {
           url,
@@ -47,13 +44,13 @@ export function WebhookFormModal({
       }
       return webhooksApi.create(repoId, { url, secret: secret || undefined, events });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['webhooks', repoId] });
-      toast.success(isEdit ? 'Webhook updated' : 'Webhook created');
-      onClose();
+    {
+      successMessage: isEdit ? 'Webhook updated' : 'Webhook created',
+      invalidateKeys: [['webhooks', repoId]],
+      onSuccess: () => onClose(),
+      onError: (err: Error) => setError(err.message),
     },
-    onError: (err: Error) => setError(err.message),
-  });
+  );
 
   const toggleEvent = (value: string) => {
     if (value === '*') {

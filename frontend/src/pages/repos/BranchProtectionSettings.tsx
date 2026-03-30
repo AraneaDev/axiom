@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2, Pencil, Shield, GitBranch, X, ShieldCheck, ShieldOff } from 'lucide-react';
 import { useState } from 'react';
 
@@ -12,8 +12,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
 import { useModalState } from '@/hooks/useModalState';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 interface BranchProtectionRule {
   id: string;
@@ -38,8 +38,6 @@ interface BranchProtectionSettingsProps {
  * @param root0.repoId
  */
 export default function BranchProtectionSettings({ repoId }: BranchProtectionSettingsProps) {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const formModal = useModalState();
   const [editing, setEditing] = useState<BranchProtectionRule | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BranchProtectionRule | null>(null);
@@ -49,14 +47,14 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
     queryFn: () => reposApi.listProtectionRules(repoId) as Promise<BranchProtectionRule[]>,
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (ruleId: string) => reposApi.deleteProtectionRule(repoId, ruleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['branch-protection', repoId] });
-      setDeleteTarget(null);
-      toast.success('Protection rule deleted');
+  const deleteMutation = useMutationWithToast(
+    (ruleId: string) => reposApi.deleteProtectionRule(repoId, ruleId),
+    {
+      successMessage: 'Protection rule deleted',
+      invalidateKeys: [['branch-protection', repoId]],
+      onSuccess: () => setDeleteTarget(null),
     },
-  });
+  );
 
   const handleEdit = (rule: BranchProtectionRule) => {
     setEditing(rule);
@@ -194,8 +192,6 @@ function ProtectionRuleFormModal({
   rule: BranchProtectionRule | null;
   onClose: () => void;
 }) {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const isEdit = !!rule;
 
   const [pattern, setPattern] = useState(rule?.pattern ?? '');
@@ -206,8 +202,8 @@ function ProtectionRuleFormModal({
   const [requireLinear, setRequireLinear] = useState(rule?.requireLinear ?? false);
   const [error, setError] = useState('');
 
-  const mutation = useMutation({
-    mutationFn: () => {
+  const mutation = useMutationWithToast(
+    () => {
       const data = {
         pattern,
         requiredReviews,
@@ -222,13 +218,13 @@ function ProtectionRuleFormModal({
       }
       return reposApi.createProtectionRule(repoId, data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['branch-protection', repoId] });
-      toast.success(isEdit ? 'Protection rule updated' : 'Protection rule created');
-      onClose();
+    {
+      successMessage: isEdit ? 'Protection rule updated' : 'Protection rule created',
+      invalidateKeys: [['branch-protection', repoId]],
+      onSuccess: () => onClose(),
+      onError: (err: Error) => setError(err.message),
     },
-    onError: (err: Error) => setError(err.message),
-  });
+  );
 
   const handleSubmit = () => {
     if (!pattern.trim()) {

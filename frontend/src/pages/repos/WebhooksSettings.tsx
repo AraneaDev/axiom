@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2, Pencil, Webhook, Globe, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
@@ -12,9 +12,9 @@ import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
 import { Toggle } from '@/components/ui/Toggle';
 import { useModalState } from '@/hooks/useModalState';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 interface WebhooksSettingsProps {
   repoId: string;
@@ -26,8 +26,6 @@ interface WebhooksSettingsProps {
  * @param root0.repoId
  */
 export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const formModal = useModalState();
   const [editing, setEditing] = useState<WebhookType | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WebhookType | null>(null);
@@ -38,19 +36,19 @@ export default function WebhooksSettings({ repoId }: WebhooksSettingsProps) {
     queryFn: () => webhooksApi.list(repoId),
   });
 
-  const toggleMutation = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      webhooksApi.update(repoId, id, { active }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['webhooks', repoId] }),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => webhooksApi.delete(repoId, id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['webhooks', repoId] });
-      setDeleteTarget(null);
-      toast.success('Webhook deleted');
+  const toggleMutation = useMutationWithToast(
+    ({ id, active }: { id: string; active: boolean }) => webhooksApi.update(repoId, id, { active }),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['webhooks', repoId]],
     },
+  );
+
+  const deleteMutation = useMutationWithToast((id: string) => webhooksApi.delete(repoId, id), {
+    successMessage: 'Webhook deleted',
+    invalidateKeys: [['webhooks', repoId]],
+    onSuccess: () => setDeleteTarget(null),
   });
 
   const handleEdit = (webhook: WebhookType) => {

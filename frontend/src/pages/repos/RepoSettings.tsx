@@ -1,4 +1,3 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, FileText, Save, Trash2, Settings, AlertTriangle, GitMerge } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -13,7 +12,7 @@ import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 
 /**
@@ -22,8 +21,6 @@ import { useRepoContext } from '@/hooks/useRepoContext';
 export default function RepoSettings() {
   const { currentRepo, basePath, org, teamSlug } = useRepoContext();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const toast = useToast();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -45,8 +42,8 @@ export default function RepoSettings() {
     setInitialized(true);
   }
 
-  const updateMutation = useMutation({
-    mutationFn: (
+  const updateMutation = useMutationWithToast(
+    (
       data: Partial<{
         name: string;
         description: string;
@@ -54,35 +51,32 @@ export default function RepoSettings() {
         defaultBranch: string;
       }>,
     ) => reposApi.update(currentRepo!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repos'] });
-      toast.success('Repository settings saved');
+    {
+      successMessage: 'Repository settings saved',
+      invalidateKeys: [['repos']],
     },
-  });
+  );
 
-  const settingsMutation = useMutation({
-    mutationFn: (data: { defaultMergeStrategy?: string }) =>
-      reposApi.updateSettings(currentRepo!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repos'] });
-      toast.success('Merge settings saved');
+  const settingsMutation = useMutationWithToast(
+    (data: { defaultMergeStrategy?: string }) => reposApi.updateSettings(currentRepo!.id, data),
+    {
+      successMessage: 'Merge settings saved',
+      invalidateKeys: [['repos']],
     },
-  });
+  );
 
-  const prTemplateMutation = useMutation({
-    mutationFn: (data: { prTemplate: string | null }) => reposApi.update(currentRepo!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repos'] });
-      toast.success('PR template saved');
+  const prTemplateMutation = useMutationWithToast(
+    (data: { prTemplate: string | null }) => reposApi.update(currentRepo!.id, data),
+    {
+      successMessage: 'PR template saved',
+      invalidateKeys: [['repos']],
     },
-  });
+  );
 
-  const deleteMutation = useMutation({
-    mutationFn: () => reposApi.delete(currentRepo!.id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repos'] });
-      navigate(`/${org}/${teamSlug}/repos`);
-    },
+  const deleteMutation = useMutationWithToast(() => reposApi.delete(currentRepo!.id), {
+    successMessage: null,
+    invalidateKeys: [['repos']],
+    onSuccess: () => navigate(`/${org}/${teamSlug}/repos`),
   });
 
   if (!currentRepo)

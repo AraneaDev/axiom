@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Save, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, Navigate, useParams, useNavigate } from 'react-router';
@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 
 /**
@@ -20,8 +20,6 @@ export default function FileEdit() {
   const { ref, '*': filePath } = useParams();
   const { currentRepo, basePath, repoSlug } = useRepoContext();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const toast = useToast();
 
   const parts = filePath?.split('/') ?? [];
   const fileName = parts[parts.length - 1] ?? '';
@@ -45,22 +43,20 @@ export default function FileEdit() {
 
   const blobUrl = `${basePath}/blob/${encodeURIComponent(ref!)}/${filePath}`;
 
-  const mutation = useMutation({
-    mutationFn: () =>
+  const mutation = useMutationWithToast(
+    () =>
       reposApi.updateFile(currentRepo!.id, ref!, filePath!, {
         content: effectiveContent,
         message: commitMessage,
         branch: ref!,
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['blob', currentRepo?.id, ref, filePath] });
-      toast.success('File saved successfully');
-      navigate(blobUrl);
+    {
+      successMessage: 'File saved successfully',
+      errorMessage: 'Failed to save file',
+      invalidateKeys: [['blob', currentRepo?.id, ref, filePath]],
+      onSuccess: () => navigate(blobUrl),
     },
-    onError: (err: Error) => {
-      toast.error(err.message || 'Failed to save file');
-    },
-  });
+  );
 
   if (!ref || !filePath) {
     return <Navigate to={basePath} replace />;

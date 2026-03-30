@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle2,
   XCircle,
@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { usePipelineLogs } from '@/hooks/usePipelineLogs';
 import { cn, formatRelative } from '@/lib/utils';
 
@@ -154,9 +154,6 @@ export default function PipelineRunDetail() {
     runId,
   } = useParams<{ org: string; team: string; repo: string; runId: string }>();
 
-  const queryClient = useQueryClient();
-  const { success: toastSuccess, error: toastError } = useToast();
-
   const { data: run, isLoading } = useQuery({
     queryKey: ['pipeline-run', runId],
     queryFn: () => pipelinesApi.getRun('', runId!),
@@ -169,23 +166,22 @@ export default function PipelineRunDetail() {
 
   const displayJobs = liveJobs.length > 0 ? liveJobs : (run?.jobs ?? []);
 
-  const rerunMutation = useMutation({
-    mutationFn: () => {
+  const rerunMutation = useMutationWithToast(
+    () => {
       if (!run) throw new Error('No run data');
       return pipelinesApi.triggerRun(run.repoId, run.pipelineId, run.triggerRef);
     },
-    onSuccess: (newRun) => {
-      toastSuccess('Pipeline re-run triggered');
-      queryClient.invalidateQueries({ queryKey: ['pipeline-run'] });
-      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
-      // Navigate to the new run (update URL without full page reload)
-      window.history.pushState({}, '', `/${org}/${teamSlug}/repos/${repoSlug}/runs/${newRun.id}`);
-      window.location.reload();
+    {
+      successMessage: 'Pipeline re-run triggered',
+      errorMessage: 'Failed to trigger re-run',
+      invalidateKeys: [['pipeline-run'], ['pipelines']],
+      onSuccess: (newRun) => {
+        // Navigate to the new run (update URL without full page reload)
+        window.history.pushState({}, '', `/${org}/${teamSlug}/repos/${repoSlug}/runs/${newRun.id}`);
+        window.location.reload();
+      },
     },
-    onError: () => {
-      toastError('Failed to trigger re-run');
-    },
-  });
+  );
 
   if (isLoading) return <PageLoader />;
   if (!run) return <EmptyState title="Run not found" />;

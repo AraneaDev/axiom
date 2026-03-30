@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Tag,
   Plus,
@@ -30,8 +30,8 @@ import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
-import { useToast } from '@/components/ui/Toast';
 import { useModalState } from '@/hooks/useModalState';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -65,7 +65,6 @@ function deployStatusVariant(status: string): 'success' | 'danger' | 'warning' |
  */
 export default function ReleasesTab({ repoId, defaultBranch }: Props) {
   const qc = useQueryClient();
-  const toast = useToast();
   const createModal = useModalState();
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [editBody, setEditBody] = useState('');
@@ -83,38 +82,52 @@ export default function ReleasesTab({ repoId, defaultBranch }: Props) {
     queryFn: () => deploymentsApi.listEnvironments(repoId),
   });
 
-  const publishMutation = useMutation({
-    mutationFn: (tagName: string) => releasesApi.publish(repoId, tagName),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['releases', repoId] }),
-  });
+  const publishMutation = useMutationWithToast(
+    (tagName: string) => releasesApi.publish(repoId, tagName),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['releases', repoId]],
+    },
+  );
 
-  const deleteMutation = useMutation({
-    mutationFn: (tagName: string) => releasesApi.delete(repoId, tagName),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['releases', repoId] }),
-  });
+  const deleteMutation = useMutationWithToast(
+    (tagName: string) => releasesApi.delete(repoId, tagName),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['releases', repoId]],
+    },
+  );
 
-  const updateMutation = useMutation({
-    mutationFn: ({ tagName, body }: { tagName: string; body: string }) =>
+  const updateMutation = useMutationWithToast(
+    ({ tagName, body }: { tagName: string; body: string }) =>
       releasesApi.update(repoId, tagName, { body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['releases', repoId] });
-      setEditingTag(null);
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['releases', repoId]],
+      onSuccess: () => setEditingTag(null),
     },
-  });
+  );
 
-  const deployMutation = useMutation({
-    mutationFn: ({ tagName, environmentId }: { tagName: string; environmentId: string }) =>
+  const deployMutation = useMutationWithToast(
+    ({ tagName, environmentId }: { tagName: string; environmentId: string }) =>
       releasesApi.deploy(repoId, tagName, environmentId),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: ['releases', repoId] });
-      qc.invalidateQueries({ queryKey: ['environments', repoId] });
-      qc.invalidateQueries({
-        queryKey: ['release-deployments', repoId, variables.tagName],
-      });
-      toast.success('Deployment initiated');
+    {
+      successMessage: 'Deployment initiated',
+      errorMessage: 'Failed to deploy release',
+      invalidateKeys: [
+        ['releases', repoId],
+        ['environments', repoId],
+      ],
+      onSuccess: (_data, variables) => {
+        qc.invalidateQueries({
+          queryKey: ['release-deployments', repoId, variables.tagName],
+        });
+      },
     },
-    onError: () => toast.error('Failed to deploy release'),
-  });
+  );
 
   const published = releases.filter((r) => !r.isDraft);
   const drafts = releases.filter((r) => r.isDraft);

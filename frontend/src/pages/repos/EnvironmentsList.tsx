@@ -1,4 +1,3 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, ExternalLink, Trash2, Pencil, X, Save, Server, GitCommit } from 'lucide-react';
 import { useState } from 'react';
 
@@ -10,8 +9,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { useToast } from '@/components/ui/Toast';
 import { useModalState } from '@/hooks/useModalState';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatRelative } from '@/lib/utils';
 
 interface EnvironmentsListProps {
@@ -28,8 +27,6 @@ interface EnvironmentsListProps {
  * @param root0.onSelectEnv
  */
 export function EnvironmentsList({ repoId, environments, onSelectEnv }: EnvironmentsListProps) {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const createModal = useModalState();
   const [editingEnv, setEditingEnv] = useState<DeploymentEnvironment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -37,38 +34,39 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
   const [formUrl, setFormUrl] = useState('');
   const [now] = useState(() => Date.now());
 
-  const createMutation = useMutation({
-    mutationFn: (data: { name: string; url?: string }) =>
-      deploymentsApi.createEnvironment(repoId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['environments', repoId] });
-      createModal.close();
-      setFormName('');
-      setFormUrl('');
-      toast.success('Environment created');
+  const createMutation = useMutationWithToast(
+    (data: { name: string; url?: string }) => deploymentsApi.createEnvironment(repoId, data),
+    {
+      successMessage: 'Environment created',
+      errorMessage: 'Failed to create environment',
+      invalidateKeys: [['environments', repoId]],
+      onSuccess: () => {
+        createModal.close();
+        setFormName('');
+        setFormUrl('');
+      },
     },
-    onError: () => toast.error('Failed to create environment'),
-  });
+  );
 
-  const updateMutation = useMutation({
-    mutationFn: ({ envId, data }: { envId: string; data: { name?: string; url?: string } }) =>
+  const updateMutation = useMutationWithToast(
+    ({ envId, data }: { envId: string; data: { name?: string; url?: string } }) =>
       deploymentsApi.updateEnvironment(repoId, envId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['environments', repoId] });
-      setEditingEnv(null);
-      toast.success('Environment updated');
+    {
+      successMessage: 'Environment updated',
+      errorMessage: 'Failed to update environment',
+      invalidateKeys: [['environments', repoId]],
+      onSuccess: () => setEditingEnv(null),
     },
-    onError: () => toast.error('Failed to update environment'),
-  });
+  );
 
-  const deleteMutation = useMutation({
-    mutationFn: (envId: string) => deploymentsApi.deleteEnvironment(repoId, envId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['environments', repoId] });
-      toast.success('Environment deleted');
+  const deleteMutation = useMutationWithToast(
+    (envId: string) => deploymentsApi.deleteEnvironment(repoId, envId),
+    {
+      successMessage: 'Environment deleted',
+      errorMessage: 'Failed to delete environment',
+      invalidateKeys: [['environments', repoId]],
     },
-    onError: () => toast.error('Failed to delete environment'),
-  });
+  );
 
   return (
     <div>

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Workflow,
   Plus,
@@ -23,6 +23,7 @@ import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
 import { useModalState } from '@/hooks/useModalState';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatRelative } from '@/lib/utils';
 
 const STATUS_ICON: Record<RunStatus, React.ReactNode> = {
@@ -163,16 +164,23 @@ export default function PipelinesTab({ repoId }: Props) {
     queryFn: () => pipelinesApi.listRuns(repoId, { limit: 10 }),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (pipelineId: string) => pipelinesApi.delete(repoId, pipelineId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pipelines', repoId] }),
-  });
+  const deleteMutation = useMutationWithToast(
+    (pipelineId: string) => pipelinesApi.delete(repoId, pipelineId),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['pipelines', repoId]],
+    },
+  );
 
-  const triggerMutation = useMutation({
-    mutationFn: ({ pipelineId }: { pipelineId: string }) =>
-      pipelinesApi.triggerRun(repoId, pipelineId, 'HEAD'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pipeline-runs', repoId] }),
-  });
+  const triggerMutation = useMutationWithToast(
+    ({ pipelineId }: { pipelineId: string }) => pipelinesApi.triggerRun(repoId, pipelineId, 'HEAD'),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['pipeline-runs', repoId]],
+    },
+  );
 
   if (loadingPipelines || loadingRuns) {
     return (

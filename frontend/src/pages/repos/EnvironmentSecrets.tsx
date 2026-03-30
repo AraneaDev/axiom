@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2, Pencil, X, Save, Key, EyeOff, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Table, TableContainer, Tbody, Td, Th, Thead, Tr, TrHead } from '@/components/ui/Table';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatRelative } from '@/lib/utils';
 
 interface EnvironmentSecretsProps {
@@ -26,8 +26,6 @@ interface EnvironmentSecretsProps {
  * @param root0.envId
  */
 export function EnvironmentSecrets({ repoId, envId }: EnvironmentSecretsProps) {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingVar, setEditingVar] = useState<EnvironmentVariable | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EnvironmentVariable | null>(null);
@@ -39,46 +37,45 @@ export function EnvironmentSecrets({ repoId, envId }: EnvironmentSecretsProps) {
     queryFn: () => deploymentsApi.listEnvVariables(repoId, envId),
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: { name: string; value: string }) =>
+  const createMutation = useMutationWithToast(
+    (data: { name: string; value: string }) =>
       deploymentsApi.createEnvVariable(repoId, envId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['env-variables', repoId, envId] });
-      setShowAddModal(false);
-      setVarName('');
-      setVarValue('');
-      toast.success('Variable added');
+    {
+      successMessage: 'Variable added',
+      errorMessage: 'Failed to add variable',
+      invalidateKeys: [['env-variables', repoId, envId]],
+      onSuccess: () => {
+        setShowAddModal(false);
+        setVarName('');
+        setVarValue('');
+      },
     },
-    onError: () => toast.error('Failed to add variable'),
-  });
+  );
 
-  const updateMutation = useMutation({
-    mutationFn: ({
-      variableId,
-      data,
-    }: {
-      variableId: string;
-      data: { name: string; value: string };
-    }) => deploymentsApi.updateEnvVariable(repoId, envId, variableId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['env-variables', repoId, envId] });
-      setEditingVar(null);
-      setVarName('');
-      setVarValue('');
-      toast.success('Variable updated');
+  const updateMutation = useMutationWithToast(
+    ({ variableId, data }: { variableId: string; data: { name: string; value: string } }) =>
+      deploymentsApi.updateEnvVariable(repoId, envId, variableId, data),
+    {
+      successMessage: 'Variable updated',
+      errorMessage: 'Failed to update variable',
+      invalidateKeys: [['env-variables', repoId, envId]],
+      onSuccess: () => {
+        setEditingVar(null);
+        setVarName('');
+        setVarValue('');
+      },
     },
-    onError: () => toast.error('Failed to update variable'),
-  });
+  );
 
-  const deleteMutation = useMutation({
-    mutationFn: (variableId: string) => deploymentsApi.deleteEnvVariable(repoId, envId, variableId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['env-variables', repoId, envId] });
-      setDeleteTarget(null);
-      toast.success('Variable deleted');
+  const deleteMutation = useMutationWithToast(
+    (variableId: string) => deploymentsApi.deleteEnvVariable(repoId, envId, variableId),
+    {
+      successMessage: 'Variable deleted',
+      errorMessage: 'Failed to delete variable',
+      invalidateKeys: [['env-variables', repoId, envId]],
+      onSuccess: () => setDeleteTarget(null),
     },
-    onError: () => toast.error('Failed to delete variable'),
-  });
+  );
 
   if (isLoading) return <PageLoader />;
 

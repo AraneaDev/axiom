@@ -12,6 +12,7 @@ import { hydrateApi } from '@/api/hydrate.api';
 import { reposApi } from '@/api/repos.api';
 import { statusChecksApi } from '@/api/status-checks.api';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -136,38 +137,51 @@ export default function PRDetail() {
     enabled: !!currentRepo?.id,
   });
 
-  const mergeMutation = useMutation({
-    mutationFn: () =>
+  const mergeMutation = useMutationWithToast(
+    () =>
       reposApi.mergePR(currentRepo!.id, prNumber, { strategy: mergeStrategy, deleteSourceBranch }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] }),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['pr', currentRepo?.id, prNumber]],
+    },
+  );
+
+  const closeMutation = useMutationWithToast(() => reposApi.closePR(currentRepo!.id, prNumber), {
+    successMessage: null,
+    errorMessage: null,
+    invalidateKeys: [['pr', currentRepo?.id, prNumber]],
   });
 
-  const closeMutation = useMutation({
-    mutationFn: () => reposApi.closePR(currentRepo!.id, prNumber),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] }),
-  });
-
-  const reviewMutation = useMutation({
-    mutationFn: (data: { status: string; body?: string }) =>
+  const reviewMutation = useMutationWithToast(
+    (data: { status: string; body?: string }) =>
       reposApi.submitReview(currentRepo!.id, prNumber, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] }),
-  });
-
-  const commentMutation = useMutation({
-    mutationFn: () => reposApi.addPRComment(currentRepo!.id, prNumber, { body: commentBody }),
-    onSuccess: () => {
-      setCommentBody('');
-      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['pr', currentRepo?.id, prNumber]],
     },
-  });
+  );
 
-  const replyMutation = useMutation({
-    mutationFn: ({ parentId, body }: { parentId: string; body: string }) =>
+  const commentMutation = useMutationWithToast(
+    () => reposApi.addPRComment(currentRepo!.id, prNumber, { body: commentBody }),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['pr', currentRepo?.id, prNumber]],
+      onSuccess: () => setCommentBody(''),
+    },
+  );
+
+  const replyMutation = useMutationWithToast(
+    ({ parentId, body }: { parentId: string; body: string }) =>
       reposApi.addPRComment(currentRepo!.id, prNumber, { body, parentId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['pr', currentRepo?.id, prNumber]],
     },
-  });
+  );
 
   const applySuggestionMutation = useMutation({
     mutationFn: (commentId: string) =>
@@ -181,38 +195,49 @@ export default function PRDetail() {
     },
   });
 
-  const batchApplyMutation = useMutation({
-    mutationFn: () =>
-      reposApi.batchApplySuggestions(currentRepo!.id, prNumber, [...selectedSuggestions]),
-    onSuccess: () => {
-      setSelectedSuggestions(new Set());
-      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
-      queryClient.invalidateQueries({ queryKey: ['prDiff', currentRepo?.id, prNumber] });
-      queryClient.invalidateQueries({ queryKey: ['prCommits', currentRepo?.id, prNumber] });
+  const batchApplyMutation = useMutationWithToast(
+    () => reposApi.batchApplySuggestions(currentRepo!.id, prNumber, [...selectedSuggestions]),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [
+        ['pr', currentRepo?.id, prNumber],
+        ['prDiff', currentRepo?.id, prNumber],
+        ['prCommits', currentRepo?.id, prNumber],
+      ],
+      onSuccess: () => setSelectedSuggestions(new Set()),
     },
-  });
+  );
 
-  const updateDescriptionMutation = useMutation({
-    mutationFn: (body: string) => reposApi.updatePR(currentRepo!.id, prNumber, { body }),
-    onSuccess: () => {
-      setEditingDescription(false);
-      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+  const updateDescriptionMutation = useMutationWithToast(
+    (body: string) => reposApi.updatePR(currentRepo!.id, prNumber, { body }),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['pr', currentRepo?.id, prNumber]],
+      onSuccess: () => setEditingDescription(false),
     },
-  });
+  );
 
-  const updateCommentMutation = useMutation({
-    mutationFn: ({ commentId, body }: { commentId: string; body: string }) =>
+  const updateCommentMutation = useMutationWithToast(
+    ({ commentId, body }: { commentId: string; body: string }) =>
       reposApi.updatePRComment(currentRepo!.id, commentId, body),
-    onSuccess: () => {
-      setEditingCommentId(null);
-      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['pr', currentRepo?.id, prNumber]],
+      onSuccess: () => setEditingCommentId(null),
     },
-  });
+  );
 
-  const deleteCommentMutation = useMutation({
-    mutationFn: (commentId: string) => reposApi.deletePRComment(currentRepo!.id, commentId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] }),
-  });
+  const deleteCommentMutation = useMutationWithToast(
+    (commentId: string) => reposApi.deletePRComment(currentRepo!.id, commentId),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['pr', currentRepo?.id, prNumber]],
+    },
+  );
 
   if (isLoading || !pr) return <DetailSkeleton />;
 

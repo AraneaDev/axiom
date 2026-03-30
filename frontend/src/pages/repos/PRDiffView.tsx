@@ -1,4 +1,3 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Rows3,
   Columns2,
@@ -23,7 +22,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Textarea } from '@/components/ui/Textarea';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { cn } from '@/lib/utils';
 
 interface CommentingOn {
@@ -152,21 +151,17 @@ function ActiveFileDiff({
   prNumber: number;
 }) {
   const [commentingOn, setCommentingOn] = useState<CommentingOn | null>(null);
-  const queryClient = useQueryClient();
-  const toast = useToast();
 
-  const addCommentMutation = useMutation({
-    mutationFn: (data: { body: string; filePath: string; line: number }) =>
+  const addCommentMutation = useMutationWithToast(
+    (data: { body: string; filePath: string; line: number }) =>
       reposApi.addPRComment(repoId, prNumber, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pr', repoId, prNumber] });
-      setCommentingOn(null);
-      toast.success('Comment added');
+    {
+      successMessage: 'Comment added',
+      errorMessage: 'Failed to add comment',
+      invalidateKeys: [['pr', repoId, prNumber]],
+      onSuccess: () => setCommentingOn(null),
     },
-    onError: () => {
-      toast.error('Failed to add comment');
-    },
-  });
+  );
 
   const parsed = useMemo(() => parseDiff(activeChunk.rawDiff), [activeChunk.rawDiff]);
   const activeFile = parsed[0];

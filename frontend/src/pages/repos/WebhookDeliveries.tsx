@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Clock, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 
@@ -6,7 +6,7 @@ import { webhooksApi, type WebhookDelivery } from '@/api/webhooks.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ListSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatTimestamp } from '@/lib/format';
 
 function formatJson(str: string): string {
@@ -30,8 +30,6 @@ export function WebhookDeliveriesPanel({
   repoId: string;
   webhookId: string;
 }) {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data: deliveries = [], isLoading } = useQuery({
@@ -39,14 +37,13 @@ export function WebhookDeliveriesPanel({
     queryFn: () => webhooksApi.listDeliveries(repoId, webhookId),
   });
 
-  const redeliverMutation = useMutation({
-    mutationFn: (deliveryId: string) => webhooksApi.redeliver(repoId, webhookId, deliveryId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['webhook-deliveries', webhookId] });
-      toast.success('Webhook redelivered');
+  const redeliverMutation = useMutationWithToast(
+    (deliveryId: string) => webhooksApi.redeliver(repoId, webhookId, deliveryId),
+    {
+      successMessage: 'Webhook redelivered',
+      invalidateKeys: [['webhook-deliveries', webhookId]],
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
   if (isLoading) {
     return (

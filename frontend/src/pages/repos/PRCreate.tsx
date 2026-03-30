@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, GitPullRequest, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -8,7 +8,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 
 /**
@@ -17,7 +17,6 @@ import { useRepoContext } from '@/hooks/useRepoContext';
 export default function PRCreate() {
   const { currentRepo, basePath } = useRepoContext();
   const navigate = useNavigate();
-  const toast = useToast();
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -39,17 +38,14 @@ export default function PRCreate() {
 
   const branchOptions = (branches ?? []).map((b) => ({ value: b.name, label: b.name }));
 
-  const { mutate: createPR, isPending } = useMutation({
-    mutationFn: () =>
-      reposApi.createPR(currentRepo!.id, { title, body, sourceBranch, targetBranch }),
-    onSuccess: (pr) => {
-      toast.success('Pull request created successfully.');
-      navigate(`${basePath}/pulls/${pr.number}`);
+  const { mutate: createPR, isPending } = useMutationWithToast(
+    () => reposApi.createPR(currentRepo!.id, { title, body, sourceBranch, targetBranch }),
+    {
+      successMessage: 'Pull request created successfully.',
+      errorMessage: 'Failed to create pull request.',
+      onSuccess: (pr) => navigate(`${basePath}/pulls/${pr.number}`),
     },
-    onError: (err: Error) => {
-      toast.error(err.message ?? 'Failed to create pull request.');
-    },
-  });
+  );
 
   const sameBranch = sourceBranch && targetBranch && sourceBranch === targetBranch;
   const canSubmit = title.trim() && sourceBranch && targetBranch && !sameBranch && !isPending;
