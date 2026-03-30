@@ -1,4 +1,3 @@
-import { useMutation } from '@tanstack/react-query';
 import { MessageSquare, Pencil, Trash2, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -12,9 +11,9 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
-import { useToast } from '@/components/ui/Toast';
 import { useDraftState } from '@/hooks/useDraftState';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { Issue } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -55,38 +54,43 @@ export function IssueDetailComments({
   orgSlug,
   teamSlug,
 }: IssueDetailCommentsProps) {
-  const toast = useToast();
   const { user } = useAuthStore();
   const editCommentDraft = useDraftState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const { invalidateIssue } = useIssueInvalidation(projectId, num);
 
-  const commentMutation = useMutation({
-    mutationFn: () => issuesApi.addComment(projectId, parseInt(num), commentBody),
-    onSuccess: () => {
-      onCommentReset();
-      invalidateIssue();
+  const commentMutation = useMutationWithToast(
+    () => issuesApi.addComment(projectId, parseInt(num), commentBody),
+    {
+      successMessage: null,
+      onSuccess: () => {
+        onCommentReset();
+        invalidateIssue();
+      },
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const updateCommentMutation = useMutation({
-    mutationFn: ({ commentId, body }: { commentId: string; body: string }) =>
+  const updateCommentMutation = useMutationWithToast(
+    ({ commentId, body }: { commentId: string; body: string }) =>
       issuesApi.updateComment(projectId, commentId, body),
-    onSuccess: () => {
-      setEditingCommentId(null);
-      editCommentDraft.reset();
-      invalidateIssue();
+    {
+      successMessage: null,
+      onSuccess: () => {
+        setEditingCommentId(null);
+        editCommentDraft.reset();
+        invalidateIssue();
+      },
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const deleteCommentMutation = useMutation({
-    mutationFn: (commentId: string) => issuesApi.deleteComment(projectId, commentId),
-    onSuccess: () => invalidateIssue(),
-    onError: (err: Error) => toast.error(err.message),
-  });
+  const deleteCommentMutation = useMutationWithToast(
+    (commentId: string) => issuesApi.deleteComment(projectId, commentId),
+    {
+      successMessage: null,
+      onSuccess: () => invalidateIssue(),
+    },
+  );
 
   function startEditComment(commentId: string, body: string) {
     editCommentDraft.startEditing(body);

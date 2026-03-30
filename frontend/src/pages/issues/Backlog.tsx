@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ArrowRight, GripVertical, Target, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
@@ -17,8 +17,8 @@ import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
 import { VelocityChart } from '@/components/VelocityChart';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import type { Issue, Sprint } from '@/lib/types';
 import { useUIStore } from '@/stores/ui.store';
@@ -126,7 +126,6 @@ export default function Backlog() {
   useEffect(() => {
     setPreferredView('backlog');
   }, [setPreferredView]);
-  const toast = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newSprint, setNewSprint] = useState({
     name: '',
@@ -184,25 +183,30 @@ export default function Backlog() {
     enabled: !!currentProject?.id && !hydrationQuery.data?.velocity,
   });
 
-  const createMutation = useMutation({
-    mutationFn: () => sprintsApi.create(currentProject!.id, newSprint),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', currentProject?.id] });
-      setShowCreateModal(false);
-      setNewSprint({ name: '', goal: '', startDate: '', endDate: '' });
-      toast.success('Sprint created');
+  const createMutation = useMutationWithToast(
+    () => sprintsApi.create(currentProject!.id, newSprint),
+    {
+      successMessage: 'Sprint created',
+      invalidateKeys: [['sprints', currentProject?.id]],
+      onSuccess: () => {
+        setShowCreateModal(false);
+        setNewSprint({ name: '', goal: '', startDate: '', endDate: '' });
+      },
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const addToSprintMutation = useMutation({
-    mutationFn: ({ issueId, sprintId }: { issueId: string; sprintId: string }) =>
+  const addToSprintMutation = useMutationWithToast(
+    ({ issueId, sprintId }: { issueId: string; sprintId: string }) =>
       sprintsApi.addIssues(currentProject!.id, sprintId, [issueId]),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', currentProject?.id] });
-      queryClient.invalidateQueries({ queryKey: ['backlog', currentProject?.id] });
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [
+        ['sprints', currentProject?.id],
+        ['backlog', currentProject?.id],
+      ],
     },
-  });
+  );
 
   // Sort sprints: active first, then planning, then completed
   const sortedSprints = useMemo(() => {

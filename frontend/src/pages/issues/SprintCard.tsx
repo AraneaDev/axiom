@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Play,
   CheckCircle2,
@@ -27,9 +27,9 @@ import { Select } from '@/components/ui/Dropdown';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Modal } from '@/components/ui/Modal';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
-import { useToast } from '@/components/ui/Toast';
 import { useDraftState } from '@/hooks/useDraftState';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { Issue, Sprint } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
 
@@ -163,57 +163,55 @@ interface SprintCardProps {
 export function SprintCard({ sprint, org, team, project, projectId, allSprints }: SprintCardProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const toast = useToast();
   const { invalidateSprints } = useIssueInvalidation(projectId);
   const [collapsed, setCollapsed] = useState(sprint.status === 'COMPLETED');
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [moveToSprintId, setMoveToSprintId] = useState<string>('');
   const goalDraftState = useDraftState('');
 
-  const startMutation = useMutation({
-    mutationFn: () => sprintsApi.start(projectId, sprint.id),
-    onSuccess: () => {
-      invalidateSprints();
-      toast.success('Sprint started');
-    },
-    onError: (err: Error) => toast.error(err.message),
+  const startMutation = useMutationWithToast(() => sprintsApi.start(projectId, sprint.id), {
+    successMessage: 'Sprint started',
+    onSuccess: () => invalidateSprints(),
   });
 
-  const completeMutation = useMutation({
-    mutationFn: () => sprintsApi.complete(projectId, sprint.id, moveToSprintId || undefined),
-    onSuccess: () => {
-      invalidateSprints();
-      queryClient.invalidateQueries({ queryKey: ['velocity', projectId] });
-      setShowCompleteModal(false);
-      toast.success('Sprint completed');
+  const completeMutation = useMutationWithToast(
+    () => sprintsApi.complete(projectId, sprint.id, moveToSprintId || undefined),
+    {
+      successMessage: 'Sprint completed',
+      invalidateKeys: [['velocity', projectId]],
+      onSuccess: () => {
+        invalidateSprints();
+        setShowCompleteModal(false);
+      },
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const addIssuesMutation = useMutation({
-    mutationFn: (issueIds: string[]) => sprintsApi.addIssues(projectId, sprint.id, issueIds),
-    onSuccess: () => {
-      invalidateSprints();
+  const addIssuesMutation = useMutationWithToast(
+    (issueIds: string[]) => sprintsApi.addIssues(projectId, sprint.id, issueIds),
+    {
+      successMessage: null,
+      onSuccess: () => invalidateSprints(),
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const removeIssueMutation = useMutation({
-    mutationFn: (issueId: string) => sprintsApi.removeIssue(projectId, sprint.id, issueId),
-    onSuccess: () => {
-      invalidateSprints();
+  const removeIssueMutation = useMutationWithToast(
+    (issueId: string) => sprintsApi.removeIssue(projectId, sprint.id, issueId),
+    {
+      successMessage: null,
+      onSuccess: () => invalidateSprints(),
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
-  const updateGoalMutation = useMutation({
-    mutationFn: (goal: string) => sprintsApi.update(projectId, sprint.id, { goal }),
-    onSuccess: () => {
-      invalidateSprints();
-      goalDraftState.reset();
+  const updateGoalMutation = useMutationWithToast(
+    (goal: string) => sprintsApi.update(projectId, sprint.id, { goal }),
+    {
+      successMessage: null,
+      onSuccess: () => {
+        invalidateSprints();
+        goalDraftState.reset();
+      },
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
   const totalPoints =
     sprint._storyPoints ?? sprint.issues.reduce((s, i) => s + (i.storyPoints ?? 0), 0);

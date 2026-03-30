@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
   Filter,
@@ -33,6 +33,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useIssueListFilters } from '@/hooks/useIssueListFilters';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
@@ -166,22 +167,28 @@ export default function IssueList() {
     enabled: !!currentProject?.id && !hydrated,
   });
 
-  const saveFilterMutation = useMutation({
-    mutationFn: (d: { name: string; query: Record<string, string>; projectId?: string }) =>
+  const saveFilterMutation = useMutationWithToast(
+    (d: { name: string; query: Record<string, string>; projectId?: string }) =>
       savedFiltersApi.create(d),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-filters', currentProject?.id] });
-      setShowSaveFilterModal(false);
-      setSaveFilterName('');
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['saved-filters', currentProject?.id]],
+      onSuccess: () => {
+        setShowSaveFilterModal(false);
+        setSaveFilterName('');
+      },
     },
-  });
+  );
 
-  const deleteFilterMutation = useMutation({
-    mutationFn: (filterId: string) => savedFiltersApi.delete(filterId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-filters', currentProject?.id] });
+  const deleteFilterMutation = useMutationWithToast(
+    (filterId: string) => savedFiltersApi.delete(filterId),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['saved-filters', currentProject?.id]],
     },
-  });
+  );
 
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -206,8 +213,8 @@ export default function IssueList() {
     }
   };
 
-  const bulkMutation = useMutation({
-    mutationFn: (d: {
+  const bulkMutation = useMutationWithToast(
+    (d: {
       issueIds: string[];
       updates: {
         status?: string;
@@ -216,15 +223,19 @@ export default function IssueList() {
         sprintId?: string | null;
       };
     }) => issuesApi.bulkUpdate(currentProject!.id, d),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issues', currentProject?.id] });
-      queryClient.invalidateQueries({ queryKey: ['board', currentProject?.id] });
-      setSelectedIds(new Set());
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [
+        ['issues', currentProject?.id],
+        ['board', currentProject?.id],
+      ],
+      onSuccess: () => setSelectedIds(new Set()),
     },
-  });
+  );
 
-  const bulkDeleteMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
+  const bulkDeleteMutation = useMutationWithToast(
+    async (ids: string[]) => {
       const issuesData = data?.issues ?? [];
       for (const id of ids) {
         const issue = issuesData.find((i) => i.id === id);
@@ -233,13 +244,19 @@ export default function IssueList() {
         }
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issues', currentProject?.id] });
-      queryClient.invalidateQueries({ queryKey: ['board', currentProject?.id] });
-      setSelectedIds(new Set());
-      setShowDeleteConfirm(false);
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [
+        ['issues', currentProject?.id],
+        ['board', currentProject?.id],
+      ],
+      onSuccess: () => {
+        setSelectedIds(new Set());
+        setShowDeleteConfirm(false);
+      },
     },
-  });
+  );
 
   const hasSelection = selectedIds.size > 0;
 

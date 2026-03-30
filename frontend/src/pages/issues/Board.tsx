@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ChevronDown, ChevronRight, Settings, Palette } from 'lucide-react';
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link } from 'react-router';
@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { BoardSkeleton } from '@/components/ui/Skeleton';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { PRIORITY_LABELS } from '@/lib/constants';
 import type { BoardColumn, Issue } from '@/lib/types';
@@ -321,14 +322,14 @@ export default function Board() {
 
   const cardColorBy = currentProject?.cardColorBy ?? null;
 
-  const updateProjectMutation = useMutation({
-    mutationFn: (data: { cardColorBy?: string | null }) =>
-      projectsApi.update(currentProject!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project'] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+  const updateProjectMutation = useMutationWithToast(
+    (data: { cardColorBy?: string | null }) => projectsApi.update(currentProject!.id, data),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['project'], ['projects']],
     },
-  });
+  );
 
   // Extract unique assignees and labels from all board issues
   const allIssues = useMemo(() => columns?.flatMap((c) => c.issues) ?? [], [columns]);
@@ -349,8 +350,8 @@ export default function Board() {
     return Array.from(map.values());
   }, [allIssues]);
 
-  const moveMutation = useMutation({
-    mutationFn: ({
+  const moveMutation = useMutationWithToast(
+    ({
       issueNumber,
       columnId,
       position,
@@ -359,10 +360,12 @@ export default function Board() {
       columnId: string;
       position: number;
     }) => issuesApi.moveIssue(currentProject!.id, issueNumber, { columnId, position }),
-    onSuccess: () => {
-      invalidateList();
+    {
+      successMessage: null,
+      errorMessage: null,
+      onSuccess: () => invalidateList(),
     },
-  });
+  );
 
   const handleDragStart = useCallback((e: React.DragEvent, issue: Issue, columnId: string) => {
     e.dataTransfer.setData(

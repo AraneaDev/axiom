@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { GitBranch } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -6,6 +6,7 @@ import { issuesApi } from '@/api/issues.api';
 import { Select } from '@/components/ui/Dropdown';
 import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 interface Repo {
   id: string;
@@ -61,16 +62,20 @@ export default function CreateBranchModal({
   }, [repoId]);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
-  const mutation = useMutation({
-    mutationFn: () =>
+  const mutation = useMutationWithToast(
+    () =>
       issuesApi.createIssueBranch(projectId, issueNumber, {
         repoId,
         branchName,
         startPoint: startPoint || undefined,
       }),
-    onSuccess: (branch) => onCreated(branch),
-    onError: (e: unknown) => setError(e instanceof Error ? e.message : 'Failed to create branch'),
-  });
+    {
+      successMessage: null,
+      errorMessage: null,
+      onSuccess: (branch) => onCreated(branch),
+      onError: (e: Error) => setError(e.message || 'Failed to create branch'),
+    },
+  );
 
   return (
     <FormModal

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Network, Search, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Spinner } from '@/components/ui/Spinner';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -34,7 +35,6 @@ export function ParentIssuePicker({
   isEditing,
   onEditField,
 }: ParentIssuePickerProps) {
-  const queryClient = useQueryClient();
   const [parentSearch, setParentSearch] = useState('');
 
   const { data: allIssues } = useQuery({
@@ -43,19 +43,25 @@ export function ParentIssuePicker({
     enabled: isEditing,
   });
 
-  const setParentMutation = useMutation({
-    mutationFn: (parentIssueNumber: number | null) =>
+  const setParentMutation = useMutationWithToast(
+    (parentIssueNumber: number | null) =>
       issuesApi.setParent(projectId, parseInt(num), parentIssueNumber),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue', projectId, num] });
-      queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['issue-children'] });
-      queryClient.invalidateQueries({ queryKey: ['issue-progress'] });
-      queryClient.invalidateQueries({ queryKey: ['roadmap', projectId] });
-      onEditField(null);
-      setParentSearch('');
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [
+        ['issue', projectId, num],
+        ['issues', projectId],
+        ['issue-children'],
+        ['issue-progress'],
+        ['roadmap', projectId],
+      ],
+      onSuccess: () => {
+        onEditField(null);
+        setParentSearch('');
+      },
     },
-  });
+  );
 
   return (
     <div>

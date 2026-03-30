@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import {
   customFieldsApi,
@@ -7,6 +7,7 @@ import {
 } from '@/api/custom-fields.api';
 import { CustomFieldRenderer } from '@/components/CustomFieldRenderer';
 import { Spinner } from '@/components/ui/Spinner';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { TeamMember } from '@/lib/issue-types';
 
 interface CustomFieldEditorProps {
@@ -23,8 +24,6 @@ interface CustomFieldEditorProps {
  * @param root0.teamMembers
  */
 export function CustomFieldEditor({ issueId, projectId, teamMembers }: CustomFieldEditorProps) {
-  const queryClient = useQueryClient();
-
   const { data: customFieldDefs = [] } = useQuery({
     queryKey: ['custom-fields', projectId],
     queryFn: () => customFieldsApi.listDefinitions(projectId),
@@ -37,13 +36,15 @@ export function CustomFieldEditor({ issueId, projectId, teamMembers }: CustomFie
     enabled: !!issueId,
   });
 
-  const setFieldValueMutation = useMutation({
-    mutationFn: ({ fieldId, value }: { fieldId: string; value: string }) =>
+  const setFieldValueMutation = useMutationWithToast(
+    ({ fieldId, value }: { fieldId: string; value: string }) =>
       customFieldsApi.setFieldValue(issueId, fieldId, value),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['custom-field-values', issueId] });
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['custom-field-values', issueId]],
     },
-  });
+  );
 
   if (customFieldDefs.length === 0) return null;
 

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link2, X, Hash } from 'lucide-react';
 import { useState } from 'react';
 
@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Dropdown';
 import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 const LINK_TYPES = [
   { value: 'BLOCKS', label: 'Blocks' },
@@ -41,7 +42,6 @@ export default function IssueLinkModal({ projectId, issueNumber, onClose, onLink
     projectId: string;
   } | null>(null);
   const [error, setError] = useState('');
-  const qc = useQueryClient();
 
   const { data: results } = useQuery({
     queryKey: ['issue-search', projectId, search],
@@ -49,19 +49,21 @@ export default function IssueLinkModal({ projectId, issueNumber, onClose, onLink
     enabled: search.length >= 2,
   });
 
-  const mutation = useMutation({
-    mutationFn: () =>
+  const mutation = useMutationWithToast(
+    () =>
       issuesApi.addLink(projectId, issueNumber, {
         targetProjectId: selected!.projectId,
         targetIssueNumber: selected!.number,
         type: linkType,
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['issue-links', projectId, issueNumber] });
-      onLinked();
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [['issue-links', projectId, issueNumber]],
+      onSuccess: () => onLinked(),
+      onError: (e: Error) => setError(e.message || 'Failed to add link'),
     },
-    onError: (e: unknown) => setError(e instanceof Error ? e.message : 'Failed to add link'),
-  });
+  );
 
   const issues =
     (results as { issues?: { id: string; number: number; title: string; priority: string }[] })

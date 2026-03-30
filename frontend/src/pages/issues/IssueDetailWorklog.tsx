@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Check, ChevronDown, ChevronUp, Clock, Timer, User, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Progress } from '@/components/ui/Progress';
 import { Spinner } from '@/components/ui/Spinner';
-import { useToast } from '@/components/ui/Toast';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { Issue } from '@/lib/types';
 import { formatRelative } from '@/lib/utils';
 
@@ -50,7 +50,6 @@ export function IssueDetailWorklog({
   onEditField,
   onUpdate,
 }: IssueDetailWorklogProps) {
-  const toast = useToast();
   const { invalidateIssue, invalidateWorklogs } = useIssueInvalidation(projectId, num);
   const [showLogWork, setShowLogWork] = useState(false);
   const [showEntries, setShowEntries] = useState(false);
@@ -64,19 +63,21 @@ export function IssueDetailWorklog({
     enabled: !!projectId && !!num,
   });
 
-  const logWorkMutation = useMutation({
-    mutationFn: (data: { minutes: number; description?: string }) =>
+  const logWorkMutation = useMutationWithToast(
+    (data: { minutes: number; description?: string }) =>
       issuesApi.logWork(projectId, parseInt(num), data),
-    onSuccess: () => {
-      invalidateIssue();
-      invalidateWorklogs();
-      setShowLogWork(false);
-      setLogWorkHours('');
-      setLogWorkMinutes('');
-      setLogWorkDesc('');
+    {
+      successMessage: null,
+      onSuccess: () => {
+        invalidateIssue();
+        invalidateWorklogs();
+        setShowLogWork(false);
+        setLogWorkHours('');
+        setLogWorkMinutes('');
+        setLogWorkDesc('');
+      },
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
   function handleLogWork() {
     const h = parseInt(logWorkHours) || 0;

@@ -1,4 +1,3 @@
-import { useMutation } from '@tanstack/react-query';
 import { Plus, Trash2, GripVertical, Save, Check, X, Pencil } from 'lucide-react';
 import { useState, useRef, useCallback } from 'react';
 
@@ -7,8 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { useToast } from '@/components/ui/Toast';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { BoardColumn } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -37,7 +36,6 @@ interface ColumnRow {
  * @param root0.columns
  */
 export function ColumnManager({ open, onClose, projectId, columns }: ColumnManagerProps) {
-  const toast = useToast();
   const { invalidateList } = useIssueInvalidation(projectId);
   const [rows, setRows] = useState<ColumnRow[]>(() =>
     columns.map((c) => ({
@@ -56,55 +54,66 @@ export function ColumnManager({ open, onClose, projectId, columns }: ColumnManag
   const dragItem = useRef<number | null>(null);
   const dragOver = useRef<number | null>(null);
 
-  const createMutation = useMutation({
-    mutationFn: (data: { name: string; isDone?: boolean }) =>
-      issuesApi.createColumn(projectId, data),
-    onSuccess: (col) => {
-      setRows((prev) => [
-        ...prev,
-        {
-          id: col.id,
-          name: col.name,
-          isDone: col.isDone,
-          isDefault: col.isDefault,
-          issueCount: 0,
-          wipLimit: col.wipLimit ?? null,
-        },
-      ]);
-      setNewName('');
-      setNewIsDone(false);
-      invalidateList();
+  const createMutation = useMutationWithToast(
+    (data: { name: string; isDone?: boolean }) => issuesApi.createColumn(projectId, data),
+    {
+      successMessage: null,
+      errorMessage: 'Failed to create column',
+      onSuccess: (col) => {
+        setRows((prev) => [
+          ...prev,
+          {
+            id: col.id,
+            name: col.name,
+            isDone: col.isDone,
+            isDefault: col.isDefault,
+            issueCount: 0,
+            wipLimit: col.wipLimit ?? null,
+          },
+        ]);
+        setNewName('');
+        setNewIsDone(false);
+        invalidateList();
+      },
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create column'),
-  });
+  );
 
-  const updateMutation = useMutation({
-    mutationFn: ({
+  const updateMutation = useMutationWithToast(
+    ({
       columnId,
       data,
     }: {
       columnId: string;
       data: { name?: string; isDone?: boolean; wipLimit?: number | null };
     }) => issuesApi.updateColumn(projectId, columnId, data),
-    onSuccess: () => invalidateList(),
-    onError: (err: Error) => toast.error(err.message || 'Failed to update column'),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (columnId: string) => issuesApi.deleteColumn(projectId, columnId),
-    onSuccess: (_, columnId) => {
-      setRows((prev) => prev.filter((r) => r.id !== columnId));
-      invalidateList();
+    {
+      successMessage: null,
+      errorMessage: 'Failed to update column',
+      onSuccess: () => invalidateList(),
     },
-    onError: (err: Error) => toast.error(err.message || 'Cannot delete column. Move issues first.'),
-  });
+  );
 
-  const reorderMutation = useMutation({
-    mutationFn: (positions: { id: string; position: number }[]) =>
+  const deleteMutation = useMutationWithToast(
+    (columnId: string) => issuesApi.deleteColumn(projectId, columnId),
+    {
+      successMessage: null,
+      errorMessage: 'Cannot delete column. Move issues first.',
+      onSuccess: (_, columnId) => {
+        setRows((prev) => prev.filter((r) => r.id !== columnId));
+        invalidateList();
+      },
+    },
+  );
+
+  const reorderMutation = useMutationWithToast(
+    (positions: { id: string; position: number }[]) =>
       issuesApi.reorderColumns(projectId, positions),
-    onSuccess: () => invalidateList(),
-    onError: (err: Error) => toast.error(err.message || 'Failed to reorder columns'),
-  });
+    {
+      successMessage: null,
+      errorMessage: 'Failed to reorder columns',
+      onSuccess: () => invalidateList(),
+    },
+  );
 
   const handleCreate = () => {
     const trimmed = newName.trim();

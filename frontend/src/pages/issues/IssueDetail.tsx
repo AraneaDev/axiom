@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowUp, Check, Eye, EyeOff, Paperclip, Pencil, X } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
@@ -24,9 +24,9 @@ import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
-import { useToast } from '@/components/ui/Toast';
 import { useDraftState } from '@/hooks/useDraftState';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn, formatRelative } from '@/lib/utils';
@@ -39,7 +39,6 @@ export default function IssueDetail() {
   const { org, teamSlug, projectSlug, currentTeam, currentProject } = useProjectContext();
   const { num } = useParams();
   const queryClient = useQueryClient();
-  const toast = useToast();
   const { draft: commentBody, setDraft: setCommentBody, reset: resetComment } = useDraftState('');
   const titleDraftState = useDraftState('');
   const bodyDraftState = useDraftState('');
@@ -137,14 +136,14 @@ export default function IssueDetail() {
     staleTime: 30_000,
   });
 
-  const voteMutation = useMutation({
-    mutationFn: () => issuesApi.toggleVote(currentProject!.id, parseInt(num!)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue-votes', currentProject?.id, num] });
-      invalidateAll();
+  const voteMutation = useMutationWithToast(
+    () => issuesApi.toggleVote(currentProject!.id, parseInt(num!)),
+    {
+      successMessage: null,
+      invalidateKeys: [['issue-votes', currentProject?.id, num]],
+      onSuccess: () => invalidateAll(),
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
   const { data: watcherData } = useQuery({
     queryKey: ['issue-watchers', currentProject?.id, num],
@@ -157,14 +156,14 @@ export default function IssueDetail() {
     staleTime: 30_000,
   });
 
-  const watchMutation = useMutation({
-    mutationFn: () => issuesApi.toggleWatch(currentProject!.id, parseInt(num!)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue-watchers', currentProject?.id, num] });
-      invalidateAll();
+  const watchMutation = useMutationWithToast(
+    () => issuesApi.toggleWatch(currentProject!.id, parseInt(num!)),
+    {
+      successMessage: null,
+      invalidateKeys: [['issue-watchers', currentProject?.id, num]],
+      onSuccess: () => invalidateAll(),
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
   const { data: repos = [] } = useQuery({
     queryKey: ['repos', currentTeam?.id],
@@ -222,10 +221,9 @@ export default function IssueDetail() {
     staleTime: 30_000,
   });
 
-  const deleteAttachmentMutation = useMutation({
-    mutationFn: (id: string) => attachmentsApi.remove(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', issue?.id] }),
-    onError: (err: Error) => toast.error(err.message),
+  const deleteAttachmentMutation = useMutationWithToast((id: string) => attachmentsApi.remove(id), {
+    successMessage: null,
+    invalidateKeys: [['attachments', issue?.id]],
   });
 
   const { data: children = [] } = useQuery({
@@ -251,16 +249,17 @@ export default function IssueDetail() {
     staleTime: 30_000,
   });
 
-  const updateMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
-      issuesApi.update(currentProject!.id, parseInt(num!), data),
-    onSuccess: () => {
-      invalidateAll();
-      titleDraftState.cancel();
-      setEditingField(null);
+  const updateMutation = useMutationWithToast(
+    (data: Record<string, unknown>) => issuesApi.update(currentProject!.id, parseInt(num!), data),
+    {
+      successMessage: null,
+      onSuccess: () => {
+        invalidateAll();
+        titleDraftState.cancel();
+        setEditingField(null);
+      },
     },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  );
 
   useEffect(() => {
     if (titleDraftState.isEditing && titleInputRef.current) {
