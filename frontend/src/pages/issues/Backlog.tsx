@@ -126,7 +126,7 @@ export default function Backlog() {
   useEffect(() => {
     setPreferredView('backlog');
   }, [setPreferredView]);
-  const { toast } = useToast();
+  const toast = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newSprint, setNewSprint] = useState({
     name: '',
@@ -190,9 +190,9 @@ export default function Backlog() {
       queryClient.invalidateQueries({ queryKey: ['sprints', currentProject?.id] });
       setShowCreateModal(false);
       setNewSprint({ name: '', goal: '', startDate: '', endDate: '' });
-      toast('Sprint created', 'success');
+      toast.success('Sprint created');
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const addToSprintMutation = useMutation({

@@ -20,7 +20,7 @@ import type { BoardColumn } from '@/lib/types';
 export default function WorkflowEditor() {
   const { currentProject } = useProjectContext();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const toast = useToast();
 
   const [fromColumnId, setFromColumnId] = useState('');
   const [toColumnId, setToColumnId] = useState('');
@@ -50,18 +50,18 @@ export default function WorkflowEditor() {
       queryClient.invalidateQueries({ queryKey: ['workflow-rules', currentProject?.id] });
       setFromColumnId('');
       setToColumnId('');
-      toast('Workflow rule created', 'success');
+      toast.success('Workflow rule created');
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (ruleId: string) => workflowsApi.deleteRule(currentProject!.id, ruleId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow-rules', currentProject?.id] });
-      toast('Workflow rule deleted', 'success');
+      toast.success('Workflow rule deleted');
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const columnOptions = (columns ?? []).map((col: BoardColumn) => ({
@@ -72,7 +72,7 @@ export default function WorkflowEditor() {
   const handleAdd = () => {
     if (!fromColumnId || !toColumnId) return;
     if (fromColumnId === toColumnId) {
-      toast('From and To columns must be different', 'error');
+      toast.error('From and To columns must be different');
       return;
     }
     createMutation.mutate({ fromColumnId, toColumnId });

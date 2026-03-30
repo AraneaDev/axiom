@@ -278,7 +278,7 @@ function RuleForm({
 export default function AutomationRules() {
   const { currentProject } = useProjectContext();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
 
@@ -302,9 +302,9 @@ export default function AutomationRules() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['automation-rules', currentProject?.id] });
       setShowForm(false);
-      toast('Automation rule created', 'success');
+      toast.success('Automation rule created');
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const updateMutation = useMutation({
@@ -313,18 +313,18 @@ export default function AutomationRules() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['automation-rules', currentProject?.id] });
       setEditingRule(null);
-      toast('Automation rule updated', 'success');
+      toast.success('Automation rule updated');
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (ruleId: string) => automationApi.deleteRule(currentProject!.id, ruleId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['automation-rules', currentProject?.id] });
-      toast('Automation rule deleted', 'success');
+      toast.success('Automation rule deleted');
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const toggleMutation = useMutation({
@@ -332,7 +332,7 @@ export default function AutomationRules() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['automation-rules', currentProject?.id] });
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const triggerLabel = (trigger: string) =>

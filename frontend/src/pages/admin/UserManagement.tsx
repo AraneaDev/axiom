@@ -120,17 +120,17 @@ function UserDetailModal({ user, onClose }: { user: AdminUser; onClose: () => vo
 function ResetPasswordModal({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   const [newPassword, setNewPassword] = useState('');
   const [isPending, setIsPending] = useState(false);
-  const { success, error: showError } = useToast();
+  const toast = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsPending(true);
     try {
       await adminApi.resetPassword(user.id, newPassword);
-      success('Password reset successfully');
+      toast.success('Password reset successfully');
       onClose();
     } catch {
-      showError('Failed to reset password');
+      toast.error('Failed to reset password');
     } finally {
       setIsPending(false);
     }
@@ -180,7 +180,7 @@ export default function UserManagement() {
   const [resetPasswordTarget, setResetPasswordTarget] = useState<AdminUser | null>(null);
 
   const queryClient = useQueryClient();
-  const { success, error: showError } = useToast();
+  const toast = useToast();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin', 'users', debouncedSearch, page],
@@ -196,11 +196,11 @@ export default function UserManagement() {
     mutationFn: (userId: string) => adminApi.deleteUser(userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      success('User deleted successfully');
+      toast.success('User deleted successfully');
       setDeleteTarget(null);
     },
     onError: () => {
-      showError('Failed to delete user');
+      toast.error('Failed to delete user');
     },
   });
 
@@ -209,10 +209,10 @@ export default function UserManagement() {
       deactivated ? adminApi.reactivateUser(userId) : adminApi.deactivateUser(userId),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      success(vars.deactivated ? 'User reactivated' : 'User deactivated');
+      toast.success(vars.deactivated ? 'User reactivated' : 'User deactivated');
     },
     onError: (_err, vars) => {
-      showError(vars.deactivated ? 'Failed to reactivate user' : 'Failed to deactivate user');
+      toast.error(vars.deactivated ? 'Failed to reactivate user' : 'Failed to deactivate user');
     },
   });
 
