@@ -9,6 +9,9 @@ import {
   Calendar,
   RotateCcw,
   X,
+  CircleDot,
+  CheckCircle,
+  List,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -16,10 +19,12 @@ import { milestonesApi, type Milestone } from '@/api/milestones.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Tabs } from '@/components/ui/Tabs';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { useModalState } from '@/hooks/useModalState';
@@ -234,9 +239,6 @@ export default function Milestones() {
     return true;
   });
 
-  const openCount = milestones.filter((m) => m.status === 'OPEN').length;
-  const closedCount = milestones.filter((m) => m.status === 'CLOSED').length;
-
   return (
     <div className="space-y-6 px-6 py-4">
       {/* Header */}
@@ -248,38 +250,15 @@ export default function Milestones() {
       </PageHeader>
 
       {/* Filter tabs */}
-      <div className="flex items-center gap-1 border-b border-border">
-        {(['open', 'closed', 'all'] as FilterTab[]).map((tab) => {
-          const count =
-            tab === 'open' ? openCount : tab === 'closed' ? closedCount : milestones.length;
-          const TabIcon = tab === 'open' ? Circle : tab === 'closed' ? CheckCircle2 : Flag;
-          return (
-            <button
-              key={tab}
-              onClick={() => setFilter(tab)}
-              className={cn(
-                'flex items-center gap-1.5 px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors',
-                filter === tab
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-text-secondary hover:text-text',
-              )}
-            >
-              <TabIcon className="h-3.5 w-3.5" />
-              {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-              <span
-                className={cn(
-                  'ml-0.5 text-xs rounded-full px-1.5 py-0.5',
-                  filter === tab
-                    ? 'bg-primary-light text-primary'
-                    : 'bg-surface-tertiary text-text-tertiary',
-                )}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <Tabs
+        tabs={[
+          { key: 'open', label: 'Open', icon: <CircleDot className="h-4 w-4" /> },
+          { key: 'closed', label: 'Closed', icon: <CheckCircle className="h-4 w-4" /> },
+          { key: 'all', label: 'All', icon: <List className="h-4 w-4" /> },
+        ]}
+        activeKey={filter}
+        onChange={(key) => setFilter(key as FilterTab)}
+      />
 
       {/* Milestones list */}
       {error ? (
@@ -366,35 +345,14 @@ export default function Milestones() {
         </form>
       </Modal>
 
-      {/* Delete confirmation modal */}
-      <Modal
+      <ConfirmDialog
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
-        title="Delete Milestone"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-text-secondary">
-            Are you sure you want to delete{' '}
-            <span className="font-semibold text-text">{confirmDelete?.title}</span>? This action
-            cannot be undone.
-          </p>
-          <div className="flex items-center justify-end gap-3">
-            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
-              <X className="h-4 w-4" />
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => confirmDelete && deleteMutation.mutate(confirmDelete.id)}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        onConfirm={() => confirmDelete && deleteMutation.mutate(confirmDelete.id)}
+        title="Delete milestone"
+        description={`Are you sure you want to delete "${confirmDelete?.title}"? This cannot be undone.`}
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }
