@@ -3,8 +3,8 @@ import { Plus, ChevronDown, ChevronRight, Settings, Palette } from 'lucide-react
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link } from 'react-router';
 
-import type { Filters, GroupBy } from './BoardFilters';
 import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
+import type { Filters, GroupBy } from './BoardFilters';
 import { ColumnManager } from './ColumnManager';
 
 import { issuesApi } from '@/api/issues.api';
@@ -445,19 +445,22 @@ export default function Board() {
                 { value: 'priority', label: 'Priority' },
                 { value: 'type', label: 'Type' },
               ].map((opt) => (
-                <button
+                <Button
                   key={opt.value ?? 'none'}
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     updateProjectMutation.mutate({ cardColorBy: opt.value });
                     setShowColorMenu(false);
                   }}
                   className={cn(
-                    'w-full text-left px-3 py-1.5 text-sm hover:bg-surface-secondary transition-colors',
+                    'w-full justify-start rounded-none px-3 py-1.5',
                     cardColorBy === opt.value && 'text-primary font-semibold',
                   )}
                 >
+                  <Palette className="h-3.5 w-3.5" />
                   {opt.label}
-                </button>
+                </Button>
               ))}
             </div>
           )}

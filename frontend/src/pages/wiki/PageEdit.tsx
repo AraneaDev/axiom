@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Eye,
   EyeOff,
@@ -39,6 +39,7 @@ import { PresenceIndicators } from '@/components/wiki/PresenceIndicators';
 import { TemplateVariablePanel } from '@/components/wiki/TemplateVariablePanel';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import { useWikiInvalidation } from '@/hooks/useWikiInvalidation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -56,11 +57,11 @@ const BLUEPRINT_ICONS: Record<string, typeof FileText> = {
 export default function PageEdit() {
   const { org, team, space: spaceSlug, page: pageSlug } = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
   const [searchParams] = useSearchParams();
   const { currentSpace, currentTeam } = useWikiContext();
+  const { invalidateAttachments } = useWikiInvalidation(currentSpace?.id ?? '', pageSlug);
 
   const { data: templates = [] } = useQuery({
     queryKey: ['wikiTemplates', currentSpace?.id],
@@ -561,9 +562,7 @@ export default function PageEdit() {
             <FileUpload
               className="mt-3"
               uploadFn={(file) => attachmentsApi.upload(file, { pageId: existingPage.id })}
-              onUpload={() =>
-                queryClient.invalidateQueries({ queryKey: ['attachments', existingPage.id] })
-              }
+              onUpload={() => invalidateAttachments(existingPage.id)}
             />
           </div>
         )}

@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { PageLoader, Spinner } from '@/components/ui/Spinner';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 
@@ -29,7 +29,6 @@ export default function IssueCreate() {
     isLoading: loadingContext,
   } = useProjectContext();
   const navigate = useNavigate();
-  const toast = useToast();
 
   const { data: templates = [] } = useQuery({
     queryKey: ['issue-templates', currentProject?.id],
@@ -51,8 +50,24 @@ export default function IssueCreate() {
   const [assigneeId, setAssigneeId] = useState('');
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  const mutation = useMutationWithToast(
+    () =>
+      issuesApi.create(currentProject!.id, {
+        title,
+        body,
+        type,
+        priority,
+        assigneeId: assigneeId || undefined,
+        labels: selectedLabels.length > 0 ? selectedLabels : undefined,
+        dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
+      }),
+    {
+      successMessage: null,
+      errorMessage: 'Failed to create issue',
+      onSuccess: (issue) => navigate(`/${org}/${teamSlug}/${projectSlug}/issues/${issue.number}`),
+    },
+  );
 
   function applyTemplate(template: IssueTemplate) {
     setTitle(template.title);
@@ -61,29 +76,10 @@ export default function IssueCreate() {
     setSelectedLabels(template.labels ?? []);
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!currentProject) return;
-    setError('');
-    setLoading(true);
-    try {
-      const issue = await issuesApi.create(currentProject.id, {
-        title,
-        body,
-        type,
-        priority,
-        assigneeId: assigneeId || undefined,
-        labels: selectedLabels.length > 0 ? selectedLabels : undefined,
-        dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
-      });
-      navigate(`/${org}/${teamSlug}/${projectSlug}/issues/${issue.number}`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to create issue';
-      setError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
+    mutation.mutate();
   }
 
   if (loadingContext) return <PageLoader />;
@@ -122,12 +118,6 @@ export default function IssueCreate() {
             </div>
           )}
 
-          {error && (
-            <div className="mb-5 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
-              {error}
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-5">
             <Input
               id="title"
@@ -149,8 +139,8 @@ export default function IssueCreate() {
             </div>
 
             <div className="flex gap-3 pt-4 border-t border-border">
-              <Button type="submit" disabled={loading}>
-                {loading ? (
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? (
                   <Spinner size="sm" />
                 ) : (
                   <>

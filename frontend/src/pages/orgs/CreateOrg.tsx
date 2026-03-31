@@ -7,19 +7,25 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 /**
  *
  */
 export default function CreateOrg() {
   const navigate = useNavigate();
-  const toast = useToast();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  const mutation = useMutationWithToast(
+    () => orgsApi.create({ name, slug, description: description || undefined }),
+    {
+      successMessage: 'Organization created',
+      errorMessage: 'Failed to create organization',
+      onSuccess: (org) => navigate(`/${org.slug}`),
+    },
+  );
 
   function handleNameChange(value: string) {
     setName(value);
@@ -31,30 +37,14 @@ export default function CreateOrg() {
     );
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const org = await orgsApi.create({ name, slug, description: description || undefined });
-      toast.success('Organization created');
-      navigate(`/${org.slug}`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create organization');
-    } finally {
-      setLoading(false);
-    }
+    mutation.mutate();
   }
 
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create organization</h1>
-
-      {error && (
-        <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
-          {error}
-        </div>
-      )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input
@@ -84,8 +74,8 @@ export default function CreateOrg() {
             placeholder="What is this organization for?"
           />
         </div>
-        <Button type="submit" disabled={loading}>
-          {loading ? (
+        <Button type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? (
             <Spinner size="sm" />
           ) : (
             <>

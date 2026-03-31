@@ -37,6 +37,7 @@ import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { PageComments } from '@/components/wiki/PageComments';
 import { useModalState } from '@/hooks/useModalState';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import { useWikiInvalidation } from '@/hooks/useWikiInvalidation';
 import type { PageTreeNode } from '@/lib/types';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -52,19 +53,21 @@ function TocSidebar({ tocEntries }: { tocEntries: { level: number; text: string;
         </div>
         <nav className="p-3 space-y-1">
           {tocEntries.map((entry, i) => (
-            <button
+            <Button
               key={`${entry.id}-${i}`}
+              variant="ghost"
+              size="xs"
               type="button"
               onClick={() => {
                 const el = document.getElementById(entry.id);
                 el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}
-              className="flex items-center gap-1.5 w-full text-left text-sm text-text-secondary hover:text-primary transition-colors truncate"
+              className="w-full justify-start text-sm text-text-secondary hover:text-primary truncate"
               style={{ paddingLeft: `${(entry.level - 1) * 12}px` }}
             >
               <Hash className="h-3 w-3 shrink-0 opacity-40" />
               {entry.text}
-            </button>
+            </Button>
           ))}
         </nav>
       </Card>
@@ -90,6 +93,7 @@ export default function PageView() {
   const basePath = `/${org}/${team}/wiki/${spaceSlug}`;
 
   const { currentSpace, currentTeam, tree, setTocEntries } = useWikiContext();
+  const { invalidateAttachments } = useWikiInvalidation(currentSpace?.id ?? '', pageSlug);
 
   const moveModal = useModalState();
   const deleteConfirm = useModalState();
@@ -414,7 +418,7 @@ export default function PageView() {
         <FileUpload
           className="mt-3"
           uploadFn={(file) => attachmentsApi.upload(file, { pageId: page.id })}
-          onUpload={() => queryClient.invalidateQueries({ queryKey: ['attachments', page.id] })}
+          onUpload={() => invalidateAttachments(page.id)}
         />
       </div>
 

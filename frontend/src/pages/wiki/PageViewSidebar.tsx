@@ -32,6 +32,7 @@ import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { PageTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -90,10 +91,7 @@ function TableOfContents({ entries }: { entries: TocEntry[] }) {
 }
 
 /**
- * Collect all ancestor node IDs for a given slug so we can auto-expand the path.
- * @param nodes
- * @param targetSlug
- * @param ancestors
+ * Count all descendants of a tree node recursively.
  * @param node
  */
 function countDescendants(node: PageTreeNode): number {
@@ -215,18 +213,22 @@ function TreeNode({
         )}
         {/* Collapse toggle */}
         {hasChildren ? (
-          <button
-            type="button"
-            onClick={() => onToggle(node.id)}
-            className="shrink-0 p-0.5 rounded hover:bg-surface-secondary transition-colors text-text-tertiary"
-            title={isExpanded ? 'Collapse' : 'Expand'}
-          >
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5" />
-            )}
-          </button>
+          <Tooltip content={isExpanded ? 'Collapse' : 'Expand'}>
+            <Button
+              variant="ghost"
+              size="xs"
+              type="button"
+              onClick={() => onToggle(node.id)}
+              className="shrink-0 !p-0.5 text-text-tertiary"
+              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </Tooltip>
         ) : (
           <span className="shrink-0 w-[18px]" />
         )}
@@ -248,26 +250,32 @@ function TreeNode({
         </Link>
 
         {/* Drag handle */}
-        <button
-          {...listeners}
-          type="button"
-          className="shrink-0 cursor-grab opacity-0 group-hover:opacity-100 p-0.5 text-text-tertiary"
-          title="Drag to reorder"
-        >
-          <GripVertical className="h-3 w-3" />
-        </button>
+        <Tooltip content="Drag to reorder">
+          <Button
+            {...listeners}
+            variant="ghost"
+            size="xs"
+            type="button"
+            className="shrink-0 cursor-grab opacity-0 group-hover:opacity-100 !p-0.5 text-text-tertiary"
+            aria-label="Drag to reorder"
+          >
+            <GripVertical className="h-3 w-3" />
+          </Button>
+        </Tooltip>
 
         {/* Context menu */}
         <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <Dropdown
             trigger={
-              <button
+              <Button
+                variant="ghost"
+                size="xs"
                 type="button"
-                className="p-0.5 rounded hover:bg-surface-secondary text-text-tertiary"
-                title="Actions"
+                className="!p-0.5 text-text-tertiary"
+                aria-label="Actions"
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             }
             align="right"
           >
@@ -521,14 +529,18 @@ export function PageViewSidebar({
             )}
           </h3>
           <div className="flex gap-1">
-            <Link to={`${basePath}/new/edit`}>
-              <Button variant="ghost" size="xs" title="New Page">
-                <Plus className="h-3.5 w-3.5" /> New Page
+            <Tooltip content="New Page">
+              <Link to={`${basePath}/new/edit`}>
+                <Button variant="ghost" size="xs">
+                  <Plus className="h-3.5 w-3.5" /> New Page
+                </Button>
+              </Link>
+            </Tooltip>
+            <Tooltip content="New Folder">
+              <Button variant="ghost" size="xs" onClick={() => onNewFolder?.()}>
+                <FolderPlus className="h-3.5 w-3.5" /> New Folder
               </Button>
-            </Link>
-            <Button variant="ghost" size="xs" title="New Folder" onClick={() => onNewFolder?.()}>
-              <FolderPlus className="h-3.5 w-3.5" /> New Folder
-            </Button>
+            </Tooltip>
           </div>
         </div>
       )}

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import { Tooltip } from '@/components/ui/Tooltip';
 import type { IssueLink } from '@/lib/issue-types';
 import type { Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -54,11 +55,13 @@ export function IssueDetailMetaPanel({
       <Card className="p-4 shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold">Sub-issues</h3>
-          <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
-            <Button variant="ghost" size="sm" title="Add sub-issue">
-              <Plus className="h-3.5 w-3.5" /> Add
-            </Button>
-          </Link>
+          <Tooltip content="Add sub-issue">
+            <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
+              <Button variant="ghost" size="sm">
+                <Plus className="h-3.5 w-3.5" /> Add
+              </Button>
+            </Link>
+          </Tooltip>
         </div>
         {progress && progress.total > 0 && (
           <div className="mb-2">

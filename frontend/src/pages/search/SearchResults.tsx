@@ -336,55 +336,67 @@ export default function SearchResults() {
             <Badge size="sm" variant="default">
               <Library className="h-3 w-3" />
               {allSpaces.find((s: { id: string }) => s.id === spaceId)?.name}
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => setFilter('spaceId', '')}
-                className="ml-1 hover:text-danger"
+                className="ml-1 p-0 hover:text-danger"
+                title="Remove space filter"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </Badge>
           )}
           {labelFilter && (
             <Badge size="sm" variant="default">
               <Tag className="h-3 w-3" />
               {labelFilter}
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => {
                   setFilter('label', '');
                   setLabelInput('');
                 }}
-                className="ml-1 hover:text-danger"
+                className="ml-1 p-0 hover:text-danger"
+                title="Remove label filter"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </Badge>
           )}
           {sinceFilter && (
             <Badge size="sm" variant="default">
               <Calendar className="h-3 w-3" />
               from {sinceFilter}
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => setFilter('since', '')}
-                className="ml-1 hover:text-danger"
+                className="ml-1 p-0 hover:text-danger"
+                title="Remove since filter"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </Badge>
           )}
           {untilFilter && (
             <Badge size="sm" variant="default">
               <Calendar className="h-3 w-3" />
               until {untilFilter}
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => setFilter('until', '')}
-                className="ml-1 hover:text-danger"
+                className="ml-1 p-0 hover:text-danger"
+                title="Remove until filter"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </Badge>
           )}
         </Card>
@@ -529,6 +541,7 @@ function CodeRow({ item, query }: { item: CodeItem; query: string }) {
       </div>
       <div className="rounded bg-surface-tertiary border border-border-light px-3 py-1.5 font-mono text-xs overflow-x-auto">
         <span className="text-text-tertiary select-none mr-3">{item.lineNumber}</span>
+        {/* eslint-disable-next-line react/no-danger -- search highlight markup is escaped server-side */}
         <span dangerouslySetInnerHTML={{ __html: highlighted }} />
       </div>
     </div>
@@ -546,6 +559,7 @@ function WikiRow({ item }: { item: SearchResultItem }) {
       {item.snippet && (
         <p
           className="text-xs text-text-tertiary ml-7 line-clamp-2"
+          // eslint-disable-next-line react/no-danger -- snippet is escaped server-side
           dangerouslySetInnerHTML={{ __html: formatSnippet(item.snippet) }}
         />
       )}

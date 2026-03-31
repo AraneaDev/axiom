@@ -7,7 +7,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { PageLoader, Spinner } from '@/components/ui/Spinner';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useTeamContext } from '@/hooks/useTeamContext';
 
 /**
@@ -17,13 +17,25 @@ export default function CreateProject() {
   const { org, teamSlug, currentTeam, isLoading: teamLoading } = useTeamContext();
   const navigate = useNavigate();
 
-  const toast = useToast();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [prefix, setPrefix] = useState('');
   const [description, setDescription] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  const mutation = useMutationWithToast(
+    () =>
+      projectsApi.create(currentTeam!.id, {
+        name,
+        slug,
+        prefix,
+        description: description || undefined,
+      }),
+    {
+      successMessage: 'Project created',
+      errorMessage: 'Failed to create project',
+      onSuccess: (project) => navigate(`/${org}/${teamSlug}/${project.slug}/board`),
+    },
+  );
 
   function handleNameChange(value: string) {
     setName(value);
@@ -41,25 +53,10 @@ export default function CreateProject() {
     );
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!currentTeam) return;
-    setError('');
-    setLoading(true);
-    try {
-      const project = await projectsApi.create(currentTeam.id, {
-        name,
-        slug,
-        prefix,
-        description: description || undefined,
-      });
-      toast.success('Project created');
-      navigate(`/${org}/${teamSlug}/${project.slug}/board`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create project');
-    } finally {
-      setLoading(false);
-    }
+    mutation.mutate();
   }
 
   if (teamLoading) return <PageLoader />;
@@ -67,11 +64,6 @@ export default function CreateProject() {
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create project</h1>
-      {error && (
-        <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
-          {error}
-        </div>
-      )}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input
           id="name"
@@ -111,8 +103,8 @@ export default function CreateProject() {
             placeholder="What is this project about?"
           />
         </div>
-        <Button type="submit" disabled={loading}>
-          {loading ? (
+        <Button type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? (
             <Spinner size="sm" />
           ) : (
             <>

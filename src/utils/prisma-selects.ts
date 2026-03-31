@@ -72,3 +72,27 @@ export const REPO_TEAM_ORG_INCLUDE = {
 export const SPACE_TEAM_ORG_INCLUDE = {
   space: { include: { team: { include: { org: true } } } },
 } as const;
+
+/** Common issue include for list views: assignee, labels, column (id + name) */
+export const ISSUE_LIST_INCLUDE = {
+  assignee: { select: USER_BASIC_SELECT },
+  labels: true,
+  column: { select: { id: true, name: true } },
+} as const;
+
+/** Issue include with full column relation (used in create/update responses) */
+export const ISSUE_WITH_COLUMN_INCLUDE = {
+  assignee: { select: USER_BASIC_SELECT },
+  labels: true,
+  column: true,
+} as const;
+
+/** Hydrated issue include for automation rule evaluation */
+export const AUTOMATION_ISSUE_INCLUDE = {
+  assignee: { select: { id: true, username: true, displayName: true, email: true } },
+  creator: { select: { id: true, username: true, displayName: true, email: true } },
+  labels: { select: { name: true } },
+  sprint: { select: { id: true, name: true, goal: true } },
+  column: { select: { id: true, name: true } },
+  project: { select: { id: true, name: true, key: true } },
+} as const;

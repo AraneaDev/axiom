@@ -22,7 +22,7 @@ const BLOCKED_RANGES = [
  */
 export async function executeWebhook(
   url: string,
-  data: any,
+  data: Record<string, unknown>,
   method = 'POST',
   headers?: Record<string, string>,
 ) {

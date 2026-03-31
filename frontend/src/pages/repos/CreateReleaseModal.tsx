@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { Select } from '@/components/ui/Dropdown';
 import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 interface Props {
   repoId: string;
@@ -33,13 +34,28 @@ export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onC
   const [targetBranch, setTargetBranch] = useState(defaultBranch);
   const [isDraft, setIsDraft] = useState(false);
   const [isPrerelease, setIsPrerelease] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   const { data: branches = [] } = useQuery({
     queryKey: ['branches', repoId],
     queryFn: () => reposApi.listBranches(repoId),
   });
+
+  const mutation = useMutationWithToast(
+    () =>
+      releasesApi.create(repoId, {
+        tagName,
+        title,
+        body,
+        isDraft,
+        isPrerelease,
+        targetBranch,
+      }),
+    {
+      successMessage: 'Release created',
+      errorMessage: 'Failed to create release',
+      onSuccess: () => onCreated(),
+    },
+  );
 
   const handleGenerateChangelog = async () => {
     if (!tagName || !targetBranch) return;
@@ -65,24 +81,8 @@ export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onC
     }
   };
 
-  const handleSubmit = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      await releasesApi.create(repoId, {
-        tagName,
-        title,
-        body,
-        isDraft,
-        isPrerelease,
-        targetBranch,
-      });
-      onCreated();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create release');
-    } finally {
-      setLoading(false);
-    }
+  const handleSubmit = () => {
+    mutation.mutate();
   };
 
   return (
@@ -92,8 +92,8 @@ export default function CreateReleaseModal({ repoId, defaultBranch, onClose, onC
       title="New Release"
       size="lg"
       onSubmit={handleSubmit}
-      isPending={loading}
-      error={error}
+      isPending={mutation.isPending}
+      error={mutation.error?.message ?? ''}
       submitLabel={isDraft ? 'Save Draft' : 'Publish Release'}
       submitIcon={<Tag className="h-4 w-4" />}
     >

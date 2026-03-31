@@ -18,6 +18,21 @@ export function validate<T extends z.ZodTypeAny>(schema: T, data: unknown): z.ou
   return result.data;
 }
 
+// ─── Shared Validators ─────────────────────────────────────
+
+/** Reusable slug: 2-50 lowercase alphanumeric + hyphens */
+export const slugValidator = z
+  .string()
+  .min(2)
+  .max(50)
+  .regex(/^[a-z0-9-]+$/);
+
+/** Team-level role enum */
+export const teamRoleValidator = z.enum(['ADMIN', 'MEMBER', 'VIEWER']);
+
+/** Org-level role enum (superset of team roles) */
+export const orgRoleValidator = z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER', 'GUEST']);
+
 // ─── Auth ───────────────────────────────────────────────────
 
 export const registerSchema = z.object({
@@ -55,11 +70,7 @@ export const resetPasswordSchema = z.object({
 
 export const createOrgSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: z
-    .string()
-    .min(2)
-    .max(50)
-    .regex(/^[a-z0-9-]+$/),
+  slug: slugValidator,
   description: z.string().max(500).optional(),
 });
 
@@ -67,28 +78,20 @@ export const createOrgSchema = z.object({
 
 export const createTeamSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: z
-    .string()
-    .min(2)
-    .max(50)
-    .regex(/^[a-z0-9-]+$/),
+  slug: slugValidator,
   description: z.string().max(500).optional(),
 });
 
 export const addTeamMemberSchema = z.object({
   userId: z.string(),
-  role: z.enum(['ADMIN', 'MEMBER', 'VIEWER']).default('MEMBER'),
+  role: teamRoleValidator.default('MEMBER'),
 });
 
 // ─── Projects ───────────────────────────────────────────────
 
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: z
-    .string()
-    .min(2)
-    .max(50)
-    .regex(/^[a-z0-9-]+$/),
+  slug: slugValidator,
   description: z.string().optional(),
   prefix: z
     .string()
@@ -151,7 +154,7 @@ export const savedSearchSchema = z.object({
 
 export const adminUpdateUserSchema = z.object({
   displayName: z.string().min(1).max(100).optional(),
-  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER', 'GUEST']).optional(),
+  role: orgRoleValidator.optional(),
   email: z.string().email().optional(),
 });
 
@@ -172,7 +175,7 @@ export const updateWorkflowRuleSchema = createWorkflowRuleSchema.partial();
 
 export const createInvitationSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER', 'GUEST']),
+  role: orgRoleValidator,
   teamId: z.string().optional(),
 });
 
@@ -185,11 +188,11 @@ export const updateOrgSchema = z.object({
 
 export const addOrgMemberSchema = z.object({
   userId: z.string().min(1),
-  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER', 'GUEST']).default('MEMBER'),
+  role: orgRoleValidator.default('MEMBER'),
 });
 
 export const createInviteLinkSchema = z.object({
-  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER', 'GUEST']).default('MEMBER'),
+  role: orgRoleValidator.default('MEMBER'),
   maxUses: z.number().int().min(1).max(1000).default(25),
   expiresInDays: z.number().int().min(1).max(365).optional(),
 });

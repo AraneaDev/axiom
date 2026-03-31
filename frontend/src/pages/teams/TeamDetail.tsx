@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import { cn, formatRelative } from '@/lib/utils';
 
@@ -382,11 +383,13 @@ export default function TeamDetail() {
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
                   Members ({teamDetail.members.length})
                 </h3>
-                <Link to={`/${org}/${teamSlug}/members`}>
-                  <Button variant="ghost" size="xs" title="View all members">
-                    <Users className="h-3.5 w-3.5" />
-                  </Button>
-                </Link>
+                <Tooltip content="View all members">
+                  <Link to={`/${org}/${teamSlug}/members`}>
+                    <Button variant="ghost" size="xs">
+                      <Users className="h-3.5 w-3.5" />
+                    </Button>
+                  </Link>
+                </Tooltip>
               </div>
               <div className="space-y-1">
                 {teamDetail.members.slice(0, 10).map(

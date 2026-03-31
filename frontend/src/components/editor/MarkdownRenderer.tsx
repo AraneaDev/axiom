@@ -1,3 +1,4 @@
+/* eslint-disable react/no-danger -- Renderer component: all HTML is DOMPurify-sanitized */
 import DOMPurify from 'dompurify';
 import {
   Info,

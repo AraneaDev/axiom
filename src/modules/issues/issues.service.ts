@@ -381,7 +381,8 @@ export async function updateIssue(
     'Issue not found',
   );
 
-  const previousLabels = (issue as any).labels?.map((l: any) => l.name) ?? [];
+  const previousLabels =
+    (issue as unknown as { labels?: { name: string }[] }).labels?.map((l) => l.name) ?? [];
 
   // Validate workflow transition before updating column
   if (data.columnId !== undefined && data.columnId !== issue.columnId) {
@@ -511,7 +512,8 @@ export async function updateIssue(
           });
         }
         if (data.labels !== undefined) {
-          const currentLabels = hydrated.labels?.map((l: any) => l.name) ?? [];
+          const currentLabels =
+            (hydrated.labels as { name: string }[] | undefined)?.map((l) => l.name) ?? [];
           const addedLabels = currentLabels.filter((l: string) => !previousLabels.includes(l));
           for (const label of addedLabels) {
             evaluateRules(projectId, 'label:added', { ...ctx, label }).catch((err) => {

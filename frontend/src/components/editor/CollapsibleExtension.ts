@@ -63,6 +63,7 @@ export const CollapsibleExtension = Node.create({
   addStorage() {
     return {
       markdown: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         serialize(state: any, node: any) {
           const title = (node.attrs.title as string) || 'Click to expand';
           state.wrapBlock('> ', `> [!DETAILS] ${title}\n> `, node, () => state.renderContent(node));

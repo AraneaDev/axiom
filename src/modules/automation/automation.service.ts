@@ -49,7 +49,7 @@ export interface AutomationAction {
 }
 
 export interface AutomationContext {
-  issue: any;
+  issue: Record<string, unknown> & { id: string; projectId: string };
   actorId: string;
   from?: string | null;
   to?: string;
@@ -58,14 +58,8 @@ export interface AutomationContext {
   issueCreationCount?: number;
 }
 
-export const AUTOMATION_ISSUE_INCLUDE = {
-  assignee: { select: { id: true, username: true, displayName: true, email: true } },
-  creator: { select: { id: true, username: true, displayName: true, email: true } },
-  labels: { select: { name: true } },
-  sprint: { select: { id: true, name: true, goal: true } },
-  column: { select: { id: true, name: true } },
-  project: { select: { id: true, name: true, key: true } },
-} as const;
+// Re-export so existing consumers importing from this file keep working
+export { AUTOMATION_ISSUE_INCLUDE } from '../../utils/prisma-selects';
 
 interface CreateRuleData {
   name: string;
@@ -87,8 +81,8 @@ export async function createRule(projectId: string, data: CreateRuleData) {
   if (data.condition) {
     try {
       parse(data.condition);
-    } catch (e: any) {
-      throw new AppError(400, `Invalid condition: ${e.message}`);
+    } catch (e: unknown) {
+      throw new AppError(400, `Invalid condition: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -130,8 +124,8 @@ export async function updateRule(ruleId: string, data: Partial<CreateRuleData>) 
   if (data.condition) {
     try {
       parse(data.condition);
-    } catch (e: any) {
-      throw new AppError(400, `Invalid condition: ${e.message}`);
+    } catch (e: unknown) {
+      throw new AppError(400, `Invalid condition: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -206,7 +200,10 @@ export async function evaluateRules(
   }
 }
 
-function matchesCondition(rule: any, context: AutomationContext): boolean {
+function matchesCondition(
+  rule: { condition?: string | null; conditions?: unknown },
+  context: AutomationContext,
+): boolean {
   if (rule.condition) {
     const ast = parse(rule.condition);
     return evaluate(ast, context.issue, issueFieldRegistry, {
@@ -261,7 +258,7 @@ async function buildTemplateContext(context: AutomationContext) {
   return {
     issue: {
       ...issue,
-      labels: issue.labels?.map((l: any) => l.name) ?? [],
+      labels: (issue.labels as { name: string }[] | undefined)?.map((l) => l.name) ?? [],
     },
     trigger: context.from !== undefined ? 'issue:status_changed' : 'issue:created',
     from: context.from,

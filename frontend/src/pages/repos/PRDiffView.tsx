@@ -359,18 +359,20 @@ function ActiveFileDiff({
                             <td className="w-6 text-center text-text-tertiary select-none px-1 relative">
                               {line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}
                               {currentLine !== null && (
-                                <button
-                                  title="Add comment"
+                                <Button
+                                  variant="primary"
+                                  size="xs"
+                                  aria-label="Add comment"
                                   onClick={() =>
                                     setCommentingOn({
                                       filePath: activeChunk.file,
                                       line: currentLine,
                                     })
                                   }
-                                  className="absolute left-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center h-4 w-4 rounded bg-primary text-text-inverse"
+                                  className="absolute left-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity !p-0 !h-4 !w-4 !min-w-0 rounded"
                                 >
                                   <Plus className="h-2.5 w-2.5" />
-                                </button>
+                                </Button>
                               )}
                             </td>
                             <td className="pl-2 whitespace-pre leading-5">{line.content || ' '}</td>

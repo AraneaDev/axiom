@@ -107,16 +107,18 @@ export default function WikiLayout() {
             {spaces && spaces.filter((s) => !s.isArchived).length > 1 ? (
               <Dropdown
                 trigger={
-                  <button
+                  <Button
                     type="button"
-                    className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-md hover:bg-surface-tertiary transition-colors mb-3"
+                    variant="ghost"
+                    size="sm"
+                    className="flex items-center gap-2 w-full justify-start px-2 py-1.5 mb-3"
                   >
                     <Library className="h-4 w-4 text-primary shrink-0" />
                     <span className="text-sm font-semibold text-text truncate flex-1">
                       {currentSpace.name}
                     </span>
                     <ChevronDown className="h-3.5 w-3.5 text-text-tertiary shrink-0" />
-                  </button>
+                  </Button>
                 }
                 align="left"
               >

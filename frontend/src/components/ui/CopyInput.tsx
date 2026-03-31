@@ -13,13 +13,10 @@ interface CopyInputProps {
 /**
  * Read-only input with a copy-to-clipboard button.
  * Used for displaying URLs or tokens that users need to copy.
- * @param props.value - The text to display and copy.
  * @param root0
- * @param root0.value
- * @param props.label - Accessible label for the input.
- * @param root0.label
- * @param props.className - Additional CSS classes for the wrapper.
- * @param root0.className
+ * @param root0.value - The text to display and copy.
+ * @param root0.label - Accessible label for the input.
+ * @param root0.className - Additional CSS classes for the wrapper.
  */
 export function CopyInput({ value, label, className }: CopyInputProps) {
   const [copied, setCopied] = useState(false);

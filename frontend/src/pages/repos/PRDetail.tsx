@@ -13,6 +13,7 @@ import { reposApi } from '@/api/repos.api';
 import { statusChecksApi } from '@/api/status-checks.api';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import { usePRInvalidation } from '@/hooks/usePRInvalidation';
 import { useRepoContext } from '@/hooks/useRepoContext';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -48,6 +49,7 @@ export default function PRDetail() {
   }, []);
 
   const prNumber = parseInt(prNum!);
+  const { invalidatePR } = usePRInvalidation(currentRepo?.id ?? '', prNumber);
 
   // Hydration: single request for all PR detail data
   const hydrationQuery = useQuery({
@@ -189,9 +191,7 @@ export default function PRDetail() {
     onMutate: (commentId) => setApplyingComment(commentId),
     onSettled: () => setApplyingComment(null),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pr', currentRepo?.id, prNumber] });
-      queryClient.invalidateQueries({ queryKey: ['prDiff', currentRepo?.id, prNumber] });
-      queryClient.invalidateQueries({ queryKey: ['prCommits', currentRepo?.id, prNumber] });
+      invalidatePR();
     },
   });
 

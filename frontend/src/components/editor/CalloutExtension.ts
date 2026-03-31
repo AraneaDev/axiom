@@ -53,6 +53,7 @@ export const CalloutExtension = Node.create({
   addStorage() {
     return {
       markdown: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         serialize(state: any, node: any) {
           const typeMap: Record<string, string> = {
             info: 'NOTE',

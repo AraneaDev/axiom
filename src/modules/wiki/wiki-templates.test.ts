@@ -75,8 +75,8 @@ describe('Wiki Template Resolution API', () => {
         context: { teamId, spaceId },
       });
     expect(res.status).toBe(200);
-    expect(res.body.resolved).toContain('Wiki Template Test User');
-    expect(res.body.resolved).not.toContain('{{');
+    expect(res.body.body).toContain('Wiki Template Test User');
+    expect(res.body.body).not.toContain('{{');
   });
 
   it('2. should resolve now() function', async () => {
@@ -89,8 +89,8 @@ describe('Wiki Template Resolution API', () => {
         context: { teamId, spaceId },
       });
     expect(res.status).toBe(200);
-    expect(res.body.resolved).toBeTruthy();
-    expect(res.body.resolved).not.toBe('{{now()}}');
+    expect(res.body.body).toBeTruthy();
+    expect(res.body.body).not.toBe('{{now()}}');
   });
 
   it('3. should handle missing variables gracefully', async () => {
@@ -103,7 +103,7 @@ describe('Wiki Template Resolution API', () => {
         context: { teamId, spaceId },
       });
     expect(res.status).toBe(200);
-    expect(res.body.resolved).toBe('Value: ');
+    expect(res.body.body).toBe('Value: ');
   });
 
   it('4. should require authentication', async () => {

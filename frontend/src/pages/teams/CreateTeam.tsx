@@ -9,7 +9,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
-import { useToast } from '@/components/ui/Toast';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 /**
  *
@@ -20,12 +20,18 @@ export default function CreateTeam() {
   const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: orgsApi.list });
   const currentOrg = orgs?.find((o) => o.slug === org);
 
-  const toast = useToast();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  const mutation = useMutationWithToast(
+    () => teamsApi.create(currentOrg!.id, { name, slug, description: description || undefined }),
+    {
+      successMessage: 'Team created',
+      errorMessage: 'Failed to create team',
+      onSuccess: (team) => navigate(`/${org}/${team.slug}`),
+    },
+  );
 
   function handleNameChange(value: string) {
     setName(value);
@@ -37,34 +43,15 @@ export default function CreateTeam() {
     );
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!currentOrg) return;
-    setError('');
-    setLoading(true);
-    try {
-      const team = await teamsApi.create(currentOrg.id, {
-        name,
-        slug,
-        description: description || undefined,
-      });
-      toast.success('Team created');
-      navigate(`/${org}/${team.slug}`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create team');
-    } finally {
-      setLoading(false);
-    }
+    mutation.mutate();
   }
 
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create team</h1>
-      {error && (
-        <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
-          {error}
-        </div>
-      )}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input
           id="name"
@@ -93,8 +80,8 @@ export default function CreateTeam() {
             placeholder="What does this team work on?"
           />
         </div>
-        <Button type="submit" disabled={loading}>
-          {loading ? (
+        <Button type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? (
             <Spinner size="sm" />
           ) : (
             <>
