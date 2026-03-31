@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 
-import { prisma } from '../../config/database';
 import { param } from '../../utils/params';
 
 import * as linkService from './wiki-issue-links.service';
@@ -64,10 +63,7 @@ export async function removeLink(req: Request, res: Response) {
 export async function listLinkedPagesForIssue(req: Request, res: Response) {
   const projectId = param(req, 'projectId');
   const issueNumber = param(req, 'issueNumber');
-  const issue = await prisma.issue.findFirst({
-    where: { projectId, number: parseInt(issueNumber, 10) },
-    select: { id: true },
-  });
+  const issue = await linkService.findIssueByNumber(projectId, parseInt(issueNumber, 10));
   if (!issue) {
     res.status(404).json({ error: { message: 'Issue not found' } });
     return;

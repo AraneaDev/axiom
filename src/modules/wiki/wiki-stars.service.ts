@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { SPACE_URL_SELECT, USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
  * Toggle a star on a wiki page for a user.
@@ -50,19 +50,7 @@ export async function getStarredPages(userId: string) {
           title: true,
           slug: true,
           spaceId: true,
-          space: {
-            select: {
-              id: true,
-              slug: true,
-              name: true,
-              team: {
-                select: {
-                  slug: true,
-                  org: { select: { slug: true } },
-                },
-              },
-            },
-          },
+          space: { select: SPACE_URL_SELECT },
           versions: {
             orderBy: { version: 'desc' as const },
             take: 1,

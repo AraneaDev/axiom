@@ -4,7 +4,7 @@ import { assertAuthor } from '../../utils/assert-author';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
-import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { TEAM_ORG_SELECT, USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 import { createNotification } from '../notifications/notifications.service';
 
@@ -31,7 +31,7 @@ export async function addComment(issueId: string, authorId: string, body: string
       title: true,
       number: true,
       project: {
-        select: { slug: true, team: { select: { slug: true, org: { select: { slug: true } } } } },
+        select: { slug: true, team: { select: TEAM_ORG_SELECT } },
       },
     },
   });

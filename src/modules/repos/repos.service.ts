@@ -502,3 +502,18 @@ export async function updateFile(
     }).catch(() => {});
   }
 }
+
+/**
+ * Look up a user's display name and email for use in git commits.
+ * @param userId - The user ID to look up
+ * @returns Object with displayName and email
+ * @throws {AppError} 404 if user not found
+ */
+export async function getUserForCommit(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { displayName: true, email: true },
+  });
+  if (!user) throw new AppError(404, 'User not found');
+  return user;
+}

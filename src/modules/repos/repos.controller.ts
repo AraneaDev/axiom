@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 
-import { prisma } from '../../config/database';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
@@ -132,18 +131,15 @@ export const listTags = asyncHandler(async (req: Request, res: Response) => {
 export const updateBlob = asyncHandler(async (req: Request, res: Response) => {
   const data = validate(updateFileSchema, req.body);
   const filePath = wildcardPath(req);
-  const user = await prisma.user.findUnique({
-    where: { id: req.userId! },
-    select: { displayName: true, email: true },
-  });
+  const user = await reposService.getUserForCommit(req.userId!);
   const result = await reposService.updateFile(
     param(req, 'repoId'),
     filePath,
     data.content,
     data.message,
     data.branch,
-    user!.displayName,
-    user!.email,
+    user.displayName,
+    user.email,
   );
   res.json(result);
 });

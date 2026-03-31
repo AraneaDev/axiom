@@ -1,9 +1,13 @@
 import { Request, Response } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler';
-import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
-import { validate, adminUpdateUserSchema, adminResetPasswordSchema } from '../../utils/validation';
+import {
+  validate,
+  adminListUsersQuerySchema,
+  adminUpdateUserSchema,
+  adminResetPasswordSchema,
+} from '../../utils/validation';
 
 import * as adminService from './admin.service';
 
@@ -13,10 +17,12 @@ export const getStats = asyncHandler(async (_req: Request, res: Response) => {
 });
 
 export const listUsers = asyncHandler(async (req: Request, res: Response) => {
-  const search = req.query.search as string | undefined;
-  const { take, skip } = parsePagination(req.query as Record<string, string>);
-
-  const result = await adminService.listUsers({ search, limit: take, offset: skip });
+  const query = validate(adminListUsersQuerySchema, req.query);
+  const result = await adminService.listUsers({
+    search: query.search,
+    limit: query.limit ?? 20,
+    offset: query.offset ?? 0,
+  });
   res.json(result);
 });
 

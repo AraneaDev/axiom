@@ -347,12 +347,10 @@ export default function PageEdit() {
               <div className="flex gap-4">
                 <div className="flex-1 space-y-4">
                   {/* Blank page option */}
-                  <button
-                    type="button"
-                    className={cn(
-                      'w-full bg-surface flex items-center gap-3 px-4 py-3 text-left text-sm transition-colors rounded-lg border border-border',
-                      'hover:border-primary/50 hover:bg-surface-hover',
-                    )}
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full bg-surface justify-start gap-3 px-4 py-3 text-left rounded-lg hover:border-primary/50 hover:bg-surface-hover"
                     onClick={() => {
                       setBody('');
                       setTitle('');
@@ -366,7 +364,7 @@ export default function PageEdit() {
                       <div className="font-medium text-text">Blank page</div>
                       <div className="text-xs text-text-tertiary">Start from scratch</div>
                     </div>
-                  </button>
+                  </Button>
 
                   {/* Built-in templates */}
                   {builtIn.length > 0 && (
@@ -378,12 +376,12 @@ export default function PageEdit() {
                         {builtIn.map((tpl) => {
                           const Icon = BLUEPRINT_ICONS[tpl.name] ?? FileText;
                           return (
-                            <button
+                            <Button
                               key={tpl.id}
-                              type="button"
+                              variant="outline"
+                              size="lg"
                               className={cn(
-                                'flex bg-surface items-center gap-3 rounded-lg border border-border px-4 py-3 text-left text-sm transition-colors',
-                                'hover:border-primary/50 hover:bg-surface-hover',
+                                'bg-surface justify-start gap-3 rounded-lg px-4 py-3 text-left hover:border-primary/50 hover:bg-surface-hover',
                                 hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
                               )}
                               onClick={() => applyTemplate(tpl)}
@@ -399,7 +397,7 @@ export default function PageEdit() {
                                   </div>
                                 )}
                               </div>
-                            </button>
+                            </Button>
                           );
                         })}
                       </div>
@@ -414,12 +412,12 @@ export default function PageEdit() {
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         {custom.map((tpl) => (
-                          <button
+                          <Button
                             key={tpl.id}
-                            type="button"
+                            variant="outline"
+                            size="lg"
                             className={cn(
-                              'flex bg-surface items-center gap-3 rounded-lg border border-border px-4 py-3 text-left text-sm transition-colors',
-                              'hover:border-primary/50 hover:bg-surface-hover',
+                              'bg-surface justify-start gap-3 rounded-lg px-4 py-3 text-left hover:border-primary/50 hover:bg-surface-hover',
                               hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
                             )}
                             onClick={() => applyTemplate(tpl)}
@@ -435,7 +433,7 @@ export default function PageEdit() {
                                 </div>
                               )}
                             </div>
-                          </button>
+                          </Button>
                         ))}
                       </div>
                     </div>

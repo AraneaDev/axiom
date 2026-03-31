@@ -1,5 +1,10 @@
 import { prisma } from '../../config/database';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import {
+  PROJECT_URL_SELECT,
+  SPACE_URL_SELECT,
+  USER_WITH_AVATAR_SELECT,
+} from '../../utils/prisma-selects';
 
 // Matches issue keys like AXM-123
 const ISSUE_KEY_RE = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
@@ -120,19 +125,25 @@ export async function getLinksForPage(pageId: string) {
           priority: true,
           type: true,
           column: { select: { id: true, name: true } },
-          assignee: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
-          project: {
-            select: {
-              id: true,
-              prefix: true,
-              slug: true,
-              team: { select: { slug: true, org: { select: { slug: true } } } },
-            },
-          },
+          assignee: { select: USER_WITH_AVATAR_SELECT },
+          project: { select: { id: true, ...PROJECT_URL_SELECT } },
         },
       },
     },
     orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * Find an issue by project ID and issue number.
+ * @param projectId - The project ID
+ * @param issueNumber - The issue number within the project
+ * @returns The issue or null if not found
+ */
+export async function findIssueByNumber(projectId: string, issueNumber: number) {
+  return prisma.issue.findFirst({
+    where: { projectId, number: issueNumber },
+    select: { id: true },
   });
 }
 
@@ -149,14 +160,7 @@ export async function getLinksForIssue(issueId: string) {
           id: true,
           title: true,
           slug: true,
-          space: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              team: { select: { slug: true, org: { select: { slug: true } } } },
-            },
-          },
+          space: { select: SPACE_URL_SELECT },
         },
       },
     },

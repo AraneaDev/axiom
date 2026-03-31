@@ -2,12 +2,12 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
-import { parsePagination } from '../../utils/pagination';
 import { param, paramInt } from '../../utils/params';
 import {
   validate,
   createIssueSchema,
   updateIssueSchema,
+  issueListQuerySchema,
   createCommentSchema,
   logWorkSchema,
   bulkUpdateIssuesSchema,
@@ -27,20 +27,21 @@ export const get = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
-  const { take, skip } = parsePagination(req.query as Record<string, string>, { limit: 25 });
-  const clampedLimit = Math.min(take, 100);
+  const query = validate(issueListQuerySchema, req.query);
+  const limit = query.limit ?? 25;
+  const offset = query.offset ?? 0;
   const result = await issuesService.listIssues(param(req, 'projectId'), {
-    q: req.query.q as string,
-    type: req.query.type as string,
-    priority: req.query.priority as string,
-    assigneeId: req.query.assigneeId as string,
-    columnId: req.query.columnId as string,
-    sprintId: req.query.sprintId as string,
-    label: req.query.label as string,
-    limit: clampedLimit,
-    offset: skip,
+    q: query.q,
+    type: query.type,
+    priority: query.priority,
+    assigneeId: query.assigneeId,
+    columnId: query.columnId,
+    sprintId: query.sprintId,
+    label: query.label,
+    limit,
+    offset,
   });
-  res.json({ ...result, limit: clampedLimit, offset: skip });
+  res.json({ ...result, limit, offset });
 });
 
 export const update = asyncHandler(async (req: Request, res: Response) => {

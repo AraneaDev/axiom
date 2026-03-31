@@ -4,7 +4,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { invalidateIssueCache } from '../../utils/issue-cache';
-import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { ISSUE_WITH_COLUMN_INCLUDE } from '../../utils/prisma-selects';
 
 /**
  * Bulk update multiple issues at once with shared field values.
@@ -108,11 +108,7 @@ export async function bulkUpdate(
   // Fetch updated records for the response
   const results = await prisma.issue.findMany({
     where: { id: { in: resolvedIds } },
-    include: {
-      assignee: { select: USER_BASIC_SELECT },
-      labels: true,
-      column: true,
-    },
+    include: ISSUE_WITH_COLUMN_INCLUDE,
   });
 
   await invalidateIssueCache(projectId);

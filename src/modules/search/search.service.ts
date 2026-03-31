@@ -452,14 +452,7 @@ async function searchWiki(
     prisma.page.findMany({
       where,
       include: {
-        space: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            team: { select: { slug: true, org: { select: { slug: true } } } },
-          },
-        },
+        space: { select: SPACE_URL_SELECT },
         pageLabels: true,
       },
       take: params.limit,

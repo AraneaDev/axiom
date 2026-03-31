@@ -3,6 +3,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
+import { TEAM_ORG_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 import { createNotification } from '../notifications/notifications.service';
 
@@ -32,7 +33,7 @@ export async function submitReview(
       where: { repoId_number: { repoId, number: prNumber } },
       include: {
         repo: {
-          select: { slug: true, team: { select: { slug: true, org: { select: { slug: true } } } } },
+          select: { slug: true, team: { select: TEAM_ORG_SELECT } },
         },
       },
     }),

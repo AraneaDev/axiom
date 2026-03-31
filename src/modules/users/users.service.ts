@@ -4,7 +4,12 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
-import { USER_WITH_AVATAR_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
+import {
+  REPO_URL_SELECT,
+  TEAM_ORG_INCLUDE,
+  TEAM_ORG_SELECT,
+  USER_WITH_AVATAR_SELECT,
+} from '../../utils/prisma-selects';
 
 // ─── Profile ────────────────────────────────────────────────
 
@@ -106,14 +111,7 @@ export async function getDashboard(userId: string) {
         status: 'OPEN',
       },
       include: {
-        repo: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            team: { select: { slug: true, org: { select: { slug: true } } } },
-          },
-        },
+        repo: { select: REPO_URL_SELECT },
       },
       orderBy: { createdAt: 'desc' },
       take: 20,
@@ -180,7 +178,7 @@ export async function getDashboard(userId: string) {
     .filter((a: RecentActivity) => a.resourceType === 'wiki_page')
     .map((a: RecentActivity) => a.resourceId);
 
-  const teamOrgSelect = { slug: true, org: { select: { slug: true } } } as const;
+  const teamOrgSelect = TEAM_ORG_SELECT;
 
   const issueSelect = {
     id: true,
