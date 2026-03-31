@@ -12,7 +12,7 @@ export const createApiTokenSchema = z.object({
 
 export const addSshKeySchema = z.object({
   title: z.string().min(1).max(100),
-  publicKey: z.string().min(1),
+  publicKey: z.string().min(1).max(10_000),
 });
 
 // ─── Wiki ───────────────────────────────────────────────────
@@ -34,7 +34,7 @@ export const createPageSchema = z.object({
     .min(1)
     .max(100)
     .regex(/^[a-z0-9-]+$/),
-  body: z.string().default(''),
+  body: z.string().max(500_000).default(''),
   parentId: z
     .string()
     .nullable()
@@ -57,15 +57,15 @@ export const restoreVersionSchema = z.object({
 
 export const createPageTemplateSchema = z.object({
   name: z.string().min(1).max(200),
-  body: z.string().min(0).default(''),
+  body: z.string().min(0).max(500_000).default(''),
   description: z.string().max(500).optional(),
 });
 
 // ─── Wiki Page Comments ─────────────────────────────────────
 
 export const createPageCommentSchema = z.object({
-  body: z.string().min(1),
-  anchorText: z.string().optional(),
+  body: z.string().min(1).max(50_000),
+  anchorText: z.string().max(1000).optional(),
 });
 
 // ─── Wiki Page Labels ───────────────────────────────────────

@@ -131,7 +131,18 @@ export async function login(data: { login: string; password: string; twoFactorCo
   if (!user) throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
 
   const valid = await bcrypt.compare(data.password, user.passwordHash);
-  if (!valid) throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
+  if (!valid) {
+    logAudit({
+      userId: user.id,
+      action: 'login_failed',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { reason: 'invalid_password', username: user.username },
+    }).catch(() => {
+      /* fire-and-forget */
+    });
+    throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
+  }
 
   // 2FA check
   if (user.twoFactorEnabled) {
@@ -287,6 +298,15 @@ export async function verifyAndActivateTwoFactor(userId: string, code: string) {
     data: { twoFactorEnabled: true },
   });
 
+  logAudit({
+    userId,
+    action: '2fa_enabled',
+    resourceType: 'user',
+    resourceId: userId,
+  }).catch(() => {
+    /* fire-and-forget */
+  });
+
   return { enabled: true };
 }
 
@@ -312,6 +332,15 @@ export async function disableTwoFactor(userId: string, code: string) {
     data: { twoFactorEnabled: false, twoFactorSecret: null },
   });
 
+  logAudit({
+    userId,
+    action: '2fa_disabled',
+    resourceType: 'user',
+    resourceId: userId,
+  }).catch(() => {
+    /* fire-and-forget */
+  });
+
   return { enabled: false };
 }
 
@@ -324,6 +353,16 @@ const PASSWORD_RESET_TTL_HOURS = 1;
 export async function requestPasswordReset(email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return { success: true };
+
+  logAudit({
+    userId: user.id,
+    action: 'password_reset_requested',
+    resourceType: 'user',
+    resourceId: user.id,
+    details: { email: user.email },
+  }).catch(() => {
+    /* fire-and-forget */
+  });
 
   await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
 

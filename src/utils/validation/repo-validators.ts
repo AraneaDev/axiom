@@ -41,14 +41,14 @@ export const updateRepoSettingsSchema = z.object({
 
 export const createPRSchema = z.object({
   title: z.string().min(1).max(200),
-  body: z.string().default(''),
+  body: z.string().max(100_000).default(''),
   sourceBranch: z.string().min(1),
   targetBranch: z.string().min(1),
 });
 
 export const updatePRSchema = z.object({
   title: z.string().min(1).max(200).optional(),
-  body: z.string().optional(),
+  body: z.string().max(100_000).optional(),
 });
 
 export const mergePRSchema = z.object({
@@ -58,20 +58,20 @@ export const mergePRSchema = z.object({
 
 export const submitReviewSchema = z.object({
   status: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED']),
-  body: z.string().optional(),
+  body: z.string().max(50_000).optional(),
   comments: z
     .array(
       z.object({
         path: z.string(),
         line: z.number().int(),
-        body: z.string().min(1),
+        body: z.string().min(1).max(50_000),
       }),
     )
     .optional(),
 });
 
 export const addPRCommentSchema = z.object({
-  body: z.string().min(1),
+  body: z.string().min(1).max(50_000),
   filePath: z.string().optional(),
   line: z.number().int().optional(),
   parentId: z.string().optional(),
@@ -86,7 +86,7 @@ export const batchApplySuggestionsSchema = z.object({
 });
 
 export const updateFileSchema = z.object({
-  content: z.string(),
+  content: z.string().max(500_000),
   message: z.string().min(1).max(500),
   branch: z.string().min(1),
 });
@@ -95,7 +95,7 @@ export const updateFileSchema = z.object({
 
 export const createPipelineSchema = z.object({
   name: z.string().min(1).max(100),
-  yamlContent: z.string().min(1),
+  yamlContent: z.string().min(1).max(100_000),
 });
 
 export const updatePipelineSchema = createPipelineSchema.partial();
@@ -109,7 +109,7 @@ export const triggerRunSchema = z.object({
 export const createReleaseSchema = z.object({
   tagName: z.string().min(1).max(100),
   title: z.string().min(1).max(200),
-  body: z.string().optional(),
+  body: z.string().max(100_000).optional(),
   isDraft: z.boolean().default(false),
   isPrerelease: z.boolean().default(false),
   targetBranch: z.string().min(1),
@@ -118,7 +118,7 @@ export const createReleaseSchema = z.object({
 
 export const updateReleaseSchema = z.object({
   title: z.string().min(1).max(200).optional(),
-  body: z.string().optional(),
+  body: z.string().max(100_000).optional(),
   isDraft: z.boolean().optional(),
   isPrerelease: z.boolean().optional(),
 });

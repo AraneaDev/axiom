@@ -19,6 +19,7 @@ export {
   searchSchema,
   codeSearchSchema,
   savedSearchSchema,
+  adminListUsersQuerySchema,
   adminUpdateUserSchema,
   adminResetPasswordSchema,
   createWorkflowRuleSchema,
@@ -36,6 +37,7 @@ export {
 export {
   createIssueSchema,
   updateIssueSchema,
+  issueListQuerySchema,
   logWorkSchema,
   bulkUpdateIssuesSchema,
   createSprintSchema,

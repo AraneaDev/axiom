@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 export const createIssueSchema = z.object({
   title: z.string().min(1).max(200),
-  body: z.string().default(''),
+  body: z.string().max(100_000).default(''),
   type: z.enum(['TASK', 'BUG', 'STORY', 'EPIC']).default('TASK'),
   priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).default('MEDIUM'),
   assigneeId: z.string().optional(),
@@ -39,6 +39,20 @@ export const bulkUpdateIssuesSchema = z.object({
     sprintId: z.string().nullable().optional(),
     labels: z.array(z.string()).optional(),
   }),
+});
+
+// ─── Issue List Query ──────────────────────────────────────
+
+export const issueListQuerySchema = z.object({
+  q: z.string().max(1000).optional(),
+  type: z.string().optional(),
+  priority: z.string().optional(),
+  assigneeId: z.string().optional(),
+  columnId: z.string().optional(),
+  sprintId: z.string().optional(),
+  label: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
 });
 
 // ─── Sprints ───────────────────────────────────────────────

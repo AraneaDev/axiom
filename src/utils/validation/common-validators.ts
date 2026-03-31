@@ -92,7 +92,7 @@ export const addTeamMemberSchema = z.object({
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(100),
   slug: slugValidator,
-  description: z.string().optional(),
+  description: z.string().max(2000).optional(),
   prefix: z
     .string()
     .min(2)
@@ -107,7 +107,7 @@ export const updateProjectSchema = createProjectSchema.partial().extend({
 // ─── Comments ───────────────────────────────────────────────
 
 export const createCommentSchema = z.object({
-  body: z.string().min(1),
+  body: z.string().min(1).max(50_000),
 });
 
 // ─── Labels ────────────────────────────────────────────────
@@ -123,7 +123,7 @@ export const updateLabelSchema = createLabelSchema.partial();
 // ─── Search ─────────────────────────────────────────────────
 
 export const searchSchema = z.object({
-  q: z.string().min(1),
+  q: z.string().min(1).max(1000),
   type: z.enum(['issues', 'wiki', 'repos', 'code', 'all']).default('all'),
   teamId: z.string().optional(),
   projectId: z.string().optional(),
@@ -136,7 +136,7 @@ export const searchSchema = z.object({
 });
 
 export const codeSearchSchema = z.object({
-  q: z.string().min(1),
+  q: z.string().min(1).max(1000),
   repoIds: z.string().optional(), // comma-separated repo IDs
   limit: z.coerce.number().int().min(1).max(50).default(50),
 });
@@ -151,6 +151,12 @@ export const savedSearchSchema = z.object({
 });
 
 // ─── Admin ──────────────────────────────────────────────────
+
+export const adminListUsersQuerySchema = z.object({
+  search: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
 
 export const adminUpdateUserSchema = z.object({
   displayName: z.string().min(1).max(100).optional(),
@@ -203,7 +209,7 @@ export const createIssueTemplateSchema = z.object({
   name: z.string().min(1).max(200),
   type: z.enum(['TASK', 'BUG', 'STORY', 'EPIC']),
   title: z.string().min(1).max(500),
-  body: z.string().default(''),
+  body: z.string().max(100_000).default(''),
   labels: z.array(z.string()).optional(),
   assigneeId: z.string().optional(),
 });
