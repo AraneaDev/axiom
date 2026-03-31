@@ -12,6 +12,7 @@ import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
+import { PROJECT_URL_SELECT } from '../../utils/prisma-selects';
 import { getRepoDisk } from '../../utils/repo-disk';
 import { logActivity } from '../activity/activity.service';
 import { enforceMergeProtection } from '../repos/protection.service';
@@ -40,6 +41,10 @@ async function parseAndLinkIssues(prId: string, repoId: string, text: string): P
   await prisma.issuePullRequest.deleteMany({ where: { prId } });
 
   const matches = [...text.matchAll(ISSUE_REF_RE)];
+  if (matches.length === 0 || teamProjects.length === 0) return;
+
+  // Collect all referenced issue numbers and determine refType per number
+  const refTypeByNumber = new Map<number, CommitRefType>();
   for (const match of matches) {
     const keyword = match[1]?.toLowerCase();
     const issueNum = parseInt(match[2]);
@@ -48,19 +53,30 @@ async function parseAndLinkIssues(prId: string, repoId: string, text: string): P
       : keyword?.startsWith('fix')
         ? CommitRefType.FIXES
         : CommitRefType.REFS;
+    // Later matches for the same number override earlier ones (preserves original behavior)
+    refTypeByNumber.set(issueNum, refType);
+  }
 
-    for (const project of teamProjects) {
-      const issue = await prisma.issue.findUnique({
-        where: { projectId_number: { projectId: project.id, number: issueNum } },
-      });
-      if (!issue) continue;
+  const issueNumbers = [...refTypeByNumber.keys()];
+  const projectIds = teamProjects.map((p) => p.id);
 
-      await prisma.issuePullRequest.upsert({
-        where: { issueId_prId: { issueId: issue.id, prId } },
-        create: { issueId: issue.id, prId, refType },
-        update: { refType },
-      });
-    }
+  // Single batch query replaces N * M sequential findUnique calls
+  const matchedIssues = await prisma.issue.findMany({
+    where: {
+      projectId: { in: projectIds },
+      number: { in: issueNumbers },
+    },
+    select: { id: true, projectId: true, number: true },
+  });
+
+  // Upsert links for all matched issues
+  for (const issue of matchedIssues) {
+    const refType = refTypeByNumber.get(issue.number)!;
+    await prisma.issuePullRequest.upsert({
+      where: { issueId_prId: { issueId: issue.id, prId } },
+      create: { issueId: issue.id, prId, refType },
+      update: { refType },
+    });
   }
 }
 
@@ -539,13 +555,7 @@ export async function getLinkedIssues(repoId: string, prNumber: number) {
     include: {
       issue: {
         include: {
-          project: {
-            select: {
-              prefix: true,
-              slug: true,
-              team: { select: { slug: true, org: { select: { slug: true } } } },
-            },
-          },
+          project: { select: PROJECT_URL_SELECT },
           column: { select: { name: true } },
           assignee: { select: { id: true, displayName: true } },
         },

@@ -92,19 +92,50 @@ export async function listActivities(opts: {
   if (opts.resourceId) where.resourceId = opts.resourceId;
   if (opts.userId) where.userId = opts.userId;
 
-  // If projectId is provided, find all issue IDs in that project and filter
+  // If projectId is provided, use a raw SQL EXISTS subquery so Postgres handles
+  // the join efficiently instead of fetching all issue IDs into application memory
   if (opts.projectId) {
-    const issues = await prisma.issue.findMany({
-      where: { projectId: opts.projectId },
-      select: { id: true },
-    });
-    const issueIds = issues.map((i: { id: string }) => i.id);
+    where.resourceType = 'issue';
 
-    // Include activities for the project's issues
-    where.OR = [
-      { resourceType: 'issue', resourceId: { in: issueIds } },
-      // Also include any activities directly tied to a projectId in details
-    ];
+    // Fetch matching activity IDs via a single SQL query with an EXISTS subquery.
+    // Postgres uses the issues.projectId index to efficiently filter without
+    // materializing all issue IDs in a huge IN clause.
+    const matchingIds: { id: string }[] = await prisma.$queryRaw`
+      SELECT a.id FROM activities a
+      WHERE a."resourceType" = 'issue'
+        AND EXISTS (
+          SELECT 1 FROM issues i
+          WHERE i.id = a."resourceId"
+            AND i."projectId" = ${opts.projectId}
+        )
+      ORDER BY a."createdAt" DESC
+      LIMIT ${take} OFFSET ${skip}
+    `;
+
+    if (matchingIds.length === 0) {
+      return { activities: [], total: 0 };
+    }
+
+    const countResult: { count: bigint }[] = await prisma.$queryRaw`
+      SELECT COUNT(*)::bigint as count FROM activities a
+      WHERE a."resourceType" = 'issue'
+        AND EXISTS (
+          SELECT 1 FROM issues i
+          WHERE i.id = a."resourceId"
+            AND i."projectId" = ${opts.projectId}
+        )
+    `;
+    const total = Number(countResult[0]?.count ?? 0);
+
+    const activities = await prisma.activity.findMany({
+      where: { id: { in: matchingIds.map((r) => r.id) } },
+      include: {
+        user: { select: USER_WITH_AVATAR_SELECT },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { activities, total };
   }
 
   const [activities, total] = await Promise.all([
