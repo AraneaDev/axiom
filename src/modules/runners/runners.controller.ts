@@ -1,6 +1,8 @@
 import type { RunnerScope } from '@prisma/client';
 import type { Request, Response } from 'express';
 
+import { prisma } from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 
@@ -35,4 +37,63 @@ export const remove = asyncHandler(async (req: Request, res: Response) => {
   const { scopeType, scopeId } = extractScope(req);
   await svc.deleteRunner(param(req, 'runnerId'), scopeType, scopeId);
   res.status(204).end();
+});
+
+export const getTask = asyncHandler(async (req: Request, res: Response) => {
+  const task = await prisma.runnerTask.findUnique({
+    where: { id: param(req, 'taskId') },
+    include: { runner: { select: { name: true, uuid: true } } },
+  });
+  if (!task) throw new AppError(404, 'Task not found');
+  res.json(task);
+});
+
+export const streamTaskLogs = asyncHandler(async (req: Request, res: Response) => {
+  const taskId = param(req, 'taskId');
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  let lastIndex = -1;
+  const send = (data: unknown) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  const poll = setInterval(async () => {
+    try {
+      const task = await prisma.runnerTask.findUnique({ where: { id: taskId } });
+      if (!task) {
+        clearInterval(poll);
+        res.write('event: done\ndata: {}\n\n');
+        res.end();
+        return;
+      }
+
+      const lines = await prisma.runnerTaskLog.findMany({
+        where: { taskId, lineIndex: { gt: lastIndex } },
+        orderBy: { lineIndex: 'asc' },
+      });
+
+      if (lines.length > 0) {
+        lastIndex = lines[lines.length - 1].lineIndex;
+        send({
+          lines: lines.map((l) => ({
+            index: l.lineIndex,
+            content: l.content,
+            timestamp: l.timestamp,
+          })),
+        });
+      }
+
+      const terminal = ['SUCCESS', 'FAILURE', 'CANCELLED'];
+      if (terminal.includes(task.status)) {
+        clearInterval(poll);
+        res.write('event: done\ndata: {}\n\n');
+        res.end();
+      }
+    } catch {
+      clearInterval(poll);
+      res.end();
+    }
+  }, 500);
+
+  req.on('close', () => clearInterval(poll));
 });

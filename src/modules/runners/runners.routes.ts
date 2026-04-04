@@ -26,4 +26,8 @@ router.get('/projects/:projectId/runners', ctrl.list);
 router.get('/projects/:projectId/runners/:runnerId', ctrl.get);
 router.delete('/projects/:projectId/runners/:runnerId', ctrl.remove);
 
+// Task endpoints (scope-independent, require standard auth)
+router.get('/runner-tasks/:taskId', ctrl.getTask);
+router.get('/runner-tasks/:taskId/logs', ctrl.streamTaskLogs);
+
 export default router;
