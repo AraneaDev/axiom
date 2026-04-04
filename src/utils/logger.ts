@@ -1,3 +1,5 @@
+import os from 'os';
+
 import pino from 'pino';
 
 const pinoLogger = pino({
@@ -8,36 +10,62 @@ const pinoLogger = pino({
     },
   },
   timestamp: pino.stdTimeFunctions.isoTime,
+  redact: {
+    paths: ['password', 'token', 'authorization', 'cookie', 'secret', '*.password', '*.token'],
+    censor: '[REDACTED]',
+  },
+  base: {
+    service: 'axiom-api',
+    pid: process.pid,
+    ...(process.env.NODE_ENV === 'production' && { hostname: os.hostname() }),
+  },
 });
 
+function wrapLevel(level: 'info' | 'warn' | 'error' | 'debug' | 'fatal') {
+  return (message: string, context?: Record<string, unknown>, error?: Error) => {
+    const merged = { ...context, ...(error && { err: error }) };
+    if (Object.keys(merged).length > 0) {
+      pinoLogger[level](merged, message);
+    } else {
+      pinoLogger[level](message);
+    }
+  };
+}
+
+function wrapChildLevel(
+  childPino: pino.Logger,
+  level: 'info' | 'warn' | 'error' | 'debug' | 'fatal',
+) {
+  return (message: string, context?: Record<string, unknown>, error?: Error) => {
+    const merged = { ...context, ...(error && { err: error }) };
+    if (Object.keys(merged).length > 0) {
+      childPino[level](merged, message);
+    } else {
+      childPino[level](message);
+    }
+  };
+}
+
 /**
- * Structured JSON logger powered by pino.
- * Maintains backward-compatible API: info/warn/error with optional context object.
- * Adds child() for request-scoped loggers with bound context.
+ * Structured JSON logger powered by Pino.
+ * All levels: debug, info, warn, error, fatal.
+ * Sensitive fields (password, token, etc.) auto-redacted.
  */
 export const logger = {
-  info: (message: string, context?: Record<string, unknown>) =>
-    context ? pinoLogger.info(context, message) : pinoLogger.info(message),
-
-  warn: (message: string, context?: Record<string, unknown>) =>
-    context ? pinoLogger.warn(context, message) : pinoLogger.warn(message),
-
-  error: (message: string, context?: Record<string, unknown>, error?: Error) => {
-    const merged = { ...context, ...(error && { err: error }) };
-    pinoLogger.error(merged, message);
-  },
+  debug: wrapLevel('debug'),
+  info: wrapLevel('info'),
+  warn: wrapLevel('warn'),
+  error: wrapLevel('error'),
+  fatal: wrapLevel('fatal'),
 
   child: (bindings: Record<string, unknown>) => {
     const childPino = pinoLogger.child(bindings);
     return {
-      info: (message: string, context?: Record<string, unknown>) =>
-        context ? childPino.info(context, message) : childPino.info(message),
-      warn: (message: string, context?: Record<string, unknown>) =>
-        context ? childPino.warn(context, message) : childPino.warn(message),
-      error: (message: string, context?: Record<string, unknown>, error?: Error) => {
-        const merged = { ...context, ...(error && { err: error }) };
-        childPino.error(merged, message);
-      },
+      debug: wrapChildLevel(childPino, 'debug'),
+      info: wrapChildLevel(childPino, 'info'),
+      warn: wrapChildLevel(childPino, 'warn'),
+      error: wrapChildLevel(childPino, 'error'),
+      fatal: wrapChildLevel(childPino, 'fatal'),
     };
   },
 };
