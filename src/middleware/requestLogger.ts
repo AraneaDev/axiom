@@ -8,6 +8,7 @@ declare module 'express-serve-static-core' {
   interface Request {
     requestId: string;
     log: ReturnType<typeof logger.child>;
+    userId?: string;
   }
 }
 
@@ -40,7 +41,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
 
     // userId is available here because auth middleware has already run
-    const userId = (req as Record<string, unknown>).userId as string | undefined;
+    const userId = req.userId;
 
     req.log[level]('request completed', {
       statusCode: res.statusCode,
