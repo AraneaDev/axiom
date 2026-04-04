@@ -8,6 +8,7 @@ import { prisma } from './config/database';
 import { env } from './config/env';
 import hookRoutes from './git/hook-handler';
 import smartHttpRoutes from './git/smart-http.routes';
+import { openApiRouter } from './lib/openapi';
 import { auditMiddleware } from './middleware/auditMiddleware';
 import { authenticate } from './middleware/auth';
 import { csrfGuard } from './middleware/csrfGuard';
@@ -153,6 +154,9 @@ app.use('/api/internal/hooks', hookRoutes);
 // MCP SSE endpoint
 app.get('/api/mcp', authenticate, handleMcpSse);
 app.post('/api/mcp/messages', authenticate, handleMcpMessage);
+
+// OpenAPI spec + Scalar docs UI
+app.use('/api', openApiRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
