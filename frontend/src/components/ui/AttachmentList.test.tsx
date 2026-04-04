@@ -34,10 +34,15 @@ import type { AttachmentMeta } from '@/api/attachments.api';
 
 const makeAttachment = (overrides: Partial<AttachmentMeta> = {}): AttachmentMeta => ({
   id: 'att-1',
+  filename: 'document.txt',
   originalName: 'document.txt',
   mimeType: 'text/plain',
   size: 1024,
+  storageKey: 'store/document.txt',
   uploaderId: 'user-1',
+  issueId: null,
+  pageId: null,
+  commentId: null,
   createdAt: '2024-01-01T00:00:00Z',
   ...overrides,
 });

@@ -12,8 +12,8 @@ function makeFile(name: string, type: string, size?: number): File {
 }
 
 describe('FileUpload', () => {
-  let uploadFn: ReturnType<typeof vi.fn>;
-  let onUpload: ReturnType<typeof vi.fn>;
+  let uploadFn: ReturnType<typeof vi.fn<(file: File) => Promise<unknown>>>;
+  let onUpload: ReturnType<typeof vi.fn<(attachment: unknown) => void>>;
 
   beforeEach(() => {
     uploadFn = vi.fn().mockResolvedValue({ url: 'https://example.com/file.pdf' });
