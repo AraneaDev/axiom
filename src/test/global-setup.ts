@@ -12,3 +12,12 @@ export async function setup() {
     cwd: process.cwd(),
   });
 }
+
+/**
+ *
+ */
+export async function teardown() {
+  const { truncateAllTables, disconnectPrisma } = await import('./test-utils');
+  await truncateAllTables();
+  await disconnectPrisma();
+}
