@@ -142,7 +142,11 @@ export async function handleInfoRefs(req: Request, res: Response, next: NextFunc
 
     gitProcess.stdout.pipe(res);
     gitProcess.stderr.on('data', (data) => {
-      logger.warn('git service stderr', { service, output: data.toString() });
+      logger.warn('git service stderr', {
+        service,
+        repoPath: repoRecord.diskPath,
+        output: data.toString(),
+      });
     });
     gitProcess.on('error', (err) => next(err));
   } catch (err) {
@@ -187,18 +191,30 @@ export async function handleServiceRpc(req: Request, res: Response, next: NextFu
     gitProcess.stdout.pipe(res);
 
     gitProcess.stderr.on('data', (data) => {
-      logger.warn('git service stderr', { service, output: data.toString() });
+      logger.warn('git service stderr', {
+        service,
+        repoPath: repoRecord.diskPath,
+        output: data.toString(),
+      });
     });
 
     gitProcess.on('close', (code) => {
       if (code !== 0) {
-        logger.error('git service exited with non-zero code', { service, code });
+        logger.error('git service exited with non-zero code', {
+          service,
+          repoPath: repoRecord.diskPath,
+          code,
+        });
       }
       // If it was a push, we could trigger webhooks here
     });
 
     gitProcess.on('error', (err) => {
-      logger.error('git service error', { service }, err as Error);
+      logger.error(
+        'git service error',
+        { service, repoPath: repoRecord.diskPath },
+        err instanceof Error ? err : undefined,
+      );
       if (!res.headersSent) {
         res.status(500).send('Git operation failed');
       }
