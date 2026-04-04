@@ -43,6 +43,7 @@ import insightsRoutes from './modules/repos/insights.routes';
 import protectionRoutes from './modules/repos/protection.routes';
 import reposRoutes from './modules/repos/repos.routes';
 import webhooksRoutes from './modules/repos/webhooks.routes';
+import connectRpcRoutes from './modules/runners/connect-rpc.routes';
 import runnersRoutes from './modules/runners/runners.routes';
 import savedFiltersRoutes from './modules/saved-filters/saved-filters.routes';
 import searchRoutes from './modules/search/search.routes';
@@ -99,6 +100,9 @@ app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api/auth/reset-password', authLimiter);
 app.use('/api/search', searchLimiter);
 app.use('/git', gitLimiter);
+
+// Connect-RPC routes (runner protocol, no CSRF)
+app.use('/api', connectRpcRoutes);
 
 // CSRF protection: require X-Requested-With header on state-changing requests
 app.use('/api', csrfGuard);
