@@ -14,7 +14,9 @@ export type AutomationTrigger =
   | 'issue:status_changed'
   | 'issue:assigned'
   | 'pr:merged'
-  | 'label:added';
+  | 'label:added'
+  | 'workflow:completed'
+  | 'workflow:failed';
 
 export interface AutomationCondition {
   field: string;
@@ -32,7 +34,8 @@ export interface AutomationAction {
     | 'set_field'
     | 'create_issue'
     | 'send_email'
-    | 'webhook';
+    | 'webhook'
+    | 'run_workflow';
   columnId?: string;
   userId?: string;
   name?: string;
@@ -46,6 +49,14 @@ export interface AutomationAction {
   method?: string;
   headers?: Record<string, string>;
   data?: Record<string, unknown>;
+  // run_workflow fields
+  source?: 'repo_file' | 'pipeline';
+  repoId?: string;
+  workflowPath?: string;
+  pipelineId?: string;
+  ref?: string;
+  labels?: string[];
+  variables?: Record<string, string>;
 }
 
 export interface AutomationContext {
@@ -186,7 +197,7 @@ export async function evaluateRules(
   context: AutomationContext,
   options?: { skipAutomation?: boolean },
 ) {
-  if (options?.skipAutomation || (context.automationDepth ?? 0) > 0) return;
+  if (options?.skipAutomation || (context.automationDepth ?? 0) > 2) return;
 
   const rules = await prisma.automationRule.findMany({
     where: { projectId, trigger, enabled: true },
@@ -373,6 +384,25 @@ async function executeActions(
             );
           }
           break;
+        case 'run_workflow': {
+          if (action.source && (action.workflowPath || action.pipelineId)) {
+            const { createRunnerTask } = await import('../runners/connect-rpc.service');
+            await createRunnerTask({
+              source: action.source,
+              workflowPath: action.workflowPath,
+              pipelineId: action.pipelineId,
+              repoId: action.repoId,
+              ref: action.ref,
+              labels: action.labels ?? [],
+              variables: action.variables,
+              projectId,
+              issueId: issue.id,
+              actorId: context.actorId,
+              templateCtx,
+            });
+          }
+          break;
+        }
       }
     } catch (err) {
       logger.error(

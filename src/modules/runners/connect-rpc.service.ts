@@ -290,6 +290,110 @@ export async function updateLog(
   return { ackIndex: Math.max(ackIndex, 0) };
 }
 
+/**
+ * Create a RunnerTask from a run_workflow automation action.
+ * Resolves workflow content from repo file or pipeline definition.
+ * @param params
+ * @param params.source
+ * @param params.workflowPath
+ * @param params.pipelineId
+ * @param params.repoId
+ * @param params.ref
+ * @param params.labels
+ * @param params.variables
+ * @param params.projectId
+ * @param params.issueId
+ * @param params.actorId
+ * @param params.templateCtx
+ */
+export async function createRunnerTask(params: {
+  source: 'repo_file' | 'pipeline';
+  workflowPath?: string;
+  pipelineId?: string;
+  repoId?: string;
+  ref?: string;
+  labels: string[];
+  variables?: Record<string, string>;
+  projectId: string;
+  issueId: string;
+  actorId: string;
+  templateCtx: Record<string, unknown>;
+}) {
+  let workflowContent: string;
+  let workflowRef: string;
+  let repoId: string;
+
+  if (params.source === 'pipeline') {
+    if (!params.pipelineId) throw new AppError(400, 'pipelineId required for pipeline source');
+    const pipeline = await prisma.pipeline.findUnique({ where: { id: params.pipelineId } });
+    if (!pipeline) throw new AppError(404, 'Pipeline not found');
+    workflowContent = pipeline.yamlContent;
+    workflowRef = params.pipelineId;
+    repoId = params.repoId ?? pipeline.repoId;
+  } else {
+    // repo_file: read workflow YAML from git storage
+    if (!params.workflowPath) throw new AppError(400, 'workflowPath required for repo_file source');
+
+    // Find repo
+    if (params.repoId) {
+      repoId = params.repoId;
+    } else {
+      const repo = await prisma.repository.findFirst({
+        where: { team: { projects: { some: { id: params.projectId } } } },
+      });
+      if (!repo) throw new AppError(404, 'No repository found for project');
+      repoId = repo.id;
+    }
+
+    const repo = await prisma.repository.findUnique({ where: { id: repoId } });
+    if (!repo) throw new AppError(404, 'Repository not found');
+    if (!repo.diskPath) throw new AppError(500, 'Repository has no disk path');
+
+    // Read file from git -- use execFileSync to prevent command injection
+    const ref = params.ref ?? 'HEAD';
+    const { execFileSync } = await import('child_process');
+    try {
+      workflowContent = execFileSync('git', ['show', `${ref}:${params.workflowPath}`], {
+        cwd: repo.diskPath,
+        encoding: 'utf-8',
+        timeout: 5000,
+      });
+    } catch {
+      throw new AppError(404, `Workflow file not found: ${params.workflowPath} at ${ref}`);
+    }
+    workflowRef = params.workflowPath;
+  }
+
+  // Resolve template variables
+  const resolvedVars: Record<string, string> = {};
+  if (params.variables) {
+    const { resolveTemplate } = await import('../../lib/query-engine');
+    for (const [key, val] of Object.entries(params.variables)) {
+      resolvedVars[key] = resolveTemplate(val, params.templateCtx);
+    }
+  }
+
+  const task = await prisma.runnerTask.create({
+    data: {
+      workflowSource: params.source,
+      workflowRef,
+      workflowContent,
+      repoId,
+      gitRef: params.ref ?? 'HEAD',
+      status: 'PENDING',
+      context: { ...resolvedVars, issueId: params.issueId, actorId: params.actorId },
+      labels: params.labels,
+      issueId: params.issueId,
+    },
+  });
+
+  await incrementTasksVersion();
+
+  logger.info('Runner task created', { taskId: task.id, source: params.source, workflowRef });
+
+  return task;
+}
+
 async function getEligibleScopeIds(scopeType: string, scopeId: string): Promise<string[]> {
   switch (scopeType) {
     case 'PROJECT':
