@@ -13,6 +13,7 @@ import { auditMiddleware } from './middleware/auditMiddleware';
 import { authenticate } from './middleware/auth';
 import { csrfGuard } from './middleware/csrfGuard';
 import { errorHandler } from './middleware/errorHandler';
+import { metricsCollector } from './middleware/metricsCollector';
 import { globalLimiter, authLimiter, searchLimiter, gitLimiter } from './middleware/rate-limit.js';
 import { requestLogger } from './middleware/requestLogger';
 import activityRoutes from './modules/activity/activity.routes';
@@ -85,6 +86,7 @@ app.use(
   }),
 );
 app.use(requestLogger);
+app.use(metricsCollector);
 app.use(express.json({ limit: '5mb' }));
 
 // Rate limiting
