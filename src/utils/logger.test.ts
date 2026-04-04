@@ -1,61 +1,52 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { logger } from './logger';
-
+// Pino writes ALL levels to stdout (unlike the old custom logger which split stdout/stderr).
+// This is an intentional behavior change — pino unifies output for structured log aggregation.
 describe('logger', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
+  let output: string[];
+
+  beforeEach(() => {
+    output = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      output.push(chunk.toString());
+      return true;
+    });
   });
 
-  it('should write info messages to stdout as JSON', () => {
-    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    logger.info('test info message', { requestId: '123' });
-    expect(spy).toHaveBeenCalledOnce();
-    const output = spy.mock.calls[0][0] as string;
-    const parsed = JSON.parse(output.trim());
-    expect(parsed.level).toBe('info');
-    expect(parsed.message).toBe('test info message');
-    expect(parsed.timestamp).toBeDefined();
-    expect(parsed.context.requestId).toBe('123');
+  it('exports info, warn, and error methods', async () => {
+    const { logger } = await import('./logger');
+    expect(typeof logger.info).toBe('function');
+    expect(typeof logger.warn).toBe('function');
+    expect(typeof logger.error).toBe('function');
   });
 
-  it('should write warn messages to stdout as JSON', () => {
-    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    logger.warn('test warning');
-    expect(spy).toHaveBeenCalledOnce();
-    const output = spy.mock.calls[0][0] as string;
-    const parsed = JSON.parse(output.trim());
-    expect(parsed.level).toBe('warn');
-    expect(parsed.message).toBe('test warning');
+  it('info writes structured JSON to stdout', async () => {
+    const { logger } = await import('./logger');
+    logger.info('test message', { key: 'value' });
+    expect(output.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(output[0]);
+    expect(parsed.msg).toBe('test message');
+    expect(parsed.key).toBe('value');
+    expect(parsed.level).toBeDefined();
+    expect(parsed.time).toBeDefined();
   });
 
-  it('should write error messages to stderr with error object', () => {
-    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    const err = new Error('something broke');
-    logger.error('failure occurred', { module: 'auth' }, err);
-    expect(spy).toHaveBeenCalledOnce();
-    const output = spy.mock.calls[0][0] as string;
-    const parsed = JSON.parse(output.trim());
-    expect(parsed.level).toBe('error');
-    expect(parsed.message).toBe('failure occurred');
-    expect(parsed.context.module).toBe('auth');
-    expect(parsed.error.message).toBe('something broke');
-    expect(parsed.error.stack).toBeDefined();
+  it('error includes error stack when provided', async () => {
+    const { logger } = await import('./logger');
+    const err = new Error('boom');
+    logger.error('failure', {}, err);
+    const parsed = JSON.parse(output[0]);
+    expect(parsed.msg).toBe('failure');
+    expect(parsed.err).toBeDefined();
+    expect(parsed.err.stack).toContain('boom');
   });
 
-  it('should include ISO timestamp in output', () => {
-    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    logger.info('timestamp test');
-    const output = spy.mock.calls[0][0] as string;
-    const parsed = JSON.parse(output.trim());
-    expect(new Date(parsed.timestamp).toISOString()).toBe(parsed.timestamp);
-  });
-
-  it('should omit context when not provided', () => {
-    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    logger.info('no context');
-    const output = spy.mock.calls[0][0] as string;
-    const parsed = JSON.parse(output.trim());
-    expect(parsed.context).toBeUndefined();
+  it('child creates a logger with bound context', async () => {
+    const { logger } = await import('./logger');
+    const child = logger.child({ requestId: 'abc-123' });
+    child.info('child message');
+    const parsed = JSON.parse(output[0]);
+    expect(parsed.requestId).toBe('abc-123');
+    expect(parsed.msg).toBe('child message');
   });
 });
