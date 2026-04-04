@@ -8,6 +8,8 @@ import { redis } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
+import { AUTOMATION_ISSUE_INCLUDE } from '../../utils/prisma-selects';
+import { evaluateRules } from '../automation/automation.service';
 
 const TASKS_VERSION_KEY = 'runner:tasks_version';
 
@@ -253,6 +255,9 @@ export async function updateTask(
     taskId: updated.id,
   });
 
+  // Fire completion handlers (auto-comment + workflow triggers)
+  await handleTaskCompletion(updated);
+
   return { state: { id: updated.id, result: data.result } };
 }
 
@@ -392,6 +397,70 @@ export async function createRunnerTask(params: {
   logger.info('Runner task created', { taskId: task.id, source: params.source, workflowRef });
 
   return task;
+}
+
+/**
+ * Handle task completion: post comment on issue, fire workflow triggers.
+ * @param task
+ * @param task.id
+ * @param task.issueId
+ * @param task.status
+ * @param task.workflowRef
+ * @param task.workflowSource
+ * @param task.startedAt
+ * @param task.finishedAt
+ * @param task.repoId
+ * @param task.context
+ */
+async function handleTaskCompletion(task: {
+  id: string;
+  issueId: string | null;
+  status: string;
+  workflowRef: string;
+  workflowSource: string;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  repoId: string;
+  context: unknown;
+}) {
+  if (!task.issueId) return;
+
+  const issue = await prisma.issue.findUnique({
+    where: { id: task.issueId },
+    include: AUTOMATION_ISSUE_INCLUDE,
+  });
+  if (!issue) return;
+
+  // Calculate duration
+  const durationMs =
+    task.startedAt && task.finishedAt ? task.finishedAt.getTime() - task.startedAt.getTime() : 0;
+  const durationSec = Math.round(durationMs / 1000);
+
+  // Post comment on issue
+  const statusText = task.status === 'SUCCESS' ? 'SUCCESS' : 'FAILURE';
+  const workflowName =
+    task.workflowSource === 'pipeline'
+      ? task.workflowRef
+      : (task.workflowRef.split('/').pop() ?? task.workflowRef);
+
+  const actorId = (task.context as Record<string, string>)?.actorId ?? issue.creatorId;
+
+  await prisma.comment.create({
+    data: {
+      issueId: task.issueId,
+      authorId: actorId,
+      body: `Workflow \`${workflowName}\` completed with status **${statusText}** (${durationSec}s)`,
+    },
+  });
+
+  // Fire workflow trigger for downstream automation
+  const trigger = task.status === 'SUCCESS' ? 'workflow:completed' : 'workflow:failed';
+
+  evaluateRules(issue.projectId, trigger, {
+    issue: issue as unknown as Record<string, unknown> & { id: string; projectId: string },
+    actorId,
+    automationDepth: 1,
+  }).catch((err) => logger.error('Workflow trigger evaluation failed', {}, err as Error));
 }
 
 async function getEligibleScopeIds(scopeType: string, scopeId: string): Promise<string[]> {
