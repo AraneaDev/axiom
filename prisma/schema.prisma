@@ -269,6 +269,7 @@ model Repository {
   pipelineRuns           PipelineRun[]
   commitStatuses         CommitStatus[]
   deploymentEnvironments DeploymentEnvironment[]
+  runnerTasks            RunnerTask[]
 
   @@unique([teamId, slug])
   @@map("repositories")
@@ -492,6 +493,7 @@ model Issue {
   timeEntries       TimeEntry[]
   sprintHistory     SprintIssueHistory[]
   wikiIssueLinks    WikiPageIssueLink[]
+  runnerTasks       RunnerTask[]
 
   @@unique([projectId, number])
   @@index([assigneeId])
@@ -726,6 +728,18 @@ enum RunStatus {
   FAILURE
   CANCELLED
   SKIPPED
+}
+
+enum RunnerStatus {
+  OFFLINE
+  IDLE
+  ACTIVE
+}
+
+enum RunnerScope {
+  ORG
+  TEAM
+  PROJECT
 }
 
 enum TriggerType {
@@ -1028,6 +1042,8 @@ model AutomationRule {
   enabled    Boolean  @default(true)
   createdAt  DateTime @default(now())
 
+  runnerTasks RunnerTask[]
+
   @@map("automation_rules")
 }
 
@@ -1300,4 +1316,83 @@ model PageView {
   @@index([userId])
   @@index([pageId, viewedAt])
   @@map("page_views")
+}
+
+// ─── Runners ────────────────────────────────────────────────
+
+model Runner {
+  id         String       @id @default(cuid())
+  uuid       String       @unique
+  name       String
+  tokenHash  String
+  status     RunnerStatus @default(IDLE)
+  labels     Json         @default("[]")
+  version    String       @default("")
+  lastSeenAt DateTime?
+  scopeType  RunnerScope
+  scopeId    String
+  tasks      RunnerTask[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([scopeType, scopeId])
+  @@index([status])
+  @@map("runners")
+}
+
+model RunnerRegistrationToken {
+  id        String      @id @default(cuid())
+  tokenHash String      @unique
+  scopeType RunnerScope
+  scopeId   String
+  usedBy    String?
+  expiresAt DateTime
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([scopeType, scopeId])
+  @@map("runner_registration_tokens")
+}
+
+model RunnerTask {
+  id               String          @id @default(cuid())
+  runnerId         String?
+  runner           Runner?         @relation(fields: [runnerId], references: [id])
+  automationRuleId String?
+  automationRule   AutomationRule? @relation(fields: [automationRuleId], references: [id], onDelete: SetNull)
+  issueId          String?
+  issue            Issue?          @relation(fields: [issueId], references: [id])
+  workflowSource   String
+  workflowRef      String
+  workflowContent  String
+  repoId           String
+  repo             Repository      @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  gitRef           String          @default("HEAD")
+  status           RunStatus       @default(PENDING)
+  context          Json            @default("{}")
+  labels           Json            @default("[]")
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  logs             RunnerTaskLog[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([status])
+  @@index([runnerId])
+  @@index([issueId])
+  @@index([repoId])
+  @@map("runner_tasks")
+}
+
+model RunnerTaskLog {
+  id        String     @id @default(cuid())
+  taskId    String
+  task      RunnerTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  lineIndex Int
+  content   String
+  timestamp DateTime   @default(now())
+
+  @@unique([taskId, lineIndex])
+  @@index([taskId])
+  @@map("runner_task_logs")
 }
