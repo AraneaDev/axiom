@@ -3,7 +3,6 @@ import { createServer } from 'http';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
-import morgan from 'morgan';
 
 import { prisma } from './config/database';
 import { env } from './config/env';
@@ -14,6 +13,7 @@ import { authenticate } from './middleware/auth';
 import { csrfGuard } from './middleware/csrfGuard';
 import { errorHandler } from './middleware/errorHandler';
 import { globalLimiter, authLimiter, searchLimiter, gitLimiter } from './middleware/rate-limit.js';
+import { requestLogger } from './middleware/requestLogger';
 import activityRoutes from './modules/activity/activity.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import attachmentsRoutes from './modules/attachments/attachments.routes';
@@ -83,7 +83,7 @@ app.use(
     credentials: true,
   }),
 );
-app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+app.use(requestLogger);
 app.use(express.json({ limit: '5mb' }));
 
 // Rate limiting
