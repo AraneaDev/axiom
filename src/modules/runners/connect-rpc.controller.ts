@@ -28,3 +28,9 @@ export const declare = asyncHandler(async (req: Request, res: Response) => {
   });
   res.json(result);
 });
+
+export const fetchTask = asyncHandler(async (req: Request, res: Response) => {
+  const runner = (req as RunnerRequest).runner!;
+  const result = await svc.fetchTask(runner, req.body.tasksVersion);
+  res.json(result);
+});

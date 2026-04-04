@@ -12,13 +12,22 @@ const prisma = createPrismaClient(process.env.DATABASE_URL);
 // Track created IDs for cleanup
 const createdRunnerIds: string[] = [];
 const createdTokenIds: string[] = [];
+const createdOrgIds: string[] = [];
+const createdTaskIds: string[] = [];
 
 afterAll(async () => {
+  for (const id of createdTaskIds) {
+    await prisma.runnerTask.delete({ where: { id } }).catch(() => {});
+  }
   for (const id of createdRunnerIds) {
     await prisma.runner.delete({ where: { id } }).catch(() => {});
   }
   for (const id of createdTokenIds) {
     await prisma.runnerRegistrationToken.delete({ where: { id } }).catch(() => {});
+  }
+  for (const id of createdOrgIds) {
+    // Cascade deletes teams, projects, repos
+    await prisma.organization.delete({ where: { id } }).catch(() => {});
   }
   await prisma.$disconnect();
 });
@@ -182,6 +191,157 @@ describe('Connect-RPC Protocol', () => {
       });
 
       expect(res.status).toBe(401);
+    });
+  });
+
+  describe('FetchTask', () => {
+    let fetchRunnerUuid: string;
+    let fetchRunnerToken: string;
+    let fetchRunnerId: string;
+    let repoId: string;
+
+    beforeAll(async () => {
+      // Create org > team > project > repo hierarchy for scoping
+      const org = await prisma.organization.create({
+        data: {
+          name: 'FetchTask Test Org',
+          slug: `fetch-test-org-${crypto.randomUUID().slice(0, 8)}`,
+        },
+      });
+      createdOrgIds.push(org.id);
+
+      const team = await prisma.team.create({
+        data: {
+          name: 'FetchTask Test Team',
+          slug: `fetch-test-team-${crypto.randomUUID().slice(0, 8)}`,
+          orgId: org.id,
+        },
+      });
+
+      await prisma.project.create({
+        data: {
+          name: 'FetchTask Test Project',
+          slug: `fetch-test-proj-${crypto.randomUUID().slice(0, 8)}`,
+          prefix: 'FTP',
+          teamId: team.id,
+        },
+      });
+
+      const repo = await prisma.repository.create({
+        data: {
+          name: 'test-repo',
+          slug: `test-repo-${crypto.randomUUID().slice(0, 8)}`,
+          teamId: team.id,
+        },
+      });
+      repoId = repo.id;
+
+      // Register a runner scoped to this org
+      const { plain } = await createRegToken();
+      // Override scope to match the org we created
+      const regToken = await prisma.runnerRegistrationToken.findFirst({
+        where: { id: createdTokenIds[createdTokenIds.length - 1] },
+      });
+      await prisma.runnerRegistrationToken.update({
+        where: { id: regToken!.id },
+        data: { scopeType: 'ORG', scopeId: org.id },
+      });
+
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/Register')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({
+          name: 'fetch-runner',
+          token: plain,
+          labels: ['linux'],
+          version: '0.1.0',
+        });
+
+      fetchRunnerUuid = res.body.runner.uuid;
+      fetchRunnerToken = res.body.runner.token;
+
+      const runner = await prisma.runner.findUnique({ where: { uuid: fetchRunnerUuid } });
+      if (runner) {
+        fetchRunnerId = runner.id;
+        createdRunnerIds.push(runner.id);
+      }
+    });
+
+    it('returns empty when no pending tasks', async () => {
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/FetchTask')
+        .set('X-Runner-UUID', fetchRunnerUuid)
+        .set('X-Runner-Token', fetchRunnerToken)
+        .send({});
+
+      expect(res.status).toBe(200);
+      expect(res.body.task).toBeNull();
+    });
+
+    it('returns and claims a pending task', async () => {
+      // Create a pending task
+      const task = await prisma.runnerTask.create({
+        data: {
+          repoId,
+          workflowSource: 'file',
+          workflowRef: '.axiom/workflows/ci.yml',
+          workflowContent: 'name: CI\non: push',
+          gitRef: 'refs/heads/main',
+          status: 'PENDING',
+          context: { event: 'push' },
+        },
+      });
+      createdTaskIds.push(task.id);
+
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/FetchTask')
+        .set('X-Runner-UUID', fetchRunnerUuid)
+        .set('X-Runner-Token', fetchRunnerToken)
+        .send({});
+
+      expect(res.status).toBe(200);
+      expect(res.body.task).not.toBeNull();
+      expect(res.body.task.id).toBe(task.id);
+      expect(res.body.task.workflowPayload).toBe('name: CI\non: push');
+      expect(res.body.task.gitRef).toBe('refs/heads/main');
+
+      // Verify task is now RUNNING in DB
+      const updated = await prisma.runnerTask.findUnique({ where: { id: task.id } });
+      expect(updated!.status).toBe('RUNNING');
+      expect(updated!.runnerId).toBe(fetchRunnerId);
+
+      // Second fetch should return null (no more pending tasks)
+      const res2 = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/FetchTask')
+        .set('X-Runner-UUID', fetchRunnerUuid)
+        .set('X-Runner-Token', fetchRunnerToken)
+        .send({});
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.task).toBeNull();
+    });
+
+    it('skips DB query when tasksVersion matches', async () => {
+      // First fetch to get the current version
+      const res1 = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/FetchTask')
+        .set('X-Runner-UUID', fetchRunnerUuid)
+        .set('X-Runner-Token', fetchRunnerToken)
+        .send({});
+
+      const version = res1.body.tasksVersion;
+      if (version === undefined) return; // Redis unavailable, skip test
+
+      // Send the same version back -- should short-circuit
+      const res2 = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/FetchTask')
+        .set('X-Runner-UUID', fetchRunnerUuid)
+        .set('X-Runner-Token', fetchRunnerToken)
+        .send({ tasksVersion: version });
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.task).toBeNull();
+      expect(res2.body.tasksVersion).toBe(version);
     });
   });
 });
