@@ -651,6 +651,8 @@ case 'SET_MILESTONE': {
 
 Always check these guards before performing any write in a new action case.
 
+**Note:** The `run_workflow` action type is handled specially -- it creates a `RunnerTask` record and delegates execution to an external runner rather than performing the action inline. See [Runner Module Pattern](design-patterns.md#runner-module-pattern) for details.
+
 ---
 
 ## Query Engine Testing
@@ -778,6 +780,56 @@ feat/widget-crud
 fix/issue-pagination
 refactor/label-badge
 ```
+
+---
+
+## Setting Up a Local Runner
+
+A local runner is only needed if you want to test the `run_workflow` automation action. Axiom is compatible with Gitea's `act_runner`.
+
+### 1. Download act_runner
+
+Check https://gitea.com/gitea/act_runner/releases for the latest version.
+
+```bash
+# Linux amd64
+curl -L https://gitea.com/gitea/act_runner/releases/latest/download/act_runner-linux-amd64 -o act_runner
+chmod +x act_runner
+```
+
+### 2. Generate a registration token
+
+The dev stack must be running (`npm run docker:dev`). Log in to get an access token, then generate a registration token at the desired scope (org, team, or project):
+
+```bash
+# Get an access token
+ACCESS_TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -H 'X-Requested-With: XMLHttpRequest' \
+  -d '{"username":"tim","password":"password123"}' | jq -r '.accessToken')
+
+# Generate a registration token (replace <orgId> with the actual org ID)
+curl -X POST http://localhost:3000/api/orgs/<orgId>/runners/registration-token \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'X-Requested-With: XMLHttpRequest'
+```
+
+### 3. Register the runner
+
+```bash
+./act_runner register \
+  --instance http://localhost:3000 \
+  --token <registration-token> \
+  --name local-runner
+```
+
+### 4. Start the runner daemon
+
+```bash
+./act_runner daemon
+```
+
+The runner will poll `FetchTask` for available work. You can verify it appears in the runner list via the API or the Axiom UI.
 
 ---
 

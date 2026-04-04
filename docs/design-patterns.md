@@ -419,6 +419,29 @@ const { take, skip } = parseServicePagination(opts);  // defaults: take=25, skip
 
 ---
 
+## Runner Module Pattern
+
+The runner subsystem extends the standard backend module pattern with a Connect-RPC protocol layer. The module is split across two routing groups:
+
+```
+src/modules/runners/
+  runners.routes.ts           # REST management API (CRUD, registration tokens)
+  runners.controller.ts       # Request handlers for management endpoints
+  runners.service.ts          # Business logic: runner lifecycle, token generation
+  runner-protocol.routes.ts   # Connect-RPC endpoints (Ping, Register, Declare, FetchTask, UpdateTask, UpdateLog)
+  runner-protocol.controller.ts # Handlers that decode Connect-RPC wire format
+  runner-protocol.service.ts  # Protocol logic: task claiming, log ingestion
+  runner-tasks.routes.ts      # Task status + SSE log streaming
+  runner-tasks.controller.ts  # Task query and SSE handlers
+  runner-health.service.ts    # Background health monitor (stale/dead detection)
+```
+
+The REST management routes are mounted per-scope (`/api/orgs/:orgId/runners`, `/api/teams/:teamId/runners`, `/api/projects/:projectId/runners`). The Connect-RPC protocol routes are mounted at `/api/actions/*` for Gitea `act_runner` compatibility. Task and log endpoints are mounted at `/api/runner-tasks/*`.
+
+The `run_workflow` automation action type dispatches a workflow to an external runner. It creates a `RunnerTask` record scoped to the issue's project (falling back to team, then org). On completion, an auto-comment is posted on the triggering issue and automation rules are re-evaluated.
+
+---
+
 ## Field Registry Pattern
 
 The field registry is a plain object that defines every filterable/sortable field for a given resource type. The query engine compiler and evaluator both accept a registry so the same parser can serve multiple resource types.

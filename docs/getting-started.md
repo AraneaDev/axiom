@@ -224,6 +224,14 @@ Run the script again at any time to pull your latest local commits into the bare
 
 ---
 
+## Runner Setup (Optional)
+
+A local runner is only required if you want to test the `run_workflow` automation action, which dispatches workflows to external Gitea-compatible runners. Most developers do not need this for day-to-day work.
+
+For full setup instructions -- downloading `act_runner`, generating registration tokens, and starting the daemon -- see the [Setting Up a Local Runner](development-guide.md#setting-up-a-local-runner) section in the Development Guide.
+
+---
+
 ## Verifying Everything Works
 
 ### Health check

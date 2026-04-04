@@ -66,7 +66,7 @@ Obtain an access token by calling `POST /api/auth/login` with your Axiom credent
 
 ---
 
-## Available Tools (44)
+## Available Tools (48)
 
 ### Organization (3 tools)
 
@@ -425,6 +425,47 @@ Create a new release with a tag name and target branch.
 
 ---
 
+### Runners (4 tools)
+
+#### `list_runners`
+
+List registered runners at a given scope (org, team, or project).
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`orgId`|string|conditional|Organization ID (provide one scope)|
+|`teamId`|string|conditional|Team ID|
+|`projectId`|string|conditional|Project ID|
+
+#### `generate_runner_registration_token`
+
+Generate a one-time registration token for a new runner.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`orgId`|string|conditional|Organization ID (provide one scope)|
+|`teamId`|string|conditional|Team ID|
+|`projectId`|string|conditional|Project ID|
+
+#### `get_runner_task`
+
+Get the current status of a runner task.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`taskId`|string|yes|Runner task ID|
+
+#### `get_runner_task_logs`
+
+Get log output from a runner task.
+
+|Parameter|Type|Required|Description|
+|-|-|-|-|
+|`taskId`|string|yes|Runner task ID|
+|`limit`|number|no|Max log lines (default: 100)|
+
+---
+
 ### Wiki (6 tools)
 
 #### `list_wiki_spaces`
@@ -585,6 +626,13 @@ get_page_tree(spaceId)       -> navigate pages
 list_teams(orgId)            -> get teamId
 list_repos(teamId)           -> get repoId
 browse_files(repoId)         -> explore code
+```
+
+```
+list_orgs()                  -> get orgId
+list_runners(orgId)          -> see registered runners
+get_runner_task(taskId)      -> check task status
+get_runner_task_logs(taskId) -> read execution logs
 ```
 
 ---

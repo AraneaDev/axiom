@@ -112,6 +112,9 @@ Controllers receive `req`/`res` and call service functions. Services never touch
 | `/api/notifications` | notifications |
 | `/api/saved-filters` | saved-filters |
 | `/api/admin` | admin, audit |
+| `/api/orgs/:orgId/runners`, `/api/teams/:teamId/runners`, `/api/projects/:projectId/runners` | runners (management) |
+| `/api/actions` | runners (Connect-RPC protocol) |
+| `/api/runner-tasks` | runner-tasks (task status + log streaming) |
 | `/api/internal/hooks` | git post-receive hook handler |
 | `/git/*` | smart HTTP git protocol |
 | `/api/mcp` | Model Context Protocol SSE endpoint (authenticated) |
@@ -208,10 +211,30 @@ Automation rules are stored as `AutomationRule` records and evaluated at trigger
 | `create_issue` | Create a linked child issue |
 | `send_email` | Send an email to a specified address |
 | `webhook` | POST a JSON payload to an external URL (SSRF-protected) |
+| `run_workflow` | Dispatch a workflow to an external Gitea-compatible runner |
 
 **Template expressions in actions:** Action field values support `{{expression}}` syntax resolved via the template resolver. At execution time the resolver receives an `AutomationTemplateContext` containing the triggering issue and actor.
 
 **SSRF protection:** The `webhook` action validates the target URL against a blocklist of private IP ranges and loopback addresses before dispatching the request.
+
+### Runner Subsystem
+
+The runner subsystem enables Axiom to dispatch workflow tasks to external execution environments via Gitea-compatible `act_runner` instances. Runners register at three scope levels -- organization, team, or project -- and inherit downward (an org-level runner can pick up tasks from any project in that org).
+
+**Protocol:** Runners communicate using a Connect-RPC protocol compatible with Gitea's `act_runner`. Six RPC endpoints handle the full lifecycle:
+
+1. `Ping` -- runner heartbeat
+2. `Register` -- exchange a registration token for persistent runner credentials
+3. `Declare` -- runner advertises its labels (capabilities)
+4. `FetchTask` -- runner polls for available work (atomic claim via database transaction)
+5. `UpdateTask` -- runner reports execution progress and final status
+6. `UpdateLog` -- runner streams log lines during execution
+
+**Task dispatch flow:** When an automation rule fires a `run_workflow` action, the automation engine creates a `RunnerTask` record in the database. A runner matching the task's scope calls `FetchTask`, which atomically claims the task. During execution the runner streams logs via `UpdateLog` and reports completion via `UpdateTask`. On completion, the system posts an auto-comment on the triggering issue and re-evaluates automation rules against the updated issue state.
+
+**Log streaming:** Logs are stored as `RunnerTaskLog` rows (one per line) and served to the frontend via a Server-Sent Events (SSE) endpoint (`GET /api/runner-tasks/:taskId/logs`). New log lines are pushed in real-time as they arrive from the runner.
+
+**Health monitoring:** A background monitor runs on a configurable interval (default: 60 seconds) and marks runners as `offline` if no heartbeat has been received within the stale threshold (default: 5 minutes). Runners that have been offline beyond the dead threshold (default: 24 hours) are marked as `dead`.
 
 ### Template Variables
 

@@ -3681,6 +3681,146 @@ Serve a `git push` request.
 
 ---
 
+## Runner Management
+
+Runners can be registered at three scope levels. Each scope exposes the same set of endpoints.
+
+### POST /api/orgs/:orgId/runners/registration-token
+
+Generate a one-time registration token for registering a new runner at the organization scope. Requires org ADMIN or OWNER role.
+
+**Response 201:**
+
+```json
+{
+  "token": "rt_abc123..."
+}
+```
+
+The same endpoint pattern exists for teams and projects:
+- `POST /api/teams/:teamId/runners/registration-token`
+- `POST /api/projects/:projectId/runners/registration-token`
+
+### GET /api/orgs/:orgId/runners
+
+List all runners registered at the organization scope.
+
+**Response 200:**
+
+```json
+{
+  "runners": [
+    {
+      "id": "rnr_01HZ...",
+      "name": "build-runner-01",
+      "status": "online",
+      "labels": ["ubuntu-latest", "docker"],
+      "lastSeen": "2026-04-04T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+The same pattern exists for teams and projects:
+- `GET /api/teams/:teamId/runners`
+- `GET /api/projects/:projectId/runners`
+
+### GET /api/orgs/:orgId/runners/:runnerId
+
+Get details for a specific runner. Same pattern for teams and projects.
+
+### DELETE /api/orgs/:orgId/runners/:runnerId
+
+Remove a runner registration. Same pattern for teams and projects. Requires ADMIN or OWNER role.
+
+---
+
+## Connect-RPC Protocol (Runner)
+
+Base path: `/api/actions`
+
+These endpoints implement the Gitea `act_runner` Connect-RPC protocol. They use `application/proto` or `application/json` content types. Runners authenticate using their runner token (obtained during registration).
+
+### POST /api/actions/ping.v1.PingService/Ping
+
+Runner heartbeat. Updates the runner's `lastSeen` timestamp.
+
+### POST /api/actions/runner.v1.RunnerService/Register
+
+Exchange a one-time registration token for persistent runner credentials. Called once during `act_runner register`.
+
+**Request body:**
+
+```json
+{
+  "name": "build-runner-01",
+  "token": "rt_abc123..."
+}
+```
+
+**Response:**
+
+```json
+{
+  "runner": {
+    "id": "rnr_01HZ...",
+    "token": "<persistent-runner-token>"
+  }
+}
+```
+
+### POST /api/actions/runner.v1.RunnerService/Declare
+
+Runner advertises its labels (capabilities such as `ubuntu-latest`, `docker`, `node-20`).
+
+### POST /api/actions/runner.v1.RunnerService/FetchTask
+
+Runner polls for available tasks. The server atomically claims a task matching the runner's scope and labels, returning the task payload. Returns empty if no tasks are available.
+
+### POST /api/actions/runner.v1.RunnerService/UpdateTask
+
+Runner reports task execution progress or final status (success/failure).
+
+### POST /api/actions/runner.v1.RunnerService/UpdateLog
+
+Runner streams log lines during task execution. Logs are stored as `RunnerTaskLog` rows.
+
+---
+
+## Runner Tasks
+
+Base path: `/api/runner-tasks`
+
+### GET /api/runner-tasks/:taskId
+
+Get the current status and metadata for a runner task.
+
+**Response 200:**
+
+```json
+{
+  "id": "rtk_01HZ...",
+  "status": "running",
+  "runnerId": "rnr_01HZ...",
+  "workflowName": "build-and-test",
+  "createdAt": "2026-04-04T10:00:00.000Z",
+  "startedAt": "2026-04-04T10:00:05.000Z",
+  "completedAt": null
+}
+```
+
+### GET /api/runner-tasks/:taskId/logs
+
+Server-Sent Events stream of task log lines. Each event contains a log line with its sequence number and timestamp. The stream remains open while the task is running and closes on completion.
+
+**Event format:**
+
+```
+data: {"line": 1, "content": "Step 1: Checkout repository", "timestamp": "2026-04-04T10:00:06.000Z"}
+```
+
+---
+
 ## MCP Server
 
 Base path: `/api/mcp`
