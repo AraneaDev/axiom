@@ -11,9 +11,12 @@ declare module 'express-serve-static-core' {
   }
 }
 
+const SLOW_REQUEST_MS = parseInt(process.env.SLOW_REQUEST_THRESHOLD_MS || '1000', 10);
+
 /**
  * Assigns a unique request ID (or reuses X-Request-Id from the client),
- * attaches a child logger with request context, and logs request completion.
+ * attaches a child logger with request context, and logs request completion
+ * with duration, status, response size, and slow-request warnings.
  * @param req
  * @param res
  * @param next
@@ -21,18 +24,38 @@ declare module 'express-serve-static-core' {
 export function requestLogger(req: Request, res: Response, next: NextFunction): void {
   const requestId = (req.headers['x-request-id'] as string) || crypto.randomUUID();
   req.requestId = requestId;
-  req.log = logger.child({ requestId, method: req.method, url: req.originalUrl });
+
+  req.log = logger.child({
+    requestId,
+    method: req.method,
+    url: req.originalUrl,
+  });
 
   res.setHeader('X-Request-Id', requestId);
 
   const start = Date.now();
   res.on('finish', () => {
-    const duration = Date.now() - start;
+    const durationMs = Date.now() - start;
+    const contentLength = res.getHeader('content-length');
     const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
+
+    // userId is available here because auth middleware has already run
+    const userId = (req as Record<string, unknown>).userId as string | undefined;
+
     req.log[level]('request completed', {
       statusCode: res.statusCode,
-      durationMs: duration,
+      durationMs,
+      ...(contentLength && { contentLength: Number(contentLength) }),
+      ...(userId && { userId }),
     });
+
+    if (durationMs > SLOW_REQUEST_MS) {
+      req.log.warn('slow request detected', {
+        statusCode: res.statusCode,
+        durationMs,
+        threshold: SLOW_REQUEST_MS,
+      });
+    }
   });
 
   next();
