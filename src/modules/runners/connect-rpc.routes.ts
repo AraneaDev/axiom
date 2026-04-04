@@ -23,6 +23,9 @@ router.post(
   ctrl.fetchTask,
 );
 
+router.post('/actions/runner.v1.RunnerService/UpdateTask', authenticateRunner, ctrl.updateTask);
+router.post('/actions/runner.v1.RunnerService/UpdateLog', authenticateRunner, ctrl.updateLog);
+
 export default router;
 
 async function rateLimitRunner(req: Request, res: Response, next: NextFunction) {

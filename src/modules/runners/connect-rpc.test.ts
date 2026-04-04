@@ -17,6 +17,7 @@ const createdTaskIds: string[] = [];
 
 afterAll(async () => {
   for (const id of createdTaskIds) {
+    await prisma.runnerTaskLog.deleteMany({ where: { taskId: id } }).catch(() => {});
     await prisma.runnerTask.delete({ where: { id } }).catch(() => {});
   }
   for (const id of createdRunnerIds) {
@@ -342,6 +343,321 @@ describe('Connect-RPC Protocol', () => {
       expect(res2.status).toBe(200);
       expect(res2.body.task).toBeNull();
       expect(res2.body.tasksVersion).toBe(version);
+    });
+  });
+
+  describe('UpdateTask', () => {
+    let runnerUuid: string;
+    let runnerToken: string;
+    let runnerId: string;
+    let repoId: string;
+
+    let otherRunnerUuid: string;
+    let otherRunnerToken: string;
+
+    beforeAll(async () => {
+      const org = await prisma.organization.create({
+        data: {
+          name: 'UpdateTask Test Org',
+          slug: `update-task-org-${crypto.randomUUID().slice(0, 8)}`,
+        },
+      });
+      createdOrgIds.push(org.id);
+
+      const team = await prisma.team.create({
+        data: {
+          name: 'UpdateTask Test Team',
+          slug: `update-task-team-${crypto.randomUUID().slice(0, 8)}`,
+          orgId: org.id,
+        },
+      });
+
+      await prisma.project.create({
+        data: {
+          name: 'UpdateTask Test Project',
+          slug: `update-task-proj-${crypto.randomUUID().slice(0, 8)}`,
+          prefix: 'UTP',
+          teamId: team.id,
+        },
+      });
+
+      const repo = await prisma.repository.create({
+        data: {
+          name: 'update-task-repo',
+          slug: `update-task-repo-${crypto.randomUUID().slice(0, 8)}`,
+          teamId: team.id,
+        },
+      });
+      repoId = repo.id;
+
+      // Register runner
+      const { plain } = await createRegToken();
+      const regToken = await prisma.runnerRegistrationToken.findFirst({
+        where: { id: createdTokenIds[createdTokenIds.length - 1] },
+      });
+      await prisma.runnerRegistrationToken.update({
+        where: { id: regToken!.id },
+        data: { scopeType: 'ORG', scopeId: org.id },
+      });
+
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/Register')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ name: 'update-task-runner', token: plain, labels: ['linux'], version: '0.1.0' });
+
+      runnerUuid = res.body.runner.uuid;
+      runnerToken = res.body.runner.token;
+      const runner = await prisma.runner.findUnique({ where: { uuid: runnerUuid } });
+      if (runner) {
+        runnerId = runner.id;
+        createdRunnerIds.push(runner.id);
+      }
+
+      // Register a second runner for the "wrong runner" test
+      const { plain: plain2 } = await createRegToken();
+      const regToken2 = await prisma.runnerRegistrationToken.findFirst({
+        where: { id: createdTokenIds[createdTokenIds.length - 1] },
+      });
+      await prisma.runnerRegistrationToken.update({
+        where: { id: regToken2!.id },
+        data: { scopeType: 'ORG', scopeId: org.id },
+      });
+
+      const res2 = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/Register')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ name: 'other-runner', token: plain2, labels: ['linux'], version: '0.1.0' });
+
+      otherRunnerUuid = res2.body.runner.uuid;
+      otherRunnerToken = res2.body.runner.token;
+      const otherRunner = await prisma.runner.findUnique({ where: { uuid: otherRunnerUuid } });
+      if (otherRunner) createdRunnerIds.push(otherRunner.id);
+    });
+
+    it('sets status to SUCCESS when result is 0', async () => {
+      const task = await prisma.runnerTask.create({
+        data: {
+          repoId,
+          runnerId,
+          workflowSource: 'file',
+          workflowRef: '.axiom/workflows/ci.yml',
+          workflowContent: 'name: CI',
+          gitRef: 'refs/heads/main',
+          status: 'RUNNING',
+          context: { event: 'push' },
+          startedAt: new Date(),
+        },
+      });
+      createdTaskIds.push(task.id);
+
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/UpdateTask')
+        .set('X-Runner-UUID', runnerUuid)
+        .set('X-Runner-Token', runnerToken)
+        .send({ state: { id: task.id, result: 0 } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.state.id).toBe(task.id);
+      expect(res.body.state.result).toBe(0);
+
+      const updated = await prisma.runnerTask.findUnique({ where: { id: task.id } });
+      expect(updated!.status).toBe('SUCCESS');
+      expect(updated!.finishedAt).toBeTruthy();
+
+      // Runner should be back to IDLE
+      const runner = await prisma.runner.findUnique({ where: { id: runnerId } });
+      expect(runner!.status).toBe('IDLE');
+    });
+
+    it('sets status to FAILURE when result is non-zero', async () => {
+      const task = await prisma.runnerTask.create({
+        data: {
+          repoId,
+          runnerId,
+          workflowSource: 'file',
+          workflowRef: '.axiom/workflows/ci.yml',
+          workflowContent: 'name: CI',
+          gitRef: 'refs/heads/main',
+          status: 'RUNNING',
+          context: { event: 'push' },
+          startedAt: new Date(),
+        },
+      });
+      createdTaskIds.push(task.id);
+
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/UpdateTask')
+        .set('X-Runner-UUID', runnerUuid)
+        .set('X-Runner-Token', runnerToken)
+        .send({ state: { id: task.id, result: 1 } });
+
+      expect(res.status).toBe(200);
+
+      const updated = await prisma.runnerTask.findUnique({ where: { id: task.id } });
+      expect(updated!.status).toBe('FAILURE');
+    });
+
+    it('returns 404 for task assigned to a different runner', async () => {
+      const task = await prisma.runnerTask.create({
+        data: {
+          repoId,
+          runnerId, // assigned to first runner
+          workflowSource: 'file',
+          workflowRef: '.axiom/workflows/ci.yml',
+          workflowContent: 'name: CI',
+          gitRef: 'refs/heads/main',
+          status: 'RUNNING',
+          context: { event: 'push' },
+          startedAt: new Date(),
+        },
+      });
+      createdTaskIds.push(task.id);
+
+      // Try to update using the other runner's credentials
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/UpdateTask')
+        .set('X-Runner-UUID', otherRunnerUuid)
+        .set('X-Runner-Token', otherRunnerToken)
+        .send({ state: { id: task.id, result: 0 } });
+
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('UpdateLog', () => {
+    let runnerUuid: string;
+    let runnerToken: string;
+    let runnerId: string;
+    let repoId: string;
+
+    beforeAll(async () => {
+      const org = await prisma.organization.create({
+        data: {
+          name: 'UpdateLog Test Org',
+          slug: `update-log-org-${crypto.randomUUID().slice(0, 8)}`,
+        },
+      });
+      createdOrgIds.push(org.id);
+
+      const team = await prisma.team.create({
+        data: {
+          name: 'UpdateLog Test Team',
+          slug: `update-log-team-${crypto.randomUUID().slice(0, 8)}`,
+          orgId: org.id,
+        },
+      });
+
+      await prisma.project.create({
+        data: {
+          name: 'UpdateLog Test Project',
+          slug: `update-log-proj-${crypto.randomUUID().slice(0, 8)}`,
+          prefix: 'ULP',
+          teamId: team.id,
+        },
+      });
+
+      const repo = await prisma.repository.create({
+        data: {
+          name: 'update-log-repo',
+          slug: `update-log-repo-${crypto.randomUUID().slice(0, 8)}`,
+          teamId: team.id,
+        },
+      });
+      repoId = repo.id;
+
+      const { plain } = await createRegToken();
+      const regToken = await prisma.runnerRegistrationToken.findFirst({
+        where: { id: createdTokenIds[createdTokenIds.length - 1] },
+      });
+      await prisma.runnerRegistrationToken.update({
+        where: { id: regToken!.id },
+        data: { scopeType: 'ORG', scopeId: org.id },
+      });
+
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/Register')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ name: 'log-runner', token: plain, labels: ['linux'], version: '0.1.0' });
+
+      runnerUuid = res.body.runner.uuid;
+      runnerToken = res.body.runner.token;
+      const runner = await prisma.runner.findUnique({ where: { uuid: runnerUuid } });
+      if (runner) {
+        runnerId = runner.id;
+        createdRunnerIds.push(runner.id);
+      }
+    });
+
+    it('stores log lines and returns ackIndex', async () => {
+      const task = await prisma.runnerTask.create({
+        data: {
+          repoId,
+          runnerId,
+          workflowSource: 'file',
+          workflowRef: '.axiom/workflows/ci.yml',
+          workflowContent: 'name: CI',
+          gitRef: 'refs/heads/main',
+          status: 'RUNNING',
+          context: { event: 'push' },
+          startedAt: new Date(),
+        },
+      });
+      createdTaskIds.push(task.id);
+
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/UpdateLog')
+        .set('X-Runner-UUID', runnerUuid)
+        .set('X-Runner-Token', runnerToken)
+        .send({
+          taskId: task.id,
+          index: 0,
+          rows: [{ content: 'Step 1: Checkout' }, { content: 'Step 2: Build' }],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.ackIndex).toBe(1);
+
+      // Verify logs in DB
+      const logs = await prisma.runnerTaskLog.findMany({
+        where: { taskId: task.id },
+        orderBy: { lineIndex: 'asc' },
+      });
+      expect(logs).toHaveLength(2);
+      expect(logs[0].lineIndex).toBe(0);
+      expect(logs[0].content).toBe('Step 1: Checkout');
+      expect(logs[1].lineIndex).toBe(1);
+      expect(logs[1].content).toBe('Step 2: Build');
+    });
+
+    it('handles empty rows with noMore flag', async () => {
+      const task = await prisma.runnerTask.create({
+        data: {
+          repoId,
+          runnerId,
+          workflowSource: 'file',
+          workflowRef: '.axiom/workflows/ci.yml',
+          workflowContent: 'name: CI',
+          gitRef: 'refs/heads/main',
+          status: 'RUNNING',
+          context: { event: 'push' },
+          startedAt: new Date(),
+        },
+      });
+      createdTaskIds.push(task.id);
+
+      const res = await request(app)
+        .post('/api/actions/runner.v1.RunnerService/UpdateLog')
+        .set('X-Runner-UUID', runnerUuid)
+        .set('X-Runner-Token', runnerToken)
+        .send({
+          taskId: task.id,
+          index: 0,
+          rows: [],
+          noMore: true,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.ackIndex).toBe(0);
     });
   });
 });

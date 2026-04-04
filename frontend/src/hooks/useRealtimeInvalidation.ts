@@ -17,7 +17,8 @@ export type RealtimeEvent =
   | { type: 'wiki:updated'; spaceId: string; pageId: string }
   | { type: 'notification'; userId: string; notificationId: string }
   | { type: 'pipeline:updated'; repoId: string; runId: string }
-  | { type: 'repo:pushed'; repoId: string; ref: string };
+  | { type: 'repo:pushed'; repoId: string; ref: string }
+  | { type: 'runner-task:updated'; repoId: string; taskId: string };
 
 /**
  * Hook that auto-subscribes to relevant rooms based on current route context

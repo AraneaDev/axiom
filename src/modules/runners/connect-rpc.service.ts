@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
 import { redis } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
+import { broadcastToRoom } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 
 const TASKS_VERSION_KEY = 'runner:tasks_version';
@@ -209,6 +210,84 @@ async function getCurrentTasksVersion(): Promise<number | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * UpdateTask: runner reports job completion.
+ * result: 0 = SUCCESS, non-zero = FAILURE
+ * @param runnerId
+ * @param data
+ * @param data.id
+ * @param data.result
+ * @param data.stoppedAt
+ */
+export async function updateTask(
+  runnerId: string,
+  data: { id: string; result: number; stoppedAt?: string },
+) {
+  const task = await prisma.runnerTask.findUnique({ where: { id: data.id } });
+  if (!task || task.runnerId !== runnerId) {
+    throw new AppError(404, 'Task not found or not assigned to this runner');
+  }
+
+  const status = data.result === 0 ? 'SUCCESS' : 'FAILURE';
+
+  const updated = await prisma.runnerTask.update({
+    where: { id: data.id },
+    data: {
+      status,
+      finishedAt: data.stoppedAt ? new Date(data.stoppedAt) : new Date(),
+    },
+  });
+
+  // Set runner back to IDLE
+  await prisma.runner.update({
+    where: { id: runnerId },
+    data: { status: 'IDLE' },
+  });
+
+  // Broadcast update
+  broadcastToRoom(`repo:${updated.repoId}`, {
+    type: 'runner-task:updated',
+    repoId: updated.repoId,
+    taskId: updated.id,
+  });
+
+  return { state: { id: updated.id, result: data.result } };
+}
+
+/**
+ * UpdateLog: runner streams log lines.
+ * @param runnerId
+ * @param data
+ * @param data.taskId
+ * @param data.index
+ * @param data.rows
+ * @param data.noMore
+ */
+export async function updateLog(
+  runnerId: string,
+  data: { taskId: string; index: number; rows: Array<{ content: string }>; noMore?: boolean },
+) {
+  const task = await prisma.runnerTask.findUnique({ where: { id: data.taskId } });
+  if (!task || task.runnerId !== runnerId) {
+    throw new AppError(404, 'Task not found or not assigned to this runner');
+  }
+
+  if (data.rows.length > 0) {
+    await prisma.runnerTaskLog.createMany({
+      data: data.rows.map((row, i) => ({
+        taskId: data.taskId,
+        lineIndex: data.index + i,
+        content: row.content,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  const ackIndex = data.index + data.rows.length - 1;
+
+  return { ackIndex: Math.max(ackIndex, 0) };
 }
 
 async function getEligibleScopeIds(scopeType: string, scopeId: string): Promise<string[]> {

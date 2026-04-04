@@ -34,3 +34,15 @@ export const fetchTask = asyncHandler(async (req: Request, res: Response) => {
   const result = await svc.fetchTask(runner, req.body.tasksVersion);
   res.json(result);
 });
+
+export const updateTask = asyncHandler(async (req: Request, res: Response) => {
+  const runner = (req as RunnerRequest).runner!;
+  const result = await svc.updateTask(runner.id, req.body.state);
+  res.json(result);
+});
+
+export const updateLog = asyncHandler(async (req: Request, res: Response) => {
+  const runner = (req as RunnerRequest).runner!;
+  const result = await svc.updateLog(runner.id, req.body);
+  res.json(result);
+});
