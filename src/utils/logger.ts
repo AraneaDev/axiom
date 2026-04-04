@@ -1,53 +1,46 @@
-type LogLevel = 'info' | 'warn' | 'error';
+import pino from 'pino';
 
-interface LogEntry {
-  level: LogLevel;
-  message: string;
-  timestamp: string;
-  context?: Record<string, unknown>;
-  error?: { message: string; stack?: string };
-}
-
-function log(
-  level: LogLevel,
-  message: string,
-  context?: Record<string, unknown>,
-  error?: Error,
-): void {
-  const entry: LogEntry = {
-    level,
-    message,
-    timestamp: new Date().toISOString(),
-    ...(context && { context }),
-    ...(error && { error: { message: error.message, stack: error.stack } }),
-  };
-  const output = JSON.stringify(entry);
-  if (level === 'error') process.stderr.write(output + '\n');
-  else process.stdout.write(output + '\n');
-}
+const pinoLogger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: {
+    level(label) {
+      return { level: label };
+    },
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+});
 
 /**
- * Structured JSON logger that writes to stdout (info/warn) or stderr (error).
+ * Structured JSON logger powered by pino.
+ * Maintains backward-compatible API: info/warn/error with optional context object.
+ * Adds child() for request-scoped loggers with bound context.
  */
 export const logger = {
-  /**
-   * Log an informational message.
-   * @param message - The log message
-   * @param context - Optional key-value context metadata
-   */
-  info: (message: string, context?: Record<string, unknown>) => log('info', message, context),
-  /**
-   * Log a warning message.
-   * @param message - The log message
-   * @param context - Optional key-value context metadata
-   */
-  warn: (message: string, context?: Record<string, unknown>) => log('warn', message, context),
-  /**
-   * Log an error message with optional error object for stack trace capture.
-   * @param message - The log message
-   * @param context - Optional key-value context metadata
-   * @param error - Optional Error object for stack trace
-   */
-  error: (message: string, context?: Record<string, unknown>, error?: Error) =>
-    log('error', message, context, error),
+  info: (message: string, context?: Record<string, unknown>) =>
+    context ? pinoLogger.info(context, message) : pinoLogger.info(message),
+
+  warn: (message: string, context?: Record<string, unknown>) =>
+    context ? pinoLogger.warn(context, message) : pinoLogger.warn(message),
+
+  error: (message: string, context?: Record<string, unknown>, error?: Error) => {
+    const merged = { ...context, ...(error && { err: error }) };
+    pinoLogger.error(merged, message);
+  },
+
+  child: (bindings: Record<string, unknown>) => {
+    const childPino = pinoLogger.child(bindings);
+    return {
+      info: (message: string, context?: Record<string, unknown>) =>
+        context ? childPino.info(context, message) : childPino.info(message),
+      warn: (message: string, context?: Record<string, unknown>) =>
+        context ? childPino.warn(context, message) : childPino.warn(message),
+      error: (message: string, context?: Record<string, unknown>, error?: Error) => {
+        const merged = { ...context, ...(error && { err: error }) };
+        childPino.error(merged, message);
+      },
+    };
+  },
 };
+
+export type Logger = typeof logger;
+export type ChildLogger = ReturnType<typeof logger.child>;
