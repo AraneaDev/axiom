@@ -44,6 +44,7 @@ import protectionRoutes from './modules/repos/protection.routes';
 import reposRoutes from './modules/repos/repos.routes';
 import webhooksRoutes from './modules/repos/webhooks.routes';
 import connectRpcRoutes from './modules/runners/connect-rpc.routes';
+import { startRunnerHealthMonitor, stopRunnerHealthMonitor } from './modules/runners/runner-health';
 import runnersRoutes from './modules/runners/runners.routes';
 import savedFiltersRoutes from './modules/saved-filters/saved-filters.routes';
 import searchRoutes from './modules/search/search.routes';
@@ -192,10 +193,12 @@ if (require.main === module) {
     if (process.env.NODE_ENV === 'production' && process.env.CORS_ORIGIN === '*') {
       logger.warn('CORS_ORIGIN is set to wildcard in production', { env: 'production' });
     }
+    startRunnerHealthMonitor();
   });
 
   function gracefulShutdown(signal: string) {
     logger.info('Graceful shutdown initiated', { signal });
+    stopRunnerHealthMonitor();
     server.close(async () => {
       logger.info('HTTP server closed');
       await prisma.$disconnect();
