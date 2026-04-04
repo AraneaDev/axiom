@@ -43,12 +43,17 @@ export default function ResetPassword() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface p-6">
       <div className="w-full max-w-sm">
-        <Link to="/login" className="inline-flex items-center gap-1 text-sm text-text-secondary hover:text-primary mb-6">
+        <Link
+          to="/login"
+          className="inline-flex items-center gap-1 text-sm text-text-secondary hover:text-primary mb-6"
+        >
           <ArrowLeft className="h-4 w-4" /> Back to login
         </Link>
 
         <h2 className="text-2xl font-bold text-text mb-1">Set new password</h2>
-        <p className="text-sm text-text-secondary mb-6">Choose a strong password for your account.</p>
+        <p className="text-sm text-text-secondary mb-6">
+          Choose a strong password for your account.
+        </p>
 
         {error && (
           <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
@@ -77,7 +82,13 @@ export default function ResetPassword() {
             required
           />
           <Button type="submit" disabled={loading} className="w-full" size="lg">
-            {loading ? <Spinner size="sm" /> : <><KeyRound className="h-4 w-4" /> Reset password</>}
+            {loading ? (
+              <Spinner size="sm" />
+            ) : (
+              <>
+                <KeyRound className="h-4 w-4" /> Reset password
+              </>
+            )}
           </Button>
         </form>
       </div>

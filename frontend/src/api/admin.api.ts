@@ -67,9 +67,12 @@ export const adminApi = {
 
   deleteUser: (userId: string) => del<{ deleted: boolean }>(`/admin/users/${userId}`),
 
-  deactivateUser: (userId: string) => post<{ success: boolean }>(`/admin/users/${userId}/deactivate`, {}),
-  reactivateUser: (userId: string) => post<{ success: boolean }>(`/admin/users/${userId}/reactivate`, {}),
-  resetPassword: (userId: string, newPassword: string) => post<{ success: boolean }>(`/admin/users/${userId}/reset-password`, { newPassword }),
+  deactivateUser: (userId: string) =>
+    post<{ success: boolean }>(`/admin/users/${userId}/deactivate`, {}),
+  reactivateUser: (userId: string) =>
+    post<{ success: boolean }>(`/admin/users/${userId}/reactivate`, {}),
+  resetPassword: (userId: string, newPassword: string) =>
+    post<{ success: boolean }>(`/admin/users/${userId}/reset-password`, { newPassword }),
 
   getSettings: () => get<SystemSettings>('/admin/settings'),
 };

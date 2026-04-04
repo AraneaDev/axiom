@@ -155,7 +155,14 @@ function AppWithKeyboard() {
             {adminRoutes()}
 
             {/* Catch-all 404 route */}
-            <Route path="*" element={<SuspenseLoader><NotFound /></SuspenseLoader>} />
+            <Route
+              path="*"
+              element={
+                <SuspenseLoader>
+                  <NotFound />
+                </SuspenseLoader>
+              }
+            />
           </Route>
         </Route>
       </Routes>

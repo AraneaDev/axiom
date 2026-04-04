@@ -70,6 +70,5 @@ export const hydrateApi = {
     return get<IssuesListHydration>(`/projects/${projectId}/issues/hydrate${qs}`);
   },
 
-  backlog: (projectId: string) =>
-    get<BacklogHydration>(`/projects/${projectId}/backlog/hydrate`),
+  backlog: (projectId: string) => get<BacklogHydration>(`/projects/${projectId}/backlog/hydrate`),
 };

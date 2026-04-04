@@ -21,11 +21,7 @@ function toSlug(name: string): string {
     .replace(/^-|-$/g, '');
 }
 
-const STEPS = [
-  { label: 'Welcome' },
-  { label: 'Organization' },
-  { label: 'Team' },
-];
+const STEPS = [{ label: 'Welcome' }, { label: 'Organization' }, { label: 'Team' }];
 
 /**
  *

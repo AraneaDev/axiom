@@ -3,8 +3,8 @@ import { Plus, ChevronDown, ChevronRight, Settings, Palette } from 'lucide-react
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link } from 'react-router';
 
-import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
 import type { Filters, GroupBy } from './BoardFilters';
+import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
 import { ColumnManager } from './ColumnManager';
 
 import { issuesApi } from '@/api/issues.api';

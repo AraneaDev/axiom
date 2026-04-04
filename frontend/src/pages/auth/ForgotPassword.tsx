@@ -33,7 +33,10 @@ export default function ForgotPassword() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface p-6">
       <div className="w-full max-w-sm">
-        <Link to="/login" className="inline-flex items-center gap-1 text-sm text-text-secondary hover:text-primary mb-6">
+        <Link
+          to="/login"
+          className="inline-flex items-center gap-1 text-sm text-text-secondary hover:text-primary mb-6"
+        >
           <ArrowLeft className="h-4 w-4" /> Back to login
         </Link>
 
@@ -66,7 +69,13 @@ export default function ForgotPassword() {
                 required
               />
               <Button type="submit" disabled={loading} className="w-full" size="lg">
-                {loading ? <Spinner size="sm" /> : <><Send className="h-4 w-4" /> Send reset link</>}
+                {loading ? (
+                  <Spinner size="sm" />
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" /> Send reset link
+                  </>
+                )}
               </Button>
             </form>
           </>

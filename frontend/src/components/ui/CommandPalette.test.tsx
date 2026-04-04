@@ -55,7 +55,7 @@ describe('CommandPalette', () => {
 
   it('calls toggleSearch when backdrop is clicked', () => {
     render(<CommandPalette />);
-    const backdrop = document.querySelector('.bg-black\\/50');
+    const backdrop = document.querySelector('.bg-backdrop');
     expect(backdrop).toBeTruthy();
     fireEvent.click(backdrop!);
     expect(mockToggleSearch).toHaveBeenCalled();
