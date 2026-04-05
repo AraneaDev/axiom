@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: axiom
       POSTGRES_USER: axiom
@@ -18,6 +19,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -30,6 +32,7 @@ services:
 
   mailserver:
     image: ghcr.io/docker-mailserver/docker-mailserver:latest
+    restart: unless-stopped
     hostname: mail.axiom.local
     environment:
       SMTP_ONLY: 1
@@ -57,6 +60,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -99,6 +103,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
+    restart: unless-stopped
     ports:
       - "7000:7000"
     environment:
