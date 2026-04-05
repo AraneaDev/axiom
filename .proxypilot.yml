@@ -1,0 +1,24 @@
+hooks:
+  pre_compose_up:
+    - test -f .env
+
+  post_pull:
+    - docker compose build --no-cache
+    - docker compose up -d --force-recreate
+
+  health_check:
+    - curl -sf http://localhost:7000/api/health
+
+cron:
+  - name: db-backup-daily
+    schedule: "0 3 * * *"
+    command: docker compose exec -T db pg_dump -U axiom axiom | gzip > backups/db-$(date +\%F).sql.gz
+
+  - name: db-backup-cleanup
+    schedule: "0 4 * * 0"
+    command: find backups/ -name "db-*.sql.gz" -mtime +30 -delete
+
+aide:
+  exclude:
+    - backups/
+    - .data/
