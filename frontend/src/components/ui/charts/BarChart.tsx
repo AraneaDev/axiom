@@ -13,7 +13,7 @@ interface BarChartProps {
  * @param root0.showValues
  * @param root0.className
  */
-export function BarChart({ data, height = 80, showValues = true, className }: BarChartProps) {
+export function BarChart({ data, height = 60, showValues = true, className }: BarChartProps) {
   if (data.length === 0) {
     return <p className="text-sm text-text-secondary">No data available.</p>;
   }

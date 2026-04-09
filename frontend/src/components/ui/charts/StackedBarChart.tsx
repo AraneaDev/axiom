@@ -26,14 +26,14 @@ export function StackedBarChart({
     return <p className="text-sm text-text-secondary">No data available.</p>;
   }
 
-  const barHeight = 12;
-  const barGap = 4;
-  const paddingLeft = 80;
-  const paddingRight = 36;
-  const paddingTop = 18;
-  const paddingBottom = 4;
-  const legendHeight = 14;
-  const width = 400;
+  const barHeight = 10;
+  const barGap = 3;
+  const paddingLeft = 70;
+  const paddingRight = 30;
+  const paddingTop = 14;
+  const paddingBottom = 3;
+  const legendHeight = 12;
+  const width = 600;
   const computedHeight =
     height ?? paddingTop + legendHeight + data.length * (barHeight + barGap) + paddingBottom;
   const chartW = width - paddingLeft - paddingRight;
