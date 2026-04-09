@@ -26,8 +26,8 @@ export function HorizontalBarChart({
     return <p className="text-sm text-text-secondary">No data available.</p>;
   }
 
-  const barHeight = 24;
-  const barGap = 10;
+  const barHeight = 18;
+  const barGap = 6;
   const paddingLeft = 96;
   const paddingRight = 48;
   const paddingTop = 8;
@@ -70,7 +70,7 @@ export function HorizontalBarChart({
               width={Math.max(barW, 2)}
               height={barHeight}
               rx={3}
-              fill={d.color ?? 'var(--color-accent)'}
+              style={{ fill: d.color ?? 'var(--color-accent)' }}
             />
 
             {/* Value */}

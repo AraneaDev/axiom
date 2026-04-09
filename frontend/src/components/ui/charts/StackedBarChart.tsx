@@ -26,8 +26,8 @@ export function StackedBarChart({
     return <p className="text-sm text-text-secondary">No data available.</p>;
   }
 
-  const barHeight = 24;
-  const barGap = 10;
+  const barHeight = 18;
+  const barGap = 6;
   const paddingLeft = 96;
   const paddingRight = 44;
   const paddingTop = 24;
@@ -51,7 +51,7 @@ export function StackedBarChart({
         const lx = paddingLeft + i * 110;
         return (
           <g key={i}>
-            <rect x={lx} y={8} width={10} height={10} rx={2} fill={segmentColors[i]} />
+            <rect x={lx} y={8} width={10} height={10} rx={2} style={{ fill: segmentColors[i] }} />
             <text x={lx + 14} y={17} className="fill-text-secondary" fontSize={9}>
               {label}
             </text>
@@ -98,7 +98,7 @@ export function StackedBarChart({
                   width={Math.max(segW, 1)}
                   height={barHeight}
                   rx={isFirst || isLast ? 3 : 0}
-                  fill={seg.color}
+                  style={{ fill: seg.color }}
                 />
               );
             })}

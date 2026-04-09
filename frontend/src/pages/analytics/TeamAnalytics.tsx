@@ -180,7 +180,6 @@ export default function TeamAnalytics() {
                     label: m.displayName,
                     value: Math.round((m.totalMinutes / 60) * 10) / 10,
                   }))}
-                  height={120}
                   className="mb-4"
                 />
                 <table className="w-full text-sm">
@@ -251,7 +250,6 @@ export default function TeamAnalytics() {
                     value: lt.avgLeadTimeDays,
                   }))}
                   formatValue={(v) => `${v}d`}
-                  height={100}
                   className="mb-4"
                 />
                 <table className="w-full text-sm">

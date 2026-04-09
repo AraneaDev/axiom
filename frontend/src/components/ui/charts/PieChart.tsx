@@ -94,7 +94,7 @@ export function PieChart({ data, size = 200, donut = true, className }: PieChart
     >
       {/* Slices */}
       {slices.map((s, i) => (
-        <path key={i} d={s.path} fill={s.color} />
+        <path key={i} d={s.path} style={{ fill: s.color }} />
       ))}
 
       {/* Legend */}
@@ -105,7 +105,7 @@ export function PieChart({ data, size = 200, donut = true, className }: PieChart
 
         return (
           <g key={i}>
-            <rect x={lx} y={ly} width={10} height={10} rx={2} fill={d.color} />
+            <rect x={lx} y={ly} width={10} height={10} rx={2} style={{ fill: d.color }} />
             <text x={lx + 16} y={ly + 9} className="fill-text-secondary" fontSize={9}>
               {d.label}
             </text>

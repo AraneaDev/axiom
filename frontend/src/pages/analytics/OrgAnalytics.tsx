@@ -105,7 +105,6 @@ export default function OrgAnalytics() {
                     'var(--color-accent)',
                     'var(--color-warning)',
                   ]}
-                  height={120}
                   className="mb-4"
                 />
                 <table className="w-full text-sm">
@@ -182,7 +181,6 @@ export default function OrgAnalytics() {
                   label: t.teamName,
                   value: Math.round((t.minutes / 60) * 10) / 10,
                 }))}
-                height={120}
                 className="mb-4"
               />
             )}
@@ -264,7 +262,6 @@ export default function OrgAnalytics() {
                     value: lt.avgLeadTimeDays,
                   }))}
                   formatValue={(v) => `${v}d`}
-                  height={100}
                 />
               </>
             )}
@@ -289,7 +286,6 @@ export default function OrgAnalytics() {
                     label: b.projectName,
                     value: b.backlogSize,
                   }))}
-                  height={100}
                   className="mb-4"
                 />
                 <table className="w-full text-sm">
