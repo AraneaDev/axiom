@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { analyticsApi } from '@/api/analytics.api';
 import type { Period } from '@/api/analytics.api';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
+import { BarChart, HorizontalBarChart } from '@/components/ui/charts';
 import { PeriodSelector } from '@/components/ui/PeriodSelector';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import { cn } from '@/lib/utils';
@@ -172,48 +173,57 @@ export default function TeamAnalytics() {
             </p>
           </div>
           {data.hours.byMember.length > 0 && (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-secondary)]">
-                  <th className="pb-2 font-medium">Member</th>
-                  {data.hours.byProject.map((p) => (
-                    <th key={p.projectSlug} className="pb-2 text-right font-medium">
-                      {p.projectName}
-                    </th>
-                  ))}
-                  <th className="pb-2 text-right font-medium">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.hours.byMember.map((m) => (
-                  <tr key={m.userId} className="border-b border-[var(--color-border-subtle)]">
-                    <td className="py-2 font-medium text-[var(--color-text-primary)]">
-                      {m.displayName}
-                    </td>
-                    {data.hours.byProject.map((p) => {
-                      const entry = m.byProject.find((bp) => bp.projectSlug === p.projectSlug);
-                      return (
-                        <td key={p.projectSlug} className="py-2 text-right">
-                          {entry ? formatMinutes(entry.minutes) : '-'}
-                        </td>
-                      );
-                    })}
-                    <td className="py-2 text-right font-semibold">
-                      {formatMinutes(m.totalMinutes)}
-                    </td>
+            <>
+              <BarChart
+                data={data.hours.byMember.map((m) => ({
+                  label: m.displayName,
+                  value: Math.round((m.totalMinutes / 60) * 10) / 10,
+                }))}
+                className="mb-4"
+              />
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-secondary)]">
+                    <th className="pb-2 font-medium">Member</th>
+                    {data.hours.byProject.map((p) => (
+                      <th key={p.projectSlug} className="pb-2 text-right font-medium">
+                        {p.projectName}
+                      </th>
+                    ))}
+                    <th className="pb-2 text-right font-medium">Total</th>
                   </tr>
-                ))}
-                <tr className="border-t border-[var(--color-border)] font-semibold">
-                  <td className="py-2">Total</td>
-                  {data.hours.byProject.map((p) => (
-                    <td key={p.projectSlug} className="py-2 text-right">
-                      {formatMinutes(p.minutes)}
-                    </td>
+                </thead>
+                <tbody>
+                  {data.hours.byMember.map((m) => (
+                    <tr key={m.userId} className="border-b border-[var(--color-border-subtle)]">
+                      <td className="py-2 font-medium text-[var(--color-text-primary)]">
+                        {m.displayName}
+                      </td>
+                      {data.hours.byProject.map((p) => {
+                        const entry = m.byProject.find((bp) => bp.projectSlug === p.projectSlug);
+                        return (
+                          <td key={p.projectSlug} className="py-2 text-right">
+                            {entry ? formatMinutes(entry.minutes) : '-'}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 text-right font-semibold">
+                        {formatMinutes(m.totalMinutes)}
+                      </td>
+                    </tr>
                   ))}
-                  <td className="py-2 text-right">{formatMinutes(data.hours.totalMinutes)}</td>
-                </tr>
-              </tbody>
-            </table>
+                  <tr className="border-t border-[var(--color-border)] font-semibold">
+                    <td className="py-2">Total</td>
+                    {data.hours.byProject.map((p) => (
+                      <td key={p.projectSlug} className="py-2 text-right">
+                        {formatMinutes(p.minutes)}
+                      </td>
+                    ))}
+                    <td className="py-2 text-right">{formatMinutes(data.hours.totalMinutes)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </>
           )}
         </CardContent>
       </Card>
@@ -232,44 +242,57 @@ export default function TeamAnalytics() {
               No completed issues in this period.
             </p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-secondary)]">
-                  <th className="pb-2 font-medium">Project</th>
-                  <th className="pb-2 text-right font-medium">Avg Lead Time</th>
-                  <th className="pb-2 text-right font-medium">Completed</th>
-                  <th className="pb-2 text-right font-medium">Task</th>
-                  <th className="pb-2 text-right font-medium">Bug</th>
-                  <th className="pb-2 text-right font-medium">Story</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.leadTimes.map((lt) => (
-                  <tr key={lt.projectSlug} className="border-b border-[var(--color-border-subtle)]">
-                    <td className="py-2 font-medium text-[var(--color-text-primary)]">
-                      {lt.projectName}
-                    </td>
-                    <td className="py-2 text-right">{lt.avgLeadTimeDays}d</td>
-                    <td className="py-2 text-right">{lt.issuesCompleted}</td>
-                    <td className="py-2 text-right text-[var(--color-text-secondary)]">
-                      {lt.byType.TASK
-                        ? `${lt.byType.TASK.avgLeadTimeDays}d (${lt.byType.TASK.count})`
-                        : '-'}
-                    </td>
-                    <td className="py-2 text-right text-[var(--color-text-secondary)]">
-                      {lt.byType.BUG
-                        ? `${lt.byType.BUG.avgLeadTimeDays}d (${lt.byType.BUG.count})`
-                        : '-'}
-                    </td>
-                    <td className="py-2 text-right text-[var(--color-text-secondary)]">
-                      {lt.byType.STORY
-                        ? `${lt.byType.STORY.avgLeadTimeDays}d (${lt.byType.STORY.count})`
-                        : '-'}
-                    </td>
+            <>
+              <HorizontalBarChart
+                data={data.leadTimes.map((lt) => ({
+                  label: lt.projectName,
+                  value: lt.avgLeadTimeDays,
+                }))}
+                formatValue={(v) => `${v}d`}
+                className="mb-4"
+              />
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-secondary)]">
+                    <th className="pb-2 font-medium">Project</th>
+                    <th className="pb-2 text-right font-medium">Avg Lead Time</th>
+                    <th className="pb-2 text-right font-medium">Completed</th>
+                    <th className="pb-2 text-right font-medium">Task</th>
+                    <th className="pb-2 text-right font-medium">Bug</th>
+                    <th className="pb-2 text-right font-medium">Story</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.leadTimes.map((lt) => (
+                    <tr
+                      key={lt.projectSlug}
+                      className="border-b border-[var(--color-border-subtle)]"
+                    >
+                      <td className="py-2 font-medium text-[var(--color-text-primary)]">
+                        {lt.projectName}
+                      </td>
+                      <td className="py-2 text-right">{lt.avgLeadTimeDays}d</td>
+                      <td className="py-2 text-right">{lt.issuesCompleted}</td>
+                      <td className="py-2 text-right text-[var(--color-text-secondary)]">
+                        {lt.byType.TASK
+                          ? `${lt.byType.TASK.avgLeadTimeDays}d (${lt.byType.TASK.count})`
+                          : '-'}
+                      </td>
+                      <td className="py-2 text-right text-[var(--color-text-secondary)]">
+                        {lt.byType.BUG
+                          ? `${lt.byType.BUG.avgLeadTimeDays}d (${lt.byType.BUG.count})`
+                          : '-'}
+                      </td>
+                      <td className="py-2 text-right text-[var(--color-text-secondary)]">
+                        {lt.byType.STORY
+                          ? `${lt.byType.STORY.avgLeadTimeDays}d (${lt.byType.STORY.count})`
+                          : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </CardContent>
       </Card>

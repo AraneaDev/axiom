@@ -7,6 +7,7 @@ import { analyticsApi } from '@/api/analytics.api';
 import type { Period } from '@/api/analytics.api';
 import { orgsApi } from '@/api/orgs.api';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
+import { BarChart, HorizontalBarChart, StackedBarChart } from '@/components/ui/charts';
 import { PeriodSelector } from '@/components/ui/PeriodSelector';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -87,41 +88,60 @@ export default function OrgAnalytics() {
           {data.workload.length === 0 ? (
             <p className="text-sm text-[var(--color-text-tertiary)]">No assigned issues found.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-secondary)]">
-                  <th className="pb-2 font-medium">Member</th>
-                  <th className="pb-2 font-medium">Team</th>
-                  <th className="pb-2 text-right font-medium">Open</th>
-                  <th className="pb-2 text-right font-medium">In Progress</th>
-                  <th className="pb-2 text-right font-medium">In Review</th>
-                  <th className="pb-2 text-right font-medium">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.workload.map((w) => (
-                  <tr key={w.userId} className="border-b border-[var(--color-border-subtle)]">
-                    <td className="py-2 font-medium text-[var(--color-text-primary)]">
-                      {w.displayName}
-                    </td>
-                    <td className="py-2">
-                      <Link
-                        to={`/${org}/${w.teamSlug}/analytics`}
-                        className="text-[var(--color-accent)] hover:underline"
-                      >
-                        {w.teamName}
-                      </Link>
-                    </td>
-                    <td className="py-2 text-right">{w.open}</td>
-                    <td className="py-2 text-right">{w.inProgress}</td>
-                    <td className="py-2 text-right">{w.inReview}</td>
-                    <td className={cn('py-2 text-right font-semibold', loadColor(w.total))}>
-                      {w.total}
-                    </td>
+            <>
+              <StackedBarChart
+                data={data.workload.map((w) => ({
+                  label: w.displayName,
+                  segments: [
+                    { value: w.open, color: 'var(--color-text-secondary)' },
+                    { value: w.inProgress, color: 'var(--color-accent)' },
+                    { value: w.inReview, color: 'var(--color-warning)' },
+                  ],
+                }))}
+                segmentLabels={['Open', 'In Progress', 'In Review']}
+                segmentColors={[
+                  'var(--color-text-secondary)',
+                  'var(--color-accent)',
+                  'var(--color-warning)',
+                ]}
+                className="mb-4"
+              />
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-secondary)]">
+                    <th className="pb-2 font-medium">Member</th>
+                    <th className="pb-2 font-medium">Team</th>
+                    <th className="pb-2 text-right font-medium">Open</th>
+                    <th className="pb-2 text-right font-medium">In Progress</th>
+                    <th className="pb-2 text-right font-medium">In Review</th>
+                    <th className="pb-2 text-right font-medium">Total</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.workload.map((w) => (
+                    <tr key={w.userId} className="border-b border-[var(--color-border-subtle)]">
+                      <td className="py-2 font-medium text-[var(--color-text-primary)]">
+                        {w.displayName}
+                      </td>
+                      <td className="py-2">
+                        <Link
+                          to={`/${org}/${w.teamSlug}/analytics`}
+                          className="text-[var(--color-accent)] hover:underline"
+                        >
+                          {w.teamName}
+                        </Link>
+                      </td>
+                      <td className="py-2 text-right">{w.open}</td>
+                      <td className="py-2 text-right">{w.inProgress}</td>
+                      <td className="py-2 text-right">{w.inReview}</td>
+                      <td className={cn('py-2 text-right font-semibold', loadColor(w.total))}>
+                        {w.total}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </CardContent>
       </Card>
@@ -154,6 +174,15 @@ export default function OrgAnalytics() {
               </div>
             ))}
           </div>
+          {data.hours.byTeam.length > 0 && (
+            <BarChart
+              data={data.hours.byTeam.map((t) => ({
+                label: t.teamName,
+                value: Math.round((t.minutes / 60) * 10) / 10,
+              }))}
+              className="mb-4"
+            />
+          )}
           {data.hours.byMember.length > 0 && (
             <table className="w-full text-sm">
               <thead>
@@ -226,29 +255,13 @@ export default function OrgAnalytics() {
                   ))}
                 </tbody>
               </table>
-              {/* Bar chart */}
-              <div className="space-y-2">
-                {data.leadTimes.map((lt) => {
-                  const max = Math.max(...data.leadTimes.map((l) => l.avgLeadTimeDays));
-                  const pct = max > 0 ? (lt.avgLeadTimeDays / max) * 100 : 0;
-                  return (
-                    <div key={lt.projectSlug} className="flex items-center gap-3">
-                      <span className="w-32 truncate text-xs text-[var(--color-text-secondary)]">
-                        {lt.projectName}
-                      </span>
-                      <div className="h-4 flex-1 rounded-full bg-[var(--color-surface-secondary)]">
-                        <div
-                          className="h-full rounded-full bg-[var(--color-accent)]"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="w-12 text-right text-xs font-medium">
-                        {lt.avgLeadTimeDays}d
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              <HorizontalBarChart
+                data={data.leadTimes.map((lt) => ({
+                  label: lt.projectName,
+                  value: lt.avgLeadTimeDays,
+                }))}
+                formatValue={(v) => `${v}d`}
+              />
             </>
           )}
         </CardContent>
@@ -266,32 +279,44 @@ export default function OrgAnalytics() {
           {data.backlog.length === 0 ? (
             <p className="text-sm text-[var(--color-text-tertiary)]">No backlog items found.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-secondary)]">
-                  <th className="pb-2 font-medium">Project</th>
-                  <th className="pb-2 text-right font-medium">Backlog</th>
-                  <th className="pb-2 text-right font-medium">Maintenance</th>
-                  <th className="pb-2 text-right font-medium">Bugs</th>
-                  <th className="pb-2 text-right font-medium">Oldest</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.backlog.map((b) => (
-                  <tr key={b.projectSlug} className="border-b border-[var(--color-border-subtle)]">
-                    <td className="py-2 font-medium text-[var(--color-text-primary)]">
-                      {b.projectName}
-                    </td>
-                    <td className="py-2 text-right">{b.backlogSize}</td>
-                    <td className="py-2 text-right">{b.maintenanceCount}</td>
-                    <td className="py-2 text-right">{b.bugCount}</td>
-                    <td className={cn('py-2 text-right', ageColor(b.oldestItemDays))}>
-                      {b.oldestItemDays}d
-                    </td>
+            <>
+              <HorizontalBarChart
+                data={data.backlog.map((b) => ({
+                  label: b.projectName,
+                  value: b.backlogSize,
+                }))}
+                className="mb-4"
+              />
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-secondary)]">
+                    <th className="pb-2 font-medium">Project</th>
+                    <th className="pb-2 text-right font-medium">Backlog</th>
+                    <th className="pb-2 text-right font-medium">Maintenance</th>
+                    <th className="pb-2 text-right font-medium">Bugs</th>
+                    <th className="pb-2 text-right font-medium">Oldest</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.backlog.map((b) => (
+                    <tr
+                      key={b.projectSlug}
+                      className="border-b border-[var(--color-border-subtle)]"
+                    >
+                      <td className="py-2 font-medium text-[var(--color-text-primary)]">
+                        {b.projectName}
+                      </td>
+                      <td className="py-2 text-right">{b.backlogSize}</td>
+                      <td className="py-2 text-right">{b.maintenanceCount}</td>
+                      <td className="py-2 text-right">{b.bugCount}</td>
+                      <td className={cn('py-2 text-right', ageColor(b.oldestItemDays))}>
+                        {b.oldestItemDays}d
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </CardContent>
       </Card>
