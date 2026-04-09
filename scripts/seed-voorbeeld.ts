@@ -445,8 +445,8 @@ async function main() {
 
   const issueDefs: IssueSeed[] = [
     // -- Partnerportaal (PPT) - Sanne --
-    { projectSlug: 'partnerportaal', title: 'SAML-authenticatie provider implementeren', body: 'Implementeer SAML 2.0 authenticatie provider voor Microsoft Entra ID integratie. Inclusief metadata exchange en assertion validation.', type: 'STORY', priority: 'HIGH', column: 'In Ontwikkeling', assignee: 'sanne', creator: 'erik', labels: ['nieuw'], parentTitle: 'SSO-integratie voor partnerportaal', inSprint: true },
-    { projectSlug: 'partnerportaal', title: 'Automatische gebruikersprovisioning', body: 'Bij eerste SSO-login automatisch een gebruikersaccount aanmaken op basis van SAML-claims (naam, email, organisatie).', type: 'STORY', priority: 'HIGH', column: 'Te Doen', assignee: 'sanne', creator: 'erik', labels: ['nieuw'], parentTitle: 'SSO-integratie voor partnerportaal', inSprint: true },
+    { projectSlug: 'partnerportaal', title: 'SAML-authenticatie provider implementeren', body: 'Implementeer SAML 2.0 authenticatie provider voor Microsoft Entra ID integratie. Inclusief metadata exchange en assertion validation.', type: 'STORY', priority: 'HIGH', column: 'In Ontwikkeling', assignee: 'sanne', creator: 'erik', labels: ['nieuw'], parentTitle: 'SSO-integratie voor partnerportaal', inSprint: true, milestoneSlug: 'partnerportaal' },
+    { projectSlug: 'partnerportaal', title: 'Automatische gebruikersprovisioning', body: 'Bij eerste SSO-login automatisch een gebruikersaccount aanmaken op basis van SAML-claims (naam, email, organisatie).', type: 'STORY', priority: 'HIGH', column: 'Te Doen', assignee: 'sanne', creator: 'erik', labels: ['nieuw'], parentTitle: 'SSO-integratie voor partnerportaal', inSprint: true, milestoneSlug: 'partnerportaal' },
     { projectSlug: 'partnerportaal', title: 'SSO login pagina redesign', body: 'Login pagina aanpassen met "Inloggen met bedrijfsaccount" knop naast het bestaande login formulier.', type: 'STORY', priority: 'MEDIUM', column: 'Backlog', creator: 'sanne', labels: ['nieuw'], parentTitle: 'SSO-integratie voor partnerportaal' },
     { projectSlug: 'partnerportaal', title: 'Partnerdashboard laadt traag bij veel orders', body: 'Het dashboard heeft 5+ seconden nodig bij partners met meer dan 1000 orders. Query optimalisatie nodig op de orders tabel.', type: 'BUG', priority: 'HIGH', column: 'Code Review', assignee: 'sanne', creator: 'tim', labels: ['bug'], inSprint: true },
     { projectSlug: 'partnerportaal', title: 'Verouderde Node.js dependencies updaten', body: 'Verschillende npm packages hebben bekende kwetsbaarheden. Update naar laatste minor/patch versies en test regressies.', type: 'TASK', priority: 'LOW', column: 'Backlog', creator: 'sanne', labels: ['onderhoud'] },
@@ -467,8 +467,8 @@ async function main() {
     { projectSlug: 'dealregistratie', title: 'Deal import uit Excel fout bij speciale tekens', body: 'Excel import faalt bij bedrijfsnamen met &, < of > tekens. HTML-entities worden niet correct geescaped.', type: 'BUG', priority: 'HIGH', column: 'Gereed', assignee: 'mila', creator: 'sanne', labels: ['bug'], inSprint: true },
 
     // -- Klantportaal (KPT) - Joris --
-    { projectSlug: 'klantportaal', title: 'Design tokens implementeren voor nieuwe huisstijl', body: 'CSS custom properties opzetten voor kleuren, typografie en spacing volgens het nieuwe Voorbeeld brand book.', type: 'STORY', priority: 'HIGH', column: 'Gereed', assignee: 'joris', creator: 'erik', labels: ['nieuw'], parentTitle: 'Klantportaal migratie naar nieuwe huisstijl', inSprint: true },
-    { projectSlug: 'klantportaal', title: 'Navigatie component refactoring', body: 'Hoofdnavigatie en sidebar herschrijven met nieuwe design tokens. Responsive gedrag verbeteren voor tablet en mobiel.', type: 'STORY', priority: 'HIGH', column: 'In Ontwikkeling', assignee: 'joris', creator: 'erik', labels: ['nieuw'], parentTitle: 'Klantportaal migratie naar nieuwe huisstijl', inSprint: true },
+    { projectSlug: 'klantportaal', title: 'Design tokens implementeren voor nieuwe huisstijl', body: 'CSS custom properties opzetten voor kleuren, typografie en spacing volgens het nieuwe Voorbeeld brand book.', type: 'STORY', priority: 'HIGH', column: 'Gereed', assignee: 'joris', creator: 'erik', labels: ['nieuw'], parentTitle: 'Klantportaal migratie naar nieuwe huisstijl', inSprint: true, milestoneSlug: 'klantportaal' },
+    { projectSlug: 'klantportaal', title: 'Navigatie component refactoring', body: 'Hoofdnavigatie en sidebar herschrijven met nieuwe design tokens. Responsive gedrag verbeteren voor tablet en mobiel.', type: 'STORY', priority: 'HIGH', column: 'In Ontwikkeling', assignee: 'joris', creator: 'erik', labels: ['nieuw'], parentTitle: 'Klantportaal migratie naar nieuwe huisstijl', inSprint: true, milestoneSlug: 'klantportaal' },
     { projectSlug: 'klantportaal', title: 'Toegankelijkheidsaudit uitvoeren', body: 'WCAG 2.1 AA audit uitvoeren op alle paginas. Focus op kleurcontrast, keyboard navigatie en screen reader ondersteuning.', type: 'STORY', priority: 'MEDIUM', column: 'Te Doen', creator: 'joris', labels: ['verbetering'], parentTitle: 'Klantportaal migratie naar nieuwe huisstijl' },
     { projectSlug: 'klantportaal', title: 'Sessie timeout melding toevoegen', body: 'Gebruikers krijgen geen waarschuwing voordat hun sessie verloopt. Toon een melding 5 minuten voor timeout met optie om te verlengen.', type: 'TASK', priority: 'MEDIUM', column: 'Backlog', creator: 'joris', labels: ['verbetering'] },
     { projectSlug: 'klantportaal', title: 'Performance audit en bundle size reductie', body: 'Lighthouse score is onder de 70. Bundle analyseren, lazy loading implementeren en ongebruikte dependencies verwijderen.', type: 'TASK', priority: 'MEDIUM', column: 'Code Review', assignee: 'joris', creator: 'joris', labels: ['onderhoud'], inSprint: true },
@@ -488,8 +488,8 @@ async function main() {
     { projectSlug: 'orderverwerking', title: 'Monitoring dashboard voor orderflow', body: 'Dashboard met real-time metrics: orders per uur, gemiddelde verwerkingstijd, error rate, queue depth.', type: 'TASK', priority: 'LOW', column: 'Backlog', creator: 'ruben', labels: ['infrastructuur'] },
 
     // -- AI Assistent (AIA) - Anika --
-    { projectSlug: 'ai-assistent', title: 'Document ingestion pipeline opzetten', body: 'Pipeline voor het inlezen, chunken en embedden van documenten uit Confluence en SharePoint. Gebruik LangChain voor orkestratie.', type: 'STORY', priority: 'HIGH', column: 'In Ontwikkeling', assignee: 'anika', creator: 'anika', labels: ['nieuw'], parentTitle: 'RAG-pipeline voor interne kennisbank', inSprint: true },
-    { projectSlug: 'ai-assistent', title: 'Vector store integratie met Qdrant', body: 'Qdrant als vector database configureren voor het opslaan en doorzoeken van document embeddings.', type: 'STORY', priority: 'HIGH', column: 'Te Doen', assignee: 'anika', creator: 'anika', labels: ['nieuw'], parentTitle: 'RAG-pipeline voor interne kennisbank', inSprint: true },
+    { projectSlug: 'ai-assistent', title: 'Document ingestion pipeline opzetten', body: 'Pipeline voor het inlezen, chunken en embedden van documenten uit Confluence en SharePoint. Gebruik LangChain voor orkestratie.', type: 'STORY', priority: 'HIGH', column: 'In Ontwikkeling', assignee: 'anika', creator: 'anika', labels: ['nieuw'], parentTitle: 'RAG-pipeline voor interne kennisbank', inSprint: true, milestoneSlug: 'ai-assistent' },
+    { projectSlug: 'ai-assistent', title: 'Vector store integratie met Qdrant', body: 'Qdrant als vector database configureren voor het opslaan en doorzoeken van document embeddings.', type: 'STORY', priority: 'HIGH', column: 'Te Doen', assignee: 'anika', creator: 'anika', labels: ['nieuw'], parentTitle: 'RAG-pipeline voor interne kennisbank', inSprint: true, milestoneSlug: 'ai-assistent' },
     { projectSlug: 'ai-assistent', title: 'Context window optimalisatie', body: 'Het RAG-systeem stuurt te veel context mee waardoor het antwoord traag en duur is. Implementeer relevantie-scoring en context pruning.', type: 'STORY', priority: 'MEDIUM', column: 'Backlog', creator: 'anika', labels: ['verbetering'], parentTitle: 'RAG-pipeline voor interne kennisbank' },
     { projectSlug: 'ai-assistent', title: 'Chatbot geeft foutieve antwoorden over verlofbeleid', body: 'De chatbot haalt verlofbeleid uit een verouderd document. Bron-validatie en document versioning toevoegen.', type: 'BUG', priority: 'HIGH', column: 'Gereed', assignee: 'anika', creator: 'thijs', labels: ['bug'], inSprint: true },
     { projectSlug: 'ai-assistent', title: 'Token usage monitoring en kostenbeheersing', body: 'Dashboard voor het bijhouden van API-kosten per model, per gebruiker en per dag. Alerts bij overschrijding budget.', type: 'TASK', priority: 'MEDIUM', column: 'Backlog', creator: 'anika', labels: ['infrastructuur'] },
@@ -660,11 +660,11 @@ async function main() {
         projectId: proj.id,
         name: 'Epic intake melding',
         trigger: 'issue_created',
-        conditions: JSON.stringify({ type: 'EPIC' }),
-        actions: JSON.stringify([{
+        conditions: { type: 'EPIC' },
+        actions: [{
           type: 'add_comment',
           body: 'Wijzigingsverzoek wacht op beoordeling door Erik Bakker. Neem contact op met je teamlead voor prioritering.',
-        }]),
+        }],
         enabled: true,
       },
     });
@@ -674,11 +674,11 @@ async function main() {
         projectId: proj.id,
         name: 'Epic goedkeuring actie',
         trigger: 'issue_updated',
-        conditions: JSON.stringify({ type: 'EPIC' }),
-        actions: JSON.stringify([{
+        conditions: { type: 'EPIC' },
+        actions: [{
           type: 'add_comment',
           body: 'Epic is goedgekeurd. Maak child stories aan voor de planningsfase.',
-        }]),
+        }],
         enabled: true,
       },
     });
@@ -891,4 +891,4 @@ main()
     console.error('Voorbeeld seed failed:', e);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => { await prisma.$disconnect(); await pool.end(); });
