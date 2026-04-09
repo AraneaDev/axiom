@@ -82,7 +82,7 @@ export function BarChart({ data, height = 60, showValues = true, className }: Ba
               width={barWidth}
               height={barH}
               rx={2}
-              style={{ fill: d.color ?? 'var(--color-accent)' }}
+              style={{ fill: d.color ?? 'var(--color-primary)' }}
             />
             {showValues && (
               <text

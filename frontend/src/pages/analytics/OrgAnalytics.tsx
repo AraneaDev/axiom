@@ -94,15 +94,15 @@ export default function OrgAnalytics() {
                   data={data.workload.map((w) => ({
                     label: w.displayName,
                     segments: [
-                      { value: w.open, color: 'var(--color-text-secondary)' },
-                      { value: w.inProgress, color: 'var(--color-accent)' },
+                      { value: w.open, color: 'var(--color-text-tertiary)' },
+                      { value: w.inProgress, color: 'var(--color-primary)' },
                       { value: w.inReview, color: 'var(--color-warning)' },
                     ],
                   }))}
                   segmentLabels={['Open', 'In Progress', 'In Review']}
                   segmentColors={[
-                    'var(--color-text-secondary)',
-                    'var(--color-accent)',
+                    'var(--color-text-tertiary)',
+                    'var(--color-primary)',
                     'var(--color-warning)',
                   ]}
                   className="mb-4"
@@ -127,7 +127,7 @@ export default function OrgAnalytics() {
                         <td className="py-2">
                           <Link
                             to={`/${org}/${w.teamSlug}/analytics`}
-                            className="text-[var(--color-accent)] hover:underline"
+                            className="text-[var(--color-primary)] hover:underline"
                           >
                             {w.teamName}
                           </Link>
@@ -247,7 +247,7 @@ export default function OrgAnalytics() {
                         <td className="py-2 text-right">
                           <Link
                             to={`/${org}/${lt.teamSlug}/analytics`}
-                            className="inline-flex items-center gap-1 text-[var(--color-accent)] hover:underline"
+                            className="inline-flex items-center gap-1 text-[var(--color-primary)] hover:underline"
                           >
                             Details <ArrowRight className="h-3 w-3" />
                           </Link>

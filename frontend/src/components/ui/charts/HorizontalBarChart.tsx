@@ -70,7 +70,7 @@ export function HorizontalBarChart({
               width={Math.max(barW, 2)}
               height={barHeight}
               rx={2}
-              style={{ fill: d.color ?? 'var(--color-accent)' }}
+              style={{ fill: d.color ?? 'var(--color-primary)' }}
             />
 
             {/* Value */}
