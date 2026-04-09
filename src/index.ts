@@ -18,6 +18,7 @@ import { globalLimiter, authLimiter, searchLimiter, gitLimiter } from './middlew
 import { requestLogger } from './middleware/requestLogger';
 import activityRoutes from './modules/activity/activity.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import analyticsRoutes from './modules/analytics/analytics.routes';
 import attachmentsRoutes from './modules/attachments/attachments.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import authRoutes from './modules/auth/auth.routes';
@@ -153,6 +154,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/saved-filters', savedFiltersRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/audit-logs', auditRoutes);
+app.use('/api', analyticsRoutes);
 
 // Git Smart HTTP (must be before JSON body parser doesn't matter — has its own raw parser)
 app.use('/git', smartHttpRoutes);
