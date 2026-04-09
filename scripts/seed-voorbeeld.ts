@@ -503,7 +503,7 @@ async function main() {
   ];
 
   // Track created issues per project for sprint assignment
-  const createdIssues: { id: string; projectSlug: string; title: string; inSprint?: boolean }[] = [];
+  const createdIssues: { id: string; projectSlug: string; title: string; inSprint?: boolean; column?: string; assignee?: string; type?: string }[] = [];
 
   for (const issue of issueDefs) {
     const projectId = projects[issue.projectSlug].id;
@@ -512,7 +512,20 @@ async function main() {
     });
 
     if (existingIssue) {
-      createdIssues.push({ id: existingIssue.id, projectSlug: issue.projectSlug, title: issue.title, inSprint: issue.inSprint });
+      // Ensure timeEstimate is set on re-runs
+      if (issue.assignee && !existingIssue.timeEstimate) {
+        const seed = issue.title.length;
+        let est: number;
+        if (issue.type === 'STORY') {
+          est = 480 + ((seed * 7) % 9) * 60;
+        } else if (issue.type === 'BUG') {
+          est = 60 + ((seed * 11) % 7) * 30;
+        } else {
+          est = 120 + ((seed * 13) % 5) * 30;
+        }
+        await prisma.issue.update({ where: { id: existingIssue.id }, data: { timeEstimate: est } });
+      }
+      createdIssues.push({ id: existingIssue.id, projectSlug: issue.projectSlug, title: issue.title, inSprint: issue.inSprint, column: issue.column, assignee: issue.assignee, type: issue.type });
       continue;
     }
 
@@ -539,6 +552,23 @@ async function main() {
       .filter((l) => projectLabels[issue.projectSlug][l])
       .map((l) => ({ id: projectLabels[issue.projectSlug][l] }));
 
+    // Deterministic timeEstimate based on issue type (in minutes)
+    let timeEstimate: number | undefined;
+    if (issue.assignee) {
+      // Use title length as deterministic seed for variation
+      const seed = issue.title.length;
+      if (issue.type === 'STORY') {
+        // Stories: 480-960 minutes (8-16 hours), steps of 60
+        timeEstimate = 480 + ((seed * 7) % 9) * 60;
+      } else if (issue.type === 'BUG') {
+        // Bugs: 60-240 minutes (1-4 hours), steps of 30
+        timeEstimate = 60 + ((seed * 11) % 7) * 30;
+      } else {
+        // Tasks: 120-240 minutes (2-4 hours), steps of 30
+        timeEstimate = 120 + ((seed * 13) % 5) * 30;
+      }
+    }
+
     const created = await prisma.issue.create({
       data: {
         projectId,
@@ -555,9 +585,10 @@ async function main() {
         dueDate: issue.dueDate ?? null,
         position: nextNumber,
         labels: { connect: labelIds },
+        timeEstimate,
       },
     });
-    createdIssues.push({ id: created.id, projectSlug: issue.projectSlug, title: issue.title, inSprint: issue.inSprint });
+    createdIssues.push({ id: created.id, projectSlug: issue.projectSlug, title: issue.title, inSprint: issue.inSprint, column: issue.column, assignee: issue.assignee, type: issue.type });
   }
   console.warn(`        ${createdIssues.length} issues created`);
 
@@ -586,63 +617,129 @@ async function main() {
   console.warn('        Sprint assignments done');
 
   // ────────────────────────────────────────────────────────────
-  // 9. Time entries
+  // 9. Time entries (deterministic daily spread over 14 workdays)
   // ────────────────────────────────────────────────────────────
   console.warn('  [9/12] Time entries');
 
   const activeColumns = ['In Ontwikkeling', 'Code Review', 'Testen', 'Gereed'];
-  let timeEntryCount = 0;
+  const timeDescriptions = ['Implementatie', 'Code review', 'Onderzoek', 'Testing', 'Documentatie'];
+
+  // Build list of workdays over the last 14 calendar days (skip weekends)
+  const workdays: Date[] = [];
+  for (let d = 1; d <= 20 && workdays.length < 14; d++) {
+    const date = daysAgo(d);
+    const dow = date.getDay(); // 0=Sun, 6=Sat
+    if (dow !== 0 && dow !== 6) workdays.push(date);
+  }
+
+  // Collect all assigned issues in active columns, grouped by assignee
+  type ActiveIssue = { id: string; assigneeId: string; projectSlug: string; column: string; titleLen: number };
+  const activeIssuesByAssignee: Record<string, ActiveIssue[]> = {};
 
   for (const issue of createdIssues) {
-    // Find the issue to check its column and assignee
+    if (!issue.assignee || !activeColumns.includes(issue.column ?? '')) continue;
     const fullIssue = await prisma.issue.findUnique({
       where: { id: issue.id },
       include: { column: true },
     });
-    if (!fullIssue || !fullIssue.column || !activeColumns.includes(fullIssue.column.name) || !fullIssue.assigneeId) continue;
+    if (!fullIssue || !fullIssue.assigneeId) continue;
 
-    // Check if time entries already exist
-    const existingEntries = await prisma.timeEntry.count({ where: { issueId: issue.id } });
+    const col = fullIssue.column?.name ?? '';
+    if (!activeColumns.includes(col)) continue;
+
+    const ai: ActiveIssue = {
+      id: issue.id,
+      assigneeId: fullIssue.assigneeId,
+      projectSlug: issue.projectSlug,
+      column: col,
+      titleLen: issue.title.length,
+    };
+    if (!activeIssuesByAssignee[fullIssue.assigneeId]) activeIssuesByAssignee[fullIssue.assigneeId] = [];
+    activeIssuesByAssignee[fullIssue.assigneeId].push(ai);
+  }
+
+  let timeEntryCount = 0;
+
+  for (const [assigneeId, issues] of Object.entries(activeIssuesByAssignee)) {
+    // Check if time entries already exist for this user (skip if already seeded)
+    const existingEntries = await prisma.timeEntry.count({
+      where: { userId: assigneeId, issueId: { in: issues.map((i) => i.id) } },
+    });
     if (existingEntries > 0) continue;
 
-    // Generate 2-4 time entries per issue, spread over last 2 weeks
-    const entryCount = 2 + Math.floor(Math.random() * 3);
-    for (let i = 0; i < entryCount; i++) {
-      const daysBack = Math.floor(Math.random() * 14);
-      const minutes = [30, 60, 90, 120, 150, 180, 210, 240][Math.floor(Math.random() * 8)];
-      const descriptions = [
-        'Onderzoek en analyse',
-        'Implementatie',
-        'Code review feedback verwerkt',
-        'Unit tests geschreven',
-        'Bug geanalyseerd en fix geimplementeerd',
-        'Documentatie bijgewerkt',
-        'Overleg met team over aanpak',
-        'Refactoring en code cleanup',
-      ];
+    // For each workday, log 6-8 hours spread across this person's issues
+    for (let dayIdx = 0; dayIdx < workdays.length; dayIdx++) {
+      const day = workdays[dayIdx];
+      // Deterministic daily hours: varies by person and day for interesting workload patterns
+      // Some devs work 6h days, others 8h+; some days lighter than others
+      const personSeed = assigneeId.charCodeAt(0) + assigneeId.charCodeAt(assigneeId.length - 1);
+      const dayVariation = ((dayIdx * 37 + personSeed) % 7) * 30; // 0-180 min variation
+      const personBase = 300 + ((personSeed * 13) % 5) * 30; // 300-420 min base (5-7h)
+      const dailyMinutes = personBase + dayVariation; // 300-600 min (5-10h)
 
-      await prisma.timeEntry.create({
-        data: {
-          issueId: issue.id,
-          userId: fullIssue.assigneeId,
-          minutes,
-          description: descriptions[Math.floor(Math.random() * descriptions.length)],
-          loggedAt: daysAgo(daysBack),
-        },
-      });
-      timeEntryCount++;
+      // Spread across issues deterministically
+      const numIssues = issues.length;
+      let remainingMinutes = dailyMinutes;
+
+      for (let issueIdx = 0; issueIdx < numIssues && remainingMinutes > 0; issueIdx++) {
+        const iss = issues[issueIdx];
+        // Each issue gets a share; last issue gets the remainder
+        let entryMinutes: number;
+        if (issueIdx === numIssues - 1) {
+          entryMinutes = remainingMinutes;
+        } else {
+          // Deterministic split: base of 60-180 min per issue
+          const base = 60 + ((dayIdx * 13 + issueIdx * 17 + iss.titleLen) % 5) * 30;
+          entryMinutes = Math.min(base, remainingMinutes);
+        }
+        if (entryMinutes <= 0) continue;
+
+        const descIdx = (dayIdx + issueIdx + iss.titleLen) % timeDescriptions.length;
+
+        await prisma.timeEntry.create({
+          data: {
+            issueId: iss.id,
+            userId: assigneeId,
+            minutes: entryMinutes,
+            description: timeDescriptions[descIdx],
+            loggedAt: day,
+          },
+        });
+        remainingMinutes -= entryMinutes;
+        timeEntryCount++;
+      }
     }
+  }
 
-    // Update timeSpent on issue
+  // Update timeSpent on all active issues and set realistic updatedAt on completed issues
+  for (const issue of createdIssues) {
+    if (!issue.assignee || !activeColumns.includes(issue.column ?? '')) continue;
+
     const totalMinutes = await prisma.timeEntry.aggregate({
       where: { issueId: issue.id },
       _sum: { minutes: true },
     });
-    await prisma.issue.update({
-      where: { id: issue.id },
-      data: { timeSpent: totalMinutes._sum.minutes ?? 0 },
-    });
+    const spent = totalMinutes._sum.minutes ?? 0;
+    if (spent > 0) {
+      await prisma.issue.update({
+        where: { id: issue.id },
+        data: { timeSpent: spent },
+      });
+    }
+
+    // For completed issues ("Gereed"), set updatedAt to 2-7 days after createdAt for realistic lead times
+    if (issue.column === 'Gereed') {
+      const fullIssue = await prisma.issue.findUnique({ where: { id: issue.id }, select: { createdAt: true } });
+      if (fullIssue) {
+        // Deterministic offset: 2-7 days based on title length
+        const offsetDays = 2 + (issue.title.length % 6);
+        const completedDate = new Date(fullIssue.createdAt);
+        completedDate.setDate(completedDate.getDate() + offsetDays);
+        await prisma.$executeRaw`UPDATE "issues" SET "updatedAt" = ${completedDate} WHERE "id"::text = ${issue.id}`;
+      }
+    }
   }
+
   console.warn(`        ${timeEntryCount} time entries`);
 
   // ────────────────────────────────────────────────────────────
