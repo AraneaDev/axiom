@@ -26,13 +26,13 @@ export function StackedBarChart({
     return <p className="text-sm text-text-secondary">No data available.</p>;
   }
 
-  const barHeight = 18;
-  const barGap = 6;
-  const paddingLeft = 96;
-  const paddingRight = 44;
-  const paddingTop = 24;
-  const paddingBottom = 8;
-  const legendHeight = 20;
+  const barHeight = 12;
+  const barGap = 4;
+  const paddingLeft = 80;
+  const paddingRight = 36;
+  const paddingTop = 18;
+  const paddingBottom = 4;
+  const legendHeight = 14;
   const width = 400;
   const computedHeight =
     height ?? paddingTop + legendHeight + data.length * (barHeight + barGap) + paddingBottom;
@@ -48,11 +48,11 @@ export function StackedBarChart({
     >
       {/* Legend */}
       {segmentLabels.map((label, i) => {
-        const lx = paddingLeft + i * 110;
+        const lx = paddingLeft + i * 90;
         return (
           <g key={i}>
-            <rect x={lx} y={8} width={10} height={10} rx={2} style={{ fill: segmentColors[i] }} />
-            <text x={lx + 14} y={17} className="fill-text-secondary" fontSize={9}>
+            <rect x={lx} y={4} width={7} height={7} rx={1} style={{ fill: segmentColors[i] }} />
+            <text x={lx + 10} y={11} className="fill-text-secondary" fontSize={6}>
               {label}
             </text>
           </g>
@@ -73,9 +73,9 @@ export function StackedBarChart({
               y={y + barHeight / 2 + 4}
               textAnchor="end"
               className="fill-text-secondary"
-              fontSize={9}
+              fontSize={6}
             >
-              {d.label}
+              {d.label.length > 14 ? d.label.slice(0, 13) + '..' : d.label}
             </text>
 
             {/* Stacked segments */}
@@ -97,7 +97,7 @@ export function StackedBarChart({
                   y={y}
                   width={Math.max(segW, 1)}
                   height={barHeight}
-                  rx={isFirst || isLast ? 3 : 0}
+                  rx={isFirst || isLast ? 2 : 0}
                   style={{ fill: seg.color }}
                 />
               );
@@ -109,7 +109,7 @@ export function StackedBarChart({
               y={y + barHeight / 2 + 4}
               textAnchor="start"
               className="fill-text-secondary"
-              fontSize={9}
+              fontSize={6}
             >
               {total}
             </text>

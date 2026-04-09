@@ -13,22 +13,22 @@ interface BarChartProps {
  * @param root0.showValues
  * @param root0.className
  */
-export function BarChart({ data, height = 150, showValues = true, className }: BarChartProps) {
+export function BarChart({ data, height = 80, showValues = true, className }: BarChartProps) {
   if (data.length === 0) {
     return <p className="text-sm text-text-secondary">No data available.</p>;
   }
 
-  const barWidth = 28;
-  const barGap = 6;
-  const paddingLeft = 32;
+  const width = 400;
+  const paddingLeft = 28;
   const paddingRight = 8;
-  const paddingTop = showValues ? 16 : 8;
-  const paddingBottom = 20;
-  const width = paddingLeft + paddingRight + data.length * (barWidth + barGap) + barGap;
+  const paddingTop = showValues ? 12 : 6;
+  const paddingBottom = 14;
   const chartW = width - paddingLeft - paddingRight;
   const chartH = height - paddingTop - paddingBottom;
 
   const maxValue = Math.max(...data.map((d) => d.value), 1);
+  const barGap = 4;
+  const barWidth = Math.max(4, (chartW - barGap * (data.length + 1)) / data.length);
 
   const tickCount = 3;
   const yTicks = Array.from({ length: tickCount + 1 }, (_, i) =>
@@ -57,10 +57,10 @@ export function BarChart({ data, height = 150, showValues = true, className }: B
             />
             <text
               x={paddingLeft - 4}
-              y={y + 3}
+              y={y + 2}
               textAnchor="end"
               className="fill-text-tertiary"
-              fontSize={7}
+              fontSize={5}
             >
               {tick}
             </text>
@@ -87,23 +87,22 @@ export function BarChart({ data, height = 150, showValues = true, className }: B
             {showValues && (
               <text
                 x={x + barWidth / 2}
-                y={y - 3}
+                y={y - 2}
                 textAnchor="middle"
                 className="fill-text-secondary"
-                fontSize={7}
+                fontSize={5}
               >
                 {d.value}
               </text>
             )}
-            {/* X-axis label */}
             <text
               x={x + barWidth / 2}
-              y={paddingTop + chartH + 12}
+              y={paddingTop + chartH + 9}
               textAnchor="middle"
               className="fill-text-tertiary"
-              fontSize={7}
+              fontSize={5}
             >
-              {d.label.length > 10 ? d.label.slice(0, 9) + '..' : d.label}
+              {d.label.length > 12 ? d.label.slice(0, 11) + '..' : d.label}
             </text>
           </g>
         );

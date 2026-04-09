@@ -26,12 +26,12 @@ export function HorizontalBarChart({
     return <p className="text-sm text-text-secondary">No data available.</p>;
   }
 
-  const barHeight = 18;
-  const barGap = 6;
-  const paddingLeft = 96;
-  const paddingRight = 48;
-  const paddingTop = 8;
-  const paddingBottom = 8;
+  const barHeight = 12;
+  const barGap = 4;
+  const paddingLeft = 80;
+  const paddingRight = 40;
+  const paddingTop = 4;
+  const paddingBottom = 4;
   const width = 400;
   const computedHeight = height ?? paddingTop + paddingBottom + data.length * (barHeight + barGap);
   const chartW = width - paddingLeft - paddingRight;
@@ -58,9 +58,9 @@ export function HorizontalBarChart({
               y={y + barHeight / 2 + 4}
               textAnchor="end"
               className="fill-text-secondary"
-              fontSize={9}
+              fontSize={6}
             >
-              {d.label}
+              {d.label.length > 14 ? d.label.slice(0, 13) + '..' : d.label}
             </text>
 
             {/* Bar */}
@@ -69,7 +69,7 @@ export function HorizontalBarChart({
               y={y}
               width={Math.max(barW, 2)}
               height={barHeight}
-              rx={3}
+              rx={2}
               style={{ fill: d.color ?? 'var(--color-accent)' }}
             />
 
@@ -80,7 +80,7 @@ export function HorizontalBarChart({
                 y={y + barHeight / 2 + 4}
                 textAnchor="start"
                 className="fill-text-secondary"
-                fontSize={9}
+                fontSize={6}
               >
                 {format(d.value)}
               </text>
