@@ -18,6 +18,7 @@ import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth.store';
 import { useUIStore } from '@/stores/ui.store';
 
 function NavItem({
@@ -92,6 +93,7 @@ function SectionHeader({
  */
 export function Sidebar() {
   const { org, team } = useParams();
+  const user = useAuthStore((s) => s.user);
   const { sidebarOpen, setSidebarOpen, currentOrgId, setCurrentOrg, setCurrentTeam } = useUIStore();
   const [orgsCollapsed, setOrgsCollapsed] = useState(false);
   const [teamsCollapsed, setTeamsCollapsed] = useState(false);
@@ -244,8 +246,8 @@ export function Sidebar() {
             </div>
           )}
 
-          {/* Admin link -- only for org owners */}
-          {orgs?.some((o) => o.role === 'OWNER') && (
+          {/* Admin link -- only for system admins */}
+          {user?.isAdmin && (
             <div className="mt-auto">
               <NavItem to="/admin" icon={ShieldCheck} label="Admin" />
             </div>

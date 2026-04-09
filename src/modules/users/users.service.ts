@@ -29,6 +29,7 @@ export async function getProfile(userId: string) {
         username: true,
         displayName: true,
         avatarUrl: true,
+        isAdmin: true,
         twoFactorEnabled: true,
         createdAt: true,
       },

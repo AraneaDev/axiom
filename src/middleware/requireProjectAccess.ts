@@ -16,6 +16,13 @@ export async function requireProjectAccess(req: Request, _res: Response, next: N
   try {
     const projectId = param(req, 'projectId');
 
+    // System admins bypass all project access checks
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId! },
+      select: { isAdmin: true },
+    });
+    if (user?.isAdmin) return next();
+
     const project = (await prisma.project.findUnique({
       where: { id: projectId },
       include: { team: { select: { id: true } } },
