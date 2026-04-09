@@ -22,6 +22,9 @@ const IssueTemplates = lazy(() => import('@/pages/projects/IssueTemplates'));
 const Milestones = lazy(() => import('@/pages/projects/Milestones'));
 const SprintReport = lazy(() => import('@/pages/issues/SprintReport'));
 
+const OrgAnalytics = lazy(() => import('@/pages/analytics/OrgAnalytics'));
+const TeamAnalytics = lazy(() => import('@/pages/analytics/TeamAnalytics'));
+
 const WikiLayout = lazy(() => import('@/pages/wiki/WikiLayout'));
 const WikiHome = lazy(() => import('@/pages/wiki/WikiHome'));
 const CreateWikiSpace = lazy(() => import('@/pages/wiki/CreateWikiSpace'));
@@ -41,6 +44,24 @@ function ProjectRedirect() {
 export function projectRoutes() {
   return (
     <>
+      {/* Org and Team analytics -- outside project layout */}
+      <Route
+        path="/:org/analytics"
+        element={
+          <ErrorBoundary>
+            <OrgAnalytics />
+          </ErrorBoundary>
+        }
+      />
+      <Route
+        path="/:org/:team/analytics"
+        element={
+          <ErrorBoundary>
+            <TeamAnalytics />
+          </ErrorBoundary>
+        }
+      />
+
       {/* Project routes -- wrapped in ProjectLayout for persistent nav bar */}
       <Route path="/:org/:team/:project" element={<ProjectLayout />}>
         <Route index element={<ProjectRedirect />} />

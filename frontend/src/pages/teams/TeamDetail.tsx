@@ -11,6 +11,7 @@ import {
   ArrowRight,
   FileText,
   AlertTriangle,
+  BarChart3,
 } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -114,6 +115,12 @@ export default function TeamDetail() {
           )}
         </div>
         <div className="flex gap-2">
+          <Link to={`/${org}/${teamSlug}/analytics`}>
+            <Button variant="outline" size="sm">
+              <BarChart3 className="mr-1.5 h-4 w-4" />
+              Analytics
+            </Button>
+          </Link>
           <Link to={`/${org}/${teamSlug}/members`}>
             <Button variant="secondary" size="sm">
               <Users className="h-4 w-4" /> Members

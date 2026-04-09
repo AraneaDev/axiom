@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Users, Plus, FolderKanban, AlertTriangle } from 'lucide-react';
+import { Users, Plus, FolderKanban, AlertTriangle, BarChart3 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
@@ -46,11 +46,19 @@ export default function TeamList() {
     <div className="px-6 py-4">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Teams</h1>
-        <Link to={`/${org}/teams/new`}>
-          <Button size="sm">
-            <Plus className="h-4 w-4" /> New Team
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link to={`/${org}/analytics`}>
+            <Button variant="outline" size="sm">
+              <BarChart3 className="mr-1.5 h-4 w-4" />
+              Analytics
+            </Button>
+          </Link>
+          <Link to={`/${org}/teams/new`}>
+            <Button size="sm">
+              <Plus className="h-4 w-4" /> New Team
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {!teams?.length ? (
