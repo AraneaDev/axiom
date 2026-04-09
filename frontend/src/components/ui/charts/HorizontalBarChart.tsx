@@ -28,11 +28,11 @@ export function HorizontalBarChart({
 
   const barHeight = 24;
   const barGap = 10;
-  const paddingLeft = 120;
-  const paddingRight = 60;
-  const paddingTop = 10;
-  const paddingBottom = 10;
-  const width = 600;
+  const paddingLeft = 96;
+  const paddingRight = 48;
+  const paddingTop = 8;
+  const paddingBottom = 8;
+  const width = 400;
   const computedHeight = height ?? paddingTop + paddingBottom + data.length * (barHeight + barGap);
   const chartW = width - paddingLeft - paddingRight;
 
@@ -58,7 +58,7 @@ export function HorizontalBarChart({
               y={y + barHeight / 2 + 4}
               textAnchor="end"
               className="fill-text-secondary"
-              fontSize={11}
+              fontSize={9}
             >
               {d.label}
             </text>
@@ -80,7 +80,7 @@ export function HorizontalBarChart({
                 y={y + barHeight / 2 + 4}
                 textAnchor="start"
                 className="fill-text-secondary"
-                fontSize={10}
+                fontSize={9}
               >
                 {format(d.value)}
               </text>

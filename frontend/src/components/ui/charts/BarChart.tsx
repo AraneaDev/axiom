@@ -18,11 +18,11 @@ export function BarChart({ data, height = 200, showValues = true, className }: B
     return <p className="text-sm text-text-secondary">No data available.</p>;
   }
 
-  const width = 600;
-  const paddingLeft = 45;
-  const paddingRight = 15;
-  const paddingTop = showValues ? 25 : 15;
-  const paddingBottom = 30;
+  const width = 400;
+  const paddingLeft = 36;
+  const paddingRight = 12;
+  const paddingTop = showValues ? 20 : 12;
+  const paddingBottom = 24;
   const chartW = width - paddingLeft - paddingRight;
   const chartH = height - paddingTop - paddingBottom;
 
@@ -61,7 +61,7 @@ export function BarChart({ data, height = 200, showValues = true, className }: B
               y={y + 3}
               textAnchor="end"
               className="fill-text-tertiary"
-              fontSize={10}
+              fontSize={9}
             >
               {tick}
             </text>
@@ -91,7 +91,7 @@ export function BarChart({ data, height = 200, showValues = true, className }: B
                 y={y - 5}
                 textAnchor="middle"
                 className="fill-text-secondary"
-                fontSize={10}
+                fontSize={9}
               >
                 {d.value}
               </text>
@@ -102,7 +102,7 @@ export function BarChart({ data, height = 200, showValues = true, className }: B
               y={paddingTop + chartH + 16}
               textAnchor="middle"
               className="fill-text-tertiary"
-              fontSize={10}
+              fontSize={9}
             >
               {d.label}
             </text>

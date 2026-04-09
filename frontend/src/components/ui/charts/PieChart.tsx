@@ -106,7 +106,7 @@ export function PieChart({ data, size = 200, donut = true, className }: PieChart
         return (
           <g key={i}>
             <rect x={lx} y={ly} width={10} height={10} rx={2} fill={d.color} />
-            <text x={lx + 16} y={ly + 9} className="fill-text-secondary" fontSize={11}>
+            <text x={lx + 16} y={ly + 9} className="fill-text-secondary" fontSize={9}>
               {d.label}
             </text>
             <text
@@ -114,7 +114,7 @@ export function PieChart({ data, size = 200, donut = true, className }: PieChart
               y={ly + 9}
               textAnchor="end"
               className="fill-text-tertiary"
-              fontSize={10}
+              fontSize={9}
             >
               {d.value} ({pct}%)
             </text>
