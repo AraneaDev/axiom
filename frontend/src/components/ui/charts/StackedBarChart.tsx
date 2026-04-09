@@ -43,7 +43,7 @@ export function StackedBarChart({
   return (
     <svg
       viewBox={`0 0 ${width} ${computedHeight}`}
-      className={`w-full h-auto max-h-80 ${className ?? ''}`}
+      className={`w-full h-auto ${className ?? ''}`}
       preserveAspectRatio="xMidYMid meet"
     >
       {/* Legend */}

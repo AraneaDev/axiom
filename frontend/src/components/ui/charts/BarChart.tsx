@@ -38,7 +38,7 @@ export function BarChart({ data, height = 150, showValues = true, className }: B
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      className={`w-full h-auto max-h-60 ${className ?? ''}`}
+      className={`w-full h-auto ${className ?? ''}`}
       preserveAspectRatio="xMidYMid meet"
     >
       {/* Grid lines */}
