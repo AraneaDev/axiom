@@ -43,7 +43,7 @@ export function HorizontalBarChart({
   return (
     <svg
       viewBox={`0 0 ${width} ${computedHeight}`}
-      className={`w-full h-auto ${className ?? ''}`}
+      className={`w-full h-auto max-h-56 ${className ?? ''}`}
       preserveAspectRatio="xMidYMid meet"
     >
       {data.map((d, i) => {

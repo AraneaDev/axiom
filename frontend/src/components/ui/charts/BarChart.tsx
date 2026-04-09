@@ -13,25 +13,24 @@ interface BarChartProps {
  * @param root0.showValues
  * @param root0.className
  */
-export function BarChart({ data, height = 200, showValues = true, className }: BarChartProps) {
+export function BarChart({ data, height = 120, showValues = true, className }: BarChartProps) {
   if (data.length === 0) {
     return <p className="text-sm text-text-secondary">No data available.</p>;
   }
 
-  const width = 400;
-  const paddingLeft = 36;
-  const paddingRight = 12;
-  const paddingTop = showValues ? 20 : 12;
-  const paddingBottom = 24;
+  const barWidth = 28;
+  const barGap = 6;
+  const paddingLeft = 32;
+  const paddingRight = 8;
+  const paddingTop = showValues ? 16 : 8;
+  const paddingBottom = 20;
+  const width = paddingLeft + paddingRight + data.length * (barWidth + barGap) + barGap;
   const chartW = width - paddingLeft - paddingRight;
   const chartH = height - paddingTop - paddingBottom;
 
   const maxValue = Math.max(...data.map((d) => d.value), 1);
-  const barGap = 8;
-  const barWidth = Math.max(4, (chartW - barGap * (data.length + 1)) / data.length);
 
-  // Y-axis ticks (0, 25%, 50%, 75%, 100% of max)
-  const tickCount = 4;
+  const tickCount = 3;
   const yTicks = Array.from({ length: tickCount + 1 }, (_, i) =>
     Math.round((maxValue / tickCount) * i),
   );
@@ -39,7 +38,7 @@ export function BarChart({ data, height = 200, showValues = true, className }: B
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      className={`w-full h-auto ${className ?? ''}`}
+      className={`h-auto max-h-40 ${className ?? ''}`}
       preserveAspectRatio="xMidYMid meet"
     >
       {/* Grid lines */}
@@ -57,11 +56,11 @@ export function BarChart({ data, height = 200, showValues = true, className }: B
               strokeWidth={0.5}
             />
             <text
-              x={paddingLeft - 6}
+              x={paddingLeft - 4}
               y={y + 3}
               textAnchor="end"
               className="fill-text-tertiary"
-              fontSize={9}
+              fontSize={7}
             >
               {tick}
             </text>
@@ -82,16 +81,16 @@ export function BarChart({ data, height = 200, showValues = true, className }: B
               y={y}
               width={barWidth}
               height={barH}
-              rx={3}
+              rx={2}
               style={{ fill: d.color ?? 'var(--color-accent)' }}
             />
             {showValues && (
               <text
                 x={x + barWidth / 2}
-                y={y - 5}
+                y={y - 3}
                 textAnchor="middle"
                 className="fill-text-secondary"
-                fontSize={9}
+                fontSize={7}
               >
                 {d.value}
               </text>
@@ -99,12 +98,12 @@ export function BarChart({ data, height = 200, showValues = true, className }: B
             {/* X-axis label */}
             <text
               x={x + barWidth / 2}
-              y={paddingTop + chartH + 16}
+              y={paddingTop + chartH + 12}
               textAnchor="middle"
               className="fill-text-tertiary"
-              fontSize={9}
+              fontSize={7}
             >
-              {d.label}
+              {d.label.length > 10 ? d.label.slice(0, 9) + '..' : d.label}
             </text>
           </g>
         );
@@ -117,7 +116,7 @@ export function BarChart({ data, height = 200, showValues = true, className }: B
         x2={paddingLeft + chartW}
         y2={paddingTop + chartH}
         className="stroke-border"
-        strokeWidth={1}
+        strokeWidth={0.5}
       />
     </svg>
   );
