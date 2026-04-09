@@ -70,7 +70,7 @@ export default function TeamAnalytics() {
 
   if (isLoading || !data) {
     return (
-      <div className="mx-auto max-w-7xl space-y-6 p-6">
+      <div className="space-y-6">
         <div className="h-8 w-48 animate-pulse rounded bg-[var(--color-surface-secondary)]" />
         {[1, 2, 3, 4].map((i) => (
           <div
@@ -83,7 +83,7 @@ export default function TeamAnalytics() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <BarChart3 className="h-6 w-6 text-[var(--color-text-secondary)]" />
@@ -179,6 +179,7 @@ export default function TeamAnalytics() {
                   label: m.displayName,
                   value: Math.round((m.totalMinutes / 60) * 10) / 10,
                 }))}
+                height={120}
                 className="mb-4"
               />
               <table className="w-full text-sm">
@@ -249,6 +250,7 @@ export default function TeamAnalytics() {
                   value: lt.avgLeadTimeDays,
                 }))}
                 formatValue={(v) => `${v}d`}
+                height={100}
                 className="mb-4"
               />
               <table className="w-full text-sm">
