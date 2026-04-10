@@ -61,6 +61,8 @@ model User {
   wikiPageIssueLinks      WikiPageIssueLink[]  @relation("WikiPageIssueLinks")
   approvalRequestsMade    ApprovalRequest[]    @relation("approvalRequester")
   approvalVotes           ApprovalVote[]
+  formsCreated            Form[]               @relation("formCreator")
+  submissionsReviewed     FormSubmission[]     @relation("submissionReviewer")
 
   @@map("users")
 }
@@ -410,6 +412,8 @@ model Project {
   automationRules        AutomationRule[]
   savedFilters           SavedFilter[]
   approvalGates          ApprovalGate[]
+  forms                  Form[]
+  formSubmissions        FormSubmission[]
 
   @@unique([teamId, slug])
   @@unique([teamId, prefix])
@@ -501,6 +505,7 @@ model Issue {
   wikiIssueLinks    WikiPageIssueLink[]
   runnerTasks       RunnerTask[]
   approvalRequests  ApprovalRequest[]
+  formSubmissions   FormSubmission[]
 
   @@unique([projectId, number])
   @@index([assigneeId])
@@ -1475,4 +1480,127 @@ model ApprovalVote {
   @@unique([approvalRequestId, userId])
   @@index([userId])
   @@map("approval_votes")
+}
+
+// ─── Public Intake Forms ─────────────────────────────────────
+
+enum FormStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum FormAuthMode {
+  PUBLIC
+  TOKEN_GATED
+}
+
+enum FormSpamProtection {
+  NONE
+  CAPTCHA
+  RATE_LIMIT
+}
+
+enum FormFieldType {
+  TEXT
+  TEXTAREA
+  SELECT
+  MULTISELECT
+  CHECKBOX
+  RADIO
+  DATE
+  FILE
+  HEADING
+  DESCRIPTION
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SPAM
+}
+
+model Form {
+  id               String             @id @default(cuid())
+  projectId        String
+  name             String
+  slug             String             @unique
+  description      String?
+  status           FormStatus         @default(DRAFT)
+  authMode         FormAuthMode       @default(PUBLIC)
+  sharedSecret     String?
+  spamProtection   FormSpamProtection @default(NONE)
+  rateLimitPerHour Int?
+  successMessage   String?
+  redirectUrl      String?
+  createdById      String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User             @relation("formCreator", fields: [createdById], references: [id])
+  pages       FormPage[]
+  submissions FormSubmission[]
+
+  @@index([projectId])
+}
+
+model FormPage {
+  id                String     @id @default(cuid())
+  formId            String
+  title             String
+  position          Int
+  conditionFieldId  String?
+  conditionOperator String?
+  conditionValue    String?
+
+  form            Form        @relation(fields: [formId], references: [id], onDelete: Cascade)
+  conditionField  FormField?  @relation("pageCondition", fields: [conditionFieldId], references: [id], onDelete: SetNull)
+  fields          FormField[] @relation("pageFields")
+
+  @@index([formId])
+}
+
+model FormField {
+  id                String        @id @default(cuid())
+  formPageId        String
+  position          Int
+  type              FormFieldType
+  label             String
+  placeholder       String?
+  helpText          String?
+  required          Boolean       @default(false)
+  options           Json?
+  issueFieldMapping String?
+  validationRules   Json?
+
+  page           FormPage   @relation("pageFields", fields: [formPageId], references: [id], onDelete: Cascade)
+  conditionPages FormPage[] @relation("pageCondition")
+
+  @@index([formPageId])
+}
+
+model FormSubmission {
+  id             String           @id @default(cuid())
+  formId         String
+  projectId      String
+  status         SubmissionStatus @default(PENDING)
+  data           Json
+  submitterEmail String?
+  submitterName  String?
+  submitterIp    String
+  issueId        String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewNote     String?
+  createdAt      DateTime         @default(now())
+
+  form       Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issue      Issue?   @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  reviewedBy User?    @relation("submissionReviewer", fields: [reviewedById], references: [id])
+
+  @@index([formId, status])
+  @@index([projectId, status])
 }
