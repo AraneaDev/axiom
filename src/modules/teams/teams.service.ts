@@ -52,7 +52,20 @@ export async function getTeam(teamId: string) {
     prisma.team.findUnique({
       where: { id: teamId },
       include: {
-        members: { include: { user: { select: USER_BASIC_SELECT } } },
+        members: {
+          include: {
+            user: {
+              select: {
+                ...USER_BASIC_SELECT,
+                isAdmin: true,
+                orgMemberships: {
+                  select: { orgId: true, role: true },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
         repos: { select: { id: true, name: true, slug: true, visibility: true } },
         projects: { select: { id: true, name: true, slug: true, prefix: true } },
         wikiSpaces: { select: { id: true, name: true, slug: true } },
@@ -129,7 +142,17 @@ export async function listTeamMembers(teamId: string) {
 
   return prisma.teamMembership.findMany({
     where: { teamId },
-    include: { user: { select: USER_BASIC_SELECT } },
+    include: {
+      user: {
+        select: {
+          ...USER_BASIC_SELECT,
+          isAdmin: true,
+          orgMemberships: {
+            select: { orgId: true, role: true },
+          },
+        },
+      },
+    },
     orderBy: { createdAt: 'asc' },
   });
 }
@@ -164,7 +187,17 @@ export async function addTeamMember(
 
   return prisma.teamMembership.create({
     data: { userId, teamId, role },
-    include: { user: { select: USER_BASIC_SELECT } },
+    include: {
+      user: {
+        select: {
+          ...USER_BASIC_SELECT,
+          isAdmin: true,
+          orgMemberships: {
+            select: { orgId: true, role: true },
+          },
+        },
+      },
+    },
   });
 }
 
