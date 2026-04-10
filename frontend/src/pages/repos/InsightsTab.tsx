@@ -8,6 +8,7 @@ import {
   LanguageBreakdown,
 } from '@/api/insights.api';
 import { Card } from '@/components/ui/Card';
+import { LineChart } from '@/components/ui/charts';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { formatRelative } from '@/lib/utils';
@@ -46,155 +47,49 @@ function getLangColor(lang: string): string {
   return LANG_COLORS[lang] || '#6b7280';
 }
 
-// ─── SVG Line Chart ──────────────────────────────────────────
+// ─── Commit Frequency Chart ──────────────────────────────────
 
 function CommitFrequencyChart({ data }: { data: CommitFrequencyPoint[] }) {
   if (data.length === 0)
     return <p className="text-sm text-text-secondary">No commit data available.</p>;
 
-  const width = 800;
-  const height = 200;
-  const paddingX = 40;
-  const paddingY = 20;
-  const chartW = width - paddingX * 2;
-  const chartH = height - paddingY * 2;
-
-  const maxCount = Math.max(...data.map((d) => d.count), 1);
-  const points = data.map((d, i) => {
-    const x = paddingX + (i / Math.max(data.length - 1, 1)) * chartW;
-    const y = paddingY + chartH - (d.count / maxCount) * chartH;
-    return { x, y, ...d };
-  });
-
-  const polyline = points.map((p) => `${p.x},${p.y}`).join(' ');
-  const areaPath = `M${points[0].x},${paddingY + chartH} ${points.map((p) => `L${p.x},${p.y}`).join(' ')} L${points[points.length - 1].x},${paddingY + chartH} Z`;
-
-  // Y-axis labels
-  const yTicks = [0, Math.round(maxCount / 2), maxCount];
-
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="w-full h-auto"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      {/* Grid lines */}
-      {yTicks.map((tick) => {
-        const y = paddingY + chartH - (tick / maxCount) * chartH;
-        return (
-          <g key={tick}>
-            <line
-              x1={paddingX}
-              y1={y}
-              x2={width - paddingX}
-              y2={y}
-              className="stroke-border"
-              strokeWidth="1"
-              strokeDasharray="4 2"
-            />
-            <text
-              x={paddingX - 8}
-              y={y + 4}
-              textAnchor="end"
-              className="fill-text-tertiary text-[10px]"
-            >
-              {tick}
-            </text>
-          </g>
-        );
-      })}
-      {/* Area fill */}
-      <path d={areaPath} className="fill-primary" opacity="0.1" />
-      {/* Line */}
-      <polyline
-        points={polyline}
-        fill="none"
-        className="stroke-primary"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <LineChart
+      series={[
+        {
+          label: 'Commits',
+          data: data.map((d) => ({ x: d.date, y: d.count })),
+        },
+      ]}
+      area
+      height={200}
+    />
   );
 }
 
-// ─── Code Frequency Bar Chart ────────────────────────────────
+// ─── Code Frequency Chart ────────────────────────────────────
 
 function CodeFrequencyChart({ data }: { data: CodeFrequencyPoint[] }) {
   if (data.length === 0)
     return <p className="text-sm text-text-secondary">No code frequency data available.</p>;
 
-  const width = 800;
-  const height = 200;
-  const paddingX = 50;
-  const paddingY = 20;
-  const chartW = width - paddingX * 2;
-  const chartH = height - paddingY * 2;
-
-  const maxVal = Math.max(...data.map((d) => Math.max(d.additions, d.deletions)), 1);
-  const barWidth = Math.max(chartW / data.length / 2.5, 2);
-
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="w-full h-auto"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      {/* Baseline */}
-      <line
-        x1={paddingX}
-        y1={paddingY + chartH}
-        x2={width - paddingX}
-        y2={paddingY + chartH}
-        className="stroke-border"
-        strokeWidth="1"
-      />
-      {/* Y-axis label */}
-      <text
-        x={paddingX - 8}
-        y={paddingY + 4}
-        textAnchor="end"
-        className="fill-text-tertiary text-[10px]"
-      >
-        {maxVal}
-      </text>
-      <text
-        x={paddingX - 8}
-        y={paddingY + chartH + 4}
-        textAnchor="end"
-        className="fill-text-tertiary text-[10px]"
-      >
-        0
-      </text>
-      {data.map((d, i) => {
-        const x = paddingX + (i / Math.max(data.length - 1, 1)) * chartW;
-        const addH = (d.additions / maxVal) * chartH;
-        const delH = (d.deletions / maxVal) * chartH;
-        return (
-          <g key={d.week}>
-            {/* Additions bar */}
-            <rect
-              x={x - barWidth}
-              y={paddingY + chartH - addH}
-              width={barWidth}
-              height={addH}
-              className="fill-success"
-              opacity="0.7"
-              rx="1"
-            />
-            {/* Deletions bar */}
-            <rect
-              x={x}
-              y={paddingY + chartH - delH}
-              width={barWidth}
-              height={delH}
-              className="fill-danger"
-              opacity="0.7"
-              rx="1"
-            />
-          </g>
-        );
-      })}
-    </svg>
+    <LineChart
+      series={[
+        {
+          label: 'Additions',
+          data: data.map((d) => ({ x: d.week, y: d.additions })),
+          color: 'var(--color-success)',
+        },
+        {
+          label: 'Deletions',
+          data: data.map((d) => ({ x: d.week, y: d.deletions })),
+          color: 'var(--color-danger)',
+        },
+      ]}
+      area
+      height={200}
+    />
   );
 }
 
@@ -339,23 +234,7 @@ export default function InsightsTab({ repoId }: InsightsTabProps) {
           <h2 className="text-lg font-semibold">Code Frequency</h2>
           <span className="text-sm text-text-secondary ml-auto">Weekly additions/deletions</span>
         </div>
-        {loadingCode ? (
-          <PageLoader />
-        ) : (
-          <>
-            <CodeFrequencyChart data={codeFreq ?? []} />
-            <div className="flex gap-4 mt-3 text-sm">
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-3 h-3 rounded-full bg-success" />
-                Additions
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-3 h-3 rounded-full bg-danger" />
-                Deletions
-              </span>
-            </div>
-          </>
-        )}
+        {loadingCode ? <PageLoader /> : <CodeFrequencyChart data={codeFreq ?? []} />}
       </Card>
     </div>
   );

@@ -273,11 +273,70 @@ export async function getDashboard(userId: string) {
     return { ...a, resourceTitle, resourceLink, resourceKey };
   });
 
+  // ── 7-day trend sparklines ──────────────────────────────────
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  // Build an array of day-start boundaries for the past 7 days (index 0 = oldest)
+  const dayBoundaries = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(sevenDaysAgo.getTime() + i * 24 * 60 * 60 * 1000);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+  const dayEnd = (i: number) =>
+    i < 6 ? dayBoundaries[i + 1] : new Date(dayBoundaries[6].getTime() + 24 * 60 * 60 * 1000);
+
+  const [trendIssues, trendPRs, trendDueDates, trendActivity] = await Promise.all([
+    // Issues created (assigned to user) per day
+    prisma.issue.findMany({
+      where: { assigneeId: userId, createdAt: { gte: sevenDaysAgo } },
+      select: { createdAt: true },
+    }),
+    // PRs requesting review per day
+    prisma.pullRequest.findMany({
+      where: {
+        reviews: { some: { reviewerId: userId } },
+        createdAt: { gte: sevenDaysAgo },
+      },
+      select: { createdAt: true },
+    }),
+    // Issues that became due per day
+    prisma.issue.findMany({
+      where: {
+        assigneeId: userId,
+        dueDate: { gte: sevenDaysAgo, lte: sevenDaysFromNow },
+      },
+      select: { dueDate: true },
+    }),
+    // Activity events per day
+    prisma.activity.findMany({
+      where: { userId, createdAt: { gte: sevenDaysAgo } },
+      select: { createdAt: true },
+    }),
+  ]);
+
+  function bucketByDay(dates: Date[]): number[] {
+    return dayBoundaries.map((_, i) => {
+      const start = dayBoundaries[i];
+      const end = dayEnd(i);
+      return dates.filter((d) => d >= start && d < end).length;
+    });
+  }
+
+  const trends = {
+    assignedIssues: bucketByDay(trendIssues.map((i) => new Date(i.createdAt))),
+    reviewRequests: bucketByDay(trendPRs.map((p) => new Date(p.createdAt))),
+    upcomingDueDates: bucketByDay(
+      trendDueDates.filter((i) => i.dueDate != null).map((i) => new Date(i.dueDate!)),
+    ),
+    recentActivity: bucketByDay(trendActivity.map((a) => new Date(a.createdAt))),
+  };
+
   return {
     assignedIssues,
     reviewRequests: reviewRequestsWithAuthors,
     recentActivity: enrichedActivity,
     upcomingDueDates,
+    trends,
   };
 }
 

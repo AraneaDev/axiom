@@ -52,7 +52,7 @@ export function HeatmapChart({
   const cellGap = 2;
   const cols = xLabels.length;
   const rows = yLabels.length;
-  const width = paddingLeft + cols * (cellSize + cellGap) + 10;
+  const width = Math.max(400, paddingLeft + cols * (cellSize + cellGap) + 10);
   const height = paddingTop + rows * (cellSize + cellGap) + 10;
 
   // Index data for fast lookup
@@ -70,7 +70,7 @@ export function HeatmapChart({
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="w-full h-auto"
-        preserveAspectRatio="xMidYMid meet"
+        preserveAspectRatio="xMinYMin meet"
       >
         {/* X labels */}
         {xLabels.map((label, xi) => (

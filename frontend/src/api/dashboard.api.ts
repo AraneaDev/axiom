@@ -53,11 +53,19 @@ export interface DashboardActivity {
   resourceKey: string | null;
 }
 
+export interface DashboardTrends {
+  assignedIssues: number[];
+  reviewRequests: number[];
+  upcomingDueDates: number[];
+  recentActivity: number[];
+}
+
 export interface DashboardData {
   assignedIssues: DashboardIssue[];
   reviewRequests: DashboardPR[];
   recentActivity: DashboardActivity[];
   upcomingDueDates: DashboardIssue[];
+  trends?: DashboardTrends;
 }
 
 export const dashboardApi = {

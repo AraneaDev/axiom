@@ -8,6 +8,7 @@ export interface Milestone {
   dueDate?: string;
   status: 'OPEN' | 'CLOSED';
   issueCount: number;
+  closedIssueCount: number;
   createdAt: string;
 }
 

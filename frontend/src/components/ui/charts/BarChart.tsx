@@ -38,8 +38,11 @@ export function BarChart({ data, height = 60, showValues = true, className }: Ba
   const paddingTop = showValues ? 12 : 6;
   const paddingBottom = 14;
   const barGap = 4;
-  const barWidth = Math.max(4, Math.min(32, 300 / data.length));
-  const width = calcViewBoxWidth(data.length, barWidth, barGap, paddingLeft, paddingRight);
+  const barWidth = Math.max(4, Math.min(16, 200 / data.length));
+  const width = Math.max(
+    400,
+    calcViewBoxWidth(data.length, barWidth, barGap, paddingLeft, paddingRight),
+  );
   const chartW = width - paddingLeft - paddingRight;
   const chartH = height - paddingTop - paddingBottom;
   const maxValue = Math.max(...data.map((d) => d.value), 1);

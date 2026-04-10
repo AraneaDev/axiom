@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { analyticsApi } from '@/api/analytics.api';
 import type { Period } from '@/api/analytics.api';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
-import { BarChart, HorizontalBarChart } from '@/components/ui/charts';
+import { BarChart, HeatmapChart, HorizontalBarChart } from '@/components/ui/charts';
 import { PeriodSelector } from '@/components/ui/PeriodSelector';
 import { AnalyticsGridSkeleton } from '@/components/ui/Skeleton';
 import { Table, Thead, Tbody, Tr, TrHead, Th, Td } from '@/components/ui/Table';
@@ -142,6 +142,22 @@ export default function TeamAnalytics() {
                     label: m.displayName,
                     value: Math.round((m.totalMinutes / 60) * 10) / 10,
                   }))}
+                  className="mb-4"
+                />
+                <HeatmapChart
+                  xLabels={data.hours.byProject.map((p) => p.projectName)}
+                  yLabels={data.hours.byMember.map((m) => m.displayName)}
+                  data={data.hours.byMember.flatMap((m) =>
+                    data.hours.byProject.map((p) => {
+                      const entry = m.byProject.find((bp) => bp.projectSlug === p.projectSlug);
+                      return {
+                        x: p.projectName,
+                        y: m.displayName,
+                        value: entry?.minutes ?? 0,
+                      };
+                    }),
+                  )}
+                  formatValue={(v) => formatMinutes(v)}
                   className="mb-4"
                 />
                 <Table>

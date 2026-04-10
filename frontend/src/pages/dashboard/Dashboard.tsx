@@ -20,12 +20,14 @@ import {
 } from './DashboardWidgets';
 
 import { dashboardApi } from '@/api/dashboard.api';
+import type { DashboardTrends } from '@/api/dashboard.api';
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Sparkline } from '@/components/ui/charts';
 import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -128,54 +130,77 @@ export default function Dashboard() {
           {/* Quick stats */}
           {dashboardData && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                {
-                  icon: ListChecks,
-                  label: 'Open Issues',
-                  value: dashboardData.assignedIssues?.length ?? 0,
-                  bg: 'bg-primary-light',
-                  fg: 'text-primary',
-                },
-                {
-                  icon: GitPullRequest,
-                  label: 'Review Requests',
-                  value: dashboardData.reviewRequests?.length ?? 0,
-                  bg: 'bg-accent-light',
-                  fg: 'text-accent',
-                },
-                {
-                  icon: CalendarClock,
-                  label: 'Due Soon',
-                  value: dashboardData.upcomingDueDates?.length ?? 0,
-                  bg: 'bg-warning-light',
-                  fg: 'text-warning',
-                },
-                {
-                  icon: Activity,
-                  label: 'Recent Events',
-                  value: dashboardData.recentActivity?.length ?? 0,
-                  bg: 'bg-success-light',
-                  fg: 'text-success',
-                },
-              ].map(({ icon: StatIcon, label, value, bg, fg }) => (
-                <div
-                  key={label}
-                  className="rounded-xl border border-border-light bg-surface-elevated p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-all duration-150"
-                >
+              {(
+                [
+                  {
+                    icon: ListChecks,
+                    label: 'Open Issues',
+                    value: dashboardData.assignedIssues?.length ?? 0,
+                    bg: 'bg-primary-light',
+                    fg: 'text-primary',
+                    color: 'var(--color-primary)',
+                    trendKey: 'assignedIssues' as keyof DashboardTrends,
+                  },
+                  {
+                    icon: GitPullRequest,
+                    label: 'Review Requests',
+                    value: dashboardData.reviewRequests?.length ?? 0,
+                    bg: 'bg-accent-light',
+                    fg: 'text-accent',
+                    color: 'var(--color-accent)',
+                    trendKey: 'reviewRequests' as keyof DashboardTrends,
+                  },
+                  {
+                    icon: CalendarClock,
+                    label: 'Due Soon',
+                    value: dashboardData.upcomingDueDates?.length ?? 0,
+                    bg: 'bg-warning-light',
+                    fg: 'text-warning',
+                    color: 'var(--color-warning)',
+                    trendKey: 'upcomingDueDates' as keyof DashboardTrends,
+                  },
+                  {
+                    icon: Activity,
+                    label: 'Recent Events',
+                    value: dashboardData.recentActivity?.length ?? 0,
+                    bg: 'bg-success-light',
+                    fg: 'text-success',
+                    color: 'var(--color-success)',
+                    trendKey: 'recentActivity' as keyof DashboardTrends,
+                  },
+                ] as const
+              ).map(({ icon: StatIcon, label, value, bg, fg, color, trendKey }) => {
+                const trend = dashboardData.trends?.[trendKey];
+                return (
                   <div
-                    className={cn(
-                      'h-10 w-10 rounded-xl flex items-center justify-center shrink-0',
-                      bg,
-                    )}
+                    key={label}
+                    className="rounded-xl border border-border-light bg-surface-elevated p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-all duration-150"
                   >
-                    <StatIcon className={cn('h-[18px] w-[18px]', fg)} />
+                    <div
+                      className={cn(
+                        'h-10 w-10 rounded-xl flex items-center justify-center shrink-0',
+                        bg,
+                      )}
+                    >
+                      <StatIcon className={cn('h-[18px] w-[18px]', fg)} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-2xl font-[650] text-text leading-none">{value}</p>
+                      <p className="text-xs text-text-tertiary mt-1">{label}</p>
+                    </div>
+                    {trend && trend.length >= 2 && (
+                      <Sparkline
+                        data={trend}
+                        color={color}
+                        height={24}
+                        width={64}
+                        fill
+                        className="shrink-0"
+                      />
+                    )}
                   </div>
-                  <div>
-                    <p className="text-2xl font-[650] text-text leading-none">{value}</p>
-                    <p className="text-xs text-text-tertiary mt-1">{label}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

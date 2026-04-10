@@ -16,6 +16,7 @@ import { projectsApi } from '@/api/projects.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
+import { LineChart } from '@/components/ui/charts';
 import { AnalyticsGridSkeleton } from '@/components/ui/Skeleton';
 import { Table, Tbody, Td, Th, Thead, Tr, TrHead } from '@/components/ui/Table';
 import { useProjectContext } from '@/hooks/useProjectContext';
@@ -89,10 +90,6 @@ export default function ProjectAnalytics() {
 
   const maxStatusCount = Math.max(...analytics.issuesByStatus.map((s) => s.count), 1);
   const maxPriorityCount = Math.max(...analytics.issuesByPriority.map((p) => p.count), 1);
-  const maxDayActivity = Math.max(
-    ...analytics.issuesOverTime.map((d) => Math.max(d.opened, d.closed)),
-    1,
-  );
 
   return (
     <div className="space-y-6">
@@ -235,54 +232,28 @@ export default function ProjectAnalytics() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4 mb-3 text-xs text-text-secondary">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 rounded-sm bg-primary" /> Opened
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 rounded-sm bg-success" /> Closed
-            </span>
-          </div>
-          <div className="flex items-end gap-px h-32">
-            {analytics.issuesOverTime.map((day) => (
-              <div
-                key={day.date}
-                className="flex-1 flex flex-col items-center justify-end gap-px h-full group relative"
-              >
-                <div
-                  className="w-full rounded-t-sm bg-primary transition-all duration-300 min-h-0"
-                  style={{
-                    height: day.opened > 0 ? `${(day.opened / maxDayActivity) * 50}%` : '0',
-                  }}
-                />
-                <div
-                  className="w-full rounded-t-sm bg-success transition-all duration-300 min-h-0"
-                  style={{
-                    height: day.closed > 0 ? `${(day.closed / maxDayActivity) * 50}%` : '0',
-                  }}
-                />
-                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block z-10">
-                  <div className="bg-surface-elevated border border-border rounded-md shadow-lg px-2 py-1 text-xs whitespace-nowrap">
-                    <div className="font-medium">{day.date}</div>
-                    <div className="text-text-secondary">
-                      Opened: {day.opened} / Closed: {day.closed}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-between mt-1 text-[10px] text-text-tertiary">
-            <span>{analytics.issuesOverTime[0]?.date.slice(5) ?? ''}</span>
-            <span>
-              {analytics.issuesOverTime[
-                Math.floor(analytics.issuesOverTime.length / 2)
-              ]?.date.slice(5) ?? ''}
-            </span>
-            <span>
-              {analytics.issuesOverTime[analytics.issuesOverTime.length - 1]?.date.slice(5) ?? ''}
-            </span>
-          </div>
+          <LineChart
+            series={[
+              {
+                label: 'Opened',
+                data: analytics.issuesOverTime.map((d) => ({
+                  x: d.date.slice(5),
+                  y: d.opened,
+                })),
+                color: 'var(--color-primary)',
+              },
+              {
+                label: 'Closed',
+                data: analytics.issuesOverTime.map((d) => ({
+                  x: d.date.slice(5),
+                  y: d.closed,
+                })),
+                color: 'var(--color-success)',
+              },
+            ]}
+            area={true}
+            height={160}
+          />
         </CardContent>
       </Card>
 

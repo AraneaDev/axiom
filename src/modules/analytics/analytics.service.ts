@@ -161,7 +161,7 @@ export async function getOrgAnalytics(orgId: string, period: Period) {
       issue: {
         select: {
           project: {
-            select: { id: true, name: true, teamId: true },
+            select: { id: true, name: true, slug: true, teamId: true },
           },
         },
       },
@@ -174,7 +174,9 @@ export async function getOrgAnalytics(orgId: string, period: Period) {
       userId: string;
       displayName: string;
       teamName: string;
+      teamSlug: string;
       projectName: string;
+      projectSlug: string;
       minutes: number;
     }[]
   > = {};
@@ -200,7 +202,9 @@ export async function getOrgAnalytics(orgId: string, period: Period) {
         userId: entry.userId,
         displayName: userNameMap.get(entry.userId) ?? 'Unknown',
         teamName: teamNameMap.get(teamId) ?? '',
+        teamSlug: teamSlugMap.get(teamId) ?? '',
         projectName: entry.issue.project.name,
+        projectSlug: entry.issue.project.slug,
         minutes: entry.minutes,
       });
     }

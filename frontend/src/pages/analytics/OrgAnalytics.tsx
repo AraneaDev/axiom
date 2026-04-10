@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Users, Clock, Timer, Archive, BarChart3, ArrowRight } from 'lucide-react';
+import { Users, Clock, Timer, Archive, BarChart3 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -98,7 +98,7 @@ export default function OrgAnalytics() {
                         <Td>
                           <Link
                             to={`/${org}/${w.teamSlug}/analytics`}
-                            className="text-primary hover:underline"
+                            className="hover:underline cursor-pointer"
                           >
                             {w.teamName}
                           </Link>
@@ -167,8 +167,22 @@ export default function OrgAnalytics() {
                   {data.hours.byMember.map((h, i) => (
                     <Tr key={i}>
                       <Td className="font-medium">{h.displayName}</Td>
-                      <Td>{h.teamName}</Td>
-                      <Td>{h.projectName}</Td>
+                      <Td>
+                        <Link
+                          to={`/${org}/${h.teamSlug}/analytics`}
+                          className="hover:underline cursor-pointer"
+                        >
+                          {h.teamName}
+                        </Link>
+                      </Td>
+                      <Td>
+                        <Link
+                          to={`/${org}/${h.teamSlug}/${h.projectSlug}/analytics`}
+                          className="hover:underline cursor-pointer"
+                        >
+                          {h.projectName}
+                        </Link>
+                      </Td>
                       <Td className="text-right tabular-nums">{formatMinutes(h.minutes)}</Td>
                     </Tr>
                   ))}
@@ -205,23 +219,21 @@ export default function OrgAnalytics() {
                       <Th>Project</Th>
                       <Th className="text-right">Avg Lead Time</Th>
                       <Th className="text-right">Completed</Th>
-                      <Th></Th>
                     </TrHead>
                   </Thead>
                   <Tbody>
                     {data.leadTimes.map((lt) => (
                       <Tr key={lt.projectSlug}>
-                        <Td className="font-medium">{lt.projectName}</Td>
-                        <Td className="text-right tabular-nums">{lt.avgLeadTimeDays}d</Td>
-                        <Td className="text-right tabular-nums">{lt.issuesCompleted}</Td>
-                        <Td className="text-right">
+                        <Td className="font-medium">
                           <Link
-                            to={`/${org}/${lt.teamSlug}/analytics`}
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                            to={`/${org}/${lt.teamSlug}/${lt.projectSlug}/analytics`}
+                            className="hover:underline cursor-pointer"
                           >
-                            Details <ArrowRight className="h-3 w-3" />
+                            {lt.projectName}
                           </Link>
                         </Td>
+                        <Td className="text-right tabular-nums">{lt.avgLeadTimeDays}d</Td>
+                        <Td className="text-right tabular-nums">{lt.issuesCompleted}</Td>
                       </Tr>
                     ))}
                   </Tbody>
@@ -264,7 +276,14 @@ export default function OrgAnalytics() {
                   <Tbody>
                     {data.backlog.map((b) => (
                       <Tr key={b.projectSlug}>
-                        <Td className="font-medium">{b.projectName}</Td>
+                        <Td className="font-medium">
+                          <Link
+                            to={`/${org}/${b.teamSlug}/${b.projectSlug}/analytics`}
+                            className="hover:underline cursor-pointer"
+                          >
+                            {b.projectName}
+                          </Link>
+                        </Td>
                         <Td className="text-right tabular-nums">{b.backlogSize}</Td>
                         <Td className="text-right tabular-nums">{b.maintenanceCount}</Td>
                         <Td className="text-right tabular-nums">{b.bugCount}</Td>

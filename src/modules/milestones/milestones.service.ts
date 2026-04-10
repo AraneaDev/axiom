@@ -30,13 +30,18 @@ export async function createMilestone(
 export async function listMilestones(projectId: string) {
   const milestones = await prisma.milestone.findMany({
     where: { projectId },
-    include: { _count: { select: { issues: true } } },
+    include: {
+      _count: { select: { issues: true } },
+      issues: { select: { column: { select: { isDone: true } } } },
+    },
     orderBy: { createdAt: 'desc' },
   });
 
   return milestones.map((m: (typeof milestones)[number]) => ({
     ...m,
     issueCount: m._count.issues,
+    closedIssueCount: m.issues.filter((i) => i.column?.isDone).length,
+    issues: undefined,
   }));
 }
 

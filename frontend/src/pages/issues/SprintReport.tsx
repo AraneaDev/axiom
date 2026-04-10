@@ -17,6 +17,7 @@ import type { SprintReportIssue, SprintReportScopeChange } from '@/api/sprint-re
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { GaugeChart } from '@/components/ui/charts';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -286,6 +287,29 @@ export default function SprintReport() {
           variant="default"
         />
       </div>
+
+      {/* Completion gauges */}
+      {summary.committedCount > 0 && (
+        <Card>
+          <div className="px-4 py-3 border-b border-border-light">
+            <h3 className="text-sm font-medium text-text">Sprint Completion</h3>
+          </div>
+          <div className="flex items-center justify-center gap-12 py-6">
+            <GaugeChart
+              value={Math.round((summary.completedCount / summary.committedCount) * 100)}
+              label="Issues"
+              size={130}
+            />
+            {summary.committedPoints > 0 && (
+              <GaugeChart
+                value={Math.round((summary.completedPoints / summary.committedPoints) * 100)}
+                label="Story Points"
+                size={130}
+              />
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Completed issues */}
       <IssueTable

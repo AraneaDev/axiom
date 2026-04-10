@@ -15,7 +15,9 @@ export interface HoursEntry {
   userId: string;
   displayName: string;
   teamName: string;
+  teamSlug: string;
   projectName: string;
+  projectSlug: string;
   minutes: number;
 }
 

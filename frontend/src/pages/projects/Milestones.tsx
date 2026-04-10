@@ -19,6 +19,7 @@ import { milestonesApi, type Milestone } from '@/api/milestones.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { GaugeChart } from '@/components/ui/charts';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -138,20 +139,24 @@ function MilestoneCard({
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div>
-        <div className="flex items-center justify-between mb-1 text-xs text-text-tertiary">
-          <span>Progress</span>
-          <span>{milestone.issueCount} issues</span>
-        </div>
-        <div className="w-full h-2 rounded-full bg-surface-tertiary overflow-hidden">
-          <div
-            className={cn(
-              'h-full rounded-full transition-all duration-500',
-              isOpen ? 'bg-primary' : 'bg-success',
-            )}
-            style={{ width: milestone.issueCount > 0 ? '0%' : '0%' }}
-          />
+      {/* Completion gauge */}
+      <div className="flex items-center gap-4">
+        <GaugeChart
+          value={
+            milestone.issueCount > 0
+              ? Math.round((milestone.closedIssueCount / milestone.issueCount) * 100)
+              : 0
+          }
+          label="Complete"
+          color={isOpen ? 'var(--color-primary)' : 'var(--color-success)'}
+          size={80}
+          arc={180}
+        />
+        <div className="flex flex-col gap-1 text-xs text-text-tertiary">
+          <span>
+            {milestone.closedIssueCount} of {milestone.issueCount}{' '}
+            {milestone.issueCount === 1 ? 'issue' : 'issues'} closed
+          </span>
         </div>
       </div>
     </Card>
