@@ -14,7 +14,15 @@ export type RealtimeEvent =
   | { type: 'notification'; userId: string; notificationId: string }
   | { type: 'pipeline:updated'; repoId: string; runId: string }
   | { type: 'repo:pushed'; repoId: string; ref: string }
-  | { type: 'runner-task:updated'; repoId: string; taskId: string };
+  | { type: 'runner-task:updated'; repoId: string; taskId: string }
+  | { type: 'approval:request:created'; projectId: string; requestId: string; issueId: string }
+  | {
+      type: 'approval:request:updated';
+      projectId: string;
+      requestId: string;
+      issueId: string;
+      status: string;
+    };
 
 /**
  * Client-to-server message types.
