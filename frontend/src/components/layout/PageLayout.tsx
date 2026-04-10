@@ -26,11 +26,11 @@ export function PageLayout({
   className,
 }: PageLayoutProps) {
   if (!sidebar) {
-    return <div className={cn('px-6 py-4', className)}>{children}</div>;
+    return <div className={cn('px-6 py-5', className)}>{children}</div>;
   }
 
   return (
-    <div className={cn('flex gap-6 px-6 py-4', className)}>
+    <div className={cn('flex gap-6 px-6 py-5', className)}>
       <div className="min-w-0 flex-1">{children}</div>
       <aside
         className={cn(
