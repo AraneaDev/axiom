@@ -59,6 +59,8 @@ model User {
   commentReactions        CommentReaction[]    @relation("UserCommentReactions")
   spacePermissions        SpacePermission[]    @relation("SpacePermissions")
   wikiPageIssueLinks      WikiPageIssueLink[]  @relation("WikiPageIssueLinks")
+  approvalRequestsMade    ApprovalRequest[]    @relation("approvalRequester")
+  approvalVotes           ApprovalVote[]
 
   @@map("users")
 }
@@ -407,6 +409,7 @@ model Project {
   workflowRules          WorkflowRule[]
   automationRules        AutomationRule[]
   savedFilters           SavedFilter[]
+  approvalGates          ApprovalGate[]
 
   @@unique([teamId, slug])
   @@unique([teamId, prefix])
@@ -423,9 +426,12 @@ model BoardColumn {
   isDone    Boolean @default(false)
   wipLimit  Int?
 
-  issues            Issue[]
-  workflowRulesFrom WorkflowRule[] @relation("fromColumn")
-  workflowRulesTo   WorkflowRule[] @relation("toColumn")
+  issues                 Issue[]
+  workflowRulesFrom      WorkflowRule[]    @relation("fromColumn")
+  workflowRulesTo        WorkflowRule[]    @relation("toColumn")
+  approvalGatesFrom      ApprovalGate[]    @relation("approvalGateFrom")
+  approvalGatesTo        ApprovalGate[]    @relation("approvalGateTo")
+  approvalRequestTargets ApprovalRequest[] @relation("approvalRequestTarget")
 
   @@index([projectId])
   @@map("board_columns")
@@ -494,6 +500,7 @@ model Issue {
   sprintHistory     SprintIssueHistory[]
   wikiIssueLinks    WikiPageIssueLink[]
   runnerTasks       RunnerTask[]
+  approvalRequests  ApprovalRequest[]
 
   @@unique([projectId, number])
   @@index([assigneeId])
@@ -1395,4 +1402,77 @@ model RunnerTaskLog {
   @@unique([taskId, lineIndex])
   @@index([taskId])
   @@map("runner_task_logs")
+}
+
+// ─── Approval Workflows ─────────────────────────────────────
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+model ApprovalGate {
+  id                String   @id @default(cuid())
+  projectId         String
+  fromColumnId      String
+  toColumnId        String
+  minApprovals      Int      @default(1)
+  allowSelfApproval Boolean  @default(false)
+  enabled           Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromColumn BoardColumn @relation("approvalGateFrom", fields: [fromColumnId], references: [id], onDelete: Cascade)
+  toColumn   BoardColumn @relation("approvalGateTo", fields: [toColumnId], references: [id], onDelete: Cascade)
+  requests   ApprovalRequest[]
+
+  @@unique([projectId, fromColumnId, toColumnId])
+  @@index([projectId])
+  @@map("approval_gates")
+}
+
+model ApprovalRequest {
+  id             String                @id @default(cuid())
+  issueId        String
+  approvalGateId String
+  targetColumnId String
+  requestedById  String
+  status         ApprovalRequestStatus @default(PENDING)
+  createdAt      DateTime              @default(now())
+  resolvedAt     DateTime?
+
+  issue        Issue        @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  approvalGate ApprovalGate @relation(fields: [approvalGateId], references: [id], onDelete: Cascade)
+  targetColumn BoardColumn  @relation("approvalRequestTarget", fields: [targetColumnId], references: [id], onDelete: Cascade)
+  requestedBy  User         @relation("approvalRequester", fields: [requestedById], references: [id])
+  votes        ApprovalVote[]
+
+  @@index([issueId])
+  @@index([approvalGateId])
+  @@index([requestedById, status])
+  @@map("approval_requests")
+}
+
+model ApprovalVote {
+  id                String           @id @default(cuid())
+  approvalRequestId String
+  userId            String
+  decision          ApprovalDecision
+  comment           String?
+  createdAt         DateTime         @default(now())
+
+  approvalRequest ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id])
+
+  @@unique([approvalRequestId, userId])
+  @@index([userId])
+  @@map("approval_votes")
 }
