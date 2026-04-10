@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useModalState } from '@/hooks/useModalState';
@@ -133,13 +134,12 @@ export default function TeamMembers() {
   );
 
   return (
-    <div className="px-6 py-4">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Team Members</h1>
+    <div className="">
+      <PageHeader title="Team Members">
         <Button onClick={() => inviteModal.open()}>
           <UserPlus className="h-4 w-4" /> Invite Member
         </Button>
-      </div>
+      </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
         <div className="space-y-6">
@@ -189,7 +189,7 @@ export default function TeamMembers() {
           {/* Pending Invitations */}
           {pendingInvitations.length > 0 && (
             <div>
-              <h2 className="text-lg font-semibold mb-3">Pending Invitations</h2>
+              <h2 className="h3 mb-3">Pending Invitations</h2>
               <Card className="divide-y divide-border">
                 {pendingInvitations.map((inv: Invitation) => (
                   <div key={inv.id} className="flex items-center gap-3 p-4">
@@ -234,7 +234,7 @@ export default function TeamMembers() {
 
         {/* Team summary sidebar */}
         <div className="space-y-4">
-          <Card className="p-4">
+          <Card className="p-5">
             <p className="text-xs text-text-secondary uppercase font-semibold mb-3">Team Summary</p>
             <div className="space-y-3">
               <div className="flex items-center justify-between">

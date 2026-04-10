@@ -164,7 +164,7 @@ export default function FileView() {
   const lines = isMarkdown ? [] : highlightLines(blob?.content ?? '', fileName);
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       {/* Branch switcher */}
       <div className="flex items-center gap-3 mb-4">
         <Dropdown

@@ -389,7 +389,7 @@ export default function IssueList() {
     return (
       <PageLayout>
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">Issues</h1>
+          <h1 className="h2">Issues</h1>
         </div>
         <ListSkeleton rows={8} />
       </PageLayout>

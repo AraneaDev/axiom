@@ -90,7 +90,7 @@ export default function TimeReport() {
   }
 
   return (
-    <div className="space-y-8 px-6 py-4">
+    <div className="space-y-8">
       {/* Header */}
       <PageHeader title={`${currentProject?.name} Time Report`} prefix={currentProject?.prefix}>
         <Button variant="secondary" size="sm" onClick={handleExportCsv}>

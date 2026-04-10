@@ -61,7 +61,7 @@ export default function MemberProfile() {
   if (!profile) return null;
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       <div className="mb-6">
         <Link to={`/${org}/${teamSlug}/members`}>
           <Button variant="ghost" size="sm">
@@ -78,7 +78,7 @@ export default function MemberProfile() {
             <div className="flex items-center gap-4">
               <Avatar name={profile.displayName} src={profile.avatarUrl ?? undefined} size="lg" />
               <div>
-                <h1 className="text-xl font-bold">{profile.displayName}</h1>
+                <h1 className="h2">{profile.displayName}</h1>
                 <p className="text-sm text-text-secondary">@{profile.username}</p>
               </div>
               <div className="ml-auto">
@@ -127,7 +127,7 @@ export default function MemberProfile() {
         {/* Sidebar */}
         <div className="space-y-4">
           {/* Stats */}
-          <Card className="p-4 space-y-3">
+          <Card className="p-5 space-y-3">
             <p className="text-xs text-text-secondary uppercase font-semibold">Stats</p>
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary flex items-center gap-2">
@@ -144,7 +144,7 @@ export default function MemberProfile() {
           </Card>
 
           {/* Details */}
-          <Card className="p-4 space-y-3">
+          <Card className="p-5 space-y-3">
             <p className="text-xs text-text-secondary uppercase font-semibold">Details</p>
             <div className="flex items-center gap-2 text-sm">
               <Mail className="h-4 w-4 text-text-tertiary" />

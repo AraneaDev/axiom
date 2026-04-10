@@ -57,7 +57,7 @@ export default function PRCreate() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-4">
+    <div className="max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link to={`${basePath}/pulls`}>
           <Button variant="ghost" size="sm">
@@ -68,7 +68,7 @@ export default function PRCreate() {
 
       <div className="flex items-center gap-2 mb-6">
         <GitPullRequest className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">New Pull Request</h1>
+        <h1 className="h2">New Pull Request</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">

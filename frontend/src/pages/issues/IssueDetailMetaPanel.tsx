@@ -52,7 +52,7 @@ export function IssueDetailMetaPanel({
   return (
     <>
       {/* Sub-issues */}
-      <Card className="p-4 shadow-sm">
+      <Card className="p-5 shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold">Sub-issues</h3>
           <Tooltip content="Add sub-issue">

@@ -55,7 +55,7 @@ export default function CreateWikiSpace() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Create wiki space</h1>
+      <h1 className="h2 mb-6">Create wiki space</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input
           id="name"

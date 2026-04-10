@@ -184,14 +184,14 @@ export default function AuditLogs() {
   }
 
   return (
-    <div className="flex-1 overflow-auto px-6 py-4">
+    <div className="flex-1 overflow-auto">
       <div>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <ScrollText className="h-6 w-6 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold text-text">Audit Logs</h1>
+              <h1 className="h2">Audit Logs</h1>
               <p className="text-sm text-text-secondary">
                 Track all changes and access events across the platform
               </p>

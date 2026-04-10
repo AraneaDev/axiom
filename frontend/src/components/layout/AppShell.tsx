@@ -16,10 +16,8 @@ export function AppShell() {
       <CommandPalette />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          <div className="px-6 pt-4">
-            <Breadcrumbs />
-          </div>
+        <main className="flex-1 overflow-y-auto px-6 py-5">
+          <Breadcrumbs />
           <Outlet />
         </main>
       </div>

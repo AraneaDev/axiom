@@ -63,7 +63,7 @@ export default function FileBrowser() {
   }));
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       {/* Branch switcher */}
       <div className="flex items-center gap-3 mb-4">
         <Dropdown

@@ -170,7 +170,7 @@ export default function CommitDetail() {
   }
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       {/* Header */}
       <div className="mb-4">
         <Link
@@ -179,7 +179,7 @@ export default function CommitDetail() {
         >
           <ArrowLeft className="h-3 w-3" /> Back to repository
         </Link>
-        <h1 className="text-xl font-bold mb-1">{commit.message}</h1>
+        <h1 className="h2 mb-1">{commit.message}</h1>
         <div className="flex items-center gap-3 text-sm text-text-secondary">
           <span className="flex items-center gap-1">
             <GitCommit className="h-4 w-4" />

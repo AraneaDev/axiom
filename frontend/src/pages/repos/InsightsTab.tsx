@@ -168,20 +168,20 @@ export default function InsightsTab({ repoId }: InsightsTabProps) {
   return (
     <div className="space-y-8">
       {/* Commit Frequency */}
-      <Card className="p-6">
+      <Card className="p-5">
         <div className="flex items-center gap-2 mb-4">
           <Activity className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Commit Frequency</h2>
+          <h2 className="h3">Commit Frequency</h2>
           <span className="text-sm text-text-secondary ml-auto">Last 90 days</span>
         </div>
         {loadingCommits ? <PageLoader /> : <CommitFrequencyChart data={commitFreq ?? []} />}
       </Card>
 
       {/* Contributors */}
-      <Card className="p-6">
+      <Card className="p-5">
         <div className="flex items-center gap-2 mb-4">
           <Users className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Contributors</h2>
+          <h2 className="h3">Contributors</h2>
           <span className="text-sm text-text-secondary ml-auto">
             {contributors?.length ?? 0} total
           </span>
@@ -219,19 +219,19 @@ export default function InsightsTab({ repoId }: InsightsTabProps) {
       </Card>
 
       {/* Language Breakdown */}
-      <Card className="p-6">
+      <Card className="p-5">
         <div className="flex items-center gap-2 mb-4">
           <Code className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Languages</h2>
+          <h2 className="h3">Languages</h2>
         </div>
         {loadingLangs ? <PageLoader /> : <LanguageBar data={languages ?? []} />}
       </Card>
 
       {/* Code Frequency */}
-      <Card className="p-6">
+      <Card className="p-5">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Code Frequency</h2>
+          <h2 className="h3">Code Frequency</h2>
           <span className="text-sm text-text-secondary ml-auto">Weekly additions/deletions</span>
         </div>
         {loadingCode ? <PageLoader /> : <CodeFrequencyChart data={codeFreq ?? []} />}

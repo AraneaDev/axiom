@@ -137,7 +137,7 @@ export default function ApiTokens() {
       )}
 
       {showForm && (
-        <Card className="p-4 mb-6">
+        <Card className="p-5 mb-6">
           {error && (
             <div className="mb-3 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
               {error}

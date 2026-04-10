@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import { STABLE_STALE_TIME } from '@/lib/constants';
@@ -38,10 +39,8 @@ export default function RepoList() {
 
   if (isLoading)
     return (
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Repositories</h1>
-        </div>
+      <div className="">
+        <PageHeader title="Repositories" />
         <ListSkeleton rows={6} />
       </div>
     );
@@ -58,15 +57,14 @@ export default function RepoList() {
   }
 
   return (
-    <div className="px-6 py-4">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Repositories</h1>
+    <div className="">
+      <PageHeader title="Repositories">
         <Link to={`/${org}/${teamSlug}/repos/new`}>
           <Button size="sm">
             <Plus className="h-4 w-4" /> New Repository
           </Button>
         </Link>
-      </div>
+      </PageHeader>
       {!repos?.length ? (
         <EmptyState
           icon={<GitBranch className="h-12 w-12" />}

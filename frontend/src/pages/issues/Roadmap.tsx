@@ -254,7 +254,7 @@ export default function Roadmap() {
 
   if (isLoading)
     return (
-      <div className="px-6 py-4">
+      <div className="">
         <div className="flex items-center justify-between mb-4">
           <div>
             <Skeleton className="h-7 w-48 mb-2" />
@@ -300,7 +300,7 @@ export default function Roadmap() {
   }
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       <PageHeader title={`${currentProject?.name} Roadmap`} prefix={currentProject?.prefix}>
         <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
           <Button size="sm">

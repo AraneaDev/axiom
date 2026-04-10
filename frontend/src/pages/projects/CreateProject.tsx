@@ -62,8 +62,8 @@ export default function CreateProject() {
   if (teamLoading) return <PageLoader />;
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-4">
-      <h1 className="text-2xl font-bold mb-6">Create project</h1>
+    <div className="max-w-4xl mx-auto">
+      <h1 className="h2 mb-6">Create project</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input
           id="name"

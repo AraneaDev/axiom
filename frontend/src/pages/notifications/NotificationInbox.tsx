@@ -111,10 +111,10 @@ export default function NotificationInbox() {
   }
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-text">Notifications</h1>
+          <h1 className="h2">Notifications</h1>
           <p className="text-sm text-text-secondary mt-1">
             Stay up to date with activity across your projects
           </p>

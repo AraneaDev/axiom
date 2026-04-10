@@ -56,7 +56,7 @@ export default function PageDiff() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <GitCompare className="h-5 w-5 text-text-secondary" />
-          <h1 className="text-2xl font-bold">Version Comparison</h1>
+          <h1 className="h2">Version Comparison</h1>
         </div>
         <div className="flex items-center gap-2">
           <Link to={`/${org}/${team}/wiki/${spaceSlug}/${pageSlug}/history`}>

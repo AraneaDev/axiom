@@ -427,7 +427,7 @@ export default function Board() {
   if (error) return <div className="p-8 text-center text-danger">Failed to load board data</div>;
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       <PageHeader title={`${currentProject?.name} Board`} prefix={currentProject?.prefix}>
         <div className="relative">
           <Button

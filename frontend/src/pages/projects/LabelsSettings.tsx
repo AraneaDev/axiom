@@ -146,7 +146,7 @@ export default function LabelsSettings() {
     >
       {/* Add form */}
       {showAddForm && (
-        <Card className="p-4 mb-4 space-y-3">
+        <Card className="p-5 mb-4 space-y-3">
           <div className="flex items-end gap-3">
             <div className="flex-1">
               <Input
@@ -235,7 +235,7 @@ export default function LabelsSettings() {
       ) : (
         <div className="space-y-2">
           {labels.map((label) => (
-            <Card key={label.id} className="p-4 flex items-center gap-3">
+            <Card key={label.id} className="p-5 flex items-center gap-3">
               {editingName === label.name ? (
                 <div className="flex-1 space-y-3">
                   <div className="flex items-end gap-3">

@@ -68,7 +68,7 @@ export function PRHeader({
     <>
       <div className="border-b border-border pb-5">
         <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-xl font-bold text-text">{pr.title}</h1>
+          <h1 className="h2">{pr.title}</h1>
           <Badge variant={STATUS_BADGE[pr.status]}>{pr.status}</Badge>
         </div>
         <p className="text-sm text-text-secondary flex items-center gap-1.5 flex-wrap">
@@ -98,7 +98,7 @@ export function PRHeader({
 
       {/* Description */}
       {(pr.body || editingDescription) && (
-        <Card className="p-4">
+        <Card className="p-5">
           {editingDescription ? (
             <div className="space-y-2">
               <MarkdownEditor value={descriptionBody} onChange={onDescriptionBodyChange} />

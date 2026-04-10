@@ -98,7 +98,7 @@ export default function WikiLayout() {
   const showSpaceTree = !!spaceSlug && !!currentSpace;
 
   return (
-    <div className="flex gap-6 px-6 py-4">
+    <div className="flex gap-6">
       {/* Persistent sidebar */}
       <aside className="hidden lg:block w-[280px] shrink-0 sticky top-20 self-start min-h-[calc(100vh-6rem)] max-h-[calc(100vh-6rem)] overflow-y-auto">
         {showSpaceTree ? (

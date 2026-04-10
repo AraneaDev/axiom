@@ -225,7 +225,7 @@ export default function UserManagement() {
   };
 
   return (
-    <div className="px-6 py-4 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -235,7 +235,7 @@ export default function UserManagement() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-text">User Management</h1>
+            <h1 className="h2">User Management</h1>
             <p className="text-sm text-text-secondary mt-1">
               {data ? `${data.total} users total` : ''}
             </p>

@@ -54,7 +54,7 @@ export function IssueDetailFieldsPanel({
   isUpdating,
 }: IssueDetailFieldsPanelProps) {
   return (
-    <Card className="p-4">
+    <Card className="p-5">
       {/* Compact 2-column grid for short fields */}
       <div className="grid grid-cols-2 gap-3">
         {/* Status */}

@@ -133,7 +133,7 @@ export function PRReviewPanel({
 
   return (
     <div className="space-y-4">
-      <Card className="p-4 space-y-3">
+      <Card className="p-5 space-y-3">
         <div>
           <p className="text-xs text-text-secondary uppercase font-semibold mb-1">Merge status</p>
           {pr.status === 'OPEN' ? (
@@ -311,7 +311,7 @@ export function PRReviewPanel({
 
       {/* Code Owners */}
       {codeOwners && codeOwners.owners.length > 0 && (
-        <Card className="p-4 space-y-3">
+        <Card className="p-5 space-y-3">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-text-secondary" />
             <p className="text-xs text-text-secondary uppercase font-semibold">Code Owners</p>
@@ -343,7 +343,7 @@ export function PRReviewPanel({
         </Card>
       )}
 
-      <Card className="p-4">
+      <Card className="p-5">
         <p className="text-xs text-text-secondary uppercase font-semibold mb-1">Branches</p>
         <p className="text-sm">
           <Link

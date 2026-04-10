@@ -35,7 +35,7 @@ export function IssueLinkedSection({
 
   const content =
     links.length > 0 ? (
-      <Card className="p-4">
+      <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold">Linked Issues</h3>
           <Button variant="ghost" size="sm" onClick={() => setShowLinkModal(true)}>
@@ -76,7 +76,7 @@ export function IssueLinkedSection({
         </div>
       </Card>
     ) : (
-      <Card className="p-4">
+      <Card className="p-5">
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-sm font-semibold">Linked Issues</h3>
           <Button variant="ghost" size="sm" onClick={() => setShowLinkModal(true)}>

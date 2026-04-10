@@ -234,11 +234,11 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="px-6 py-4 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text">Admin Dashboard</h1>
+          <h1 className="h2">Admin Dashboard</h1>
           <p className="text-sm text-text-secondary mt-1">System overview and management</p>
         </div>
         <div className="flex items-center gap-2">

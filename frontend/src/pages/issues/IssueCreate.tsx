@@ -93,9 +93,9 @@ export default function IssueCreate() {
   ];
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Create Issue</h1>
+        <h1 className="h2">Create Issue</h1>
       </div>
 
       <div className="flex gap-6">
@@ -157,7 +157,7 @@ export default function IssueCreate() {
 
         {/* Sidebar - right side */}
         <div className="w-72 shrink-0 space-y-4">
-          <Card className="p-4 space-y-4">
+          <Card className="p-5 space-y-4">
             <Select
               label="Type"
               value={type}

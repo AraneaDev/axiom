@@ -106,7 +106,7 @@ export default function RepoSettings() {
   };
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       <div className="mb-6">
         <Link
           to={basePath}
@@ -114,14 +114,14 @@ export default function RepoSettings() {
         >
           <ArrowLeft className="h-3 w-3" /> Back to repository
         </Link>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+        <h1 className="h2 flex items-center gap-2">
           <Settings className="h-5 w-5" /> Repository Settings
         </h1>
       </div>
 
       {/* General settings */}
-      <Card className="p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">General</h2>
+      <Card className="p-5 mb-6">
+        <h2 className="h3 mb-4">General</h2>
         <div className="space-y-4">
           <Input label="Repository name" value={name} onChange={(e) => setName(e.target.value)} />
           <div>
@@ -151,8 +151,8 @@ export default function RepoSettings() {
       </Card>
 
       {/* Merge settings */}
-      <Card className="p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+      <Card className="p-5 mb-6">
+        <h2 className="h3 mb-4 flex items-center gap-2">
           <GitMerge className="h-5 w-5" /> Merge Settings
         </h2>
         <div className="space-y-4">
@@ -183,18 +183,18 @@ export default function RepoSettings() {
       </Card>
 
       {/* Branch Protection */}
-      <Card className="p-6 mb-6">
+      <Card className="p-5 mb-6">
         <BranchProtectionSettings repoId={currentRepo.id} />
       </Card>
 
       {/* Webhooks */}
-      <Card className="p-6 mb-6">
+      <Card className="p-5 mb-6">
         <WebhooksSettings repoId={currentRepo.id} />
       </Card>
 
       {/* PR Template */}
-      <Card className="p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+      <Card className="p-5 mb-6">
+        <h2 className="h3 mb-4 flex items-center gap-2">
           <FileText className="h-5 w-5" /> PR Template
         </h2>
         <p className="text-xs text-text-secondary mb-3">
@@ -225,7 +225,7 @@ export default function RepoSettings() {
 
       {/* Danger zone */}
       <div className="rounded-lg border border-danger bg-surface p-6">
-        <h2 className="text-lg font-semibold text-danger flex items-center gap-2 mb-4">
+        <h2 className="h3 text-danger flex items-center gap-2 mb-4">
           <AlertTriangle className="h-5 w-5" /> Danger Zone
         </h2>
         <p className="text-sm text-text-secondary mb-4">

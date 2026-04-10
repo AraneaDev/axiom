@@ -67,7 +67,7 @@ export default function SystemSettings() {
 
   if (isLoading || !settings)
     return (
-      <div className="px-6 py-4 space-y-6">
+      <div className="space-y-6">
         <div className="flex items-center gap-3">
           <Skeleton className="h-8 w-8 rounded-md" />
           <div>
@@ -99,7 +99,7 @@ export default function SystemSettings() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-text">System Settings</h1>
+          <h1 className="h2">System Settings</h1>
           <p className="text-sm text-text-secondary mt-1">
             Current system configuration (read-only)
           </p>

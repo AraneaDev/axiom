@@ -166,7 +166,7 @@ export default function CustomFieldSettings() {
     >
       {/* Add form */}
       {showAddForm && (
-        <Card className="p-4 mb-4 space-y-3">
+        <Card className="p-5 mb-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Name"
@@ -228,7 +228,7 @@ export default function CustomFieldSettings() {
       ) : (
         <div className="space-y-2">
           {fields.map((field) => (
-            <Card key={field.id} className="p-4 flex items-center gap-3">
+            <Card key={field.id} className="p-5 flex items-center gap-3">
               <GripVertical className="h-4 w-4 text-text-tertiary shrink-0" />
 
               {editingId === field.id ? (

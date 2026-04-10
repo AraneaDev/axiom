@@ -95,7 +95,7 @@ export default function IssueDevelopmentCard({
     branches.length + prs.length + commits.length + pipelines.length + wikiPages.length > 0;
 
   return (
-    <Card className="p-4">
+    <Card className="p-5">
       <div className="flex items-center gap-2 mb-3">
         <GitBranch className="h-4 w-4 text-text-secondary" />
         <h3 className="text-sm font-semibold">Development</h3>

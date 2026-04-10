@@ -243,7 +243,7 @@ export default function IssueTemplates() {
     >
       {/* Add form */}
       {showAddForm && (
-        <Card className="p-4 mb-4">
+        <Card className="p-5 mb-4">
           {templateForm}
           <div className="flex items-center gap-2 pt-3">
             <Button
@@ -276,7 +276,7 @@ export default function IssueTemplates() {
       ) : (
         <div className="space-y-2">
           {templates.map((template) => (
-            <Card key={template.id} className="p-4">
+            <Card key={template.id} className="p-5">
               {editingId === template.id ? (
                 <div>
                   {templateForm}

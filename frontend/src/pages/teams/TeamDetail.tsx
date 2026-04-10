@@ -106,10 +106,10 @@ export default function TeamDetail() {
   }
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">{currentTeam?.name}</h1>
+          <h1 className="h2">{currentTeam?.name}</h1>
           {currentTeam?.description && (
             <p className="text-text-secondary text-sm mt-1">{currentTeam.description}</p>
           )}
@@ -138,7 +138,7 @@ export default function TeamDetail() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <FolderKanban className="h-5 w-5 text-primary" />
-                <h2 className="text-lg font-semibold">Projects</h2>
+                <h2 className="h3">Projects</h2>
               </div>
               <Link to={`/${org}/${teamSlug}/projects/new`}>
                 <Button variant="ghost" size="sm">
@@ -195,7 +195,7 @@ export default function TeamDetail() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <BookOpen className="h-5 w-5 text-primary" />
-                  <h2 className="text-lg font-semibold">Wiki</h2>
+                  <h2 className="h3">Wiki</h2>
                 </div>
                 <Link to={`/${org}/${teamSlug}/wiki/new`}>
                   <Button variant="ghost" size="sm">
@@ -233,7 +233,7 @@ export default function TeamDetail() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <BookOpen className="h-5 w-5 text-primary" />
-                  <h2 className="text-lg font-semibold">Wiki</h2>
+                  <h2 className="h3">Wiki</h2>
                 </div>
               </div>
               <EmptyState
@@ -257,7 +257,7 @@ export default function TeamDetail() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <GitPullRequest className="h-5 w-5 text-success" />
-                  <h2 className="text-lg font-semibold">Open Pull Requests</h2>
+                  <h2 className="h3">Open Pull Requests</h2>
                   <Badge variant="default" size="sm">
                     {openPRs!.length}
                   </Badge>
@@ -299,7 +299,7 @@ export default function TeamDetail() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <GitBranch className="h-5 w-5 text-primary" />
-                <h2 className="text-lg font-semibold">Repositories</h2>
+                <h2 className="h3">Repositories</h2>
               </div>
               <Link to={`/${org}/${teamSlug}/repos/new`}>
                 <Button variant="ghost" size="sm">
@@ -385,7 +385,7 @@ export default function TeamDetail() {
 
           {/* Team Members */}
           {teamDetail?.members && (
-            <Card className="p-4">
+            <Card className="p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
                   Members ({teamDetail.members.length})
@@ -442,7 +442,7 @@ export default function TeamDetail() {
           )}
 
           {/* Recent Activity */}
-          <Card className="p-4">
+          <Card className="p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
                 Recent Activity

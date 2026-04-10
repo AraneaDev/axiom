@@ -253,7 +253,7 @@ export default function PageEdit() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{isNew ? 'New Page' : 'Edit Page'}</h1>
+          <h1 className="h2">{isNew ? 'New Page' : 'Edit Page'}</h1>
           {draftStatus === 'saving' && (
             <span className="text-xs text-text-tertiary flex items-center gap-1">
               <Save className="h-3 w-3 animate-pulse" /> Saving draft...

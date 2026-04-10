@@ -39,7 +39,7 @@ export default function Security() {
     >
       <div className="space-y-4">
         {/* 2FA status */}
-        <Card className="p-4">
+        <Card className="p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-primary" />

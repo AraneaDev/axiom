@@ -144,10 +144,10 @@ export default function RepoDetail() {
   ];
 
   return (
-    <div className="space-y-6 px-6 py-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text">{currentRepo.name}</h1>
+          <h1 className="h2">{currentRepo.name}</h1>
           {currentRepo.description && (
             <p className="text-sm text-text-secondary mt-1">{currentRepo.description}</p>
           )}

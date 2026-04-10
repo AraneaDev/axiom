@@ -253,7 +253,7 @@ export default function PRDetail() {
   }
 
   return (
-    <div className="space-y-6 px-6 py-4">
+    <div className="space-y-6">
       <PRHeader
         pr={pr}
         org={org!}

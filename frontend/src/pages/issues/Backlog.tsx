@@ -219,7 +219,7 @@ export default function Backlog() {
   const isLoading = (sprintsLoading || backlogLoading) && !hydrationQuery.data;
   if (isLoading)
     return (
-      <div className="px-6 py-4">
+      <div className="">
         <div className="flex items-center justify-between mb-4">
           <div>
             <Skeleton className="h-7 w-32 mb-2" />
@@ -233,7 +233,7 @@ export default function Backlog() {
             <ListSkeleton rows={6} />
           </div>
           <div className="space-y-4">
-            <Card className="p-4">
+            <Card className="p-5">
               <Skeleton className="h-40 w-full rounded-md" />
             </Card>
           </div>
@@ -277,7 +277,7 @@ export default function Backlog() {
 
   const sidebarContent = (
     <div className="space-y-4">
-      <Card className="p-4">
+      <Card className="p-5">
         <VelocityChart data={velocityData} />
       </Card>
 

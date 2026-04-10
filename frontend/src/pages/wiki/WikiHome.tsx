@@ -42,7 +42,7 @@ export default function WikiHome() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Wiki</h1>
+        <h1 className="h2">Wiki</h1>
         <div className="flex items-center gap-2">
           {archivedSpaces.length > 0 && (
             <Button

@@ -242,7 +242,7 @@ export default function Milestones() {
   });
 
   return (
-    <div className="space-y-6 px-6 py-4">
+    <div className="space-y-6">
       {/* Header */}
       <PageHeader title="Milestones" prefix={currentProject?.prefix}>
         <Button onClick={() => createModal.open()} disabled={!currentProject}>

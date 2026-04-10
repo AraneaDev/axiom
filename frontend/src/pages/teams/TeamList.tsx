@@ -43,9 +43,9 @@ export default function TeamList() {
   }
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Teams</h1>
+        <h1 className="h2">Teams</h1>
         <div className="flex gap-2">
           <Link to={`/${org}/analytics`}>
             <Button variant="outline" size="sm">

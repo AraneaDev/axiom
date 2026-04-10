@@ -97,7 +97,7 @@ export function IssueDetailSidebar({
       </IssueDetailMetaPanel>
 
       {activities.length > 0 && (
-        <Card className="p-4">
+        <Card className="p-5">
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2.5 flex items-center gap-2">
             <History className="h-3.5 w-3.5" />
             History

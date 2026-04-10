@@ -187,7 +187,7 @@ export default function PipelineRunDetail() {
   if (!run) return <EmptyState title="Run not found" />;
 
   return (
-    <div className="px-6 py-4">
+    <div className="">
       <div className="flex items-center gap-3 mb-6">
         <Link
           to={`/${org}/${teamSlug}/repos/${repoSlug}`}
@@ -198,7 +198,7 @@ export default function PipelineRunDetail() {
         <div className="flex-1">
           <div className="flex items-center gap-2">
             {STATUS_ICON[run.status]}
-            <h1 className="text-xl font-bold">{run.pipeline?.name ?? 'Pipeline Run'}</h1>
+            <h1 className="h2">{run.pipeline?.name ?? 'Pipeline Run'}</h1>
             <span
               className={cn('text-xs px-2 py-0.5 rounded-full border', STATUS_BADGE[run.status])}
             >
