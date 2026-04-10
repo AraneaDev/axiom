@@ -36,7 +36,14 @@ export interface TeamMember {
   id: string;
   userId: string;
   role: 'ADMIN' | 'MEMBER' | 'VIEWER';
-  user: { id: string; username: string; displayName: string };
+  user: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUrl?: string;
+    isAdmin?: boolean;
+    orgMemberships?: { orgId: string; role: string }[];
+  };
 }
 
 export interface Project {
