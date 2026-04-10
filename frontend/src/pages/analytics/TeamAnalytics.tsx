@@ -85,7 +85,7 @@ export default function TeamAnalytics() {
           </div>
         </PageHeader>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="columns-1 lg:columns-2 gap-6 [&>*]:mb-6 [&>*]:break-inside-avoid">
           {/* Workload by Member */}
           <Card>
             <CardHeader>
