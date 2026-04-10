@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Users, Clock, Timer, Archive, BarChart3 } from 'lucide-react';
+import { Users, Clock, Timer, Archive } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -9,6 +9,7 @@ import { orgsApi } from '@/api/orgs.api';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { BarChart, HorizontalBarChart, StackedBarChart } from '@/components/ui/charts';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { PeriodSelector } from '@/components/ui/PeriodSelector';
 import { AnalyticsGridSkeleton } from '@/components/ui/Skeleton';
 import { Table, Thead, Tbody, Tr, TrHead, Th, Td } from '@/components/ui/Table';
@@ -41,19 +42,19 @@ export default function OrgAnalytics() {
   }
 
   const sidebar = (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5">
       <PeriodSelector value={period} onChange={setPeriod} />
-      <Card className="p-4">
+      <Card className="p-5">
         <p className="text-xs text-text-tertiary mb-1">Total Active Issues</p>
         <p className="text-2xl font-bold tabular-nums">
           {data.workload.reduce((s, w) => s + w.total, 0)}
         </p>
       </Card>
-      <Card className="p-4">
+      <Card className="p-5">
         <p className="text-xs text-text-tertiary mb-1">Total Hours</p>
         <p className="text-2xl font-bold tabular-nums">{formatMinutes(data.hours.totalMinutes)}</p>
       </Card>
-      <Card className="p-4">
+      <Card className="p-5">
         <p className="text-xs text-text-tertiary mb-1">Avg Lead Time</p>
         <p className="text-2xl font-bold tabular-nums">
           {data.leadTimes.length > 0
@@ -61,7 +62,7 @@ export default function OrgAnalytics() {
             : '-'}
         </p>
       </Card>
-      <Card className="p-4">
+      <Card className="p-5">
         <p className="text-xs text-text-tertiary mb-1">Backlog Size</p>
         <p className="text-2xl font-bold tabular-nums">
           {data.backlog.reduce((s, b) => s + b.backlogSize, 0)}
@@ -72,14 +73,12 @@ export default function OrgAnalytics() {
 
   return (
     <PageLayout sidebar={sidebar}>
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <BarChart3 className="h-6 w-6 text-text-secondary" />
-          <h1 className="text-2xl font-semibold">Organization Analytics</h1>
-          <div className="xl:hidden ml-auto">
+      <div className="flex flex-col gap-6">
+        <PageHeader title="Organization Analytics">
+          <div className="xl:hidden">
             <PeriodSelector value={period} onChange={setPeriod} />
           </div>
-        </div>
+        </PageHeader>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {/* Workload Overview */}
@@ -87,7 +86,7 @@ export default function OrgAnalytics() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-text-secondary" />
-                <h2 className="text-lg font-medium">Workload Overview</h2>
+                <h3 className="h3">Workload Overview</h3>
               </div>
             </CardHeader>
             <CardContent>
@@ -160,7 +159,7 @@ export default function OrgAnalytics() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-text-secondary" />
-                <h2 className="text-lg font-medium">Hours Spent</h2>
+                <h3 className="h3">Hours Spent</h3>
               </div>
             </CardHeader>
             <CardContent>
@@ -229,7 +228,7 @@ export default function OrgAnalytics() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Timer className="h-5 w-5 text-text-secondary" />
-                <h2 className="text-lg font-medium">Lead Times</h2>
+                <h3 className="h3">Lead Times</h3>
               </div>
             </CardHeader>
             <CardContent>
@@ -280,7 +279,7 @@ export default function OrgAnalytics() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Archive className="h-5 w-5 text-text-secondary" />
-                <h2 className="text-lg font-medium">Backlog Health</h2>
+                <h3 className="h3">Backlog Health</h3>
               </div>
             </CardHeader>
             <CardContent>
