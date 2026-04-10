@@ -34,7 +34,7 @@ export function PageLayout({
       <div className="min-w-0 flex-1">{children}</div>
       <aside
         className={cn(
-          'hidden xl:block shrink-0 sticky top-4 self-start max-h-[calc(100vh-5rem)] overflow-y-auto',
+          'hidden xl:block shrink-0 sticky top-0 self-start max-h-[calc(100vh-5rem)] overflow-y-auto',
           sidebarWidth,
         )}
       >

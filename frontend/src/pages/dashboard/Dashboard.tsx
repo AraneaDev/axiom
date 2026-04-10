@@ -116,8 +116,8 @@ export default function Dashboard() {
   ) : null;
 
   return (
-    <PageLayout sidebar={activitySidebar}>
-      <div className="flex flex-col gap-6">
+    <PageLayout sidebar={activitySidebar} sidebarWidth="w-88">
+      <div className="flex flex-col gap-5">
         <PageHeader title={`${greeting}, ${user?.displayName?.split(' ')[0]}`}>
           <p className="text-text-tertiary text-sm">{dateStr}</p>
           <Link to="/orgs/new">
@@ -186,28 +186,22 @@ export default function Dashboard() {
             )}
 
             {/* Widget grid */}
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-[3fr_2fr]">
+            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
               <MyIssuesWidget issues={dashboardData?.assignedIssues ?? []} />
               <ReviewRequestsWidget prs={dashboardData?.reviewRequests ?? []} />
               <UpcomingDueDatesWidget issues={dashboardData?.upcomingDueDates ?? []} />
+              {teams &&
+                teams.length > 0 &&
+                firstOrg &&
+                teams.map((team) => (
+                  <SprintHealthWidget
+                    key={team.id}
+                    teamId={team.id}
+                    orgSlug={firstOrg.slug}
+                    teamSlug={team.slug}
+                  />
+                ))}
             </div>
-
-            {/* Sprint Health */}
-            {teams && teams.length > 0 && firstOrg && (
-              <div>
-                <h3 className="h3 mb-3">Sprint Health</h3>
-                <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-                  {teams.map((team) => (
-                    <SprintHealthWidget
-                      key={team.id}
-                      teamId={team.id}
-                      orgSlug={firstOrg.slug}
-                      teamSlug={team.slug}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Org cards */}
             <div>
@@ -219,12 +213,12 @@ export default function Dashboard() {
                     to={`/${org.slug}`}
                     className="group rounded-lg border border-border bg-surface-elevated overflow-hidden hover:shadow-md transition-all duration-150"
                   >
-                    <div className="h-16 bg-primary-light flex items-end px-5 pb-3">
-                      <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center shadow-sm -mb-5 ring-2 ring-surface">
-                        <span className="text-on-primary text-sm font-bold">{org.name[0]}</span>
+                    <div className="h-10 bg-primary-light flex items-end px-4 pb-2">
+                      <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center shadow-sm -mb-4 ring-2 ring-surface-elevated">
+                        <span className="text-text-inverse text-xs font-bold">{org.name[0]}</span>
                       </div>
                     </div>
-                    <div className="p-5 pt-7">
+                    <div className="p-4 pt-6">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-text text-sm truncate">{org.name}</h3>
                         <Badge variant="outline" size="sm">
