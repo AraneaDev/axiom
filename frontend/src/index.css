@@ -3,12 +3,12 @@
 
 @theme {
   /* Core palette */
-  --color-primary: #6d5dca;
-  --color-primary-hover: #5a4cb5;
-  --color-primary-light: #f0edf9;
-  --color-primary-muted: #c4bce8;
-  --color-accent: #0d9488;
-  --color-accent-light: #e6f7f5;
+  --color-primary: #7c3aed;
+  --color-primary-hover: #6d28d9;
+  --color-primary-light: #ede9fe;
+  --color-primary-muted: #a78bfa;
+  --color-accent: #06b6d4;
+  --color-accent-light: #ecfeff;
   --color-danger: #ef4444;
   --color-danger-light: #fef2f2;
   --color-warning: #f59e0b;
@@ -17,34 +17,34 @@
   --color-success-light: #ecfdf5;
 
   /* Surfaces */
-  --color-surface: #fefefe;
-  --color-surface-secondary: #fafaf8;
-  --color-surface-tertiary: #f3f2ef;
+  --color-surface: #fafafa;
+  --color-surface-secondary: #f4f4f6;
+  --color-surface-tertiary: #e8e8ec;
   --color-surface-elevated: #ffffff;
-  --color-surface-overlay: rgba(255, 255, 255, 0.8);
+  --color-surface-overlay: rgba(250, 250, 250, 0.8);
   --color-backdrop: rgba(0, 0, 0, 0.5);
-  --color-surface-inverse: #1a1a1a;
+  --color-surface-inverse: #18181b;
 
   /* Borders */
-  --color-border: #e8e6e1;
-  --color-border-light: #f0eeea;
-  --color-border-focus: #6d5dca;
+  --color-border: #e4e4e7;
+  --color-border-light: #f0f0f2;
+  --color-border-focus: #7c3aed;
 
   /* Text */
-  --color-text: #1a1a1a;
-  --color-text-secondary: #6b6b6b;
-  --color-text-tertiary: #9a9a9a;
+  --color-text: #18181b;
+  --color-text-secondary: #52525b;
+  --color-text-tertiary: #a1a1aa;
   --color-text-inverse: #ffffff;
 
   /* Fonts */
   --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'Geist Mono', 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, monospace;
 
-  /* Shadows — warm-tinted */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
-  --shadow-glow: 0 0 0 3px rgba(109, 93, 202, 0.15);
+  /* Shadows — cool-tinted */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.10), 0 4px 8px rgba(0, 0, 0, 0.06);
+  --shadow-glow: 0 0 0 3px rgba(124, 58, 237, 0.15);
 
   /* Card color coding */
   --card-color-critical: var(--color-danger);
@@ -63,22 +63,22 @@
   --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Chart palette — categorical (8 distinct colors for data series) */
-  --color-chart-1: #6d5dca;
-  --color-chart-2: #0d9488;
+  /* Chart palette — categorical */
+  --color-chart-1: #7c3aed;
+  --color-chart-2: #06b6d4;
   --color-chart-3: #e87b35;
   --color-chart-4: #3b82f6;
   --color-chart-5: #ec4899;
   --color-chart-6: #84cc16;
   --color-chart-7: #f59e0b;
-  --color-chart-8: #06b6d4;
+  --color-chart-8: #8b5cf6;
 
-  /* Chart palette — sequential (primary shades for magnitude data) */
-  --color-chart-seq-1: rgba(109, 93, 202, 0.2);
-  --color-chart-seq-2: rgba(109, 93, 202, 0.4);
-  --color-chart-seq-3: rgba(109, 93, 202, 0.6);
-  --color-chart-seq-4: rgba(109, 93, 202, 0.8);
-  --color-chart-seq-5: #6d5dca;
+  /* Chart palette — sequential */
+  --color-chart-seq-1: rgba(124, 58, 237, 0.2);
+  --color-chart-seq-2: rgba(124, 58, 237, 0.4);
+  --color-chart-seq-3: rgba(124, 58, 237, 0.6);
+  --color-chart-seq-4: rgba(124, 58, 237, 0.8);
+  --color-chart-seq-5: #7c3aed;
 }
 
 /* Dark mode — soft warm */
