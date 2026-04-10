@@ -51,6 +51,8 @@ interface IssueListTableProps {
   org: string;
   teamSlug: string;
   projectSlug: string;
+  onIssueClick?: (id: string) => void;
+  selectedIssueId?: string | null;
 }
 
 /**
@@ -66,6 +68,8 @@ interface IssueListTableProps {
  * @param root0.org
  * @param root0.teamSlug
  * @param root0.projectSlug
+ * @param root0.onIssueClick
+ * @param root0.selectedIssueId
  */
 export function IssueListTable({
   issues,
@@ -78,6 +82,8 @@ export function IssueListTable({
   org,
   teamSlug,
   projectSlug,
+  onIssueClick,
+  selectedIssueId,
 }: IssueListTableProps) {
   const hasSelection = selectedIds.size > 0;
 
@@ -126,7 +132,9 @@ export function IssueListTable({
                 'flex items-center gap-3 px-4 py-2.5 border-l-2 hover:bg-surface-tertiary transition-colors duration-150 cursor-pointer',
                 PRIORITY_BORDER_COLORS[issue.priority] ?? 'border-l-transparent',
                 selectedIds.has(issue.id) && 'bg-primary-light/5',
+                selectedIssueId === issue.id && 'bg-primary-light/10 border-l-primary',
               )}
+              onClick={() => onIssueClick?.(issue.id)}
             >
               <Checkbox
                 checked={selectedIds.has(issue.id)}
@@ -179,9 +187,11 @@ export function IssueListTable({
           key={issue.id}
           data-issue-row
           className={cn(
-            'relative p-4 hover:shadow-md hover:-translate-y-px hover:border-primary/30 transition-all duration-150',
+            'relative p-4 hover:shadow-md hover:-translate-y-px hover:border-primary/30 transition-all duration-150 cursor-pointer',
             selectedIds.has(issue.id) && 'border-primary/50 bg-primary-light/5',
+            selectedIssueId === issue.id && 'border-primary/50 bg-primary-light/10',
           )}
+          onClick={() => onIssueClick?.(issue.id)}
         >
           <Checkbox
             checked={selectedIds.has(issue.id)}

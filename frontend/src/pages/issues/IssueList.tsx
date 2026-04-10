@@ -11,6 +11,9 @@ import {
   Bookmark,
   BookmarkCheck,
   AlertTriangle,
+  ExternalLink,
+  CircleDot,
+  CircleCheck,
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -25,12 +28,18 @@ import { issuesApi } from '@/api/issues.api';
 import { savedFiltersApi } from '@/api/saved-filters.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
+import { PageLayout } from '@/components/layout/PageLayout';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
+import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useIssueListFilters } from '@/hooks/useIssueListFilters';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
@@ -190,6 +199,9 @@ export default function IssueList() {
     },
   );
 
+  // Issue preview sidebar state
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -262,14 +274,125 @@ export default function IssueList() {
 
   const queryError = hydrationQuery.error || issuesError;
 
+  // Build issue preview sidebar
+  const allIssues = data?.issues ?? [];
+  const selectedIssue = selectedIssueId
+    ? (allIssues.find((i) => i.id === selectedIssueId) ?? null)
+    : null;
+
+  const openCount = allIssues.filter(
+    (i) => i.column?.name !== 'Done' && i.column?.name !== 'Closed',
+  ).length;
+  const closedCount = allIssues.length - openCount;
+
+  const issueSidebar = selectedIssue ? (
+    <Card className="overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <h3 className="font-semibold text-sm text-text truncate">Issue Preview</h3>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => setSelectedIssueId(null)}
+          title="Close preview"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <div className="p-4 space-y-4">
+        <div className="flex items-start gap-2">
+          <IssueTypeIcon type={selectedIssue.type} className="h-4 w-4 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <span className="text-xs font-mono text-text-secondary">{selectedIssue.key}</span>
+            <h4 className="text-sm font-medium text-text leading-snug">{selectedIssue.title}</h4>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {selectedIssue.column && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-text-tertiary">Status</span>
+              <Badge variant="outline" size="sm">
+                {selectedIssue.column.name}
+              </Badge>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-text-tertiary">Priority</span>
+            <PriorityBadge priority={selectedIssue.priority} />
+          </div>
+
+          {selectedIssue.assignee && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-text-tertiary">Assignee</span>
+              <div className="flex items-center gap-1.5">
+                <Avatar name={selectedIssue.assignee.displayName} size="xs" />
+                <span className="text-xs text-text">{selectedIssue.assignee.displayName}</span>
+              </div>
+            </div>
+          )}
+
+          {selectedIssue.labels && selectedIssue.labels.length > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-text-tertiary">Labels</span>
+              <div className="flex items-center gap-1 flex-wrap justify-end">
+                {selectedIssue.labels.map((l) => (
+                  <Badge key={l.id} variant="outline" size="sm">
+                    {l.name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Link
+          to={`/${org}/${teamSlug}/${projectSlug}/issues/${selectedIssue.number}`}
+          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-hover mt-2"
+        >
+          <ExternalLink className="h-3 w-3" /> View full details
+        </Link>
+      </div>
+    </Card>
+  ) : (
+    <Card className="overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <h3 className="font-semibold text-sm text-text">Summary</h3>
+      </div>
+      <div className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-text-tertiary">Total Issues</span>
+          <span className="text-sm font-medium text-text">{allIssues.length}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <CircleDot className="h-3 w-3 text-success" />
+            <span className="text-xs text-text-tertiary">Open</span>
+          </div>
+          <span className="text-sm font-medium text-text">{openCount}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <CircleCheck className="h-3 w-3 text-text-tertiary" />
+            <span className="text-xs text-text-tertiary">Closed</span>
+          </div>
+          <span className="text-sm font-medium text-text">{closedCount}</span>
+        </div>
+        <p className="text-xs text-text-tertiary pt-2 border-t border-border">
+          Click an issue row to preview it here
+        </p>
+      </div>
+    </Card>
+  );
+
   if (isLoading)
     return (
-      <div className="px-6 py-4">
+      <PageLayout>
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold">Issues</h1>
         </div>
         <ListSkeleton rows={8} />
-      </div>
+      </PageLayout>
     );
 
   if (queryError) {
@@ -284,7 +407,7 @@ export default function IssueList() {
   }
 
   return (
-    <div className="px-6 py-4">
+    <PageLayout sidebar={issueSidebar}>
       <PageHeader title={`${currentProject?.name} Issues`} prefix={currentProject?.prefix}>
         <Button
           variant="secondary"
@@ -505,6 +628,8 @@ export default function IssueList() {
         org={org!}
         teamSlug={teamSlug!}
         projectSlug={projectSlug!}
+        onIssueClick={(id) => setSelectedIssueId((prev) => (prev === id ? null : id))}
+        selectedIssueId={selectedIssueId}
       />
 
       {/* Pagination */}
@@ -581,6 +706,6 @@ export default function IssueList() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageLayout>
   );
 }
