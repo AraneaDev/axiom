@@ -51,7 +51,7 @@ export function Widget({
   className?: string;
 }) {
   return (
-    <Card className={cn('flex flex-col', className)}>
+    <Card className={cn('flex flex-col overflow-hidden', className)}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-primary" />
@@ -273,8 +273,8 @@ export function RecentActivityWidget({ activities }: { activities: DashboardActi
                   size="sm"
                   className="mt-0.5"
                 />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm leading-snug">
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <p className="text-sm leading-snug line-clamp-2">
                     <span className="font-medium">{a.user.displayName}</span>{' '}
                     <span className="text-text-secondary">{actionLabel}</span>{' '}
                     {a.resourceLink ? (
