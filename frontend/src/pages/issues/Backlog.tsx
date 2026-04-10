@@ -9,6 +9,7 @@ import { SprintFormModal } from './SprintFormModal';
 import { hydrateApi } from '@/api/hydrate.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { BurndownChart } from '@/components/BurndownChart';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -274,164 +275,162 @@ export default function Backlog() {
     e.dataTransfer.effectAllowed = 'move';
   };
 
+  const sidebarContent = (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <VelocityChart data={velocityData} />
+      </Card>
+
+      {/* Burndown chart for active sprint */}
+      {sortedSprints
+        .filter((s) => s.status === 'ACTIVE')
+        .map((s) => (
+          <Card key={s.id} className="p-4">
+            <BurndownChart sprint={s} />
+          </Card>
+        ))}
+
+      {/* Sprint summary */}
+      <Card className="p-4 space-y-3">
+        <h3 className="text-sm font-semibold">Sprint Summary</h3>
+        {sortedSprints.filter((s) => s.status !== 'COMPLETED').length === 0 ? (
+          <p className="text-xs text-text-tertiary">No active or planned sprints.</p>
+        ) : (
+          sortedSprints
+            .filter((s) => s.status !== 'COMPLETED')
+            .map((s) => {
+              const total = s.issues.length;
+              const done = s.issues.filter((i) => i.column?.isDone).length;
+              const inProgress = s.issues.filter((i) => i.column && !i.column.isDone).length;
+              const todo = total - done - inProgress;
+              const donePct = total > 0 ? (done / total) * 100 : 0;
+              const inProgressPct = total > 0 ? (inProgress / total) * 100 : 0;
+              const todoPct = total > 0 ? (todo / total) * 100 : 0;
+
+              return (
+                <div key={s.id} className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-text truncate font-medium">{s.name}</span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={STATUS_BADGE[s.status]} className="text-[9px]">
+                        {s.status}
+                      </Badge>
+                      <span className="text-text-tertiary tabular-nums">
+                        {s._storyPoints ??
+                          s.issues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0)}{' '}
+                        pts
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  {total > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex h-2 rounded-full overflow-hidden bg-surface-tertiary">
+                        {donePct > 0 && (
+                          <div
+                            className="bg-success transition-all"
+                            style={{ width: `${donePct}%` }}
+                          />
+                        )}
+                        {inProgressPct > 0 && (
+                          <div
+                            className="bg-primary transition-all"
+                            style={{ width: `${inProgressPct}%` }}
+                          />
+                        )}
+                        {todoPct > 0 && (
+                          <div
+                            className="bg-border transition-all"
+                            style={{ width: `${todoPct}%` }}
+                          />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] text-text-tertiary">
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block h-2 w-2 rounded-full bg-success" />
+                          Done {done}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block h-2 w-2 rounded-full bg-primary" />
+                          In Progress {inProgress}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block h-2 w-2 rounded-full bg-border" />
+                          To Do {todo}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+        )}
+      </Card>
+    </div>
+  );
+
   return (
-    <div className="px-6 py-4">
+    <PageLayout sidebar={sidebarContent} sidebarWidth="w-80 2xl:w-96">
       <PageHeader title="Backlog" prefix={currentProject?.prefix}>
         <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4" /> Create Sprint
         </Button>
       </PageHeader>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main panel: sprints + backlog */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Sprint panels */}
-          {sortedSprints.map((sprint) => (
-            <SprintCard
-              key={sprint.id}
-              sprint={sprint}
-              org={org!}
-              team={teamSlug!}
-              project={projectSlug!}
-              projectId={currentProject!.id}
-              allSprints={sprints}
-            />
-          ))}
+      <div className="space-y-4">
+        {/* Sprint panels */}
+        {sortedSprints.map((sprint) => (
+          <SprintCard
+            key={sprint.id}
+            sprint={sprint}
+            org={org!}
+            team={teamSlug!}
+            project={projectSlug!}
+            projectId={currentProject!.id}
+            allSprints={sprints}
+          />
+        ))}
 
-          {/* Backlog panel */}
-          <Card
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-            }}
-            onDrop={handleBacklogDrop}
-          >
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border-light">
-              <span className="font-medium text-sm">Backlog</span>
-              <span className="text-xs text-text-tertiary">
-                {backlogIssues.length} issues |{' '}
-                {backlogIssues.reduce((s, i) => s + (i.storyPoints ?? 0), 0)} pts
-              </span>
-            </div>
-            <div className="p-2">
-              {backlogIssues.length === 0 ? (
-                <EmptyState
-                  title="Backlog is empty"
-                  description="All issues are assigned to sprints."
-                />
-              ) : (
-                backlogIssues.map((issue) => (
-                  <div key={issue.id} draggable onDragStart={(e) => handleIssueDragStart(e, issue)}>
-                    <BacklogIssueRow
-                      issue={issue}
-                      org={org!}
-                      team={teamSlug!}
-                      project={projectSlug!}
-                      sprints={sprints}
-                      onMoveToSprint={(issueId, sprintId) =>
-                        addToSprintMutation.mutate({ issueId, sprintId })
-                      }
-                    />
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* Sidebar: velocity chart */}
-        <div className="space-y-4">
-          <Card className="p-4">
-            <VelocityChart data={velocityData} />
-          </Card>
-
-          {/* Burndown chart for active sprint */}
-          {sortedSprints
-            .filter((s) => s.status === 'ACTIVE')
-            .map((s) => (
-              <Card key={s.id} className="p-4">
-                <BurndownChart sprint={s} />
-              </Card>
-            ))}
-
-          {/* Sprint summary */}
-          <Card className="p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Sprint Summary</h3>
-            {sortedSprints.filter((s) => s.status !== 'COMPLETED').length === 0 ? (
-              <p className="text-xs text-text-tertiary">No active or planned sprints.</p>
+        {/* Backlog panel */}
+        <Card
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+          }}
+          onDrop={handleBacklogDrop}
+        >
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border-light">
+            <span className="font-medium text-sm">Backlog</span>
+            <span className="text-xs text-text-tertiary">
+              {backlogIssues.length} issues |{' '}
+              {backlogIssues.reduce((s, i) => s + (i.storyPoints ?? 0), 0)} pts
+            </span>
+          </div>
+          <div className="p-2">
+            {backlogIssues.length === 0 ? (
+              <EmptyState
+                title="Backlog is empty"
+                description="All issues are assigned to sprints."
+              />
             ) : (
-              sortedSprints
-                .filter((s) => s.status !== 'COMPLETED')
-                .map((s) => {
-                  const total = s.issues.length;
-                  const done = s.issues.filter((i) => i.column?.isDone).length;
-                  const inProgress = s.issues.filter((i) => i.column && !i.column.isDone).length;
-                  const todo = total - done - inProgress;
-                  const donePct = total > 0 ? (done / total) * 100 : 0;
-                  const inProgressPct = total > 0 ? (inProgress / total) * 100 : 0;
-                  const todoPct = total > 0 ? (todo / total) * 100 : 0;
-
-                  return (
-                    <div key={s.id} className="space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-text truncate font-medium">{s.name}</span>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={STATUS_BADGE[s.status]} className="text-[9px]">
-                            {s.status}
-                          </Badge>
-                          <span className="text-text-tertiary tabular-nums">
-                            {s._storyPoints ??
-                              s.issues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0)}{' '}
-                            pts
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Progress bar */}
-                      {total > 0 && (
-                        <div className="space-y-1.5">
-                          <div className="flex h-2 rounded-full overflow-hidden bg-surface-tertiary">
-                            {donePct > 0 && (
-                              <div
-                                className="bg-success transition-all"
-                                style={{ width: `${donePct}%` }}
-                              />
-                            )}
-                            {inProgressPct > 0 && (
-                              <div
-                                className="bg-primary transition-all"
-                                style={{ width: `${inProgressPct}%` }}
-                              />
-                            )}
-                            {todoPct > 0 && (
-                              <div
-                                className="bg-border transition-all"
-                                style={{ width: `${todoPct}%` }}
-                              />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 text-[10px] text-text-tertiary">
-                            <span className="flex items-center gap-1">
-                              <span className="inline-block h-2 w-2 rounded-full bg-success" />
-                              Done {done}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <span className="inline-block h-2 w-2 rounded-full bg-primary" />
-                              In Progress {inProgress}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <span className="inline-block h-2 w-2 rounded-full bg-border" />
-                              To Do {todo}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+              backlogIssues.map((issue) => (
+                <div key={issue.id} draggable onDragStart={(e) => handleIssueDragStart(e, issue)}>
+                  <BacklogIssueRow
+                    issue={issue}
+                    org={org!}
+                    team={teamSlug!}
+                    project={projectSlug!}
+                    sprints={sprints}
+                    onMoveToSprint={(issueId, sprintId) =>
+                      addToSprintMutation.mutate({ issueId, sprintId })
+                    }
+                  />
+                </div>
+              ))
             )}
-          </Card>
-        </div>
+          </div>
+        </Card>
       </div>
 
       {/* Create Sprint Modal */}
@@ -446,6 +445,6 @@ export default function Backlog() {
           projectId={currentProject?.id}
         />
       )}
-    </div>
+    </PageLayout>
   );
 }
