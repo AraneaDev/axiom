@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { formatTimestamp } from '@/lib/format';
 import { cn, formatDate } from '@/lib/utils';
@@ -194,11 +195,11 @@ export default function SprintReport() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 w-48 bg-surface-tertiary rounded" />
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-48" />
           <div className="grid grid-cols-4 gap-4">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 bg-surface-tertiary rounded-lg" />
+              <Skeleton key={i} className="h-24 rounded-lg" />
             ))}
           </div>
         </div>

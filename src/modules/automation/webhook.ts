@@ -1,5 +1,7 @@
 import dns from 'dns/promises';
 
+import { AppError } from '../../middleware/errorHandler';
+
 const BLOCKED_IPV4_RANGES = [
   /^10\./,
   /^172\.(1[6-9]|2\d|3[01])\./,
@@ -31,7 +33,7 @@ export async function executeWebhook(
 ) {
   const parsed = new URL(url);
   if (parsed.protocol !== 'https:') {
-    throw new Error('Webhook URLs must use HTTPS');
+    throw new AppError(400, 'Webhook URLs must use HTTPS');
   }
 
   const [ipv4Addresses, ipv6Addresses] = await Promise.all([
@@ -40,18 +42,18 @@ export async function executeWebhook(
   ]);
 
   if (ipv4Addresses.length === 0 && ipv6Addresses.length === 0) {
-    throw new Error('Webhook URL does not resolve to any address');
+    throw new AppError(400, 'Webhook URL does not resolve to any address');
   }
 
   for (const addr of ipv4Addresses) {
     if (BLOCKED_IPV4_RANGES.some((r) => r.test(addr))) {
-      throw new Error('Webhook URL resolves to a private/internal IP');
+      throw new AppError(400, 'Webhook URL resolves to a private/internal IP');
     }
   }
 
   for (const addr of ipv6Addresses) {
     if (BLOCKED_IPV6_RANGES.some((r) => r.test(addr))) {
-      throw new Error('Webhook URL resolves to a private/internal IPv6 address');
+      throw new AppError(400, 'Webhook URL resolves to a private/internal IPv6 address');
     }
   }
 

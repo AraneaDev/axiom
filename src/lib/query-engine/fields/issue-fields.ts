@@ -13,7 +13,7 @@ export const issueFieldRegistry: FieldRegistry = {
   creator: { column: 'creatorId', type: 'user', aliasField: 'creator.username' },
   label: { column: 'labels.name', type: 'relation', join: 'labels', many: true },
   sprint: { column: 'sprintId', type: 'relation', aliasField: 'sprint.name' },
-  project: { column: 'projectId', type: 'relation', aliasField: 'project.key' },
+  project: { column: 'projectId', type: 'relation', aliasField: 'project.prefix' },
   storypoints: { column: 'storyPoints', type: 'number' },
   created: { column: 'createdAt', type: 'date' },
   updated: { column: 'updatedAt', type: 'date' },

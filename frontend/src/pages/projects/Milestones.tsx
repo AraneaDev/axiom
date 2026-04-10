@@ -24,6 +24,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { Textarea } from '@/components/ui/Textarea';
 import { useModalState } from '@/hooks/useModalState';
@@ -267,7 +268,7 @@ export default function Milestones() {
       ) : isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="p-5 h-28 animate-pulse"></Card>
+            <Skeleton key={i} className="h-28 rounded-lg" />
           ))}
         </div>
       ) : filteredMilestones.length === 0 ? (

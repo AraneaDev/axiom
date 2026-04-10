@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -43,7 +45,7 @@ describe('Runners API', () => {
 
     // Create team for repo
     const teamRes = await request(app)
-      .post(`/api/orgs/${orgId}/teams`)
+      .post(`/api/teams/org/${orgId}`)
       .set('Authorization', `Bearer ${token}`)
       .set(XHR)
       .send({ name: 'Runners Test Team', slug: 'runners-test-team' });
@@ -101,10 +103,12 @@ describe('Runners API', () => {
     const runner = await prisma.runner.create({
       data: {
         name: 'task-test-runner',
+        uuid: crypto.randomUUID(),
+        tokenHash: await bcrypt.hash('test-token', 4),
         scopeType: 'ORG',
         scopeId: orgId,
         labels: ['self-hosted'],
-        status: 'ONLINE',
+        status: 'ACTIVE',
       },
     });
 
@@ -142,10 +146,12 @@ describe('Runners API', () => {
     const runner = await prisma.runner.create({
       data: {
         name: 'sse-test-runner',
+        uuid: crypto.randomUUID(),
+        tokenHash: await bcrypt.hash('test-token', 4),
         scopeType: 'ORG',
         scopeId: orgId,
         labels: ['self-hosted'],
-        status: 'ONLINE',
+        status: 'ACTIVE',
       },
     });
 
@@ -176,6 +182,8 @@ describe('Runners API', () => {
     const runner = await prisma.runner.create({
       data: {
         name: 'test-runner',
+        uuid: crypto.randomUUID(),
+        tokenHash: await bcrypt.hash('test-token', 4),
         scopeType: 'ORG',
         scopeId: orgId,
         labels: ['self-hosted', 'linux'],

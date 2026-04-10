@@ -2,9 +2,10 @@ import crypto from 'crypto';
 
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
 import { createPrismaClient } from '../../config/database';
+import { redis } from '../../config/redis';
 import app from '../../index';
 
 const prisma = createPrismaClient(process.env.DATABASE_URL);
@@ -201,6 +202,11 @@ describe('Connect-RPC Protocol', () => {
     let fetchRunnerId: string;
     let repoId: string;
 
+    // Clear rate-limit key before each test to avoid 429s
+    beforeEach(async () => {
+      if (fetchRunnerUuid) await redis.del(`runner:rate:${fetchRunnerUuid}`);
+    });
+
     beforeAll(async () => {
       // Create org > team > project > repo hierarchy for scoping
       const org = await prisma.organization.create({
@@ -311,6 +317,9 @@ describe('Connect-RPC Protocol', () => {
       expect(updated!.status).toBe('RUNNING');
       expect(updated!.runnerId).toBe(fetchRunnerId);
 
+      // Clear rate-limit key so the second fetch isn't throttled
+      await redis.del(`runner:rate:${fetchRunnerUuid}`);
+
       // Second fetch should return null (no more pending tasks)
       const res2 = await request(app)
         .post('/api/actions/runner.v1.RunnerService/FetchTask')
@@ -332,6 +341,9 @@ describe('Connect-RPC Protocol', () => {
 
       const version = res1.body.tasksVersion;
       if (version === undefined) return; // Redis unavailable, skip test
+
+      // Clear rate-limit key so the second fetch isn't throttled
+      await redis.del(`runner:rate:${fetchRunnerUuid}`);
 
       // Send the same version back -- should short-circuit
       const res2 = await request(app)

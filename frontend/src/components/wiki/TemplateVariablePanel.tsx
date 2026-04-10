@@ -44,8 +44,8 @@ export function TemplateVariablePanel({ onInsert }: TemplateVariablePanelProps) 
   });
 
   return (
-    <div className="w-64 border-l border-[var(--color-border)] p-3 space-y-3">
-      <h3 className="text-sm font-medium text-[var(--color-text-primary)]">Template Variables</h3>
+    <div className="w-64 border-l border-border p-3 space-y-3">
+      <h3 className="text-sm font-medium text-text">Template Variables</h3>
       {VARIABLE_GROUPS.map((group) => {
         const Icon = group.icon;
         const isExpanded = expanded[group.label] ?? true;
@@ -53,7 +53,7 @@ export function TemplateVariablePanel({ onInsert }: TemplateVariablePanelProps) 
           <div key={group.label}>
             <button
               onClick={() => setExpanded((e) => ({ ...e, [group.label]: !isExpanded }))}
-              className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-secondary)] w-full"
+              className="flex items-center gap-1.5 text-xs font-medium text-text-secondary w-full"
             >
               {isExpanded ? (
                 <ChevronDown className="h-3 w-3" />
@@ -69,10 +69,10 @@ export function TemplateVariablePanel({ onInsert }: TemplateVariablePanelProps) 
                   <button
                     key={v.name}
                     onClick={() => onInsert(v.name)}
-                    className="block w-full text-left text-xs hover:bg-[var(--color-bg-hover)] rounded px-1.5 py-1"
+                    className="block w-full text-left text-xs hover:bg-surface-secondary rounded px-1.5 py-1"
                     title={v.description}
                   >
-                    <code className="text-[var(--color-primary)]">{v.name}</code>
+                    <code className="text-primary">{v.name}</code>
                   </button>
                 ))}
               </div>

@@ -14,6 +14,7 @@ import { Link, useLocation, useParams } from 'react-router';
 import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 
 /** Map well-known team-level route keywords to icons and friendly labels */
@@ -51,7 +52,7 @@ interface Crumb {
 }
 
 function CrumbSkeleton() {
-  return <span className="inline-block h-4 w-16 bg-surface-tertiary rounded animate-pulse" />;
+  return <Skeleton className="inline-block h-4 w-16" />;
 }
 
 function deSlugify(seg: string) {

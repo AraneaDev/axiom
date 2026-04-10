@@ -94,5 +94,5 @@ export const AUTOMATION_ISSUE_INCLUDE = {
   labels: { select: { name: true } },
   sprint: { select: { id: true, name: true, goal: true } },
   column: { select: { id: true, name: true } },
-  project: { select: { id: true, name: true, key: true } },
+  project: { select: { id: true, name: true, prefix: true } },
 } as const;

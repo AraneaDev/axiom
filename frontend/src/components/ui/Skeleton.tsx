@@ -5,9 +5,18 @@ import { cn } from '@/lib/utils';
  *
  * @param root0
  * @param root0.className
+ * @param root0.style
  */
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse rounded-md bg-surface-tertiary', className)} />;
+export function Skeleton({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div className={cn('animate-pulse rounded-md bg-surface-tertiary', className)} style={style} />
+  );
 }
 
 /**
@@ -204,6 +213,37 @@ export function RepoSkeleton() {
           </div>
         ))}
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Skeleton for analytics pages with a 2-column card grid.
+ * @param root0
+ * @param root0.showPeriod
+ */
+export function AnalyticsGridSkeleton({ showPeriod = true }: { showPeriod?: boolean }) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-8 w-64" />
+        {showPeriod && <Skeleton className="h-9 w-36 rounded-md" />}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {[1, 2, 3, 4].map((i) => (
+          <Card key={i}>
+            <div className="px-5 py-4 border-b border-border">
+              <Skeleton className="h-5 w-40" />
+            </div>
+            <div className="p-5">
+              <Skeleton className="h-24 w-full mb-4" />
+              {Array.from({ length: 3 }).map((_, j) => (
+                <Skeleton key={j} className="h-6 w-full mb-2" />
+              ))}
+            </div>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

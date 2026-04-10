@@ -23,6 +23,7 @@ import type { HealthStatus } from '@/api/health.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { PageLoader } from '@/components/ui/Spinner';
 import { formatSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -42,16 +43,16 @@ function formatUptime(seconds: number): string {
 
 function HealthSkeleton() {
   return (
-    <Card className="p-5 animate-pulse">
+    <Card className="p-5">
       <div className="flex items-center gap-2 mb-4">
-        <div className="h-4 w-4 rounded bg-surface-tertiary" />
-        <div className="h-4 w-32 rounded bg-surface-tertiary" />
+        <Skeleton className="h-4 w-4" />
+        <Skeleton className="h-4 w-32" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[0, 1, 2].map((i) => (
           <div key={i} className="rounded-lg bg-surface-secondary p-4">
-            <div className="h-4 w-20 rounded bg-surface-tertiary mb-2" />
-            <div className="h-5 w-16 rounded bg-surface-tertiary" />
+            <Skeleton className="h-4 w-20 mb-2" />
+            <Skeleton className="h-5 w-16" />
           </div>
         ))}
       </div>

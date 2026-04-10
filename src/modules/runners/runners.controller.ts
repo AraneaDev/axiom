@@ -12,7 +12,7 @@ function extractScope(req: Request): { scopeType: RunnerScope; scopeId: string }
   if (req.params.orgId) return { scopeType: 'ORG', scopeId: param(req, 'orgId') };
   if (req.params.teamId) return { scopeType: 'TEAM', scopeId: param(req, 'teamId') };
   if (req.params.projectId) return { scopeType: 'PROJECT', scopeId: param(req, 'projectId') };
-  throw new Error('Could not determine runner scope from route');
+  throw new AppError(400, 'Could not determine runner scope from route');
 }
 
 export const createRegistrationToken = asyncHandler(async (req: Request, res: Response) => {

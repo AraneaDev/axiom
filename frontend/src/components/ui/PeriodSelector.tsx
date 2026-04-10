@@ -29,7 +29,7 @@ export function PeriodSelector({ value, onChange, className }: PeriodSelectorPro
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as Period)}
-        className="appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-surface-primary)] px-3 py-1.5 pr-8 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+        className="appearance-none rounded-md border border-border bg-surface px-3 py-1.5 pr-8 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary"
       >
         {PERIOD_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -37,7 +37,7 @@ export function PeriodSelector({ value, onChange, className }: PeriodSelectorPro
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
+      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary" />
     </div>
   );
 }

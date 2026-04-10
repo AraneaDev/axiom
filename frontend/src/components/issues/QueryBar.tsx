@@ -24,12 +24,12 @@ export function QueryBar({ value, onChange, error }: QueryBarProps) {
     <div
       className={cn(
         'flex items-center gap-2 rounded-md border px-3 py-1.5',
-        'border-[var(--color-border)]',
-        focused && 'border-[var(--color-primary)] ring-1 ring-[var(--color-primary)]',
-        error && 'border-[var(--color-danger)]',
+        'border-border',
+        focused && 'border-primary ring-1 ring-primary',
+        error && 'border-danger',
       )}
     >
-      <Code className="h-4 w-4 shrink-0 text-[var(--color-text-tertiary)]" />
+      <Code className="h-4 w-4 shrink-0 text-text-tertiary" />
       <input
         type="text"
         value={value}
@@ -37,14 +37,14 @@ export function QueryBar({ value, onChange, error }: QueryBarProps) {
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         placeholder="type:bug priority:high OR storyPoints > 5"
-        className="flex-1 bg-transparent text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none"
+        className="flex-1 bg-transparent text-sm text-text placeholder:text-text-tertiary outline-none"
       />
       {value && (
         <Button variant="ghost" size="sm" title="Clear query" onClick={() => onChange('')}>
           <X className="h-3.5 w-3.5" />
         </Button>
       )}
-      {error && <span className="text-xs text-[var(--color-danger)]">{error.message}</span>}
+      {error && <span className="text-xs text-danger">{error.message}</span>}
     </div>
   );
 }

@@ -220,29 +220,29 @@ const calloutIcons: Record<CalloutType, typeof Info> = {
 
 const calloutStyles: Record<CalloutType, { border: string; bg: string; icon: string }> = {
   info: {
-    border: 'border-l-[var(--color-info)]',
-    bg: 'bg-[var(--color-info)]/10',
-    icon: 'text-[var(--color-info)]',
+    border: 'border-l-primary',
+    bg: 'bg-primary/10',
+    icon: 'text-primary',
   },
   warning: {
-    border: 'border-l-[var(--color-warning)]',
-    bg: 'bg-[var(--color-warning)]/10',
-    icon: 'text-[var(--color-warning)]',
+    border: 'border-l-warning',
+    bg: 'bg-warning/10',
+    icon: 'text-warning',
   },
   note: {
-    border: 'border-l-[var(--color-primary)]',
-    bg: 'bg-[var(--color-primary)]/10',
-    icon: 'text-[var(--color-primary)]',
+    border: 'border-l-primary',
+    bg: 'bg-primary/10',
+    icon: 'text-primary',
   },
   success: {
-    border: 'border-l-[var(--color-success)]',
-    bg: 'bg-[var(--color-success)]/10',
-    icon: 'text-[var(--color-success)]',
+    border: 'border-l-success',
+    bg: 'bg-success/10',
+    icon: 'text-success',
   },
   error: {
-    border: 'border-l-[var(--color-danger)]',
-    bg: 'bg-[var(--color-danger)]/10',
-    icon: 'text-[var(--color-danger)]',
+    border: 'border-l-danger',
+    bg: 'bg-danger/10',
+    icon: 'text-danger',
   },
 };
 

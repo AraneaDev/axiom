@@ -277,8 +277,8 @@ export default function Roadmap() {
                 <Skeleton className="h-4 w-48" />
               </div>
               <div className="flex-1 py-3 px-4">
-                <div
-                  className="h-6 animate-pulse rounded-full bg-surface-tertiary"
+                <Skeleton
+                  className="h-6 rounded-full"
                   style={{ width: `${40 + i * 12}%`, marginLeft: `${i * 8}%` }}
                 />
               </div>

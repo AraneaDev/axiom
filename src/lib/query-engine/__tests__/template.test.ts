@@ -11,7 +11,7 @@ describe('template resolver', () => {
       assignee: { username: 'tim', displayName: 'Tim', email: 'tim@test.com' },
       labels: ['frontend', 'urgent'],
       column: { name: 'In Progress' },
-      project: { name: 'Axiom', key: 'AXM' },
+      project: { name: 'Axiom', prefix: 'AXM' },
     },
     trigger: 'issue:created',
     actor: { username: 'jane', displayName: 'Jane', email: 'jane@test.com' },
@@ -59,6 +59,6 @@ describe('template resolver', () => {
   });
 
   it('handles adjacent expressions', () => {
-    expect(resolveTemplate('{{issue.project.key}}-{{issue.number}}', context)).toBe('AXM-42');
+    expect(resolveTemplate('{{issue.project.prefix}}-{{issue.number}}', context)).toBe('AXM-42');
   });
 });

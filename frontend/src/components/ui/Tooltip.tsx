@@ -16,12 +16,12 @@ const positions = {
 };
 
 const arrows = {
-  top: 'top-full left-1/2 -translate-x-1/2 border-t-[var(--color-surface-inverse)] border-x-transparent border-b-transparent border-4',
+  top: 'top-full left-1/2 -translate-x-1/2 border-t-surface-inverse border-x-transparent border-b-transparent border-4',
   bottom:
-    'bottom-full left-1/2 -translate-x-1/2 border-b-[var(--color-surface-inverse)] border-x-transparent border-t-transparent border-4',
-  left: 'left-full top-1/2 -translate-y-1/2 border-l-[var(--color-surface-inverse)] border-y-transparent border-r-transparent border-4',
+    'bottom-full left-1/2 -translate-x-1/2 border-b-surface-inverse border-x-transparent border-t-transparent border-4',
+  left: 'left-full top-1/2 -translate-y-1/2 border-l-surface-inverse border-y-transparent border-r-transparent border-4',
   right:
-    'right-full top-1/2 -translate-y-1/2 border-r-[var(--color-surface-inverse)] border-y-transparent border-l-transparent border-4',
+    'right-full top-1/2 -translate-y-1/2 border-r-surface-inverse border-y-transparent border-l-transparent border-4',
 };
 
 /**

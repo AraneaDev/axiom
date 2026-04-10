@@ -1,0 +1,228 @@
+- generic [ref=e34]:
+  - banner [ref=e35]:
+    - generic [ref=e36]:
+      - button "Toggle sidebar" [ref=e37] [cursor=pointer]:
+        - img [ref=e38]
+      - link "A Axiom" [ref=e39] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e41]: A
+        - generic [ref=e42]: Axiom
+    - button "Search anything... Ctrl+K" [ref=e43] [cursor=pointer]:
+      - img [ref=e44]
+      - generic [ref=e47]: Search anything...
+      - generic [ref=e48]: Ctrl+K
+    - generic [ref=e49]:
+      - button "Toggle theme" [ref=e50] [cursor=pointer]:
+        - img [ref=e51]
+      - button "Notifications" [ref=e54] [cursor=pointer]:
+        - img [ref=e55]
+      - button "EB Erik Bakker" [ref=e59] [cursor=pointer]:
+        - generic [ref=e60]: EB
+        - generic [ref=e61]: Erik Bakker
+  - generic [ref=e62]:
+    - complementary [ref=e63]:
+      - generic [ref=e65]:
+        - generic [ref=e66]:
+          - button "Organization" [ref=e67] [cursor=pointer]:
+            - img [ref=e68]
+            - text: Organization
+          - link [ref=e70] [cursor=pointer]:
+            - /url: /orgs/new
+            - img [ref=e71]
+        - link "Y Voorbeeld" [ref=e73] [cursor=pointer]:
+          - /url: /voorbeeld
+          - generic [ref=e75]: "Y"
+          - generic [ref=e76]: Voorbeeld
+    - main [ref=e77]:
+      - generic [ref=e79]:
+        - generic [ref=e80]:
+          - generic [ref=e81]:
+            - heading "Good evening, Erik" [level=1] [ref=e82]
+            - paragraph [ref=e83]: Thursday, April 9
+          - link "New Organization" [ref=e84] [cursor=pointer]:
+            - /url: /orgs/new
+            - button "New Organization" [ref=e85]:
+              - img [ref=e86]
+              - text: New Organization
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - img [ref=e90]
+            - generic [ref=e93]:
+              - paragraph [ref=e94]: "0"
+              - paragraph [ref=e95]: Open Issues
+          - generic [ref=e96]:
+            - img [ref=e98]
+            - generic [ref=e102]:
+              - paragraph [ref=e103]: "0"
+              - paragraph [ref=e104]: Review Requests
+          - generic [ref=e105]:
+            - img [ref=e107]
+            - generic [ref=e111]:
+              - paragraph [ref=e112]: "0"
+              - paragraph [ref=e113]: Due Soon
+          - generic [ref=e114]:
+            - img [ref=e116]
+            - generic [ref=e118]:
+              - paragraph [ref=e119]: "0"
+              - paragraph [ref=e120]: Recent Events
+        - generic [ref=e121]:
+          - generic [ref=e122]:
+            - generic [ref=e124]:
+              - img [ref=e125]
+              - heading "My Issues" [level=3] [ref=e128]
+            - generic [ref=e130]: No open issues assigned to you
+          - generic [ref=e131]:
+            - generic [ref=e133]:
+              - img [ref=e134]
+              - heading "Review Requests" [level=3] [ref=e138]
+            - generic [ref=e140]: No pending review requests
+          - generic [ref=e141]:
+            - generic [ref=e143]:
+              - img [ref=e144]
+              - heading "Upcoming Due Dates" [level=3] [ref=e148]
+            - generic [ref=e150]: No upcoming deadlines
+          - generic [ref=e151]:
+            - generic [ref=e153]:
+              - img [ref=e154]
+              - heading "Recent Activity" [level=3] [ref=e156]
+            - generic [ref=e158]: No recent activity
+        - generic [ref=e159]:
+          - heading "Sprint Health" [level=2] [ref=e160]
+          - generic [ref=e161]:
+            - generic [ref=e162]:
+              - generic [ref=e164]:
+                - img [ref=e165]
+                - heading "Sprint Health" [level=3] [ref=e168]
+              - generic [ref=e170]:
+                - generic [ref=e171]:
+                  - generic [ref=e172]:
+                    - link "Klantportaal" [ref=e173] [cursor=pointer]:
+                      - /url: /voorbeeld/team-zuid/klantportaal/backlog
+                    - generic [ref=e174]: Sprint 2026-Q2-1
+                  - generic [ref=e175]: No story points assigned. Add estimates to see the burndown.
+                - generic [ref=e176]:
+                  - generic [ref=e177]:
+                    - link "Offertetool" [ref=e178] [cursor=pointer]:
+                      - /url: /voorbeeld/team-zuid/offertetool/backlog
+                    - generic [ref=e179]: Sprint 2026-Q2-1
+                  - generic [ref=e180]: No story points assigned. Add estimates to see the burndown.
+                - generic [ref=e181]:
+                  - generic [ref=e182]:
+                    - link "Orderverwerking" [ref=e183] [cursor=pointer]:
+                      - /url: /voorbeeld/team-zuid/orderverwerking/backlog
+                    - generic [ref=e184]: Sprint 2026-Q2-1
+                  - generic [ref=e185]: No story points assigned. Add estimates to see the burndown.
+            - generic [ref=e186]:
+              - generic [ref=e188]:
+                - img [ref=e189]
+                - heading "Sprint Health" [level=3] [ref=e192]
+              - generic [ref=e194]:
+                - generic [ref=e195]:
+                  - generic [ref=e196]:
+                    - link "AI Assistent" [ref=e197] [cursor=pointer]:
+                      - /url: /voorbeeld/team-ai/ai-assistent/backlog
+                    - generic [ref=e198]: Sprint 2026-Q2-1
+                  - generic [ref=e199]: No story points assigned. Add estimates to see the burndown.
+                - generic [ref=e200]:
+                  - generic [ref=e201]:
+                    - link "Documentherkenning" [ref=e202] [cursor=pointer]:
+                      - /url: /voorbeeld/team-ai/documentherkenning/backlog
+                    - generic [ref=e203]: Sprint 2026-Q2-1
+                  - generic [ref=e204]: No story points assigned. Add estimates to see the burndown.
+            - generic [ref=e205]:
+              - generic [ref=e207]:
+                - img [ref=e208]
+                - heading "Sprint Health" [level=3] [ref=e211]
+              - generic [ref=e213]:
+                - generic [ref=e214]:
+                  - generic [ref=e215]:
+                    - link "Commissie Engine" [ref=e216] [cursor=pointer]:
+                      - /url: /voorbeeld/team-noord/commissie-engine/backlog
+                    - generic [ref=e217]: Sprint 2026-Q2-1
+                  - generic [ref=e218]: No story points assigned. Add estimates to see the burndown.
+                - generic [ref=e219]:
+                  - generic [ref=e220]:
+                    - link "Dealregistratie" [ref=e221] [cursor=pointer]:
+                      - /url: /voorbeeld/team-noord/dealregistratie/backlog
+                    - generic [ref=e222]: Sprint 2026-Q2-1
+                  - generic [ref=e223]: No story points assigned. Add estimates to see the burndown.
+                - generic [ref=e224]:
+                  - generic [ref=e225]:
+                    - link "Partnerportaal" [ref=e226] [cursor=pointer]:
+                      - /url: /voorbeeld/team-noord/partnerportaal/backlog
+                    - generic [ref=e227]: Sprint 2026-Q2-1
+                  - generic [ref=e228]: No story points assigned. Add estimates to see the burndown.
+        - generic [ref=e229]:
+          - heading "Organizations" [level=2] [ref=e230]
+          - link "Y Voorbeeld owner /voorbeeld Voorbeeld - Digitale oplossingen voor partners en klanten Open workspace" [ref=e232] [cursor=pointer]:
+            - /url: /voorbeeld
+            - generic [ref=e235]: "Y"
+            - generic [ref=e236]:
+              - generic [ref=e237]:
+                - heading "Voorbeeld" [level=3] [ref=e238]
+                - generic [ref=e239]: owner
+              - paragraph [ref=e240]: /voorbeeld
+              - paragraph [ref=e244]: Voorbeeld - Digitale oplossingen voor partners en klanten
+              - generic [ref=e245]:
+                - generic [ref=e246]: Open workspace
+                - img [ref=e247]
+        - generic [ref=e249]:
+          - heading "Teams" [level=2] [ref=e250]
+          - generic [ref=e251]:
+            - link "Team Zuid /team-zuid Team Zuid applicaties en klantportalen 3 projects 0 repos 4 members" [ref=e252] [cursor=pointer]:
+              - /url: /voorbeeld/team-zuid
+              - generic [ref=e253]:
+                - img [ref=e255]
+                - generic [ref=e260]:
+                  - heading "Team Zuid" [level=3] [ref=e261]
+                  - paragraph [ref=e262]: /team-zuid
+                - img [ref=e263]
+              - paragraph [ref=e268]: Team Zuid applicaties en klantportalen
+              - generic [ref=e269]:
+                - generic [ref=e270]:
+                  - img [ref=e271]
+                  - text: 3 projects
+                - generic [ref=e273]:
+                  - img [ref=e274]
+                  - text: 0 repos
+                - generic [ref=e278]:
+                  - img [ref=e279]
+                  - text: 4 members
+            - link "Team AI /team-ai AI-ontwikkeling en machine learning toepassingen 2 projects 0 repos 3 members" [ref=e284] [cursor=pointer]:
+              - /url: /voorbeeld/team-ai
+              - generic [ref=e285]:
+                - img [ref=e287]
+                - generic [ref=e292]:
+                  - heading "Team AI" [level=3] [ref=e293]
+                  - paragraph [ref=e294]: /team-ai
+                - img [ref=e295]
+              - paragraph [ref=e300]: AI-ontwikkeling en machine learning toepassingen
+              - generic [ref=e301]:
+                - generic [ref=e302]:
+                  - img [ref=e303]
+                  - text: 2 projects
+                - generic [ref=e305]:
+                  - img [ref=e306]
+                  - text: 0 repos
+                - generic [ref=e310]:
+                  - img [ref=e311]
+                  - text: 3 members
+            - link "Team Noord /team-noord Team Noord applicaties en integraties 3 projects 0 repos 4 members" [ref=e316] [cursor=pointer]:
+              - /url: /voorbeeld/team-noord
+              - generic [ref=e317]:
+                - img [ref=e319]
+                - generic [ref=e324]:
+                  - heading "Team Noord" [level=3] [ref=e325]
+                  - paragraph [ref=e326]: /team-noord
+                - img [ref=e327]
+              - paragraph [ref=e332]: Team Noord applicaties en integraties
+              - generic [ref=e333]:
+                - generic [ref=e334]:
+                  - img [ref=e335]
+                  - text: 3 projects
+                - generic [ref=e337]:
+                  - img [ref=e338]
+                  - text: 0 repos
+                - generic [ref=e342]:
+                  - img [ref=e343]
+                  - text: 4 members
