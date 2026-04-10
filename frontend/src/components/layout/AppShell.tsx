@@ -17,10 +17,10 @@ export function AppShell() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto">
-          <div className="p-4 lg:px-8 lg:py-6">
+          <div className="px-6 pt-4">
             <Breadcrumbs />
-            <Outlet />
           </div>
+          <Outlet />
         </main>
       </div>
     </div>
