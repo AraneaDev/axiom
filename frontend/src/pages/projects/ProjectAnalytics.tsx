@@ -168,127 +168,129 @@ export default function ProjectAnalytics() {
           />
         </div>
 
-        {/* Issue distributions */}
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {/* By Status */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-text-secondary" />
-                <h2 className="text-lg font-medium">Issues by Status</h2>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {analytics.issuesByStatus.length === 0 ? (
-                <p className="text-sm text-text-tertiary">No issues yet</p>
-              ) : (
-                <div className="space-y-3">
-                  {analytics.issuesByStatus
-                    .sort((a, b) => b.count - a.count)
-                    .map((item) => (
-                      <div key={item.status}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm text-text-secondary">{item.status}</span>
-                          <span className="text-sm font-medium tabular-nums">{item.count}</span>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-surface-tertiary overflow-hidden">
-                          <div
-                            className={cn(
-                              'h-full rounded-full transition-all duration-500',
-                              item.isDone
-                                ? 'bg-success'
-                                : 'bg-gradient-to-r from-primary to-primary-hover',
-                            )}
-                            style={{
-                              width: `${(item.count / maxStatusCount) * 100}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+        {/* Issue distributions + Activity trend */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">
+          <div className="flex flex-col gap-6">
+            {/* By Status */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-text-secondary" />
+                  <h2 className="text-lg font-medium">Issues by Status</h2>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                {analytics.issuesByStatus.length === 0 ? (
+                  <p className="text-sm text-text-tertiary">No issues yet</p>
+                ) : (
+                  <div className="space-y-3">
+                    {analytics.issuesByStatus
+                      .sort((a, b) => b.count - a.count)
+                      .map((item) => (
+                        <div key={item.status}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm text-text-secondary">{item.status}</span>
+                            <span className="text-sm font-medium tabular-nums">{item.count}</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-surface-tertiary overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full rounded-full transition-all duration-500',
+                                item.isDone
+                                  ? 'bg-success'
+                                  : 'bg-gradient-to-r from-primary to-primary-hover',
+                              )}
+                              style={{
+                                width: `${(item.count / maxStatusCount) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-          {/* By Priority */}
+            {/* By Priority */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-text-secondary" />
+                  <h2 className="text-lg font-medium">Issues by Priority</h2>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {analytics.issuesByPriority.length === 0 ? (
+                  <p className="text-sm text-text-tertiary">No issues yet</p>
+                ) : (
+                  <div className="space-y-3">
+                    {analytics.issuesByPriority
+                      .sort((a, b) => {
+                        const order = ['URGENT', 'HIGH', 'MEDIUM', 'LOW', 'NONE'];
+                        return order.indexOf(a.priority) - order.indexOf(b.priority);
+                      })
+                      .map((item) => (
+                        <div key={item.priority}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm text-text-secondary">
+                              {PRIORITY_LABELS[item.priority] ?? item.priority}
+                            </span>
+                            <span className="text-sm font-medium tabular-nums">{item.count}</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-surface-tertiary overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full rounded-full transition-all duration-500',
+                                CHART_PRIORITY_COLORS[item.priority] ?? 'bg-primary',
+                              )}
+                              style={{
+                                width: `${(item.count / maxPriorityCount) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Activity trend (last 30 days) */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5 text-text-secondary" />
-                <h2 className="text-lg font-medium">Issues by Priority</h2>
+                <h2 className="text-lg font-medium">Activity Trend (Last 30 Days)</h2>
               </div>
             </CardHeader>
             <CardContent>
-              {analytics.issuesByPriority.length === 0 ? (
-                <p className="text-sm text-text-tertiary">No issues yet</p>
-              ) : (
-                <div className="space-y-3">
-                  {analytics.issuesByPriority
-                    .sort((a, b) => {
-                      const order = ['URGENT', 'HIGH', 'MEDIUM', 'LOW', 'NONE'];
-                      return order.indexOf(a.priority) - order.indexOf(b.priority);
-                    })
-                    .map((item) => (
-                      <div key={item.priority}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm text-text-secondary">
-                            {PRIORITY_LABELS[item.priority] ?? item.priority}
-                          </span>
-                          <span className="text-sm font-medium tabular-nums">{item.count}</span>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-surface-tertiary overflow-hidden">
-                          <div
-                            className={cn(
-                              'h-full rounded-full transition-all duration-500',
-                              CHART_PRIORITY_COLORS[item.priority] ?? 'bg-primary',
-                            )}
-                            style={{
-                              width: `${(item.count / maxPriorityCount) * 100}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
+              <LineChart
+                series={[
+                  {
+                    label: 'Opened',
+                    data: analytics.issuesOverTime.map((d) => ({
+                      x: d.date.slice(5),
+                      y: d.opened,
+                    })),
+                    color: 'var(--color-primary)',
+                  },
+                  {
+                    label: 'Closed',
+                    data: analytics.issuesOverTime.map((d) => ({
+                      x: d.date.slice(5),
+                      y: d.closed,
+                    })),
+                    color: 'var(--color-success)',
+                  },
+                ]}
+                area={true}
+                height={160}
+              />
             </CardContent>
           </Card>
         </div>
-
-        {/* Activity trend (last 30 days) */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-text-secondary" />
-              <h2 className="text-lg font-medium">Activity Trend (Last 30 Days)</h2>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <LineChart
-              series={[
-                {
-                  label: 'Opened',
-                  data: analytics.issuesOverTime.map((d) => ({
-                    x: d.date.slice(5),
-                    y: d.opened,
-                  })),
-                  color: 'var(--color-primary)',
-                },
-                {
-                  label: 'Closed',
-                  data: analytics.issuesOverTime.map((d) => ({
-                    x: d.date.slice(5),
-                    y: d.closed,
-                  })),
-                  color: 'var(--color-success)',
-                },
-              ]}
-              area={true}
-              height={160}
-            />
-          </CardContent>
-        </Card>
 
         {/* Team workload */}
         <Card>
