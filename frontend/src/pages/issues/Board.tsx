@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ChevronDown, ChevronRight, Settings, Palette } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Settings, Palette, ShieldCheck } from 'lucide-react';
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link } from 'react-router';
 
@@ -7,8 +7,12 @@ import type { Filters, GroupBy } from './BoardFilters';
 import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
 import { ColumnManager } from './ColumnManager';
 
+import { approvalsApi, type ApprovalGate, type ApprovalRequest } from '@/api/approvals.api';
 import { issuesApi } from '@/api/issues.api';
 import { projectsApi } from '@/api/projects.api';
+import { teamsApi } from '@/api/teams.api';
+import { ApprovalBadge } from '@/components/ui/ApprovalBadge';
+import { ApprovalModal } from '@/components/ui/ApprovalModal';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
@@ -21,6 +25,7 @@ import { useProjectContext } from '@/hooks/useProjectContext';
 import { PRIORITY_LABELS } from '@/lib/constants';
 import type { BoardColumn, Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth.store';
 import { useUIStore } from '@/stores/ui.store';
 
 const PRIORITY_CARD_COLORS: Record<string, string> = {
@@ -115,6 +120,7 @@ function IssueCard({
   columnId,
   onDragStart,
   cardColorBy,
+  pendingRequest,
 }: {
   issue: Issue;
   org: string;
@@ -123,6 +129,7 @@ function IssueCard({
   columnId: string;
   onDragStart: (e: React.DragEvent, issue: Issue, columnId: string) => void;
   cardColorBy?: string | null;
+  pendingRequest?: ApprovalRequest | null;
 }) {
   const borderColor =
     cardColorBy === 'priority'
@@ -131,15 +138,24 @@ function IssueCard({
         ? (TYPE_CARD_COLORS[issue.type] ?? undefined)
         : undefined;
 
+  const hasPending = !!pendingRequest;
+
   return (
     <Link
       to={`/${org}/${team}/${project}/issues/${issue.number}`}
-      draggable
+      draggable={!hasPending}
       onDragStart={(e) => {
+        if (hasPending) {
+          e.preventDefault();
+          return;
+        }
         e.stopPropagation();
         onDragStart(e, issue, columnId);
       }}
-      className="block rounded-md border border-border bg-surface p-3 hover:shadow-md hover:border-primary/50 hover:bg-surface-secondary transition-all cursor-grab active:cursor-grabbing"
+      className={cn(
+        'block rounded-md border border-border bg-surface p-3 hover:shadow-md hover:border-primary/50 hover:bg-surface-secondary transition-all',
+        hasPending ? 'cursor-default opacity-80' : 'cursor-grab active:cursor-grabbing',
+      )}
       style={borderColor ? { borderLeftWidth: '4px', borderLeftColor: borderColor } : undefined}
     >
       <div className="flex items-center gap-1.5 mb-1.5">
@@ -148,6 +164,11 @@ function IssueCard({
         <PriorityBadge priority={issue.priority} display="short" className="ml-auto" />
       </div>
       <p className="text-sm font-medium line-clamp-2 mb-2">{issue.title}</p>
+      {hasPending && (
+        <div className="mb-2">
+          <ApprovalBadge status="PENDING" targetColumnName={pendingRequest?.targetColumn?.name} />
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div className="flex gap-1">
           {issue.labels?.slice(0, 2).map((l) => (
@@ -208,6 +229,8 @@ function Column({
   groupBy,
   filters,
   cardColorBy,
+  pendingRequests,
+  isGatedInbound,
 }: {
   column: BoardColumn;
   org: string;
@@ -221,6 +244,8 @@ function Column({
   groupBy: GroupBy;
   filters: Filters;
   cardColorBy?: string | null;
+  pendingRequests?: Map<string, ApprovalRequest>;
+  isGatedInbound?: boolean;
 }) {
   const isOver = dragOverColumnId === column.id;
   const isDragging = dragSourceColumnId !== null;
@@ -245,6 +270,11 @@ function Column({
         )}
       >
         <div className="flex items-center gap-2">
+          {isGatedInbound && (
+            <span title="Gated column — approval required">
+              <ShieldCheck className="h-3.5 w-3.5 text-warning" />
+            </span>
+          )}
           <h3 className="text-sm font-semibold text-text">{column.name}</h3>
           <span
             className={cn(
@@ -283,6 +313,7 @@ function Column({
                 columnId={column.id}
                 onDragStart={onDragStart}
                 cardColorBy={cardColorBy}
+                pendingRequest={pendingRequests?.get(issue.id) ?? null}
               />
             ))}
           </SwimLaneSection>
@@ -296,10 +327,11 @@ function Column({
  *
  */
 export default function Board() {
-  const { org, teamSlug, projectSlug, currentProject } = useProjectContext();
+  const { org, teamSlug, projectSlug, currentProject, currentTeam } = useProjectContext();
   const queryClient = useQueryClient();
   const { invalidateList } = useIssueInvalidation(currentProject?.id ?? '');
   const setPreferredView = useUIStore((s) => s.setPreferredProjectView);
+  const currentUser = useAuthStore((s) => s.user);
   useEffect(() => {
     setPreferredView('board');
   }, [setPreferredView]);
@@ -309,6 +341,15 @@ export default function Board() {
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [showColumnManager, setShowColumnManager] = useState(false);
   const [showColorMenu, setShowColorMenu] = useState(false);
+  const [approvalModalState, setApprovalModalState] = useState<{
+    issueId: string;
+    issueTitle: string;
+    fromColumnName: string;
+    toColumnId: string;
+    toColumnName: string;
+    minApprovals: number;
+    allowSelfApproval: boolean;
+  } | null>(null);
 
   const {
     data: columns,
@@ -319,6 +360,63 @@ export default function Board() {
     queryFn: () => issuesApi.getBoard(currentProject!.id),
     enabled: !!currentProject?.id,
   });
+
+  // Approval gates for this project
+  const { data: approvalGates } = useQuery({
+    queryKey: ['approval-gates', currentProject?.id],
+    queryFn: () => approvalsApi.listGates(currentProject!.id),
+    enabled: !!currentProject?.id,
+  });
+
+  // Pending approval requests for this project
+  const { data: pendingRequests } = useQuery({
+    queryKey: ['approval-requests-pending', currentProject?.id],
+    queryFn: () => approvalsApi.listPendingForProject(currentProject!.id),
+    enabled: !!currentProject?.id,
+  });
+
+  // Team members for the approval modal
+  const { data: teamDetail } = useQuery({
+    queryKey: ['team-detail', currentTeam?.id],
+    queryFn: () => teamsApi.get(currentTeam!.id),
+    enabled: !!currentTeam?.id,
+  });
+
+  // Map issueId -> pending request for quick lookup
+  const pendingRequestsByIssue = useMemo(() => {
+    const map = new Map<string, ApprovalRequest>();
+    if (pendingRequests) {
+      for (const req of pendingRequests) {
+        map.set(req.issueId, req);
+      }
+    }
+    return map;
+  }, [pendingRequests]);
+
+  // Set of column IDs that have at least one inbound gate
+  const gatedInboundColumnIds = useMemo(() => {
+    const set = new Set<string>();
+    if (approvalGates) {
+      for (const gate of approvalGates) {
+        if (gate.enabled) set.add(gate.toColumnId);
+      }
+    }
+    return set;
+  }, [approvalGates]);
+
+  // Project members for approval modal
+  const projectMembers = useMemo(() => {
+    return (teamDetail?.members ?? []).map(
+      (m: {
+        user: { id: string; username: string; displayName: string; avatarUrl?: string | null };
+      }) => ({
+        id: m.user.id,
+        username: m.user.username,
+        displayName: m.user.displayName,
+        avatarUrl: m.user.avatarUrl,
+      }),
+    );
+  }, [teamDetail?.members]);
 
   const cardColorBy = currentProject?.cardColorBy ?? null;
 
@@ -391,6 +489,35 @@ export default function Board() {
         const data = JSON.parse(e.dataTransfer.getData('application/json'));
         if (data.sourceColumnId === targetColumnId) return;
 
+        // Check for approval gate
+        const gate = approvalGates?.find(
+          (g: ApprovalGate) =>
+            g.fromColumnId === data.sourceColumnId && g.toColumnId === targetColumnId && g.enabled,
+        );
+        if (gate) {
+          const prevColumns = queryClient.getQueryData<BoardColumn[]>([
+            'board',
+            currentProject?.id,
+          ]);
+          const movedIssue = prevColumns
+            ?.flatMap((c) => c.issues)
+            .find((i) => i.id === data.issueId);
+          const fromCol = prevColumns?.find((c) => c.id === data.sourceColumnId);
+          const toCol = prevColumns?.find((c) => c.id === targetColumnId);
+          if (movedIssue && fromCol && toCol) {
+            setApprovalModalState({
+              issueId: movedIssue.id,
+              issueTitle: movedIssue.title,
+              fromColumnName: fromCol.name,
+              toColumnId: targetColumnId,
+              toColumnName: toCol.name,
+              minApprovals: gate.minApprovals,
+              allowSelfApproval: gate.allowSelfApproval,
+            });
+          }
+          return;
+        }
+
         // Optimistic update
         const boardKey = ['board', currentProject?.id];
         const prevColumns = queryClient.getQueryData<BoardColumn[]>(boardKey);
@@ -420,7 +547,7 @@ export default function Board() {
         /* ignore invalid drag data */
       }
     },
-    [currentProject, queryClient, moveMutation],
+    [currentProject, queryClient, moveMutation, approvalGates],
   );
 
   if (isLoading) return <BoardSkeleton />;
@@ -522,6 +649,8 @@ export default function Board() {
             groupBy={groupBy}
             filters={filters}
             cardColorBy={cardColorBy}
+            pendingRequests={pendingRequestsByIssue}
+            isGatedInbound={gatedInboundColumnIds.has(col.id)}
           />
         ))}
       </div>
@@ -532,6 +661,27 @@ export default function Board() {
           onClose={() => setShowColumnManager(false)}
           projectId={currentProject.id}
           columns={columns}
+        />
+      )}
+
+      {approvalModalState && currentUser && (
+        <ApprovalModal
+          open={!!approvalModalState}
+          onClose={() => setApprovalModalState(null)}
+          issueId={approvalModalState.issueId}
+          issueTitle={approvalModalState.issueTitle}
+          fromColumnName={approvalModalState.fromColumnName}
+          toColumnId={approvalModalState.toColumnId}
+          toColumnName={approvalModalState.toColumnName}
+          minApprovals={approvalModalState.minApprovals}
+          allowSelfApproval={approvalModalState.allowSelfApproval}
+          currentUserId={currentUser.id}
+          projectMembers={projectMembers}
+          onSuccess={() => {
+            queryClient.invalidateQueries({
+              queryKey: ['approval-requests-pending', currentProject?.id],
+            });
+          }}
         />
       )}
     </div>

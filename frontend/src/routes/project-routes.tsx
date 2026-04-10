@@ -16,12 +16,14 @@ const ProjectAnalytics = lazy(() => import('@/pages/projects/ProjectAnalytics'))
 const TimeReport = lazy(() => import('@/pages/projects/TimeReport'));
 const CustomFieldSettings = lazy(() => import('@/pages/projects/CustomFieldSettings'));
 const WorkflowEditor = lazy(() => import('@/pages/projects/WorkflowEditor'));
+const ApprovalsSettings = lazy(() => import('@/pages/projects/ApprovalsSettings'));
 const AutomationRules = lazy(() => import('@/pages/projects/AutomationRules'));
 const LabelsSettings = lazy(() => import('@/pages/projects/LabelsSettings'));
 const IssueTemplates = lazy(() => import('@/pages/projects/IssueTemplates'));
 const Milestones = lazy(() => import('@/pages/projects/Milestones'));
 const SprintReport = lazy(() => import('@/pages/issues/SprintReport'));
 
+const MyApprovals = lazy(() => import('@/pages/approvals/MyApprovals'));
 const OrgAnalytics = lazy(() => import('@/pages/analytics/OrgAnalytics'));
 const TeamAnalytics = lazy(() => import('@/pages/analytics/TeamAnalytics'));
 
@@ -44,6 +46,16 @@ function ProjectRedirect() {
 export function projectRoutes() {
   return (
     <>
+      {/* Org-level approvals page */}
+      <Route
+        path="/:org/approvals"
+        element={
+          <ErrorBoundary>
+            <MyApprovals />
+          </ErrorBoundary>
+        }
+      />
+
       {/* Org and Team analytics -- outside project layout */}
       <Route
         path="/:org/analytics"
@@ -159,6 +171,7 @@ export function projectRoutes() {
           <Route path="templates" element={<IssueTemplates />} />
           <Route path="automation" element={<AutomationRules />} />
           <Route path="workflow" element={<WorkflowEditor />} />
+          <Route path="approvals" element={<ApprovalsSettings />} />
         </Route>
       </Route>
 

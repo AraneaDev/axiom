@@ -18,7 +18,9 @@ export type RealtimeEvent =
   | { type: 'notification'; userId: string; notificationId: string }
   | { type: 'pipeline:updated'; repoId: string; runId: string }
   | { type: 'repo:pushed'; repoId: string; ref: string }
-  | { type: 'runner-task:updated'; repoId: string; taskId: string };
+  | { type: 'runner-task:updated'; repoId: string; taskId: string }
+  | { type: 'approval:request:created'; projectId: string; issueId: string }
+  | { type: 'approval:request:resolved'; projectId: string; issueId: string; status: string };
 
 /**
  * Hook that auto-subscribes to relevant rooms based on current route context
@@ -128,6 +130,27 @@ export function useRealtimeInvalidation(): void {
           queryClient.invalidateQueries({ queryKey: ['commits'] });
           queryClient.invalidateQueries({ queryKey: ['branches'] });
           queryClient.invalidateQueries({ queryKey: ['prs', event.repoId] });
+          break;
+
+        case 'approval:request:created':
+          queryClient.invalidateQueries({
+            queryKey: ['approval-requests-pending', event.projectId],
+          });
+          queryClient.invalidateQueries({ queryKey: ['approval-requests', event.issueId] });
+          queryClient.invalidateQueries({ queryKey: ['my-pending-approvals'] });
+          break;
+
+        case 'approval:request:resolved':
+          queryClient.invalidateQueries({
+            queryKey: ['approval-requests-pending', event.projectId],
+          });
+          queryClient.invalidateQueries({ queryKey: ['approval-requests', event.issueId] });
+          queryClient.invalidateQueries({ queryKey: ['my-pending-approvals'] });
+          // If approved, the issue may have moved -- refresh the board
+          if (event.status === 'APPROVED') {
+            queryClient.invalidateQueries({ queryKey: ['board', event.projectId] });
+            queryClient.invalidateQueries({ queryKey: ['issues', event.projectId] });
+          }
           break;
       }
     },

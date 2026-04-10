@@ -188,6 +188,13 @@ export function Sidebar() {
             </div>
           </div>
 
+          {/* Org-level nav */}
+          {currentOrg && (
+            <div className="space-y-1">
+              <NavItem to={`/${org}/approvals`} icon={ShieldCheck} label="My Approvals" />
+            </div>
+          )}
+
           {/* Teams */}
           {currentOrg && teams && (
             <div className="flex-1 space-y-1">

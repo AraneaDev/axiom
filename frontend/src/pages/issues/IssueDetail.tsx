@@ -1,5 +1,16 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowUp, Check, Eye, EyeOff, Paperclip, Pencil, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowUp,
+  Check,
+  Eye,
+  EyeOff,
+  MessageSquare,
+  Paperclip,
+  Pencil,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
 
@@ -16,6 +27,7 @@ import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { PageLayout } from '@/components/layout/PageLayout';
+import { ApprovalPanel } from '@/components/ui/ApprovalPanel';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -44,6 +56,7 @@ export default function IssueDetail() {
   const titleDraftState = useDraftState('');
   const bodyDraftState = useDraftState('');
   const [editingField, setEditingField] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'comments' | 'approvals'>('comments');
   const titleInputRef = useRef<HTMLInputElement>(null);
   const { invalidateAll } = useIssueInvalidation(currentProject?.id ?? '', num);
 
@@ -465,18 +478,54 @@ export default function IssueDetail() {
           />
         </div>
 
-        {/* Comments and activity */}
-        <IssueDetailComments
-          issue={issue}
-          projectId={currentProject!.id}
-          num={num!}
-          commentBody={commentBody}
-          onCommentBodyChange={setCommentBody}
-          onCommentReset={resetComment}
-          basePath={`/${org}/${teamSlug}/${projectSlug}`}
-          orgSlug={org}
-          teamSlug={teamSlug}
-        />
+        {/* Tabs */}
+        <div className="flex items-center gap-1 border-b border-border mb-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setActiveTab('comments')}
+            className={cn(
+              'rounded-none border-b-2 px-3 py-2',
+              activeTab === 'comments'
+                ? 'border-primary text-primary font-medium'
+                : 'border-transparent text-text-secondary hover:text-text',
+            )}
+          >
+            <MessageSquare className="h-4 w-4" />
+            Comments
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setActiveTab('approvals')}
+            className={cn(
+              'rounded-none border-b-2 px-3 py-2',
+              activeTab === 'approvals'
+                ? 'border-primary text-primary font-medium'
+                : 'border-transparent text-text-secondary hover:text-text',
+            )}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Approvals
+          </Button>
+        </div>
+
+        {/* Tab content */}
+        {activeTab === 'comments' && (
+          <IssueDetailComments
+            issue={issue}
+            projectId={currentProject!.id}
+            num={num!}
+            commentBody={commentBody}
+            onCommentBodyChange={setCommentBody}
+            onCommentReset={resetComment}
+            basePath={`/${org}/${teamSlug}/${projectSlug}`}
+            orgSlug={org}
+            teamSlug={teamSlug}
+          />
+        )}
+
+        {activeTab === 'approvals' && <ApprovalPanel issueId={issue.id} />}
       </div>
     </PageLayout>
   );

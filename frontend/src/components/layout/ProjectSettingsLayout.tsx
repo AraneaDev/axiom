@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Tag, ListPlus, FileText, Zap, GitBranch } from 'lucide-react';
+import { Tag, ListPlus, FileText, Zap, GitBranch, ShieldCheck } from 'lucide-react';
 import { NavLink, Outlet, useParams } from 'react-router';
 
 import { cn } from '@/lib/utils';
@@ -10,6 +10,7 @@ const settingsNav: { path: string; icon: LucideIcon; label: string }[] = [
   { path: 'templates', icon: FileText, label: 'Templates' },
   { path: 'automation', icon: Zap, label: 'Automations' },
   { path: 'workflow', icon: GitBranch, label: 'Workflows' },
+  { path: 'approvals', icon: ShieldCheck, label: 'Approvals' },
 ];
 
 /**
