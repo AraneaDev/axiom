@@ -32,7 +32,11 @@ export function PageLayout({
   return (
     <div className={cn('flex gap-6', className)}>
       <div className="min-w-0 flex-1">{children}</div>
-      <aside className={cn('hidden xl:block shrink-0 self-start', sidebarWidth)}>{sidebar}</aside>
+      <aside
+        className={cn('hidden xl:block shrink-0 self-start min-w-0 overflow-hidden', sidebarWidth)}
+      >
+        {sidebar}
+      </aside>
     </div>
   );
 }

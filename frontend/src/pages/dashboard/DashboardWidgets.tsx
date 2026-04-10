@@ -71,7 +71,7 @@ export function Widget({
           </Link>
         )}
       </div>
-      <div className="overflow-y-auto max-h-80">{children}</div>
+      <div className="overflow-y-auto overflow-x-hidden max-h-[480px]">{children}</div>
     </Card>
   );
 }
