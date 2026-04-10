@@ -132,9 +132,9 @@ async function main() {
 
   // Team memberships: { teamSlug: { username: role } }
   const teamMemberDefs: Record<string, Record<string, 'ADMIN' | 'MEMBER'>> = {
-    'team-noord': { erik: 'ADMIN', tim: 'ADMIN', sanne: 'MEMBER', mila: 'MEMBER' },
-    'team-zuid': { erik: 'ADMIN', joris: 'MEMBER', fenna: 'MEMBER', ruben: 'MEMBER' },
-    'team-ai': { erik: 'ADMIN', anika: 'MEMBER', thijs: 'MEMBER' },
+    'team-noord': { tim: 'ADMIN', sanne: 'MEMBER', mila: 'MEMBER' },
+    'team-zuid': { joris: 'ADMIN', fenna: 'MEMBER', ruben: 'MEMBER' },
+    'team-ai': { anika: 'ADMIN', thijs: 'MEMBER' },
   };
 
   for (const [teamSlug, members] of Object.entries(teamMemberDefs)) {

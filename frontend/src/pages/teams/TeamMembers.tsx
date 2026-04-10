@@ -28,25 +28,11 @@ const ROLE_BADGE: Record<string, 'primary' | 'default' | 'warning'> = {
   VIEWER: 'warning',
 };
 
-function getMemberRoleContext(
-  member: TeamMember,
-  orgId: string,
-): { label: string; variant: 'primary' | 'default' | 'warning' | 'danger'; inherited: boolean } {
-  if (member.user.isAdmin) {
-    return { label: 'Super Admin', variant: 'danger', inherited: true };
-  }
-  const orgMembership = member.user.orgMemberships?.find((m) => m.orgId === orgId);
-  if (orgMembership?.role === 'OWNER') {
-    return { label: 'Org Owner', variant: 'warning', inherited: true };
-  }
-  const roleConfig: Record<string, { label: string; variant: 'primary' | 'default' | 'warning' }> =
-    {
-      ADMIN: { label: 'Admin', variant: 'primary' },
-      MEMBER: { label: 'Member', variant: 'default' },
-      VIEWER: { label: 'Viewer', variant: 'warning' },
-    };
-  return { ...(roleConfig[member.role] ?? roleConfig.MEMBER), inherited: false };
-}
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Admin',
+  MEMBER: 'Member',
+  VIEWER: 'Viewer',
+};
 
 /**
  *
@@ -146,11 +132,10 @@ export default function TeamMembers() {
   }
 
   const members = teamDetail?.members ?? [];
-  const orgId = currentOrg?.id ?? teamDetail?.orgId ?? '';
   const roleBreakdown = members.reduce(
     (acc: Record<string, number>, m: TeamMember) => {
-      const ctx = getMemberRoleContext(m, orgId);
-      acc[ctx.label] = (acc[ctx.label] || 0) + 1;
+      const label = ROLE_LABELS[m.role] ?? m.role;
+      acc[label] = (acc[label] || 0) + 1;
       return acc;
     },
     {} as Record<string, number>,
@@ -167,53 +152,42 @@ export default function TeamMembers() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
         <div className="flex flex-col gap-6">
           <Card className="divide-y divide-border">
-            {members.map((m: TeamMember) => {
-              const roleContext = getMemberRoleContext(m, orgId);
-              return (
-                <div key={m.id} className="flex items-center gap-3 p-4">
-                  <Avatar name={m.user.displayName} />
-                  <Link
-                    to={`/${org}/${teamSlug}/members/${m.user.username}`}
-                    className="flex-1 min-w-0 hover:text-primary transition-colors"
+            {members.map((m: TeamMember) => (
+              <div key={m.id} className="flex items-center gap-3 p-4">
+                <Avatar name={m.user.displayName} />
+                <Link
+                  to={`/${org}/${teamSlug}/members/${m.user.username}`}
+                  className="flex-1 min-w-0 hover:text-primary transition-colors"
+                >
+                  <p className="font-medium text-sm truncate">{m.user.displayName}</p>
+                  <p className="text-xs text-text-secondary">@{m.user.username}</p>
+                </Link>
+                <Badge variant={ROLE_BADGE[m.role] ?? 'default'}>
+                  {ROLE_LABELS[m.role] ?? m.role}
+                </Badge>
+                <div className="flex gap-1">
+                  <Select
+                    value={m.role}
+                    onChange={(v) =>
+                      roleMutation.mutate({ memberId: m.user.id, role: v as string })
+                    }
+                    options={[
+                      { value: 'ADMIN', label: 'Admin' },
+                      { value: 'MEMBER', label: 'Member' },
+                      { value: 'VIEWER', label: 'Viewer' },
+                    ]}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeMutation.mutate(m.user.id)}
+                    title="Remove member"
                   >
-                    <p className="font-medium text-sm truncate">{m.user.displayName}</p>
-                    <p className="text-xs text-text-secondary">@{m.user.username}</p>
-                  </Link>
-                  <Badge variant={roleContext.variant}>{roleContext.label}</Badge>
-                  <div className="flex gap-1">
-                    {roleContext.inherited ? (
-                      <span
-                        className="text-xs text-text-tertiary px-2 py-1"
-                        title={`Role inherited from ${roleContext.label.toLowerCase()} status`}
-                      >
-                        {roleContext.label}
-                      </span>
-                    ) : (
-                      <Select
-                        value={m.role}
-                        onChange={(v) =>
-                          roleMutation.mutate({ memberId: m.user.id, role: v as string })
-                        }
-                        options={[
-                          { value: 'ADMIN', label: 'Admin' },
-                          { value: 'MEMBER', label: 'Member' },
-                          { value: 'VIEWER', label: 'Viewer' },
-                        ]}
-                      />
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeMutation.mutate(m.user.id)}
-                      title="Remove member"
-                      disabled={roleContext.inherited}
-                    >
-                      <UserMinus className="h-3.5 w-3.5 text-danger" />
-                    </Button>
-                  </div>
+                    <UserMinus className="h-3.5 w-3.5 text-danger" />
+                  </Button>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </Card>
 
           {/* Pending Invitations */}
