@@ -187,7 +187,7 @@ export default function PipelineRunDetail() {
   if (!run) return <EmptyState title="Run not found" />;
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="flex items-center gap-3 mb-6">
         <Link
           to={`/${org}/${teamSlug}/repos/${repoSlug}`}

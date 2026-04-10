@@ -17,7 +17,7 @@ const settingsNav: { to: string; icon: LucideIcon; label: string }[] = [
  */
 export function SettingsLayout() {
   return (
-    <div className="flex gap-8">
+    <div className="flex gap-8 px-6 py-4">
       <nav className="w-56 shrink-0">
         <h2 className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider px-3 mb-2">
           Settings

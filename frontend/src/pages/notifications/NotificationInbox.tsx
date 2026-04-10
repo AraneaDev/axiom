@@ -111,7 +111,7 @@ export default function NotificationInbox() {
   }
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-text">Notifications</h1>

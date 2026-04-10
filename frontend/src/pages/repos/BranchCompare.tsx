@@ -44,7 +44,7 @@ export default function BranchCompare() {
   const branchOptions = (branches ?? []).map((b) => ({ value: b.name, label: b.name }));
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="mb-4">
         <Link
           to={basePath}

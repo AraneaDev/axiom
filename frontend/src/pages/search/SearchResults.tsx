@@ -180,7 +180,7 @@ export default function SearchResults() {
   }, [results, activeType]);
 
   return (
-    <div>
+    <div className="px-6 py-4">
       {/* Search input */}
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">

@@ -57,7 +57,7 @@ export default function PRCreate() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto px-6 py-4">
       <div className="flex items-center gap-3 mb-6">
         <Link to={`${basePath}/pulls`}>
           <Button variant="ghost" size="sm">

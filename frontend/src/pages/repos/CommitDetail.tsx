@@ -170,7 +170,7 @@ export default function CommitDetail() {
   }
 
   return (
-    <div>
+    <div className="px-6 py-4">
       {/* Header */}
       <div className="mb-4">
         <Link

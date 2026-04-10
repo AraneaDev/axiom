@@ -106,7 +106,7 @@ export default function RepoSettings() {
   };
 
   return (
-    <div>
+    <div className="px-6 py-4">
       <div className="mb-6">
         <Link
           to={basePath}

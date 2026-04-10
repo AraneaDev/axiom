@@ -64,7 +64,7 @@ export default function BlameView() {
   }
 
   return (
-    <div>
+    <div className="px-6 py-4">
       {/* Breadcrumbs */}
       <div className="flex items-center gap-1 mb-4 text-sm flex-wrap">
         <Link to={basePath} className="text-primary hover:underline">
