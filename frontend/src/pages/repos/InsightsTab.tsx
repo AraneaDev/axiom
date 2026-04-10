@@ -166,7 +166,7 @@ export default function InsightsTab({ repoId }: InsightsTabProps) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-6">
       {/* Commit Frequency */}
       <Card className="p-5">
         <div className="flex items-center gap-2 mb-4">

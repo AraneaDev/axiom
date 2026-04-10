@@ -386,7 +386,7 @@ export default function PageView() {
       {/* Child pages */}
       {page.children && page.children.length > 0 && (
         <div className="mt-6">
-          <h2 className="text-lg font-semibold mb-3">Child Pages</h2>
+          <h2 className="h3 mb-3">Child Pages</h2>
           <div className="grid gap-2">
             {page.children.map((child) => (
               <Link

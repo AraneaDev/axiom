@@ -253,7 +253,7 @@ export default function PRDetail() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PRHeader
         pr={pr}
         org={org!}
@@ -273,7 +273,7 @@ export default function PRDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
         {/* Main content */}
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           <PRDiffView
             commits={commits}
             diff={diff}

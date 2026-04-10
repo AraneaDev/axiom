@@ -233,7 +233,7 @@ export default function SprintReport() {
   const endStr = formatDate(sprint.endDate);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto flex flex-col gap-6">
       {/* Header */}
       <div>
         <Button

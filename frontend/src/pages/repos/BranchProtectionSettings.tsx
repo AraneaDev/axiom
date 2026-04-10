@@ -69,7 +69,7 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
+        <h2 className="h3 flex items-center gap-2">
           <Shield className="h-5 w-5" /> Branch Protection
         </h2>
         <Button size="sm" onClick={() => formModal.open()}>

@@ -61,7 +61,7 @@ export default function NotificationSettings() {
 
   if (isLoading)
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <div>
           <Skeleton className="h-7 w-52 mb-2" />
           <Skeleton className="h-4 w-72" />

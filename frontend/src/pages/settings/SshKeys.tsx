@@ -57,7 +57,7 @@ export default function SshKeys() {
 
   if (isLoading)
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <div>
             <Skeleton className="h-7 w-32 mb-2" />

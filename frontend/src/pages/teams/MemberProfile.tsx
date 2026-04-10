@@ -72,7 +72,7 @@ export default function MemberProfile() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
         {/* Main content */}
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           {/* Profile header */}
           <Card className="p-6">
             <div className="flex items-center gap-4">

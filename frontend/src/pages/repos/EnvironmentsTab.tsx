@@ -47,7 +47,7 @@ export default function EnvironmentsTab({ repoId }: EnvironmentsTabProps) {
           >
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
-          <h2 className="text-lg font-semibold">{selectedEnv.name}</h2>
+          <h2 className="h3">{selectedEnv.name}</h2>
           {selectedEnv.url && (
             <a
               href={selectedEnv.url}

@@ -132,7 +132,7 @@ export default function TeamDetail() {
       {/* Main layout: content + sidebar */}
       <div className="flex flex-col lg:grid lg:grid-cols-[1fr_340px] gap-8">
         {/* Main content */}
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           {/* Projects - full width, prominent cards */}
           <section>
             <div className="flex items-center justify-between mb-3">
@@ -350,7 +350,7 @@ export default function TeamDetail() {
         </div>
 
         {/* Sidebar: Members + Activity (sticky, like issue detail) */}
-        <div className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto space-y-6">
+        <div className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto flex flex-col gap-6">
           {/* Quick Stats */}
           <div className="grid grid-cols-2 gap-3">
             <Card className="p-3 text-center">

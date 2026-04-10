@@ -23,7 +23,7 @@ function formatMinutes(mins: number | null | undefined): string {
 
 function TimeReportSkeleton() {
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-6">
       <div>
         <Skeleton className="h-7 w-48 mb-2" />
         <Skeleton className="h-4 w-64" />
@@ -90,7 +90,7 @@ export default function TimeReport() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <PageHeader title={`${currentProject?.name} Time Report`} prefix={currentProject?.prefix}>
         <Button variant="secondary" size="sm" onClick={handleExportCsv}>

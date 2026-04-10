@@ -71,7 +71,7 @@ export function EnvironmentsList({ repoId, environments, onSelectEnv }: Environm
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Environments</h2>
+        <h2 className="h3">Environments</h2>
         <Button size="sm" onClick={() => createModal.open()}>
           <Plus className="h-4 w-4" /> New Environment
         </Button>

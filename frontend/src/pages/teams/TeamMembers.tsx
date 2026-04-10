@@ -142,7 +142,7 @@ export default function TeamMembers() {
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           <Card className="divide-y divide-border">
             {members.map(
               (m: {
