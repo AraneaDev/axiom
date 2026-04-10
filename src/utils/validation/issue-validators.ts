@@ -19,6 +19,8 @@ export const updateIssueSchema = createIssueSchema.partial().extend({
   sprintId: z.string().nullable().optional(),
   timeEstimate: z.number().int().min(0).nullable().optional(),
   timeSpent: z.number().int().min(0).nullable().optional(),
+  startDate: z.string().datetime().nullable().optional(),
+  roadmapBucketId: z.string().nullable().optional(),
 });
 
 // ─── Worklogs ───────────────────────────────────────────────

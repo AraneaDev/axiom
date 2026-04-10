@@ -414,6 +414,7 @@ model Project {
   approvalGates          ApprovalGate[]
   forms                  Form[]
   formSubmissions        FormSubmission[]
+  roadmapBuckets         RoadmapBucket[]
 
   @@unique([teamId, slug])
   @@unique([teamId, prefix])
@@ -484,6 +485,9 @@ model Issue {
   milestone    Milestone?  @relation(fields: [milestoneId], references: [id])
   timeEstimate Int? // minutes
   timeSpent    Int? // minutes
+  startDate       DateTime?
+  roadmapBucketId String?
+  roadmapBucket   RoadmapBucket? @relation(fields: [roadmapBucketId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1603,4 +1607,22 @@ model FormSubmission {
 
   @@index([formId, status])
   @@index([projectId, status])
+}
+
+// ─── Roadmap ─────────────────────────────────────────────
+
+model RoadmapBucket {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  position  Int
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues  Issue[]
+
+  @@index([projectId])
+  @@map("roadmap_buckets")
 }
