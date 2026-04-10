@@ -146,7 +146,7 @@ export default function TeamMembers() {
   }
 
   const members = teamDetail?.members ?? [];
-  const orgId = teamDetail?.orgId ?? '';
+  const orgId = currentOrg?.id ?? teamDetail?.orgId ?? '';
   const roleBreakdown = members.reduce(
     (acc: Record<string, number>, m: TeamMember) => {
       const ctx = getMemberRoleContext(m, orgId);
