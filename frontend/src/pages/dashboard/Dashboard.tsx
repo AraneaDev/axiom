@@ -116,145 +116,146 @@ export default function Dashboard() {
   ) : null;
 
   return (
-    <PageLayout sidebar={activitySidebar} sidebarWidth="w-88">
-      <div className="flex flex-col gap-5">
-        <PageHeader title={`${greeting}, ${user?.displayName?.split(' ')[0]}`}>
-          <p className="text-text-tertiary text-sm">{dateStr}</p>
-          <Link to="/orgs/new">
-            <Button variant="outline" size="sm">
-              <Plus className="h-3.5 w-3.5" /> New Organization
-            </Button>
-          </Link>
-        </PageHeader>
+    <>
+      <PageHeader title={`${greeting}, ${user?.displayName?.split(' ')[0]}`}>
+        <p className="text-text-tertiary text-sm">{dateStr}</p>
+        <Link to="/orgs/new">
+          <Button variant="outline" size="sm">
+            <Plus className="h-3.5 w-3.5" /> New Organization
+          </Button>
+        </Link>
+      </PageHeader>
+      <PageLayout sidebar={activitySidebar} sidebarWidth="w-88">
+        <div className="flex flex-col gap-5">
+          {!orgs?.length ? (
+            <OnboardingWizard />
+          ) : (
+            <>
+              {/* Quick stats */}
+              {dashboardData && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {(
+                    [
+                      {
+                        icon: ListChecks,
+                        label: 'Open Issues',
+                        value: dashboardData.assignedIssues?.length ?? 0,
+                        variant: 'primary' as const,
+                        color: 'var(--color-primary)',
+                        trendKey: 'assignedIssues' as keyof DashboardTrends,
+                      },
+                      {
+                        icon: GitPullRequest,
+                        label: 'Review Requests',
+                        value: dashboardData.reviewRequests?.length ?? 0,
+                        variant: 'default' as const,
+                        color: 'var(--color-accent)',
+                        trendKey: 'reviewRequests' as keyof DashboardTrends,
+                      },
+                      {
+                        icon: CalendarClock,
+                        label: 'Due Soon',
+                        value: dashboardData.upcomingDueDates?.length ?? 0,
+                        variant: 'warning' as const,
+                        color: 'var(--color-warning)',
+                        trendKey: 'upcomingDueDates' as keyof DashboardTrends,
+                      },
+                      {
+                        icon: Activity,
+                        label: 'Recent Events',
+                        value: dashboardData.recentActivity?.length ?? 0,
+                        variant: 'success' as const,
+                        color: 'var(--color-success)',
+                        trendKey: 'recentActivity' as keyof DashboardTrends,
+                      },
+                    ] as const
+                  ).map(({ icon, label, value, variant, color, trendKey }) => {
+                    const trend = dashboardData.trends?.[trendKey];
+                    return (
+                      <div key={label} className="relative">
+                        <StatCard icon={icon} label={label} value={value} variant={variant} />
+                        {trend && trend.length >= 2 && (
+                          <div className="absolute bottom-3 right-3">
+                            <Sparkline data={trend} color={color} height={24} width={64} fill />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-        {!orgs?.length ? (
-          <OnboardingWizard />
-        ) : (
-          <>
-            {/* Quick stats */}
-            {dashboardData && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {(
-                  [
-                    {
-                      icon: ListChecks,
-                      label: 'Open Issues',
-                      value: dashboardData.assignedIssues?.length ?? 0,
-                      variant: 'primary' as const,
-                      color: 'var(--color-primary)',
-                      trendKey: 'assignedIssues' as keyof DashboardTrends,
-                    },
-                    {
-                      icon: GitPullRequest,
-                      label: 'Review Requests',
-                      value: dashboardData.reviewRequests?.length ?? 0,
-                      variant: 'default' as const,
-                      color: 'var(--color-accent)',
-                      trendKey: 'reviewRequests' as keyof DashboardTrends,
-                    },
-                    {
-                      icon: CalendarClock,
-                      label: 'Due Soon',
-                      value: dashboardData.upcomingDueDates?.length ?? 0,
-                      variant: 'warning' as const,
-                      color: 'var(--color-warning)',
-                      trendKey: 'upcomingDueDates' as keyof DashboardTrends,
-                    },
-                    {
-                      icon: Activity,
-                      label: 'Recent Events',
-                      value: dashboardData.recentActivity?.length ?? 0,
-                      variant: 'success' as const,
-                      color: 'var(--color-success)',
-                      trendKey: 'recentActivity' as keyof DashboardTrends,
-                    },
-                  ] as const
-                ).map(({ icon, label, value, variant, color, trendKey }) => {
-                  const trend = dashboardData.trends?.[trendKey];
-                  return (
-                    <div key={label} className="relative">
-                      <StatCard icon={icon} label={label} value={value} variant={variant} />
-                      {trend && trend.length >= 2 && (
-                        <div className="absolute bottom-3 right-3">
-                          <Sparkline data={trend} color={color} height={24} width={64} fill />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              {/* Widget grid */}
+              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+                <MyIssuesWidget issues={dashboardData?.assignedIssues ?? []} />
+                <ReviewRequestsWidget prs={dashboardData?.reviewRequests ?? []} />
+                <UpcomingDueDatesWidget issues={dashboardData?.upcomingDueDates ?? []} />
+                {teams &&
+                  teams.length > 0 &&
+                  firstOrg &&
+                  teams.map((team) => (
+                    <SprintHealthWidget
+                      key={team.id}
+                      teamId={team.id}
+                      orgSlug={firstOrg.slug}
+                      teamSlug={team.slug}
+                    />
+                  ))}
               </div>
-            )}
 
-            {/* Widget grid */}
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-              <MyIssuesWidget issues={dashboardData?.assignedIssues ?? []} />
-              <ReviewRequestsWidget prs={dashboardData?.reviewRequests ?? []} />
-              <UpcomingDueDatesWidget issues={dashboardData?.upcomingDueDates ?? []} />
-              {teams &&
-                teams.length > 0 &&
-                firstOrg &&
-                teams.map((team) => (
-                  <SprintHealthWidget
-                    key={team.id}
-                    teamId={team.id}
-                    orgSlug={firstOrg.slug}
-                    teamSlug={team.slug}
-                  />
-                ))}
-            </div>
-
-            {/* Org cards */}
-            <div>
-              <h3 className="h3 mb-3">Organizations</h3>
-              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-                {orgs.map((org) => (
-                  <Link
-                    key={org.id}
-                    to={`/${org.slug}`}
-                    className="group rounded-lg border border-border bg-surface-elevated overflow-hidden hover:shadow-md transition-all duration-150"
-                  >
-                    <div className="h-10 bg-primary-light flex items-end px-4 pb-2">
-                      <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center shadow-sm -mb-4 ring-2 ring-surface-elevated">
-                        <span className="text-text-inverse text-xs font-bold">{org.name[0]}</span>
-                      </div>
-                    </div>
-                    <div className="p-4 pt-6">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-text text-sm truncate">{org.name}</h3>
-                        <Badge variant="outline" size="sm">
-                          {org.role?.toLowerCase()}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-text-tertiary mb-2">/{org.slug}</p>
-                      {org.description && (
-                        <div className="text-sm text-text-secondary line-clamp-2 mb-3">
-                          <MarkdownRenderer content={org.description} />
-                        </div>
-                      )}
-                      <div className="flex items-center text-xs text-text-tertiary group-hover:text-primary transition-colors">
-                        <span>Open workspace</span>
-                        <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-0.5 transition-transform" />
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            {/* Teams overview */}
-            {teams && teams.length > 0 && (
+              {/* Org cards */}
               <div>
-                <h3 className="h3 mb-3">Teams</h3>
+                <h3 className="h3 mb-3">Organizations</h3>
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-                  {teams.map((team) => (
-                    <TeamCard key={team.id} team={team} orgSlug={firstOrg!.slug} />
+                  {orgs.map((org) => (
+                    <Link
+                      key={org.id}
+                      to={`/${org.slug}`}
+                      className="group rounded-lg border border-border bg-surface-elevated overflow-hidden hover:shadow-md transition-all duration-150"
+                    >
+                      <div className="h-10 bg-primary-light flex items-end px-4 pb-2">
+                        <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center shadow-sm -mb-4 ring-2 ring-surface-elevated">
+                          <span className="text-text-inverse text-xs font-bold">{org.name[0]}</span>
+                        </div>
+                      </div>
+                      <div className="p-4 pt-6">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-text text-sm truncate">{org.name}</h3>
+                          <Badge variant="outline" size="sm">
+                            {org.role?.toLowerCase()}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-text-tertiary mb-2">/{org.slug}</p>
+                        {org.description && (
+                          <div className="text-sm text-text-secondary line-clamp-2 mb-3">
+                            <MarkdownRenderer content={org.description} />
+                          </div>
+                        )}
+                        <div className="flex items-center text-xs text-text-tertiary group-hover:text-primary transition-colors">
+                          <span>Open workspace</span>
+                          <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </Link>
                   ))}
                 </div>
               </div>
-            )}
-          </>
-        )}
-      </div>
-    </PageLayout>
+
+              {/* Teams overview */}
+              {teams && teams.length > 0 && (
+                <div>
+                  <h3 className="h3 mb-3">Teams</h3>
+                  <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                    {teams.map((team) => (
+                      <TeamCard key={team.id} team={team} orgSlug={firstOrg!.slug} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </PageLayout>
+    </>
   );
 }
