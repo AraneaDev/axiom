@@ -62,6 +62,23 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-full: 9999px;
+
+  /* Chart palette — categorical (8 distinct colors for data series) */
+  --color-chart-1: #6d5dca;
+  --color-chart-2: #0d9488;
+  --color-chart-3: #e87b35;
+  --color-chart-4: #3b82f6;
+  --color-chart-5: #ec4899;
+  --color-chart-6: #84cc16;
+  --color-chart-7: #f59e0b;
+  --color-chart-8: #06b6d4;
+
+  /* Chart palette — sequential (primary shades for magnitude data) */
+  --color-chart-seq-1: rgba(109, 93, 202, 0.2);
+  --color-chart-seq-2: rgba(109, 93, 202, 0.4);
+  --color-chart-seq-3: rgba(109, 93, 202, 0.6);
+  --color-chart-seq-4: rgba(109, 93, 202, 0.8);
+  --color-chart-seq-5: #6d5dca;
 }
 
 /* Dark mode — soft warm */
@@ -96,6 +113,23 @@
   --color-text-tertiary: #6b6b6b;
   --color-text-inverse: #1a1a1a;
 
+  /* Chart palette — categorical (brighter for dark backgrounds) */
+  --color-chart-1: #9b8ade;
+  --color-chart-2: #2dd4bf;
+  --color-chart-3: #f5a060;
+  --color-chart-4: #60a5fa;
+  --color-chart-5: #f472b6;
+  --color-chart-6: #a3e635;
+  --color-chart-7: #fbbf24;
+  --color-chart-8: #22d3ee;
+
+  /* Chart palette — sequential */
+  --color-chart-seq-1: rgba(155, 138, 222, 0.2);
+  --color-chart-seq-2: rgba(155, 138, 222, 0.4);
+  --color-chart-seq-3: rgba(155, 138, 222, 0.6);
+  --color-chart-seq-4: rgba(155, 138, 222, 0.8);
+  --color-chart-seq-5: #9b8ade;
+
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.25);
@@ -105,14 +139,14 @@
 /* Clickable elements should always show pointer cursor */
 a,
 button,
-[role="button"],
-[type="button"],
-[type="submit"],
-[type="reset"],
+[role='button'],
+[type='button'],
+[type='submit'],
+[type='reset'],
 summary,
 select,
 [onclick],
-[tabindex]:not([tabindex="-1"]) {
+[tabindex]:not([tabindex='-1']) {
   cursor: pointer;
 }
 
@@ -168,7 +202,10 @@ button,
 input,
 select,
 textarea {
-  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
 }
 
 /* Toast animation */
