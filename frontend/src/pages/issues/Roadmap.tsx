@@ -1,380 +1,235 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Plus, Calendar, AlertTriangle } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { Link } from 'react-router';
+import { CalendarRange, Columns3, Plus, Map, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
 
+import { patch } from '@/api/client';
 import { issuesApi } from '@/api/issues.api';
+import { roadmapApi, type TimelineIssue } from '@/api/roadmap.api';
+import { BucketBoard } from '@/components/ui/BucketBoard';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import { GanttChart } from '@/components/ui/GanttChart';
+import { IssuePickerModal } from '@/components/ui/IssuePickerModal';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { Tabs } from '@/components/ui/Tabs';
+import { TimelineZoom, type ZoomLevel } from '@/components/ui/TimelineZoom';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
-import type { RoadmapEpic, Issue } from '@/lib/types';
-import { cn } from '@/lib/utils';
 
-function formatMonth(date: Date) {
-  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-}
+type Mode = 'timeline' | 'buckets';
 
-function EpicBar({
-  epic,
-  timelineStart,
-  totalDays,
-  org,
-  teamSlug,
-  projectSlug,
-}: {
-  epic: RoadmapEpic;
-  timelineStart: Date;
-  totalDays: number;
-  org: string;
-  teamSlug: string;
-  projectSlug: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  const startOffset = Math.max(
-    0,
-    (new Date(epic.startDate).getTime() - timelineStart.getTime()) / 86400000,
-  );
-  const endOffset = Math.min(
-    totalDays,
-    (new Date(epic.endDate).getTime() - timelineStart.getTime()) / 86400000,
-  );
-  const barWidth = Math.max(2, endOffset - startOffset);
-
-  const leftPct = (startOffset / totalDays) * 100;
-  const widthPct = (barWidth / totalDays) * 100;
-
-  return (
-    <div className="mb-1">
-      {/* Epic row */}
-      <div className="flex items-stretch border-b border-border-light hover:bg-surface-secondary/50 transition-colors">
-        {/* Label column */}
-        <div className="w-72 shrink-0 flex items-center gap-2 px-3 py-2 border-r border-border-light">
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setExpanded(!expanded)}
-            title={expanded ? 'Collapse' : 'Expand'}
-            className="p-0.5"
-          >
-            {expanded ? (
-              <ChevronDown className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <IssueTypeIcon type="EPIC" className="h-4 w-4 shrink-0" />
-          <Link
-            to={`/${org}/${teamSlug}/${projectSlug}/issues/${epic.number}`}
-            className="text-sm font-medium truncate hover:text-primary transition-colors"
-          >
-            {epic.key} {epic.title}
-          </Link>
-          <span className="ml-auto text-xs text-text-tertiary shrink-0">
-            {epic.progress.completed}/{epic.progress.total}
-          </span>
-        </div>
-
-        {/* Timeline column */}
-        <div className="flex-1 relative min-h-[40px]">
-          <div
-            className="absolute top-1/2 -translate-y-1/2 h-6 rounded-full bg-primary-light border border-primary/20 overflow-hidden"
-            style={{ left: `${leftPct}%`, width: `${widthPct}%`, minWidth: '24px' }}
-          >
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-300"
-              style={{ width: `${epic.progress.percentage}%` }}
-            />
-          </div>
-          {/* Percentage label */}
-          {widthPct > 5 && (
-            <div
-              className="absolute top-1/2 -translate-y-1/2 text-[10px] font-medium text-primary pointer-events-none"
-              style={{ left: `${leftPct + widthPct / 2}%`, transform: 'translate(-50%, -50%)' }}
-            >
-              {epic.progress.percentage}%
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Expanded children */}
-      {expanded && epic.children && epic.children.length > 0 && (
-        <div className="bg-surface-secondary/30">
-          {(epic.children as Issue[]).map((child) => {
-            const childStart = new Date(child.createdAt);
-            const childEnd = child.dueDate
-              ? new Date(child.dueDate)
-              : new Date(childStart.getTime() + 7 * 86400000);
-            const cStartOff = Math.max(
-              0,
-              (childStart.getTime() - timelineStart.getTime()) / 86400000,
-            );
-            const cEndOff = Math.min(
-              totalDays,
-              (childEnd.getTime() - timelineStart.getTime()) / 86400000,
-            );
-            const cBarWidth = Math.max(1, cEndOff - cStartOff);
-            const cLeftPct = (cStartOff / totalDays) * 100;
-            const cWidthPct = (cBarWidth / totalDays) * 100;
-            const isDone = child.column?.isDone;
-
-            return (
-              <div
-                key={child.id}
-                className="flex items-stretch border-b border-border-light/50 hover:bg-surface-secondary transition-colors"
-              >
-                <div className="w-72 shrink-0 flex items-center gap-2 pl-10 pr-3 py-1.5 border-r border-border-light">
-                  <IssueTypeIcon type={child.type} className="h-3.5 w-3.5 shrink-0" />
-                  <Link
-                    to={`/${org}/${teamSlug}/${projectSlug}/issues/${child.number}`}
-                    className={cn(
-                      'text-xs truncate hover:text-primary transition-colors',
-                      isDone && 'line-through text-text-tertiary',
-                    )}
-                  >
-                    {child.key} {child.title}
-                  </Link>
-                  <PriorityBadge
-                    priority={child.priority}
-                    display="short"
-                    className="ml-auto text-[10px] shrink-0"
-                  />
-                </div>
-                <div className="flex-1 relative min-h-[32px]">
-                  <div
-                    className={cn(
-                      'absolute top-1/2 -translate-y-1/2 h-4 rounded-full',
-                      isDone
-                        ? 'bg-success/30 border border-success/40'
-                        : 'bg-surface-tertiary border border-border',
-                    )}
-                    style={{ left: `${cLeftPct}%`, width: `${cWidthPct}%`, minWidth: '12px' }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+const MODE_TABS = [
+  { key: 'timeline', label: 'Timeline', icon: <CalendarRange className="h-4 w-4" /> },
+  { key: 'buckets', label: 'Buckets', icon: <Columns3 className="h-4 w-4" /> },
+];
 
 /**
- *
+ * Visual Roadmap page with dual-mode view: Gantt timeline and bucket board.
+ * Supports drag-and-drop bucket assignment, issue picker, and quick-start defaults.
  */
 export default function Roadmap() {
-  const { org, teamSlug, projectSlug, currentProject } = useProjectContext();
+  const { currentProject, basePath } = useProjectContext();
+  const navigate = useNavigate();
 
-  const {
-    data: epics = [],
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: ['roadmap', currentProject?.id],
-    queryFn: () => issuesApi.getRoadmap(currentProject!.id),
-    enabled: !!currentProject?.id,
+  const [mode, setMode] = useState<Mode>('timeline');
+  const [zoom, setZoom] = useState<ZoomLevel>('months');
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const projectId = currentProject?.id ?? '';
+  const projectPrefix = currentProject?.prefix ?? '';
+
+  // -- Timeline data
+  const { data: timelineData, isLoading: timelineLoading } = useQuery({
+    queryKey: ['roadmap-timeline', projectId],
+    queryFn: () => roadmapApi.getTimeline(projectId),
+    enabled: !!projectId && mode === 'timeline',
   });
 
-  // Compute timeline bounds
-  const { timelineStart, timelineEnd, totalDays, weekMarkers } = useMemo(() => {
-    if (!epics.length) {
-      const now = new Date();
-      const start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      const end = new Date(now);
-      end.setDate(end.getDate() + 90);
-      return { timelineStart: start, timelineEnd: end, totalDays: 97, weekMarkers: [] as Date[] };
-    }
+  // -- Buckets view data
+  const { data: bucketsViewData, isLoading: bucketsViewLoading } = useQuery({
+    queryKey: ['roadmap-buckets-view', projectId],
+    queryFn: () => roadmapApi.getBucketsView(projectId),
+    enabled: !!projectId && mode === 'buckets',
+  });
 
-    const allStarts = epics.map((e) => new Date(e.startDate).getTime());
-    const allEnds = epics.map((e) => new Date(e.endDate).getTime());
-    const minTime = Math.min(...allStarts);
-    const maxTime = Math.max(...allEnds);
+  // -- Buckets list (for checking if any exist)
+  const { data: bucketsList, isLoading: bucketsListLoading } = useQuery({
+    queryKey: ['roadmap-buckets', projectId],
+    queryFn: () => roadmapApi.listBuckets(projectId),
+    enabled: !!projectId && mode === 'buckets',
+  });
 
-    // Add padding: 1 week before, 2 weeks after
-    const start = new Date(minTime - 7 * 86400000);
-    const end = new Date(maxTime + 14 * 86400000);
-    const days = Math.ceil((end.getTime() - start.getTime()) / 86400000);
+  // -- Create default buckets
+  const createDefaultsMutation = useMutationWithToast(() => roadmapApi.createDefaults(projectId), {
+    successMessage: 'Default buckets created',
+    invalidateKeys: [
+      ['roadmap-buckets', projectId],
+      ['roadmap-buckets-view', projectId],
+    ],
+  });
 
-    // Generate week markers
-    const markers: Date[] = [];
-    const cursor = new Date(start);
-    cursor.setDate(cursor.getDate() - cursor.getDay()); // align to Sunday
-    while (cursor.getTime() <= end.getTime()) {
-      if (cursor.getTime() >= start.getTime()) {
-        markers.push(new Date(cursor));
-      }
-      cursor.setDate(cursor.getDate() + 7);
-    }
+  // -- Move issue to bucket
+  const moveToBucketMutation = useMutationWithToast(
+    ({ issueId, bucketId }: { issueId: string; bucketId: string | null }) =>
+      patch(`/projects/${projectId}/roadmap/issues/${issueId}/bucket`, { bucketId }),
+    {
+      successMessage: 'Issue moved',
+      invalidateKeys: [
+        ['roadmap-buckets-view', projectId],
+        ['roadmap-buckets', projectId],
+      ],
+    },
+  );
 
-    return { timelineStart: start, timelineEnd: end, totalDays: days, weekMarkers: markers };
-  }, [epics]);
+  // -- Add issue to roadmap (set start/due dates via issue update)
+  const addToRoadmapMutation = useMutationWithToast(
+    (issueId: string) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const twoWeeks = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+      return patch(`/projects/${projectId}/roadmap/issues/${issueId}/dates`, {
+        startDate: today,
+        dueDate: twoWeeks,
+      });
+    },
+    {
+      successMessage: 'Issue added to roadmap',
+      invalidateKeys: [
+        ['roadmap-timeline', projectId],
+        ['roadmap-buckets-view', projectId],
+      ],
+      onSuccess: () => setPickerOpen(false),
+    },
+  );
 
-  // Month headers
-  const monthHeaders = useMemo(() => {
-    const months: { label: string; leftPct: number; widthPct: number }[] = [];
-    if (totalDays <= 0) return months;
+  function handleIssueClick(issue: TimelineIssue) {
+    navigate(`${basePath}/issues/${issue.number}`);
+  }
 
-    const cursor = new Date(timelineStart);
-    cursor.setDate(1);
-    if (cursor.getTime() < timelineStart.getTime()) {
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
+  function handleMoveToBucket(issueId: string, bucketId: string | null) {
+    moveToBucketMutation.mutate({ issueId, bucketId });
+  }
 
-    let prevPct = 0;
-    while (cursor.getTime() <= timelineEnd.getTime()) {
-      const pct = ((cursor.getTime() - timelineStart.getTime()) / (totalDays * 86400000)) * 100;
-      if (months.length > 0) {
-        months[months.length - 1].widthPct = pct - prevPct;
-      }
-      months.push({ label: formatMonth(cursor), leftPct: pct, widthPct: 0 });
-      prevPct = pct;
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
-    if (months.length > 0) {
-      months[months.length - 1].widthPct = 100 - prevPct;
-    }
+  const isLoading =
+    mode === 'timeline' ? timelineLoading : bucketsViewLoading || bucketsListLoading;
 
-    return months;
-  }, [timelineStart, timelineEnd, totalDays]);
-
-  // Today marker
-  const todayPct = useMemo(() => {
-    const now = new Date();
-    const pct = ((now.getTime() - timelineStart.getTime()) / (totalDays * 86400000)) * 100;
-    return pct >= 0 && pct <= 100 ? pct : null;
-  }, [timelineStart, totalDays]);
-
-  if (isLoading)
+  if (isLoading) {
     return (
-      <div className="">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <Skeleton className="h-7 w-48 mb-2" />
-            <Skeleton className="h-4 w-32" />
-          </div>
+      <div>
+        <div className="flex items-center justify-between mb-4 px-4">
+          <Skeleton className="h-7 w-48" />
           <div className="flex gap-2">
-            <Skeleton className="h-8 w-20 rounded-md" />
-            <Skeleton className="h-8 w-20 rounded-md" />
+            <Skeleton className="h-8 w-40 rounded-md" />
             <Skeleton className="h-8 w-28 rounded-md" />
           </div>
         </div>
-        <Card className="overflow-hidden">
-          <div className="flex border-b border-border bg-surface-secondary">
-            <Skeleton className="w-72 h-10 shrink-0" />
-            <Skeleton className="flex-1 h-10" />
-          </div>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex border-b border-border-light">
-              <div className="w-72 shrink-0 px-3 py-3">
-                <Skeleton className="h-4 w-48" />
-              </div>
-              <div className="flex-1 py-3 px-4">
-                <Skeleton
-                  className="h-6 rounded-full"
-                  style={{ width: `${40 + i * 12}%`, marginLeft: `${i * 8}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </Card>
-      </div>
-    );
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <AlertTriangle className="h-8 w-8 text-danger mx-auto mb-2" />
-          <p className="text-secondary">Failed to load roadmap</p>
+        <div className="px-4">
+          <Skeleton className="h-64 w-full rounded-lg" />
         </div>
       </div>
     );
   }
 
+  // Buckets mode: no buckets exist yet -- show setup prompt
+  const hasBuckets = (bucketsList?.length ?? 0) > 0;
+  const showBucketSetup = mode === 'buckets' && !hasBuckets;
+
   return (
-    <div className="">
-      <PageHeader title={`${currentProject?.name} Roadmap`} prefix={currentProject?.prefix}>
-        <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
-          <Button size="sm">
-            <Plus className="h-4 w-4" /> New Issue
-          </Button>
-        </Link>
-      </PageHeader>
-
-      {epics.length === 0 ? (
-        <EmptyState
-          title="No epics yet"
-          description="Create issues with type Epic to see them on the roadmap timeline."
-        />
-      ) : (
-        <Card className="overflow-hidden">
-          {/* Header */}
-          <div className="flex border-b border-border bg-surface-secondary">
-            <div className="w-72 shrink-0 px-3 py-2 text-xs font-semibold text-text-secondary uppercase border-r border-border-light flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" /> Epics
-            </div>
-            <div className="flex-1 relative overflow-hidden">
-              {/* Month headers */}
-              <div className="flex h-full">
-                {monthHeaders.map((m, i) => (
-                  <div
-                    key={i}
-                    className="text-[10px] text-text-tertiary font-medium px-2 py-2 border-r border-border-light/50 truncate"
-                    style={{ width: `${m.widthPct}%`, minWidth: 0 }}
-                  >
-                    {m.label}
-                  </div>
-                ))}
-              </div>
-            </div>
+    <div className="flex flex-col h-full">
+      {/* Toolbar */}
+      <div className="px-4">
+        <PageHeader title="Roadmap">
+          <div className="flex items-center gap-3">
+            <Tabs
+              tabs={MODE_TABS}
+              activeKey={mode}
+              onChange={(key) => setMode(key as Mode)}
+              className="border-b-0"
+            />
+            {mode === 'timeline' && <TimelineZoom value={zoom} onChange={setZoom} />}
+            <Button size="sm" onClick={() => setPickerOpen(true)}>
+              <Plus className="h-4 w-4" /> Add to Roadmap
+            </Button>
           </div>
+        </PageHeader>
+      </div>
 
-          {/* Timeline body */}
-          <div className="relative">
-            {/* Week grid lines */}
-            {weekMarkers.map((w, i) => {
-              const pct = ((w.getTime() - timelineStart.getTime()) / (totalDays * 86400000)) * 100;
-              return (
-                <div
-                  key={i}
-                  className="absolute top-0 bottom-0 border-l border-border-light/30 pointer-events-none z-0"
-                  style={{ left: `calc(288px + (100% - 288px) * ${pct / 100})` }}
-                />
-              );
-            })}
-
-            {/* Today line */}
-            {todayPct !== null && (
-              <div
-                className="absolute top-0 bottom-0 border-l-2 border-danger/50 pointer-events-none z-10"
-                style={{ left: `calc(288px + (100% - 288px) * ${todayPct / 100})` }}
-              >
-                <div className="absolute -top-0.5 -left-1.5 w-3 h-3 rounded-full bg-danger/50" />
-              </div>
-            )}
-
-            {/* Epic rows */}
-            {epics.map((epic) => (
-              <EpicBar
-                key={epic.id}
-                epic={epic}
-                timelineStart={timelineStart}
-                totalDays={totalDays}
-                org={org!}
-                teamSlug={teamSlug!}
-                projectSlug={projectSlug!}
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-4">
+        {mode === 'timeline' && (
+          <>
+            {timelineData && timelineData.issues.length > 0 ? (
+              <GanttChart
+                issues={timelineData.issues}
+                links={timelineData.links}
+                zoom={zoom}
+                projectPrefix={projectPrefix}
+                projectId={projectId}
+                onIssueClick={handleIssueClick}
               />
-            ))}
-          </div>
-        </Card>
+            ) : (
+              <EmptyState
+                icon={<Map />}
+                title="No issues on the timeline"
+                description="Add issues with start and due dates to see them on the timeline."
+                action={
+                  <Button size="sm" onClick={() => setPickerOpen(true)}>
+                    <Plus className="h-4 w-4" /> Add Issue
+                  </Button>
+                }
+              />
+            )}
+          </>
+        )}
+
+        {mode === 'buckets' && (
+          <>
+            {showBucketSetup ? (
+              <EmptyState
+                icon={<Columns3 />}
+                title="No buckets configured"
+                description="Create buckets to organize your roadmap. Start with the default Now / Next / Later setup."
+                action={
+                  <Button
+                    size="sm"
+                    onClick={() => createDefaultsMutation.mutate()}
+                    disabled={createDefaultsMutation.isPending}
+                  >
+                    <Sparkles className="h-4 w-4" /> Now / Next / Later
+                  </Button>
+                }
+              />
+            ) : bucketsViewData ? (
+              <BucketBoard
+                data={bucketsViewData}
+                projectPrefix={projectPrefix}
+                onMoveToBucket={handleMoveToBucket}
+                onIssueClick={handleIssueClick}
+              />
+            ) : null}
+          </>
+        )}
+      </div>
+
+      {/* Issue picker modal */}
+      {currentProject && (
+        <IssuePickerModal
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          projectId={projectId}
+          onSelect={(issueId) => addToRoadmapMutation.mutate(issueId)}
+          fetchIssues={async (pid, search) => {
+            const result = await issuesApi.list(pid, { q: search, limit: '20' });
+            return result.issues.map((i) => ({
+              id: i.id,
+              number: i.number,
+              title: i.title,
+              type: i.type,
+              priority: i.priority,
+            }));
+          }}
+        />
       )}
     </div>
   );

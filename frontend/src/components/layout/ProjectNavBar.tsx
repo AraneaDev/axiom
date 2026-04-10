@@ -6,6 +6,7 @@ import {
   Flag,
   BarChart3,
   Clock,
+  Inbox,
   Settings,
 } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router';
@@ -20,6 +21,7 @@ const NAV_TABS = [
   { key: 'milestones', label: 'Milestones', icon: <Flag className="h-4 w-4" /> },
   { key: 'analytics', label: 'Analytics', icon: <BarChart3 className="h-4 w-4" /> },
   { key: 'time-report', label: 'Time', icon: <Clock className="h-4 w-4" /> },
+  { key: 'intake', label: 'Intake', icon: <Inbox className="h-4 w-4" /> },
   { key: 'settings', label: 'Settings', icon: <Settings className="h-4 w-4" /> },
 ];
 

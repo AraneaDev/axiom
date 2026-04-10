@@ -30,6 +30,7 @@ const TeamMembers = lazy(() => import('@/pages/teams/TeamMembers'));
 const MemberProfile = lazy(() => import('@/pages/teams/MemberProfile'));
 const CreateProject = lazy(() => import('@/pages/projects/CreateProject'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
+const PublicForm = lazy(() => import('@/pages/forms/PublicForm'));
 
 function SuspenseLoader({ children }: { children: React.ReactNode }) {
   return (
@@ -48,6 +49,16 @@ function AppWithKeyboard() {
     <>
       <KeyboardShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
       <Routes>
+        {/* Public form route — no auth required */}
+        <Route
+          path="/f/:formSlug"
+          element={
+            <SuspenseLoader>
+              <PublicForm />
+            </SuspenseLoader>
+          }
+        />
+
         {/* Guest routes */}
         <Route element={<GuestGuard />}>
           <Route path="/login" element={<Login />} />

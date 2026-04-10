@@ -29,7 +29,10 @@ import codeOwnersRoutes from './modules/code-owners/code-owners.routes';
 import customFieldsDirectRoutes from './modules/custom-fields/custom-fields-direct.routes';
 import customFieldsRoutes from './modules/custom-fields/custom-fields.routes';
 import deploymentsRoutes from './modules/deployments/deployments.routes';
+import formRoutes from './modules/forms/forms.routes';
+import publicFormRoutes from './modules/forms/public-forms.routes';
 import healthRoutes from './modules/health/health.routes';
+import intakeRoutes from './modules/intake/intake.routes';
 import invitationsRoutes from './modules/invitations/invitations.routes';
 import issueTemplatesRoutes from './modules/issue-templates/issue-templates.routes';
 import issuesRoutes from './modules/issues/issues.routes';
@@ -46,6 +49,7 @@ import insightsRoutes from './modules/repos/insights.routes';
 import protectionRoutes from './modules/repos/protection.routes';
 import reposRoutes from './modules/repos/repos.routes';
 import webhooksRoutes from './modules/repos/webhooks.routes';
+import roadmapRoutes from './modules/roadmap/roadmap.routes';
 import connectRpcRoutes from './modules/runners/connect-rpc.routes';
 import { startRunnerHealthMonitor, stopRunnerHealthMonitor } from './modules/runners/runner-health';
 import runnersRoutes from './modules/runners/runners.routes';
@@ -111,6 +115,9 @@ app.use('/api', connectRpcRoutes);
 // CSRF protection: require X-Requested-With header on state-changing requests
 app.use('/api', csrfGuard);
 
+// Public form routes (no auth required)
+app.use('/api', publicFormRoutes);
+
 // Health check (public, no auth required)
 app.use('/api/health', healthRoutes);
 app.get('/health', (_req, res) => {
@@ -159,6 +166,9 @@ app.use('/api/saved-filters', savedFiltersRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/audit-logs', auditRoutes);
 app.use('/api', analyticsRoutes);
+app.use('/api/projects', formRoutes);
+app.use('/api/projects', intakeRoutes);
+app.use('/api/projects', roadmapRoutes);
 
 // Git Smart HTTP (must be before JSON body parser doesn't matter — has its own raw parser)
 app.use('/git', smartHttpRoutes);

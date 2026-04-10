@@ -22,7 +22,8 @@ export type RealtimeEvent =
       requestId: string;
       issueId: string;
       status: string;
-    };
+    }
+  | { type: 'form:submission:created'; projectId: string; submissionId: string; formId: string };
 
 /**
  * Client-to-server message types.

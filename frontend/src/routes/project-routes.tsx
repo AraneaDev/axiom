@@ -17,7 +17,10 @@ const TimeReport = lazy(() => import('@/pages/projects/TimeReport'));
 const CustomFieldSettings = lazy(() => import('@/pages/projects/CustomFieldSettings'));
 const WorkflowEditor = lazy(() => import('@/pages/projects/WorkflowEditor'));
 const ApprovalsSettings = lazy(() => import('@/pages/projects/ApprovalsSettings'));
+const FormsSettings = lazy(() => import('@/pages/projects/FormsSettings'));
+const FormBuilderPage = lazy(() => import('@/pages/projects/FormBuilderPage'));
 const AutomationRules = lazy(() => import('@/pages/projects/AutomationRules'));
+const IntakeQueue = lazy(() => import('@/pages/intake/IntakeQueue'));
 const LabelsSettings = lazy(() => import('@/pages/projects/LabelsSettings'));
 const IssueTemplates = lazy(() => import('@/pages/projects/IssueTemplates'));
 const Milestones = lazy(() => import('@/pages/projects/Milestones'));
@@ -158,6 +161,14 @@ export function projectRoutes() {
           }
         />
         <Route
+          path="intake"
+          element={
+            <ErrorBoundary>
+              <IntakeQueue />
+            </ErrorBoundary>
+          }
+        />
+        <Route
           path="settings"
           element={
             <ErrorBoundary>
@@ -172,6 +183,8 @@ export function projectRoutes() {
           <Route path="automation" element={<AutomationRules />} />
           <Route path="workflow" element={<WorkflowEditor />} />
           <Route path="approvals" element={<ApprovalsSettings />} />
+          <Route path="forms" element={<FormsSettings />} />
+          <Route path="forms/:formId" element={<FormBuilderPage />} />
         </Route>
       </Route>
 
