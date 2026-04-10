@@ -29,9 +29,10 @@ import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Sparkline } from '@/components/ui/charts';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton';
+import { StatCard } from '@/components/ui/StatCard';
 import { STABLE_STALE_TIME } from '@/lib/constants';
-import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -116,20 +117,15 @@ export default function Dashboard() {
 
   return (
     <PageLayout sidebar={activitySidebar}>
-      <div className="space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-text">
-              {greeting}, {user?.displayName?.split(' ')[0]}
-            </h1>
-            <p className="text-text-tertiary text-sm mt-1">{dateStr}</p>
-          </div>
+      <div className="flex flex-col gap-6">
+        <PageHeader title={`${greeting}, ${user?.displayName?.split(' ')[0]}`}>
+          <p className="text-text-tertiary text-sm">{dateStr}</p>
           <Link to="/orgs/new">
             <Button variant="outline" size="sm">
               <Plus className="h-3.5 w-3.5" /> New Organization
             </Button>
           </Link>
-        </div>
+        </PageHeader>
 
         {!orgs?.length ? (
           <OnboardingWizard />
@@ -144,8 +140,7 @@ export default function Dashboard() {
                       icon: ListChecks,
                       label: 'Open Issues',
                       value: dashboardData.assignedIssues?.length ?? 0,
-                      bg: 'bg-primary-light',
-                      fg: 'text-primary',
+                      variant: 'primary' as const,
                       color: 'var(--color-primary)',
                       trendKey: 'assignedIssues' as keyof DashboardTrends,
                     },
@@ -153,8 +148,7 @@ export default function Dashboard() {
                       icon: GitPullRequest,
                       label: 'Review Requests',
                       value: dashboardData.reviewRequests?.length ?? 0,
-                      bg: 'bg-accent-light',
-                      fg: 'text-accent',
+                      variant: 'default' as const,
                       color: 'var(--color-accent)',
                       trendKey: 'reviewRequests' as keyof DashboardTrends,
                     },
@@ -162,8 +156,7 @@ export default function Dashboard() {
                       icon: CalendarClock,
                       label: 'Due Soon',
                       value: dashboardData.upcomingDueDates?.length ?? 0,
-                      bg: 'bg-warning-light',
-                      fg: 'text-warning',
+                      variant: 'warning' as const,
                       color: 'var(--color-warning)',
                       trendKey: 'upcomingDueDates' as keyof DashboardTrends,
                     },
@@ -171,40 +164,20 @@ export default function Dashboard() {
                       icon: Activity,
                       label: 'Recent Events',
                       value: dashboardData.recentActivity?.length ?? 0,
-                      bg: 'bg-success-light',
-                      fg: 'text-success',
+                      variant: 'success' as const,
                       color: 'var(--color-success)',
                       trendKey: 'recentActivity' as keyof DashboardTrends,
                     },
                   ] as const
-                ).map(({ icon: StatIcon, label, value, bg, fg, color, trendKey }) => {
+                ).map(({ icon, label, value, variant, color, trendKey }) => {
                   const trend = dashboardData.trends?.[trendKey];
                   return (
-                    <div
-                      key={label}
-                      className="rounded-xl border border-border-light bg-surface-elevated p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-all duration-150"
-                    >
-                      <div
-                        className={cn(
-                          'h-10 w-10 rounded-xl flex items-center justify-center shrink-0',
-                          bg,
-                        )}
-                      >
-                        <StatIcon className={cn('h-[18px] w-[18px]', fg)} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-2xl font-[650] text-text leading-none">{value}</p>
-                        <p className="text-xs text-text-tertiary mt-1">{label}</p>
-                      </div>
+                    <div key={label} className="relative">
+                      <StatCard icon={icon} label={label} value={value} variant={variant} />
                       {trend && trend.length >= 2 && (
-                        <Sparkline
-                          data={trend}
-                          color={color}
-                          height={24}
-                          width={64}
-                          fill
-                          className="shrink-0"
-                        />
+                        <div className="absolute bottom-3 right-3">
+                          <Sparkline data={trend} color={color} height={24} width={64} fill />
+                        </div>
                       )}
                     </div>
                   );
@@ -222,7 +195,7 @@ export default function Dashboard() {
             {/* Sprint Health */}
             {teams && teams.length > 0 && firstOrg && (
               <div>
-                <h2 className="text-lg font-semibold text-text mb-3">Sprint Health</h2>
+                <h3 className="h3 mb-3">Sprint Health</h3>
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                   {teams.map((team) => (
                     <SprintHealthWidget
@@ -237,14 +210,14 @@ export default function Dashboard() {
             )}
 
             {/* Org cards */}
-            <div className="mt-4">
-              <h2 className="text-lg font-semibold text-text mb-3">Organizations</h2>
+            <div>
+              <h3 className="h3 mb-3">Organizations</h3>
               <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                 {orgs.map((org) => (
                   <Link
                     key={org.id}
                     to={`/${org.slug}`}
-                    className="group rounded-xl border border-border-light bg-surface-elevated overflow-hidden shadow-sm hover:shadow-md transition-all duration-150"
+                    className="group rounded-lg border border-border bg-surface-elevated overflow-hidden hover:shadow-md transition-all duration-150"
                   >
                     <div className="h-16 bg-primary-light flex items-end px-5 pb-3">
                       <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center shadow-sm -mb-5 ring-2 ring-surface">
@@ -277,7 +250,7 @@ export default function Dashboard() {
             {/* Teams overview */}
             {teams && teams.length > 0 && (
               <div>
-                <h2 className="text-lg font-semibold text-text mb-3">Teams</h2>
+                <h3 className="h3 mb-3">Teams</h3>
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                   {teams.map((team) => (
                     <TeamCard key={team.id} team={team} orgSlug={firstOrg!.slug} />
