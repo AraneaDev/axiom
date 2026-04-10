@@ -15,6 +15,7 @@ import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -292,197 +293,191 @@ export default function IssueDetail() {
     }
   }
 
+  const sidebarContent = (
+    <IssueDetailSidebar
+      issue={issue}
+      projectId={currentProject!.id}
+      num={num!}
+      org={org!}
+      teamSlug={teamSlug!}
+      projectSlug={projectSlug!}
+      teamMembers={teamDetail?.members}
+      sprints={sprints}
+      children={children}
+      progress={progress}
+      links={links}
+      repos={repos}
+      activities={activityData?.activities ?? []}
+      editingField={editingField}
+      onEditField={setEditingField}
+      onUpdate={(data) => updateMutation.mutate(data)}
+      isUpdating={updateMutation.isPending}
+    />
+  );
+
   return (
-    <div className="px-6 py-4">
-      <div className="flex flex-col lg:grid lg:grid-cols-[1fr_340px] gap-8">
-        {/* Main content */}
-        <div className="min-w-0">
-          <div className="flex items-start gap-3 mb-6">
-            <IssueTypeIcon type={issue.type} className="h-5 w-5 mt-1.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-              {titleDraftState.isEditing ? (
-                <div className="flex items-center gap-2">
-                  <Input
-                    ref={titleInputRef}
-                    value={titleDraftState.draft}
-                    onChange={(e) => titleDraftState.setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') saveTitle();
-                      if (e.key === 'Escape') titleDraftState.cancel();
-                    }}
-                    className="flex-1 text-2xl font-bold bg-transparent border-b-2 border-primary outline-none py-0.5"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={saveTitle}
-                    className="text-success"
-                    title="Save"
-                    aria-label="Save"
-                  >
-                    <Check className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={() => titleDraftState.cancel()}
-                    className="text-text-tertiary"
-                    title="Cancel"
-                    aria-label="Cancel"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <h1 className="text-2xl font-bold group cursor-pointer" onClick={startEditTitle}>
-                  {issue.title}
-                  <Pencil className="h-3.5 w-3.5 ml-2 inline opacity-0 group-hover:opacity-40 transition-opacity" />
-                </h1>
-              )}
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-sm text-text-tertiary">
-                  {issue.key} &middot; opened {formatRelative(issue.createdAt)} by{' '}
-                  {issue.creator?.displayName}
-                </p>
+    <PageLayout sidebar={sidebarContent} sidebarWidth="w-[340px] 2xl:w-[380px]">
+      <div>
+        <div className="flex items-start gap-3 mb-6">
+          <IssueTypeIcon type={issue.type} className="h-5 w-5 mt-1.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            {titleDraftState.isEditing ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={titleInputRef}
+                  value={titleDraftState.draft}
+                  onChange={(e) => titleDraftState.setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveTitle();
+                    if (e.key === 'Escape') titleDraftState.cancel();
+                  }}
+                  className="flex-1 text-2xl font-bold bg-transparent border-b-2 border-primary outline-none py-0.5"
+                />
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="xs"
-                  onClick={() => voteMutation.mutate()}
-                  className={cn(
-                    'ml-2 gap-1',
-                    voteData?.voted && 'border-primary bg-primary/10 text-primary',
-                  )}
-                  title={voteData?.voted ? 'Remove vote' : 'Vote for this issue'}
+                  onClick={saveTitle}
+                  className="text-success"
+                  title="Save"
+                  aria-label="Save"
                 >
-                  <ArrowUp className="h-3.5 w-3.5" />
-                  {voteData?.count ?? 0}
+                  <Check className="h-4 w-4" />
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="xs"
-                  onClick={() => watchMutation.mutate()}
-                  className={cn(
-                    'gap-1',
-                    watcherData?.watching && 'border-primary bg-primary/10 text-primary',
-                  )}
-                  title={watcherData?.watching ? 'Stop watching this issue' : 'Watch this issue'}
+                  onClick={() => titleDraftState.cancel()}
+                  className="text-text-tertiary"
+                  title="Cancel"
+                  aria-label="Cancel"
                 >
-                  {watcherData?.watching ? (
-                    <EyeOff className="h-3.5 w-3.5" />
-                  ) : (
-                    <Eye className="h-3.5 w-3.5" />
-                  )}
-                  {watcherData?.watchers?.length ?? 0}
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <h1 className="text-2xl font-bold group cursor-pointer" onClick={startEditTitle}>
+                {issue.title}
+                <Pencil className="h-3.5 w-3.5 ml-2 inline opacity-0 group-hover:opacity-40 transition-opacity" />
+              </h1>
+            )}
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-sm text-text-tertiary">
+                {issue.key} &middot; opened {formatRelative(issue.createdAt)} by{' '}
+                {issue.creator?.displayName}
+              </p>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => voteMutation.mutate()}
+                className={cn(
+                  'ml-2 gap-1',
+                  voteData?.voted && 'border-primary bg-primary/10 text-primary',
+                )}
+                title={voteData?.voted ? 'Remove vote' : 'Vote for this issue'}
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+                {voteData?.count ?? 0}
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => watchMutation.mutate()}
+                className={cn(
+                  'gap-1',
+                  watcherData?.watching && 'border-primary bg-primary/10 text-primary',
+                )}
+                title={watcherData?.watching ? 'Stop watching this issue' : 'Watch this issue'}
+              >
+                {watcherData?.watching ? (
+                  <EyeOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+                {watcherData?.watchers?.length ?? 0}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        <Card className="p-5 mb-8">
+          {bodyDraftState.isEditing ? (
+            <div className="space-y-2">
+              <MarkdownEditor
+                value={bodyDraftState.draft}
+                onChange={bodyDraftState.setDraft}
+                projectId={currentProject?.id}
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    updateMutation.mutate({ body: bodyDraftState.draft });
+                    bodyDraftState.reset();
+                  }}
+                >
+                  <Check className="h-4 w-4" /> Save
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => bodyDraftState.cancel()}>
+                  <X className="h-4 w-4" /> Cancel
                 </Button>
               </div>
             </div>
-          </div>
-
-          {/* Body */}
-          <Card className="p-5 mb-8">
-            {bodyDraftState.isEditing ? (
-              <div className="space-y-2">
-                <MarkdownEditor
-                  value={bodyDraftState.draft}
-                  onChange={bodyDraftState.setDraft}
-                  projectId={currentProject?.id}
+          ) : (
+            <div className="group relative">
+              {issue.body ? (
+                <MarkdownRenderer
+                  content={issue.body}
+                  basePath={`/${org}/${teamSlug}/${projectSlug}`}
                 />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      updateMutation.mutate({ body: bodyDraftState.draft });
-                      bodyDraftState.reset();
-                    }}
-                  >
-                    <Check className="h-4 w-4" /> Save
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => bodyDraftState.cancel()}>
-                    <X className="h-4 w-4" /> Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="group relative">
-                {issue.body ? (
-                  <MarkdownRenderer
-                    content={issue.body}
-                    basePath={`/${org}/${teamSlug}/${projectSlug}`}
-                  />
-                ) : (
-                  <p className="text-text-tertiary italic text-sm">No description provided.</p>
-                )}
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  className="opacity-0 group-hover:opacity-100 absolute top-0 right-0 transition-opacity"
-                  title="Edit description"
-                  onClick={() => bodyDraftState.startEditing(issue.body ?? '')}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            )}
-          </Card>
+              ) : (
+                <p className="text-text-tertiary italic text-sm">No description provided.</p>
+              )}
+              <Button
+                size="xs"
+                variant="ghost"
+                className="opacity-0 group-hover:opacity-100 absolute top-0 right-0 transition-opacity"
+                title="Edit description"
+                onClick={() => bodyDraftState.startEditing(issue.body ?? '')}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </Card>
 
-          {/* Attachments */}
-          <div className="mb-8">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
-              <Paperclip className="h-3.5 w-3.5" />
-              Attachments
-              {attachments.length > 0 && <Badge size="sm">{attachments.length}</Badge>}
-            </h2>
-            <AttachmentList
-              attachments={attachments}
-              currentUserId={user?.id}
-              onDelete={(id) => deleteAttachmentMutation.mutate(id)}
-            />
-            <FileUpload
-              className="mt-3"
-              uploadFn={(file) => attachmentsApi.upload(file, { issueId: issue.id })}
-              onUpload={() =>
-                queryClient.invalidateQueries({ queryKey: ['attachments', issue.id] })
-              }
-            />
-          </div>
-
-          {/* Comments and activity */}
-          <IssueDetailComments
-            issue={issue}
-            projectId={currentProject!.id}
-            num={num!}
-            commentBody={commentBody}
-            onCommentBodyChange={setCommentBody}
-            onCommentReset={resetComment}
-            basePath={`/${org}/${teamSlug}/${projectSlug}`}
-            orgSlug={org}
-            teamSlug={teamSlug}
+        {/* Attachments */}
+        <div className="mb-8">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary mb-3 flex items-center gap-2">
+            <Paperclip className="h-3.5 w-3.5" />
+            Attachments
+            {attachments.length > 0 && <Badge size="sm">{attachments.length}</Badge>}
+          </h2>
+          <AttachmentList
+            attachments={attachments}
+            currentUserId={user?.id}
+            onDelete={(id) => deleteAttachmentMutation.mutate(id)}
+          />
+          <FileUpload
+            className="mt-3"
+            uploadFn={(file) => attachmentsApi.upload(file, { issueId: issue.id })}
+            onUpload={() => queryClient.invalidateQueries({ queryKey: ['attachments', issue.id] })}
           />
         </div>
 
-        {/* Sidebar */}
-        <div className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-          <IssueDetailSidebar
-            issue={issue}
-            projectId={currentProject!.id}
-            num={num!}
-            org={org!}
-            teamSlug={teamSlug!}
-            projectSlug={projectSlug!}
-            teamMembers={teamDetail?.members}
-            sprints={sprints}
-            children={children}
-            progress={progress}
-            links={links}
-            repos={repos}
-            activities={activityData?.activities ?? []}
-            editingField={editingField}
-            onEditField={setEditingField}
-            onUpdate={(data) => updateMutation.mutate(data)}
-            isUpdating={updateMutation.isPending}
-          />
-        </div>
+        {/* Comments and activity */}
+        <IssueDetailComments
+          issue={issue}
+          projectId={currentProject!.id}
+          num={num!}
+          commentBody={commentBody}
+          onCommentBodyChange={setCommentBody}
+          onCommentReset={resetComment}
+          basePath={`/${org}/${teamSlug}/${projectSlug}`}
+          orgSlug={org}
+          teamSlug={teamSlug}
+        />
       </div>
-    </div>
+    </PageLayout>
   );
 }
