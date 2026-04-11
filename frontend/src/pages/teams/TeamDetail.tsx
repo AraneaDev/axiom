@@ -15,6 +15,10 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { TeamActivityCard } from './TeamActivityCard';
+import { TeamProjectsSection } from './TeamProjectsSection';
+import { TeamReposSection } from './TeamReposSection';
+
 import { projectsApi } from '@/api/projects.api';
 import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
@@ -27,24 +31,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useTeamContext } from '@/hooks/useTeamContext';
-import { cn, formatRelative } from '@/lib/utils';
-
-const ACTION_LABELS: Record<string, string> = {
-  created: 'created',
-  updated: 'updated',
-  status_changed: 'changed status of',
-  assigned: 'assigned',
-  unassigned: 'unassigned',
-  commented: 'commented on',
-  merged: 'merged',
-  closed: 'closed',
-  labeled: 'labeled',
-  priority_changed: 'changed priority of',
-  type_changed: 'changed type of',
-  review_submitted: 'reviewed',
-  deleted: 'deleted',
-  time_logged: 'logged time on',
-};
+import { formatRelative } from '@/lib/utils';
 
 /**
  *
@@ -133,61 +120,8 @@ export default function TeamDetail() {
       <div className="flex flex-col lg:grid lg:grid-cols-[1fr_340px] gap-8">
         {/* Main content */}
         <div className="flex flex-col gap-6">
-          {/* Projects - full width, prominent cards */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <FolderKanban className="h-5 w-5 text-primary" />
-                <h2 className="h3">Projects</h2>
-              </div>
-              <Link to={`/${org}/${teamSlug}/projects/new`}>
-                <Button variant="ghost" size="sm">
-                  <Plus className="h-4 w-4" /> New Project
-                </Button>
-              </Link>
-            </div>
-            {!projects?.length ? (
-              <EmptyState
-                icon={<FolderKanban className="h-10 w-10" />}
-                title="No projects yet"
-                description="Create a project to start tracking issues."
-              />
-            ) : (
-              <div className="space-y-2">
-                {projects.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/${org}/${teamSlug}/${p.slug}/board`}
-                    className="group bg-surface flex items-center gap-4 rounded-lg border border-border p-4 hover:border-primary/50 hover:shadow-sm transition-all"
-                  >
-                    <div className="h-10 w-10 rounded-lg bg-primary-light flex items-center justify-center shrink-0">
-                      <FolderKanban className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-semibold text-text">{p.name}</span>
-                        <Badge variant="outline" size="sm">
-                          {p.prefix}
-                        </Badge>
-                      </div>
-                      {p.description && (
-                        <p className="text-sm text-text-secondary line-clamp-1">{p.description}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-text">{p._count?.issues ?? 0}</p>
-                        <p className="text-[10px] text-text-tertiary uppercase tracking-wide">
-                          Issues
-                        </p>
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
+          {/* Projects */}
+          <TeamProjectsSection projects={projects} orgSlug={org} teamSlug={teamSlug} />
 
           {/* Wiki Spaces */}
           {(spaces?.length ?? 0) > 0 ? (
@@ -294,59 +228,8 @@ export default function TeamDetail() {
             </section>
           )}
 
-          {/* Repositories - full width list */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <GitBranch className="h-5 w-5 text-primary" />
-                <h2 className="h3">Repositories</h2>
-              </div>
-              <Link to={`/${org}/${teamSlug}/repos/new`}>
-                <Button variant="ghost" size="sm">
-                  <Plus className="h-4 w-4" /> New Repo
-                </Button>
-              </Link>
-            </div>
-            {!repos?.length ? (
-              <EmptyState
-                icon={<GitBranch className="h-10 w-10" />}
-                title="No repositories yet"
-                description="Create a repository to start hosting code."
-              />
-            ) : (
-              <div className="space-y-2">
-                {repos.map((r) => (
-                  <Link
-                    key={r.id}
-                    to={`/${org}/${teamSlug}/repos/${r.slug}`}
-                    className="group bg-surface flex items-center gap-3 rounded-lg border border-border px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
-                  >
-                    <GitBranch className="h-4 w-4 text-text-secondary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <span className="font-medium text-text">{r.name}</span>
-                      {r.description && (
-                        <p className="text-xs text-text-tertiary line-clamp-1 mt-0.5">
-                          {r.description}
-                        </p>
-                      )}
-                    </div>
-                    <Badge
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        r.visibility === 'PUBLIC' && 'text-success border-success/30',
-                        r.visibility === 'PRIVATE' && 'text-text-tertiary',
-                      )}
-                    >
-                      {r.visibility.toLowerCase()}
-                    </Badge>
-                    <span className="text-xs text-text-tertiary">{r.defaultBranch}</span>
-                    <ArrowRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
+          {/* Repositories */}
+          <TeamReposSection repos={repos} orgSlug={org} teamSlug={teamSlug} />
         </div>
 
         {/* Sidebar: Members + Activity (sticky, like issue detail) */}
@@ -442,77 +325,7 @@ export default function TeamDetail() {
           )}
 
           {/* Recent Activity */}
-          <Card className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-                Recent Activity
-              </h3>
-              {activity && activity.length > 0 && (
-                <Badge variant="default" size="sm">
-                  {activity.length}
-                </Badge>
-              )}
-            </div>
-            {!activity?.length ? (
-              <p className="text-sm text-text-tertiary py-3">No recent activity.</p>
-            ) : (
-              <div className="space-y-0 divide-y divide-border-light">
-                {activity.slice(0, 5).map((a) => {
-                  const actionLabel = ACTION_LABELS[a.action] ?? a.action;
-
-                  const resourceContent = a.resourceTitle ? (
-                    <>
-                      {a.resourceKey && (
-                        <span className="font-mono text-xs text-text-secondary">
-                          {a.resourceKey}
-                        </span>
-                      )}{' '}
-                      <span className="text-text">{a.resourceTitle}</span>
-                    </>
-                  ) : (
-                    <span className="text-text-secondary">
-                      {a.resourceType?.replace(/_/g, ' ').toLowerCase()}
-                    </span>
-                  );
-
-                  return (
-                    <div
-                      key={a.id}
-                      className="flex items-start gap-2.5 py-2.5 first:pt-0 last:pb-0"
-                    >
-                      <Avatar
-                        name={a.user.displayName}
-                        src={a.user.avatarUrl ?? undefined}
-                        size="sm"
-                        className="mt-0.5 shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm leading-snug">
-                          <Link
-                            to={`/${org}/${teamSlug}/members/${a.user.username}`}
-                            className="font-medium text-text hover:text-primary transition-colors"
-                          >
-                            {a.user.displayName}
-                          </Link>{' '}
-                          <span className="text-text-secondary">{actionLabel}</span>{' '}
-                          {a.resourceLink ? (
-                            <Link to={a.resourceLink} className="text-primary hover:underline">
-                              {resourceContent}
-                            </Link>
-                          ) : (
-                            resourceContent
-                          )}
-                        </p>
-                        <span className="text-xs text-text-tertiary flex items-center gap-1 mt-0.5">
-                          <Clock className="h-3 w-3" /> {formatRelative(a.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
+          <TeamActivityCard activity={activity} orgSlug={org} teamSlug={teamSlug} />
         </div>
       </div>
     </div>
