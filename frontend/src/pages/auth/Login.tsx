@@ -133,7 +133,13 @@ export default function Login() {
               />
             )}
 
-            <Button type="submit" disabled={loading} className="w-full mt-2" size="lg">
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full mt-2"
+              size="lg"
+              aria-label={loading ? 'Signing in' : undefined}
+            >
               {loading ? (
                 <Spinner size="sm" />
               ) : needs2FA ? (

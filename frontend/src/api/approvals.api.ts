@@ -78,11 +78,11 @@ export const approvalsApi = {
 
   // Voting
   castVote: (requestId: string, data: { decision: 'APPROVED' | 'REJECTED'; comment?: string }) =>
-    post<ApprovalVote>(`/approval-requests/${requestId}/votes`, data),
+    post<ApprovalVote>(`/approval-requests/${requestId}/vote`, data),
 
   cancelRequest: (requestId: string) =>
-    patch<ApprovalRequest>(`/approval-requests/${requestId}/cancel`, {}),
+    post<ApprovalRequest>(`/approval-requests/${requestId}/cancel`, {}),
 
   // My approvals
-  myPendingApprovals: () => get<ApprovalRequest[]>('/approval-requests/my-pending'),
+  myPendingApprovals: () => get<ApprovalRequest[]>('/users/me/pending-approvals'),
 };
