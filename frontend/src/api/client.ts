@@ -133,6 +133,60 @@ export async function fetchWithAuth(url: string, init?: RequestInit): Promise<Re
   });
 }
 
+/**
+ * Send a FormData request with auth, auto-refresh, and error handling.
+ * Use for file uploads where Content-Type must be set by the browser.
+ * @param path
+ * @param formData
+ * @param method
+ */
+export async function apiFormData<T = unknown>(
+  path: string,
+  formData: FormData,
+  method = 'POST',
+): Promise<T> {
+  const headers: Record<string, string> = {
+    'X-Requested-With': 'XMLHttpRequest',
+  };
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  let res = await fetch(`${API_BASE}${path}`, { method, headers, body: formData });
+
+  if (res.status === 401 && refreshToken) {
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    try {
+      await refreshPromise;
+    } catch {
+      window.location.href = '/login';
+      throw new ApiError(401, 'Session expired');
+    }
+
+    headers['Authorization'] = `Bearer ${accessToken}`;
+    res = await fetch(`${API_BASE}${path}`, { method, headers, body: formData });
+  }
+
+  if (res.status === 401 && !refreshToken) {
+    clearTokens();
+    window.location.href = '/login';
+    throw new ApiError(401, 'Session expired');
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.error?.message ?? 'Request failed', body.error?.code);
+  }
+
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
 // Convenience methods
 export const get = <T = unknown>(path: string) => api<T>(path);
 export const post = <T = unknown>(path: string, body: unknown) =>
