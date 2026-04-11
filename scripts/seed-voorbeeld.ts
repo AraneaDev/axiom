@@ -43,7 +43,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 1. Users
   // ────────────────────────────────────────────────────────────
-  console.warn('  [1/12] Users');
+  console.warn('  [1/23] Users');
   const passwordHash = await bcrypt.hash('password123', 12);
 
   // Tim Schipper already exists from seed-demo.ts -- look him up
@@ -77,7 +77,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 2. Organization + memberships
   // ────────────────────────────────────────────────────────────
-  console.warn('  [2/12] Organization');
+  console.warn('  [2/23] Organization');
   const org = await prisma.organization.upsert({
     where: { slug: 'voorbeeld' },
     update: {},
@@ -112,7 +112,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 3. Teams + memberships
   // ────────────────────────────────────────────────────────────
-  console.warn('  [3/12] Teams');
+  console.warn('  [3/23] Teams');
 
   const teamDefs = [
     { name: 'Team Noord', slug: 'team-noord', description: 'Team Noord applicaties en integraties' },
@@ -151,7 +151,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 4. Projects + board columns + labels
   // ────────────────────────────────────────────────────────────
-  console.warn('  [4/12] Projects');
+  console.warn('  [4/23] Projects');
 
   const columnDefs = [
     { name: 'Backlog', position: 0, isDefault: true, isDone: false },
@@ -251,17 +251,30 @@ async function main() {
   }
 
   // ────────────────────────────────────────────────────────────
-  // 5. Milestones
+  // 5. Milestones (16 milestones across all 8 projects)
   // ────────────────────────────────────────────────────────────
-  console.warn('  [5/12] Milestones');
+  console.warn('  [5/23] Milestones');
 
   const milestoneDefs = [
-    { projectSlug: 'partnerportaal', title: 'Q2 2026 Release', dueDate: new Date('2026-06-30') },
-    { projectSlug: 'klantportaal', title: 'Klantportaal v2.0', dueDate: new Date('2026-05-31') },
-    { projectSlug: 'ai-assistent', title: 'AI Platform MVP', dueDate: new Date('2026-07-31') },
+    { projectSlug: 'partnerportaal', title: 'Q2 2026 Release', dueDate: new Date('2026-06-30'), description: 'SSO-integratie en performance verbeteringen' },
+    { projectSlug: 'partnerportaal', title: 'Q3 2026 Release', dueDate: new Date('2026-09-30'), description: 'Partner self-service uitbreidingen' },
+    { projectSlug: 'commissie-engine', title: 'Real-time Commissie v1', dueDate: new Date('2026-06-15'), description: 'Automatische real-time commissieberekeningen' },
+    { projectSlug: 'commissie-engine', title: 'Commissie Rapportage v2', dueDate: new Date('2026-08-31'), description: 'Uitgebreide rapportage en inzichten' },
+    { projectSlug: 'dealregistratie', title: 'Pipeline Dashboard v1', dueDate: new Date('2026-05-31'), description: 'Visueel dashboard en notificaties' },
+    { projectSlug: 'dealregistratie', title: 'Duplicaatdetectie Release', dueDate: new Date('2026-07-31'), description: 'Automatische dubbele deals herkenning' },
+    { projectSlug: 'klantportaal', title: 'Klantportaal v2.0', dueDate: new Date('2026-05-31'), description: 'Nieuwe huisstijl en toegankelijkheid' },
+    { projectSlug: 'klantportaal', title: 'WCAG 2.1 AA Certificering', dueDate: new Date('2026-08-15'), description: 'Volledige toegankelijkheidscertificering' },
+    { projectSlug: 'offertetool', title: 'PDF Export v1', dueDate: new Date('2026-05-15'), description: 'PDF-export met bedrijfstemplate' },
+    { projectSlug: 'offertetool', title: 'Workflow Digitalisering', dueDate: new Date('2026-09-30'), description: 'Digitale goedkeuringsworkflow' },
+    { projectSlug: 'orderverwerking', title: 'Batch Processing v1', dueDate: new Date('2026-05-31'), description: 'EDI batch verwerking en foutafhandeling' },
+    { projectSlug: 'orderverwerking', title: 'Monitoring & Alerting', dueDate: new Date('2026-08-31'), description: 'Real-time monitoring dashboard' },
+    { projectSlug: 'ai-assistent', title: 'AI Platform MVP', dueDate: new Date('2026-07-31'), description: 'RAG-pipeline en kennisbank integratie' },
+    { projectSlug: 'ai-assistent', title: 'AI Platform v1.1', dueDate: new Date('2026-10-31'), description: 'Context optimalisatie en kostenbeheersing' },
+    { projectSlug: 'documentherkenning', title: 'Azure DI Migratie', dueDate: new Date('2026-06-30'), description: 'Migratie naar Azure Document Intelligence' },
+    { projectSlug: 'documentherkenning', title: 'HTR Model v1', dueDate: new Date('2026-09-30'), description: 'Handgeschreven tekst herkenning productie' },
   ];
 
-  const milestones: Record<string, { id: string }> = {};
+  const milestones: Record<string, { id: string }[]> = {};
   for (const md of milestoneDefs) {
     const ms = await prisma.milestone.upsert({
       where: { projectId_title: { projectId: projects[md.projectSlug].id, title: md.title } },
@@ -269,18 +282,20 @@ async function main() {
       create: {
         projectId: projects[md.projectSlug].id,
         title: md.title,
+        description: md.description,
         dueDate: md.dueDate,
         status: 'OPEN',
       },
     });
-    milestones[md.projectSlug] = ms;
+    if (!milestones[md.projectSlug]) milestones[md.projectSlug] = [];
+    milestones[md.projectSlug].push(ms);
     console.warn(`        ${md.title} (${md.projectSlug})`);
   }
 
   // ────────────────────────────────────────────────────────────
   // 6. Sprints
   // ────────────────────────────────────────────────────────────
-  console.warn('  [6/12] Sprints');
+  console.warn('  [6/23] Sprints');
 
   const sprintStart = daysAgo(8);
   const sprintEnd = futureDate(6);
@@ -323,7 +338,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 7. Issues - Epics (complex change requests)
   // ────────────────────────────────────────────────────────────
-  console.warn('  [7/12] Epics');
+  console.warn('  [7/23] Epics');
 
   type EpicSeed = {
     projectSlug: string;
@@ -332,6 +347,8 @@ async function main() {
     priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
     creator: string;
     status: string; // Epic workflow status (stored in body/title convention, column = Backlog)
+    startDate?: Date;
+    dueDate?: Date;
   };
 
   const epicDefs: EpicSeed[] = [
@@ -342,6 +359,8 @@ async function main() {
       priority: 'HIGH',
       creator: 'erik',
       status: 'Goedgekeurd',
+      startDate: daysAgo(21),
+      dueDate: futureDate(42),
     },
     {
       projectSlug: 'commissie-engine',
@@ -350,6 +369,8 @@ async function main() {
       priority: 'MEDIUM',
       creator: 'sanne',
       status: 'Ingediend',
+      startDate: daysAgo(7),
+      dueDate: futureDate(56),
     },
     {
       projectSlug: 'klantportaal',
@@ -358,6 +379,8 @@ async function main() {
       priority: 'HIGH',
       creator: 'erik',
       status: 'Goedgekeurd',
+      startDate: daysAgo(28),
+      dueDate: futureDate(35),
     },
     {
       projectSlug: 'offertetool',
@@ -366,6 +389,8 @@ async function main() {
       priority: 'MEDIUM',
       creator: 'fenna',
       status: 'Ingediend',
+      startDate: futureDate(7),
+      dueDate: futureDate(63),
     },
     {
       projectSlug: 'ai-assistent',
@@ -374,6 +399,8 @@ async function main() {
       priority: 'HIGH',
       creator: 'erik',
       status: 'Goedgekeurd',
+      startDate: daysAgo(14),
+      dueDate: futureDate(49),
     },
     {
       projectSlug: 'documentherkenning',
@@ -382,6 +409,8 @@ async function main() {
       priority: 'MEDIUM',
       creator: 'thijs',
       status: 'Ingediend',
+      startDate: futureDate(14),
+      dueDate: futureDate(70),
     },
   ];
 
@@ -394,6 +423,11 @@ async function main() {
     });
 
     if (existingEpic) {
+      // Update dates on existing epics
+      await prisma.issue.update({
+        where: { id: existingEpic.id },
+        data: { startDate: epic.startDate ?? null, dueDate: epic.dueDate ?? null },
+      });
       epicIssues[epic.title] = { id: existingEpic.id, projectSlug: epic.projectSlug };
       continue;
     }
@@ -416,6 +450,8 @@ async function main() {
         columnId: projectColumns[epic.projectSlug]['Backlog'],
         creatorId: users[epic.creator].id,
         position: 0,
+        startDate: epic.startDate ?? null,
+        dueDate: epic.dueDate ?? null,
       },
     });
     epicIssues[epic.title] = { id: created.id, projectSlug: epic.projectSlug };
@@ -425,7 +461,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 8. Issues - Stories, Tasks, Bugs
   // ────────────────────────────────────────────────────────────
-  console.warn('  [8/12] Issues');
+  console.warn('  [8/23] Issues');
 
   type IssueSeed = {
     projectSlug: string;
@@ -545,7 +581,7 @@ async function main() {
     // Resolve milestone
     let milestoneId: string | undefined;
     if (issue.milestoneSlug && milestones[issue.milestoneSlug]) {
-      milestoneId = milestones[issue.milestoneSlug].id;
+      milestoneId = milestones[issue.milestoneSlug]?.[0]?.id;
     }
 
     const labelIds = (issue.labels ?? [])
@@ -617,9 +653,146 @@ async function main() {
   console.warn('        Sprint assignments done');
 
   // ────────────────────────────────────────────────────────────
-  // 9. Time entries (deterministic daily spread over 14 workdays)
+  // 9. Issue dates for roadmap
   // ────────────────────────────────────────────────────────────
-  console.warn('  [9/12] Time entries');
+  console.warn('  [9/23] Issue dates');
+  console.warn('        Setting issue dates for roadmap...');
+  let dateIdx = 0;
+  for (const issue of createdIssues) {
+    if (!issue.inSprint) continue;
+    const offset = (dateIdx * 3) % 14;
+    const start = daysAgo(8 - offset);
+    const duration = 3 + (issue.title.length % 7);
+    const end = new Date(start.getTime() + duration * 86_400_000);
+    await prisma.issue.update({
+      where: { id: issue.id },
+      data: { startDate: start, dueDate: end },
+    });
+    dateIdx++;
+  }
+  console.warn(`        ${dateIdx} issues dated`);
+
+  // ────────────────────────────────────────────────────────────
+  // 10. Roadmap buckets
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [10/23] Roadmap buckets');
+
+  const bucketDefs = [
+    { name: 'Now', position: 0, color: 'var(--color-success)' },
+    { name: 'Next', position: 1, color: 'var(--color-warning)' },
+    { name: 'Later', position: 2, color: 'var(--color-text-tertiary)' },
+  ];
+
+  const projectBuckets: Record<string, Record<string, string>> = {};
+
+  for (const slug of Object.keys(projects)) {
+    projectBuckets[slug] = {};
+    for (const bd of bucketDefs) {
+      const existing = await prisma.roadmapBucket.findFirst({
+        where: { projectId: projects[slug].id, name: bd.name },
+      });
+      if (existing) {
+        projectBuckets[slug][bd.name] = existing.id;
+      } else {
+        const bucket = await prisma.roadmapBucket.create({
+          data: {
+            projectId: projects[slug].id,
+            name: bd.name,
+            position: bd.position,
+            color: bd.color,
+          },
+        });
+        projectBuckets[slug][bd.name] = bucket.id;
+      }
+    }
+  }
+
+  // Assign issues to buckets based on column
+  const nowColumns = ['In Ontwikkeling', 'Code Review', 'Testen'];
+  const nextColumns = ['Te Doen'];
+  for (const issue of createdIssues) {
+    let bucketName: string | null = null;
+    if (nowColumns.includes(issue.column ?? '')) {
+      bucketName = 'Now';
+    } else if (nextColumns.includes(issue.column ?? '')) {
+      bucketName = 'Next';
+    } else if (issue.column === 'Backlog' && issue.assignee) {
+      bucketName = 'Later';
+    }
+    if (bucketName && projectBuckets[issue.projectSlug]?.[bucketName]) {
+      await prisma.issue.update({
+        where: { id: issue.id },
+        data: { roadmapBucketId: projectBuckets[issue.projectSlug][bucketName] },
+      });
+    }
+  }
+  console.warn(`        ${Object.keys(projects).length * 3} buckets created`);
+
+  // ────────────────────────────────────────────────────────────
+  // 11. Issue links (dependencies)
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [11/23] Issue links');
+
+  // Helper to find issue by title + project slug
+  async function findIssue(projectSlug: string, title: string) {
+    return prisma.issue.findFirst({
+      where: { projectId: projects[projectSlug].id, title },
+      select: { id: true },
+    });
+  }
+
+  const blocksDefs: { fromSlug: string; fromTitle: string; toSlug: string; toTitle: string }[] = [
+    // Within projects
+    { fromSlug: 'partnerportaal', fromTitle: 'SAML-authenticatie provider implementeren', toSlug: 'partnerportaal', toTitle: 'Automatische gebruikersprovisioning' },
+    { fromSlug: 'partnerportaal', fromTitle: 'Automatische gebruikersprovisioning', toSlug: 'partnerportaal', toTitle: 'SSO login pagina redesign' },
+    { fromSlug: 'klantportaal', fromTitle: 'Design tokens implementeren voor nieuwe huisstijl', toSlug: 'klantportaal', toTitle: 'Navigatie component refactoring' },
+    { fromSlug: 'klantportaal', fromTitle: 'Navigatie component refactoring', toSlug: 'klantportaal', toTitle: 'Toegankelijkheidsaudit uitvoeren' },
+    { fromSlug: 'ai-assistent', fromTitle: 'Document ingestion pipeline opzetten', toSlug: 'ai-assistent', toTitle: 'Vector store integratie met Qdrant' },
+    { fromSlug: 'ai-assistent', fromTitle: 'Vector store integratie met Qdrant', toSlug: 'ai-assistent', toTitle: 'Context window optimalisatie' },
+    { fromSlug: 'offertetool', fromTitle: 'Offerte template systeem', toSlug: 'offertetool', toTitle: 'Offerte versiegeschiedenis' },
+    { fromSlug: 'orderverwerking', fromTitle: 'Batch verwerking van orders', toSlug: 'orderverwerking', toTitle: 'Monitoring dashboard voor orderflow' },
+    // Cross-project
+    { fromSlug: 'orderverwerking', fromTitle: 'Order status webhook naar klantportaal', toSlug: 'klantportaal', toTitle: 'Sessie timeout melding toevoegen' },
+    { fromSlug: 'documentherkenning', fromTitle: 'OCR-pipeline migreren naar Azure Document Intelligence', toSlug: 'ai-assistent', toTitle: 'Document ingestion pipeline opzetten' },
+  ];
+
+  let linkCount = 0;
+  for (const ld of blocksDefs) {
+    const fromIssue = await findIssue(ld.fromSlug, ld.fromTitle);
+    const toIssue = await findIssue(ld.toSlug, ld.toTitle);
+    if (!fromIssue || !toIssue) continue;
+
+    const existing = await prisma.issueLink.findUnique({
+      where: { fromId_toId_type: { fromId: fromIssue.id, toId: toIssue.id, type: 'BLOCKS' } },
+    });
+    if (!existing) {
+      await prisma.issueLink.create({
+        data: { fromId: fromIssue.id, toId: toIssue.id, type: 'BLOCKS' },
+      });
+      linkCount++;
+    }
+  }
+
+  // RELATES_TO link
+  const relFrom = await findIssue('commissie-engine', 'Commissierapport per partner genereren');
+  const relTo = await findIssue('partnerportaal', 'Partnerdashboard laadt traag bij veel orders');
+  if (relFrom && relTo) {
+    const existingRel = await prisma.issueLink.findUnique({
+      where: { fromId_toId_type: { fromId: relFrom.id, toId: relTo.id, type: 'RELATES_TO' } },
+    });
+    if (!existingRel) {
+      await prisma.issueLink.create({
+        data: { fromId: relFrom.id, toId: relTo.id, type: 'RELATES_TO' },
+      });
+      linkCount++;
+    }
+  }
+  console.warn(`        ${linkCount} issue links created`);
+
+  // ────────────────────────────────────────────────────────────
+  // 12. Time entries (deterministic daily spread over 14 workdays)
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [12/23] Time entries');
 
   const activeColumns = ['In Ontwikkeling', 'Code Review', 'Testen', 'Gereed'];
   const timeDescriptions = ['Implementatie', 'Code review', 'Onderzoek', 'Testing', 'Documentatie'];
@@ -743,9 +916,9 @@ async function main() {
   console.warn(`        ${timeEntryCount} time entries`);
 
   // ────────────────────────────────────────────────────────────
-  // 10. Automation rules
+  // 13. Automation rules
   // ────────────────────────────────────────────────────────────
-  console.warn('  [10/12] Automation rules');
+  console.warn('  [13/23] Automation rules');
 
   let automationCount = 0;
   for (const [slug, proj] of Object.entries(projects)) {
@@ -784,9 +957,365 @@ async function main() {
   console.warn(`        ${automationCount} automation rules`);
 
   // ────────────────────────────────────────────────────────────
-  // 11. Wiki spaces + pages
+  // 14. Custom fields
   // ────────────────────────────────────────────────────────────
-  console.warn('  [11/12] Wiki');
+  console.warn('  [14/23] Custom fields');
+
+  const omgevingOptions = ['Ontwikkeling', 'Test', 'Acceptatie', 'Productie'];
+  const klantImpactOptions = ['Geen', 'Laag', 'Gemiddeld', 'Hoog', 'Kritiek'];
+
+  const customFieldDefs: Record<string, string> = {}; // fieldKey -> fieldId
+
+  for (const slug of Object.keys(projects)) {
+    const projectId = projects[slug].id;
+
+    // Omgeving field
+    const existingOmgeving = await prisma.customFieldDefinition.findFirst({
+      where: { projectId, name: 'Omgeving' },
+    });
+    if (existingOmgeving) {
+      customFieldDefs[`${slug}:Omgeving`] = existingOmgeving.id;
+    } else {
+      const f = await prisma.customFieldDefinition.create({
+        data: { projectId, name: 'Omgeving', type: 'SELECT', options: omgevingOptions, position: 0 },
+      });
+      customFieldDefs[`${slug}:Omgeving`] = f.id;
+    }
+
+    // Klant Impact field
+    const existingImpact = await prisma.customFieldDefinition.findFirst({
+      where: { projectId, name: 'Klant Impact' },
+    });
+    if (existingImpact) {
+      customFieldDefs[`${slug}:Klant Impact`] = existingImpact.id;
+    } else {
+      const f = await prisma.customFieldDefinition.create({
+        data: { projectId, name: 'Klant Impact', type: 'SELECT', options: klantImpactOptions, position: 1 },
+      });
+      customFieldDefs[`${slug}:Klant Impact`] = f.id;
+    }
+  }
+
+  // Team-specific fields
+  const aiProjectId = projects['ai-assistent'].id;
+  const existingModelVersie = await prisma.customFieldDefinition.findFirst({
+    where: { projectId: aiProjectId, name: 'Model Versie' },
+  });
+  if (!existingModelVersie) {
+    const f = await prisma.customFieldDefinition.create({
+      data: { projectId: aiProjectId, name: 'Model Versie', type: 'TEXT', position: 2 },
+    });
+    customFieldDefs['ai-assistent:Model Versie'] = f.id;
+  } else {
+    customFieldDefs['ai-assistent:Model Versie'] = existingModelVersie.id;
+  }
+
+  const dchProjectId = projects['documentherkenning'].id;
+  const existingNauwkeurigheid = await prisma.customFieldDefinition.findFirst({
+    where: { projectId: dchProjectId, name: 'Nauwkeurigheid %' },
+  });
+  if (!existingNauwkeurigheid) {
+    const f = await prisma.customFieldDefinition.create({
+      data: { projectId: dchProjectId, name: 'Nauwkeurigheid %', type: 'NUMBER', position: 2 },
+    });
+    customFieldDefs['documentherkenning:Nauwkeurigheid %'] = f.id;
+  } else {
+    customFieldDefs['documentherkenning:Nauwkeurigheid %'] = existingNauwkeurigheid.id;
+  }
+
+  // Set custom field values on assigned issues
+  let cfvCount = 0;
+  for (const issue of createdIssues) {
+    if (!issue.assignee) continue;
+    const slug = issue.projectSlug;
+    const seed = issue.title.length;
+
+    // Omgeving
+    const omgevingFieldId = customFieldDefs[`${slug}:Omgeving`];
+    if (omgevingFieldId) {
+      const val = omgevingOptions[seed % omgevingOptions.length];
+      await prisma.customFieldValue.upsert({
+        where: { issueId_fieldDefinitionId: { issueId: issue.id, fieldDefinitionId: omgevingFieldId } },
+        update: { value: val },
+        create: { issueId: issue.id, fieldDefinitionId: omgevingFieldId, value: val },
+      });
+      cfvCount++;
+    }
+
+    // Klant Impact
+    const impactFieldId = customFieldDefs[`${slug}:Klant Impact`];
+    if (impactFieldId) {
+      const val = klantImpactOptions[(seed * 3) % klantImpactOptions.length];
+      await prisma.customFieldValue.upsert({
+        where: { issueId_fieldDefinitionId: { issueId: issue.id, fieldDefinitionId: impactFieldId } },
+        update: { value: val },
+        create: { issueId: issue.id, fieldDefinitionId: impactFieldId, value: val },
+      });
+      cfvCount++;
+    }
+
+    // AI-specific fields
+    if (slug === 'ai-assistent' && customFieldDefs['ai-assistent:Model Versie']) {
+      const modelVersions = ['GPT-4 Turbo', 'GPT-4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro'];
+      const val = modelVersions[seed % modelVersions.length];
+      await prisma.customFieldValue.upsert({
+        where: { issueId_fieldDefinitionId: { issueId: issue.id, fieldDefinitionId: customFieldDefs['ai-assistent:Model Versie'] } },
+        update: { value: val },
+        create: { issueId: issue.id, fieldDefinitionId: customFieldDefs['ai-assistent:Model Versie'], value: val },
+      });
+      cfvCount++;
+    }
+
+    if (slug === 'documentherkenning' && customFieldDefs['documentherkenning:Nauwkeurigheid %']) {
+      const val = String(75 + (seed % 24));
+      await prisma.customFieldValue.upsert({
+        where: { issueId_fieldDefinitionId: { issueId: issue.id, fieldDefinitionId: customFieldDefs['documentherkenning:Nauwkeurigheid %'] } },
+        update: { value: val },
+        create: { issueId: issue.id, fieldDefinitionId: customFieldDefs['documentherkenning:Nauwkeurigheid %'], value: val },
+      });
+      cfvCount++;
+    }
+  }
+  console.warn(`        ${cfvCount} custom field values`);
+
+  // ────────────────────────────────────────────────────────────
+  // 15. Issue templates
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [15/23] Issue templates');
+
+  const templateData = [
+    {
+      name: 'Bug Report',
+      description: 'Rapporteer een bug of fout',
+      type: 'BUG',
+      priority: 'HIGH',
+      body: '## Beschrijving\n\n...\n\n## Stappen om te reproduceren\n\n1. ...\n\n## Omgeving\n\n- Browser: \n- OS: ',
+    },
+    {
+      name: 'Feature Request',
+      description: 'Vraag een nieuwe functionaliteit aan',
+      type: 'STORY',
+      priority: 'MEDIUM',
+      body: '## Samenvatting\n\n...\n\n## Probleemstelling\n\n...\n\n## Acceptatiecriteria\n\n- [ ] ...',
+    },
+  ];
+
+  let templateCount = 0;
+  for (const slug of Object.keys(projects)) {
+    const proj = await prisma.project.findUnique({ where: { id: projects[slug].id }, select: { id: true, issueTemplates: true } });
+    if (!proj) continue;
+    // Skip if templates already set (non-null and non-empty array)
+    const existing = proj.issueTemplates as unknown;
+    if (Array.isArray(existing) && existing.length > 0) continue;
+
+    await prisma.project.update({
+      where: { id: proj.id },
+      data: { issueTemplates: templateData },
+    });
+    templateCount++;
+  }
+  console.warn(`        ${templateCount} projects with templates`);
+
+  // ────────────────────────────────────────────────────────────
+  // 16. Saved filters
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [16/23] Saved filters');
+
+  // Map project to team admin user
+  const projectTeamAdmin: Record<string, string> = {};
+  for (const pd of projectDefs) {
+    const members = teamMemberDefs[pd.teamSlug];
+    const adminUser = Object.entries(members).find(([, role]) => role === 'ADMIN')?.[0];
+    if (adminUser) projectTeamAdmin[pd.slug] = adminUser;
+  }
+
+  let filterCount = 0;
+  for (const slug of Object.keys(projects)) {
+    const adminUsername = projectTeamAdmin[slug];
+    if (!adminUsername) continue;
+    const adminUserId = users[adminUsername].id;
+    const projectId = projects[slug].id;
+
+    const existingFilters = await prisma.savedFilter.count({ where: { projectId, userId: adminUserId } });
+    if (existingFilters >= 3) continue;
+
+    const filterDefs = [
+      { name: 'Mijn Issues', query: { assigneeId: adminUserId } },
+      { name: 'Kritieke Bugs', query: { type: 'BUG', priority: 'CRITICAL,HIGH' } },
+      { name: 'Sprint Backlog', query: { column: 'Backlog,Te Doen' } },
+    ];
+
+    for (const fd of filterDefs) {
+      await prisma.savedFilter.create({
+        data: {
+          userId: adminUserId,
+          projectId,
+          name: fd.name,
+          query: fd.query,
+        },
+      });
+      filterCount++;
+    }
+  }
+  console.warn(`        ${filterCount} saved filters`);
+
+  // ────────────────────────────────────────────────────────────
+  // 17. Approval gates
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [17/23] Approval gates');
+
+  const approvalProjectSlugs = ['partnerportaal', 'commissie-engine', 'klantportaal'];
+  let gateCount = 0;
+  for (const slug of approvalProjectSlugs) {
+    const cols = projectColumns[slug];
+    const fromColId = cols['Code Review'];
+    const toColId = cols['Testen'];
+    if (!fromColId || !toColId) continue;
+
+    const existing = await prisma.approvalGate.findUnique({
+      where: { projectId_fromColumnId_toColumnId: { projectId: projects[slug].id, fromColumnId: fromColId, toColumnId: toColId } },
+    });
+    if (!existing) {
+      await prisma.approvalGate.create({
+        data: {
+          projectId: projects[slug].id,
+          fromColumnId: fromColId,
+          toColumnId: toColId,
+          minApprovals: 1,
+          allowSelfApproval: false,
+          enabled: true,
+        },
+      });
+      gateCount++;
+    }
+  }
+  console.warn(`        ${gateCount} approval gates`);
+
+  // ────────────────────────────────────────────────────────────
+  // 18. Forms
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [18/23] Forms');
+
+  const formDefs = [
+    {
+      projectSlug: 'partnerportaal',
+      name: 'Partner Bug Report',
+      slug: 'partner-bug-report',
+      description: 'Meld een technisch probleem in het partnerportaal',
+      creatorUsername: 'tim',
+      pageTitle: 'Bug Details',
+      fields: [
+        { position: 0, type: 'TEXT' as const, label: 'Onderwerp', placeholder: 'Korte beschrijving van het probleem', required: true },
+        { position: 1, type: 'TEXTAREA' as const, label: 'Beschrijving', placeholder: 'Geef een gedetailleerde beschrijving...', required: true },
+        { position: 2, type: 'SELECT' as const, label: 'Ernst', options: ['Laag', 'Gemiddeld', 'Hoog', 'Kritiek'], required: true },
+        { position: 3, type: 'TEXT' as const, label: 'Browser / OS', placeholder: 'bijv. Chrome 120 / Windows 11', required: false },
+        { position: 4, type: 'TEXT' as const, label: 'Contactpersoon', placeholder: 'Uw e-mailadres', required: true },
+      ],
+      submission: {
+        data: { Onderwerp: 'Dashboard laadt niet na login', Beschrijving: 'Na het inloggen via SSO blijft het dashboard op een wit scherm hangen. Console toont een 403 fout.', Ernst: 'Hoog', 'Browser / OS': 'Chrome 124 / Windows 11', Contactpersoon: 'partner@example.nl' },
+        submitterEmail: 'partner@example.nl',
+        submitterName: 'Jan de Vries',
+      },
+    },
+    {
+      projectSlug: 'klantportaal',
+      name: 'Feature Aanvraag',
+      slug: 'feature-aanvraag',
+      description: 'Vraag een nieuwe functionaliteit aan voor het klantportaal',
+      creatorUsername: 'joris',
+      pageTitle: 'Feature Details',
+      fields: [
+        { position: 0, type: 'TEXT' as const, label: 'Functionaliteit', placeholder: 'Naam van de gewenste functionaliteit', required: true },
+        { position: 1, type: 'TEXTAREA' as const, label: 'Use case', placeholder: 'Beschrijf het probleem dat u wilt oplossen...', required: true },
+        { position: 2, type: 'SELECT' as const, label: 'Prioriteit', options: ['Laag', 'Gemiddeld', 'Hoog'], required: true },
+        { position: 3, type: 'TEXTAREA' as const, label: 'Acceptatiecriteria', placeholder: 'Wanneer is de functionaliteit geslaagd?', required: false },
+      ],
+      submission: {
+        data: { Functionaliteit: 'Factuur download als PDF', 'Use case': 'Als klant wil ik mijn facturen als PDF kunnen downloaden zodat ik ze kan doorsturen naar mijn boekhouder.', Prioriteit: 'Gemiddeld', Acceptatiecriteria: 'PDF bevat alle factuurregels, BTW-berekening en bedrijfsgegevens.' },
+        submitterEmail: 'klant@bedrijf.nl',
+        submitterName: 'Maria Bakker',
+      },
+    },
+    {
+      projectSlug: 'ai-assistent',
+      name: 'AI Model Evaluatie',
+      slug: 'ai-model-evaluatie',
+      description: 'Evalueer de prestaties van het AI-model',
+      creatorUsername: 'anika',
+      pageTitle: 'Evaluatie Details',
+      fields: [
+        { position: 0, type: 'TEXT' as const, label: 'Model naam', placeholder: 'bijv. GPT-4 Turbo', required: true },
+        { position: 1, type: 'SELECT' as const, label: 'Evaluatietype', options: ['Nauwkeurigheid', 'Snelheid', 'Kosten', 'Kwaliteit'], required: true },
+        { position: 2, type: 'TEXTAREA' as const, label: 'Testresultaten', placeholder: 'Beschrijf de testresultaten...', required: true },
+        { position: 3, type: 'TEXT' as const, label: 'Score (0-100)', placeholder: '85', required: true },
+        { position: 4, type: 'TEXTAREA' as const, label: 'Opmerkingen', placeholder: 'Aanvullende opmerkingen...', required: false },
+      ],
+      submission: {
+        data: { 'Model naam': 'GPT-4 Turbo', Evaluatietype: 'Nauwkeurigheid', Testresultaten: 'Op een testset van 500 vragen behaalde het model een nauwkeurigheid van 92%. Fouten voornamelijk bij juridische terminologie.', 'Score (0-100)': '92', Opmerkingen: 'Aanbeveling: fine-tuning op juridische documenten overwegen.' },
+        submitterEmail: 'anika@voorbeeld.example',
+        submitterName: 'Anika Bos',
+      },
+    },
+  ];
+
+  let formCount = 0;
+  for (const fd of formDefs) {
+    const existingForm = await prisma.form.findUnique({ where: { slug: fd.slug } });
+    if (existingForm) continue;
+
+    const form = await prisma.form.create({
+      data: {
+        projectId: projects[fd.projectSlug].id,
+        name: fd.name,
+        slug: fd.slug,
+        description: fd.description,
+        status: 'PUBLISHED',
+        authMode: 'PUBLIC',
+        spamProtection: 'RATE_LIMIT',
+        rateLimitPerHour: 10,
+        createdById: users[fd.creatorUsername].id,
+        pages: {
+          create: {
+            title: fd.pageTitle,
+            position: 0,
+            fields: {
+              createMany: {
+                data: fd.fields.map((f) => ({
+                  position: f.position,
+                  type: f.type,
+                  label: f.label,
+                  placeholder: f.placeholder ?? null,
+                  required: f.required,
+                  options: f.options ?? null,
+                })),
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Add sample submission
+    await prisma.formSubmission.create({
+      data: {
+        formId: form.id,
+        projectId: projects[fd.projectSlug].id,
+        status: 'PENDING',
+        data: fd.submission.data,
+        submitterEmail: fd.submission.submitterEmail,
+        submitterName: fd.submission.submitterName,
+        submitterIp: '192.168.1.100',
+      },
+    });
+
+    formCount++;
+  }
+  console.warn(`        ${formCount} forms with submissions`);
+
+  // ────────────────────────────────────────────────────────────
+  // 19. Wiki spaces + pages
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [19/23] Wiki');
 
   type WikiPageSeed = { slug: string; title: string; body: string };
 
@@ -918,9 +1447,9 @@ async function main() {
   }
 
   // ────────────────────────────────────────────────────────────
-  // 12. Comments on key issues
+  // 20. Comments on key issues
   // ────────────────────────────────────────────────────────────
-  console.warn('  [12/12] Comments');
+  console.warn('  [20/23] Comments');
 
   const commentDefs = [
     {
@@ -977,6 +1506,48 @@ async function main() {
     }
   }
   console.warn(`        ${totalComments} comments`);
+
+  // ────────────────────────────────────────────────────────────
+  // 21. Notifications
+  // ────────────────────────────────────────────────────────────
+  console.warn('  [21/23] Notifications');
+
+  const notificationDefs = [
+    { username: 'sanne', type: 'issue:assigned', title: 'Je bent toegewezen aan PPT-1', body: 'SAML-authenticatie provider implementeren', link: '/voorbeeld/team-noord/partnerportaal/issues/1' },
+    { username: 'sanne', type: 'pr:review_requested', title: 'Code review gevraagd voor PPT-4', body: 'Partnerdashboard query optimalisatie', link: '/voorbeeld/team-noord/partnerportaal/issues/4' },
+    { username: 'joris', type: 'issue:assigned', title: 'Je bent toegewezen aan KPT-2', body: 'Navigatie component refactoring', link: '/voorbeeld/team-zuid/klantportaal/issues/2' },
+    { username: 'anika', type: 'issue:commented', title: 'Nieuw commentaar op AIA-1', body: 'Thijs heeft gereageerd op Document ingestion pipeline', link: '/voorbeeld/team-ai/ai-assistent/issues/1' },
+    { username: 'tim', type: 'issue:assigned', title: 'Je bent toegewezen aan CME-1', body: 'Commissierapport per partner genereren', link: '/voorbeeld/team-noord/commissie-engine/issues/1' },
+    { username: 'fenna', type: 'issue:status_changed', title: 'OFT-3 status gewijzigd naar Gereed', body: 'Prijsberekening fout bij staffelkortingen is opgelost', link: '/voorbeeld/team-zuid/offertetool/issues/3' },
+    { username: 'erik', type: 'mention', title: 'Je bent genoemd in een commentaar', body: 'Sanne heeft je genoemd in SAML-authenticatie provider implementeren', link: '/voorbeeld/team-noord/partnerportaal/issues/1' },
+    { username: 'ruben', type: 'issue:assigned', title: 'Je bent toegewezen aan OVW-1', body: 'Batch verwerking van orders', link: '/voorbeeld/team-zuid/orderverwerking/issues/1' },
+    { username: 'thijs', type: 'issue:assigned', title: 'Je bent toegewezen aan DCH-1', body: 'OCR-pipeline migreren naar Azure Document Intelligence', link: '/voorbeeld/team-ai/documentherkenning/issues/1' },
+    { username: 'mila', type: 'issue:status_changed', title: 'DLR-5 is afgerond', body: 'Deal import uit Excel fout bij speciale tekens is opgelost', link: '/voorbeeld/team-noord/dealregistratie/issues/5' },
+  ];
+
+  // Check if notifications already seeded (check first one)
+  const existingNotif = await prisma.notification.findFirst({
+    where: { userId: users['sanne'].id, title: notificationDefs[0].title },
+  });
+
+  let notifCount = 0;
+  if (!existingNotif) {
+    for (const nd of notificationDefs) {
+      const isRead = nd.type === 'issue:status_changed';
+      await prisma.notification.create({
+        data: {
+          userId: users[nd.username].id,
+          type: nd.type,
+          title: nd.title,
+          body: nd.body,
+          link: nd.link,
+          read: isRead,
+        },
+      });
+      notifCount++;
+    }
+  }
+  console.warn(`        ${notifCount} notifications`);
 
   console.warn('\nVoorbeeld demo seed complete!');
   console.warn('Login at http://localhost:7000/login');
