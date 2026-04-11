@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 
 /**
- *
  * @param root0
  * @param root0.cardColorBy
  * @param root0.onChangeCardColor
@@ -62,7 +61,6 @@ export function BoardColorByMenu({
 }
 
 /**
- *
  * @param root0
  * @param root0.cardColorBy
  */

@@ -25,6 +25,12 @@ interface WikiFiltersProps {
  * @param root0.labelFilter
  * @param root0.sinceFilter
  * @param root0.untilFilter
+/**
+ * @param root0
+ * @param root0.spaceId
+ * @param root0.labelFilter
+ * @param root0.sinceFilter
+ * @param root0.untilFilter
  * @param root0.allSpaces
  * @param root0.onSetFilter
  * @param root0.onClearAllFilters

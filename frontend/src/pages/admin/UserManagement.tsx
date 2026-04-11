@@ -35,7 +35,7 @@ import { formatRelative } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
 
-// ─── User Detail Modal ─────────────────────────────────────
+// --- User Detail Modal ---
 
 function UserDetailModal({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   return (
@@ -116,7 +116,7 @@ function UserDetailModal({ user, onClose }: { user: AdminUser; onClose: () => vo
   );
 }
 
-// ─── Reset Password Modal ───────────────────────────────────
+// --- Reset Password Modal ---
 
 function ResetPasswordModal({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   const [newPassword, setNewPassword] = useState('');
@@ -167,7 +167,7 @@ function ResetPasswordModal({ user, onClose }: { user: AdminUser; onClose: () =>
   );
 }
 
-// ─── Main ───────────────────────────────────────────────────
+// --- Main ---
 
 /**
  *

@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 
-// ─── Setting Row ────────────────────────────────────────────
+// --- Setting Row ---
 
 function SettingRow({
   icon: Icon,
@@ -39,7 +39,7 @@ function SettingRow({
   );
 }
 
-// ─── Main ───────────────────────────────────────────────────
+// --- Main ---
 
 /**
  *

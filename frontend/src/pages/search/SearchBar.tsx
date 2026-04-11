@@ -17,7 +17,6 @@ interface SearchBarProps {
 }
 
 /**
- *
  * @param root0
  * @param root0.inputValue
  * @param root0.onInputChange

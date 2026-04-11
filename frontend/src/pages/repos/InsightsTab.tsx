@@ -13,7 +13,7 @@ import { PageLoader } from '@/components/ui/Spinner';
 import { Table, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { formatRelative } from '@/lib/utils';
 
-// ─── Language colors ─────────────────────────────────────────
+// --- Language colors ---
 
 const LANG_COLORS: Record<string, string> = {
   TypeScript: '#3178c6',
@@ -47,7 +47,7 @@ function getLangColor(lang: string): string {
   return LANG_COLORS[lang] || '#6b7280';
 }
 
-// ─── Commit Frequency Chart ──────────────────────────────────
+// --- Commit Frequency Chart ---
 
 function CommitFrequencyChart({ data }: { data: CommitFrequencyPoint[] }) {
   if (data.length === 0)
@@ -67,7 +67,7 @@ function CommitFrequencyChart({ data }: { data: CommitFrequencyPoint[] }) {
   );
 }
 
-// ─── Code Frequency Chart ────────────────────────────────────
+// --- Code Frequency Chart ---
 
 function CodeFrequencyChart({ data }: { data: CodeFrequencyPoint[] }) {
   if (data.length === 0)
@@ -93,7 +93,7 @@ function CodeFrequencyChart({ data }: { data: CodeFrequencyPoint[] }) {
   );
 }
 
-// ─── Language Bar ────────────────────────────────────────────
+// --- Language Bar ---
 
 function LanguageBar({ data }: { data: LanguageBreakdown[] }) {
   if (data.length === 0)
@@ -128,7 +128,7 @@ function LanguageBar({ data }: { data: LanguageBreakdown[] }) {
   );
 }
 
-// ─── Main InsightsTab ────────────────────────────────────────
+// --- Main InsightsTab ---
 
 interface InsightsTabProps {
   repoId: string;

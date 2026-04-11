@@ -28,7 +28,6 @@ interface IssueListSidebarProps {
 }
 
 /**
- *
  * @param root0
  * @param root0.selectedIssue
  * @param root0.allIssues

@@ -28,7 +28,7 @@ import { PageLoader } from '@/components/ui/Spinner';
 import { formatSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-// ─── Uptime Formatter ────────────────────────────────────────
+// --- Uptime Formatter ---
 
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
@@ -39,7 +39,7 @@ function formatUptime(seconds: number): string {
   return `${minutes}m ${seconds % 60}s`;
 }
 
-// ─── Health Panel ────────────────────────────────────────────
+// --- Health Panel ---
 
 function HealthSkeleton() {
   return (
@@ -179,7 +179,7 @@ function HealthPanel() {
   );
 }
 
-// ─── Stat Card ──────────────────────────────────────────────
+// --- Stat Card ---
 
 function StatCard({
   icon: Icon,
@@ -205,7 +205,7 @@ function StatCard({
   );
 }
 
-// ─── Main ───────────────────────────────────────────────────
+// --- Main ---
 
 /**
  *

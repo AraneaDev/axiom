@@ -23,7 +23,7 @@ import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn, formatRelative } from '@/lib/utils';
 
-// ─── Widget wrapper ─────────────────────────────────────────
+// --- Widget wrapper ---
 
 /**
  *
@@ -76,7 +76,7 @@ export function Widget({
   );
 }
 
-// ─── My Issues widget ───────────────────────────────────────
+// --- My Issues widget ---
 
 /**
  *
@@ -136,7 +136,7 @@ export function MyIssuesWidget({ issues }: { issues: DashboardIssue[] }) {
   );
 }
 
-// ─── Review Requests widget ─────────────────────────────────
+// --- Review Requests widget ---
 
 /**
  *
@@ -191,7 +191,7 @@ export function ReviewRequestsWidget({ prs }: { prs: DashboardPR[] }) {
   );
 }
 
-// ─── Recent Activity widget ─────────────────────────────────
+// --- Recent Activity widget ---
 
 const ACTION_LABELS: Record<string, string> = {
   created: 'created',
@@ -302,7 +302,7 @@ export function RecentActivityWidget({ activities }: { activities: DashboardActi
   );
 }
 
-// ─── Sprint Health widget ────────────────────────────────────
+// --- Sprint Health widget ---
 
 /**
  * Shows a compact burndown chart for each project's active sprint in the given team.
@@ -410,7 +410,7 @@ function ProjectSprintHealth({
   );
 }
 
-// ─── Upcoming Due Dates widget ──────────────────────────────
+// --- Upcoming Due Dates widget ---
 
 /**
  *

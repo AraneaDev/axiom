@@ -43,6 +43,9 @@ function DiffFileHeader({ activeStat }: { activeStat?: FileStat }) {
  *
  * @param root0
  * @param root0.activeChunk
+/**
+ * @param root0
+ * @param root0.activeChunk
  * @param root0.activeStat
  * @param root0.diffView
  * @param root0.repoId

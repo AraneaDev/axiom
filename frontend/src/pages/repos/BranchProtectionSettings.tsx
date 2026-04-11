@@ -182,7 +182,7 @@ export default function BranchProtectionSettings({ repoId }: BranchProtectionSet
   );
 }
 
-/* ─── Form Modal ──────────────────────────────────────────── */
+/* --- Form Modal --- */
 
 function ProtectionRuleFormModal({
   repoId,
