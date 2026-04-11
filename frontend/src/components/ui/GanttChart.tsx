@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
 import { DependencyOverlay } from './DependencyOverlay';
@@ -26,6 +27,7 @@ interface GanttChartProps {
   projectPrefix: string;
   projectId: string;
   onIssueClick: (issue: TimelineIssue) => void;
+  multiProject?: boolean;
 }
 
 interface FlatRow {
@@ -33,6 +35,10 @@ interface FlatRow {
   indent: number;
   isEpic: boolean;
   childCount: number;
+  isGroupHeader?: boolean;
+  groupLabel?: string;
+  groupProjectSlug?: string;
+  groupCollapsed?: boolean;
 }
 
 /**
@@ -45,6 +51,7 @@ interface FlatRow {
  * @param root0.projectPrefix
  * @param root0.projectId
  * @param root0.onIssueClick
+ * @param root0.multiProject
  */
 export function GanttChart({
   issues,
@@ -53,31 +60,71 @@ export function GanttChart({
   projectPrefix,
   projectId,
   onIssueClick,
+  multiProject,
 }: GanttChartProps) {
   const dayWidth = ZOOM_DAY_WIDTH[zoom];
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Flatten issues into rows with expand/collapse
   const flatRows = useMemo<FlatRow[]>(() => {
     const rows: FlatRow[] = [];
-    for (const issue of issues) {
-      const isEpic = issue.type === 'EPIC';
-      const childCount = issue._count?.children ?? 0;
-      rows.push({ issue, indent: 0, isEpic, childCount });
 
-      if (isEpic && expandedIds.has(issue.id) && issue.children) {
-        for (const child of issue.children) {
-          rows.push({
-            issue: child,
-            indent: 1,
-            isEpic: child.type === 'EPIC',
-            childCount: child._count?.children ?? 0,
-          });
+    const pushIssueRows = (list: TimelineIssue[], baseIndent: number) => {
+      for (const issue of list) {
+        const isEpic = issue.type === 'EPIC';
+        const childCount = issue._count?.children ?? 0;
+        rows.push({ issue, indent: baseIndent, isEpic, childCount });
+
+        if (isEpic && expandedIds.has(issue.id) && issue.children) {
+          for (const child of issue.children) {
+            rows.push({
+              issue: child,
+              indent: baseIndent + 1,
+              isEpic: child.type === 'EPIC',
+              childCount: child._count?.children ?? 0,
+            });
+          }
         }
       }
+    };
+
+    if (multiProject) {
+      // Group issues by project slug
+      const groups = new Map<string, { prefix: string; issues: TimelineIssue[] }>();
+      for (const issue of issues) {
+        const slug = issue.project?.slug ?? 'unknown';
+        const prefix = issue.project?.prefix ?? projectPrefix;
+        if (!groups.has(slug)) {
+          groups.set(slug, { prefix, issues: [] });
+        }
+        groups.get(slug)!.issues.push(issue);
+      }
+
+      for (const [slug, group] of groups) {
+        const isCollapsed = collapsedGroups.has(slug);
+        // Insert group header row (use first issue as placeholder)
+        rows.push({
+          issue: group.issues[0],
+          indent: 0,
+          isEpic: false,
+          childCount: group.issues.length,
+          isGroupHeader: true,
+          groupLabel: group.prefix,
+          groupProjectSlug: slug,
+          groupCollapsed: isCollapsed,
+        });
+
+        if (!isCollapsed) {
+          pushIssueRows(group.issues, 1);
+        }
+      }
+    } else {
+      pushIssueRows(issues, 0);
     }
+
     return rows;
-  }, [issues, expandedIds]);
+  }, [issues, expandedIds, multiProject, collapsedGroups, projectPrefix]);
 
   // Compute view range from all issues
   const { viewStartDate, totalDays } = useMemo(() => {
@@ -156,6 +203,15 @@ export function GanttChart({
       } else {
         next.add(issueId);
       }
+      return next;
+    });
+  }, []);
+
+  const handleToggleGroup = useCallback((projectSlug: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectSlug)) next.delete(projectSlug);
+      else next.add(projectSlug);
       return next;
     });
   }, []);
@@ -255,21 +311,35 @@ export function GanttChart({
           <span className="text-xs font-medium text-text-secondary">Issues</span>
         </div>
         <div className="relative" style={{ height: totalHeight }}>
-          {flatRows.map((row, idx) => (
-            <GanttRowLabel
-              key={row.issue.id}
-              issue={row.issue}
-              y={idx * ROW_HEIGHT}
-              rowHeight={ROW_HEIGHT}
-              isEpic={row.isEpic}
-              isExpanded={expandedIds.has(row.issue.id)}
-              childCount={row.childCount}
-              onToggleExpand={handleToggleExpand}
-              onClick={onIssueClick}
-              projectPrefix={projectPrefix}
-              indent={row.indent}
-            />
-          ))}
+          {flatRows.map((row, idx) =>
+            row.isGroupHeader ? (
+              <GroupHeaderLabel
+                key={`group-${row.groupProjectSlug}`}
+                label={row.groupLabel ?? ''}
+                y={idx * ROW_HEIGHT}
+                rowHeight={ROW_HEIGHT}
+                isCollapsed={row.groupCollapsed ?? false}
+                onToggle={() => handleToggleGroup(row.groupProjectSlug ?? '')}
+                issueCount={row.childCount}
+              />
+            ) : (
+              <GanttRowLabel
+                key={row.issue.id}
+                issue={row.issue}
+                y={idx * ROW_HEIGHT}
+                rowHeight={ROW_HEIGHT}
+                isEpic={row.isEpic}
+                isExpanded={expandedIds.has(row.issue.id)}
+                childCount={row.childCount}
+                onToggleExpand={handleToggleExpand}
+                onClick={onIssueClick}
+                projectPrefix={
+                  multiProject ? (row.issue.project?.prefix ?? projectPrefix) : projectPrefix
+                }
+                indent={row.indent}
+              />
+            ),
+          )}
         </div>
       </div>
 
@@ -283,10 +353,16 @@ export function GanttChart({
         />
         <div className="relative" style={{ width: totalWidth, minHeight: totalHeight }}>
           {/* Row background stripes */}
-          {flatRows.map((_, idx) => (
+          {flatRows.map((row, idx) => (
             <div
               key={idx}
-              className={idx % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary/30'}
+              className={
+                row.isGroupHeader
+                  ? 'bg-surface-secondary/50'
+                  : idx % 2 === 0
+                    ? 'bg-surface'
+                    : 'bg-surface-secondary/30'
+              }
               style={{
                 position: 'absolute',
                 top: idx * ROW_HEIGHT,
@@ -302,6 +378,7 @@ export function GanttChart({
 
           {/* Issue bars */}
           {flatRows.map((row, idx) => {
+            if (row.isGroupHeader) return null;
             const hasDate = row.issue.startDate || row.issue.dueDate;
             if (!hasDate) return null;
             return (
@@ -337,6 +414,37 @@ export function GanttChart({
           </svg>
         </div>
       </div>
+    </div>
+  );
+}
+
+// -- Group header label for multi-project mode --
+
+function GroupHeaderLabel({
+  label,
+  y,
+  rowHeight,
+  isCollapsed,
+  onToggle,
+  issueCount,
+}: {
+  label: string;
+  y: number;
+  rowHeight: number;
+  isCollapsed: boolean;
+  onToggle: () => void;
+  issueCount: number;
+}) {
+  const Icon = isCollapsed ? ChevronRight : ChevronDown;
+  return (
+    <div
+      className="absolute flex items-center gap-1.5 px-2 text-xs font-semibold text-text cursor-pointer hover:bg-surface-secondary transition-colors bg-surface-secondary/50"
+      style={{ top: y, height: rowHeight, left: 0, right: 0 }}
+      onClick={onToggle}
+    >
+      <Icon className="h-3.5 w-3.5 text-text-secondary shrink-0" />
+      <span className="truncate">{label}</span>
+      <span className="text-text-tertiary ml-auto shrink-0">{issueCount}</span>
     </div>
   );
 }
