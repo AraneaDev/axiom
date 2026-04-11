@@ -5,6 +5,7 @@ import {
   FolderKanban,
   BookOpen,
   GitBranch,
+  CalendarRange,
   Plus,
   ChevronDown,
   ShieldCheck,
@@ -250,6 +251,7 @@ export function Sidebar() {
               <NavItem to={`/${org}/${team}/wiki`} icon={BookOpen} label="Wiki" />
               <NavItem to={`/${org}/${team}/repos`} icon={GitBranch} label="Repositories" />
               <NavItem to={`/${org}/${team}/members`} icon={Users} label="Members" />
+              <NavItem to={`/${org}/${team}/roadmap`} icon={CalendarRange} label="Roadmap" />
             </div>
           )}
 

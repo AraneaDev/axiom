@@ -29,6 +29,7 @@ const SprintReport = lazy(() => import('@/pages/issues/SprintReport'));
 const MyApprovals = lazy(() => import('@/pages/approvals/MyApprovals'));
 const OrgAnalytics = lazy(() => import('@/pages/analytics/OrgAnalytics'));
 const TeamAnalytics = lazy(() => import('@/pages/analytics/TeamAnalytics'));
+const TeamRoadmap = lazy(() => import('@/pages/roadmap/TeamRoadmap'));
 
 const WikiLayout = lazy(() => import('@/pages/wiki/WikiLayout'));
 const WikiHome = lazy(() => import('@/pages/wiki/WikiHome'));
@@ -73,6 +74,14 @@ export function projectRoutes() {
         element={
           <ErrorBoundary>
             <TeamAnalytics />
+          </ErrorBoundary>
+        }
+      />
+      <Route
+        path="/:org/:team/roadmap"
+        element={
+          <ErrorBoundary>
+            <TeamRoadmap />
           </ErrorBoundary>
         }
       />
