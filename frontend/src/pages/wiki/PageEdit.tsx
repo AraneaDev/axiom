@@ -1,25 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  Eye,
-  EyeOff,
-  FileText,
-  FilePlus,
-  Paperclip,
-  Save,
-  Wifi,
-  WifiOff,
-  X,
-  BookTemplate,
-  Braces,
-  ClipboardList,
-  RotateCcw,
-  Scale,
-  ScrollText,
-  Wrench,
-} from 'lucide-react';
+import { Paperclip } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
+import { PageEditHeader } from './PageEditHeader';
+import { TemplatePicker } from './TemplatePicker';
 import { useWikiContext } from './WikiLayout';
 
 import { attachmentsApi } from '@/api/attachments.api';
@@ -29,13 +14,11 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
-import { Spinner, PageLoader } from '@/components/ui/Spinner';
-import { PresenceIndicators } from '@/components/wiki/PresenceIndicators';
+import { PageLoader } from '@/components/ui/Spinner';
 import { TemplateVariablePanel } from '@/components/wiki/TemplateVariablePanel';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useFormError } from '@/hooks/useFormError';
@@ -43,14 +26,6 @@ import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useWikiInvalidation } from '@/hooks/useWikiInvalidation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
-
-const BLUEPRINT_ICONS: Record<string, typeof FileText> = {
-  'Meeting Notes': ClipboardList,
-  Retrospective: RotateCcw,
-  'Decision Record': Scale,
-  'Product Requirements': ScrollText,
-  Runbook: Wrench,
-};
 
 /**
  *
@@ -114,7 +89,6 @@ export default function PageEdit() {
   const [showPreview, setShowPreview] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(isNew);
   const [showVariablePanel, setShowVariablePanel] = useState(false);
-  const [hoveredTemplate, setHoveredTemplate] = useState<string | null>(null);
 
   // Flatten the page tree into select options with indentation
   function flattenTree(nodes: typeof pageTree, depth = 0): { value: string; label: string }[] {
@@ -252,77 +226,24 @@ export default function PageEdit() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="h2">{isNew ? 'New Page' : 'Edit Page'}</h1>
-          {draftStatus === 'saving' && (
-            <span className="text-xs text-text-tertiary flex items-center gap-1">
-              <Save className="h-3 w-3 animate-pulse" /> Saving draft...
-            </span>
-          )}
-          {draftStatus === 'saved' && (
-            <span className="text-xs text-success flex items-center gap-1">
-              <Save className="h-3 w-3" /> Draft saved
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Collaboration presence indicators */}
-          {!isNew && collab.presenceUsers.length > 0 && (
-            <PresenceIndicators users={collab.presenceUsers} />
-          )}
-          {!isNew && existingPage?.id && (
-            <span
-              className={cn(
-                'flex items-center gap-1 text-xs',
-                collab.isConnected ? 'text-success' : 'text-text-tertiary',
-              )}
-              title={collab.isConnected ? 'Real-time sync active' : 'Editing offline'}
-            >
-              {collab.isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            </span>
-          )}
-          {isNew && templates.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowTemplatePicker(!showTemplatePicker)}
-            >
-              <BookTemplate className="h-4 w-4" />
-              {showTemplatePicker ? 'Hide templates' : 'Templates'}
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowVariablePanel(!showVariablePanel)}
-            className={cn(showVariablePanel && 'text-primary bg-primary/10')}
-            title="Toggle template variable reference"
-          >
-            <Braces className="h-4 w-4" />
-            Variables
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setShowPreview(!showPreview)}>
-            {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            {showPreview ? 'Hide Preview' : 'Preview'}
-          </Button>
-          <Button variant="secondary" onClick={() => navigate(-1)}>
-            <X className="h-4 w-4" /> Cancel
-          </Button>
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending || !title.trim()}
-          >
-            {saveMutation.isPending ? (
-              <Spinner size="sm" />
-            ) : (
-              <>
-                <Save className="h-4 w-4" /> Save
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+      <PageEditHeader
+        isNew={isNew}
+        hasExistingPage={!!existingPage?.id}
+        draftStatus={draftStatus}
+        showTemplatePicker={showTemplatePicker}
+        onToggleTemplatePicker={() => setShowTemplatePicker(!showTemplatePicker)}
+        hasTemplates={templates.length > 0}
+        showVariablePanel={showVariablePanel}
+        onToggleVariablePanel={() => setShowVariablePanel(!showVariablePanel)}
+        showPreview={showPreview}
+        onTogglePreview={() => setShowPreview(!showPreview)}
+        onCancel={() => navigate(-1)}
+        onSave={() => saveMutation.mutate()}
+        isSaving={saveMutation.isPending}
+        canSave={!!title.trim()}
+        isConnected={collab.isConnected}
+        presenceUsers={collab.presenceUsers}
+      />
 
       {error && (
         <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
@@ -331,138 +252,18 @@ export default function PageEdit() {
       )}
 
       {/* Template Picker */}
-      {isNew &&
-        showTemplatePicker &&
-        templates.length > 0 &&
-        (() => {
-          const builtIn = templates.filter((t) => t.isBuiltIn);
-          const custom = templates.filter((t) => !t.isBuiltIn);
-          const hoveredTpl = templates.find((t) => t.id === hoveredTemplate);
-
-          return (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <BookTemplate className="h-4 w-4 text-text-secondary" />
-                <span className="text-sm font-medium text-text">Choose a template</span>
-              </div>
-              <div className="flex gap-4">
-                <div className="flex-1 space-y-4">
-                  {/* Blank page option */}
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="w-full bg-surface justify-start gap-3 px-4 py-3 text-left rounded-lg hover:border-primary/50 hover:bg-surface-hover"
-                    onClick={() => {
-                      setBody('');
-                      setTitle('');
-                      setSlug('');
-                      setShowTemplatePicker(false);
-                    }}
-                    onMouseEnter={() => setHoveredTemplate(null)}
-                  >
-                    <FilePlus className="h-5 w-5 text-text-secondary shrink-0" />
-                    <div>
-                      <div className="font-medium text-text">Blank page</div>
-                      <div className="text-xs text-text-tertiary">Start from scratch</div>
-                    </div>
-                  </Button>
-
-                  {/* Built-in templates */}
-                  {builtIn.length > 0 && (
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
-                        Built-in
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {builtIn.map((tpl) => {
-                          const Icon = BLUEPRINT_ICONS[tpl.name] ?? FileText;
-                          return (
-                            <Button
-                              key={tpl.id}
-                              variant="outline"
-                              size="lg"
-                              className={cn(
-                                'bg-surface justify-start gap-3 rounded-lg px-4 py-3 text-left hover:border-primary/50 hover:bg-surface-hover',
-                                hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
-                              )}
-                              onClick={() => applyTemplate(tpl)}
-                              onMouseEnter={() => setHoveredTemplate(tpl.id)}
-                              onMouseLeave={() => setHoveredTemplate(null)}
-                            >
-                              <Icon className="h-5 w-5 text-primary shrink-0" />
-                              <div className="min-w-0">
-                                <div className="font-medium text-text truncate">{tpl.name}</div>
-                                {tpl.description && (
-                                  <div className="text-xs text-text-tertiary truncate">
-                                    {tpl.description}
-                                  </div>
-                                )}
-                              </div>
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Custom templates */}
-                  {custom.length > 0 && (
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
-                        Custom
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {custom.map((tpl) => (
-                          <Button
-                            key={tpl.id}
-                            variant="outline"
-                            size="lg"
-                            className={cn(
-                              'bg-surface justify-start gap-3 rounded-lg px-4 py-3 text-left hover:border-primary/50 hover:bg-surface-hover',
-                              hoveredTemplate === tpl.id && 'border-primary/50 bg-surface-hover',
-                            )}
-                            onClick={() => applyTemplate(tpl)}
-                            onMouseEnter={() => setHoveredTemplate(tpl.id)}
-                            onMouseLeave={() => setHoveredTemplate(null)}
-                          >
-                            <FileText className="h-5 w-5 text-text-secondary shrink-0" />
-                            <div className="min-w-0">
-                              <div className="font-medium text-text truncate">{tpl.name}</div>
-                              {tpl.description && (
-                                <div className="text-xs text-text-tertiary truncate">
-                                  {tpl.description}
-                                </div>
-                              )}
-                            </div>
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Preview pane */}
-                {hoveredTpl && (
-                  <div className="w-80 shrink-0">
-                    <Card className="sticky top-4">
-                      <div className="px-4 py-3 border-b border-border">
-                        <div className="text-sm font-medium text-text">{hoveredTpl.name}</div>
-                        {hoveredTpl.description && (
-                          <div className="text-xs text-text-tertiary mt-0.5">
-                            {hoveredTpl.description}
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-4 max-h-64 overflow-auto">
-                        <MarkdownRenderer content={hoveredTpl.body} />
-                      </div>
-                    </Card>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })()}
+      {isNew && showTemplatePicker && templates.length > 0 && (
+        <TemplatePicker
+          templates={templates}
+          onSelect={applyTemplate}
+          onBlank={() => {
+            setBody('');
+            setTitle('');
+            setSlug('');
+            setShowTemplatePicker(false);
+          }}
+        />
+      )}
 
       <div className="space-y-4">
         <Input
