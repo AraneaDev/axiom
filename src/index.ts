@@ -50,6 +50,7 @@ import protectionRoutes from './modules/repos/protection.routes';
 import reposRoutes from './modules/repos/repos.routes';
 import webhooksRoutes from './modules/repos/webhooks.routes';
 import roadmapRoutes from './modules/roadmap/roadmap.routes';
+import teamRoadmapRoutes from './modules/roadmap/team-roadmap.routes';
 import connectRpcRoutes from './modules/runners/connect-rpc.routes';
 import { startRunnerHealthMonitor, stopRunnerHealthMonitor } from './modules/runners/runner-health';
 import runnersRoutes from './modules/runners/runners.routes';
@@ -169,6 +170,7 @@ app.use('/api', analyticsRoutes);
 app.use('/api/projects', formRoutes);
 app.use('/api/projects', intakeRoutes);
 app.use('/api/projects', roadmapRoutes);
+app.use('/api', teamRoadmapRoutes);
 
 // Git Smart HTTP (must be before JSON body parser doesn't matter — has its own raw parser)
 app.use('/git', smartHttpRoutes);
