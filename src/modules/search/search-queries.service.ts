@@ -1,0 +1,462 @@
+import { Prisma } from '@prisma/client';
+
+import { prisma } from '../../config/database';
+import { parse, compileToPrisma } from '../../lib/query-engine';
+import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
+import { formatIssueKey } from '../../utils/issue-key';
+import {
+  PROJECT_URL_WITH_NAME_SELECT,
+  SPACE_URL_SELECT,
+  USER_WITH_AVATAR_SELECT,
+} from '../../utils/prisma-selects';
+
+// ─── Types ──────────────────────────────────────────────────
+
+export interface SearchParams {
+  q: string;
+  type: 'issues' | 'wiki' | 'repos' | 'code' | 'all';
+  teamId?: string;
+  projectId?: string;
+  spaceId?: string;
+  label?: string;
+  since?: string;
+  until?: string;
+  limit: number;
+  offset: number;
+  userId?: string;
+  orgIds?: string[];
+}
+
+interface StructuredQuery {
+  freeText: string;
+  filters: Record<string, string>;
+}
+
+export interface SearchResultSection {
+  type: string;
+  items: unknown[];
+  total: number;
+}
+
+// ─── Structured Query Parsing ───────────────────────────────
+
+const STRUCTURED_FIELDS = new Set([
+  'type',
+  'status',
+  'priority',
+  'assignee',
+  'label',
+  'project',
+  'author',
+]);
+
+/**
+ * Parse a query string like "type:bug status:open fix login" into structured filters and remaining free text.
+ * @param raw - The raw query string to parse
+ * @returns Parsed query with freeText and structured filters map
+ */
+export function parseStructuredQuery(raw: string): StructuredQuery {
+  const filters: Record<string, string> = {};
+  const freeTextParts: string[] = [];
+
+  const tokens = raw.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+  for (const token of tokens) {
+    const colonIdx = token.indexOf(':');
+    if (colonIdx > 0) {
+      const field = token.substring(0, colonIdx).toLowerCase();
+      const value = token.substring(colonIdx + 1).replace(/^"|"$/g, '');
+      if (STRUCTURED_FIELDS.has(field) && value) {
+        filters[field] = value;
+        continue;
+      }
+    }
+    freeTextParts.push(token);
+  }
+
+  return { freeText: freeTextParts.join(' '), filters };
+}
+
+/**
+ * Convert a free-text string into a PostgreSQL tsquery-safe string with prefix matching on the last word.
+ * @param text - The free-text search string
+ * @returns A tsquery-formatted string or empty string if no valid words
+ */
+function toTsQuery(text: string): string {
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.replace(/[^a-zA-Z0-9]/g, ''))
+    .filter((w) => w.length > 0);
+  if (words.length === 0) return '';
+  // Prefix-match on last word for autocomplete-style search
+  return words.map((w, i) => (i === words.length - 1 ? `${w}:*` : w)).join(' & ');
+}
+
+// ─── Issue Search (FTS + Structured Filters) ────────────────
+
+/**
+ *
+ * @param freeText
+ * @param filters
+ * @param params
+ * @param rawQuery
+ */
+export async function searchIssues(
+  freeText: string,
+  filters: Record<string, string>,
+  params: SearchParams,
+  rawQuery?: string,
+) {
+  const where: Prisma.IssueWhereInput = {};
+  const andClauses: Prisma.IssueWhereInput[] = [];
+
+  if (params.orgIds && params.orgIds.length > 0) {
+    where.project = { team: { orgId: { in: params.orgIds } } };
+  }
+
+  if (params.projectId) {
+    where.projectId = params.projectId;
+  }
+
+  // Try query engine for structured queries
+  let usedQueryEngine = false;
+  if (rawQuery && /[=><!]|(?:^|\s)(?:AND|OR|NOT|IN)(?:\s|$)|\w+:/.test(rawQuery)) {
+    try {
+      const ast = parse(rawQuery);
+      const engineWhere = compileToPrisma(ast, issueFieldRegistry, {
+        projectId: params.projectId,
+      });
+      // Merge engine-generated clauses into AND
+      if (Object.keys(engineWhere).length > 0) {
+        andClauses.push(engineWhere as Prisma.IssueWhereInput);
+        usedQueryEngine = true;
+      }
+    } catch {
+      // Fall through to legacy structured filter parsing below
+    }
+  }
+
+  // Legacy structured filter parsing (used as fallback or when no structured syntax)
+  if (!usedQueryEngine) {
+    if (filters.type) {
+      const issueType = filters.type.toUpperCase();
+      if (['TASK', 'BUG', 'STORY', 'EPIC'].includes(issueType)) {
+        andClauses.push({ type: issueType as 'TASK' | 'BUG' | 'STORY' | 'EPIC' });
+      }
+    }
+
+    if (filters.priority) {
+      const priority = filters.priority.toUpperCase();
+      if (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(priority)) {
+        andClauses.push({ priority: priority as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' });
+      }
+    }
+
+    if (filters.assignee) {
+      andClauses.push({
+        assignee: {
+          OR: [
+            { username: { equals: filters.assignee, mode: 'insensitive' } },
+            { displayName: { contains: filters.assignee, mode: 'insensitive' } },
+          ],
+        },
+      });
+    }
+
+    if (filters.status) {
+      andClauses.push({
+        column: { name: { equals: filters.status, mode: 'insensitive' } },
+      });
+    }
+
+    if (filters.label) {
+      andClauses.push({
+        labels: { some: { name: { equals: filters.label, mode: 'insensitive' } } },
+      });
+    }
+
+    if (filters.project) {
+      andClauses.push({
+        project: {
+          OR: [
+            { slug: { equals: filters.project, mode: 'insensitive' } },
+            { prefix: { equals: filters.project.toUpperCase() } },
+          ],
+        },
+      });
+    }
+  }
+
+  if (andClauses.length > 0) {
+    where.AND = andClauses;
+  }
+
+  const tsq = toTsQuery(freeText);
+  const useFts = tsq.length > 0;
+
+  // If we have free text, use PostgreSQL full-text search via $queryRaw for ranking
+  if (useFts) {
+    try {
+      const rawIssues = await prisma.$queryRaw<
+        Array<{
+          id: string;
+          rank: number;
+        }>
+      >`
+        SELECT id, ts_rank(
+          to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, '')),
+          to_tsquery('english', ${tsq})
+        ) AS rank
+        FROM issues
+        WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+          @@ to_tsquery('english', ${tsq})
+        ORDER BY rank DESC
+        LIMIT ${params.limit + 50}
+      `;
+
+      const ftsIds = rawIssues.map((r: { id: string; rank: number }) => r.id);
+      if (ftsIds.length === 0) {
+        // FTS found nothing -- fall back to LIKE search
+        where.OR = [
+          { title: { contains: freeText, mode: 'insensitive' } },
+          { body: { contains: freeText, mode: 'insensitive' } },
+        ];
+      } else {
+        where.id = { in: ftsIds };
+      }
+    } catch {
+      // Fallback to LIKE search if FTS fails (e.g., invalid query)
+      where.OR = [
+        { title: { contains: freeText, mode: 'insensitive' } },
+        { body: { contains: freeText, mode: 'insensitive' } },
+      ];
+    }
+  } else if (!andClauses.length) {
+    // No text and no filters -- nothing to search
+    return { type: 'issues', items: [], total: 0 };
+  }
+
+  const [issues, total] = await Promise.all([
+    prisma.issue.findMany({
+      where,
+      include: {
+        project: { select: PROJECT_URL_WITH_NAME_SELECT },
+        assignee: { select: USER_WITH_AVATAR_SELECT },
+        labels: true,
+        column: { select: { name: true, isDone: true } },
+      },
+      take: params.limit,
+      skip: params.offset,
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.issue.count({ where }),
+  ]);
+
+  return {
+    type: 'issues',
+    total,
+    items: issues.map((i: (typeof issues)[number]) => ({
+      ...i,
+      key: formatIssueKey(i.project.prefix, i.number),
+      url: `/${i.project.team.org.slug}/${i.project.team.slug}/${i.project.slug}/issues/${i.number}`,
+      projectName: i.project.name,
+      status: i.column?.name ?? 'Backlog',
+    })),
+  };
+}
+
+// ─── Wiki Search (FTS) ──────────────────────────────────────
+
+/**
+ *
+ * @param freeText
+ * @param _filters
+ * @param params
+ */
+export async function searchWiki(
+  freeText: string,
+  _filters: Record<string, string>,
+  params: SearchParams,
+) {
+  // Allow wiki search with filters even if no free text
+  const hasFilters = !!(params.spaceId || params.label || params.since || params.until);
+  if (!freeText && !hasFilters) {
+    return { type: 'wiki', items: [], total: 0 };
+  }
+
+  const tsq = toTsQuery(freeText);
+  const where: Prisma.PageWhereInput = {};
+
+  if (params.orgIds && params.orgIds.length > 0) {
+    where.space = { team: { orgId: { in: params.orgIds } } };
+  }
+
+  // Space filter
+  if (params.spaceId) {
+    where.spaceId = params.spaceId;
+  }
+
+  // Label filter
+  if (params.label) {
+    where.pageLabels = {
+      some: { label: { equals: params.label, mode: 'insensitive' } },
+    };
+  }
+
+  // Date range filters on updatedAt
+  if (params.since || params.until) {
+    const updatedAt: Prisma.DateTimeFilter = {};
+    if (params.since) updatedAt.gte = new Date(params.since);
+    if (params.until) updatedAt.lte = new Date(params.until);
+    where.updatedAt = updatedAt;
+  }
+
+  if (tsq) {
+    try {
+      const rawPages = await prisma.$queryRaw<
+        Array<{
+          id: string;
+          rank: number;
+          snippet: string;
+        }>
+      >`
+        SELECT id, ts_rank(
+          to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, '')),
+          to_tsquery('english', ${tsq})
+        ) AS rank,
+        ts_headline('english', body, to_tsquery('english', ${tsq}),
+          'MaxWords=30, MinWords=15, StartSel=<<, StopSel=>>'
+        ) AS snippet
+        FROM pages
+        WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+          @@ to_tsquery('english', ${tsq})
+        ORDER BY rank DESC
+        LIMIT ${params.limit + 20}
+      `;
+
+      if (rawPages.length === 0) {
+        return { type: 'wiki', items: [], total: 0 };
+      }
+
+      const snippetMap = new Map(
+        rawPages.map((r: { id: string; snippet: string }) => [r.id, r.snippet]),
+      );
+      where.id = { in: rawPages.map((r: { id: string }) => r.id) };
+
+      const [pages, total] = await Promise.all([
+        prisma.page.findMany({
+          where,
+          include: {
+            space: { select: SPACE_URL_SELECT },
+            pageLabels: true,
+          },
+          take: params.limit,
+          skip: params.offset,
+          orderBy: { updatedAt: 'desc' },
+        }),
+        prisma.page.count({ where }),
+      ]);
+
+      return {
+        type: 'wiki',
+        total,
+        items: pages.map((p: (typeof pages)[number]) => ({
+          ...p,
+          url: `/${p.space.team.org.slug}/${p.space.team.slug}/wiki/${p.space.slug}/${p.slug}`,
+          spaceName: p.space.name,
+          spaceId: p.spaceId,
+          labels: p.pageLabels.map((l: { label: string }) => l.label),
+          snippet: snippetMap.get(p.id) ?? '',
+        })),
+      };
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Fallback to LIKE search (only if we have free text)
+  if (freeText) {
+    where.OR = [
+      { title: { contains: freeText, mode: 'insensitive' } },
+      { body: { contains: freeText, mode: 'insensitive' } },
+    ];
+  }
+
+  const [pages, total] = await Promise.all([
+    prisma.page.findMany({
+      where,
+      include: {
+        space: { select: SPACE_URL_SELECT },
+        pageLabels: true,
+      },
+      take: params.limit,
+      skip: params.offset,
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.page.count({ where }),
+  ]);
+
+  return {
+    type: 'wiki',
+    total,
+    items: pages.map((p: (typeof pages)[number]) => ({
+      ...p,
+      url: `/${p.space.team.org.slug}/${p.space.team.slug}/wiki/${p.space.slug}/${p.slug}`,
+      spaceName: p.space.name,
+      spaceId: p.spaceId,
+      labels: p.pageLabels.map((l: { label: string }) => l.label),
+      snippet: '',
+    })),
+  };
+}
+
+// ─── Repo Search ────────────────────────────────────────────
+
+/**
+ *
+ * @param freeText
+ * @param params
+ */
+export async function searchRepos(freeText: string, params: SearchParams) {
+  if (!freeText) {
+    return { type: 'repos', items: [], total: 0 };
+  }
+
+  const where: Prisma.RepositoryWhereInput = {
+    OR: [
+      { name: { contains: freeText, mode: 'insensitive' } },
+      { description: { contains: freeText, mode: 'insensitive' } },
+    ],
+    ...(params.orgIds && params.orgIds.length > 0
+      ? { team: { orgId: { in: params.orgIds } } }
+      : {}),
+  };
+
+  const [repos, total] = await Promise.all([
+    prisma.repository.findMany({
+      where,
+      include: {
+        team: { select: { slug: true, org: { select: { slug: true } } } },
+      },
+      take: params.limit,
+      skip: params.offset,
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.repository.count({ where }),
+  ]);
+
+  return {
+    type: 'repos',
+    total,
+    items: repos.map((r: (typeof repos)[number]) => ({
+      id: r.id,
+      name: r.name,
+      slug: r.slug,
+      description: r.description,
+      visibility: r.visibility,
+      defaultBranch: r.defaultBranch,
+      url: `/${r.team.org.slug}/${r.team.slug}/repos/${r.slug}`,
+      updatedAt: r.updatedAt,
+    })),
+  };
+}
