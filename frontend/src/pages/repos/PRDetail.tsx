@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
@@ -13,7 +13,6 @@ import { reposApi } from '@/api/repos.api';
 import { statusChecksApi } from '@/api/status-checks.api';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
-import { usePRInvalidation } from '@/hooks/usePRInvalidation';
 import { useRepoContext } from '@/hooks/useRepoContext';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -49,7 +48,6 @@ export default function PRDetail() {
   }, []);
 
   const prNumber = parseInt(prNum!);
-  const { invalidatePR } = usePRInvalidation(currentRepo?.id ?? '', prNumber);
 
   // Hydration: single request for all PR detail data
   const hydrationQuery = useQuery({
@@ -185,15 +183,20 @@ export default function PRDetail() {
     },
   );
 
-  const applySuggestionMutation = useMutation({
-    mutationFn: (commentId: string) =>
-      reposApi.applySuggestion(currentRepo!.id, prNumber, commentId),
-    onMutate: (commentId) => setApplyingComment(commentId),
-    onSettled: () => setApplyingComment(null),
-    onSuccess: () => {
-      invalidatePR();
+  const applySuggestionMutation = useMutationWithToast(
+    (commentId: string) => reposApi.applySuggestion(currentRepo!.id, prNumber, commentId),
+    {
+      successMessage: null,
+      errorMessage: null,
+      invalidateKeys: [
+        ['pr', currentRepo?.id, prNumber],
+        ['prDiff', currentRepo?.id, prNumber],
+        ['prCommits', currentRepo?.id, prNumber],
+      ],
+      onSuccess: () => setApplyingComment(null),
+      onError: () => setApplyingComment(null),
     },
-  });
+  );
 
   const batchApplyMutation = useMutationWithToast(
     () => reposApi.batchApplySuggestions(currentRepo!.id, prNumber, [...selectedSuggestions]),
@@ -303,7 +306,10 @@ export default function PRDetail() {
             onDeleteComment={(id) => deleteCommentMutation.mutate(id)}
             selectedSuggestions={selectedSuggestions}
             applyingComment={applyingComment}
-            onApplySuggestion={(id) => applySuggestionMutation.mutate(id)}
+            onApplySuggestion={(id) => {
+              setApplyingComment(id);
+              applySuggestionMutation.mutate(id);
+            }}
             onToggleSuggestion={toggleSuggestion}
             onBatchApply={() => batchApplyMutation.mutate()}
             isBatchApplying={batchApplyMutation.isPending}
