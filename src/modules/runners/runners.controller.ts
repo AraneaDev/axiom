@@ -1,10 +1,8 @@
 import type { RunnerScope } from '@prisma/client';
 import type { Request, Response } from 'express';
 
-import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
-import { ERR } from '../../utils/error-messages';
 import { param } from '../../utils/params';
 
 import * as svc from './runners.service';
@@ -41,11 +39,7 @@ export const remove = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getTask = asyncHandler(async (req: Request, res: Response) => {
-  const task = await prisma.runnerTask.findUnique({
-    where: { id: param(req, 'taskId') },
-    include: { runner: { select: { name: true, uuid: true } } },
-  });
-  if (!task) throw new AppError(404, ERR.TASK_NOT_FOUND);
+  const task = await svc.getTask(param(req, 'taskId'));
   res.json(task);
 });
 
@@ -60,18 +54,15 @@ export const streamTaskLogs = asyncHandler(async (req: Request, res: Response) =
 
   const poll = setInterval(async () => {
     try {
-      const task = await prisma.runnerTask.findUnique({ where: { id: taskId } });
-      if (!task) {
+      const status = await svc.getTaskStatus(taskId);
+      if (!status) {
         clearInterval(poll);
         res.write('event: done\ndata: {}\n\n');
         res.end();
         return;
       }
 
-      const lines = await prisma.runnerTaskLog.findMany({
-        where: { taskId, lineIndex: { gt: lastIndex } },
-        orderBy: { lineIndex: 'asc' },
-      });
+      const lines = await svc.getTaskLogsSince(taskId, lastIndex);
 
       if (lines.length > 0) {
         lastIndex = lines[lines.length - 1].lineIndex;
@@ -85,7 +76,7 @@ export const streamTaskLogs = asyncHandler(async (req: Request, res: Response) =
       }
 
       const terminal = ['SUCCESS', 'FAILURE', 'CANCELLED'];
-      if (terminal.includes(task.status)) {
+      if (terminal.includes(status)) {
         clearInterval(poll);
         res.write('event: done\ndata: {}\n\n');
         res.end();

@@ -93,6 +93,44 @@ export async function deleteRunner(runnerId: string, scopeType: RunnerScope, sco
 /**
  *
  * @param projectId
+ * @param taskId
+ */
+export async function getTask(taskId: string) {
+  const task = await prisma.runnerTask.findUnique({
+    where: { id: taskId },
+    include: { runner: { select: { name: true, uuid: true } } },
+  });
+  if (!task) throw new AppError(404, ERR.TASK_NOT_FOUND);
+  return task;
+}
+
+/**
+ *
+ * @param taskId
+ * @param afterIndex
+ */
+export async function getTaskLogsSince(taskId: string, afterIndex: number) {
+  return prisma.runnerTaskLog.findMany({
+    where: { taskId, lineIndex: { gt: afterIndex } },
+    orderBy: { lineIndex: 'asc' },
+  });
+}
+
+/**
+ *
+ * @param taskId
+ */
+export async function getTaskStatus(taskId: string) {
+  const task = await prisma.runnerTask.findUnique({
+    where: { id: taskId },
+    select: { status: true },
+  });
+  return task?.status ?? null;
+}
+
+/**
+ *
+ * @param projectId
  */
 export async function resolveProjectScopes(projectId: string) {
   const project = await prisma.project.findUnique({
