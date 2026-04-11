@@ -5,6 +5,7 @@ import { QueryBar } from '@/components/issues/QueryBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
+import type { FilterState } from '@/hooks/useIssueListFilters';
 import { PRIORITY_LABELS, ISSUE_TYPE_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
@@ -29,18 +30,9 @@ interface Column {
 }
 
 interface IssueListFiltersProps {
-  typeFilter: string[];
-  setTypeFilter: (v: string[]) => void;
-  priorityFilter: string[];
-  setPriorityFilter: (v: string[]) => void;
-  assigneeFilter: string[];
-  setAssigneeFilter: (v: string[]) => void;
-  labelFilter: string[];
-  setLabelFilter: (v: string[]) => void;
-  sprintFilter: string;
-  setSprintFilter: (v: string) => void;
-  columnFilter: string;
-  setColumnFilter: (v: string) => void;
+  filters: FilterState;
+  setFilter: <K extends keyof FilterState>(key: K, value: FilterState[K]) => void;
+  clearFilters: () => void;
   allAssignees: Assignee[];
   allLabels: Label[];
   allSprints: Sprint[];
@@ -50,25 +42,16 @@ interface IssueListFiltersProps {
   onQueryChange?: (q: string) => void;
 }
 
-function toggleFilter(arr: string[], val: string, setter: (v: string[]) => void) {
-  setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
+function toggleArrayFilter(arr: string[], val: string): string[] {
+  return arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val];
 }
 
 /**
  *
  * @param root0
- * @param root0.typeFilter
- * @param root0.setTypeFilter
- * @param root0.priorityFilter
- * @param root0.setPriorityFilter
- * @param root0.assigneeFilter
- * @param root0.setAssigneeFilter
- * @param root0.labelFilter
- * @param root0.setLabelFilter
- * @param root0.sprintFilter
- * @param root0.setSprintFilter
- * @param root0.columnFilter
- * @param root0.setColumnFilter
+ * @param root0.filters
+ * @param root0.setFilter
+ * @param root0.clearFilters
  * @param root0.allAssignees
  * @param root0.allLabels
  * @param root0.allSprints
@@ -78,18 +61,9 @@ function toggleFilter(arr: string[], val: string, setter: (v: string[]) => void)
  * @param root0.onQueryChange
  */
 export function IssueListFilters({
-  typeFilter,
-  setTypeFilter,
-  priorityFilter,
-  setPriorityFilter,
-  assigneeFilter,
-  setAssigneeFilter,
-  labelFilter,
-  setLabelFilter,
-  sprintFilter,
-  setSprintFilter,
-  columnFilter,
-  setColumnFilter,
+  filters,
+  setFilter,
+  clearFilters,
   allAssignees,
   allLabels,
   allSprints,
@@ -130,9 +104,9 @@ export function IssueListFilters({
                   key={key}
                   variant="outline"
                   size="xs"
-                  onClick={() => toggleFilter(typeFilter, key, setTypeFilter)}
+                  onClick={() => setFilter('type', toggleArrayFilter(filters.type, key))}
                   className={cn(
-                    typeFilter.includes(key)
+                    filters.type.includes(key)
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border text-text-secondary hover:border-border-focus',
                   )}
@@ -152,9 +126,9 @@ export function IssueListFilters({
                   key={key}
                   variant="outline"
                   size="xs"
-                  onClick={() => toggleFilter(priorityFilter, key, setPriorityFilter)}
+                  onClick={() => setFilter('priority', toggleArrayFilter(filters.priority, key))}
                   className={cn(
-                    priorityFilter.includes(key)
+                    filters.priority.includes(key)
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border text-text-secondary hover:border-border-focus',
                   )}
@@ -175,9 +149,9 @@ export function IssueListFilters({
                     key={a.id}
                     variant="outline"
                     size="xs"
-                    onClick={() => toggleFilter(assigneeFilter, a.id, setAssigneeFilter)}
+                    onClick={() => setFilter('assignee', toggleArrayFilter(filters.assignee, a.id))}
                     className={cn(
-                      assigneeFilter.includes(a.id)
+                      filters.assignee.includes(a.id)
                         ? 'border-primary bg-primary/10 text-primary'
                         : 'border-border text-text-secondary hover:border-border-focus',
                     )}
@@ -199,9 +173,9 @@ export function IssueListFilters({
                     key={l.id}
                     variant="outline"
                     size="xs"
-                    onClick={() => toggleFilter(labelFilter, l.id, setLabelFilter)}
+                    onClick={() => setFilter('label', toggleArrayFilter(filters.label, l.id))}
                     className={cn(
-                      labelFilter.includes(l.id)
+                      filters.label.includes(l.id)
                         ? 'border-primary bg-primary/10 text-primary'
                         : 'border-border text-text-secondary hover:border-border-focus',
                     )}
@@ -220,9 +194,9 @@ export function IssueListFilters({
               <Button
                 variant="outline"
                 size="xs"
-                onClick={() => setSprintFilter(sprintFilter === 'none' ? '' : 'none')}
+                onClick={() => setFilter('sprint', filters.sprint === 'none' ? '' : 'none')}
                 className={cn(
-                  sprintFilter === 'none'
+                  filters.sprint === 'none'
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border text-text-secondary hover:border-border-focus',
                 )}
@@ -234,9 +208,9 @@ export function IssueListFilters({
                   key={s.id}
                   variant="outline"
                   size="xs"
-                  onClick={() => setSprintFilter(sprintFilter === s.id ? '' : s.id)}
+                  onClick={() => setFilter('sprint', filters.sprint === s.id ? '' : s.id)}
                   className={cn(
-                    sprintFilter === s.id
+                    filters.sprint === s.id
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border text-text-secondary hover:border-border-focus',
                   )}
@@ -257,9 +231,9 @@ export function IssueListFilters({
                     key={c.id}
                     variant="outline"
                     size="xs"
-                    onClick={() => setColumnFilter(columnFilter === c.id ? '' : c.id)}
+                    onClick={() => setFilter('column', filters.column === c.id ? '' : c.id)}
                     className={cn(
-                      columnFilter === c.id
+                      filters.column === c.id
                         ? 'border-primary bg-primary/10 text-primary'
                         : 'border-border text-text-secondary hover:border-border-focus',
                     )}
@@ -274,14 +248,7 @@ export function IssueListFilters({
             <Button
               variant="ghost"
               size="xs"
-              onClick={() => {
-                setTypeFilter([]);
-                setPriorityFilter([]);
-                setAssigneeFilter([]);
-                setLabelFilter([]);
-                setSprintFilter('');
-                setColumnFilter('');
-              }}
+              onClick={clearFilters}
               className="text-text-tertiary hover:text-danger self-end"
             >
               <X className="h-3 w-3" /> Clear all

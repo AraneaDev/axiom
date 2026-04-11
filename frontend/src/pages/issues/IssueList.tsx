@@ -43,7 +43,7 @@ export default function IssueList() {
   const pageOffset = parseInt(searchParams.get('offset') || '0');
 
   const filterString = searchParams.toString();
-  const filters: Record<string, string> = useMemo(() => {
+  const queryParams: Record<string, string> = useMemo(() => {
     const f: Record<string, string> = {};
     for (const [k, v] of searchParams.entries()) f[k] = v;
     return f;
@@ -52,7 +52,7 @@ export default function IssueList() {
   // Hydration: single request for all issues list data
   const hydrationQuery = useQuery({
     queryKey: ['issues-list-hydrate', currentProject?.id, filterString],
-    queryFn: () => hydrateApi.issuesList(currentProject!.id, filters),
+    queryFn: () => hydrateApi.issuesList(currentProject!.id, queryParams),
     enabled: !!currentProject?.id,
     retry: 1,
     staleTime: 30_000,
@@ -61,12 +61,12 @@ export default function IssueList() {
   // Seed individual caches from hydration response
   const hydrationMappings = useMemo(
     () => [
-      { key: ['issues', currentProject?.id, filters], field: 'issues' as const },
+      { key: ['issues', currentProject?.id, queryParams], field: 'issues' as const },
       { key: ['board', currentProject?.id], field: 'boardColumns' as const },
       { key: ['sprints', currentProject?.id], field: 'sprints' as const },
       { key: ['saved-filters', currentProject?.id], field: 'savedFilters' as const },
     ],
-    [currentProject?.id, filters],
+    [currentProject?.id, queryParams],
   );
 
   useEffect(() => {
@@ -87,8 +87,8 @@ export default function IssueList() {
     isLoading,
     error: issuesError,
   } = useQuery({
-    queryKey: ['issues', currentProject?.id, filters],
-    queryFn: () => issuesApi.list(currentProject!.id, filters),
+    queryKey: ['issues', currentProject?.id, queryParams],
+    queryFn: () => issuesApi.list(currentProject!.id, queryParams),
     enabled: !!currentProject?.id && !hydrated,
   });
 
@@ -115,18 +115,9 @@ export default function IssueList() {
 
   // Use extracted filter/sort/search hook
   const {
-    typeFilter,
-    setTypeFilter,
-    priorityFilter,
-    setPriorityFilter,
-    assigneeFilter,
-    setAssigneeFilter,
-    labelFilter,
-    setLabelFilter,
-    sprintFilter,
-    setSprintFilter,
-    columnFilter,
-    setColumnFilter,
+    filters,
+    setFilter,
+    clearFilters,
     showFilters,
     setShowFilters,
     sortField,
@@ -294,10 +285,10 @@ export default function IssueList() {
     const query: Record<string, string> = {};
     for (const [k, v] of searchParams.entries()) query[k] = v;
     if (searchQuery.trim()) query.search = searchQuery.trim();
-    if (typeFilter.length) query.type = typeFilter.join(',');
-    if (priorityFilter.length) query.priority = priorityFilter.join(',');
-    if (assigneeFilter.length) query.assignee = assigneeFilter.join(',');
-    if (labelFilter.length) query.label = labelFilter.join(',');
+    if (filters.type.length) query.type = filters.type.join(',');
+    if (filters.priority.length) query.priority = filters.priority.join(',');
+    if (filters.assignee.length) query.assignee = filters.assignee.join(',');
+    if (filters.label.length) query.label = filters.label.join(',');
     if (sortField !== 'createdAt') query.sort = sortField;
     if (sortDir !== 'desc') query.dir = sortDir;
     saveFilterMutation.mutate({
@@ -376,18 +367,9 @@ export default function IssueList() {
       {/* Filter bar */}
       {showFilters && (
         <IssueListFilters
-          typeFilter={typeFilter}
-          setTypeFilter={setTypeFilter}
-          priorityFilter={priorityFilter}
-          setPriorityFilter={setPriorityFilter}
-          assigneeFilter={assigneeFilter}
-          setAssigneeFilter={setAssigneeFilter}
-          labelFilter={labelFilter}
-          setLabelFilter={setLabelFilter}
-          sprintFilter={sprintFilter}
-          setSprintFilter={setSprintFilter}
-          columnFilter={columnFilter}
-          setColumnFilter={setColumnFilter}
+          filters={filters}
+          setFilter={setFilter}
+          clearFilters={clearFilters}
           allAssignees={allAssignees}
           allLabels={allLabels}
           allSprints={sprints}

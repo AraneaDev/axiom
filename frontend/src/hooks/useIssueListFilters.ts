@@ -6,6 +6,24 @@ type SortField = 'createdAt' | 'updatedAt' | 'priority';
 type SortDir = 'asc' | 'desc';
 type ViewMode = 'list' | 'grid';
 
+export interface FilterState {
+  type: string[];
+  priority: string[];
+  assignee: string[];
+  label: string[];
+  sprint: string;
+  column: string;
+}
+
+const INITIAL_FILTERS: FilterState = {
+  type: [],
+  priority: [],
+  assignee: [],
+  label: [],
+  sprint: '',
+  column: '',
+};
+
 const PRIORITY_ORDER: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 };
 
 /**
@@ -14,13 +32,16 @@ const PRIORITY_ORDER: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, 
  */
 export function useIssueListFilters(issues: Issue[]) {
   // Filter state
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
-  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
-  const [labelFilter, setLabelFilter] = useState<string[]>([]);
-  const [sprintFilter, setSprintFilter] = useState<string>('');
-  const [columnFilter, setColumnFilter] = useState<string>('');
+  const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+
+  const setFilter = useCallback(<K extends keyof FilterState>(key: K, value: FilterState[K]) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setFilters(INITIAL_FILTERS);
+  }, []);
 
   // Sort state
   const [sortField, setSortField] = useState<SortField>('createdAt');
@@ -82,20 +103,20 @@ export function useIssueListFilters(issues: Issue[]) {
         (i) => i.title.toLowerCase().includes(q) || i.key.toLowerCase().includes(q),
       );
     }
-    if (typeFilter.length > 0) result = result.filter((i) => typeFilter.includes(i.type));
-    if (priorityFilter.length > 0)
-      result = result.filter((i) => priorityFilter.includes(i.priority));
-    if (assigneeFilter.length > 0)
-      result = result.filter((i) => i.assignee && assigneeFilter.includes(i.assignee.id));
-    if (labelFilter.length > 0)
-      result = result.filter((i) => i.labels?.some((l) => labelFilter.includes(l.id)));
-    if (sprintFilter === 'none') {
+    if (filters.type.length > 0) result = result.filter((i) => filters.type.includes(i.type));
+    if (filters.priority.length > 0)
+      result = result.filter((i) => filters.priority.includes(i.priority));
+    if (filters.assignee.length > 0)
+      result = result.filter((i) => i.assignee && filters.assignee.includes(i.assignee.id));
+    if (filters.label.length > 0)
+      result = result.filter((i) => i.labels?.some((l) => filters.label.includes(l.id)));
+    if (filters.sprint === 'none') {
       result = result.filter((i) => !i.sprintId);
-    } else if (sprintFilter) {
-      result = result.filter((i) => i.sprintId === sprintFilter);
+    } else if (filters.sprint) {
+      result = result.filter((i) => i.sprintId === filters.sprint);
     }
-    if (columnFilter) {
-      result = result.filter((i) => i.column?.id === columnFilter);
+    if (filters.column) {
+      result = result.filter((i) => i.column?.id === filters.column);
     }
     return [...result].sort((a, b) => {
       const cmp =
@@ -105,26 +126,15 @@ export function useIssueListFilters(issues: Issue[]) {
             new Date((b as unknown as Record<string, string>)[sortField]).getTime();
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [
-    issues,
-    searchQuery,
-    typeFilter,
-    priorityFilter,
-    assigneeFilter,
-    labelFilter,
-    sprintFilter,
-    columnFilter,
-    sortField,
-    sortDir,
-  ]);
+  }, [issues, searchQuery, filters, sortField, sortDir]);
 
   const activeFilterCount =
-    typeFilter.length +
-    priorityFilter.length +
-    assigneeFilter.length +
-    labelFilter.length +
-    (sprintFilter ? 1 : 0) +
-    (columnFilter ? 1 : 0);
+    filters.type.length +
+    filters.priority.length +
+    filters.assignee.length +
+    filters.label.length +
+    (filters.sprint ? 1 : 0) +
+    (filters.column ? 1 : 0);
   const hasActiveSearch = searchQuery.trim().length > 0;
 
   const toggleSort = (field: SortField) => {
@@ -143,18 +153,9 @@ export function useIssueListFilters(issues: Issue[]) {
 
   return {
     // Filter state
-    typeFilter,
-    setTypeFilter,
-    priorityFilter,
-    setPriorityFilter,
-    assigneeFilter,
-    setAssigneeFilter,
-    labelFilter,
-    setLabelFilter,
-    sprintFilter,
-    setSprintFilter,
-    columnFilter,
-    setColumnFilter,
+    filters,
+    setFilter,
+    clearFilters,
     showFilters,
     setShowFilters,
     // Sort state
