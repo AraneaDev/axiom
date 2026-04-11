@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { useFormError } from '@/hooks/useFormError';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -15,7 +16,7 @@ export default function Register() {
   const navigate = useNavigate();
   const { register } = useAuthStore();
   const [form, setForm] = useState({ email: '', username: '', displayName: '', password: '' });
-  const [error, setError] = useState('');
+  const { error, setError, clearError } = useFormError();
   const [loading, setLoading] = useState(false);
 
   function update(field: string, value: string) {
@@ -24,7 +25,7 @@ export default function Register() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError('');
+    clearError();
     setLoading(true);
     try {
       await register(form);

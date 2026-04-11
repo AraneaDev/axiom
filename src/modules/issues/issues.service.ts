@@ -6,6 +6,7 @@ import { parse, compileToPrisma } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { invalidateIssueCache, ISSUE_LIST_TTL } from '../../utils/issue-cache';
 import { formatIssueKey } from '../../utils/issue-key';
@@ -64,7 +65,7 @@ export async function createIssue(
 ) {
   const project = await findOrThrow(
     prisma.project.findUnique({ where: { id: projectId } }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 
   // Find default column
@@ -177,7 +178,7 @@ export async function getIssue(projectId: string, issueNumber: number) {
       where: { id: projectId },
       include: TEAM_ORG_INCLUDE,
     }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 
   const issue = await findOrThrow(
@@ -197,7 +198,7 @@ export async function getIssue(projectId: string, issueNumber: number) {
         },
       },
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
   return {
@@ -264,7 +265,7 @@ export async function listIssues(
 ) {
   const project = await findOrThrow(
     prisma.project.findUnique({ where: { id: projectId } }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 
   const cacheKey = `issues:${projectId}:${filters?.offset ?? 0}:${filters?.q || ''}:${filters?.type || ''}:${filters?.priority || ''}:${filters?.assigneeId || ''}:${filters?.columnId || ''}:${filters?.sprintId || ''}:${filters?.label || ''}`;
@@ -378,7 +379,7 @@ export async function updateIssue(
       where: { projectId_number: { projectId, number: issueNumber } },
       include: { labels: { select: { name: true } } },
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
   const previousLabels =
@@ -548,7 +549,7 @@ export async function deleteIssue(projectId: string, issueNumber: number, userId
     prisma.issue.findUnique({
       where: { projectId_number: { projectId, number: issueNumber } },
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
   await prisma.issue.delete({ where: { id: issue.id } });
   await invalidateIssueCache(projectId);
@@ -575,7 +576,7 @@ export async function getEpicProgress(projectId: string, issueNumber: number) {
       where: { projectId_number: { projectId, number: issueNumber } },
       include: PROJECT_TEAM_ORG_INCLUDE,
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
   const children = await prisma.issue.findMany({

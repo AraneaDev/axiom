@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
+import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatDate } from '@/lib/utils';
 
@@ -23,7 +24,7 @@ export default function ApiTokens() {
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState('issues:read,wiki:read');
   const [newToken, setNewToken] = useState<string | null>(null);
-  const [error, setError] = useState('');
+  const { error, setError } = useFormError();
   const [revokeId, setRevokeId] = useState<string | null>(null);
 
   const {

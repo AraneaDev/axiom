@@ -2,6 +2,8 @@ import { RestrictionType } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
+import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 /**
  * Check if a user can view a page.
@@ -68,7 +70,7 @@ export async function setRestrictions(
 ): Promise<void> {
   // Verify page exists
   const page = await prisma.page.findUnique({ where: { id: pageId } });
-  if (!page) throw new AppError(404, 'Page not found');
+  if (!page) throw new AppError(404, ERR.PAGE_NOT_FOUND);
 
   // Delete existing restrictions of this type then create new ones
   await prisma.$transaction([
@@ -90,7 +92,7 @@ export async function getRestrictions(pageId: string) {
   return prisma.pageRestriction.findMany({
     where: { pageId },
     include: {
-      user: { select: { id: true, username: true, displayName: true } },
+      user: { select: USER_BASIC_SELECT },
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -104,7 +106,7 @@ export async function removeRestriction(restrictionId: string): Promise<void> {
   const restriction = await prisma.pageRestriction.findUnique({
     where: { id: restrictionId },
   });
-  if (!restriction) throw new AppError(404, 'Restriction not found');
+  if (!restriction) throw new AppError(404, ERR.RESTRICTION_NOT_FOUND);
 
   await prisma.pageRestriction.delete({ where: { id: restrictionId } });
 }

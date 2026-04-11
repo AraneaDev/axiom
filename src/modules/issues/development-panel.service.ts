@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { getLinksForIssue } from '../wiki/wiki-issue-links.service';
 
 export interface DevelopmentSummary {
@@ -69,7 +70,7 @@ export async function getDevelopmentSummary(
   });
 
   if (!issue) {
-    throw new AppError(404, 'Issue not found');
+    throw new AppError(404, ERR.ISSUE_NOT_FOUND);
   }
 
   const issueId = issue.id;

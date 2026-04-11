@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler';
+import { parseServicePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 import {
   validate,
@@ -18,10 +19,11 @@ export const getStats = asyncHandler(async (_req: Request, res: Response) => {
 
 export const listUsers = asyncHandler(async (req: Request, res: Response) => {
   const query = validate(adminListUsersQuerySchema, req.query);
+  const { take, skip } = parseServicePagination({ limit: query.limit, offset: query.offset });
   const result = await adminService.listUsers({
     search: query.search,
-    limit: query.limit ?? 20,
-    offset: query.offset ?? 0,
+    limit: take,
+    offset: skip,
   });
   res.json(result);
 });

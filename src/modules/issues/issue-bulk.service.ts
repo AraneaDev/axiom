@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { invalidateIssueCache } from '../../utils/issue-cache';
 import { ISSUE_WITH_COLUMN_INCLUDE } from '../../utils/prisma-selects';
@@ -32,7 +33,7 @@ export async function bulkUpdate(
   },
   userId: string,
 ) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   const issues = await prisma.issue.findMany({
     where: { id: { in: issueIds }, projectId },

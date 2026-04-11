@@ -38,6 +38,7 @@ import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { PresenceIndicators } from '@/components/wiki/PresenceIndicators';
 import { TemplateVariablePanel } from '@/components/wiki/TemplateVariablePanel';
 import { useCollaboration } from '@/hooks/useCollaboration';
+import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useWikiInvalidation } from '@/hooks/useWikiInvalidation';
 import { cn } from '@/lib/utils';
@@ -109,7 +110,7 @@ export default function PageEdit() {
   const [body, setBody] = useState('');
   const [parentId, setParentId] = useState<string>(searchParams.get('parent') ?? '');
   const [changeDescription, setChangeDescription] = useState('');
-  const [error, setError] = useState('');
+  const { error, setError } = useFormError();
   const [showPreview, setShowPreview] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(isNew);
   const [showVariablePanel, setShowVariablePanel] = useState(false);

@@ -1,6 +1,7 @@
 import { LinkType } from '@prisma/client';
 
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { PROJECT_URL_SELECT } from '../../utils/prisma-selects';
 
@@ -14,7 +15,7 @@ export async function getLinks(projectId: string, issueNumber: number) {
     prisma.issue.findUnique({
       where: { projectId_number: { projectId, number: issueNumber } },
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
   const links = await prisma.issueLink.findMany({
@@ -62,7 +63,7 @@ export async function addLink(
     prisma.issue.findUnique({
       where: { projectId_number: { projectId, number: issueNumber } },
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
   const target = await findOrThrow(

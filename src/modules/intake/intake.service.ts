@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { createIssue } from '../issues/issues.service';
 
@@ -72,7 +73,7 @@ export async function getSubmission(submissionId: string, projectId: string) {
         reviewedBy: { select: { id: true, displayName: true, avatarUrl: true } },
       },
     }),
-    'Submission not found',
+    ERR.SUBMISSION_NOT_FOUND,
   );
 }
 
@@ -175,7 +176,7 @@ export async function markSpam(submissionId: string, projectId: string, reviewer
     prisma.formSubmission.findFirst({
       where: { id: submissionId, projectId },
     }),
-    'Submission not found',
+    ERR.SUBMISSION_NOT_FOUND,
   );
 
   return prisma.formSubmission.update({

@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
 
@@ -131,7 +132,7 @@ export async function getRun(runId: string) {
  */
 export async function triggerRun(pipelineId: string, repoId: string, userId: string, ref: string) {
   const pipeline = await prisma.pipeline.findUnique({ where: { id: pipelineId } });
-  if (!pipeline) throw Object.assign(new Error('Pipeline not found'), { status: 404 });
+  if (!pipeline) throw Object.assign(new Error(ERR.PIPELINE_NOT_FOUND), { status: 404 });
 
   const run = await prisma.pipelineRun.create({
     data: {

@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
+import { ERR } from '../../utils/error-messages';
 import { parseServicePagination } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
@@ -105,7 +106,7 @@ export async function createRelease(
   },
 ) {
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-  if (!repo) throw Object.assign(new Error('Repository not found'), { status: 404 });
+  if (!repo) throw Object.assign(new Error(ERR.REPOSITORY_NOT_FOUND), { status: 404 });
 
   let sha = data.commitSha;
   if (!sha && repo.diskPath && (await repoExists(repo.diskPath))) {
@@ -172,7 +173,7 @@ export async function publishRelease(repoId: string, tagName: string) {
   const release = await prisma.release.findUnique({
     where: { repoId_tagName: { repoId, tagName } },
   });
-  if (!release) throw Object.assign(new Error('Release not found'), { status: 404 });
+  if (!release) throw Object.assign(new Error(ERR.RELEASE_NOT_FOUND), { status: 404 });
 
   const repo = await prisma.repository.findUnique({ where: { id: repoId } });
   if (repo?.diskPath && release.commitSha && (await repoExists(repo.diskPath))) {
@@ -247,12 +248,12 @@ export async function deployRelease(
   const release = await prisma.release.findUnique({
     where: { repoId_tagName: { repoId, tagName } },
   });
-  if (!release) throw Object.assign(new Error('Release not found'), { status: 404 });
+  if (!release) throw Object.assign(new Error(ERR.RELEASE_NOT_FOUND), { status: 404 });
 
   const env = await prisma.deploymentEnvironment.findFirst({
     where: { id: environmentId, repoId },
   });
-  if (!env) throw Object.assign(new Error('Environment not found'), { status: 404 });
+  if (!env) throw Object.assign(new Error(ERR.ENVIRONMENT_NOT_FOUND), { status: 404 });
 
   const commitSha = release.commitSha ?? '';
 
@@ -290,7 +291,7 @@ export async function listReleaseDeployments(repoId: string, tagName: string) {
   const release = await prisma.release.findUnique({
     where: { repoId_tagName: { repoId, tagName } },
   });
-  if (!release) throw Object.assign(new Error('Release not found'), { status: 404 });
+  if (!release) throw Object.assign(new Error(ERR.RELEASE_NOT_FOUND), { status: 404 });
 
   return prisma.deployment.findMany({
     where: { releaseId: release.id },

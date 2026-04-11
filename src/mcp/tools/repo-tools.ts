@@ -7,6 +7,7 @@ import { repoExists } from '../../git/repo-manager';
 import * as pipelinesService from '../../modules/pipelines/pipelines.service';
 import * as pullsService from '../../modules/pulls/pulls.service';
 import * as releasesService from '../../modules/releases/releases.service';
+import { ERR } from '../../utils/error-messages';
 import { assertMcpPermission } from '../mcp-permissions';
 
 import type { McpToolContext } from './types';
@@ -28,7 +29,7 @@ export function registerRepoTools(ctx: McpToolContext) {
     },
     async ({ teamId, cursor, limit }) => {
       const team = await prisma.team.findUnique({ where: { id: teamId } });
-      if (!team) return { content: [{ type: 'text' as const, text: 'Team not found' }] };
+      if (!team) return { content: [{ type: 'text' as const, text: ERR.TEAM_NOT_FOUND }] };
       await assertMcpPermission('list_repos', team.orgId);
       const take = Math.min(limit, 100);
       const repos = await prisma.repository.findMany({
@@ -63,7 +64,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         include: { team: true },
       });
       if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
-        return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+        return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('browse_files', repo.team.orgId);
       const entries = await gitCmd.lsTree(repo.diskPath, ref, path);
       return { content: [{ type: 'text' as const, text: JSON.stringify(entries, null, 2) }] };
@@ -80,7 +81,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         include: { team: true },
       });
       if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
-        return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+        return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('read_file', repo.team.orgId);
       try {
         const content = await gitCmd.showBlob(repo.diskPath, ref, filePath);
@@ -101,7 +102,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         include: { team: true },
       });
       if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
-        return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+        return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('get_commits', repo.team.orgId);
       const commits = await gitCmd.log(repo.diskPath, ref, limit);
       return { content: [{ type: 'text' as const, text: JSON.stringify(commits, null, 2) }] };
@@ -118,7 +119,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         include: { team: true },
       });
       if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
-        return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+        return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('get_branches', repo.team.orgId);
       const branches = await gitCmd.listBranches(repo.diskPath, repo.defaultBranch);
       return { content: [{ type: 'text' as const, text: JSON.stringify(branches, null, 2) }] };
@@ -135,7 +136,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         include: { team: true },
       });
       if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
-        return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+        return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('get_diff', repo.team.orgId);
       const diffOutput = await gitCmd.diff(repo.diskPath, base, head);
       const stats = await gitCmd.diffStat(repo.diskPath, base, head);
@@ -161,7 +162,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         where: { id: repoId },
         include: { team: true },
       });
-      if (!repo) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!repo) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('list_pull_requests', repo.team.orgId);
       const where: Record<string, unknown> = { repoId };
       if (status) where.status = status;
@@ -210,7 +211,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         where: { id: repoId },
         include: { team: true },
       });
-      if (!repo) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!repo) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('create_pull_request', repo.team.orgId);
 
       const target = targetBranch || repo.defaultBranch;
@@ -270,7 +271,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         where: { id: repoId },
         include: { team: true },
       });
-      if (!repo) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!repo) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('get_pull_request', repo.team.orgId);
 
       const pr = await prisma.pullRequest.findUnique({
@@ -310,7 +311,7 @@ export function registerRepoTools(ctx: McpToolContext) {
     },
     async ({ repoId, prNumber, strategy }) => {
       const orgId = await getOrgIdFromRepo(repoId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('merge_pull_request', orgId);
       try {
         const merged = await pullsService.mergePR(repoId, prNumber, strategy);
@@ -332,7 +333,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         include: { team: true },
       });
       if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
-        return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+        return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('list_branches', repo.team.orgId);
       const branches = await gitCmd.listBranches(repo.diskPath, repo.defaultBranch);
       return { content: [{ type: 'text' as const, text: JSON.stringify(branches, null, 2) }] };
@@ -351,7 +352,7 @@ export function registerRepoTools(ctx: McpToolContext) {
     },
     async ({ repoId, cursor, limit }) => {
       const orgId = await getOrgIdFromRepo(repoId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('list_pipelines', orgId);
       try {
         const allPipelines = await pipelinesService.listPipelines(repoId);
@@ -383,7 +384,7 @@ export function registerRepoTools(ctx: McpToolContext) {
     },
     async ({ pipelineId, repoId, ref }) => {
       const orgId = await getOrgIdFromRepo(repoId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('trigger_pipeline', orgId);
       try {
         const run = await pipelinesService.triggerRun(pipelineId, repoId, userId, ref);
@@ -409,7 +410,7 @@ export function registerRepoTools(ctx: McpToolContext) {
     },
     async ({ repoId, draft, prerelease, cursor, limit }) => {
       const orgId = await getOrgIdFromRepo(repoId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('list_releases', orgId);
       try {
         const allReleases = await releasesService.listReleases(repoId, { draft, prerelease });
@@ -449,7 +450,7 @@ export function registerRepoTools(ctx: McpToolContext) {
     },
     async ({ repoId, tagName, title, body, targetBranch, isDraft, isPrerelease, commitSha }) => {
       const orgId = await getOrgIdFromRepo(repoId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('create_release', orgId);
       try {
         const release = await releasesService.createRelease(repoId, userId, {
@@ -485,7 +486,7 @@ export function registerRepoTools(ctx: McpToolContext) {
         include: { team: true },
       });
       if (!repo?.diskPath || !(await repoExists(repo.diskPath)))
-        return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+        return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('search_code', repo.team.orgId);
       const results = await grepFiles(repo.diskPath, query, { filePattern, maxResults: 100 });
       return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] };
@@ -503,7 +504,7 @@ export function registerRepoTools(ctx: McpToolContext) {
     },
     async ({ repoId, pullNumber }) => {
       const orgId = await getOrgIdFromRepo(repoId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('get_pr_diff', orgId);
 
       const repo = await prisma.repository.findUnique({ where: { id: repoId } });
@@ -556,7 +557,7 @@ export function registerRepoTools(ctx: McpToolContext) {
     },
     async ({ repoId, pullNumber }) => {
       const orgId = await getOrgIdFromRepo(repoId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('get_pr_comments', orgId);
 
       const pr = await prisma.pullRequest.findUnique({
@@ -605,7 +606,7 @@ export function registerRepoTools(ctx: McpToolContext) {
     },
     async ({ repoId, since, limit }) => {
       const orgId = await getOrgIdFromRepo(repoId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Repository not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.REPOSITORY_NOT_FOUND }] };
       await assertMcpPermission('get_recent_merges', orgId);
 
       const take = Math.min(limit, 100);

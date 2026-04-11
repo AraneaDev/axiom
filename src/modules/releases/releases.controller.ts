@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { ERR } from '../../utils/error-messages';
 import { param } from '../../utils/params';
 import { validate, createReleaseSchema, updateReleaseSchema } from '../../utils/validation';
 
@@ -20,7 +21,7 @@ export const getRelease = asyncHandler(async (req: Request, res: Response) => {
   const tagName = param(req, 'tagName');
   const release = await svc.getRelease(repoId, tagName);
   if (!release) {
-    throw new AppError(404, 'Release not found');
+    throw new AppError(404, ERR.RELEASE_NOT_FOUND);
   }
   res.json(release);
 });

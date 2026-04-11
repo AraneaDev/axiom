@@ -2,6 +2,7 @@ import type { BoardColumn, Project } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { checkUnique } from '../../utils/check-unique';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 type ProjectWithColumns = Project & { columns: BoardColumn[] };
@@ -67,7 +68,7 @@ export async function getProject(projectId: string) {
         _count: { select: { issues: true } },
       },
     }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 }
 
@@ -117,7 +118,7 @@ export async function getProjectAnalytics(projectId: string) {
       where: { id: projectId },
       include: { columns: { orderBy: { position: 'asc' } } },
     }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 
   // Issues by status (board column)

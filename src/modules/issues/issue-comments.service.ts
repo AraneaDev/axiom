@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { assertAuthor } from '../../utils/assert-author';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
@@ -83,7 +84,7 @@ export async function addComment(issueId: string, authorId: string, body: string
 export async function updateComment(commentId: string, userId: string, body: string) {
   const comment = await findOrThrow(
     prisma.comment.findUnique({ where: { id: commentId } }),
-    'Comment not found',
+    ERR.COMMENT_NOT_FOUND,
   );
   assertAuthor(comment, userId, 'edit');
 
@@ -104,7 +105,7 @@ export async function updateComment(commentId: string, userId: string, body: str
 export async function deleteComment(commentId: string, userId: string) {
   const comment = await findOrThrow(
     prisma.comment.findUnique({ where: { id: commentId } }),
-    'Comment not found',
+    ERR.COMMENT_NOT_FOUND,
   );
   assertAuthor(comment, userId, 'delete');
 

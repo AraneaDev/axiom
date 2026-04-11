@@ -7,6 +7,7 @@ import { prisma } from '../../config/database';
 import { redis } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { ERR } from '../../utils/error-messages';
 import { logger } from '../../utils/logger';
 import { AUTOMATION_ISSUE_INCLUDE } from '../../utils/prisma-selects';
 import { evaluateRules } from '../automation/automation.service';
@@ -331,7 +332,7 @@ export async function createRunnerTask(params: {
   if (params.source === 'pipeline') {
     if (!params.pipelineId) throw new AppError(400, 'pipelineId required for pipeline source');
     const pipeline = await prisma.pipeline.findUnique({ where: { id: params.pipelineId } });
-    if (!pipeline) throw new AppError(404, 'Pipeline not found');
+    if (!pipeline) throw new AppError(404, ERR.PIPELINE_NOT_FOUND);
     workflowContent = pipeline.yamlContent;
     workflowRef = params.pipelineId;
     repoId = params.repoId ?? pipeline.repoId;
@@ -351,7 +352,7 @@ export async function createRunnerTask(params: {
     }
 
     const repo = await prisma.repository.findUnique({ where: { id: repoId } });
-    if (!repo) throw new AppError(404, 'Repository not found');
+    if (!repo) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
     if (!repo.diskPath) throw new AppError(500, 'Repository has no disk path');
 
     // Read file from git -- use execFileSync to prevent command injection

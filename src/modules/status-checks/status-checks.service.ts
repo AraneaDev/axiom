@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { getRepoDiskPath } from '../../utils/repo-disk';
 
@@ -25,7 +26,7 @@ export async function createOrUpdateStatus(
 ) {
   await findOrThrow(
     prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
+    ERR.REPOSITORY_NOT_FOUND,
   );
 
   return prisma.commitStatus.upsert({

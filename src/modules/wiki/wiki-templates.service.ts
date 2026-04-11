@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 import { builtInBlueprints } from './blueprints';
@@ -41,7 +42,7 @@ export async function listTemplates(spaceId: string) {
  * @throws {AppError} 404 if template not found
  */
 export async function getTemplate(id: string) {
-  return findOrThrow(prisma.pageTemplate.findUnique({ where: { id } }), 'Template not found');
+  return findOrThrow(prisma.pageTemplate.findUnique({ where: { id } }), ERR.TEMPLATE_NOT_FOUND);
 }
 
 /**
@@ -53,7 +54,7 @@ export async function getTemplate(id: string) {
 export async function deleteTemplate(id: string) {
   const template = await findOrThrow(
     prisma.pageTemplate.findUnique({ where: { id } }),
-    'Template not found',
+    ERR.TEMPLATE_NOT_FOUND,
   );
   if (template.isBuiltIn) {
     throw new AppError(403, 'Built-in templates cannot be deleted');

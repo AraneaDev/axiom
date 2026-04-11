@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
@@ -13,7 +14,7 @@ export async function exportIssuesCsv(projectId: string) {
       where: { id: projectId },
       include: { columns: true },
     }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 
   const columnMap = new Map(

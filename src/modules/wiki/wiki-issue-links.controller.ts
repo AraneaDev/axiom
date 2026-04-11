@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 
+import { ERR } from '../../utils/error-messages';
 import { param } from '../../utils/params';
 
 import * as linkService from './wiki-issue-links.service';
@@ -65,7 +66,7 @@ export async function listLinkedPagesForIssue(req: Request, res: Response) {
   const issueNumber = param(req, 'issueNumber');
   const issue = await linkService.findIssueByNumber(projectId, parseInt(issueNumber, 10));
   if (!issue) {
-    res.status(404).json({ error: { message: 'Issue not found' } });
+    res.status(404).json({ error: { message: ERR.ISSUE_NOT_FOUND } });
     return;
   }
   const links = await linkService.getLinksForIssue(issue.id);

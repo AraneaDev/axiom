@@ -12,6 +12,7 @@ import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
+import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatDate } from '@/lib/utils';
 
@@ -22,7 +23,7 @@ export default function SshKeys() {
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [publicKey, setPublicKey] = useState('');
-  const [error, setError] = useState('');
+  const { error, setError } = useFormError();
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const {

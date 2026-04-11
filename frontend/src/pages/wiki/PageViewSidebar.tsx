@@ -8,314 +8,34 @@ import {
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
-  useDraggable,
-  useDroppable,
 } from '@dnd-kit/core';
-import {
-  ChevronDown,
-  ChevronRight,
-  FileText,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  GripVertical,
-  Hash,
-  Lock,
-  MoreHorizontal,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { FileText, FolderPlus, Lock, Plus } from 'lucide-react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
+
+import { PageTreeNodeItem } from './sidebar/PageTreeNode';
+import { TableOfContents } from './sidebar/TableOfContents';
+import {
+  collectAncestorIds,
+  countDescendants,
+  findNodeById,
+  findSiblings,
+  isDescendant,
+  type DropTarget,
+  type DropZone,
+} from './sidebar/wiki-tree-utils';
 
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { PageTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import type { TocEntry } from '@/lib/wiki-types';
 
-/**
- *
- * @param markdown
- */
-export function extractToc(markdown: string): TocEntry[] {
-  const headingRegex = /^(#{1,3})\s+(.+)$/gm;
-  const entries: TocEntry[] = [];
-  let match;
-  while ((match = headingRegex.exec(markdown)) !== null) {
-    const text = match[2].trim();
-    const id = text
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    entries.push({ level: match[1].length, text, id });
-  }
-  return entries;
-}
-
-function TableOfContents({ entries }: { entries: TocEntry[] }) {
-  if (!entries.length) return null;
-
-  function scrollTo(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  return (
-    <nav className="space-y-1">
-      <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">
-        On this page
-      </h3>
-      {entries.map((entry, i) => (
-        <Button
-          key={`${entry.id}-${i}`}
-          variant="ghost"
-          size="xs"
-          type="button"
-          onClick={() => scrollTo(entry.id)}
-          className={cn(
-            'w-full justify-start text-text-tertiary hover:text-primary truncate',
-            entry.level === 1 && 'font-medium text-text-secondary',
-            entry.level === 2 && 'pl-3',
-            entry.level === 3 && 'pl-6 text-xs',
-          )}
-        >
-          <Hash className="h-3 w-3" /> {entry.text}
-        </Button>
-      ))}
-    </nav>
-  );
-}
-
-/**
- * Count all descendants of a tree node recursively.
- * @param node
- */
-function countDescendants(node: PageTreeNode): number {
-  let count = node.children.length;
-  for (const child of node.children) {
-    count += countDescendants(child);
-  }
-  return count;
-}
-
-function collectAncestorIds(
-  nodes: PageTreeNode[],
-  targetSlug: string,
-  ancestors: string[] = [],
-): string[] | null {
-  for (const node of nodes) {
-    if (node.slug === targetSlug) {
-      return ancestors;
-    }
-    if (node.children.length > 0) {
-      const found = collectAncestorIds(node.children, targetSlug, [...ancestors, node.id]);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-type DropZone = 'before' | 'child' | 'after';
-
-interface DropTarget {
-  nodeId: string;
-  zone: DropZone;
-}
-
-function findNodeById(nodes: PageTreeNode[], id: string): PageTreeNode | undefined {
-  for (const node of nodes) {
-    if (node.id === id) return node;
-    const found = findNodeById(node.children, id);
-    if (found) return found;
-  }
-  return undefined;
-}
-
-function findSiblings(tree: PageTreeNode[], target: PageTreeNode): PageTreeNode[] {
-  if (!target.parentId) return tree;
-  const parent = findNodeById(tree, target.parentId);
-  return parent?.children ?? tree;
-}
-
-function isDescendant(node: PageTreeNode, targetId: string): boolean {
-  for (const child of node.children) {
-    if (child.id === targetId) return true;
-    if (isDescendant(child, targetId)) return true;
-  }
-  return false;
-}
-
-function TreeNode({
-  node,
-  basePath,
-  depth = 0,
-  activeSlug,
-  expanded,
-  onToggle,
-  onNewFolder,
-  onDelete,
-  dropTarget,
-}: {
-  node: PageTreeNode;
-  basePath: string;
-  depth?: number;
-  activeSlug?: string;
-  expanded: Set<string>;
-  onToggle: (id: string) => void;
-  onNewFolder?: (parentId?: string) => void;
-  onDelete?: (node: PageTreeNode) => void;
-  dropTarget?: DropTarget | null;
-}) {
-  const hasChildren = node.children.length > 0;
-  const isExpanded = expanded.has(node.id);
-  const isActive = node.slug === activeSlug;
-
-  const {
-    attributes,
-    listeners,
-    setNodeRef: setDragRef,
-    isDragging,
-  } = useDraggable({
-    id: node.id,
-  });
-  const { setNodeRef: setDropRef } = useDroppable({
-    id: node.id,
-  });
-
-  return (
-    <div className={cn(isDragging && 'opacity-30')}>
-      {/* Row — droppable ref is on the row only, not the children wrapper */}
-      <div
-        ref={(el: HTMLElement | null) => {
-          setDragRef(el);
-          setDropRef(el);
-        }}
-        {...attributes}
-        className={cn(
-          'group relative flex items-center gap-1 py-1 px-1 rounded-md text-sm hover:bg-surface-tertiary transition-colors',
-          isActive && 'bg-primary-light text-primary font-medium',
-        )}
-        style={{ paddingLeft: `${depth * 16 + 4}px` }}
-      >
-        {/* Drop indicators */}
-        {dropTarget?.nodeId === node.id && dropTarget.zone === 'before' && (
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary z-10" />
-        )}
-        {dropTarget?.nodeId === node.id && dropTarget.zone === 'child' && (
-          <div className="absolute inset-0 rounded-md bg-primary/10 border border-primary/30 z-0 pointer-events-none" />
-        )}
-        {dropTarget?.nodeId === node.id && dropTarget.zone === 'after' && (
-          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary z-10" />
-        )}
-        {/* Collapse toggle */}
-        {hasChildren ? (
-          <Tooltip content={isExpanded ? 'Collapse' : 'Expand'}>
-            <Button
-              variant="ghost"
-              size="xs"
-              type="button"
-              onClick={() => onToggle(node.id)}
-              className="shrink-0 !p-0.5 text-text-tertiary"
-              aria-label={isExpanded ? 'Collapse' : 'Expand'}
-            >
-              {isExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          </Tooltip>
-        ) : (
-          <span className="shrink-0 w-[18px]" />
-        )}
-
-        {/* Icon */}
-        {hasChildren ? (
-          isExpanded ? (
-            <FolderOpen className="h-3.5 w-3.5 text-text-secondary shrink-0" />
-          ) : (
-            <Folder className="h-3.5 w-3.5 text-text-secondary shrink-0" />
-          )
-        ) : (
-          <FileText className="h-3.5 w-3.5 text-text-secondary shrink-0" />
-        )}
-
-        {/* Link */}
-        <Link to={`${basePath}/${node.slug}`} className="truncate flex-1 py-0.5">
-          {node.title}
-        </Link>
-
-        {/* Drag handle */}
-        <Tooltip content="Drag to reorder">
-          <Button
-            {...listeners}
-            variant="ghost"
-            size="xs"
-            type="button"
-            className="shrink-0 cursor-grab opacity-0 group-hover:opacity-100 !p-0.5 text-text-tertiary"
-            aria-label="Drag to reorder"
-          >
-            <GripVertical className="h-3 w-3" />
-          </Button>
-        </Tooltip>
-
-        {/* Context menu */}
-        <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Dropdown
-            trigger={
-              <Button
-                variant="ghost"
-                size="xs"
-                type="button"
-                className="!p-0.5 text-text-tertiary"
-                aria-label="Actions"
-              >
-                <MoreHorizontal className="h-3.5 w-3.5" />
-              </Button>
-            }
-            align="right"
-          >
-            <DropdownItem
-              onClick={() => {
-                window.location.href = `${basePath}/new/edit?parent=${node.id}`;
-              }}
-            >
-              <Plus className="h-3.5 w-3.5" /> New Child Page
-            </DropdownItem>
-            <DropdownItem onClick={() => onNewFolder?.(node.id)}>
-              <FolderPlus className="h-3.5 w-3.5" /> New Folder
-            </DropdownItem>
-            <DropdownItem onClick={() => onDelete?.(node)} danger>
-              <Trash2 className="h-3.5 w-3.5" /> Delete
-            </DropdownItem>
-          </Dropdown>
-        </div>
-      </div>
-
-      {/* Children (collapsible) */}
-      {hasChildren &&
-        isExpanded &&
-        node.children.map((child) => (
-          <TreeNode
-            key={child.id}
-            node={child}
-            basePath={basePath}
-            depth={depth + 1}
-            activeSlug={activeSlug}
-            expanded={expanded}
-            onToggle={onToggle}
-            onNewFolder={onNewFolder}
-            onDelete={onDelete}
-            dropTarget={dropTarget}
-          />
-        ))}
-    </div>
-  );
-}
+// Re-export extractToc so existing consumers keep working
+export { extractToc } from './sidebar/wiki-tree-utils';
 
 interface PageViewSidebarProps {
   tree: PageTreeNode[] | undefined;
@@ -553,7 +273,7 @@ export function PageViewSidebar({
       >
         <div className="space-y-0.5 mb-6">
           {tree?.map((node) => (
-            <TreeNode
+            <PageTreeNodeItem
               key={node.id}
               node={node}
               basePath={basePath}

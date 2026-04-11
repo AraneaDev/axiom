@@ -7,6 +7,7 @@ import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { AppError } from '../../middleware/errorHandler';
 import { assertAuthor } from '../../utils/assert-author';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
@@ -123,7 +124,7 @@ export async function listPRComments(
 export async function updatePRComment(commentId: string, userId: string, body: string) {
   const comment = await findOrThrow(
     prisma.pRComment.findUnique({ where: { id: commentId } }),
-    'Comment not found',
+    ERR.COMMENT_NOT_FOUND,
   );
   assertAuthor(comment, userId, 'edit');
 
@@ -143,7 +144,7 @@ export async function updatePRComment(commentId: string, userId: string, body: s
 export async function deletePRComment(commentId: string, userId: string) {
   const comment = await findOrThrow(
     prisma.pRComment.findUnique({ where: { id: commentId } }),
-    'Comment not found',
+    ERR.COMMENT_NOT_FOUND,
   );
   assertAuthor(comment, userId, 'delete');
 
@@ -176,7 +177,7 @@ export async function applySuggestion(
 
   const comment = await findOrThrow(
     prisma.pRComment.findUnique({ where: { id: commentId } }),
-    'Comment not found',
+    ERR.COMMENT_NOT_FOUND,
   );
   if (!comment.filePath || comment.line == null) {
     throw new AppError(400, 'Comment does not reference a file location');

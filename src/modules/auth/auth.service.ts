@@ -9,6 +9,7 @@ import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import type { AuthPayload } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logAudit } from '../audit/audit.service';
 
@@ -261,7 +262,7 @@ export async function logout(userId: string, refreshTokenValue?: string) {
 export async function enableTwoFactor(userId: string) {
   const user = await findOrThrow(
     prisma.user.findUnique({ where: { id: userId } }),
-    'User not found',
+    ERR.USER_NOT_FOUND,
   );
   if (user.twoFactorEnabled) throw new AppError(400, '2FA already enabled');
 

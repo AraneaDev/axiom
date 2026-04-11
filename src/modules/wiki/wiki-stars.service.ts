@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { SPACE_URL_SELECT, USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { toggleAssociation } from '../../utils/toggle-association';
 
 /**
  * Toggle a star on a wiki page for a user.
@@ -9,17 +10,12 @@ import { SPACE_URL_SELECT, USER_BASIC_SELECT } from '../../utils/prisma-selects'
  * @returns Object indicating whether the page is now starred
  */
 export async function toggleStar(userId: string, pageId: string): Promise<{ starred: boolean }> {
-  const existing = await prisma.starredPage.findUnique({
-    where: { userId_pageId: { userId, pageId } },
-  });
-
-  if (existing) {
-    await prisma.starredPage.delete({ where: { id: existing.id } });
-    return { starred: false };
-  }
-
-  await prisma.starredPage.create({ data: { userId, pageId } });
-  return { starred: true };
+  const starred = await toggleAssociation(
+    prisma.starredPage as never,
+    { userId_pageId: { userId, pageId } },
+    { userId, pageId },
+  );
+  return { starred };
 }
 
 /**

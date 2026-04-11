@@ -8,6 +8,7 @@ import { cacheInvalidate } from '../config/redis';
 import { executeSmartCommit } from '../modules/issues/smart-commits.executor';
 import { triggerPipelineOnPush } from '../pipelines/trigger';
 import { broadcastToRoom } from '../realtime/broadcast';
+import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 
 import * as gitCmd from './git-commands';
@@ -51,7 +52,7 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
     });
 
     if (!repo) {
-      return res.status(404).json({ error: 'Repository not found' });
+      return res.status(404).json({ error: ERR.REPOSITORY_NOT_FOUND });
     }
 
     // Determine event type

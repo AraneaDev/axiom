@@ -1,26 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Plus,
-  Filter,
-  ArrowUpDown,
-  LayoutList,
-  LayoutGrid,
-  Download,
-  X,
-  Search,
-  Bookmark,
-  BookmarkCheck,
-  AlertTriangle,
-  ExternalLink,
-  CircleDot,
-  CircleCheck,
-} from 'lucide-react';
+import { Plus, Download, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { IssueListBulkActions } from './IssueListBulkActions';
 import { IssueListFilters } from './IssueListFilters';
+import { IssueListSaveFilterModal } from './IssueListSaveFilterModal';
+import { IssueListSidebar } from './IssueListSidebar';
 import { IssueListTable } from './IssueListTable';
+import { IssueListToolbar } from './IssueListToolbar';
 
 import { fetchWithAuth } from '@/api/client';
 import { hydrateApi } from '@/api/hydrate.api';
@@ -29,22 +17,13 @@ import { savedFiltersApi } from '@/api/saved-filters.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { PageLayout } from '@/components/layout/PageLayout';
-import { Avatar } from '@/components/ui/Avatar';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
-import { Input } from '@/components/ui/Input';
-import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
-import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
-import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useIssueListFilters } from '@/hooks/useIssueListFilters';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
-import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui.store';
 
 /**
@@ -280,109 +259,13 @@ export default function IssueList() {
     ? (allIssues.find((i) => i.id === selectedIssueId) ?? null)
     : null;
 
-  const openCount = allIssues.filter(
-    (i) => i.column?.name !== 'Done' && i.column?.name !== 'Closed',
-  ).length;
-  const closedCount = allIssues.length - openCount;
-
-  const issueSidebar = selectedIssue ? (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h3 className="font-semibold text-sm text-text truncate">Issue Preview</h3>
-        <Button
-          variant="ghost"
-          size="xs"
-          onClick={() => setSelectedIssueId(null)}
-          title="Close preview"
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-      <div className="p-4 space-y-4">
-        <div className="flex items-start gap-2">
-          <IssueTypeIcon type={selectedIssue.type} className="h-4 w-4 mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <span className="text-xs font-mono text-text-secondary">{selectedIssue.key}</span>
-            <h4 className="text-sm font-medium text-text leading-snug">{selectedIssue.title}</h4>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          {selectedIssue.column && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-text-tertiary">Status</span>
-              <Badge variant="outline" size="sm">
-                {selectedIssue.column.name}
-              </Badge>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-text-tertiary">Priority</span>
-            <PriorityBadge priority={selectedIssue.priority} />
-          </div>
-
-          {selectedIssue.assignee && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-text-tertiary">Assignee</span>
-              <div className="flex items-center gap-1.5">
-                <Avatar name={selectedIssue.assignee.displayName} size="xs" />
-                <span className="text-xs text-text">{selectedIssue.assignee.displayName}</span>
-              </div>
-            </div>
-          )}
-
-          {selectedIssue.labels && selectedIssue.labels.length > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-text-tertiary">Labels</span>
-              <div className="flex items-center gap-1 flex-wrap justify-end">
-                {selectedIssue.labels.map((l) => (
-                  <Badge key={l.id} variant="outline" size="sm">
-                    {l.name}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <Link
-          to={`/${org}/${teamSlug}/${projectSlug}/issues/${selectedIssue.number}`}
-          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-hover mt-2"
-        >
-          <ExternalLink className="h-3 w-3" /> View full details
-        </Link>
-      </div>
-    </Card>
-  ) : (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h3 className="font-semibold text-sm text-text">Summary</h3>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-text-tertiary">Total Issues</span>
-          <span className="text-sm font-medium text-text">{allIssues.length}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <CircleDot className="h-3 w-3 text-success" />
-            <span className="text-xs text-text-tertiary">Open</span>
-          </div>
-          <span className="text-sm font-medium text-text">{openCount}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <CircleCheck className="h-3 w-3 text-text-tertiary" />
-            <span className="text-xs text-text-tertiary">Closed</span>
-          </div>
-          <span className="text-sm font-medium text-text">{closedCount}</span>
-        </div>
-        <p className="text-xs text-text-tertiary pt-2 border-t border-border">
-          Click an issue row to preview it here
-        </p>
-      </div>
-    </Card>
+  const issueSidebar = (
+    <IssueListSidebar
+      selectedIssue={selectedIssue}
+      allIssues={allIssues}
+      onClose={() => setSelectedIssueId(null)}
+      issueUrl={(num) => `/${org}/${teamSlug}/${projectSlug}/issues/${num}`}
+    />
   );
 
   if (isLoading)
@@ -405,6 +288,24 @@ export default function IssueList() {
       </div>
     );
   }
+
+  const handleSaveFilter = () => {
+    if (!saveFilterName.trim()) return;
+    const query: Record<string, string> = {};
+    for (const [k, v] of searchParams.entries()) query[k] = v;
+    if (searchQuery.trim()) query.search = searchQuery.trim();
+    if (typeFilter.length) query.type = typeFilter.join(',');
+    if (priorityFilter.length) query.priority = priorityFilter.join(',');
+    if (assigneeFilter.length) query.assignee = assigneeFilter.join(',');
+    if (labelFilter.length) query.label = labelFilter.join(',');
+    if (sortField !== 'createdAt') query.sort = sortField;
+    if (sortDir !== 'desc') query.dir = sortDir;
+    saveFilterMutation.mutate({
+      name: saveFilterName.trim(),
+      query,
+      projectId: currentProject?.id,
+    });
+  };
 
   return (
     <PageLayout sidebar={issueSidebar}>
@@ -434,149 +335,27 @@ export default function IssueList() {
         </Link>
       </PageHeader>
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 mb-4 bg-surface rounded-lg border border-border p-2">
-        <div className="relative w-64">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-tertiary pointer-events-none" />
-          <Input
-            placeholder="Search issues..."
-            value={searchInput}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-8 py-1.5 text-sm h-8"
-          />
-          {hasActiveSearch && (
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={clearSearch}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text p-0.5"
-              title="Clear search"
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-
-        <Button variant="secondary" size="sm" onClick={() => setShowFilters(!showFilters)}>
-          <Filter className="h-3.5 w-3.5" /> Filters
-          {activeFilterCount > 0 && (
-            <span className="ml-1 bg-primary text-on-primary text-[10px] rounded-full px-1.5 py-0.5">
-              {activeFilterCount}
-            </span>
-          )}
-        </Button>
-
-        {/* Sort dropdown */}
-        <Dropdown
-          trigger={
-            <Button variant="secondary" size="sm">
-              <ArrowUpDown className="h-3.5 w-3.5" /> Sort
-            </Button>
-          }
-        >
-          {(
-            [
-              ['createdAt', 'Created'],
-              ['updatedAt', 'Updated'],
-              ['priority', 'Priority'],
-            ] as const
-          ).map(([field, label]) => (
-            <DropdownItem
-              key={field}
-              onClick={() => toggleSort(field)}
-              className={cn('justify-between', sortField === field && 'text-primary font-medium')}
-            >
-              <ArrowUpDown className="h-3 w-3" /> {label}
-              {sortField === field && (
-                <span className="text-xs">{sortDir === 'asc' ? 'Asc' : 'Desc'}</span>
-              )}
-            </DropdownItem>
-          ))}
-        </Dropdown>
-
-        {/* Saved filters dropdown */}
-        <Dropdown
-          trigger={
-            <Button variant="secondary" size="sm">
-              <BookmarkCheck className="h-3.5 w-3.5" /> Saved
-              {savedFilters.length > 0 && (
-                <span className="ml-1 bg-surface-tertiary text-text-secondary text-[10px] rounded-full px-1.5 py-0.5">
-                  {savedFilters.length}
-                </span>
-              )}
-            </Button>
-          }
-        >
-          {savedFilters.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-text-tertiary">No saved filters</p>
-          ) : (
-            savedFilters.map((sf) => (
-              <div key={sf.id} className="flex items-center group">
-                <DropdownItem
-                  onClick={() => {
-                    const params = new URLSearchParams(sf.query as Record<string, string>);
-                    setSearchParams(params);
-                  }}
-                  className="flex-1 justify-start"
-                >
-                  <Bookmark className="h-3 w-3 text-primary shrink-0" />
-                  <span className="truncate">{sf.name}</span>
-                </DropdownItem>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteFilterMutation.mutate(sf.id);
-                  }}
-                  className="px-2 py-1 text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Delete saved filter"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ))
-          )}
-        </Dropdown>
-
-        {/* Save current filter */}
-        {(activeFilterCount > 0 || hasActiveSearch) && (
-          <Button variant="secondary" size="sm" onClick={() => setShowSaveFilterModal(true)}>
-            <Bookmark className="h-3.5 w-3.5" /> Save Filter
-          </Button>
-        )}
-
-        <div className="ml-auto flex items-center gap-1 rounded-lg border border-border p-0.5">
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setViewMode('list')}
-            className={cn(
-              'p-1',
-              viewMode === 'list'
-                ? 'bg-surface-tertiary text-text'
-                : 'text-text-tertiary hover:text-text',
-            )}
-            title="List view"
-          >
-            <LayoutList className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setViewMode('grid')}
-            className={cn(
-              'p-1',
-              viewMode === 'grid'
-                ? 'bg-surface-tertiary text-text'
-                : 'text-text-tertiary hover:text-text',
-            )}
-            title="Grid view"
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <IssueListToolbar
+        searchInput={searchInput}
+        onSearchChange={handleSearchChange}
+        onClearSearch={clearSearch}
+        hasActiveSearch={hasActiveSearch}
+        onToggleFilters={() => setShowFilters(!showFilters)}
+        activeFilterCount={activeFilterCount}
+        sortField={sortField}
+        sortDir={sortDir}
+        onToggleSort={toggleSort}
+        viewMode={viewMode}
+        onSetViewMode={setViewMode}
+        savedFilters={savedFilters}
+        onApplySavedFilter={(query) => {
+          const params = new URLSearchParams(query);
+          setSearchParams(params);
+        }}
+        onDeleteSavedFilter={(id) => deleteFilterMutation.mutate(id)}
+        onSaveFilter={() => setShowSaveFilterModal(true)}
+        canSaveFilter={activeFilterCount > 0 || hasActiveSearch}
+      />
 
       {/* Bulk action toolbar */}
       {hasSelection && (
@@ -653,59 +432,14 @@ export default function IssueList() {
         />
       )}
 
-      {/* Save Filter Modal */}
-      <Modal
+      <IssueListSaveFilterModal
         open={showSaveFilterModal}
         onClose={() => setShowSaveFilterModal(false)}
-        title="Save Filter"
-        size="sm"
-      >
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!saveFilterName.trim()) return;
-            const query: Record<string, string> = {};
-            for (const [k, v] of searchParams.entries()) query[k] = v;
-            if (searchQuery.trim()) query.search = searchQuery.trim();
-            if (typeFilter.length) query.type = typeFilter.join(',');
-            if (priorityFilter.length) query.priority = priorityFilter.join(',');
-            if (assigneeFilter.length) query.assignee = assigneeFilter.join(',');
-            if (labelFilter.length) query.label = labelFilter.join(',');
-            if (sortField !== 'createdAt') query.sort = sortField;
-            if (sortDir !== 'desc') query.dir = sortDir;
-            saveFilterMutation.mutate({
-              name: saveFilterName.trim(),
-              query,
-              projectId: currentProject?.id,
-            });
-          }}
-        >
-          <Input
-            label="Filter name"
-            placeholder="e.g. My urgent bugs"
-            value={saveFilterName}
-            onChange={(e) => setSaveFilterName(e.target.value)}
-            autoFocus
-          />
-          <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-border-light">
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={() => setShowSaveFilterModal(false)}
-            >
-              <X className="h-3.5 w-3.5" /> Cancel
-            </Button>
-            <Button
-              size="sm"
-              type="submit"
-              disabled={!saveFilterName.trim() || saveFilterMutation.isPending}
-            >
-              <Bookmark className="h-3.5 w-3.5" /> Save
-            </Button>
-          </div>
-        </form>
-      </Modal>
+        filterName={saveFilterName}
+        onFilterNameChange={setSaveFilterName}
+        onSave={handleSaveFilter}
+        isSaving={saveFilterMutation.isPending}
+      />
     </PageLayout>
   );
 }

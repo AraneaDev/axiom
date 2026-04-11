@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { ERR } from '../../utils/error-messages';
+import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 import {
   validate,
@@ -32,12 +34,13 @@ export const deletePipeline = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const listRuns = asyncHandler(async (req: Request, res: Response) => {
-  const { pipelineId, status, limit } = req.query as Record<string, string>;
+  const { pipelineId, status } = req.query as Record<string, string>;
+  const { take } = parsePagination(req.query as { limit?: string; offset?: string }, { limit: 20 });
   res.json(
     await svc.listRuns(param(req, 'repoId'), {
       pipelineId,
       status,
-      limit: limit ? parseInt(limit, 10) : undefined,
+      limit: take,
     }),
   );
 });
@@ -45,7 +48,7 @@ export const listRuns = asyncHandler(async (req: Request, res: Response) => {
 export const getRun = asyncHandler(async (req: Request, res: Response) => {
   const run = await svc.getRun(param(req, 'runId'));
   if (!run) {
-    throw new AppError(404, 'Run not found');
+    throw new AppError(404, ERR.RUN_NOT_FOUND);
   }
   res.json(run);
 });

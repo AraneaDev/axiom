@@ -6,6 +6,7 @@ import { issuesApi } from '@/api/issues.api';
 import { Select } from '@/components/ui/Dropdown';
 import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
+import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 interface Repo {
@@ -43,7 +44,7 @@ export default function CreateBranchModal({
   const [repoId, setRepoId] = useState(repos[0]?.id ?? '');
   const [branchName, setBranchName] = useState('');
   const [startPoint, setStartPoint] = useState('');
-  const [error, setError] = useState('');
+  const { error, setError } = useFormError();
 
   const selectedRepo = repos.find((r) => r.id === repoId);
 

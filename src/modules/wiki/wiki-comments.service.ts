@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { assertAuthor } from '../../utils/assert-author';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
@@ -34,7 +35,7 @@ export async function addPageComment(
   body: string,
   anchorText?: string,
 ) {
-  await findOrThrow(prisma.page.findUnique({ where: { id: pageId } }), 'Page not found');
+  await findOrThrow(prisma.page.findUnique({ where: { id: pageId } }), ERR.PAGE_NOT_FOUND);
 
   return prisma.pageComment.create({
     data: { pageId, userId, body, anchorText },
@@ -73,7 +74,7 @@ export async function listPageComments(pageId: string, opts?: { limit?: number; 
 export async function updatePageComment(commentId: string, userId: string, body: string) {
   const comment = await findOrThrow(
     prisma.pageComment.findUnique({ where: { id: commentId } }),
-    'Comment not found',
+    ERR.COMMENT_NOT_FOUND,
   );
   assertAuthor(comment, userId, 'edit');
 
@@ -93,7 +94,7 @@ export async function updatePageComment(commentId: string, userId: string, body:
 export async function resolveComment(commentId: string) {
   const comment = await findOrThrow(
     prisma.pageComment.findUnique({ where: { id: commentId } }),
-    'Comment not found',
+    ERR.COMMENT_NOT_FOUND,
   );
 
   return prisma.pageComment.update({
@@ -111,7 +112,7 @@ export async function resolveComment(commentId: string) {
 export async function deletePageComment(commentId: string) {
   await findOrThrow(
     prisma.pageComment.findUnique({ where: { id: commentId } }),
-    'Comment not found',
+    ERR.COMMENT_NOT_FOUND,
   );
   await prisma.pageComment.delete({ where: { id: commentId } });
 }
@@ -137,7 +138,7 @@ export async function toggleReaction(
 
   await findOrThrow(
     prisma.pageComment.findUnique({ where: { id: commentId } }),
-    'Comment not found',
+    ERR.COMMENT_NOT_FOUND,
   );
 
   const existing = await prisma.commentReaction.findUnique({

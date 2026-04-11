@@ -2,11 +2,15 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { parsePagination } from '../../utils/pagination';
 
 import * as auditService from './audit.service';
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
-  const { userId, resourceType, action, startDate, endDate, limit, offset } = req.query;
+  const { userId, resourceType, action, startDate, endDate } = req.query;
+  const { take, skip } = parsePagination(req.query as { limit?: string; offset?: string }, {
+    limit: 50,
+  });
 
   const result = await auditService.listAuditLogs({
     userId: userId as string | undefined,
@@ -14,8 +18,8 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
     action: action as string | undefined,
     startDate: startDate ? new Date(startDate as string) : undefined,
     endDate: endDate ? new Date(endDate as string) : undefined,
-    limit: limit ? parseInt(limit as string, 10) : undefined,
-    offset: offset ? parseInt(offset as string, 10) : undefined,
+    limit: take,
+    offset: skip,
   });
 
   res.json(result);

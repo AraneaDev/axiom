@@ -6,19 +6,20 @@ import { authApi } from '@/api/auth.api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { useFormError } from '@/hooks/useFormError';
 
 /**
  *
  */
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
+  const { error, setError, clearError } = useFormError();
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError('');
+    clearError();
     setLoading(true);
     try {
       await authApi.forgotPassword(email);

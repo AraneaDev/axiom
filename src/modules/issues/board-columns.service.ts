@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
@@ -15,7 +16,7 @@ export async function createColumn(
   projectId: string,
   data: { name: string; position?: number; isDone?: boolean; wipLimit?: number | null },
 ) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   // If no position given, append at end
   let position: number;
@@ -57,9 +58,9 @@ export async function updateColumn(
 ) {
   const column = await findOrThrow(
     prisma.boardColumn.findUnique({ where: { id: columnId } }),
-    'Column not found',
+    ERR.COLUMN_NOT_FOUND,
   );
-  if (column.projectId !== projectId) throw new AppError(404, 'Column not found');
+  if (column.projectId !== projectId) throw new AppError(404, ERR.COLUMN_NOT_FOUND);
 
   return prisma.boardColumn.update({
     where: { id: columnId },
@@ -82,9 +83,9 @@ export async function deleteColumn(projectId: string, columnId: string) {
       where: { id: columnId },
       include: { _count: { select: { issues: true } } },
     }),
-    'Column not found',
+    ERR.COLUMN_NOT_FOUND,
   );
-  if (column.projectId !== projectId) throw new AppError(404, 'Column not found');
+  if (column.projectId !== projectId) throw new AppError(404, ERR.COLUMN_NOT_FOUND);
   if (column.isDefault) throw new AppError(400, 'Cannot delete the default column');
   if (column._count.issues > 0) {
     throw new AppError(400, 'Cannot delete a column that has issues. Move them first.');
@@ -102,7 +103,7 @@ export async function reorderColumns(
   projectId: string,
   positions: { id: string; position: number }[],
 ) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   await prisma.$transaction(
     positions.map(({ id, position }) =>

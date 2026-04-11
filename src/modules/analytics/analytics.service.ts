@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 
 type Period = '7d' | '30d' | '90d' | 'quarter';
 
@@ -352,7 +353,7 @@ export async function getTeamAnalytics(teamId: string, period: Period) {
       },
     },
   });
-  if (!team) throw new AppError(404, 'Team not found');
+  if (!team) throw new AppError(404, ERR.TEAM_NOT_FOUND);
 
   // Build column classification map
   const columnClassMap = new Map<string, string>();

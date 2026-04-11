@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
@@ -21,7 +22,7 @@ export async function listPageLabels(pageId: string) {
  * @throws {AppError} 404 if page not found
  */
 export async function addLabel(pageId: string, label: string) {
-  await findOrThrow(prisma.page.findUnique({ where: { id: pageId } }), 'Page not found');
+  await findOrThrow(prisma.page.findUnique({ where: { id: pageId } }), ERR.PAGE_NOT_FOUND);
 
   return prisma.pageLabel.create({
     data: { pageId, label },

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { ERR } from '../../utils/error-messages';
 import { parsePagination } from '../../utils/pagination';
 import { param, paramInt } from '../../utils/params';
 
@@ -25,7 +26,7 @@ export const listIssueActivity = asyncHandler(async (req: Request, res: Response
   // Resolve issue ID from project + number
   const issueId = await activityService.getIssueIdByNumber(projectId, issueNumber);
   if (!issueId) {
-    throw new AppError(404, 'Issue not found');
+    throw new AppError(404, ERR.ISSUE_NOT_FOUND);
   }
 
   const { take, skip } = parsePagination(req.query as Record<string, string>);

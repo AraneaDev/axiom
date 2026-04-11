@@ -3,6 +3,7 @@ import { TeamRole } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { checkUnique } from '../../utils/check-unique';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parsePagination, parseServicePagination, paginatedResponse } from '../../utils/pagination';
 import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
@@ -71,7 +72,7 @@ export async function getTeam(teamId: string) {
         wikiSpaces: { select: { id: true, name: true, slug: true } },
       },
     }),
-    'Team not found',
+    ERR.TEAM_NOT_FOUND,
   );
 }
 
@@ -138,7 +139,7 @@ export async function deleteTeam(teamId: string) {
  * @throws {AppError} 404 if team not found
  */
 export async function listTeamMembers(teamId: string) {
-  await findOrThrow(prisma.team.findUnique({ where: { id: teamId } }), 'Team not found');
+  await findOrThrow(prisma.team.findUnique({ where: { id: teamId } }), ERR.TEAM_NOT_FOUND);
 
   return prisma.teamMembership.findMany({
     where: { teamId },
@@ -177,7 +178,7 @@ export async function addTeamMember(
   // Verify user is in the org
   const team = await findOrThrow(
     prisma.team.findUnique({ where: { id: teamId } }),
-    'Team not found',
+    ERR.TEAM_NOT_FOUND,
   );
 
   const orgMember = await prisma.orgMembership.findUnique({
@@ -429,7 +430,7 @@ export async function getTeamMemberProfile(teamId: string, username: string) {
         createdAt: true,
       },
     }),
-    'User not found',
+    ERR.USER_NOT_FOUND,
   );
 
   const membership = await findOrThrow(

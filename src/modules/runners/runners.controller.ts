@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { ERR } from '../../utils/error-messages';
 import { param } from '../../utils/params';
 
 import * as svc from './runners.service';
@@ -44,7 +45,7 @@ export const getTask = asyncHandler(async (req: Request, res: Response) => {
     where: { id: param(req, 'taskId') },
     include: { runner: { select: { name: true, uuid: true } } },
   });
-  if (!task) throw new AppError(404, 'Task not found');
+  if (!task) throw new AppError(404, ERR.TASK_NOT_FOUND);
   res.json(task);
 });
 

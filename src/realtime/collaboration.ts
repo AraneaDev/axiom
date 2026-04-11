@@ -17,6 +17,7 @@ import * as Y from 'yjs';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 import type { AuthPayload } from '../middleware/auth';
+import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 
 import {
@@ -316,7 +317,7 @@ export function createCollaborationServer(): {
     // Verify the page exists
     const page = await prisma.page.findUnique({ where: { id: pageId } });
     if (!page) {
-      ws.close(4004, 'Page not found');
+      ws.close(4004, ERR.PAGE_NOT_FOUND);
       return;
     }
 

@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Dropdown';
 import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
+import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 const LINK_TYPES = [
@@ -41,7 +42,7 @@ export default function IssueLinkModal({ projectId, issueNumber, onClose, onLink
     title: string;
     projectId: string;
   } | null>(null);
-  const [error, setError] = useState('');
+  const { error, setError } = useFormError();
 
   const { data: results } = useQuery({
     queryKey: ['issue-search', projectId, search],

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
+import { useFormError } from '@/hooks/useFormError';
 
 /**
  *
@@ -15,7 +16,7 @@ import { Spinner, PageLoader } from '@/components/ui/Spinner';
 export default function Setup2FA() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
-  const [error, setError] = useState('');
+  const { error, setError, clearError } = useFormError();
   const [loading, setLoading] = useState(false);
 
   const { data, isLoading } = useQuery({
@@ -26,7 +27,7 @@ export default function Setup2FA() {
   });
 
   async function handleVerify() {
-    setError('');
+    clearError();
     setLoading(true);
     try {
       await authApi.verify2FA(code);

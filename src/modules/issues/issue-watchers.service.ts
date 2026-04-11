@@ -1,4 +1,8 @@
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
+import { findOrThrow } from '../../utils/find-or-throw';
+import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
+import { toggleAssociation } from '../../utils/toggle-association';
 
 /**
  * Toggle watch status for a user on an issue.
@@ -8,24 +12,19 @@ import { prisma } from '../../config/database';
  * @param userId
  */
 export async function toggleWatch(projectId: string, issueNumber: number, userId: string) {
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-  });
-  if (!issue) throw Object.assign(new Error('Issue not found'), { status: 404 });
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+    }),
+    ERR.ISSUE_NOT_FOUND,
+  );
 
-  const existing = await prisma.issueWatcher.findUnique({
-    where: { issueId_userId: { issueId: issue.id, userId } },
-  });
-
-  if (existing) {
-    await prisma.issueWatcher.delete({ where: { id: existing.id } });
-    return { watching: false };
-  }
-
-  await prisma.issueWatcher.create({
-    data: { issueId: issue.id, userId },
-  });
-  return { watching: true };
+  const watching = await toggleAssociation(
+    prisma.issueWatcher as never,
+    { issueId_userId: { issueId: issue.id, userId } },
+    { issueId: issue.id, userId },
+  );
+  return { watching };
 }
 
 /**
@@ -34,15 +33,17 @@ export async function toggleWatch(projectId: string, issueNumber: number, userId
  * @param issueNumber
  */
 export async function getWatchers(projectId: string, issueNumber: number) {
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-  });
-  if (!issue) throw Object.assign(new Error('Issue not found'), { status: 404 });
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+    }),
+    ERR.ISSUE_NOT_FOUND,
+  );
 
   return prisma.issueWatcher.findMany({
     where: { issueId: issue.id },
     include: {
-      user: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
+      user: { select: USER_WITH_AVATAR_SELECT },
     },
     orderBy: { createdAt: 'asc' },
   });

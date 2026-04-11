@@ -5,6 +5,7 @@ import _path from 'path';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
 
@@ -166,7 +167,7 @@ export async function getUser(userId: string) {
         },
       },
     }),
-    'User not found',
+    ERR.USER_NOT_FOUND,
   );
 }
 
@@ -178,7 +179,7 @@ export async function getUser(userId: string) {
  * @param data.disabled
  */
 export async function updateUser(userId: string, data: { role?: string; disabled?: boolean }) {
-  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), 'User not found');
+  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   // Update org membership role if provided
   if (data.role) {
@@ -196,7 +197,7 @@ export async function updateUser(userId: string, data: { role?: string; disabled
  * @param userId
  */
 export async function deleteUser(userId: string) {
-  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), 'User not found');
+  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   await prisma.user.delete({ where: { id: userId } });
   return { deleted: true };
@@ -209,7 +210,7 @@ export async function deleteUser(userId: string) {
 export async function deactivateUser(userId: string) {
   const user = await findOrThrow(
     prisma.user.findUnique({ where: { id: userId } }),
-    'User not found',
+    ERR.USER_NOT_FOUND,
   );
   if (user.isAdmin) throw new AppError(400, 'Cannot deactivate an admin user');
 
@@ -225,7 +226,7 @@ export async function deactivateUser(userId: string) {
  * @param userId
  */
 export async function reactivateUser(userId: string) {
-  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), 'User not found');
+  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   await prisma.user.update({
     where: { id: userId },
@@ -240,7 +241,7 @@ export async function reactivateUser(userId: string) {
  * @param newPassword
  */
 export async function resetUserPassword(userId: string, newPassword: string) {
-  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), 'User not found');
+  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   const bcrypt = await import('bcryptjs');
   const passwordHash = await bcrypt.hash(newPassword, 12);

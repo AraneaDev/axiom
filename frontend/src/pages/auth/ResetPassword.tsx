@@ -6,6 +6,7 @@ import { authApi } from '@/api/auth.api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { useFormError } from '@/hooks/useFormError';
 
 /**
  *
@@ -15,7 +16,7 @@ export default function ResetPassword() {
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
+  const { error, setError, clearError } = useFormError();
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
@@ -28,7 +29,7 @@ export default function ResetPassword() {
       setError('Password must be at least 8 characters');
       return;
     }
-    setError('');
+    clearError();
     setLoading(true);
     try {
       await authApi.resetPassword(token!, password);

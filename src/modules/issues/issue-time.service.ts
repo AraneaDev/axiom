@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
@@ -89,7 +90,7 @@ export async function getWorklogs(projectId: string, issueNumber: number) {
  * @returns Time report with per-member and per-issue breakdown
  */
 export async function getTimeReport(projectId: string) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   const entries = await prisma.timeEntry.findMany({
     where: { issue: { projectId } },

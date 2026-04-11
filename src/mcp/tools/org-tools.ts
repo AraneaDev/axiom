@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
 import { assertMcpPermission } from '../mcp-permissions';
 
 import type { McpToolContext } from './types';
@@ -76,7 +77,7 @@ export function registerOrgTools(ctx: McpToolContext) {
     },
     async ({ teamId, cursor, limit }) => {
       const team = await prisma.team.findUnique({ where: { id: teamId } });
-      if (!team) return { content: [{ type: 'text' as const, text: 'Team not found' }] };
+      if (!team) return { content: [{ type: 'text' as const, text: ERR.TEAM_NOT_FOUND }] };
       await assertMcpPermission('list_projects', team.orgId);
       const take = Math.min(limit, 100);
       const projects = await prisma.project.findMany({

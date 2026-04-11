@@ -1,5 +1,7 @@
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { toggleAssociation } from '../../utils/toggle-association';
 
 /**
  * Toggle a vote on an issue: adds if not present, removes if already voted.
@@ -12,22 +14,15 @@ export async function toggleVote(projectId: string, issueNumber: number, userId:
     prisma.issue.findUnique({
       where: { projectId_number: { projectId, number: issueNumber } },
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
-  const existing = await prisma.issueVote.findUnique({
-    where: { issueId_userId: { issueId: issue.id, userId } },
-  });
-
-  if (existing) {
-    await prisma.issueVote.delete({ where: { id: existing.id } });
-    return { voted: false };
-  }
-
-  await prisma.issueVote.create({
-    data: { issueId: issue.id, userId },
-  });
-  return { voted: true };
+  const voted = await toggleAssociation(
+    prisma.issueVote as never,
+    { issueId_userId: { issueId: issue.id, userId } },
+    { issueId: issue.id, userId },
+  );
+  return { voted };
 }
 
 /**
@@ -41,7 +36,7 @@ export async function getVotes(projectId: string, issueNumber: number, userId: s
     prisma.issue.findUnique({
       where: { projectId_number: { projectId, number: issueNumber } },
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
   const count = await prisma.issueVote.count({ where: { issueId: issue.id } });

@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { checkUnique } from '../../utils/check-unique';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parsePagination, paginatedResponse } from '../../utils/pagination';
 
@@ -18,7 +19,7 @@ export async function createLabel(
   projectId: string,
   data: { name: string; color: string; description?: string },
 ) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   await checkUnique('label', { projectId, name: data.name }, 'Label with this name already exists');
 
@@ -45,7 +46,7 @@ export async function listLabels(
   projectId: string,
   query: { limit?: string; offset?: string } = {},
 ) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   const { take, skip } = parsePagination(query, { limit: 50 });
   const where = { projectId };
@@ -84,7 +85,7 @@ export async function updateLabel(
     prisma.label.findUnique({
       where: { projectId_name: { projectId, name: labelName } },
     }),
-    'Label not found',
+    ERR.LABEL_NOT_FOUND,
   );
 
   // If renaming, check for conflicts
@@ -117,7 +118,7 @@ export async function deleteLabel(projectId: string, labelName: string) {
     prisma.label.findUnique({
       where: { projectId_name: { projectId, name: labelName } },
     }),
-    'Label not found',
+    ERR.LABEL_NOT_FOUND,
   );
 
   await prisma.label.delete({ where: { id: label.id } });

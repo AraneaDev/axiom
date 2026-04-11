@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 
@@ -51,7 +52,7 @@ export async function getForm(formId: string, projectId: string) {
         _count: { select: { submissions: true } },
       },
     }),
-    'Form not found',
+    ERR.FORM_NOT_FOUND,
   );
 }
 
@@ -76,8 +77,8 @@ export async function getPublicForm(slug: string) {
       },
     },
   });
-  if (!form) throw new AppError(404, 'Form not found');
-  if (form.status !== 'PUBLISHED') throw new AppError(404, 'Form not found');
+  if (!form) throw new AppError(404, ERR.FORM_NOT_FOUND);
+  if (form.status !== 'PUBLISHED') throw new AppError(404, ERR.FORM_NOT_FOUND);
   return form;
 }
 
@@ -170,7 +171,10 @@ export async function updateForm(
     redirectUrl?: string;
   },
 ) {
-  await findOrThrow(prisma.form.findFirst({ where: { id: formId, projectId } }), 'Form not found');
+  await findOrThrow(
+    prisma.form.findFirst({ where: { id: formId, projectId } }),
+    ERR.FORM_NOT_FOUND,
+  );
 
   if (data.slug) {
     const existing = await prisma.form.findFirst({
@@ -206,7 +210,10 @@ export async function updateForm(
  * @param projectId
  */
 export async function deleteForm(formId: string, projectId: string) {
-  await findOrThrow(prisma.form.findFirst({ where: { id: formId, projectId } }), 'Form not found');
+  await findOrThrow(
+    prisma.form.findFirst({ where: { id: formId, projectId } }),
+    ERR.FORM_NOT_FOUND,
+  );
   await prisma.form.delete({ where: { id: formId } });
 }
 
@@ -225,7 +232,7 @@ export async function publishForm(formId: string, projectId: string) {
         },
       },
     }),
-    'Form not found',
+    ERR.FORM_NOT_FOUND,
   );
 
   // Only validate when publishing (not when unpublishing)
@@ -323,7 +330,7 @@ export async function updatePage(
     conditionValue?: string;
   },
 ) {
-  await findOrThrow(prisma.formPage.findUnique({ where: { id: pageId } }), 'Page not found');
+  await findOrThrow(prisma.formPage.findUnique({ where: { id: pageId } }), ERR.PAGE_NOT_FOUND);
 
   return prisma.formPage.update({
     where: { id: pageId },
@@ -340,7 +347,7 @@ export async function updatePage(
  * @param pageId
  */
 export async function deletePage(pageId: string) {
-  await findOrThrow(prisma.formPage.findUnique({ where: { id: pageId } }), 'Page not found');
+  await findOrThrow(prisma.formPage.findUnique({ where: { id: pageId } }), ERR.PAGE_NOT_FOUND);
   await prisma.formPage.delete({ where: { id: pageId } });
 }
 
@@ -474,7 +481,7 @@ export async function updateField(
     position?: number;
   },
 ) {
-  await findOrThrow(prisma.formField.findUnique({ where: { id: fieldId } }), 'Field not found');
+  await findOrThrow(prisma.formField.findUnique({ where: { id: fieldId } }), ERR.FIELD_NOT_FOUND);
 
   return prisma.formField.update({
     where: { id: fieldId },
@@ -491,7 +498,7 @@ export async function updateField(
  * @param fieldId
  */
 export async function deleteField(fieldId: string) {
-  await findOrThrow(prisma.formField.findUnique({ where: { id: fieldId } }), 'Field not found');
+  await findOrThrow(prisma.formField.findUnique({ where: { id: fieldId } }), ERR.FIELD_NOT_FOUND);
   await prisma.formField.delete({ where: { id: fieldId } });
 }
 
@@ -577,8 +584,8 @@ export async function submitForm(
  */
 export async function verifyFormAccess(slug: string, secret?: string) {
   const form = await prisma.form.findUnique({ where: { slug } });
-  if (!form) throw new AppError(404, 'Form not found');
-  if (form.status !== 'PUBLISHED') throw new AppError(404, 'Form not found');
+  if (!form) throw new AppError(404, ERR.FORM_NOT_FOUND);
+  if (form.status !== 'PUBLISHED') throw new AppError(404, ERR.FORM_NOT_FOUND);
 
   if (form.authMode === 'TOKEN_GATED') {
     if (!secret) throw new AppError(401, 'Access token required');

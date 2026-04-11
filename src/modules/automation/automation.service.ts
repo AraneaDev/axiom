@@ -3,6 +3,7 @@ import { emailQueue } from '../../email/queue';
 import { evaluate, parse, resolveTemplate } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import * as issuesService from '../issues/issues.service';
@@ -87,7 +88,7 @@ interface CreateRuleData {
  * @param data
  */
 export async function createRule(projectId: string, data: CreateRuleData) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   if (data.condition) {
     try {

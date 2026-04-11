@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
+import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 /**
@@ -30,7 +31,7 @@ export function WebhookFormModal({
   const [secret, setSecret] = useState('');
   const [events, setEvents] = useState<string[]>(webhook?.events ?? ['push']);
   const [active, setActive] = useState(webhook?.active ?? true);
-  const [error, setError] = useState('');
+  const { error, setError, clearError } = useFormError();
 
   const mutation = useMutationWithToast(
     () => {
@@ -82,7 +83,7 @@ export function WebhookFormModal({
       setError('Select at least one event');
       return;
     }
-    setError('');
+    clearError();
     mutation.mutate();
   };
 

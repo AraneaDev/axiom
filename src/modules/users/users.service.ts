@@ -2,6 +2,7 @@ import crypto from 'crypto';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
 import {
@@ -34,7 +35,7 @@ export async function getProfile(userId: string) {
         createdAt: true,
       },
     }),
-    'User not found',
+    ERR.USER_NOT_FOUND,
   );
 }
 

@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 export interface SprintReportIssue {
@@ -84,7 +85,7 @@ export async function getSprintReport(
         },
       },
     }),
-    'Sprint not found',
+    ERR.SPRINT_NOT_FOUND,
   );
 
   if (sprint.projectId !== projectId) {

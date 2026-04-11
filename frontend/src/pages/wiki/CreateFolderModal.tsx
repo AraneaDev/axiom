@@ -6,6 +6,7 @@ import { wikiApi } from '@/api/wiki.api';
 import { Select } from '@/components/ui/Dropdown';
 import { FormModal } from '@/components/ui/FormModal';
 import { Input } from '@/components/ui/Input';
+import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { PageTreeNode } from '@/lib/types';
 
@@ -49,7 +50,7 @@ export function CreateFolderModal({
 }: CreateFolderModalProps) {
   const [name, setName] = useState('');
   const [selectedParentId, setSelectedParentId] = useState<string>(initialParentId ?? '');
-  const [error, setError] = useState('');
+  const { error, setError, clearError } = useFormError();
 
   const { data: pageTree = [] } = useQuery({
     queryKey: ['wikiPageTree', spaceId],
@@ -80,7 +81,7 @@ export function CreateFolderModal({
       onSuccess: () => {
         setName('');
         setSelectedParentId(initialParentId ?? '');
-        setError('');
+        clearError();
         onCreated();
         onClose();
       },

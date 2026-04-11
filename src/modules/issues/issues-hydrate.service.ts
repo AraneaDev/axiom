@@ -1,3 +1,4 @@
+import { parsePagination } from '../../utils/pagination';
 import { settled } from '../../utils/settled';
 import { listActivities } from '../activity/activity.service';
 import { listAttachments } from '../attachments/attachments.service';
@@ -100,8 +101,12 @@ export async function hydrateIssuesList(
   if (filters.columnId) issueFilters.columnId = filters.columnId;
   if (filters.sprintId) issueFilters.sprintId = filters.sprintId;
   if (filters.label) issueFilters.label = filters.label;
-  if (filters.limit) issueFilters.limit = parseInt(filters.limit, 10);
-  if (filters.offset) issueFilters.offset = parseInt(filters.offset, 10);
+  const { take, skip } = parsePagination(
+    { limit: filters.limit, offset: filters.offset },
+    { limit: 25 },
+  );
+  issueFilters.limit = take;
+  issueFilters.offset = skip;
 
   const results = await Promise.allSettled([
     listIssues(projectId, issueFilters),

@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { checkUnique } from '../../utils/check-unique';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
@@ -56,7 +57,7 @@ export async function getOrg(orgId: string) {
         },
       },
     }),
-    'Organization not found',
+    ERR.ORGANIZATION_NOT_FOUND,
   );
 }
 
@@ -146,7 +147,7 @@ export async function updateOrgMemberRole(
     prisma.orgMembership.findFirst({
       where: { userId: memberId, orgId },
     }),
-    'Membership not found',
+    ERR.MEMBERSHIP_NOT_FOUND,
   );
 
   return prisma.orgMembership.update({
@@ -167,7 +168,7 @@ export async function removeOrgMember(orgId: string, memberId: string) {
     prisma.orgMembership.findFirst({
       where: { userId: memberId, orgId },
     }),
-    'Membership not found',
+    ERR.MEMBERSHIP_NOT_FOUND,
   );
   if (membership.role === 'OWNER') {
     const ownerCount = await prisma.orgMembership.count({

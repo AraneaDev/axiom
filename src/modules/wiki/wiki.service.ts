@@ -5,6 +5,7 @@ import { cacheable, cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { checkUnique } from '../../utils/check-unique';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
@@ -191,7 +192,7 @@ export async function getPage(spaceId: string, pageSlug: string, userId?: string
         },
       },
     }),
-    'Page not found',
+    ERR.PAGE_NOT_FOUND,
   );
 
   if (userId) {
@@ -233,7 +234,7 @@ export async function updatePage(
       where: { spaceId_slug: { spaceId, slug: pageSlug } },
       include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
     }),
-    'Page not found',
+    ERR.PAGE_NOT_FOUND,
   );
 
   const editAllowed = await canEditPage(authorId, page.id);
@@ -286,7 +287,7 @@ export async function deletePage(spaceId: string, pageSlug: string, userId?: str
     prisma.page.findUnique({
       where: { spaceId_slug: { spaceId, slug: pageSlug } },
     }),
-    'Page not found',
+    ERR.PAGE_NOT_FOUND,
   );
 
   if (userId) {
@@ -322,7 +323,7 @@ export async function getPageHistory(spaceId: string, pageSlug: string) {
         },
       },
     }),
-    'Page not found',
+    ERR.PAGE_NOT_FOUND,
   );
   return page.versions;
 }
@@ -385,7 +386,7 @@ export async function diffVersions(
     prisma.page.findUnique({
       where: { spaceId_slug: { spaceId, slug: pageSlug } },
     }),
-    'Page not found',
+    ERR.PAGE_NOT_FOUND,
   );
 
   const [fromVer, toVer] = await Promise.all([
@@ -452,7 +453,7 @@ export async function restoreVersion(
       where: { spaceId_slug: { spaceId, slug: pageSlug } },
       include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
     }),
-    'Page not found',
+    ERR.PAGE_NOT_FOUND,
   );
 
   const target = await findOrThrow(
@@ -534,7 +535,7 @@ export async function movePage(
 ) {
   const page = await findOrThrow(
     prisma.page.findUnique({ where: { id: pageId } }),
-    'Page not found',
+    ERR.PAGE_NOT_FOUND,
   );
 
   const newSpaceId = targetSpaceId ?? page.spaceId;
@@ -580,7 +581,7 @@ export async function copyPage(
 ) {
   const page = await findOrThrow(
     prisma.page.findUnique({ where: { id: pageId } }),
-    'Page not found',
+    ERR.PAGE_NOT_FOUND,
   );
 
   const destSpaceId = targetSpaceId ?? page.spaceId;
@@ -639,7 +640,7 @@ async function getDescendantIds(pageId: string): Promise<string[]> {
  */
 export async function reorderPage(pageId: string, parentId: string | null, position: number) {
   const page = await prisma.page.findUnique({ where: { id: pageId }, include: { space: true } });
-  if (!page) throw new AppError(404, 'Page not found');
+  if (!page) throw new AppError(404, ERR.PAGE_NOT_FOUND);
 
   if (parentId) {
     if (parentId === pageId) throw new AppError(400, 'Cannot make a page its own parent');

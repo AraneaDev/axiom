@@ -2,6 +2,7 @@ import { prisma } from '../config/database';
 import { repoExists } from '../git/repo-manager';
 import { AppError } from '../middleware/errorHandler';
 
+import { ERR } from './error-messages';
 import { findOrThrow } from './find-or-throw';
 
 /**
@@ -11,9 +12,9 @@ import { findOrThrow } from './find-or-throw';
 export async function getRepoDiskPath(repoId: string): Promise<string> {
   const repo = await findOrThrow(
     prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
+    ERR.REPOSITORY_NOT_FOUND,
   );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
+  if (!repo.diskPath) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
   if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not found on disk');
   return repo.diskPath;
 }
@@ -27,9 +28,9 @@ export async function getRepoDisk(
 ): Promise<{ diskPath: string; defaultBranch: string }> {
   const repo = await findOrThrow(
     prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
+    ERR.REPOSITORY_NOT_FOUND,
   );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
+  if (!repo.diskPath) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
   if (!(await repoExists(repo.diskPath))) throw new AppError(404, 'Repository not found on disk');
   return { diskPath: repo.diskPath, defaultBranch: repo.defaultBranch };
 }

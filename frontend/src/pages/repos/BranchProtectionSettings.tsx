@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { ListSkeleton } from '@/components/ui/Skeleton';
+import { useFormError } from '@/hooks/useFormError';
 import { useModalState } from '@/hooks/useModalState';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
@@ -200,7 +201,7 @@ function ProtectionRuleFormModal({
   const [noForcePush, setNoForcePush] = useState(rule?.noForcePush ?? true);
   const [noDirectPush, setNoDirectPush] = useState(rule?.noDirectPush ?? false);
   const [requireLinear, setRequireLinear] = useState(rule?.requireLinear ?? false);
-  const [error, setError] = useState('');
+  const { error, setError, clearError } = useFormError();
 
   const mutation = useMutationWithToast(
     () => {
@@ -231,7 +232,7 @@ function ProtectionRuleFormModal({
       setError('Branch pattern is required');
       return;
     }
-    setError('');
+    clearError();
     mutation.mutate();
   };
 

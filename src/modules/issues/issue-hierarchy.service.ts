@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { formatIssueKey } from '../../utils/issue-key';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
@@ -101,7 +102,7 @@ export async function setParent(
 export async function getChildren(projectId: string, issueNumber: number) {
   const project = await findOrThrow(
     prisma.project.findUnique({ where: { id: projectId } }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 
   const issue = await findIssueOrThrow(projectId, issueNumber);

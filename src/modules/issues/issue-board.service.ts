@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { cacheable } from '../../config/redis';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { invalidateIssueCache, BOARD_TTL } from '../../utils/issue-cache';
 import { formatIssueKey } from '../../utils/issue-key';
@@ -64,7 +65,7 @@ export async function moveIssue(
     prisma.issue.findFirst({
       where: { projectId, number: issueNumber },
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
   // Validate workflow transition
@@ -114,7 +115,7 @@ export async function moveIssue(
 export async function getRoadmap(projectId: string) {
   const project = await findOrThrow(
     prisma.project.findUnique({ where: { id: projectId } }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 
   const epics = await prisma.issue.findMany({

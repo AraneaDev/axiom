@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 /**
@@ -57,7 +58,7 @@ export async function getMilestone(milestoneId: string) {
         issues: { include: { assignee: true }, orderBy: { createdAt: 'desc' } },
       },
     }),
-    'Milestone not found',
+    ERR.MILESTONE_NOT_FOUND,
   );
 }
 
@@ -76,7 +77,7 @@ export async function updateMilestone(
 ) {
   await findOrThrow(
     prisma.milestone.findUnique({ where: { id: milestoneId } }),
-    'Milestone not found',
+    ERR.MILESTONE_NOT_FOUND,
   );
   return prisma.milestone.update({
     where: { id: milestoneId },

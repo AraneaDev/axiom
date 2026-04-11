@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { ERR } from '../../utils/error-messages';
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
 import {
@@ -57,7 +58,7 @@ export const getDeployment = asyncHandler(async (req: Request, res: Response) =>
   const deploymentId = param(req, 'deploymentId');
   const deployment = await svc.getDeployment(deploymentId);
   if (!deployment) {
-    throw new AppError(404, 'Deployment not found');
+    throw new AppError(404, ERR.DEPLOYMENT_NOT_FOUND);
   }
   res.json(deployment);
 });

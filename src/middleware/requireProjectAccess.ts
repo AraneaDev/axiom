@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { prisma } from '../config/database';
+import { ERR } from '../utils/error-messages';
 import { param } from '../utils/params';
 
 import { AppError } from './errorHandler';
@@ -27,12 +28,12 @@ export async function requireProjectAccess(req: Request, _res: Response, next: N
       where: { id: projectId },
       include: { team: { select: { id: true } } },
     })) as { teamId: string; team: { id: string } } | null;
-    if (!project) return next(new AppError(404, 'Project not found'));
+    if (!project) return next(new AppError(404, ERR.PROJECT_NOT_FOUND));
 
     const membership = await prisma.teamMembership.findUnique({
       where: { userId_teamId: { userId: req.userId!, teamId: project.team.id } },
     });
-    if (!membership) return next(new AppError(403, 'Access denied', 'FORBIDDEN'));
+    if (!membership) return next(new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN'));
 
     next();
   } catch (err) {

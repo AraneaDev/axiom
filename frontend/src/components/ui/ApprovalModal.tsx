@@ -1,4 +1,4 @@
-import { ArrowRight, Search, ShieldCheck, UserPlus } from 'lucide-react';
+import { ArrowRight, Check, Search, ShieldCheck, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 
 import { approvalsApi } from '@/api/approvals.api';
@@ -182,19 +182,7 @@ export function ApprovalModal({
                     </div>
                     {selected && (
                       <div className="h-4 w-4 rounded-full bg-primary flex items-center justify-center shrink-0">
-                        <svg
-                          className="h-2.5 w-2.5 text-text-inverse"
-                          viewBox="0 0 10 10"
-                          fill="none"
-                        >
-                          <path
-                            d="M2 5l2.5 2.5L8 3"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Check className="h-2.5 w-2.5 text-text-inverse" />
                       </div>
                     )}
                   </button>

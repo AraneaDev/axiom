@@ -10,6 +10,7 @@ import { useWebSocket, useRealtimeListener } from './useWebSocket';
 export type RealtimeEvent =
   | { type: 'issue:updated'; projectId: string; issueId: string }
   | { type: 'issue:created'; projectId: string; issueId: string }
+  | { type: 'issue:development-updated'; issueId: string }
   | { type: 'comment:added'; projectId: string; issueId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
   | { type: 'pr:updated'; repoId: string; prId: string }
@@ -19,8 +20,15 @@ export type RealtimeEvent =
   | { type: 'pipeline:updated'; repoId: string; runId: string }
   | { type: 'repo:pushed'; repoId: string; ref: string }
   | { type: 'runner-task:updated'; repoId: string; taskId: string }
-  | { type: 'approval:request:created'; projectId: string; issueId: string }
-  | { type: 'approval:request:resolved'; projectId: string; issueId: string; status: string };
+  | { type: 'approval:request:created'; projectId: string; requestId: string; issueId: string }
+  | {
+      type: 'approval:request:updated';
+      projectId: string;
+      requestId: string;
+      issueId: string;
+      status: string;
+    }
+  | { type: 'form:submission:created'; projectId: string; submissionId: string; formId: string };
 
 /**
  * Hook that auto-subscribes to relevant rooms based on current route context
@@ -140,7 +148,7 @@ export function useRealtimeInvalidation(): void {
           queryClient.invalidateQueries({ queryKey: ['my-pending-approvals'] });
           break;
 
-        case 'approval:request:resolved':
+        case 'approval:request:updated':
           queryClient.invalidateQueries({
             queryKey: ['approval-requests-pending', event.projectId],
           });

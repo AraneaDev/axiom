@@ -16,6 +16,7 @@ import {
 } from '../../git/repo-manager';
 import { AppError } from '../../middleware/errorHandler';
 import { checkUnique } from '../../utils/check-unique';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
@@ -67,7 +68,7 @@ export async function createRepo(
       where: { id: teamId },
       include: { org: { select: { slug: true } } },
     }),
-    'Team not found',
+    ERR.TEAM_NOT_FOUND,
   );
 
   await checkUnique('repository', { teamId, slug: data.slug }, 'Repository slug already taken');
@@ -104,7 +105,7 @@ export async function getRepo(repoId: string) {
         team: { select: { id: true, name: true, slug: true, orgId: true } },
       },
     }),
-    'Repository not found',
+    ERR.REPOSITORY_NOT_FOUND,
   );
 
   let size: number | undefined;
@@ -186,7 +187,7 @@ export async function updateRepoSettings(
 ) {
   await findOrThrow(
     prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
+    ERR.REPOSITORY_NOT_FOUND,
   );
 
   const updateData: Record<string, unknown> = {};
@@ -212,7 +213,7 @@ export async function updateRepoSettings(
 export async function deleteRepoById(repoId: string) {
   const repo = await findOrThrow(
     prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
+    ERR.REPOSITORY_NOT_FOUND,
   );
 
   // Delete disk first (harder to undo), then DB inside a transaction
@@ -289,9 +290,9 @@ export async function forkRepoById(repoId: string, targetTeamId: string, newSlug
 async function getRepoWithDefault(repoId: string) {
   const repo = await findOrThrow(
     prisma.repository.findUnique({ where: { id: repoId } }),
-    'Repository not found',
+    ERR.REPOSITORY_NOT_FOUND,
   );
-  if (!repo.diskPath) throw new AppError(404, 'Repository not found');
+  if (!repo.diskPath) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
   return repo;
 }
 
@@ -514,6 +515,6 @@ export async function getUserForCommit(userId: string) {
     where: { id: userId },
     select: { displayName: true, email: true },
   });
-  if (!user) throw new AppError(404, 'User not found');
+  if (!user) throw new AppError(404, ERR.USER_NOT_FOUND);
   return user;
 }

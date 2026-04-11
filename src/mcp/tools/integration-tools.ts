@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/database';
 import { getDevelopmentSummary } from '../../modules/issues/development-panel.service';
 import * as wikiIssueLinksService from '../../modules/wiki/wiki-issue-links.service';
+import { ERR } from '../../utils/error-messages';
 import { assertMcpPermission } from '../mcp-permissions';
 
 import type { McpToolContext } from './types';
@@ -23,7 +24,7 @@ export function registerIntegrationTools(ctx: McpToolContext) {
     },
     async ({ projectId, issueNumber }) => {
       const orgId = await ctx.getOrgIdFromProject(projectId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Project not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
       await assertMcpPermission('get_development_summary', orgId);
       const summary = await getDevelopmentSummary(projectId, issueNumber);
       return { content: [{ type: 'text' as const, text: JSON.stringify(summary, null, 2) }] };
@@ -46,7 +47,7 @@ export function registerIntegrationTools(ctx: McpToolContext) {
 
       if (pageId) {
         const orgId = await ctx.getOrgIdFromPage(pageId);
-        if (!orgId) return { content: [{ type: 'text' as const, text: 'Page not found' }] };
+        if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PAGE_NOT_FOUND }] };
         await assertMcpPermission('list_wiki_issue_links', orgId);
         const links = await wikiIssueLinksService.getLinksForPage(pageId);
         return { content: [{ type: 'text' as const, text: JSON.stringify(links, null, 2) }] };
@@ -57,7 +58,7 @@ export function registerIntegrationTools(ctx: McpToolContext) {
         where: { id: issueId! },
         include: { project: { include: { team: { select: { orgId: true } } } } },
       });
-      if (!issue) return { content: [{ type: 'text' as const, text: 'Issue not found' }] };
+      if (!issue) return { content: [{ type: 'text' as const, text: ERR.ISSUE_NOT_FOUND }] };
       await assertMcpPermission('list_wiki_issue_links', issue.project.team.orgId);
       const links = await wikiIssueLinksService.getLinksForIssue(issueId!);
       return { content: [{ type: 'text' as const, text: JSON.stringify(links, null, 2) }] };
@@ -74,7 +75,7 @@ export function registerIntegrationTools(ctx: McpToolContext) {
     },
     async ({ pageId, issueId, linkType }) => {
       const orgId = await ctx.getOrgIdFromPage(pageId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: 'Page not found' }] };
+      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PAGE_NOT_FOUND }] };
       await assertMcpPermission('link_wiki_to_issue', orgId);
       const link = await wikiIssueLinksService.addLink(pageId, issueId, linkType, userId);
       return { content: [{ type: 'text' as const, text: JSON.stringify(link, null, 2) }] };

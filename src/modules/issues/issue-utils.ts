@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 
 /**
  * Find an issue by project ID and issue number, or throw 404.
@@ -13,6 +14,6 @@ export async function findIssueOrThrow(projectId: string, issueNumber: number) {
   const issue = await prisma.issue.findUnique({
     where: { projectId_number: { projectId, number: issueNumber } },
   });
-  if (!issue) throw new AppError(404, 'Issue not found');
+  if (!issue) throw new AppError(404, ERR.ISSUE_NOT_FOUND);
   return issue;
 }

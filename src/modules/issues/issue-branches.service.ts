@@ -1,6 +1,9 @@
 import { prisma } from '../../config/database';
 import * as gitCmd from '../../git/git-commands';
 import { repoExists } from '../../git/repo-manager';
+import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
+import { findOrThrow } from '../../utils/find-or-throw';
 import { REPO_URL_SELECT } from '../../utils/prisma-selects';
 
 /**
@@ -33,10 +36,12 @@ export function suggestBranchName(
  * @param issueNumber
  */
 export async function getBranches(projectId: string, issueNumber: number) {
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-  });
-  if (!issue) throw Object.assign(new Error('Issue not found'), { status: 404 });
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+    }),
+    ERR.ISSUE_NOT_FOUND,
+  );
 
   return prisma.issueBranch.findMany({
     where: { issueId: issue.id },
@@ -67,18 +72,20 @@ export async function createBranch(
     startPoint?: string;
   },
 ) {
-  const issue = await prisma.issue.findUnique({
-    where: { projectId_number: { projectId, number: issueNumber } },
-    include: { project: { select: { prefix: true } } },
-  });
-  if (!issue) throw Object.assign(new Error('Issue not found'), { status: 404 });
+  const issue = await findOrThrow(
+    prisma.issue.findUnique({
+      where: { projectId_number: { projectId, number: issueNumber } },
+      include: { project: { select: { prefix: true } } },
+    }),
+    ERR.ISSUE_NOT_FOUND,
+  );
 
   const repo = await prisma.repository.findUnique({
     where: { id: data.repoId },
     include: { team: { select: { id: true } } },
   });
   if (!repo?.diskPath || !(await repoExists(repo.diskPath))) {
-    throw Object.assign(new Error('Repository not found'), { status: 404 });
+    throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
   }
 
   // Ensure repo belongs to the same team as the project
@@ -87,18 +94,16 @@ export async function createBranch(
     select: { teamId: true },
   });
   if (repo.team.id !== project?.teamId) {
-    throw Object.assign(new Error('Repository does not belong to this project team'), {
-      status: 403,
-    });
+    throw new AppError(403, 'Repository does not belong to this project team');
   }
 
   // Validate branch name
   if (!/^[a-zA-Z0-9._\-/]+$/.test(data.branchName) || data.branchName.length > 250) {
-    throw Object.assign(new Error('Invalid branch name'), { status: 400 });
+    throw new AppError(400, 'Invalid branch name');
   }
 
   if (await gitCmd.branchExists(repo.diskPath, data.branchName)) {
-    throw Object.assign(new Error('Branch already exists'), { status: 409 });
+    throw new AppError(409, 'Branch already exists');
   }
 
   const startPoint = data.startPoint ?? repo.defaultBranch;

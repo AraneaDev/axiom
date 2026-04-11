@@ -5,6 +5,7 @@ import { Request, Response, NextFunction } from 'express';
 
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 
 type GitService = 'git-upload-pack' | 'git-receive-pack';
@@ -79,7 +80,7 @@ async function resolveRepo(
   });
 
   if (!orgMembership && repo.visibility === 'PRIVATE') {
-    throw new AppError(403, 'Access denied');
+    throw new AppError(403, ERR.ACCESS_DENIED);
   }
 
   if (needsWrite) {

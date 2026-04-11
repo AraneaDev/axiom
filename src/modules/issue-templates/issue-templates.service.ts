@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 export interface IssueTemplate {
@@ -22,7 +23,7 @@ async function getTemplates(projectId: string): Promise<IssueTemplate[]> {
       where: { id: projectId },
       select: { issueTemplates: true },
     }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 
   if (!project.issueTemplates) return [];
@@ -96,7 +97,7 @@ export async function listTemplates(projectId: string) {
 export async function getTemplate(projectId: string, templateId: string) {
   const templates = await getTemplates(projectId);
   const template = templates.find((t) => t.id === templateId);
-  if (!template) throw new AppError(404, 'Template not found');
+  if (!template) throw new AppError(404, ERR.TEMPLATE_NOT_FOUND);
   return template;
 }
 
@@ -126,7 +127,7 @@ export async function updateTemplate(
 ) {
   const templates = await getTemplates(projectId);
   const index = templates.findIndex((t) => t.id === templateId);
-  if (index === -1) throw new AppError(404, 'Template not found');
+  if (index === -1) throw new AppError(404, ERR.TEMPLATE_NOT_FOUND);
 
   // Check name conflict
   if (data.name && data.name !== templates[index].name) {
@@ -151,7 +152,7 @@ export async function updateTemplate(
 export async function deleteTemplate(projectId: string, templateId: string) {
   const templates = await getTemplates(projectId);
   const index = templates.findIndex((t) => t.id === templateId);
-  if (index === -1) throw new AppError(404, 'Template not found');
+  if (index === -1) throw new AppError(404, ERR.TEMPLATE_NOT_FOUND);
 
   templates.splice(index, 1);
   await saveTemplates(projectId, templates);

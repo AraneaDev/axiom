@@ -12,7 +12,7 @@ import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
-import { PROJECT_URL_SELECT } from '../../utils/prisma-selects';
+import { PROJECT_URL_SELECT, USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { getRepoDisk } from '../../utils/repo-disk';
 import { logActivity } from '../activity/activity.service';
 import { enforceMergeProtection } from '../repos/protection.service';
@@ -233,7 +233,7 @@ export async function listPRs(
   const authors = authorIds.length
     ? await prisma.user.findMany({
         where: { id: { in: authorIds } },
-        select: { id: true, username: true, displayName: true },
+        select: USER_BASIC_SELECT,
       })
     : [];
   const authorMap = new Map(

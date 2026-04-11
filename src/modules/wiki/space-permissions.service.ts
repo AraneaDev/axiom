@@ -2,6 +2,8 @@ import { SpacePermissionLevel } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
+import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
 const LEVEL_HIERARCHY: Record<SpacePermissionLevel, number> = {
   VIEW: 1,
@@ -70,7 +72,7 @@ export async function getSpacePermissions(spaceId: string) {
     where: { spaceId },
     include: {
       user: {
-        select: { id: true, username: true, displayName: true, avatarUrl: true },
+        select: USER_WITH_AVATAR_SELECT,
       },
     },
     orderBy: { createdAt: 'asc' },
@@ -105,7 +107,7 @@ export async function setSpacePermission(
       update: { level: data.level },
       include: {
         user: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true },
+          select: USER_WITH_AVATAR_SELECT,
         },
       },
     });
@@ -117,7 +119,7 @@ export async function setSpacePermission(
     update: { level: data.level },
     include: {
       user: {
-        select: { id: true, username: true, displayName: true, avatarUrl: true },
+        select: USER_WITH_AVATAR_SELECT,
       },
     },
   });
@@ -132,7 +134,7 @@ export async function removeSpacePermission(spaceId: string, permissionId: strin
   const permission = await prisma.spacePermission.findUnique({
     where: { id: permissionId },
   });
-  if (!permission) throw new AppError(404, 'Permission not found');
+  if (!permission) throw new AppError(404, ERR.PERMISSION_NOT_FOUND);
   if (permission.spaceId !== spaceId) {
     throw new AppError(403, 'Permission does not belong to this space');
   }

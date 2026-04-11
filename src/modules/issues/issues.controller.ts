@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { parseServicePagination } from '../../utils/pagination';
 import { param, paramInt } from '../../utils/params';
 import {
   validate,
@@ -28,8 +29,7 @@ export const get = asyncHandler(async (req: Request, res: Response) => {
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
   const query = validate(issueListQuerySchema, req.query);
-  const limit = query.limit ?? 25;
-  const offset = query.offset ?? 0;
+  const { take, skip } = parseServicePagination({ limit: query.limit, offset: query.offset }, 25);
   const result = await issuesService.listIssues(param(req, 'projectId'), {
     q: query.q,
     type: query.type,
@@ -38,10 +38,10 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
     columnId: query.columnId,
     sprintId: query.sprintId,
     label: query.label,
-    limit,
-    offset,
+    limit: take,
+    offset: skip,
   });
-  res.json({ ...result, limit, offset });
+  res.json({ ...result, limit: take, offset: skip });
 });
 
 export const update = asyncHandler(async (req: Request, res: Response) => {

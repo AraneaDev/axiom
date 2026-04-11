@@ -9,6 +9,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { getStorage } from '../../storage/storage';
+import { ERR } from '../../utils/error-messages';
 import { PROJECT_TEAM_ORG_INCLUDE, SPACE_TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
@@ -99,7 +100,7 @@ export async function uploadAttachment(
  */
 export async function getAttachment(id: string) {
   const attachment = await prisma.attachment.findUnique({ where: { id } });
-  if (!attachment) throw new AppError(404, 'Attachment not found', 'NOT_FOUND');
+  if (!attachment) throw new AppError(404, ERR.ATTACHMENT_NOT_FOUND, 'NOT_FOUND');
   return attachment;
 }
 
@@ -119,7 +120,7 @@ export async function getAttachmentAuthorized(id: string, userId: string) {
       page: { include: SPACE_TEAM_ORG_INCLUDE },
     },
   });
-  if (!attachment) throw new AppError(404, 'Attachment not found', 'NOT_FOUND');
+  if (!attachment) throw new AppError(404, ERR.ATTACHMENT_NOT_FOUND, 'NOT_FOUND');
 
   // Determine the org from the parent resource
   const orgId = attachment.issue?.project?.team?.org?.id ?? attachment.page?.space?.team?.org?.id;
@@ -130,7 +131,7 @@ export async function getAttachmentAuthorized(id: string, userId: string) {
   const membership = await prisma.orgMembership.findFirst({
     where: { orgId, userId },
   });
-  if (!membership) throw new AppError(403, 'Access denied', 'FORBIDDEN');
+  if (!membership) throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
 
   return attachment;
 }
@@ -159,14 +160,14 @@ export async function listAttachments(opts: { issueId?: string; pageId?: string 
       where: { id: opts.issueId },
       include: PROJECT_TEAM_ORG_INCLUDE,
     });
-    if (!issue) throw new AppError(404, 'Issue not found', 'NOT_FOUND');
+    if (!issue) throw new AppError(404, ERR.ISSUE_NOT_FOUND, 'NOT_FOUND');
     orgId = issue.project?.team?.org?.id;
   } else if (opts.pageId) {
     const page = await prisma.page.findUnique({
       where: { id: opts.pageId },
       include: SPACE_TEAM_ORG_INCLUDE,
     });
-    if (!page) throw new AppError(404, 'Page not found', 'NOT_FOUND');
+    if (!page) throw new AppError(404, ERR.PAGE_NOT_FOUND, 'NOT_FOUND');
     orgId = page.space?.team?.org?.id;
   }
 
@@ -174,7 +175,7 @@ export async function listAttachments(opts: { issueId?: string; pageId?: string 
     const membership = await prisma.orgMembership.findFirst({
       where: { orgId, userId },
     });
-    if (!membership) throw new AppError(403, 'Access denied', 'FORBIDDEN');
+    if (!membership) throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
   }
 
   const where: Record<string, string> = {};
@@ -197,7 +198,7 @@ export async function listAttachments(opts: { issueId?: string; pageId?: string 
  */
 export async function deleteAttachment(id: string, userId: string) {
   const attachment = await prisma.attachment.findUnique({ where: { id } });
-  if (!attachment) throw new AppError(404, 'Attachment not found', 'NOT_FOUND');
+  if (!attachment) throw new AppError(404, ERR.ATTACHMENT_NOT_FOUND, 'NOT_FOUND');
 
   // Check ownership -- only the uploader can delete.
   // Org-level admin checks require org context and are handled at the route level if needed.

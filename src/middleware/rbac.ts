@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { prisma } from '../config/database';
+import { ERR } from '../utils/error-messages';
 import { param } from '../utils/params';
 import { Action, hasPermission, hasOrgPermission } from '../utils/permissions';
 
@@ -25,7 +26,7 @@ export function requireRepoAccess() {
         where: { id: repoId },
         select: { team: { select: { orgId: true } } },
       });
-      if (!repo) throw new AppError(404, 'Repository not found');
+      if (!repo) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
 
       const orgMembership = await prisma.orgMembership.findUnique({
         where: { userId_orgId: { userId, orgId: repo.team.orgId } },
@@ -130,7 +131,7 @@ export function requireWikiCommentAccess() {
         where: { id: commentId },
         select: { page: { select: { space: { select: { team: { select: { orgId: true } } } } } } },
       });
-      if (!comment) throw new AppError(404, 'Comment not found');
+      if (!comment) throw new AppError(404, ERR.COMMENT_NOT_FOUND);
 
       const orgMembership = await prisma.orgMembership.findUnique({
         where: { userId_orgId: { userId, orgId: comment.page.space.team.orgId } },
@@ -165,7 +166,7 @@ export function requireWikiTemplateAccess() {
         where: { id: templateId },
         select: { space: { select: { team: { select: { orgId: true } } } } },
       });
-      if (!template) throw new AppError(404, 'Template not found');
+      if (!template) throw new AppError(404, ERR.TEMPLATE_NOT_FOUND);
 
       const orgMembership = await prisma.orgMembership.findUnique({
         where: { userId_orgId: { userId, orgId: template.space.team.orgId } },
@@ -200,7 +201,7 @@ export function requireWikiRestrictionAccess() {
         where: { id: restrictionId },
         select: { page: { select: { space: { select: { team: { select: { orgId: true } } } } } } },
       });
-      if (!restriction) throw new AppError(404, 'Restriction not found');
+      if (!restriction) throw new AppError(404, ERR.RESTRICTION_NOT_FOUND);
 
       const orgMembership = await prisma.orgMembership.findUnique({
         where: { userId_orgId: { userId, orgId: restriction.page.space.team.orgId } },
@@ -267,7 +268,7 @@ export function requireTeamPermission(action: Action) {
 
       // Get team to find org
       const team = await prisma.team.findUnique({ where: { id: teamId } });
-      if (!team) throw new AppError(404, 'Team not found');
+      if (!team) throw new AppError(404, ERR.TEAM_NOT_FOUND);
 
       // Check org membership first
       const orgMembership = await prisma.orgMembership.findUnique({

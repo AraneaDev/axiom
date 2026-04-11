@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 
 /**
  *
@@ -68,7 +69,7 @@ export async function getRunner(runnerId: string, scopeType: RunnerScope, scopeI
   });
 
   if (!runner || runner.scopeType !== scopeType || runner.scopeId !== scopeId) {
-    throw new AppError(404, 'Runner not found');
+    throw new AppError(404, ERR.RUNNER_NOT_FOUND);
   }
 
   return runner;
@@ -83,7 +84,7 @@ export async function getRunner(runnerId: string, scopeType: RunnerScope, scopeI
 export async function deleteRunner(runnerId: string, scopeType: RunnerScope, scopeId: string) {
   const runner = await prisma.runner.findUnique({ where: { id: runnerId } });
   if (!runner || runner.scopeType !== scopeType || runner.scopeId !== scopeId) {
-    throw new AppError(404, 'Runner not found');
+    throw new AppError(404, ERR.RUNNER_NOT_FOUND);
   }
 
   await prisma.runner.delete({ where: { id: runnerId } });
@@ -98,7 +99,7 @@ export async function resolveProjectScopes(projectId: string) {
     where: { id: projectId },
     include: { team: { include: { org: true } } },
   });
-  if (!project) throw new AppError(404, 'Project not found');
+  if (!project) throw new AppError(404, ERR.PROJECT_NOT_FOUND);
 
   return {
     projectId: project.id,

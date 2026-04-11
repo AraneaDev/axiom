@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { useFormError } from '@/hooks/useFormError';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -17,12 +18,12 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [needs2FA, setNeeds2FA] = useState(false);
-  const [error, setError] = useState('');
+  const { error, setError, clearError } = useFormError();
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError('');
+    clearError();
     setLoading(true);
     try {
       const result = await login(loginId, password, needs2FA ? twoFactorCode : undefined);

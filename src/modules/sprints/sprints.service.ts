@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { formatIssueKey } from '../../utils/issue-key';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
@@ -31,7 +32,7 @@ export async function createSprint(
   projectId: string,
   data: { name: string; goal?: string; startDate: string; endDate: string },
 ) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   return prisma.sprint.create({
     data: {
@@ -63,7 +64,7 @@ export async function createSprint(
  * @throws {AppError} 404 if project not found
  */
 export async function listSprints(projectId: string, opts?: { status?: string }) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   const where: Prisma.SprintWhereInput = { projectId };
   if (opts?.status) {
@@ -113,7 +114,7 @@ export async function getSprint(sprintId: string) {
         },
       },
     }),
-    'Sprint not found',
+    ERR.SPRINT_NOT_FOUND,
   );
 
   return {
@@ -140,7 +141,7 @@ export async function updateSprint(
   sprintId: string,
   data: { name?: string; goal?: string; startDate?: string; endDate?: string },
 ) {
-  await findOrThrow(prisma.sprint.findUnique({ where: { id: sprintId } }), 'Sprint not found');
+  await findOrThrow(prisma.sprint.findUnique({ where: { id: sprintId } }), ERR.SPRINT_NOT_FOUND);
 
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
@@ -174,7 +175,7 @@ export async function updateSprint(
 export async function startSprint(sprintId: string) {
   const sprint = await findOrThrow(
     prisma.sprint.findUnique({ where: { id: sprintId } }),
-    'Sprint not found',
+    ERR.SPRINT_NOT_FOUND,
   );
   if (sprint.status !== 'PLANNING') {
     throw new AppError(400, 'Only sprints in PLANNING status can be started');
@@ -219,7 +220,7 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
         issues: { include: { column: true } },
       },
     }),
-    'Sprint not found',
+    ERR.SPRINT_NOT_FOUND,
   );
   if (sprint.status !== 'ACTIVE') {
     throw new AppError(400, 'Only active sprints can be completed');
@@ -278,7 +279,7 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
 export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
   const sprint = await findOrThrow(
     prisma.sprint.findUnique({ where: { id: sprintId } }),
-    'Sprint not found',
+    ERR.SPRINT_NOT_FOUND,
   );
 
   await prisma.issue.updateMany({
@@ -303,7 +304,7 @@ export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
 export async function removeIssueFromSprint(issueId: string) {
   const issue = await findOrThrow(
     prisma.issue.findUnique({ where: { id: issueId } }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
   // Record REMOVED history event before clearing sprint
@@ -327,7 +328,7 @@ export async function removeIssueFromSprint(issueId: string) {
  * @throws {AppError} 404 if project not found
  */
 export async function getVelocity(projectId: string, sprintCount = 5) {
-  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), 'Project not found');
+  await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   const completedSprints = await prisma.sprint.findMany({
     where: { projectId, status: 'COMPLETED' },
@@ -366,7 +367,7 @@ export async function getVelocity(projectId: string, sprintCount = 5) {
 export async function getBacklog(projectId: string) {
   const project = await findOrThrow(
     prisma.project.findUnique({ where: { id: projectId } }),
-    'Project not found',
+    ERR.PROJECT_NOT_FOUND,
   );
 
   const issues = await prisma.issue.findMany({

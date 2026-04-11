@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
@@ -32,7 +33,7 @@ export async function createInvitation(
   if (data.teamId) {
     const team = await findOrThrow(
       prisma.team.findUnique({ where: { id: data.teamId } }),
-      'Team not found',
+      ERR.TEAM_NOT_FOUND,
     );
     if (team.orgId !== orgId) throw new AppError(400, 'Team does not belong to this organization');
   }
@@ -101,7 +102,7 @@ export async function listInvitations(orgId: string, teamId?: string) {
 export async function revokeInvitation(invitationId: string, orgId: string) {
   const invitation = await findOrThrow(
     prisma.invitation.findUnique({ where: { id: invitationId } }),
-    'Invitation not found',
+    ERR.INVITATION_NOT_FOUND,
   );
   if (invitation.orgId !== orgId) throw new AppError(403, 'Invitation does not belong to this org');
   if (invitation.status !== 'PENDING')
@@ -136,7 +137,7 @@ export async function acceptInvitation(token: string, userId: string) {
   // Verify the accepting user's email matches
   const user = await findOrThrow(
     prisma.user.findUnique({ where: { id: userId } }),
-    'User not found',
+    ERR.USER_NOT_FOUND,
   );
   if (user.email !== invitation.email) {
     throw new AppError(403, 'This invitation was sent to a different email address');

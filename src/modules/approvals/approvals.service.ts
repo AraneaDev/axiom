@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
@@ -204,7 +205,7 @@ export async function createApprovalRequestWithTarget(
         },
       },
     }),
-    'Issue not found',
+    ERR.ISSUE_NOT_FOUND,
   );
 
   // Find enabled gate for the transition

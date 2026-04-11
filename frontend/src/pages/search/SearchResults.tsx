@@ -1,40 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  AlertTriangle,
-  Search,
-  FileText,
-  Code2,
-  GitFork,
-  BookOpen,
-  Bookmark,
-  BookmarkPlus,
-  Trash2,
-  Eye,
-  Lock,
-  Info,
-  X,
-  Filter,
-  Tag,
-  Calendar,
-  Library,
-} from 'lucide-react';
+import { AlertTriangle, Search, FileText, Code2, GitFork, BookOpen, X } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { useSearchParams, Link } from 'react-router';
+import { useSearchParams } from 'react-router';
+
+import { SearchBar } from './SearchBar';
+import { IssueRow, CodeRow, WikiRow, RepoRow } from './SearchResultRows';
+import type { CodeItem } from './SearchResultRows';
+import { WikiFilters } from './WikiFilters';
 
 import { searchApi } from '@/api/search.api';
 import type { SearchType, SearchFilters } from '@/api/search.api';
-import { Avatar } from '@/components/ui/Avatar';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Input } from '@/components/ui/Input';
-import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
-import type { SearchResult, SearchResultItem, SavedSearch } from '@/lib/types';
+import type { SearchResult, SavedSearch } from '@/lib/types';
 
 const SEARCH_TABS = [
   { key: 'all', label: 'All', icon: <Search className="h-4 w-4" /> },
@@ -58,7 +40,6 @@ export default function SearchResults() {
   const labelFilter = searchParams.get('label') || '';
   const sinceFilter = searchParams.get('since') || '';
   const untilFilter = searchParams.get('until') || '';
-  const [labelInput, setLabelInput] = useState(labelFilter);
 
   const filters: SearchFilters = useMemo(() => {
     const f: SearchFilters = {};
@@ -156,7 +137,6 @@ export default function SearchResults() {
 
   function clearAllFilters() {
     setSearchParams({ q: query, type: activeType });
-    setLabelInput('');
   }
 
   function handleSaveSearch() {
@@ -182,71 +162,16 @@ export default function SearchResults() {
   return (
     <div className="">
       {/* Search input */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Search className="h-5 w-5 text-text-secondary" />
-          <Input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSearch(inputValue);
-            }}
-            placeholder="Search issues, code, wiki pages, repos..."
-            className="flex-1 text-lg border-none outline-none bg-transparent placeholder:text-text-secondary text-text"
-            autoFocus
-          />
-          <div className="flex items-center gap-2">
-            {query && (
-              <Button size="sm" variant="outline" onClick={handleSaveSearch}>
-                <BookmarkPlus className="h-4 w-4" /> Save
-              </Button>
-            )}
-            <Dropdown
-              align="right"
-              trigger={
-                <Button size="sm" variant="ghost">
-                  <Bookmark className="h-4 w-4" /> Saved
-                </Button>
-              }
-            >
-              {!savedSearches?.length ? (
-                <p className="px-3 py-4 text-sm text-text-tertiary text-center">
-                  No saved searches yet
-                </p>
-              ) : (
-                savedSearches.map((s: SavedSearch) => (
-                  <div key={s.id} className="flex items-center group">
-                    <DropdownItem
-                      onClick={() => loadSavedSearch(s)}
-                      className="flex-1 justify-start"
-                    >
-                      <Bookmark className="h-3 w-3 text-text-tertiary" />
-                      {s.name}
-                    </DropdownItem>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      className="px-2 py-1 opacity-0 group-hover:opacity-100 text-danger hover:bg-danger-light transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteSavedMutation.mutate(s.id);
-                      }}
-                      title="Delete saved search"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </Dropdown>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
-          <Info className="h-3 w-3" />
-          <span>Use type:bug status:open priority:high assignee:name for advanced search</span>
-        </div>
-      </div>
+      <SearchBar
+        inputValue={inputValue}
+        onInputChange={setInputValue}
+        onSearch={handleSearch}
+        query={query}
+        onSaveSearch={handleSaveSearch}
+        savedSearches={savedSearches}
+        onLoadSavedSearch={loadSavedSearch}
+        onDeleteSavedSearch={(id) => deleteSavedMutation.mutate(id)}
+      />
 
       {/* Tabs */}
       <Tabs
@@ -258,148 +183,16 @@ export default function SearchResults() {
 
       {/* Wiki filters */}
       {(activeType === 'wiki' || activeType === 'all') && (
-        <Card className="flex items-center gap-2 flex-wrap mb-4 p-3">
-          <Filter className="h-4 w-4 text-text-tertiary shrink-0" />
-          <span className="text-xs font-medium text-text-secondary mr-1">Wiki filters:</span>
-
-          {/* Space dropdown */}
-          <Dropdown
-            align="left"
-            trigger={
-              <Button variant="outline" size="xs">
-                <Library className="h-3.5 w-3.5" />
-                {spaceId && allSpaces
-                  ? allSpaces.find((s: { id: string }) => s.id === spaceId)?.name || 'Space'
-                  : 'All spaces'}
-              </Button>
-            }
-          >
-            <DropdownItem onClick={() => setFilter('spaceId', '')}>
-              <Library className="h-3.5 w-3.5" /> All spaces
-            </DropdownItem>
-            {allSpaces?.map((s: { id: string; name: string }) => (
-              <DropdownItem key={s.id} onClick={() => setFilter('spaceId', s.id)}>
-                <BookOpen className="h-3.5 w-3.5" /> {s.name}
-              </DropdownItem>
-            ))}
-          </Dropdown>
-
-          {/* Label filter */}
-          <form
-            className="flex items-center gap-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setFilter('label', labelInput.trim());
-            }}
-          >
-            <Input
-              type="text"
-              value={labelInput}
-              onChange={(e) => setLabelInput(e.target.value)}
-              placeholder="Filter by label"
-              className="h-7 w-32 text-xs"
-            />
-            {labelInput.trim() && (
-              <Button type="submit" variant="outline" size="xs">
-                <Tag className="h-3 w-3" /> Apply
-              </Button>
-            )}
-          </form>
-
-          {/* Since date */}
-          <Input
-            type="date"
-            value={sinceFilter}
-            onChange={(e) => setFilter('since', e.target.value)}
-            className="h-7 w-36 text-xs"
-            title="Updated since"
-          />
-
-          {/* Until date */}
-          <Input
-            type="date"
-            value={untilFilter}
-            onChange={(e) => setFilter('until', e.target.value)}
-            className="h-7 w-36 text-xs"
-            title="Updated until"
-          />
-
-          {/* Clear all filters */}
-          {hasActiveFilters && (
-            <Button variant="ghost" size="xs" onClick={clearAllFilters}>
-              <X className="h-3 w-3" /> Clear filters
-            </Button>
-          )}
-
-          {/* Active filter badges */}
-          {spaceId && allSpaces && (
-            <Badge size="sm" variant="default">
-              <Library className="h-3 w-3" />
-              {allSpaces.find((s: { id: string }) => s.id === spaceId)?.name}
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={() => setFilter('spaceId', '')}
-                className="ml-1 p-0 hover:text-danger"
-                title="Remove space filter"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </Badge>
-          )}
-          {labelFilter && (
-            <Badge size="sm" variant="default">
-              <Tag className="h-3 w-3" />
-              {labelFilter}
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={() => {
-                  setFilter('label', '');
-                  setLabelInput('');
-                }}
-                className="ml-1 p-0 hover:text-danger"
-                title="Remove label filter"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </Badge>
-          )}
-          {sinceFilter && (
-            <Badge size="sm" variant="default">
-              <Calendar className="h-3 w-3" />
-              from {sinceFilter}
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={() => setFilter('since', '')}
-                className="ml-1 p-0 hover:text-danger"
-                title="Remove since filter"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </Badge>
-          )}
-          {untilFilter && (
-            <Badge size="sm" variant="default">
-              <Calendar className="h-3 w-3" />
-              until {untilFilter}
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={() => setFilter('until', '')}
-                className="ml-1 p-0 hover:text-danger"
-                title="Remove until filter"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </Badge>
-          )}
-        </Card>
+        <WikiFilters
+          spaceId={spaceId}
+          labelFilter={labelFilter}
+          sinceFilter={sinceFilter}
+          untilFilter={untilFilter}
+          allSpaces={allSpaces}
+          onSetFilter={setFilter}
+          onClearAllFilters={clearAllFilters}
+          hasActiveFilters={hasActiveFilters}
+        />
       )}
 
       {error && (
@@ -474,151 +267,4 @@ export default function SearchResults() {
       )}
     </div>
   );
-}
-
-// ─── Row Component Types ─────────────────────────────────────
-
-interface CodeItem extends SearchResultItem {
-  repoId: string;
-  repoName: string;
-  repoUrl: string;
-  filePath: string;
-  lineNumber: number;
-  lineContent: string;
-}
-
-// ─── Row Components ─────────────────────────────────────────
-
-function IssueRow({ item }: { item: SearchResultItem }) {
-  return (
-    <Link
-      to={item.url ?? '#'}
-      className="flex items-center gap-3 p-3 hover:bg-surface-secondary transition-colors"
-    >
-      <IssueTypeIcon type={item.type ?? ''} className="h-3.5 w-3.5" />
-      <span className="text-xs font-mono text-text-secondary">{item.key}</span>
-      <span className="text-sm font-medium flex-1 truncate">{item.title}</span>
-      <Badge size="sm">{item.status}</Badge>
-      <span className="text-xs text-text-tertiary">{item.projectName}</span>
-      {item.assignee && (
-        <Avatar name={item.assignee.displayName} src={item.assignee.avatarUrl} size="xs" />
-      )}
-      <Badge
-        size="sm"
-        variant={
-          item.priority === 'CRITICAL'
-            ? 'danger'
-            : item.priority === 'HIGH'
-              ? 'warning'
-              : item.priority === 'LOW'
-                ? 'success'
-                : 'default'
-        }
-      >
-        {item.priority}
-      </Badge>
-    </Link>
-  );
-}
-
-function CodeRow({ item, query }: { item: CodeItem; query: string }) {
-  const highlighted = highlightMatch(item.lineContent, query);
-
-  return (
-    <div className="p-3 hover:bg-surface-secondary transition-colors">
-      <div className="flex items-center gap-2 mb-1.5">
-        <Code2 className="h-3.5 w-3.5 text-text-tertiary" />
-        <Link to={item.repoUrl} className="text-xs font-medium text-primary hover:underline">
-          {item.repoName}
-        </Link>
-        <span className="text-text-tertiary text-xs">/</span>
-        <Link
-          to={`${item.repoUrl}/blob/HEAD/${item.filePath}`}
-          className="text-xs text-text-secondary hover:text-primary hover:underline truncate"
-        >
-          {item.filePath}
-        </Link>
-      </div>
-      <div className="rounded bg-surface-tertiary border border-border-light px-3 py-1.5 font-mono text-xs overflow-x-auto">
-        <span className="text-text-tertiary select-none mr-3">{item.lineNumber}</span>
-        {/* eslint-disable-next-line react/no-danger -- search highlight markup is escaped server-side */}
-        <span dangerouslySetInnerHTML={{ __html: highlighted }} />
-      </div>
-    </div>
-  );
-}
-
-function WikiRow({ item }: { item: SearchResultItem }) {
-  return (
-    <Link to={item.url ?? '#'} className="block p-3 hover:bg-surface-secondary transition-colors">
-      <div className="flex items-center gap-3 mb-1">
-        <FileText className="h-4 w-4 text-text-secondary" />
-        <span className="text-sm font-medium flex-1">{item.title}</span>
-        <Badge size="sm">{item.spaceName || item.slug}</Badge>
-      </div>
-      {item.snippet && (
-        <p
-          className="text-xs text-text-tertiary ml-7 line-clamp-2"
-          // eslint-disable-next-line react/no-danger -- snippet is escaped server-side
-          dangerouslySetInnerHTML={{ __html: formatSnippet(item.snippet) }}
-        />
-      )}
-    </Link>
-  );
-}
-
-function RepoRow({ item }: { item: SearchResultItem }) {
-  const isPublic = item.visibility === 'PUBLIC';
-
-  return (
-    <Link
-      to={item.url ?? '#'}
-      className="flex items-center gap-3 p-3 hover:bg-surface-secondary transition-colors"
-    >
-      <GitFork className="h-4 w-4 text-text-secondary" />
-      <span className="text-sm font-medium">{item.name}</span>
-      <span className="text-xs text-text-tertiary flex-1 truncate">
-        {item.description || 'No description'}
-      </span>
-      <Badge size="sm" variant={isPublic ? 'success' : 'outline'}>
-        {isPublic ? <Eye className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
-        {item.visibility?.toLowerCase()}
-      </Badge>
-    </Link>
-  );
-}
-
-// ─── Helpers ────────────────────────────────────────────────
-
-function highlightMatch(text: string, query: string): string {
-  if (!query) return escapeHtml(text);
-  // Extract just the free text part (remove structured filters)
-  const freeText = query
-    .split(/\s+/)
-    .filter((t) => !t.includes(':'))
-    .join(' ')
-    .trim();
-  if (!freeText) return escapeHtml(text);
-
-  const escaped = freeText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`(${escaped})`, 'gi');
-  return escapeHtml(text).replace(
-    regex,
-    '<mark class="bg-warning-light text-warning rounded px-0.5">$1</mark>',
-  );
-}
-
-function formatSnippet(snippet: string): string {
-  // Convert << >> markers from ts_headline to <mark> tags
-  return escapeHtml(snippet)
-    .replace(/&lt;&lt;/g, '<mark class="bg-warning-light text-warning rounded px-0.5">')
-    .replace(/&gt;&gt;/g, '</mark>');
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
