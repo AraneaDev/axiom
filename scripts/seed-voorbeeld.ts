@@ -1085,18 +1085,20 @@ async function main() {
 
   const templateData = [
     {
+      id: 'bug-report',
       name: 'Bug Report',
-      description: 'Rapporteer een bug of fout',
       type: 'BUG',
-      priority: 'HIGH',
-      body: '## Beschrijving\n\n...\n\n## Stappen om te reproduceren\n\n1. ...\n\n## Omgeving\n\n- Browser: \n- OS: ',
+      title: '',
+      body: '## Beschrijving\n\nBeschrijf de bug kort en duidelijk.\n\n## Stappen om te reproduceren\n\n1. Ga naar ...\n2. Klik op ...\n3. Verwacht resultaat: ...\n4. Werkelijk resultaat: ...\n\n## Omgeving\n\n- Browser: \n- OS: ',
+      labels: ['bug'],
     },
     {
+      id: 'feature-request',
       name: 'Feature Request',
-      description: 'Vraag een nieuwe functionaliteit aan',
       type: 'STORY',
-      priority: 'MEDIUM',
-      body: '## Samenvatting\n\n...\n\n## Probleemstelling\n\n...\n\n## Acceptatiecriteria\n\n- [ ] ...',
+      title: '',
+      body: '## Samenvatting\n\nBeschrijf de gewenste functionaliteit.\n\n## Probleemstelling\n\nWelk probleem lost dit op?\n\n## Acceptatiecriteria\n\n- [ ] Criterium 1\n- [ ] Criterium 2',
+      labels: ['nieuw'],
     },
   ];
 
@@ -1104,9 +1106,9 @@ async function main() {
   for (const slug of Object.keys(projects)) {
     const proj = await prisma.project.findUnique({ where: { id: projects[slug].id }, select: { id: true, issueTemplates: true } });
     if (!proj) continue;
-    // Skip if templates already set (non-null and non-empty array)
-    const existing = proj.issueTemplates as unknown;
-    if (Array.isArray(existing) && existing.length > 0) continue;
+    // Always overwrite to ensure correct shape
+    const existing = proj.issueTemplates as unknown as { id?: string }[] | null;
+    if (Array.isArray(existing) && existing.length > 0 && existing[0]?.id) continue;
 
     await prisma.project.update({
       where: { id: proj.id },
