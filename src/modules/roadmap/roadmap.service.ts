@@ -56,6 +56,7 @@ const CHILDREN_SELECT = {
   parentId: true,
   assigneeId: true,
   roadmapBucketId: true,
+  column: { select: { id: true, name: true, isDone: true } },
 } as const;
 
 // ─── Bucket CRUD ─────────────────────────────────────────────────────────────

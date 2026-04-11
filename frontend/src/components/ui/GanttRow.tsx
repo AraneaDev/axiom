@@ -79,7 +79,7 @@ export function GanttRow({
   const isEpic = issue.type === 'EPIC';
   let progress: number | undefined;
   if (isEpic && issue.children && issue.children.length > 0) {
-    const done = issue.children.filter((c) => c.column?.name?.toLowerCase() === 'done').length;
+    const done = issue.children.filter((c) => c.column?.isDone === true).length;
     progress = Math.round((done / issue.children.length) * 100);
   }
 

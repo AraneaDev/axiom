@@ -22,7 +22,7 @@ export interface TimelineIssue {
   assigneeId?: string | null;
   roadmapBucketId?: string | null;
   assignee?: { id: string; displayName: string; avatarUrl?: string | null } | null;
-  column?: { id: string; name: string } | null;
+  column?: { id: string; name: string; isDone?: boolean } | null;
   labels: { id: string; name: string; color: string }[];
   project: {
     prefix: string;
