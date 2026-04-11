@@ -25,11 +25,6 @@ export interface CodeItem extends SearchResultItem {
  * @param root0.item
  */
 export function IssueRow({ item }: { item: SearchResultItem }) {
-  /**
-   *
-   * @param root0
-   * @param root0.item
-   */
   return (
     <Link
       to={item.url ?? '#'}
@@ -62,7 +57,6 @@ export function IssueRow({ item }: { item: SearchResultItem }) {
 }
 
 /**
-/**
  * @param root0
  * @param root0.item
  * @param root0.query
@@ -89,7 +83,6 @@ export function CodeRow({ item, query }: { item: CodeItem; query: string }) {
         <span className="text-text-tertiary select-none mr-3">{item.lineNumber}</span>
         {/* eslint-disable-next-line react/no-danger -- search highlight markup is escaped server-side */}
         <span dangerouslySetInnerHTML={{ __html: highlighted }} />
-        /** * * @param root0 * @param root0.item */
       </div>
     </div>
   );
@@ -109,11 +102,6 @@ export function WikiRow({ item }: { item: SearchResultItem }) {
         <Badge size="sm">{item.spaceName || item.slug}</Badge>
       </div>
       {item.snippet && (
-        /**
-         *
-         * @param root0
-         * @param root0.item
-         */
         <p
           className="text-xs text-text-tertiary ml-7 line-clamp-2"
           // eslint-disable-next-line react/no-danger -- snippet is escaped server-side

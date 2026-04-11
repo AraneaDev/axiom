@@ -74,23 +74,14 @@ export interface DropTarget {
 }
 
 /**
- *
  * @param nodes
  * @param id
-/**
- * @param tree
- * @param target
  */
 export function findNodeById(nodes: PageTreeNode[], id: string): PageTreeNode | undefined {
   for (const node of nodes) {
     if (node.id === id) return node;
     const found = findNodeById(node.children, id);
     if (found) return found;
-    /**
-     *
-     * @param node
-     * @param targetId
-     */
   }
   return undefined;
 }
