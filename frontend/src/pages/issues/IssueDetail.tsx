@@ -1,21 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  AlertTriangle,
-  ArrowUp,
-  Check,
-  Eye,
-  EyeOff,
-  MessageSquare,
-  Paperclip,
-  Pencil,
-  ShieldCheck,
-  X,
-} from 'lucide-react';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { AlertTriangle, MessageSquare, Paperclip, ShieldCheck } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
 
+import { IssueBodySection } from './IssueBodySection';
 import { IssueDetailComments } from './IssueDetailComments';
 import { IssueDetailSidebar } from './IssueDetailSidebar';
+import { IssueHeader } from './IssueHeader';
 
 import { activityApi } from '@/api/activity.api';
 import { attachmentsApi } from '@/api/attachments.api';
@@ -24,25 +15,20 @@ import { issuesApi } from '@/api/issues.api';
 import { reposApi } from '@/api/repos.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
-import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
-import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { ApprovalPanel } from '@/components/ui/ApprovalPanel';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FileUpload } from '@/components/ui/FileUpload';
-import { Input } from '@/components/ui/Input';
-import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useDraftState } from '@/hooks/useDraftState';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { STABLE_STALE_TIME } from '@/lib/constants';
-import { cn, formatRelative } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -57,7 +43,6 @@ export default function IssueDetail() {
   const bodyDraftState = useDraftState('');
   const [editingField, setEditingField] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'comments' | 'approvals'>('comments');
-  const titleInputRef = useRef<HTMLInputElement>(null);
   const { invalidateAll } = useIssueInvalidation(currentProject?.id ?? '', num);
 
   // Hydration: single request for all issue detail data
@@ -275,13 +260,6 @@ export default function IssueDetail() {
     },
   );
 
-  useEffect(() => {
-    if (titleDraftState.isEditing && titleInputRef.current) {
-      titleInputRef.current.focus();
-      titleInputRef.current.select();
-    }
-  }, [titleDraftState.isEditing]);
-
   if (isLoading) return <DetailSkeleton />;
   if (isError) {
     return (
@@ -293,10 +271,6 @@ export default function IssueDetail() {
     );
   }
   if (!issue) return <EmptyState title="Issue not found" />;
-
-  function startEditTitle() {
-    titleDraftState.startEditing(issue!.title);
-  }
 
   function saveTitle() {
     if (titleDraftState.draft.trim() && titleDraftState.draft !== issue!.title) {
@@ -331,133 +305,34 @@ export default function IssueDetail() {
   return (
     <PageLayout sidebar={sidebarContent} sidebarWidth="w-[340px] 2xl:w-[380px]">
       <div>
-        <div className="flex items-start gap-3 mb-6">
-          <IssueTypeIcon type={issue.type} className="h-5 w-5 mt-1.5 shrink-0" />
-          <div className="flex-1 min-w-0">
-            {titleDraftState.isEditing ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  ref={titleInputRef}
-                  value={titleDraftState.draft}
-                  onChange={(e) => titleDraftState.setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveTitle();
-                    if (e.key === 'Escape') titleDraftState.cancel();
-                  }}
-                  className="flex-1 text-2xl font-bold bg-transparent border-b-2 border-primary outline-none py-0.5"
-                />
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={saveTitle}
-                  className="text-success"
-                  title="Save"
-                  aria-label="Save"
-                >
-                  <Check className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => titleDraftState.cancel()}
-                  className="text-text-tertiary"
-                  title="Cancel"
-                  aria-label="Cancel"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <h1 className="text-2xl font-bold group cursor-pointer" onClick={startEditTitle}>
-                {issue.title}
-                <Pencil className="h-3.5 w-3.5 ml-2 inline opacity-0 group-hover:opacity-40 transition-opacity" />
-              </h1>
-            )}
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-sm text-text-tertiary">
-                {issue.key} &middot; opened {formatRelative(issue.createdAt)} by{' '}
-                {issue.creator?.displayName}
-              </p>
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() => voteMutation.mutate()}
-                className={cn(
-                  'ml-2 gap-1',
-                  voteData?.voted && 'border-primary bg-primary/10 text-primary',
-                )}
-                title={voteData?.voted ? 'Remove vote' : 'Vote for this issue'}
-              >
-                <ArrowUp className="h-3.5 w-3.5" />
-                {voteData?.count ?? 0}
-              </Button>
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() => watchMutation.mutate()}
-                className={cn(
-                  'gap-1',
-                  watcherData?.watching && 'border-primary bg-primary/10 text-primary',
-                )}
-                title={watcherData?.watching ? 'Stop watching this issue' : 'Watch this issue'}
-              >
-                {watcherData?.watching ? (
-                  <EyeOff className="h-3.5 w-3.5" />
-                ) : (
-                  <Eye className="h-3.5 w-3.5" />
-                )}
-                {watcherData?.watchers?.length ?? 0}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <IssueHeader
+          issue={issue}
+          titleDraft={titleDraftState.draft}
+          isTitleEditing={titleDraftState.isEditing}
+          onTitleDraftChange={titleDraftState.setDraft}
+          onStartEditTitle={() => titleDraftState.startEditing(issue.title)}
+          onSaveTitle={saveTitle}
+          onCancelTitle={() => titleDraftState.cancel()}
+          voteData={voteData}
+          watcherData={watcherData}
+          onVote={() => voteMutation.mutate()}
+          onWatch={() => watchMutation.mutate()}
+        />
 
-        {/* Body */}
-        <Card className="p-5 mb-8">
-          {bodyDraftState.isEditing ? (
-            <div className="space-y-2">
-              <MarkdownEditor
-                value={bodyDraftState.draft}
-                onChange={bodyDraftState.setDraft}
-                projectId={currentProject?.id}
-              />
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    updateMutation.mutate({ body: bodyDraftState.draft });
-                    bodyDraftState.reset();
-                  }}
-                >
-                  <Check className="h-4 w-4" /> Save
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => bodyDraftState.cancel()}>
-                  <X className="h-4 w-4" /> Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="group relative">
-              {issue.body ? (
-                <MarkdownRenderer
-                  content={issue.body}
-                  basePath={`/${org}/${teamSlug}/${projectSlug}`}
-                />
-              ) : (
-                <p className="text-text-tertiary italic text-sm">No description provided.</p>
-              )}
-              <Button
-                size="xs"
-                variant="ghost"
-                className="opacity-0 group-hover:opacity-100 absolute top-0 right-0 transition-opacity"
-                title="Edit description"
-                onClick={() => bodyDraftState.startEditing(issue.body ?? '')}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          )}
-        </Card>
+        <IssueBodySection
+          body={issue.body}
+          basePath={`/${org}/${teamSlug}/${projectSlug}`}
+          projectId={currentProject?.id}
+          isEditing={bodyDraftState.isEditing}
+          draft={bodyDraftState.draft}
+          onDraftChange={bodyDraftState.setDraft}
+          onStartEdit={() => bodyDraftState.startEditing(issue.body ?? '')}
+          onSave={() => {
+            updateMutation.mutate({ body: bodyDraftState.draft });
+            bodyDraftState.reset();
+          }}
+          onCancel={() => bodyDraftState.cancel()}
+        />
 
         {/* Attachments */}
         <div className="mb-8">
