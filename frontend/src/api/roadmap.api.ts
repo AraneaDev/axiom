@@ -50,6 +50,28 @@ export interface BucketsViewData {
   unassigned: TimelineIssue[];
 }
 
+export interface TeamTimelineProject {
+  id: string;
+  name: string;
+  prefix: string;
+  slug: string;
+}
+
+export interface TeamTimelineData {
+  issues: TimelineIssue[];
+  links: DependencyLink[];
+  projects: TeamTimelineProject[];
+}
+
+export interface TeamTimelineFilters {
+  assigneeId?: string;
+  type?: string;
+  projectId?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+}
+
 export interface Filters {
   assigneeId?: string;
   priority?: string;
@@ -101,6 +123,12 @@ export const roadmapApi = {
 
   getBucketsView: (projectId: string, filters?: Filters) =>
     get<BucketsViewData>(`/projects/${projectId}/roadmap/buckets-view${buildQuery(filters)}`),
+
+  // Team-level roadmap
+  getTeamTimeline: (teamId: string, filters?: TeamTimelineFilters) =>
+    get<TeamTimelineData>(
+      `/teams/${teamId}/roadmap/timeline${buildQuery(filters as unknown as Filters)}`,
+    ),
 
   // Helper (exported for reuse)
   buildQuery,
