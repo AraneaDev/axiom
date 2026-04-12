@@ -26,6 +26,10 @@ export async function canAccessSpace(
   userId: string,
   requiredLevel: SpacePermissionLevel,
 ): Promise<boolean> {
+  // 0. Platform superadmins bypass all permission checks
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  if (user?.isAdmin) return true;
+
   // 1. Count custom permissions on space
   const permCount = await prisma.spacePermission.count({ where: { spaceId } });
 
@@ -35,9 +39,17 @@ export async function canAccessSpace(
   // 3. Get user's team role via TeamMember lookup
   const space = await prisma.wikiSpace.findUnique({
     where: { id: spaceId },
-    select: { teamId: true },
+    select: { teamId: true, team: { select: { orgId: true } } },
   });
   if (!space) return false;
+
+  // 3b. Org OWNER/ADMIN have full access to all spaces in their org
+  const orgMembership = await prisma.orgMembership.findUnique({
+    where: { userId_orgId: { userId, orgId: space.team.orgId } },
+  });
+  if (orgMembership && (orgMembership.role === 'OWNER' || orgMembership.role === 'ADMIN')) {
+    return true;
+  }
 
   const teamMembership = await prisma.teamMembership.findUnique({
     where: { userId_teamId: { userId, teamId: space.teamId } },
