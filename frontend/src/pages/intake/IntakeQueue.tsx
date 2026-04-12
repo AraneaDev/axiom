@@ -12,12 +12,14 @@ import {
 import { useState } from 'react';
 
 import { intakeApi, type FormSubmission } from '@/api/intake.api';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { Tabs } from '@/components/ui/Tabs';
@@ -142,23 +144,15 @@ export default function IntakeQueue() {
   const submissions = data?.submissions ?? [];
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <Inbox className="h-6 w-6 text-primary" />
-        <div>
-          <h1 className="text-lg font-semibold text-text">Intake Queue</h1>
-          <p className="text-[13px] text-text-secondary">
-            Review and triage submissions from public intake forms
-          </p>
-        </div>
-      </div>
-
-      <Tabs
-        tabs={STATUS_TABS}
-        activeKey={statusFilter}
-        onChange={(key) => setStatusFilter(key)}
-        className="mb-4"
-      />
+    <PageLayout>
+      <PageHeader title="Intake Queue">
+        <Tabs
+          tabs={STATUS_TABS}
+          activeKey={statusFilter}
+          onChange={(key) => setStatusFilter(key)}
+          className="border-b-0"
+        />
+      </PageHeader>
 
       {isLoading ? (
         <ListSkeleton rows={5} />
@@ -420,6 +414,6 @@ export default function IntakeQueue() {
         }}
         onClose={() => setSpamTarget(null)}
       />
-    </div>
+    </PageLayout>
   );
 }
