@@ -12,6 +12,10 @@ import { Request, Response, NextFunction } from 'express';
  */
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+// Paths exempt from CSRF -- MCP clients authenticate via Bearer token
+// and cannot inject custom headers into SSE transport requests.
+const CSRF_EXEMPT_PATHS = new Set(['/mcp/messages']);
+
 /**
  * CSRF guard middleware requiring X-Requested-With header on mutations.
  * @param req - Express request
@@ -20,6 +24,10 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  */
 export function csrfGuard(req: Request, res: Response, next: NextFunction) {
   if (SAFE_METHODS.has(req.method)) {
+    return next();
+  }
+
+  if (CSRF_EXEMPT_PATHS.has(req.path)) {
     return next();
   }
 

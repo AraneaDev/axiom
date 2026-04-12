@@ -98,7 +98,11 @@ app.use(
 );
 app.use(requestLogger);
 app.use(metricsCollector);
-app.use(express.json({ limit: '5mb' }));
+app.use((req, res, next) => {
+  // Skip JSON body parsing for MCP messages -- the SSE transport reads the raw stream
+  if (req.path === '/api/mcp/messages') return next();
+  express.json({ limit: '5mb' })(req, res, next);
+});
 
 // Rate limiting
 app.use(globalLimiter);

@@ -28,6 +28,16 @@ interface PRDiffViewProps {
  * @param root0.repoId
  * @param root0.prNumber
  */
+/**
+ *
+ * @param root0
+ * @param root0.commits
+ * @param root0.diff
+ * @param root0.diffView
+ * @param root0.onDiffViewChange
+ * @param root0.repoId
+ * @param root0.prNumber
+ */
 export function PRDiffView({
   commits,
   diff,

@@ -8,8 +8,8 @@ import { IssueRow, CodeRow, WikiRow, RepoRow } from './SearchResultRows';
 import type { CodeItem } from './SearchResultRows';
 import { WikiFilters } from './WikiFilters';
 
-import { searchApi } from '@/api/search.api';
 import type { SearchType, SearchFilters } from '@/api/search.api';
+import { searchApi } from '@/api/search.api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';

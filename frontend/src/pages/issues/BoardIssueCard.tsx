@@ -22,6 +22,18 @@ import { cn } from '@/lib/utils';
  * @param root0.cardColorBy
  * @param root0.pendingRequest
  */
+/**
+ *
+ * @param root0
+ * @param root0.issue
+ * @param root0.org
+ * @param root0.team
+ * @param root0.project
+ * @param root0.columnId
+ * @param root0.onDragStart
+ * @param root0.cardColorBy
+ * @param root0.pendingRequest
+ */
 export function BoardIssueCard({
   issue,
   org,

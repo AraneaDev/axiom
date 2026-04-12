@@ -10,6 +10,11 @@ interface CommitListProps {
  * @param root0
  * @param root0.commits
  */
+/**
+ *
+ * @param root0
+ * @param root0.commits
+ */
 export function CommitList({ commits }: CommitListProps) {
   if (commits.length === 0) return null;
 

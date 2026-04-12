@@ -33,6 +33,10 @@ export interface FileChunk {
  *
  * @param raw
  */
+/**
+ *
+ * @param raw
+ */
 export function parseDiff(raw: string): ParsedDiffFile[] {
   const files: ParsedDiffFile[] = [];
 
@@ -71,12 +75,23 @@ export function parseDiff(raw: string): ParsedDiffFile[] {
 
     files.push({ header, oldFile, newFile, hunks });
   }
+  /**
+   *
+   * @param rawDiff
+   */
 
   return files;
 }
 
 /**
  *
+ * @param rawDiff
+ */
+/**
+ *
+ * @param s
+ * @param s.additions
+ * @param s.deletions
  * @param rawDiff
  */
 export function splitDiffByFile(rawDiff: string): FileChunk[] {
@@ -87,6 +102,12 @@ export function splitDiffByFile(rawDiff: string): FileChunk[] {
   });
 }
 
+/**
+ *
+ * @param s
+ * @param s.additions
+ * @param s.deletions
+ */
 /**
  *
  * @param s

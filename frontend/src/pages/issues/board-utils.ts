@@ -42,6 +42,11 @@ export interface SwimLane {
  * @param issues
  * @param filters
  */
+/**
+ *
+ * @param issues
+ * @param filters
+ */
 export function applyFilters(issues: Issue[], filters: Filters): Issue[] {
   let result = issues;
   if (filters.assignee.length > 0)
@@ -49,6 +54,11 @@ export function applyFilters(issues: Issue[], filters: Filters): Issue[] {
   if (filters.priority.length > 0)
     result = result.filter((i) => filters.priority.includes(i.priority));
   if (filters.label.length > 0)
+    /**
+     *
+     * @param issues
+     * @param groupBy
+     */
     result = result.filter((i) => i.labels?.some((l) => filters.label.includes(l.id)));
   if (filters.type.length > 0) result = result.filter((i) => filters.type.includes(i.type));
   return result;

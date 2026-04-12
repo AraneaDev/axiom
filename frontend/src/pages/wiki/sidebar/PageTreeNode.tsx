@@ -34,6 +34,19 @@ import { cn } from '@/lib/utils';
  * @param root0.onDelete
  * @param root0.dropTarget
  */
+/**
+ *
+ * @param root0
+ * @param root0.node
+ * @param root0.basePath
+ * @param root0.depth
+ * @param root0.activeSlug
+ * @param root0.expanded
+ * @param root0.onToggle
+ * @param root0.onNewFolder
+ * @param root0.onDelete
+ * @param root0.dropTarget
+ */
 export function PageTreeNodeItem({
   node,
   basePath,

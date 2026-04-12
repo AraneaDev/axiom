@@ -38,6 +38,17 @@ interface DiffFileNavigatorProps {
  * @param root0.diffView
  * @param root0.onDiffViewChange
  */
+/**
+ *
+ * @param root0
+ * @param root0.stats
+ * @param root0.activeFileIndex
+ * @param root0.onFileSelect
+ * @param root0.fileListOpen
+ * @param root0.onFileListToggle
+ * @param root0.diffView
+ * @param root0.onDiffViewChange
+ */
 export function DiffFileNavigator({
   stats,
   activeFileIndex,

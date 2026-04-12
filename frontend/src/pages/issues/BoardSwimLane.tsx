@@ -12,6 +12,13 @@ import { Button } from '@/components/ui/Button';
  * @param root0.children
  * @param root0.defaultOpen
  */
+/**
+ *
+ * @param root0
+ * @param root0.lane
+ * @param root0.children
+ * @param root0.defaultOpen
+ */
 export function BoardSwimLaneSection({
   lane,
   children,

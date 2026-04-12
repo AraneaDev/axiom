@@ -63,6 +63,16 @@ interface PageViewSidebarProps {
  * @param root0.className
  * @param root0.spaceId
  * @param root0.hasPermissions
+ * @param root0
+ * @param root0.tree
+ * @param root0.basePath
+ * @param root0.tocEntries
+ * @param root0.activeSlug
+ * @param root0.onNewFolder
+ * @param root0.embedded
+ * @param root0.className
+ * @param root0.spaceId
+ * @param root0.hasPermissions
  */
 export function PageViewSidebar({
   tree,

@@ -59,6 +59,26 @@ interface IssueListToolbarProps {
  * @param root0.onSaveFilter
  * @param root0.canSaveFilter
  */
+/**
+ *
+ * @param root0
+ * @param root0.searchInput
+ * @param root0.onSearchChange
+ * @param root0.onClearSearch
+ * @param root0.hasActiveSearch
+ * @param root0.onToggleFilters
+ * @param root0.activeFilterCount
+ * @param root0.sortField
+ * @param root0.sortDir
+ * @param root0.onToggleSort
+ * @param root0.viewMode
+ * @param root0.onSetViewMode
+ * @param root0.savedFilters
+ * @param root0.onApplySavedFilter
+ * @param root0.onDeleteSavedFilter
+ * @param root0.onSaveFilter
+ * @param root0.canSaveFilter
+ */
 export function IssueListToolbar({
   searchInput,
   onSearchChange,

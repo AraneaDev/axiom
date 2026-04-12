@@ -28,6 +28,24 @@ import { cn } from '@/lib/utils';
  * @param root0.pendingRequests
  * @param root0.isGatedInbound
  */
+/**
+ *
+ * @param root0
+ * @param root0.column
+ * @param root0.org
+ * @param root0.team
+ * @param root0.project
+ * @param root0.onDragStart
+ * @param root0.onDragOver
+ * @param root0.onDrop
+ * @param root0.dragOverColumnId
+ * @param root0.dragSourceColumnId
+ * @param root0.groupBy
+ * @param root0.filters
+ * @param root0.cardColorBy
+ * @param root0.pendingRequests
+ * @param root0.isGatedInbound
+ */
 export function BoardColumn({
   column,
   org,

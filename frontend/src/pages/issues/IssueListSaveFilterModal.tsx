@@ -23,6 +23,16 @@ interface IssueListSaveFilterModalProps {
  * @param root0.onSave
  * @param root0.isSaving
  */
+/**
+ *
+ * @param root0
+ * @param root0.open
+ * @param root0.onClose
+ * @param root0.filterName
+ * @param root0.onFilterNameChange
+ * @param root0.onSave
+ * @param root0.isSaving
+ */
 export function IssueListSaveFilterModal({
   open,
   onClose,

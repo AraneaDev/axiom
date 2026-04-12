@@ -51,7 +51,7 @@ export async function assertMcpPermission(toolName: string, orgId: string): Prom
   if (!action) return; // unknown tool, allow
 
   const orgMembership = await prisma.orgMembership.findUnique({
-    where: { orgId_userId: { orgId, userId: ctx.userId } },
+    where: { userId_orgId: { orgId, userId: ctx.userId } },
   });
   if (!orgMembership) {
     throw new AppError(403, 'Forbidden');

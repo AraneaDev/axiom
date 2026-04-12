@@ -17,6 +17,13 @@ interface InlineCommentFormProps {
  * @param root0.onSubmit
  * @param root0.isPending
  */
+/**
+ *
+ * @param root0
+ * @param root0.onCancel
+ * @param root0.onSubmit
+ * @param root0.isPending
+ */
 export function InlineCommentForm({ onCancel, onSubmit, isPending }: InlineCommentFormProps) {
   const [body, setBody] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);

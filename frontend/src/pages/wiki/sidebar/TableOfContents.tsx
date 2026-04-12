@@ -13,6 +13,11 @@ function scrollTo(id: string) {
  * @param root0
  * @param root0.entries
  */
+/**
+ *
+ * @param root0
+ * @param root0.entries
+ */
 export function TableOfContents({ entries }: { entries: TocEntry[] }) {
   if (!entries.length) return null;
 
