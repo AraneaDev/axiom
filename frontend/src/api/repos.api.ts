@@ -160,6 +160,8 @@ export const reposApi = {
    * @param name
    */
   getBranch: (repoId: string, name: string) => get(`/repos/${repoId}/branches/${name}`),
+  deleteBranch: (repoId: string, name: string) =>
+    del(`/repos/${repoId}/branches/${encodeURIComponent(name)}`),
 
   /**
    * List commits for a repository, optionally filtered by ref and limited.

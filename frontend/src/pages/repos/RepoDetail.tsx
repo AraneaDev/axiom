@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   GitBranch,
   GitCommit,
@@ -13,6 +13,7 @@ import {
   BarChart3,
   Rocket,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
@@ -28,11 +29,13 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CopyInput } from '@/components/ui/CopyInput';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { RepoSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 import { formatRelative } from '@/lib/utils';
 
@@ -44,6 +47,7 @@ export default function RepoDetail() {
   const location = useLocation();
   const navigate = useNavigate();
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+  const [branchToDelete, setBranchToDelete] = useState<string | null>(null);
   const { currentRepo, basePath } = useRepoContext();
 
   const TAB_SLUGS = ['branches', 'commits', 'releases', 'pipelines', 'environments', 'insights'];
@@ -54,11 +58,24 @@ export default function RepoDetail() {
 
   const activeBranch = selectedBranch ?? currentRepo?.defaultBranch ?? 'main';
 
+  const queryClient = useQueryClient();
+
   const { data: branches } = useQuery({
     queryKey: ['branches', currentRepo?.id],
     queryFn: () => reposApi.listBranches(currentRepo!.id),
     enabled: !!currentRepo?.id,
   });
+
+  const { mutate: deleteBranch, isPending: isDeletingBranch } = useMutationWithToast(
+    (branchName: string) => reposApi.deleteBranch(currentRepo!.id, branchName),
+    {
+      successMessage: 'Branch deleted',
+      onSuccess: () => {
+        setBranchToDelete(null);
+        queryClient.invalidateQueries({ queryKey: ['branches', currentRepo?.id] });
+      },
+    },
+  );
 
   const { data: tree } = useQuery({
     queryKey: ['tree', currentRepo?.id, activeBranch],
@@ -304,22 +321,48 @@ export default function RepoDetail() {
       {activeTab === 'branches' && branches && (
         <Card className="divide-y divide-border">
           {branches.map((branch) => (
-            <Link
+            <div
               key={branch.name}
-              to={`${basePath}/tree/${encodeURIComponent(branch.name)}`}
               className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors"
             >
-              <GitBranch className="h-4 w-4 text-text-secondary shrink-0" />
-              <span className="text-sm font-medium flex-1">{branch.name}</span>
-              {branch.name === currentRepo.defaultBranch && (
-                <Badge variant="primary" size="sm">
-                  default
-                </Badge>
+              <Link
+                to={`${basePath}/tree/${encodeURIComponent(branch.name)}`}
+                className="flex items-center gap-3 flex-1 min-w-0"
+              >
+                <GitBranch className="h-4 w-4 text-text-secondary shrink-0" />
+                <span className="text-sm font-medium truncate">{branch.name}</span>
+                {branch.name === currentRepo.defaultBranch && (
+                  <Badge variant="primary" size="sm">
+                    default
+                  </Badge>
+                )}
+              </Link>
+              {branch.name !== currentRepo.defaultBranch && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  title="Delete branch"
+                  onClick={() => setBranchToDelete(branch.name)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               )}
-            </Link>
+            </div>
           ))}
         </Card>
       )}
+
+      <ConfirmDialog
+        open={!!branchToDelete}
+        onClose={() => setBranchToDelete(null)}
+        onConfirm={() => {
+          if (branchToDelete) deleteBranch(branchToDelete);
+        }}
+        title="Delete branch"
+        description={`Are you sure you want to delete branch "${branchToDelete}"? This action cannot be undone.`}
+        confirmLabel="Delete branch"
+        loading={isDeletingBranch}
+      />
 
       {/* PRs tab */}
       {activeTab === 'prs' && <PRList />}
