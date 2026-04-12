@@ -73,10 +73,14 @@ function compileComparison(
     const parts = fieldDef.column.split('.');
     const subField = parts.length > 1 ? parts[parts.length - 1] : 'name';
     const strVal = String(resolved).toLowerCase();
-    const condition = { [subField]: { equals: strVal, mode: 'insensitive' } };
+    const isNegated = operator === '!=' || operator === 'NOT';
+    const prismaOp = isNegated ? 'not' : 'equals';
+    const condition = { [subField]: { [prismaOp]: strVal, mode: 'insensitive' } };
 
     if (fieldDef.many) {
-      return { [joinName]: { some: condition } };
+      return isNegated
+        ? { [joinName]: { none: { [subField]: { equals: strVal, mode: 'insensitive' } } } }
+        : { [joinName]: { some: condition } };
     }
     return { [joinName]: condition };
   }

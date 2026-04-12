@@ -50,28 +50,30 @@ function parseSimple(tokens: Token[]): Expression {
       }
 
       const rawValue = tok.value;
+      const negated = rawValue.startsWith('!');
+      const cleanValue = negated ? rawValue.slice(1) : rawValue;
 
-      if (rawValue === '@me') {
+      if (cleanValue === '@me') {
         expressions.push({
           type: 'comparison',
           field: tok.field,
-          operator: '=',
+          operator: negated ? '!=' : '=',
           value: { type: 'function', name: 'currentuser', args: [] },
         });
-      } else if (rawValue.includes(',')) {
-        const parts = rawValue.split(',').map((v) => ({ type: 'string' as const, value: v }));
+      } else if (cleanValue.includes(',')) {
+        const parts = cleanValue.split(',').map((v) => ({ type: 'string' as const, value: v }));
         expressions.push({
           type: 'in',
           field: tok.field,
           values: parts,
-          negated: false,
+          negated,
         });
       } else {
         expressions.push({
           type: 'comparison',
           field: tok.field,
-          operator: '=',
-          value: { type: 'string', value: rawValue },
+          operator: negated ? '!=' : '=',
+          value: { type: 'string', value: cleanValue },
         });
       }
     } else if (tok.type === TokenType.FREETEXT) {
