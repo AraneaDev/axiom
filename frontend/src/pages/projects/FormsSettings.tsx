@@ -50,7 +50,7 @@ export default function FormsSettings() {
   });
 
   const createMutation = useMutationWithToast(
-    (data: { title: string }) => formsApi.create(currentProject!.id, data),
+    (data: { name: string; slug: string }) => formsApi.create(currentProject!.id, data),
     {
       successMessage: 'Form created',
       invalidateKeys: [['forms', currentProject?.id]],
@@ -81,8 +81,8 @@ export default function FormsSettings() {
   );
 
   function handleCreateSubmit() {
-    if (!createTitle.trim()) return;
-    createMutation.mutate({ title: createTitle.trim() });
+    if (!createTitle.trim() || !createSlug.trim()) return;
+    createMutation.mutate({ name: createTitle.trim(), slug: createSlug.trim() });
   }
 
   if (isLoading) return <ListSkeleton rows={4} />;
@@ -142,16 +142,16 @@ export default function FormsSettings() {
             <Tbody>
               {forms.map((form: Form) => (
                 <tr key={form.id}>
-                  <Td className="font-medium text-text">{form.title}</Td>
+                  <Td className="font-medium text-text">{form.name}</Td>
                   <Td>
-                    <Badge variant={form.isPublished ? 'success' : 'default'}>
-                      {form.isPublished ? 'Published' : 'Draft'}
+                    <Badge variant={form.status === 'PUBLISHED' ? 'success' : 'default'}>
+                      {form.status === 'PUBLISHED' ? 'Published' : 'Draft'}
                     </Badge>
                   </Td>
                   <Td className="text-text-secondary">{form._count?.submissions ?? 0}</Td>
                   <Td>
                     <span className="text-[12px] text-text-tertiary font-mono">/f/{form.slug}</span>
-                    {form.isPublished && (
+                    {form.status === 'PUBLISHED' && (
                       <a
                         href={`/f/${form.slug}`}
                         target="_blank"
@@ -178,10 +178,10 @@ export default function FormsSettings() {
                         size="xs"
                         onClick={() => publishMutation.mutate(form.id)}
                         disabled={publishMutation.isPending}
-                        title={form.isPublished ? 'Unpublish' : 'Publish'}
+                        title={form.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
                       >
                         <Send className="h-3.5 w-3.5" />
-                        {form.isPublished ? 'Unpublish' : 'Publish'}
+                        {form.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
                       </Button>
                       <Button
                         variant="ghost"
@@ -251,7 +251,7 @@ export default function FormsSettings() {
             <Button
               variant="primary"
               size="sm"
-              disabled={!createTitle.trim() || createMutation.isPending}
+              disabled={!createTitle.trim() || !createSlug.trim() || createMutation.isPending}
               onClick={handleCreateSubmit}
             >
               <Plus className="h-4 w-4" /> Create Form

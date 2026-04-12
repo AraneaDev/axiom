@@ -81,7 +81,7 @@ export default function PublicForm() {
       <div className="max-w-xl mx-auto">
         {/* Form header */}
         <div className="mb-8 text-center">
-          <h1 className="text-[22px] font-bold text-text">{form.title}</h1>
+          <h1 className="text-[22px] font-bold text-text">{form.name}</h1>
           {form.description && (
             <p className="mt-2 text-[14px] text-text-secondary">{form.description}</p>
           )}

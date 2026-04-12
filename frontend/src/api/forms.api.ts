@@ -2,7 +2,7 @@ import { get, post, patch, del } from './client';
 
 export interface FormField {
   id: string;
-  pageId: string;
+  formPageId: string;
   type: string;
   label: string;
   placeholder?: string | null;
@@ -10,10 +10,8 @@ export interface FormField {
   required: boolean;
   position: number;
   options?: { label: string; value: string }[] | null;
-  issueField?: string | null;
-  conditionFieldId?: string | null;
-  conditionOperator?: string | null;
-  conditionValue?: string | null;
+  issueFieldMapping?: string | null;
+  validationRules?: { minLength?: number; maxLength?: number; pattern?: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -26,22 +24,25 @@ export interface FormPage {
   conditionFieldId?: string | null;
   conditionOperator?: string | null;
   conditionValue?: string | null;
+  conditionField?: { id: string; label: string; type: string } | null;
   fields: FormField[];
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface Form {
   id: string;
   projectId: string;
-  title: string;
-  description?: string | null;
+  name: string;
   slug: string;
-  isPublished: boolean;
-  requiresVerification: boolean;
+  description?: string | null;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  authMode: 'PUBLIC' | 'TOKEN_GATED';
+  sharedSecret?: string | null;
+  spamProtection: 'NONE' | 'CAPTCHA' | 'RATE_LIMIT';
+  rateLimitPerHour?: number | null;
   successMessage?: string | null;
+  redirectUrl?: string | null;
   pages: FormPage[];
-  _count?: { submissions: number };
+  _count?: { submissions: number; pages: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -65,9 +66,11 @@ export const formsApi = {
    * @param projectId
    * @param data
    * @param data.title
+   * @param data.name
+   * @param data.slug
    * @param data.description
    */
-  create: (projectId: string, data: { title: string; description?: string }) =>
+  create: (projectId: string, data: { name: string; slug: string; description?: string }) =>
     post<Form>(`/projects/${projectId}/forms`, data),
 
   /**
@@ -80,10 +83,15 @@ export const formsApi = {
     projectId: string,
     formId: string,
     data: Partial<{
-      title: string;
+      name: string;
+      slug: string;
       description: string;
+      authMode: 'PUBLIC' | 'TOKEN_GATED';
+      sharedSecret: string;
+      spamProtection: 'NONE' | 'CAPTCHA' | 'RATE_LIMIT';
+      rateLimitPerHour: number;
       successMessage: string;
-      requiresVerification: boolean;
+      redirectUrl: string;
     }>,
   ) => patch<Form>(`/projects/${projectId}/forms/${formId}`, data),
 
@@ -147,12 +155,10 @@ export const formsApi = {
    * @param projectId
    * @param formId
    * @param positions
+   * @param pageIds
    */
-  reorderPages: (
-    projectId: string,
-    formId: string,
-    positions: { id: string; position: number }[],
-  ) => post<FormPage[]>(`/projects/${projectId}/forms/${formId}/pages/reorder`, { positions }),
+  reorderPages: (projectId: string, formId: string, pageIds: string[]) =>
+    post<FormPage[]>(`/projects/${projectId}/forms/${formId}/pages/reorder`, { pageIds }),
 
   // ─── Fields ──────────────────────────────────────────────────
 
@@ -205,12 +211,10 @@ export const formsApi = {
    * @param projectId
    * @param formId
    * @param positions
+   * @param fieldIds
    */
-  reorderFields: (
-    projectId: string,
-    formId: string,
-    positions: { id: string; position: number; pageId: string }[],
-  ) => post<FormField[]>(`/projects/${projectId}/forms/${formId}/fields/reorder`, { positions }),
+  reorderFields: (projectId: string, formId: string, fieldIds: string[]) =>
+    post<FormField[]>(`/projects/${projectId}/forms/${formId}/fields/reorder`, { fieldIds }),
 
   // ─── Public ──────────────────────────────────────────────────
 

@@ -48,6 +48,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', disabled, children, ...props }, ref) => {
     if (
       (import.meta as unknown as { env: { DEV: boolean } }).env.DEV &&
+      !disabled &&
       !props['aria-label'] &&
       !props.title
     ) {

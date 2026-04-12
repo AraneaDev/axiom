@@ -48,7 +48,7 @@ export function FormBuilder({
   className,
 }: FormBuilderProps) {
   const allFields = form.pages.flatMap((p) => p.fields);
-  const hasTitleMapping = allFields.some((f) => f.issueField === 'title');
+  const hasTitleMapping = allFields.some((f) => f.issueFieldMapping === 'title');
 
   const sortedPages = form.pages.slice().sort((a, b) => a.position - b.position);
 
@@ -69,7 +69,7 @@ export function FormBuilder({
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <h2 className="text-[15px] font-semibold text-text truncate">{form.title}</h2>
+          <h2 className="text-[15px] font-semibold text-text truncate">{form.name}</h2>
           <p className="text-[12px] text-text-muted">
             {form.pages.length} {form.pages.length === 1 ? 'page' : 'pages'} &middot;{' '}
             {allFields.length} {allFields.length === 1 ? 'field' : 'fields'}
@@ -88,13 +88,13 @@ export function FormBuilder({
             title={
               !hasTitleMapping
                 ? 'Map at least one field to the issue title before publishing'
-                : form.isPublished
+                : form.status === 'PUBLISHED'
                   ? 'Unpublish form'
                   : 'Publish form'
             }
           >
             <Send size={14} />
-            {form.isPublished ? 'Unpublish' : 'Publish'}
+            {form.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
           </Button>
         </div>
       </div>

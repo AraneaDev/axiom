@@ -51,7 +51,7 @@ export default function FormBuilderPage() {
   const addFieldMutation = useMutationWithToast(
     (pageId: string) =>
       formsApi.createField(projectId, formId!, pageId, {
-        type: 'SHORT_TEXT',
+        type: 'TEXT',
         label: 'New Field',
       }),
     { successMessage: 'Field added', invalidateKeys },

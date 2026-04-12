@@ -275,7 +275,7 @@ export default function TeamDetail() {
                 </h3>
                 <Tooltip content="View all members">
                   <Link to={`/${org}/${teamSlug}/members`}>
-                    <Button variant="ghost" size="xs">
+                    <Button variant="ghost" size="xs" title="View all members">
                       <Users className="h-3.5 w-3.5" />
                     </Button>
                   </Link>

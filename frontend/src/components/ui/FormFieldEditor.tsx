@@ -174,8 +174,8 @@ export function FormFieldEditor({ field, onUpdate, onDelete }: FormFieldEditorPr
                   Map to issue field
                 </label>
                 <select
-                  value={field.issueField ?? ''}
-                  onChange={(e) => update({ issueField: e.target.value || null })}
+                  value={field.issueFieldMapping ?? ''}
+                  onChange={(e) => update({ issueFieldMapping: e.target.value || null })}
                   className={inputClass}
                 >
                   {ISSUE_FIELD_MAPPINGS.map((m) => (

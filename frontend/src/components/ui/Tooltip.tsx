@@ -1,4 +1,5 @@
-import { type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { cn } from '@/lib/utils';
 
@@ -8,45 +9,135 @@ interface TooltipProps {
   children: ReactNode;
 }
 
-const positions = {
-  top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
-  bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
-  left: 'right-full top-1/2 -translate-y-1/2 mr-2',
-  right: 'left-full top-1/2 -translate-y-1/2 ml-2',
-};
+const ARROW_SIZE = 8; // border-4 = 4px each side
+const MARGIN = 8; // minimum distance from viewport edge
 
-const arrows = {
-  top: 'top-full left-1/2 -translate-x-1/2 border-t-surface-inverse border-x-transparent border-b-transparent border-4',
-  bottom:
-    'bottom-full left-1/2 -translate-x-1/2 border-b-surface-inverse border-x-transparent border-t-transparent border-4',
-  left: 'left-full top-1/2 -translate-y-1/2 border-l-surface-inverse border-y-transparent border-r-transparent border-4',
-  right:
-    'right-full top-1/2 -translate-y-1/2 border-r-surface-inverse border-y-transparent border-l-transparent border-4',
+const arrowClasses = {
+  top: 'border-t-surface-inverse border-x-transparent border-b-transparent border-4',
+  bottom: 'border-b-surface-inverse border-x-transparent border-t-transparent border-4',
+  left: 'border-l-surface-inverse border-y-transparent border-r-transparent border-4',
+  right: 'border-r-surface-inverse border-y-transparent border-l-transparent border-4',
 };
 
 /**
- * Hover-triggered tooltip that displays a text hint near the wrapped element.
- * Uses CSS group-hover for zero-JS show/hide behavior.
+ * Hover-triggered tooltip rendered via portal so it is never clipped by
+ * overflow containers.  Positions itself relative to the viewport using
+ * the trigger's bounding rect and clamps to stay fully visible.
  * @param props - Tooltip configuration.
  * @param props.content - Text to display inside the tooltip.
  * @param props.side - Tooltip placement relative to the trigger: top, bottom, left, right. Defaults to top.
  * @param props.children - The element that triggers the tooltip on hover.
  */
 export function Tooltip({ content, side = 'top', children }: TooltipProps) {
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const tooltipRef = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [arrowOffset, setArrowOffset] = useState<number | null>(null);
+
+  const reposition = useCallback(() => {
+    const trigger = triggerRef.current;
+    const tooltip = tooltipRef.current;
+    if (!trigger || !tooltip) return;
+
+    const tr = trigger.getBoundingClientRect();
+    const tw = tooltip.offsetWidth;
+    const th = tooltip.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let top = 0;
+    let left = 0;
+
+    switch (side) {
+      case 'top':
+        top = tr.top - th - ARROW_SIZE;
+        left = tr.left + tr.width / 2 - tw / 2;
+        break;
+      case 'bottom':
+        top = tr.bottom + ARROW_SIZE;
+        left = tr.left + tr.width / 2 - tw / 2;
+        break;
+      case 'left':
+        top = tr.top + tr.height / 2 - th / 2;
+        left = tr.left - tw - ARROW_SIZE;
+        break;
+      case 'right':
+        top = tr.top + tr.height / 2 - th / 2;
+        left = tr.right + ARROW_SIZE;
+        break;
+    }
+
+    // Clamp horizontally
+    const origLeft = left;
+    left = Math.max(MARGIN, Math.min(left, vw - tw - MARGIN));
+
+    // Clamp vertically
+    top = Math.max(MARGIN, Math.min(top, vh - th - MARGIN));
+
+    // Arrow offset: how much we shifted from the centered position
+    if (side === 'top' || side === 'bottom') {
+      const shift = origLeft - left;
+      setArrowOffset(tw / 2 + shift);
+    } else {
+      setArrowOffset(null);
+    }
+
+    setPos({ top: top + window.scrollY, left: left + window.scrollX });
+  }, [side]);
+
+  useLayoutEffect(() => {
+    if (visible) reposition();
+  }, [visible, reposition]);
+
+  const handleMouseEnter = useCallback(() => setVisible(true), []);
+  const handleMouseLeave = useCallback(() => setVisible(false), []);
+
+  const arrowStyle =
+    arrowOffset != null
+      ? ({ position: 'absolute', left: `${arrowOffset}px`, transform: 'translateX(-50%)' } as const)
+      : undefined;
+
+  const arrowPositionClass =
+    side === 'top'
+      ? 'top-full'
+      : side === 'bottom'
+        ? 'bottom-full'
+        : side === 'left'
+          ? 'left-full top-1/2 -translate-y-1/2'
+          : 'right-full top-1/2 -translate-y-1/2';
+
   return (
-    <span className="group relative inline-flex">
-      {children}
+    <>
       <span
-        className={cn(
-          'pointer-events-none absolute z-50 hidden group-hover:flex items-center animate-fade-in',
-          positions[side],
-        )}
+        ref={triggerRef}
+        className="inline-flex"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
-        <span className="whitespace-nowrap max-w-xs rounded-md bg-surface-inverse px-2.5 py-1.5 text-xs text-text-inverse shadow-lg">
-          {content}
-        </span>
-        <span className={cn('absolute', arrows[side])} />
+        {children}
       </span>
-    </span>
+      {visible &&
+        createPortal(
+          <span
+            ref={tooltipRef}
+            className="pointer-events-none fixed z-[9999] animate-fade-in"
+            style={{ top: pos.top, left: pos.left, position: 'fixed' }}
+          >
+            <span className="whitespace-nowrap max-w-xs rounded-md bg-surface-inverse px-2.5 py-1.5 text-xs text-text-inverse shadow-lg">
+              {content}
+            </span>
+            <span
+              className={cn(
+                'absolute',
+                arrowClasses[side],
+                arrowOffset == null && arrowPositionClass,
+              )}
+              style={arrowStyle}
+            />
+          </span>,
+          document.body,
+        )}
+    </>
   );
 }
