@@ -80,7 +80,7 @@ export default function OrgAnalytics() {
           </div>
         </PageHeader>
 
-        <div className="columns-1 lg:columns-2 gap-6 [&>*]:mb-6 [&>*]:break-inside-avoid">
+        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-6">
           {/* Workload Overview */}
           <Card>
             <CardHeader>
@@ -111,44 +111,46 @@ export default function OrgAnalytics() {
                     ]}
                     className="mb-4"
                   />
-                  <Table>
-                    <Thead>
-                      <TrHead>
-                        <Th>Member</Th>
-                        <Th>Team</Th>
-                        <Th className="text-right">Open</Th>
-                        <Th className="text-right">In Progress</Th>
-                        <Th className="text-right">In Review</Th>
-                        <Th className="text-right">Total</Th>
-                      </TrHead>
-                    </Thead>
-                    <Tbody>
-                      {data.workload.map((w) => (
-                        <Tr key={w.userId}>
-                          <Td className="font-medium">{w.displayName}</Td>
-                          <Td>
-                            <Link
-                              to={`/${org}/${w.teamSlug}/analytics`}
-                              className="hover:underline cursor-pointer"
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <Thead>
+                        <TrHead>
+                          <Th>Member</Th>
+                          <Th>Team</Th>
+                          <Th className="text-right">Open</Th>
+                          <Th className="text-right">In Progress</Th>
+                          <Th className="text-right">In Review</Th>
+                          <Th className="text-right">Total</Th>
+                        </TrHead>
+                      </Thead>
+                      <Tbody>
+                        {data.workload.map((w) => (
+                          <Tr key={w.userId}>
+                            <Td className="font-medium">{w.displayName}</Td>
+                            <Td>
+                              <Link
+                                to={`/${org}/${w.teamSlug}/analytics`}
+                                className="hover:underline cursor-pointer"
+                              >
+                                {w.teamName}
+                              </Link>
+                            </Td>
+                            <Td className="text-right tabular-nums">{w.open}</Td>
+                            <Td className="text-right tabular-nums">{w.inProgress}</Td>
+                            <Td className="text-right tabular-nums">{w.inReview}</Td>
+                            <Td
+                              className={cn(
+                                'text-right font-semibold tabular-nums',
+                                loadColor(w.total),
+                              )}
                             >
-                              {w.teamName}
-                            </Link>
-                          </Td>
-                          <Td className="text-right tabular-nums">{w.open}</Td>
-                          <Td className="text-right tabular-nums">{w.inProgress}</Td>
-                          <Td className="text-right tabular-nums">{w.inReview}</Td>
-                          <Td
-                            className={cn(
-                              'text-right font-semibold tabular-nums',
-                              loadColor(w.total),
-                            )}
-                          >
-                            {w.total}
-                          </Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
+                              {w.total}
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </div>
                 </>
               )}
             </CardContent>
@@ -185,40 +187,42 @@ export default function OrgAnalytics() {
                 />
               )}
               {data.hours.byMember.length > 0 && (
-                <Table>
-                  <Thead>
-                    <TrHead>
-                      <Th>Member</Th>
-                      <Th>Team</Th>
-                      <Th>Project</Th>
-                      <Th className="text-right">Hours</Th>
-                    </TrHead>
-                  </Thead>
-                  <Tbody>
-                    {data.hours.byMember.map((h, i) => (
-                      <Tr key={i}>
-                        <Td className="font-medium">{h.displayName}</Td>
-                        <Td>
-                          <Link
-                            to={`/${org}/${h.teamSlug}/analytics`}
-                            className="hover:underline cursor-pointer"
-                          >
-                            {h.teamName}
-                          </Link>
-                        </Td>
-                        <Td>
-                          <Link
-                            to={`/${org}/${h.teamSlug}/${h.projectSlug}/analytics`}
-                            className="hover:underline cursor-pointer"
-                          >
-                            {h.projectName}
-                          </Link>
-                        </Td>
-                        <Td className="text-right tabular-nums">{formatMinutes(h.minutes)}</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <Thead>
+                      <TrHead>
+                        <Th>Member</Th>
+                        <Th>Team</Th>
+                        <Th>Project</Th>
+                        <Th className="text-right">Hours</Th>
+                      </TrHead>
+                    </Thead>
+                    <Tbody>
+                      {data.hours.byMember.map((h, i) => (
+                        <Tr key={i}>
+                          <Td className="font-medium">{h.displayName}</Td>
+                          <Td>
+                            <Link
+                              to={`/${org}/${h.teamSlug}/analytics`}
+                              className="hover:underline cursor-pointer"
+                            >
+                              {h.teamName}
+                            </Link>
+                          </Td>
+                          <Td>
+                            <Link
+                              to={`/${org}/${h.teamSlug}/${h.projectSlug}/analytics`}
+                              className="hover:underline cursor-pointer"
+                            >
+                              {h.projectName}
+                            </Link>
+                          </Td>
+                          <Td className="text-right tabular-nums">{formatMinutes(h.minutes)}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -244,31 +248,33 @@ export default function OrgAnalytics() {
                     formatValue={(v) => `${v}d`}
                     className="mb-4"
                   />
-                  <Table>
-                    <Thead>
-                      <TrHead>
-                        <Th>Project</Th>
-                        <Th className="text-right">Avg Lead Time</Th>
-                        <Th className="text-right">Completed</Th>
-                      </TrHead>
-                    </Thead>
-                    <Tbody>
-                      {data.leadTimes.map((lt) => (
-                        <Tr key={lt.projectSlug}>
-                          <Td className="font-medium">
-                            <Link
-                              to={`/${org}/${lt.teamSlug}/${lt.projectSlug}/analytics`}
-                              className="hover:underline cursor-pointer"
-                            >
-                              {lt.projectName}
-                            </Link>
-                          </Td>
-                          <Td className="text-right tabular-nums">{lt.avgLeadTimeDays}d</Td>
-                          <Td className="text-right tabular-nums">{lt.issuesCompleted}</Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <Thead>
+                        <TrHead>
+                          <Th>Project</Th>
+                          <Th className="text-right">Avg Lead Time</Th>
+                          <Th className="text-right">Completed</Th>
+                        </TrHead>
+                      </Thead>
+                      <Tbody>
+                        {data.leadTimes.map((lt) => (
+                          <Tr key={lt.projectSlug}>
+                            <Td className="font-medium">
+                              <Link
+                                to={`/${org}/${lt.teamSlug}/${lt.projectSlug}/analytics`}
+                                className="hover:underline cursor-pointer"
+                              >
+                                {lt.projectName}
+                              </Link>
+                            </Td>
+                            <Td className="text-right tabular-nums">{lt.avgLeadTimeDays}d</Td>
+                            <Td className="text-right tabular-nums">{lt.issuesCompleted}</Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </div>
                 </>
               )}
             </CardContent>
@@ -294,37 +300,41 @@ export default function OrgAnalytics() {
                     }))}
                     className="mb-4"
                   />
-                  <Table>
-                    <Thead>
-                      <TrHead>
-                        <Th>Project</Th>
-                        <Th className="text-right">Backlog</Th>
-                        <Th className="text-right">Maintenance</Th>
-                        <Th className="text-right">Bugs</Th>
-                        <Th className="text-right">Oldest</Th>
-                      </TrHead>
-                    </Thead>
-                    <Tbody>
-                      {data.backlog.map((b) => (
-                        <Tr key={b.projectSlug}>
-                          <Td className="font-medium">
-                            <Link
-                              to={`/${org}/${b.teamSlug}/${b.projectSlug}/analytics`}
-                              className="hover:underline cursor-pointer"
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <Thead>
+                        <TrHead>
+                          <Th>Project</Th>
+                          <Th className="text-right">Backlog</Th>
+                          <Th className="text-right">Maintenance</Th>
+                          <Th className="text-right">Bugs</Th>
+                          <Th className="text-right">Oldest</Th>
+                        </TrHead>
+                      </Thead>
+                      <Tbody>
+                        {data.backlog.map((b) => (
+                          <Tr key={b.projectSlug}>
+                            <Td className="font-medium">
+                              <Link
+                                to={`/${org}/${b.teamSlug}/${b.projectSlug}/analytics`}
+                                className="hover:underline cursor-pointer"
+                              >
+                                {b.projectName}
+                              </Link>
+                            </Td>
+                            <Td className="text-right tabular-nums">{b.backlogSize}</Td>
+                            <Td className="text-right tabular-nums">{b.maintenanceCount}</Td>
+                            <Td className="text-right tabular-nums">{b.bugCount}</Td>
+                            <Td
+                              className={cn('text-right tabular-nums', ageColor(b.oldestItemDays))}
                             >
-                              {b.projectName}
-                            </Link>
-                          </Td>
-                          <Td className="text-right tabular-nums">{b.backlogSize}</Td>
-                          <Td className="text-right tabular-nums">{b.maintenanceCount}</Td>
-                          <Td className="text-right tabular-nums">{b.bugCount}</Td>
-                          <Td className={cn('text-right tabular-nums', ageColor(b.oldestItemDays))}>
-                            {b.oldestItemDays}d
-                          </Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
+                              {b.oldestItemDays}d
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </div>
                 </>
               )}
             </CardContent>

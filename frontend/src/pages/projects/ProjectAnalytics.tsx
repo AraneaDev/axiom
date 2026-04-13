@@ -169,7 +169,7 @@ export default function ProjectAnalytics() {
         </div>
 
         {/* Issue distributions + Activity trend */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">
+        <div className="grid grid-cols-1 2xl:grid-cols-[1fr_2fr] gap-6">
           <div className="flex flex-col gap-6">
             {/* By Status */}
             <Card>

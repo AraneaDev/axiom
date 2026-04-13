@@ -85,7 +85,7 @@ export default function TeamAnalytics() {
           </div>
         </PageHeader>
 
-        <div className="columns-1 lg:columns-2 gap-6 [&>*]:mb-6 [&>*]:break-inside-avoid">
+        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-6">
           {/* Workload by Member */}
           <Card>
             <CardHeader>
@@ -185,50 +185,52 @@ export default function TeamAnalytics() {
                     formatValue={(v) => formatMinutes(v)}
                     className="mb-4"
                   />
-                  <Table>
-                    <Thead>
-                      <TrHead>
-                        <Th>Member</Th>
-                        {data.hours.byProject.map((p) => (
-                          <Th key={p.projectSlug} className="text-right">
-                            {p.projectName}
-                          </Th>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <Thead>
+                        <TrHead>
+                          <Th>Member</Th>
+                          {data.hours.byProject.map((p) => (
+                            <Th key={p.projectSlug} className="text-right">
+                              {p.projectName}
+                            </Th>
+                          ))}
+                          <Th className="text-right">Total</Th>
+                        </TrHead>
+                      </Thead>
+                      <Tbody>
+                        {data.hours.byMember.map((m) => (
+                          <Tr key={m.userId}>
+                            <Td className="font-medium">{m.displayName}</Td>
+                            {data.hours.byProject.map((p) => {
+                              const entry = m.byProject.find(
+                                (bp) => bp.projectSlug === p.projectSlug,
+                              );
+                              return (
+                                <Td key={p.projectSlug} className="text-right tabular-nums">
+                                  {entry ? formatMinutes(entry.minutes) : '-'}
+                                </Td>
+                              );
+                            })}
+                            <Td className="text-right font-semibold tabular-nums">
+                              {formatMinutes(m.totalMinutes)}
+                            </Td>
+                          </Tr>
                         ))}
-                        <Th className="text-right">Total</Th>
-                      </TrHead>
-                    </Thead>
-                    <Tbody>
-                      {data.hours.byMember.map((m) => (
-                        <Tr key={m.userId}>
-                          <Td className="font-medium">{m.displayName}</Td>
-                          {data.hours.byProject.map((p) => {
-                            const entry = m.byProject.find(
-                              (bp) => bp.projectSlug === p.projectSlug,
-                            );
-                            return (
-                              <Td key={p.projectSlug} className="text-right tabular-nums">
-                                {entry ? formatMinutes(entry.minutes) : '-'}
-                              </Td>
-                            );
-                          })}
-                          <Td className="text-right font-semibold tabular-nums">
-                            {formatMinutes(m.totalMinutes)}
+                        <tr className="border-t border-border font-semibold">
+                          <Td>Total</Td>
+                          {data.hours.byProject.map((p) => (
+                            <Td key={p.projectSlug} className="text-right tabular-nums">
+                              {formatMinutes(p.minutes)}
+                            </Td>
+                          ))}
+                          <Td className="text-right tabular-nums">
+                            {formatMinutes(data.hours.totalMinutes)}
                           </Td>
-                        </Tr>
-                      ))}
-                      <tr className="border-t border-border font-semibold">
-                        <Td>Total</Td>
-                        {data.hours.byProject.map((p) => (
-                          <Td key={p.projectSlug} className="text-right tabular-nums">
-                            {formatMinutes(p.minutes)}
-                          </Td>
-                        ))}
-                        <Td className="text-right tabular-nums">
-                          {formatMinutes(data.hours.totalMinutes)}
-                        </Td>
-                      </tr>
-                    </Tbody>
-                  </Table>
+                        </tr>
+                      </Tbody>
+                    </Table>
+                  </div>
                 </>
               )}
             </CardContent>
@@ -255,42 +257,44 @@ export default function TeamAnalytics() {
                     formatValue={(v) => `${v}d`}
                     className="mb-4"
                   />
-                  <Table>
-                    <Thead>
-                      <TrHead>
-                        <Th>Project</Th>
-                        <Th className="text-right">Avg Lead Time</Th>
-                        <Th className="text-right">Completed</Th>
-                        <Th className="text-right">Task</Th>
-                        <Th className="text-right">Bug</Th>
-                        <Th className="text-right">Story</Th>
-                      </TrHead>
-                    </Thead>
-                    <Tbody>
-                      {data.leadTimes.map((lt) => (
-                        <Tr key={lt.projectSlug}>
-                          <Td className="font-medium">{lt.projectName}</Td>
-                          <Td className="text-right tabular-nums">{lt.avgLeadTimeDays}d</Td>
-                          <Td className="text-right tabular-nums">{lt.issuesCompleted}</Td>
-                          <Td className="text-right text-text-secondary tabular-nums">
-                            {lt.byType.TASK
-                              ? `${lt.byType.TASK.avgLeadTimeDays}d (${lt.byType.TASK.count})`
-                              : '-'}
-                          </Td>
-                          <Td className="text-right text-text-secondary tabular-nums">
-                            {lt.byType.BUG
-                              ? `${lt.byType.BUG.avgLeadTimeDays}d (${lt.byType.BUG.count})`
-                              : '-'}
-                          </Td>
-                          <Td className="text-right text-text-secondary tabular-nums">
-                            {lt.byType.STORY
-                              ? `${lt.byType.STORY.avgLeadTimeDays}d (${lt.byType.STORY.count})`
-                              : '-'}
-                          </Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <Thead>
+                        <TrHead>
+                          <Th>Project</Th>
+                          <Th className="text-right">Avg Lead Time</Th>
+                          <Th className="text-right">Completed</Th>
+                          <Th className="text-right">Task</Th>
+                          <Th className="text-right">Bug</Th>
+                          <Th className="text-right">Story</Th>
+                        </TrHead>
+                      </Thead>
+                      <Tbody>
+                        {data.leadTimes.map((lt) => (
+                          <Tr key={lt.projectSlug}>
+                            <Td className="font-medium">{lt.projectName}</Td>
+                            <Td className="text-right tabular-nums">{lt.avgLeadTimeDays}d</Td>
+                            <Td className="text-right tabular-nums">{lt.issuesCompleted}</Td>
+                            <Td className="text-right text-text-secondary tabular-nums">
+                              {lt.byType.TASK
+                                ? `${lt.byType.TASK.avgLeadTimeDays}d (${lt.byType.TASK.count})`
+                                : '-'}
+                            </Td>
+                            <Td className="text-right text-text-secondary tabular-nums">
+                              {lt.byType.BUG
+                                ? `${lt.byType.BUG.avgLeadTimeDays}d (${lt.byType.BUG.count})`
+                                : '-'}
+                            </Td>
+                            <Td className="text-right text-text-secondary tabular-nums">
+                              {lt.byType.STORY
+                                ? `${lt.byType.STORY.avgLeadTimeDays}d (${lt.byType.STORY.count})`
+                                : '-'}
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </div>
                 </>
               )}
             </CardContent>

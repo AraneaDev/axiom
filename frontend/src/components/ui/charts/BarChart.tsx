@@ -36,7 +36,7 @@ export function BarChart({ data, height = 60, showValues = true, className }: Ba
   const paddingLeft = 28;
   const paddingRight = 8;
   const paddingTop = showValues ? 12 : 6;
-  const paddingBottom = 14;
+  const paddingBottom = 30;
   const barGap = 4;
   const barWidth = Math.max(4, Math.min(16, 200 / data.length));
   const width = Math.max(
@@ -127,12 +127,13 @@ export function BarChart({ data, height = 60, showValues = true, className }: Ba
               )}
               <text
                 x={x + barWidth / 2}
-                y={paddingTop + chartH + 9}
-                textAnchor="middle"
+                y={paddingTop + chartH + 5}
+                textAnchor="end"
                 className="fill-text-tertiary"
                 fontSize={5}
+                transform={`rotate(-45, ${x + barWidth / 2}, ${paddingTop + chartH + 5})`}
               >
-                {d.label.length > 12 ? d.label.slice(0, 11) + '..' : d.label}
+                {d.label.length > 14 ? d.label.slice(0, 13) + '..' : d.label}
               </text>
             </g>
           );

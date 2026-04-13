@@ -82,7 +82,11 @@ export function GaugeChart({
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+      <svg
+        viewBox={`0 0 ${size} ${size}`}
+        className="w-full h-auto max-w-[var(--gauge-size)]"
+        style={{ '--gauge-size': `${size}px` } as React.CSSProperties}
+      >
         {/* Background track */}
         <path
           d={bgPath}
