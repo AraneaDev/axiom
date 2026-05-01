@@ -56,6 +56,7 @@ import { startRunnerHealthMonitor, stopRunnerHealthMonitor } from './modules/run
 import runnersRoutes from './modules/runners/runners.routes';
 import savedFiltersRoutes from './modules/saved-filters/saved-filters.routes';
 import searchRoutes from './modules/search/search.routes';
+import siteSettingsRoutes from './modules/site-settings/site-settings.routes';
 import sprintsRoutes from './modules/sprints/sprints.routes';
 import statusChecksRoutes from './modules/status-checks/status-checks.routes';
 import teamsRoutes from './modules/teams/teams.routes';
@@ -174,6 +175,7 @@ app.use('/api/attachments', attachmentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/saved-filters', savedFiltersRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/site-settings', siteSettingsRoutes);
 app.use('/api/admin/audit-logs', auditRoutes);
 app.use('/api', analyticsRoutes);
 app.use('/api/projects', formRoutes);
