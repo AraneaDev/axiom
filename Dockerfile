@@ -25,7 +25,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
 COPY --from=deps /app/prisma.config.ts ./
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/src/config/load-env.ts ./src/config/load-env.ts
 COPY package.json ./
+COPY scripts ./scripts
 
 RUN mkdir -p /data/repos /data/uploads && chown -R axiom:axiom /app /data
 
