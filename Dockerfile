@@ -35,4 +35,4 @@ USER axiom
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db push --skip-generate --accept-data-loss && node dist/index.js"]
