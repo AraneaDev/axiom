@@ -1,5 +1,5 @@
 import { useEffect, lazy, Suspense } from 'react';
-import { Routes, Route } from 'react-router';
+import { Routes, Route, Navigate } from 'react-router';
 
 import { KeyboardShortcutHelp } from '@/components/KeyboardShortcutHelp';
 import { AppShell } from '@/components/layout/AppShell';
@@ -31,6 +31,7 @@ const MemberProfile = lazy(() => import('@/pages/teams/MemberProfile'));
 const CreateProject = lazy(() => import('@/pages/projects/CreateProject'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 const PublicForm = lazy(() => import('@/pages/forms/PublicForm'));
+const LandingPage = lazy(() => import('@/pages/landing/LandingPage'));
 
 function SuspenseLoader({ children }: { children: React.ReactNode }) {
   return (
@@ -38,6 +39,13 @@ function SuspenseLoader({ children }: { children: React.ReactNode }) {
       <Suspense fallback={<PageLoader />}>{children}</Suspense>
     </ErrorBoundary>
   );
+}
+
+function ConditionalHome() {
+  const { isAuthenticated, isLoading } = useAuthStore();
+  if (isLoading) return <PageLoader />;
+  if (!isAuthenticated) return <LandingPage />;
+  return <Navigate to="/dashboard" replace />;
 }
 
 function AppWithKeyboard() {
@@ -59,6 +67,16 @@ function AppWithKeyboard() {
           }
         />
 
+        {/* Home — conditional: LandingPage or Dashboard */}
+        <Route
+          path="/"
+          element={
+            <SuspenseLoader>
+              <ConditionalHome />
+            </SuspenseLoader>
+          }
+        />
+
         {/* Guest routes */}
         <Route element={<GuestGuard />}>
           <Route path="/login" element={<Login />} />
@@ -72,7 +90,7 @@ function AppWithKeyboard() {
           <Route path="/setup-2fa" element={<Setup2FA />} />
           <Route element={<AppShell />}>
             <Route
-              path="/"
+              path="/dashboard"
               element={
                 <ErrorBoundary>
                   <Dashboard />

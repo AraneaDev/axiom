@@ -10,7 +10,7 @@ export function AuthGuard() {
   const { isAuthenticated, isLoading } = useAuthStore();
 
   if (isLoading) return <PageLoader />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/" replace />;
   return <Outlet />;
 }
 
