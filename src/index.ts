@@ -131,6 +131,9 @@ app.use('/api', publicFormRoutes);
 
 // Health check (public, no auth required)
 app.use('/api/health', healthRoutes);
+
+// Site settings (public GET, admin PUT — must be before catch-all auth routes)
+app.use('/api/site-settings', siteSettingsRoutes);
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', version: '0.1.0-alpha', name: 'axiom' });
 });
@@ -175,7 +178,6 @@ app.use('/api/attachments', attachmentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/saved-filters', savedFiltersRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/site-settings', siteSettingsRoutes);
 app.use('/api/admin/audit-logs', auditRoutes);
 app.use('/api', analyticsRoutes);
 app.use('/api/projects', formRoutes);
