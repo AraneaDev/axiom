@@ -12,6 +12,7 @@
 
 import '../src/config/load-env';
 
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -175,6 +176,13 @@ async function main() {
       defaultBranch: 'master',
     },
   });
+
+  // Init bare repo on disk if it doesn't exist
+  if (!fs.existsSync(diskPath)) {
+    fs.mkdirSync(path.dirname(diskPath), { recursive: true });
+    execSync(`git init --bare --initial-branch master "${diskPath}"`, { stdio: 'pipe' });
+    console.warn(`        Initialized bare repo at ${diskPath}`);
+  }
 
   // PR template
   await prisma.repository.update({
