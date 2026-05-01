@@ -192,6 +192,17 @@ export async function apiFormData<T = unknown>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+
+    // 2FA enforcement — redirect to security settings
+    if (
+      res.status === 403 &&
+      body?.error?.code === 'TWO_FACTOR_SETUP_REQUIRED' &&
+      typeof window !== 'undefined'
+    ) {
+      window.location.href = '/settings/security';
+      return Promise.reject(new Error(body.error.message));
+    }
+
     throw new ApiError(res.status, body.error?.message ?? 'Request failed', body.error?.code);
   }
 
