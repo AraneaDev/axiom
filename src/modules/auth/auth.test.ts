@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
@@ -172,6 +172,64 @@ describe('Auth API', () => {
     it('should reject unauthenticated request', async () => {
       const res = await request(app).get('/api/users/me');
       expect(res.status).toBe(401);
+    });
+  });
+
+  // ── Registration Mode ────────────────────────────────────────
+
+  describe('registration mode', () => {
+    const modeTestUser = {
+      email: 'regmode@axiom.dev',
+      username: 'regmodeuser',
+      displayName: 'RegMode User',
+      password: 'securepassword123',
+    };
+
+    afterEach(async () => {
+      // Reset registration mode to INVITE_ONLY
+      await prisma.siteSettings.upsert({
+        where: { id: 1 },
+        update: { registrationMode: 'INVITE_ONLY' },
+        create: { id: 1, registrationMode: 'INVITE_ONLY' },
+      });
+      // Clean up any user created during the test
+      const user = await prisma.user.findUnique({ where: { email: modeTestUser.email } });
+      if (user) {
+        await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+        await prisma.user.delete({ where: { id: user.id } });
+      }
+    });
+
+    it('should reject registration when mode is DISABLED', async () => {
+      await prisma.siteSettings.upsert({
+        where: { id: 1 },
+        update: { registrationMode: 'DISABLED' },
+        create: { id: 1, registrationMode: 'DISABLED' },
+      });
+
+      const res = await request(app)
+        .post('/api/auth/register')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send(modeTestUser);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error?.code).toBe('REGISTRATION_DISABLED');
+    });
+
+    it('should allow registration without invite when mode is OPEN', async () => {
+      await prisma.siteSettings.upsert({
+        where: { id: 1 },
+        update: { registrationMode: 'OPEN' },
+        create: { id: 1, registrationMode: 'OPEN' },
+      });
+
+      const res = await request(app)
+        .post('/api/auth/register')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send(modeTestUser);
+
+      expect(res.status).toBe(201);
+      expect(res.body.accessToken).toBeDefined();
     });
   });
 
