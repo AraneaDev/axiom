@@ -76,6 +76,7 @@ services:
       SMTP_PORT: 25
       SMTP_FROM: "Axiom <noreply@mail.axiom.local>"
       FRONTEND_URL: http://localhost:7000
+      HOOK_SECRET: axiom-dev-hook-secret-min-16-chars
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s

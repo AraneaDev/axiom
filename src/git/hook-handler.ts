@@ -4,6 +4,7 @@ import { CommitRefType } from '@prisma/client';
 import { Request, Response, NextFunction, Router } from 'express';
 
 import { prisma } from '../config/database';
+import { env } from '../config/env';
 import { cacheInvalidate } from '../config/redis';
 import { executeSmartCommit } from '../modules/issues/smart-commits.executor';
 import { triggerPipelineOnPush } from '../pipelines/trigger';
@@ -15,7 +16,7 @@ import * as gitCmd from './git-commands';
 
 const ISSUE_KEY_IN_BRANCH = /([A-Z]+-\d+)/;
 
-export const HOOK_SECRET = process.env.HOOK_SECRET || crypto.randomBytes(32).toString('hex');
+export const HOOK_SECRET = env.HOOK_SECRET;
 
 const router = Router();
 
