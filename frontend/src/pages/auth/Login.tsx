@@ -1,10 +1,12 @@
-import { LogIn, ShieldCheck } from 'lucide-react';
+import { LogIn, Moon, ShieldCheck, Sun } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { useDarkMode } from '@/hooks/useDarkMode';
 import { useFormError } from '@/hooks/useFormError';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -14,6 +16,7 @@ import { useAuthStore } from '@/stores/auth.store';
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
+  const { isDark, toggle } = useDarkMode();
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -30,7 +33,7 @@ export default function Login() {
       if (result.twoFactorRequired) {
         setNeeds2FA(true);
       } else {
-        navigate('/');
+        navigate('/dashboard');
       }
     } catch (err: unknown) {
       const msg = (err instanceof Error ? err.message : null) || 'Login failed';
@@ -45,43 +48,29 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen">
-      {/* Left panel — branding */}
-      <div
-        className="hidden lg:flex lg:w-1/2 items-center justify-center p-12 relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #4a3d8f 0%, #0d9488 100%)' }}
-      >
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
-        <div className="relative z-10 text-text-inverse max-w-md">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="h-12 w-12 rounded-lg bg-surface/20 backdrop-blur-sm flex items-center justify-center">
-              <span className="text-2xl font-bold">A</span>
-            </div>
-            <span className="text-3xl font-bold tracking-tight">Axiom</span>
+    <div className="min-h-screen flex flex-col bg-surface-secondary">
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-4">
+        <Link to="/" className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+            <span className="text-text-inverse text-sm font-bold">A</span>
           </div>
-          <h1 className="text-4xl font-bold leading-tight mb-4">
-            Code. Track. Document.
-            <br />
-            All in one place.
-          </h1>
-          <p className="text-lg text-white/70 leading-relaxed">
-            Git hosting, issue tracking, and documentation — unified with built-in AI integration.
-          </p>
-        </div>
-      </div>
+          <span className="text-xl font-bold text-text">Axiom</span>
+        </Link>
+        <button
+          onClick={toggle}
+          className="p-2 rounded-md text-text-secondary hover:text-text hover:bg-surface-tertiary transition-colors"
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
+      </header>
 
-      {/* Right panel — form */}
-      <div className="flex-1 flex items-center justify-center p-10 bg-surface min-h-screen">
-        <div className="w-full max-w-sm">
-          <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-text-inverse text-sm font-bold">A</span>
-            </div>
-            <span className="text-xl font-bold text-text">Axiom</span>
-          </div>
-
-          <h2 className="text-2xl font-bold text-text mb-1">Welcome back</h2>
-          <p className="text-sm text-text-secondary mb-8">Sign in to your account</p>
+      {/* Centered form */}
+      <div className="flex-1 flex items-center justify-center px-4">
+        <Card className="w-full max-w-sm p-8 shadow-sm">
+          <h2 className="text-2xl font-bold text-center text-text mb-1">Welcome back</h2>
+          <p className="text-sm text-text-secondary text-center mb-6">Sign in to your account</p>
 
           {error && (
             <div className="mb-4 rounded-md bg-danger-light border border-danger/20 px-3 py-2 text-sm text-danger">
@@ -160,7 +149,7 @@ export default function Login() {
               Sign up
             </Link>
           </p>
-        </div>
+        </Card>
       </div>
     </div>
   );
