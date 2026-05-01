@@ -1630,13 +1630,15 @@ model RoadmapBucket {
 // ─── Site Settings (singleton) ──────────────────────────────
 
 model SiteSettings {
-  id           Int      @id @default(1)
-  heroTitle    String   @default("Code. Track. Document.")
-  heroSubtitle String   @default("Git hosting, issue tracking, and documentation — unified with built-in AI integration.")
-  ctaText      String   @default("Get Started")
-  ctaLink      String   @default("/register")
-  bodyMarkdown String   @default("")
-  updatedAt    DateTime @updatedAt
+  id               Int      @id @default(1)
+  heroTitle        String   @default("Code. Track. Document.")
+  heroSubtitle     String   @default("Git hosting, issue tracking, and documentation — unified with built-in AI integration.")
+  ctaText          String   @default("Get Started")
+  ctaLink          String   @default("/register")
+  bodyMarkdown     String   @default("")
+  registrationMode String   @default("INVITE_ONLY") @map("registration_mode")
+  enforce2fa       Boolean  @default(false) @map("enforce_2fa")
+  updatedAt        DateTime @updatedAt
 
   @@map("site_settings")
 }
