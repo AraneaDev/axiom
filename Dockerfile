@@ -1,5 +1,6 @@
 FROM node:25-alpine AS base
 RUN apk add --no-cache git pandoc weasyprint font-noto
+RUN addgroup -S axiom && adduser -S -G axiom axiom
 WORKDIR /app
 
 # Dependencies
@@ -25,6 +26,10 @@ COPY --from=deps /app/prisma ./prisma
 COPY --from=deps /app/prisma.config.ts ./
 COPY --from=build /app/dist ./dist
 COPY package.json ./
+
+RUN mkdir -p /data/repos /data/uploads && chown -R axiom:axiom /app /data
+
+USER axiom
 
 EXPOSE 3000
 
