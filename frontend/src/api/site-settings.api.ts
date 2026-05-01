@@ -7,6 +7,8 @@ export interface SiteSettings {
   ctaText: string;
   ctaLink: string;
   bodyMarkdown: string;
+  registrationMode: 'INVITE_ONLY' | 'OPEN' | 'DISABLED';
+  enforce2fa: boolean;
   updatedAt: string;
 }
 
