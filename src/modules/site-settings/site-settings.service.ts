@@ -19,6 +19,8 @@ export async function getSiteSettings() {
  * @param data.ctaText
  * @param data.ctaLink
  * @param data.bodyMarkdown
+ * @param data.registrationMode
+ * @param data.enforce2fa
  */
 export async function updateSiteSettings(data: {
   heroTitle?: string;
@@ -26,6 +28,8 @@ export async function updateSiteSettings(data: {
   ctaText?: string;
   ctaLink?: string;
   bodyMarkdown?: string;
+  registrationMode?: string;
+  enforce2fa?: boolean;
 }) {
   return prisma.siteSettings.upsert({
     where: { id: 1 },

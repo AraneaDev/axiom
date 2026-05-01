@@ -16,6 +16,8 @@ export const updateSiteSettingsSchema = z.object({
   ctaText: z.string().min(1).max(50).optional(),
   ctaLink: z.string().min(1).max(200).optional(),
   bodyMarkdown: z.string().max(50000).optional(),
+  registrationMode: z.enum(['INVITE_ONLY', 'OPEN', 'DISABLED']).optional(),
+  enforce2fa: z.boolean().optional(),
 });
 
 // Public — no auth required
