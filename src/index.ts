@@ -88,6 +88,11 @@ try {
 
 const app = express();
 
+// Trust proxy when behind reverse proxy (Apache/nginx)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Global middleware
 app.use(helmet());
 app.use(
