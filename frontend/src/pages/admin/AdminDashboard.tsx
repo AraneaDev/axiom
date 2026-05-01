@@ -13,6 +13,7 @@ import {
   HardDrive,
   Server,
   Settings,
+  Shield,
   UserCog,
 } from 'lucide-react';
 import { Link } from 'react-router';
@@ -251,6 +252,11 @@ export default function AdminDashboard() {
           <Link to="/admin/landing">
             <Button variant="outline" size="sm">
               <Globe className="h-4 w-4" /> Landing Page
+            </Button>
+          </Link>
+          <Link to="/admin/security">
+            <Button variant="outline" size="sm">
+              <Shield className="h-4 w-4" /> Security
             </Button>
           </Link>
           <Link to="/admin/settings">
