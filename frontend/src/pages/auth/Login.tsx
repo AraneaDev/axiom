@@ -1,12 +1,12 @@
-import { LogIn, Moon, ShieldCheck, Sun } from 'lucide-react';
+import { LogIn, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 
+import { PublicHeader } from '@/components/layout/PublicHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
-import { useDarkMode } from '@/hooks/useDarkMode';
 import { useFormError } from '@/hooks/useFormError';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -16,7 +16,6 @@ import { useAuthStore } from '@/stores/auth.store';
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
-  const { isDark, toggle } = useDarkMode();
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -49,22 +48,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-secondary">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-text-inverse text-sm font-bold">A</span>
-          </div>
-          <span className="text-xl font-bold text-text">Axiom</span>
-        </Link>
-        <button
-          onClick={toggle}
-          className="p-2 rounded-md text-text-secondary hover:text-text hover:bg-surface-tertiary transition-colors"
-          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
-      </header>
+      <PublicHeader />
 
       {/* Centered form */}
       <div className="flex-1 flex items-center justify-center px-4">

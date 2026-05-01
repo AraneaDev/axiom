@@ -1,42 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, LogIn, Moon, Sun } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link } from 'react-router';
 
 import { siteSettingsApi } from '@/api/site-settings.api';
 import type { SiteSettings } from '@/api/site-settings.api';
+import { PublicHeader } from '@/components/layout/PublicHeader';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useDarkMode } from '@/hooks/useDarkMode';
-import { cn } from '@/lib/utils';
-
-function LandingHeader() {
-  const { isDark, toggle } = useDarkMode();
-
-  return (
-    <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-      <Link to="/" className="flex items-center gap-2">
-        <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-          <span className="text-text-inverse text-sm font-bold">A</span>
-        </div>
-        <span className="text-xl font-bold text-text">Axiom</span>
-      </Link>
-      <div className="flex items-center gap-3">
-        <button
-          onClick={toggle}
-          className="p-2 rounded-md text-text-secondary hover:text-text hover:bg-surface-tertiary transition-colors"
-          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
-        <Link to="/login">
-          <Button variant="outline" size="sm">
-            <LogIn className="h-4 w-4" /> Sign in
-          </Button>
-        </Link>
-      </div>
-    </header>
-  );
-}
 
 function HeroSkeleton() {
   return (
@@ -48,12 +19,95 @@ function HeroSkeleton() {
   );
 }
 
+const ALLOWED_TAGS = new Set([
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'br',
+  'hr',
+  'ul',
+  'ol',
+  'li',
+  'a',
+  'strong',
+  'em',
+  'b',
+  'i',
+  'u',
+  'code',
+  'pre',
+  'blockquote',
+  'img',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
+  'div',
+  'span',
+  'section',
+]);
+
+const ALLOWED_ATTRS = new Set([
+  'href',
+  'src',
+  'alt',
+  'title',
+  'class',
+  'id',
+  'target',
+  'rel',
+  'width',
+  'height',
+  'colspan',
+  'rowspan',
+]);
+
+function sanitizeHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+
+  function clean(node: Node): void {
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const el = child as Element;
+        if (!ALLOWED_TAGS.has(el.tagName.toLowerCase())) {
+          el.replaceWith(...Array.from(el.childNodes));
+          continue;
+        }
+        for (const attr of Array.from(el.attributes)) {
+          if (!ALLOWED_ATTRS.has(attr.name.toLowerCase())) {
+            el.removeAttribute(attr.name);
+          }
+        }
+        if (el.tagName === 'A') {
+          const href = el.getAttribute('href') || '';
+          if (href.startsWith('javascript:')) {
+            el.removeAttribute('href');
+          }
+          el.setAttribute('rel', 'noopener noreferrer');
+        }
+        clean(el);
+      }
+    }
+  }
+
+  clean(doc.body);
+  return doc.body.innerHTML;
+}
+
 function MarkdownBody({ content }: { content: string }) {
+  const sanitized = useMemo(() => sanitizeHtml(content), [content]);
   if (!content.trim()) return null;
 
   return (
     <section className="max-w-3xl mx-auto px-6 pb-16">
-      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: content }} />
+      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: sanitized }} />
     </section>
   );
 }
@@ -69,8 +123,8 @@ export default function LandingPage() {
   });
 
   return (
-    <div className={cn('min-h-screen flex flex-col bg-surface-secondary')}>
-      <LandingHeader />
+    <div className="min-h-screen flex flex-col bg-surface-secondary">
+      <PublicHeader showSignIn />
 
       {isLoading || !settings ? (
         <HeroSkeleton />

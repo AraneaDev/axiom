@@ -21,6 +21,6 @@ export function GuestGuard() {
   const { isAuthenticated, isLoading } = useAuthStore();
 
   if (isLoading) return <PageLoader />;
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
