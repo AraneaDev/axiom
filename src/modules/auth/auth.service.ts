@@ -45,6 +45,13 @@ export async function register(data: {
   inviteCode?: string;
 }) {
   // Validate invite code (required unless no users exist — first user is admin)
+  const { getSiteSettings } = await import('../site-settings/site-settings.service');
+  const settings = await getSiteSettings();
+
+  if (settings.registrationMode === 'DISABLED') {
+    throw new AppError(403, 'Registration is currently disabled', 'REGISTRATION_DISABLED');
+  }
+
   const userCount = await prisma.user.count();
   let invite: {
     id: string;
@@ -55,7 +62,7 @@ export async function register(data: {
     maxUses: number;
   } | null = null;
 
-  if (userCount > 0) {
+  if (userCount > 0 && settings.registrationMode === 'INVITE_ONLY') {
     if (!data.inviteCode) {
       throw new AppError(403, 'Registration requires an invite link', 'INVITE_REQUIRED');
     }
@@ -68,6 +75,15 @@ export async function register(data: {
     }
     if (invite.uses >= invite.maxUses) {
       throw new AppError(403, 'Invite link has been fully used', 'INVITE_EXHAUSTED');
+    }
+  } else if (userCount > 0 && data.inviteCode) {
+    // OPEN mode: still process invite code if provided (for org assignment)
+    invite = await prisma.inviteLink.findUnique({ where: { code: data.inviteCode } });
+    if (invite && invite.expiresAt && invite.expiresAt < new Date()) {
+      invite = null;
+    }
+    if (invite && invite.uses >= invite.maxUses) {
+      invite = null;
     }
   }
 
