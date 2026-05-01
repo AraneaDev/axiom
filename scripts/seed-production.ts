@@ -12,7 +12,6 @@
 
 import '../src/config/load-env';
 
-import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -36,7 +35,7 @@ async function main() {
   console.warn('Seeding production data...\n');
 
   // -- 1. User ---------------------------------------------------------------
-  console.warn('  [1/7] User');
+  console.warn('  [1/6] User');
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD!, 12);
 
   const tim = await prisma.user.upsert({
@@ -53,7 +52,7 @@ async function main() {
   console.warn('        Tim Schipper (tim@aranea.dev)');
 
   // -- 2. Organization -------------------------------------------------------
-  console.warn('  [2/7] Organization');
+  console.warn('  [2/6] Organization');
   const org = await prisma.organization.upsert({
     where: { slug: 'aranea-dev' },
     update: {},
@@ -72,7 +71,7 @@ async function main() {
   console.warn('        Aranea.Dev (tim = OWNER)');
 
   // -- 3. Team ---------------------------------------------------------------
-  console.warn('  [3/7] Team');
+  console.warn('  [3/6] Team');
   const team = await prisma.team.upsert({
     where: { orgId_slug: { orgId: org.id, slug: 'axiom' } },
     update: {},
@@ -92,7 +91,7 @@ async function main() {
   console.warn('        Axiom (tim = ADMIN)');
 
   // -- 4. Project + Board Columns --------------------------------------------
-  console.warn('  [4/7] Project');
+  console.warn('  [4/6] Project');
 
   const columnDefs = [
     { name: 'Backlog', position: 0, isDefault: true, isDone: false },
@@ -137,7 +136,7 @@ async function main() {
   console.warn('        Axiom MVP (AXM) with board columns');
 
   // -- 5. Labels -------------------------------------------------------------
-  console.warn('  [5/7] Labels');
+  console.warn('  [5/6] Labels');
 
   const labelDefs = [
     { name: 'frontend', color: '#6366f1' },
@@ -157,45 +156,8 @@ async function main() {
   }
   console.warn(`        ${labelDefs.length} labels`);
 
-  // -- 6. Repository record --------------------------------------------------
-  console.warn('  [6/7] Repository');
-
-  const reposBase = process.env.REPOS_PATH ?? '/data/repos';
-  const diskPath = path.join(reposBase, 'aranea-dev', 'axiom', 'axiom.git');
-
-  const repo = await prisma.repository.upsert({
-    where: { teamId_slug: { teamId: team.id, slug: 'axiom' } },
-    update: { diskPath, description: 'The Axiom platform source code' },
-    create: {
-      teamId: team.id,
-      name: 'axiom',
-      slug: 'axiom',
-      description: 'The Axiom platform source code',
-      visibility: 'INTERNAL',
-      diskPath,
-      defaultBranch: 'master',
-    },
-  });
-
-  // Init bare repo on disk if it doesn't exist
-  if (!fs.existsSync(diskPath)) {
-    fs.mkdirSync(path.dirname(diskPath), { recursive: true });
-    execSync(`git init --bare --initial-branch master "${diskPath}"`, { stdio: 'pipe' });
-    console.warn(`        Initialized bare repo at ${diskPath}`);
-  }
-
-  // PR template
-  await prisma.repository.update({
-    where: { id: repo.id },
-    data: {
-      prTemplate: `## Summary\n\nWhat does this PR do? Why is it needed?\n\n## Changes\n\n-\n\n## Testing\n\n- [ ] Unit tests added/updated\n- [ ] Manual testing done\n- [ ] No regressions found\n\n## Screenshots\n\n(if applicable)\n`,
-    },
-  });
-
-  console.warn(`        axiom (INTERNAL) at ${diskPath}`);
-
-  // -- 7. Wiki space ---------------------------------------------------------
-  console.warn('  [7/7] Wiki');
+  // -- 6. Wiki space ---------------------------------------------------------
+  console.warn('  [6/6] Wiki');
 
   const wikiSpace = await prisma.wikiSpace.upsert({
     where: { teamId_slug: { teamId: team.id, slug: 'docs' } },
