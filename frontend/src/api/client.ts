@@ -100,7 +100,8 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   }
 
   // No refresh token and still 401 -- redirect to login
-  if (res.status === 401 && !refreshToken) {
+  // Skip redirect for auth endpoints (login returns 401 for 2FA, invalid creds, etc.)
+  if (res.status === 401 && !refreshToken && !path.startsWith('/auth/')) {
     clearTokens();
     window.location.href = '/login';
     throw new ApiError(401, 'Session expired');
