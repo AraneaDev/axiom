@@ -14,6 +14,7 @@
     "db:seed:demo": "tsx scripts/seed-demo.ts",
     "db:seed:voorbeeld": "tsx scripts/seed-voorbeeld.ts",
     "db:seed": "tsx scripts/seed-demo.ts && tsx scripts/seed-voorbeeld.ts",
+    "db:seed:prod": "tsx scripts/seed-production.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
