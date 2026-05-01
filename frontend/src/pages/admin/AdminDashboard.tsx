@@ -9,6 +9,7 @@ import {
   CircleDot,
   Cpu,
   FileText,
+  Globe,
   HardDrive,
   Server,
   Settings,
@@ -245,6 +246,11 @@ export default function AdminDashboard() {
           <Link to="/admin/users">
             <Button variant="outline" size="sm">
               <UserCog className="h-4 w-4" /> Manage Users
+            </Button>
+          </Link>
+          <Link to="/admin/landing">
+            <Button variant="outline" size="sm">
+              <Globe className="h-4 w-4" /> Landing Page
             </Button>
           </Link>
           <Link to="/admin/settings">

@@ -15,6 +15,7 @@ const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'));
 const UserManagement = lazy(() => import('@/pages/admin/UserManagement'));
 const SystemSettings = lazy(() => import('@/pages/admin/SystemSettings'));
 const AuditLogs = lazy(() => import('@/pages/admin/AuditLogs'));
+const LandingPageEditor = lazy(() => import('@/pages/admin/LandingPageEditor'));
 const NotificationInbox = lazy(() => import('@/pages/notifications/NotificationInbox'));
 
 /**
@@ -80,6 +81,14 @@ export function adminRoutes() {
         element={
           <ErrorBoundary>
             <AuditLogs />
+          </ErrorBoundary>
+        }
+      />
+      <Route
+        path="/admin/landing"
+        element={
+          <ErrorBoundary>
+            <LandingPageEditor />
           </ErrorBoundary>
         }
       />
