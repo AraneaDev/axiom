@@ -16,6 +16,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { metricsCollector } from './middleware/metricsCollector';
 import { globalLimiter, authLimiter, searchLimiter, gitLimiter } from './middleware/rate-limit.js';
 import { requestLogger } from './middleware/requestLogger';
+import { require2fa } from './middleware/require2fa';
 import activityRoutes from './modules/activity/activity.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
@@ -134,6 +135,9 @@ app.use('/api/health', healthRoutes);
 
 // Site settings (public GET, admin PUT — must be before catch-all auth routes)
 app.use('/api/site-settings', siteSettingsRoutes);
+
+// 2FA enforcement — after auth, before feature routes
+app.use('/api', require2fa);
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', version: '0.1.0-alpha', name: 'axiom' });
 });
