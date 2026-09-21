@@ -64,13 +64,18 @@ function loadOrCreateHostKey(hostKeyPath: string): Buffer {
 
 /**
  * Write an error to the channel's stderr and close it with a non-zero exit code.
+ *
+ * Uses `end()` rather than `close()`: `close()` sends CHANNEL_CLOSE immediately
+ * and can drop the stderr message (or any other buffered output) if it has not
+ * yet drained to the client. `end()` flushes first and lets ssh2 send EOF/close
+ * once the writable side actually finishes.
  * @param channel - The SSH channel to fail
  * @param message - Human readable error message
  */
 function fail(channel: ServerChannel, message: string): void {
   channel.stderr.write(`Error: ${message}\n`);
   channel.exit(1);
-  channel.close();
+  channel.end();
 }
 
 /**
@@ -100,11 +105,16 @@ export async function startSshServer(options: SshServerOptions = {}): Promise<Se
         const result = verifyPublicKeyAuth(ctx, sshKey.publicKey);
         if (result === 'reject') return ctx.reject(['publickey']);
         if (result === 'authenticated') {
-          authenticatedUserId = sshKey.userId;
+          // Only mark this connection authenticated once the lastUsedAt update
+          // has actually succeeded. If it throws, the catch below rejects this
+          // attempt; authenticatedUserId must stay unset so a later exec on
+          // this connection cannot proceed on the strength of an attempt the
+          // client was told had failed.
           await prisma.sshKey.update({
             where: { id: sshKey.id },
             data: { lastUsedAt: new Date() },
           });
+          authenticatedUserId = sshKey.userId;
         }
         return ctx.accept();
       } catch (err) {
@@ -134,6 +144,14 @@ export async function startSshServer(options: SshServerOptions = {}): Promise<Se
 
             const gitProcess = spawn(parsed.service, [repo.diskPath]);
             channel.pipe(gitProcess.stdin);
+            // gitProcess.stdin can get EPIPE if the child exits (e.g. rejects a
+            // push) while the client is still sending pack data through the
+            // pipe above. That is expected client behavior, not a server bug;
+            // log it and move on instead of letting it crash the process as an
+            // unhandled 'error' event.
+            gitProcess.stdin.on('error', (err) => {
+              logger.warn('git process stdin error', { service: parsed.service }, err as Error);
+            });
             // { end: false }: ssh2's Channel auto-sends EOF and closes itself as
             // soon as its writable side finishes (an internal 'finish' listener
             // registered ahead of ours). Left at the pipe() default, that fires
@@ -150,7 +168,15 @@ export async function startSshServer(options: SshServerOptions = {}): Promise<Se
 
             gitProcess.on('close', (code) => {
               channel.exit(code ?? 1);
-              channel.close();
+              // end(), not close(): with { end: false } above, stdout chunks
+              // written just before the child exited can still be sitting in
+              // the channel's write buffer waiting on the client's SSH-level
+              // flow-control window. close() sends CHANNEL_CLOSE immediately
+              // and drops whatever has not drained yet, silently truncating
+              // large pack transfers to a slow client even though the child
+              // exited 0. end() flushes the buffered writes first and lets
+              // ssh2 send EOF/close once they actually finish.
+              channel.end();
             });
             gitProcess.on('error', () => fail(channel, 'git operation failed'));
           } catch (err) {

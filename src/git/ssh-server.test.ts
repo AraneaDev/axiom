@@ -1,4 +1,5 @@
 import { execFile } from 'child_process';
+import crypto from 'crypto';
 import fs from 'fs/promises';
 import http from 'http';
 import type { AddressInfo } from 'net';
@@ -168,6 +169,33 @@ describe('SSH git transport', () => {
     const key = await prisma.sshKey.findFirst({ where: { userId: ctx.owner.id } });
     expect(key?.lastUsedAt).not.toBeNull();
   });
+
+  it('transfers a large incompressible file over ssh without truncation', async () => {
+    const work = path.join(tmp, 'large-push');
+    await git(['clone', url(), work], ownerKey.file);
+    const data = crypto.randomBytes(8 * 1024 * 1024);
+    const expectedSha = crypto.createHash('sha256').update(data).digest('hex');
+    await fs.writeFile(path.join(work, 'blob.bin'), data);
+    await execFileAsync('git', ['-C', work, 'add', '.']);
+    await execFileAsync('git', [
+      '-C',
+      work,
+      '-c',
+      'user.name=T',
+      '-c',
+      'user.email=t@t.dev',
+      'commit',
+      '-m',
+      'large blob',
+    ]);
+    await git(['push', 'origin', 'HEAD:main'], ownerKey.file, work);
+
+    const clone = path.join(tmp, 'large-clone');
+    await git(['clone', url(), clone], ownerKey.file);
+    const cloned = await fs.readFile(path.join(clone, 'blob.bin'));
+    expect(cloned.length).toBe(data.length);
+    expect(crypto.createHash('sha256').update(cloned).digest('hex')).toBe(expectedSha);
+  }, 30000);
 
   it('lets a viewer read but not push', async () => {
     const { stdout } = await git(['ls-remote', url()], viewerKey.file);
