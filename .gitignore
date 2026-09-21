@@ -4,7 +4,8 @@ dist/
 *.log
 .DS_Store
 .data/
-docs/superpowers/
+/docs/superpowers/
+/.superpowers/
 playwright-report/
 test-results/
 .playwright-mcp/
