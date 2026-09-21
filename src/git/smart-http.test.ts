@@ -261,5 +261,18 @@ describe('Smart HTTP & Hooks', () => {
         .send({ repo: 'nonexistent', ref: 'refs/heads/main', before: 'a', after: 'b' });
       expect(res.status).toBe(404);
     });
+
+    it('accepts the hook without browser headers', async () => {
+      const res = await request(app)
+        .post('/api/internal/hooks/post-receive')
+        .set('X-Hook-Secret', HOOK_SECRET)
+        .send({
+          repo: repoId,
+          ref: 'refs/heads/csrf-check',
+          before: '0000000000000000000000000000000000000000',
+          after: 'abc123abc123abc123abc123abc123abc123abc1',
+        });
+      expect(res.status).toBe(200);
+    });
   });
 });

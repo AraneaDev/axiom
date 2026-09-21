@@ -19,7 +19,7 @@ const execFileAsync = promisify(execFile);
 
 // Mock hook-handler to avoid pulling in DB/Redis dependencies
 vi.mock('./hook-handler', () => ({
-  generatePostReceiveHook: (repoId: string) => `#!/bin/bash\necho "hook for ${repoId}"\n`,
+  generatePostReceiveHook: (repoId: string) => `#!/bin/sh\necho "hook for ${repoId}"\n`,
   HOOK_SECRET: 'test-secret',
   default: {},
 }));
@@ -102,6 +102,7 @@ describe('initBareRepo', () => {
 
     const hookContent = await fs.readFile(hookPath, 'utf8');
     expect(hookContent).toContain('repo-abc-123');
+    expect(hookContent.startsWith('#!/bin/sh')).toBe(true);
   });
 
   it('does not create a post-receive hook when repoId is omitted', async () => {

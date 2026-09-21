@@ -127,6 +127,12 @@ app.use('/api', connectRpcRoutes);
 // CSRF protection: require X-Requested-With header on state-changing requests
 app.use('/api', csrfGuard);
 
+// Internal hooks (called by git, not a browser; authenticates via X-Hook-Secret).
+// Mounted before the feature routers below because several of them are bare-mounted
+// at '/api' with an unconditional `router.use(authenticate)`, which would otherwise
+// reject this request for lacking an Authorization header.
+app.use('/api/internal/hooks', hookRoutes);
+
 // Public form routes (no auth required)
 app.use('/api', publicFormRoutes);
 
@@ -191,9 +197,6 @@ app.use('/api', teamRoadmapRoutes);
 
 // Git Smart HTTP (must be before JSON body parser doesn't matter — has its own raw parser)
 app.use('/git', smartHttpRoutes);
-
-// Internal hooks
-app.use('/api/internal/hooks', hookRoutes);
 
 // MCP SSE endpoint
 app.get('/api/mcp', authenticate, handleMcpSse);

@@ -12,6 +12,8 @@ export default defineConfig({
       PORT: '3001',
       REPOS_PATH: '/tmp/axiom-test-repos',
       NODE_ENV: 'test',
+      AXIOM_HOOK_ENTRY: `${process.cwd()}/src/git/post-receive-hook.ts`,
+      AXIOM_INTERNAL_URL: 'http://127.0.0.1:9',
     },
     coverage: {
       provider: 'v8',

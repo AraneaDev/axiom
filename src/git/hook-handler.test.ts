@@ -485,19 +485,13 @@ describe('POST /api/internal/hooks/post-receive', () => {
   // ── generatePostReceiveHook ─────────────────────────────────────────────────
 
   describe('generatePostReceiveHook', () => {
-    it('generates a bash script with the repo ID embedded', async () => {
+    it('generates a sh script that execs the node hook entry with the repo id', async () => {
       const { generatePostReceiveHook } = await import('./hook-handler');
-      const script = generatePostReceiveHook('repo-abc-123', 'http://localhost:3000');
-      expect(script).toContain('repo-abc-123');
-      expect(script).toContain('#!/bin/bash');
-      expect(script).toContain('/api/internal/hooks/post-receive');
-      expect(script).toContain(HOOK_SECRET);
-    });
-
-    it('uses provided apiBaseUrl', async () => {
-      const { generatePostReceiveHook } = await import('./hook-handler');
-      const script = generatePostReceiveHook('repo-1', 'https://api.mycompany.com');
-      expect(script).toContain('https://api.mycompany.com');
+      const script = generatePostReceiveHook('repo-abc-123');
+      expect(script).toContain('#!/bin/sh');
+      expect(script).toContain('exec node');
+      expect(script).toContain('"repo-abc-123"');
+      expect(script).not.toContain(HOOK_SECRET);
     });
   });
 });

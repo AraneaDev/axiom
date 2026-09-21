@@ -398,23 +398,22 @@ export async function dispatchWebhook(
     });
 }
 
+const SAFE_REPO_ID = /^[A-Za-z0-9_-]+$/;
+
 /**
- * Generate a post-receive hook script for a repository.
- * @param repoId
- * @param apiBaseUrl
+ * Generate the post-receive hook script for a repository. The script carries only the
+ * repository id; the API URL and secret are read from the git process environment.
+ * @param repoId - Repository id (cuid)
+ * @returns POSIX sh script content
+ * @throws {Error} when the id contains characters unsafe for a shell script
  */
-export function generatePostReceiveHook(
-  repoId: string,
-  apiBaseUrl: string = process.env.API_BASE_URL || 'http://localhost:3000',
-): string {
-  return `#!/bin/bash
-while read oldrev newrev refname; do
-  curl -s -X POST ${apiBaseUrl}/api/internal/hooks/post-receive \\
-    -H "Content-Type: application/json" \\
-    -H "X-Hook-Secret: ${HOOK_SECRET}" \\
-    -d "{\\"repo\\":\\"${repoId}\\",\\"ref\\":\\"$refname\\",\\"before\\":\\"$oldrev\\",\\"after\\":\\"$newrev\\"}" &
-done
-wait
+export function generatePostReceiveHook(repoId: string): string {
+  if (!SAFE_REPO_ID.test(repoId)) {
+    throw new Error(`Refusing to write hook for unsafe repo id: ${repoId}`);
+  }
+  return `#!/bin/sh
+# Installed by Axiom. Do not edit; rewritten on every deploy.
+exec node "\${AXIOM_HOOK_ENTRY:-/app/dist/git/post-receive-hook.js}" "${repoId}"
 `;
 }
 

@@ -12,9 +12,10 @@ import { Request, Response, NextFunction } from 'express';
  */
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-// Paths exempt from CSRF -- MCP clients authenticate via Bearer token
-// and cannot inject custom headers into SSE transport requests.
-const CSRF_EXEMPT_PATHS = new Set(['/mcp/messages']);
+// Paths exempt from CSRF. MCP clients authenticate via Bearer token and cannot inject
+// custom headers into SSE transport requests. The post-receive hook is called by git,
+// not a browser, and authenticates with X-Hook-Secret.
+const CSRF_EXEMPT_PATHS = new Set(['/mcp/messages', '/internal/hooks/post-receive']);
 
 /**
  * CSRF guard middleware requiring X-Requested-With header on mutations.
