@@ -1,34 +1,69 @@
--- CreateEnum
-CREATE TYPE "ApprovalRequestStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED');
+-- This migration is idempotent because the schema it describes may already exist.
+-- Environments that ran the old CMD applied these tables and columns with
+-- prisma db push before this migration was written. IF NOT EXISTS guards and
+-- duplicate_object exception handlers let migrate deploy succeed both on a
+-- fresh database and on a database that was already brought up to date by
+-- db push, with no manual migrate resolve step required.
 
 -- CreateEnum
-CREATE TYPE "ApprovalDecision" AS ENUM ('APPROVED', 'REJECTED');
+DO $$ BEGIN
+    CREATE TYPE "ApprovalRequestStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "FormStatus" AS ENUM ('DRAFT', 'PUBLISHED', 'ARCHIVED');
+DO $$ BEGIN
+    CREATE TYPE "ApprovalDecision" AS ENUM ('APPROVED', 'REJECTED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "FormAuthMode" AS ENUM ('PUBLIC', 'TOKEN_GATED');
+DO $$ BEGIN
+    CREATE TYPE "FormStatus" AS ENUM ('DRAFT', 'PUBLISHED', 'ARCHIVED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "FormSpamProtection" AS ENUM ('NONE', 'CAPTCHA', 'RATE_LIMIT');
+DO $$ BEGIN
+    CREATE TYPE "FormAuthMode" AS ENUM ('PUBLIC', 'TOKEN_GATED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "FormFieldType" AS ENUM ('TEXT', 'TEXTAREA', 'SELECT', 'MULTISELECT', 'CHECKBOX', 'RADIO', 'DATE', 'FILE', 'HEADING', 'DESCRIPTION');
+DO $$ BEGIN
+    CREATE TYPE "FormSpamProtection" AS ENUM ('NONE', 'CAPTCHA', 'RATE_LIMIT');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "SubmissionStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'SPAM');
+DO $$ BEGIN
+    CREATE TYPE "FormFieldType" AS ENUM ('TEXT', 'TEXTAREA', 'SELECT', 'MULTISELECT', 'CHECKBOX', 'RADIO', 'DATE', 'FILE', 'HEADING', 'DESCRIPTION');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+-- CreateEnum
+DO $$ BEGIN
+    CREATE TYPE "SubmissionStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'SPAM');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AlterTable
-ALTER TABLE "automation_rules" ADD COLUMN     "condition" TEXT,
+ALTER TABLE "automation_rules" ADD COLUMN IF NOT EXISTS "condition" TEXT,
 ALTER COLUMN "conditions" DROP NOT NULL;
 
 -- AlterTable
-ALTER TABLE "issues" ADD COLUMN     "roadmapBucketId" TEXT,
-ADD COLUMN     "startDate" TIMESTAMP(3);
+ALTER TABLE "issues" ADD COLUMN IF NOT EXISTS "roadmapBucketId" TEXT,
+ADD COLUMN IF NOT EXISTS "startDate" TIMESTAMP(3);
 
 -- CreateTable
-CREATE TABLE "approval_gates" (
+CREATE TABLE IF NOT EXISTS "approval_gates" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "fromColumnId" TEXT NOT NULL,
@@ -43,7 +78,7 @@ CREATE TABLE "approval_gates" (
 );
 
 -- CreateTable
-CREATE TABLE "approval_requests" (
+CREATE TABLE IF NOT EXISTS "approval_requests" (
     "id" TEXT NOT NULL,
     "issueId" TEXT NOT NULL,
     "approvalGateId" TEXT NOT NULL,
@@ -57,7 +92,7 @@ CREATE TABLE "approval_requests" (
 );
 
 -- CreateTable
-CREATE TABLE "approval_votes" (
+CREATE TABLE IF NOT EXISTS "approval_votes" (
     "id" TEXT NOT NULL,
     "approvalRequestId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -69,7 +104,7 @@ CREATE TABLE "approval_votes" (
 );
 
 -- CreateTable
-CREATE TABLE "Form" (
+CREATE TABLE IF NOT EXISTS "Form" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -90,7 +125,7 @@ CREATE TABLE "Form" (
 );
 
 -- CreateTable
-CREATE TABLE "FormPage" (
+CREATE TABLE IF NOT EXISTS "FormPage" (
     "id" TEXT NOT NULL,
     "formId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -103,7 +138,7 @@ CREATE TABLE "FormPage" (
 );
 
 -- CreateTable
-CREATE TABLE "FormField" (
+CREATE TABLE IF NOT EXISTS "FormField" (
     "id" TEXT NOT NULL,
     "formPageId" TEXT NOT NULL,
     "position" INTEGER NOT NULL,
@@ -120,7 +155,7 @@ CREATE TABLE "FormField" (
 );
 
 -- CreateTable
-CREATE TABLE "FormSubmission" (
+CREATE TABLE IF NOT EXISTS "FormSubmission" (
     "id" TEXT NOT NULL,
     "formId" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
@@ -139,7 +174,7 @@ CREATE TABLE "FormSubmission" (
 );
 
 -- CreateTable
-CREATE TABLE "roadmap_buckets" (
+CREATE TABLE IF NOT EXISTS "roadmap_buckets" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -152,104 +187,183 @@ CREATE TABLE "roadmap_buckets" (
 );
 
 -- CreateIndex
-CREATE INDEX "approval_gates_projectId_idx" ON "approval_gates"("projectId");
+CREATE INDEX IF NOT EXISTS "approval_gates_projectId_idx" ON "approval_gates"("projectId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "approval_gates_projectId_fromColumnId_toColumnId_key" ON "approval_gates"("projectId", "fromColumnId", "toColumnId");
+CREATE UNIQUE INDEX IF NOT EXISTS "approval_gates_projectId_fromColumnId_toColumnId_key" ON "approval_gates"("projectId", "fromColumnId", "toColumnId");
 
 -- CreateIndex
-CREATE INDEX "approval_requests_issueId_idx" ON "approval_requests"("issueId");
+CREATE INDEX IF NOT EXISTS "approval_requests_issueId_idx" ON "approval_requests"("issueId");
 
 -- CreateIndex
-CREATE INDEX "approval_requests_approvalGateId_idx" ON "approval_requests"("approvalGateId");
+CREATE INDEX IF NOT EXISTS "approval_requests_approvalGateId_idx" ON "approval_requests"("approvalGateId");
 
 -- CreateIndex
-CREATE INDEX "approval_requests_requestedById_status_idx" ON "approval_requests"("requestedById", "status");
+CREATE INDEX IF NOT EXISTS "approval_requests_requestedById_status_idx" ON "approval_requests"("requestedById", "status");
 
 -- CreateIndex
-CREATE INDEX "approval_votes_userId_idx" ON "approval_votes"("userId");
+CREATE INDEX IF NOT EXISTS "approval_votes_userId_idx" ON "approval_votes"("userId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "approval_votes_approvalRequestId_userId_key" ON "approval_votes"("approvalRequestId", "userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "approval_votes_approvalRequestId_userId_key" ON "approval_votes"("approvalRequestId", "userId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Form_slug_key" ON "Form"("slug");
+CREATE UNIQUE INDEX IF NOT EXISTS "Form_slug_key" ON "Form"("slug");
 
 -- CreateIndex
-CREATE INDEX "Form_projectId_idx" ON "Form"("projectId");
+CREATE INDEX IF NOT EXISTS "Form_projectId_idx" ON "Form"("projectId");
 
 -- CreateIndex
-CREATE INDEX "FormPage_formId_idx" ON "FormPage"("formId");
+CREATE INDEX IF NOT EXISTS "FormPage_formId_idx" ON "FormPage"("formId");
 
 -- CreateIndex
-CREATE INDEX "FormField_formPageId_idx" ON "FormField"("formPageId");
+CREATE INDEX IF NOT EXISTS "FormField_formPageId_idx" ON "FormField"("formPageId");
 
 -- CreateIndex
-CREATE INDEX "FormSubmission_formId_status_idx" ON "FormSubmission"("formId", "status");
+CREATE INDEX IF NOT EXISTS "FormSubmission_formId_status_idx" ON "FormSubmission"("formId", "status");
 
 -- CreateIndex
-CREATE INDEX "FormSubmission_projectId_status_idx" ON "FormSubmission"("projectId", "status");
+CREATE INDEX IF NOT EXISTS "FormSubmission_projectId_status_idx" ON "FormSubmission"("projectId", "status");
 
 -- CreateIndex
-CREATE INDEX "roadmap_buckets_projectId_idx" ON "roadmap_buckets"("projectId");
+CREATE INDEX IF NOT EXISTS "roadmap_buckets_projectId_idx" ON "roadmap_buckets"("projectId");
 
 -- AddForeignKey
-ALTER TABLE "issues" ADD CONSTRAINT "issues_roadmapBucketId_fkey" FOREIGN KEY ("roadmapBucketId") REFERENCES "roadmap_buckets"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "issues" ADD CONSTRAINT "issues_roadmapBucketId_fkey" FOREIGN KEY ("roadmapBucketId") REFERENCES "roadmap_buckets"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_fromColumnId_fkey" FOREIGN KEY ("fromColumnId") REFERENCES "board_columns"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_fromColumnId_fkey" FOREIGN KEY ("fromColumnId") REFERENCES "board_columns"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_toColumnId_fkey" FOREIGN KEY ("toColumnId") REFERENCES "board_columns"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_toColumnId_fkey" FOREIGN KEY ("toColumnId") REFERENCES "board_columns"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "issues"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "issues"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_approvalGateId_fkey" FOREIGN KEY ("approvalGateId") REFERENCES "approval_gates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_approvalGateId_fkey" FOREIGN KEY ("approvalGateId") REFERENCES "approval_gates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_targetColumnId_fkey" FOREIGN KEY ("targetColumnId") REFERENCES "board_columns"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_targetColumnId_fkey" FOREIGN KEY ("targetColumnId") REFERENCES "board_columns"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_requestedById_fkey" FOREIGN KEY ("requestedById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_requestedById_fkey" FOREIGN KEY ("requestedById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "approval_votes" ADD CONSTRAINT "approval_votes_approvalRequestId_fkey" FOREIGN KEY ("approvalRequestId") REFERENCES "approval_requests"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "approval_votes" ADD CONSTRAINT "approval_votes_approvalRequestId_fkey" FOREIGN KEY ("approvalRequestId") REFERENCES "approval_requests"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "approval_votes" ADD CONSTRAINT "approval_votes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "approval_votes" ADD CONSTRAINT "approval_votes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Form" ADD CONSTRAINT "Form_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Form" ADD CONSTRAINT "Form_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Form" ADD CONSTRAINT "Form_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Form" ADD CONSTRAINT "Form_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "FormPage" ADD CONSTRAINT "FormPage_formId_fkey" FOREIGN KEY ("formId") REFERENCES "Form"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "FormPage" ADD CONSTRAINT "FormPage_formId_fkey" FOREIGN KEY ("formId") REFERENCES "Form"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "FormPage" ADD CONSTRAINT "FormPage_conditionFieldId_fkey" FOREIGN KEY ("conditionFieldId") REFERENCES "FormField"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "FormPage" ADD CONSTRAINT "FormPage_conditionFieldId_fkey" FOREIGN KEY ("conditionFieldId") REFERENCES "FormField"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "FormField" ADD CONSTRAINT "FormField_formPageId_fkey" FOREIGN KEY ("formPageId") REFERENCES "FormPage"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "FormField" ADD CONSTRAINT "FormField_formPageId_fkey" FOREIGN KEY ("formPageId") REFERENCES "FormPage"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "FormSubmission" ADD CONSTRAINT "FormSubmission_formId_fkey" FOREIGN KEY ("formId") REFERENCES "Form"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "FormSubmission" ADD CONSTRAINT "FormSubmission_formId_fkey" FOREIGN KEY ("formId") REFERENCES "Form"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "FormSubmission" ADD CONSTRAINT "FormSubmission_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "FormSubmission" ADD CONSTRAINT "FormSubmission_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "FormSubmission" ADD CONSTRAINT "FormSubmission_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "issues"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "FormSubmission" ADD CONSTRAINT "FormSubmission_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "issues"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "FormSubmission" ADD CONSTRAINT "FormSubmission_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "FormSubmission" ADD CONSTRAINT "FormSubmission_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "roadmap_buckets" ADD CONSTRAINT "roadmap_buckets_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
+DO $$ BEGIN
+    ALTER TABLE "roadmap_buckets" ADD CONSTRAINT "roadmap_buckets_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
