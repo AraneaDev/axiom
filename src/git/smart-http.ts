@@ -5,8 +5,9 @@ import { Request, Response, NextFunction } from 'express';
 
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
-import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
+
+import { resolveRepoForGit } from './git-access';
 
 type GitService = 'git-upload-pack' | 'git-receive-pack';
 
@@ -46,53 +47,6 @@ async function authenticateGitRequest(req: Request): Promise<string> {
   return apiToken.userId;
 }
 
-/**
- * Resolve org/team/repo slugs to a repository record and verify access.
- * @param orgSlug
- * @param teamSlug
- * @param repoSlug
- * @param userId
- * @param needsWrite
- */
-async function resolveRepo(
-  orgSlug: string,
-  teamSlug: string,
-  repoSlug: string,
-  userId: string,
-  needsWrite: boolean,
-) {
-  const org = await prisma.organization.findUnique({ where: { slug: orgSlug } });
-  if (!org) throw new AppError(404, 'Not found');
-
-  const team = await prisma.team.findUnique({
-    where: { orgId_slug: { orgId: org.id, slug: teamSlug } },
-  });
-  if (!team) throw new AppError(404, 'Not found');
-
-  const repo = await prisma.repository.findUnique({
-    where: { teamId_slug: { teamId: team.id, slug: repoSlug } },
-  });
-  if (!repo || !repo.diskPath) throw new AppError(404, 'Not found');
-
-  // Check permissions
-  const orgMembership = await prisma.orgMembership.findUnique({
-    where: { userId_orgId: { userId, orgId: org.id } },
-  });
-
-  if (!orgMembership && repo.visibility === 'PRIVATE') {
-    throw new AppError(403, ERR.ACCESS_DENIED);
-  }
-
-  if (needsWrite) {
-    // Need at least MEMBER role to push
-    if (!orgMembership || orgMembership.role === 'VIEWER' || orgMembership.role === 'GUEST') {
-      throw new AppError(403, 'Write access denied');
-    }
-  }
-
-  return repo;
-}
-
 function sendAuthChallenge(res: Response) {
   res.setHeader('WWW-Authenticate', 'Basic realm="Axiom Git"');
   res.status(401).send('Authentication required');
@@ -123,7 +77,7 @@ export async function handleInfoRefs(req: Request, res: Response, next: NextFunc
     const repoSlug = req.params.repo as string;
     const cleanSlug = repoSlug.replace(/\.git$/, '');
     const needsWrite = service === 'git-receive-pack';
-    const repoRecord = await resolveRepo(org, team, cleanSlug, userId, needsWrite);
+    const repoRecord = await resolveRepoForGit(userId, org, team, cleanSlug, needsWrite);
 
     res.setHeader('Content-Type', `application/x-${service}-advertisement`);
     res.setHeader('Cache-Control', 'no-cache');
@@ -135,11 +89,7 @@ export async function handleInfoRefs(req: Request, res: Response, next: NextFunc
     res.write('0000'); // flush-pkt
 
     // Spawn the git service with --advertise-refs
-    const gitProcess = spawn(service, [
-      '--stateless-rpc',
-      '--advertise-refs',
-      repoRecord.diskPath!,
-    ]);
+    const gitProcess = spawn(service, ['--stateless-rpc', '--advertise-refs', repoRecord.diskPath]);
 
     gitProcess.stdout.pipe(res);
     gitProcess.stderr.on('data', (data) => {
@@ -181,12 +131,12 @@ export async function handleServiceRpc(req: Request, res: Response, next: NextFu
     const repoSlug = req.params.repo as string;
     const cleanSlug = repoSlug.replace(/\.git$/, '');
     const needsWrite = service === 'git-receive-pack';
-    const repoRecord = await resolveRepo(org, team, cleanSlug, userId, needsWrite);
+    const repoRecord = await resolveRepoForGit(userId, org, team, cleanSlug, needsWrite);
 
     res.setHeader('Content-Type', `application/x-${service}-result`);
     res.setHeader('Cache-Control', 'no-cache');
 
-    const gitProcess = spawn(service, ['--stateless-rpc', repoRecord.diskPath!]);
+    const gitProcess = spawn(service, ['--stateless-rpc', repoRecord.diskPath]);
 
     req.pipe(gitProcess.stdin);
     gitProcess.stdout.pipe(res);
