@@ -25,6 +25,7 @@ import PRList from './PRList';
 import ReleasesTab from './ReleasesTab';
 
 import { reposApi, type CommitInfo } from '@/api/repos.api';
+import { siteSettingsApi } from '@/api/site-settings.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -37,6 +38,7 @@ import { RepoSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
+import { buildSshCloneUrl } from '@/lib/clone-url';
 import { formatRelative } from '@/lib/utils';
 
 /**
@@ -137,9 +139,21 @@ export default function RepoDetail() {
     enabled: !!currentRepo?.id && !!readmeEntry,
   });
 
+  const { data: siteSettings } = useQuery({
+    queryKey: ['site-settings'],
+    queryFn: siteSettingsApi.get,
+  });
+
   if (!currentRepo) return <RepoSkeleton />;
   const httpCloneUrl = `${window.location.origin}/git/${org}/${teamSlug}/${repoSlug}.git`;
-  const sshCloneUrl = `git@${window.location.hostname}:${org}/${teamSlug}/${repoSlug}.git`;
+  const ssh = siteSettings?.ssh;
+  const sshCloneUrl = ssh?.enabled
+    ? buildSshCloneUrl(
+        ssh.host ?? window.location.hostname,
+        ssh.port,
+        `${org}/${teamSlug}/${repoSlug}`,
+      )
+    : null;
 
   const tabs = [
     { key: 'code', label: 'Files', icon: <FolderOpen className="h-4 w-4" /> },
@@ -188,10 +202,12 @@ export default function RepoDetail() {
                 <p className="text-xs font-medium text-text-secondary mb-1.5">HTTP</p>
                 <CopyInput value={httpCloneUrl} label="HTTP clone URL" />
               </div>
-              <div>
-                <p className="text-xs font-medium text-text-secondary mb-1.5">SSH</p>
-                <CopyInput value={sshCloneUrl} label="SSH clone URL" />
-              </div>
+              {sshCloneUrl && (
+                <div>
+                  <p className="text-xs font-medium text-text-secondary mb-1.5">SSH</p>
+                  <CopyInput value={sshCloneUrl} label="SSH clone URL" />
+                </div>
+              )}
             </div>
           </Dropdown>
           <Link to={`${basePath}/settings`}>
