@@ -72,10 +72,18 @@ export async function deleteRepo(repoPath: string): Promise<void> {
  *
  * @param sourceRepoPath
  * @param targetRepoPath
+ * @param repoId
  */
-export async function forkRepo(sourceRepoPath: string, targetRepoPath: string): Promise<void> {
+export async function forkRepo(
+  sourceRepoPath: string,
+  targetRepoPath: string,
+  repoId?: string,
+): Promise<void> {
   await fs.mkdir(path.dirname(targetRepoPath), { recursive: true });
   await execFileAsync('git', ['clone', '--bare', sourceRepoPath, targetRepoPath]);
+  if (repoId) {
+    await installPostReceiveHook(targetRepoPath, repoId);
+  }
 }
 
 /**

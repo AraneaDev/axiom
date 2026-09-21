@@ -76,9 +76,7 @@ export async function createRepo(
   const defaultBranch = data.defaultBranch ?? 'main';
   const diskPath = getRepoPath(team.org.slug, team.slug, data.slug);
 
-  await initBareRepo(diskPath, defaultBranch);
-
-  return prisma.repository.create({
+  const repo = await prisma.repository.create({
     data: {
       teamId,
       name: data.name,
@@ -89,6 +87,21 @@ export async function createRepo(
       diskPath,
     },
   });
+
+  try {
+    await initBareRepo(diskPath, defaultBranch, repo.id);
+  } catch (err) {
+    await prisma.repository.delete({ where: { id: repo.id } }).catch((delErr) => {
+      logger.error(
+        'Failed to clean up repo record after disk error',
+        { repoId: repo.id },
+        delErr as Error,
+      );
+    });
+    throw err;
+  }
+
+  return repo;
 }
 
 /**
@@ -269,7 +282,7 @@ export async function forkRepoById(repoId: string, targetTeamId: string, newSlug
   });
 
   try {
-    await forkRepo(source.diskPath!, targetDiskPath);
+    await forkRepo(source.diskPath!, targetDiskPath, forkedRepo.id);
   } catch (err) {
     // Disk clone failed -- roll back the DB record
     await prisma.repository.delete({ where: { id: forkedRepo.id } }).catch((delErr) => {
