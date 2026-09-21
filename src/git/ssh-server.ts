@@ -1,8 +1,8 @@
-import { execFileSync, spawn } from 'child_process';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-import { Server, type AuthContext, type Connection, type ServerChannel } from 'ssh2';
+import { Server, utils, type AuthContext, type Connection, type ServerChannel } from 'ssh2';
 
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
@@ -44,18 +44,19 @@ export function parseGitCommand(command: string): {
  * Load the SSH host key from disk, generating and persisting a new ed25519
  * key the first time the server starts.
  *
- * The key is generated with the `ssh-keygen` binary rather than Node's
- * `crypto.generateKeyPairSync`: Node can only export ed25519 private keys as
- * PKCS8 PEM, and ssh2's key parser does not accept that format (it needs the
- * OpenSSH private key format that `ssh-keygen` writes).
+ * The key is generated with ssh2's own `utils.generateKeyPairSync`, not the
+ * `ssh-keygen` binary: the production image has no `ssh-keygen`, and Node's
+ * `crypto.generateKeyPairSync` can only export ed25519 private keys as PKCS8
+ * PEM, which ssh2's key parser does not accept. `utils.generateKeyPairSync`
+ * writes the OpenSSH private key format ssh2 needs.
  * @param hostKeyPath - Path to the OpenSSH-format private key
  * @returns The host key contents
  */
 function loadOrCreateHostKey(hostKeyPath: string): Buffer {
   if (!fs.existsSync(hostKeyPath)) {
     fs.mkdirSync(path.dirname(hostKeyPath), { recursive: true });
-    execFileSync('ssh-keygen', ['-t', 'ed25519', '-N', '', '-q', '-f', hostKeyPath]);
-    fs.chmodSync(hostKeyPath, 0o600);
+    const { private: privateKey } = utils.generateKeyPairSync('ed25519');
+    fs.writeFileSync(hostKeyPath, privateKey, { mode: 0o600 });
     logger.info('Generated SSH host key', { path: hostKeyPath });
   }
   return fs.readFileSync(hostKeyPath);

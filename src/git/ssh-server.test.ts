@@ -57,6 +57,7 @@ describe('SSH git transport', () => {
   let ownerKey: { file: string; pub: string };
   let viewerKey: { file: string; pub: string };
   let strangerKey: { file: string; pub: string };
+  let hostKeyPath: string;
   const savedInternalUrl = process.env.AXIOM_INTERNAL_URL;
 
   function git(args: string[], key: string, cwd?: string) {
@@ -119,10 +120,11 @@ describe('SSH git transport', () => {
       publicKey: viewerKey.pub,
     });
 
+    hostKeyPath = path.join(tmp, 'host', 'host_key');
     server = await startSshServer({
       port: 0,
       host: '127.0.0.1',
-      hostKeyPath: path.join(tmp, 'host', 'host_key'),
+      hostKeyPath,
     });
     port = (server.address() as AddressInfo).port;
   });
@@ -134,6 +136,11 @@ describe('SSH git transport', () => {
     await prisma.sshKey.deleteMany({ where: { userId: { in: [ctx.owner.id, viewer.id] } } });
     await cleanupTestContext(ctx);
     await fs.rm(tmp, { recursive: true, force: true });
+  });
+
+  it('generates the host key file with mode 0o600', async () => {
+    const stat = await fs.stat(hostKeyPath);
+    expect(stat.mode & 0o777).toBe(0o600);
   });
 
   it('lets the owner clone, commit and push, and the push reaches the hook', async () => {
