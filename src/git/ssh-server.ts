@@ -1,44 +1,28 @@
-import { spawn } from 'child_process';
-import crypto from 'crypto';
+import { execFileSync, spawn } from 'child_process';
 import fs from 'fs';
+import path from 'path';
 
-import { Server, type Connection, type AuthContext } from 'ssh2';
+import { Server, type AuthContext, type Connection, type ServerChannel } from 'ssh2';
 
 import { prisma } from '../config/database';
-import { AppError } from '../middleware/errorHandler';
-import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 
-const SSH_PORT = parseInt(process.env.SSH_PORT || '2222', 10);
-const HOST_KEY_PATH = process.env.SSH_HOST_KEY || '/data/ssh/host_key';
+import { resolveRepoForGit } from './git-access';
+import { fingerprintOf, verifyPublicKeyAuth } from './ssh-auth';
 
-/**
- * Look up an SSH key by its fingerprint and return the associated userId.
- * @param key
- * @param key.data
- */
-async function authenticateByKey(key: { data: Buffer }): Promise<string | null> {
-  const hash = crypto.createHash('sha256').update(key.data).digest('base64');
-  const fingerprint = `SHA256:${hash.replace(/=+$/, '')}`;
-
-  const sshKey = await prisma.sshKey.findUnique({ where: { fingerprint } });
-  if (!sshKey) return null;
-
-  // Update last used
-  await prisma.sshKey.update({
-    where: { id: sshKey.id },
-    data: { lastUsedAt: new Date() },
-  });
-
-  return sshKey.userId;
+export interface SshServerOptions {
+  port?: number;
+  host?: string;
+  hostKeyPath?: string;
 }
 
 /**
- * Parse a git command from the SSH exec request.
- * Expected format: git-upload-pack '/org/team/repo.git' or git-receive-pack '/org/team/repo.git'
- * @param command
+ * Parse a git command from an SSH exec request.
+ * Accepts: git-upload-pack '/org/team/repo.git' or git-receive-pack 'org/team/repo'
+ * @param command - The exec command string
+ * @returns Parsed service and slugs, or null for anything else
  */
-function parseGitCommand(command: string): {
+export function parseGitCommand(command: string): {
   service: 'git-upload-pack' | 'git-receive-pack';
   orgSlug: string;
   teamSlug: string;
@@ -57,155 +41,137 @@ function parseGitCommand(command: string): {
 }
 
 /**
- * Resolve the repo path and check user permissions.
- * @param userId
- * @param orgSlug
- * @param teamSlug
- * @param repoSlug
- * @param needsWrite
+ * Load the SSH host key from disk, generating and persisting a new ed25519
+ * key the first time the server starts.
+ *
+ * The key is generated with the `ssh-keygen` binary rather than Node's
+ * `crypto.generateKeyPairSync`: Node can only export ed25519 private keys as
+ * PKCS8 PEM, and ssh2's key parser does not accept that format (it needs the
+ * OpenSSH private key format that `ssh-keygen` writes).
+ * @param hostKeyPath - Path to the OpenSSH-format private key
+ * @returns The host key contents
  */
-async function resolveAndAuthorize(
-  userId: string,
-  orgSlug: string,
-  teamSlug: string,
-  repoSlug: string,
-  needsWrite: boolean,
-): Promise<string> {
-  const org = await prisma.organization.findUnique({ where: { slug: orgSlug } });
-  if (!org) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
-
-  const team = await prisma.team.findUnique({
-    where: { orgId_slug: { orgId: org.id, slug: teamSlug } },
-  });
-  if (!team) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
-
-  const repo = await prisma.repository.findUnique({
-    where: { teamId_slug: { teamId: team.id, slug: repoSlug } },
-  });
-  if (!repo || !repo.diskPath) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
-
-  // Check permissions
-  const orgMembership = await prisma.orgMembership.findUnique({
-    where: { userId_orgId: { userId, orgId: org.id } },
-  });
-
-  if (!orgMembership && repo.visibility === 'PRIVATE') {
-    throw new AppError(403, ERR.ACCESS_DENIED);
+function loadOrCreateHostKey(hostKeyPath: string): Buffer {
+  if (!fs.existsSync(hostKeyPath)) {
+    fs.mkdirSync(path.dirname(hostKeyPath), { recursive: true });
+    execFileSync('ssh-keygen', ['-t', 'ed25519', '-N', '', '-q', '-f', hostKeyPath]);
+    fs.chmodSync(hostKeyPath, 0o600);
+    logger.info('Generated SSH host key', { path: hostKeyPath });
   }
-
-  if (needsWrite) {
-    if (!orgMembership || orgMembership.role === 'VIEWER' || orgMembership.role === 'GUEST') {
-      throw new AppError(403, 'Write access denied');
-    }
-  }
-
-  return repo.diskPath;
+  return fs.readFileSync(hostKeyPath);
 }
 
 /**
- *
+ * Write an error to the channel's stderr and close it with a non-zero exit code.
+ * @param channel - The SSH channel to fail
+ * @param message - Human readable error message
  */
-export function startSshServer() {
-  // Generate host key if it doesn't exist
-  const hostKeyDir = HOST_KEY_PATH.substring(0, HOST_KEY_PATH.lastIndexOf('/'));
-  if (!fs.existsSync(hostKeyDir)) {
-    fs.mkdirSync(hostKeyDir, { recursive: true });
-  }
-  if (!fs.existsSync(HOST_KEY_PATH)) {
-    const { privateKey } = crypto.generateKeyPairSync('ed25519');
-    fs.writeFileSync(HOST_KEY_PATH, privateKey.export({ type: 'pkcs8', format: 'pem' }));
-    fs.chmodSync(HOST_KEY_PATH, 0o600);
-  }
+function fail(channel: ServerChannel, message: string): void {
+  channel.stderr.write(`Error: ${message}\n`);
+  channel.exit(1);
+  channel.close();
+}
 
-  const server = new Server(
-    {
-      hostKeys: [fs.readFileSync(HOST_KEY_PATH)],
-    },
-    (client: Connection) => {
-      let authenticatedUserId: string | null = null;
+/**
+ * Start the SSH git transport. Only git-upload-pack and git-receive-pack are allowed.
+ * @param options - Listen port and host, host key path (defaults from env)
+ * @returns The listening server
+ * @throws {Error} when the host key cannot be read or created, or listen fails
+ */
+export async function startSshServer(options: SshServerOptions = {}): Promise<Server> {
+  const port = options.port ?? parseInt(process.env.SSH_LISTEN_PORT || '2222', 10);
+  const host = options.host ?? '0.0.0.0';
+  const hostKeyPath = options.hostKeyPath ?? (process.env.SSH_HOST_KEY || '/data/ssh/host_key');
 
-      client.on('authentication', async (ctx: AuthContext) => {
-        if (ctx.method === 'publickey') {
-          const userId = await authenticateByKey(ctx.key!);
-          if (userId) {
-            authenticatedUserId = userId;
-            return ctx.accept();
-          }
-        }
-        // Reject all other methods
-        ctx.reject(['publickey']);
-      });
+  const hostKey = loadOrCreateHostKey(hostKeyPath);
 
-      client.on('ready', () => {
-        client.on('session', (accept) => {
-          const session = accept();
+  const server = new Server({ hostKeys: [hostKey] }, (client: Connection) => {
+    let authenticatedUserId: string | null = null;
 
-          session.on('exec', async (accept, reject, info) => {
-            const parsed = parseGitCommand(info.command);
-            if (!parsed) {
-              const channel = accept();
-              channel.stderr.write('Error: only git commands are allowed\n');
-              channel.exit(1);
-              channel.close();
-              return;
-            }
+    client.on('authentication', async (ctx: AuthContext) => {
+      if (ctx.method !== 'publickey') return ctx.reject(['publickey']);
+      try {
+        const sshKey = await prisma.sshKey.findUnique({
+          where: { fingerprint: fingerprintOf(ctx.key.data) },
+        });
+        if (!sshKey) return ctx.reject(['publickey']);
 
-            if (!authenticatedUserId) {
-              const channel = accept();
-              channel.stderr.write('Error: not authenticated\n');
-              channel.exit(1);
-              channel.close();
-              return;
-            }
-
-            try {
-              const needsWrite = parsed.service === 'git-receive-pack';
-              const diskPath = await resolveAndAuthorize(
-                authenticatedUserId,
-                parsed.orgSlug,
-                parsed.teamSlug,
-                parsed.repoSlug,
-                needsWrite,
-              );
-
-              const channel = accept();
-              const gitProcess = spawn(parsed.service, [diskPath]);
-
-              channel.pipe(gitProcess.stdin);
-              gitProcess.stdout.pipe(channel);
-              gitProcess.stderr.pipe(channel.stderr);
-
-              gitProcess.on('close', (code) => {
-                channel.exit(code ?? 1);
-                channel.close();
-              });
-
-              gitProcess.on('error', () => {
-                channel.stderr.write('Error: git operation failed\n');
-                channel.exit(1);
-                channel.close();
-              });
-            } catch (err: unknown) {
-              const channel = accept();
-              channel.stderr.write(
-                `Error: ${err instanceof Error ? err.message : 'Unknown error'}\n`,
-              );
-              channel.exit(1);
-              channel.close();
-            }
+        const result = verifyPublicKeyAuth(ctx, sshKey.publicKey);
+        if (result === 'reject') return ctx.reject(['publickey']);
+        if (result === 'authenticated') {
+          authenticatedUserId = sshKey.userId;
+          await prisma.sshKey.update({
+            where: { id: sshKey.id },
+            data: { lastUsedAt: new Date() },
           });
+        }
+        return ctx.accept();
+      } catch (err) {
+        logger.error('SSH authentication error', {}, err as Error);
+        return ctx.reject(['publickey']);
+      }
+    });
+
+    client.on('ready', () => {
+      client.on('session', (acceptSession) => {
+        const session = acceptSession();
+
+        session.on('exec', async (acceptExec, _reject, info) => {
+          const channel = acceptExec();
+          const parsed = parseGitCommand(info.command);
+          if (!parsed) return fail(channel, 'only git commands are allowed');
+          if (!authenticatedUserId) return fail(channel, 'not authenticated');
+
+          try {
+            const repo = await resolveRepoForGit(
+              authenticatedUserId,
+              parsed.orgSlug,
+              parsed.teamSlug,
+              parsed.repoSlug,
+              parsed.service === 'git-receive-pack',
+            );
+
+            const gitProcess = spawn(parsed.service, [repo.diskPath]);
+            channel.pipe(gitProcess.stdin);
+            // { end: false }: ssh2's Channel auto-sends EOF and closes itself as
+            // soon as its writable side finishes (an internal 'finish' listener
+            // registered ahead of ours). Left at the pipe() default, that fires
+            // the moment the child's stdout ends, which flips the channel's
+            // outgoing state away from 'open' before we get a chance to send the
+            // exit-status request -- channel.exit() silently no-ops once the
+            // state has moved on, so the client never learns the command
+            // succeeded (OpenSSH logs "Exit status -1") even though every byte
+            // of the pack protocol response was delivered. Keeping the channel
+            // open until we explicitly exit()/close() it after the child closes
+            // avoids that race.
+            gitProcess.stdout.pipe(channel, { end: false });
+            gitProcess.stderr.pipe(channel.stderr);
+
+            gitProcess.on('close', (code) => {
+              channel.exit(code ?? 1);
+              channel.close();
+            });
+            gitProcess.on('error', () => fail(channel, 'git operation failed'));
+          } catch (err) {
+            fail(channel, err instanceof Error ? err.message : 'Unknown error');
+          }
         });
       });
+    });
 
-      client.on('error', () => {
-        // Ignore client errors (disconnects, etc.)
-      });
-    },
-  );
-
-  server.listen(SSH_PORT, '0.0.0.0', () => {
-    logger.info('Axiom SSH server listening', { port: SSH_PORT });
+    client.on('error', () => {
+      // Client disconnects and protocol errors are expected; nothing to do.
+    });
   });
 
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  logger.info('Axiom SSH server listening', { port: (server.address() as { port: number }).port });
   return server;
 }
