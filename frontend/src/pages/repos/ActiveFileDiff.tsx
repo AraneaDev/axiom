@@ -1,8 +1,8 @@
 import { Plus } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 
-import type { FileChunk, FileStat } from './diff-utils';
 import { getFileIcon, parseDiff } from './diff-utils';
+import type { FileChunk, FileStat } from './diff-utils';
 import { InlineCommentForm } from './InlineCommentForm';
 
 import { reposApi } from '@/api/repos.api';

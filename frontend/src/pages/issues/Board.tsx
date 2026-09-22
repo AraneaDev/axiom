@@ -5,8 +5,8 @@ import { Link } from 'react-router';
 
 import { BoardColorByMenu, BoardColorLegend } from './BoardColorByMenu';
 import { BoardColumn } from './BoardColumn';
-import type { Filters, GroupBy } from './BoardFilters';
 import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
+import type { Filters, GroupBy } from './BoardFilters';
 import { ColumnManager } from './ColumnManager';
 
 import { approvalsApi, type ApprovalGate, type ApprovalRequest } from '@/api/approvals.api';

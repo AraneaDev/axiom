@@ -4,8 +4,8 @@ import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { SearchBar } from './SearchBar';
-import { IssueRow, CodeRow, WikiRow, RepoRow } from './SearchResultRows';
 import type { CodeItem } from './SearchResultRows';
+import { IssueRow, CodeRow, WikiRow, RepoRow } from './SearchResultRows';
 import { WikiFilters } from './WikiFilters';
 
 import type { SearchType, SearchFilters } from '@/api/search.api';

@@ -1,7 +1,7 @@
 import { Check, X, ListChecks, Loader2, GitCommitHorizontal, Trash2 } from 'lucide-react';
 
-import { CommentThread } from './CommentThread';
 import type { Comment, CommentThreadData } from './CommentThread';
+import { CommentThread } from './CommentThread';
 
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Badge } from '@/components/ui/Badge';
