@@ -118,7 +118,7 @@ services:
   git-ssh:
     <<: *app-dev
     profiles: [ssh]
-    command: ["npx", "tsx", "watch", "src/ssh.ts"]
+    command: ["sh", "-c", "npx prisma generate && npx tsx watch src/ssh.ts"]
     environment:
       <<: *app-dev-env
       SSH_LISTEN_PORT: 2222
@@ -141,7 +141,7 @@ services:
 
   worker:
     <<: *app-dev
-    command: ["npx", "tsx", "watch", "src/worker.ts"]
+    command: ["sh", "-c", "npx prisma generate && npx tsx watch src/worker.ts"]
     depends_on:
       migrate:
         condition: service_completed_successfully

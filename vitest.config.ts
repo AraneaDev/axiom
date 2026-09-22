@@ -14,6 +14,7 @@ export default defineConfig({
       NODE_ENV: 'test',
       AXIOM_HOOK_ENTRY: `${process.cwd()}/src/git/post-receive-hook.ts`,
       AXIOM_INTERNAL_URL: 'http://127.0.0.1:9',
+      REDIS_URL: 'redis://:axiom_dev_redis@localhost:6379',
     },
     coverage: {
       provider: 'v8',

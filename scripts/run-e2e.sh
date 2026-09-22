@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
+restore() {
+  echo "Restoring API to dev database..."
+  docker compose -f docker-compose.dev.yml up -d api worker
+}
+trap restore EXIT
+
 echo "Switching API to E2E database..."
 docker compose -f docker-compose.dev.yml -f docker-compose.e2e.yml up -d api worker
 
@@ -10,10 +16,9 @@ until docker compose -f docker-compose.dev.yml exec -T api wget -qO- http://loca
 done
 
 # Run Playwright tests (pass through any extra args)
+set +e
 npx playwright test "$@"
 EXIT_CODE=$?
-
-echo "Restoring API to dev database..."
-docker compose -f docker-compose.dev.yml up -d api worker
+set -e
 
 exit $EXIT_CODE
