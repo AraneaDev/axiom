@@ -1,8 +1,16 @@
+import type { Request } from 'express';
 import rateLimit from 'express-rate-limit';
 
 import { env } from '../config/env.js';
 
 const skip = () => env.NODE_ENV === 'test';
+
+// Hook calls come from the api or git-ssh container, not a browser, and are already
+// authenticated by the X-Hook-Secret header. A push with hundreds of refs fires one
+// hook call per ref in quick succession, which the global per-IP budget was never
+// sized for; exempt the route instead of raising the global limit for everyone.
+const skipGlobal = (req: Request) =>
+  env.NODE_ENV === 'test' || req.path.startsWith('/api/internal/hooks');
 
 const errorMessage = (msg: string) => ({
   error: { message: msg, code: 'RATE_LIMITED' },
@@ -14,7 +22,7 @@ export const globalLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  skip,
+  skip: skipGlobal,
 });
 
 /** Auth endpoints: 15 req/min */
