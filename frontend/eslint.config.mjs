@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import react from 'eslint-plugin-react';
@@ -5,6 +8,13 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import jsdoc from 'eslint-plugin-jsdoc';
 import importX from 'eslint-plugin-import-x';
+
+// Resolve relative to this config file, not process.cwd() -- lint-staged
+// invokes eslint from the repo root with absolute file paths, and a
+// cwd-relative tsconfig lookup silently falls back to the root tsconfig
+// (no `@/*` aliases), which makes import-x/order group `@/...` imports as
+// unresolved and sort them differently than a `cd frontend && eslint` run.
+const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -62,7 +72,9 @@ export default tseslint.config(
     },
     settings: {
       'import-x/resolver': {
-        typescript: true,
+        typescript: {
+          project: path.join(dirname, 'tsconfig.json'),
+        },
       },
     },
   },
