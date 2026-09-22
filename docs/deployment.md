@@ -181,7 +181,7 @@ docker compose up -d --build
 
 The `migrate` container runs Prisma migrations and rewrites the post-receive hook in every repository before the other containers start.
 
-If you are updating from a deployment that predates this container split, rotate `HOOK_SECRET` afterward. The old value was written in plain text into every repository's hook file; the rewritten hooks read it from the container environment instead, but the previous value should be treated as exposed. Generate a new one with `openssl rand -hex 16`, set it in `.env`, and run `docker compose up -d --build` again so `migrate` rewrites the hooks with the new secret.
+If you are updating from a deployment that predates this container split, rotate `HOOK_SECRET` afterward. The old value was written in plain text into every repository's hook file; the rewritten hooks no longer contain the secret at all, they read it from the container environment on every call instead. So rotating it does not require touching the hook files: generate a new value with `openssl rand -hex 16`, set it in `.env`, and run `docker compose up -d` so the `api` and `git-ssh` containers pick up the new environment. The hook reinstall in `migrate` enumerates repositories from the database, so any repository directory left on disk without a matching database row is never visited and keeps its old bash hook, which still contains the old secret in plain text. Inspect or delete those directories separately.
 
 ---
 
