@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
 import { Tooltip } from './Tooltip';
@@ -13,12 +13,13 @@ describe('Tooltip', () => {
     expect(screen.getByText('Hover me')).toBeInTheDocument();
   });
 
-  it('renders tooltip content in the DOM (hidden by CSS)', () => {
+  it('renders tooltip content in the DOM on hover', () => {
     render(
       <Tooltip content="Helpful tip">
         <span>Target</span>
       </Tooltip>,
     );
+    fireEvent.mouseEnter(screen.getByText('Target').closest('span.inline-flex')!);
     expect(screen.getByText('Helpful tip')).toBeInTheDocument();
   });
 
@@ -28,8 +29,9 @@ describe('Tooltip', () => {
         <span>Target</span>
       </Tooltip>,
     );
-    const tooltipWrapper = screen.getByText('Top tip').closest('span[class*="bottom-full"]');
-    expect(tooltipWrapper).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByText('Target').closest('span.inline-flex')!);
+    const tooltipBox = screen.getByText('Top tip').closest('span.fixed')!;
+    expect(tooltipBox.querySelector('span[class*="top-full"]')).toBeTruthy();
   });
 
   it('applies bottom position classes when side="bottom"', () => {
@@ -38,8 +40,9 @@ describe('Tooltip', () => {
         <span>Target</span>
       </Tooltip>,
     );
-    const tooltipWrapper = screen.getByText('Bottom tip').closest('span[class*="top-full"]');
-    expect(tooltipWrapper).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByText('Target').closest('span.inline-flex')!);
+    const tooltipBox = screen.getByText('Bottom tip').closest('span.fixed')!;
+    expect(tooltipBox.querySelector('span[class*="bottom-full"]')).toBeTruthy();
   });
 
   it('applies left position classes when side="left"', () => {
@@ -48,8 +51,9 @@ describe('Tooltip', () => {
         <span>Target</span>
       </Tooltip>,
     );
-    const tooltipWrapper = screen.getByText('Left tip').closest('span[class*="right-full"]');
-    expect(tooltipWrapper).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByText('Target').closest('span.inline-flex')!);
+    const tooltipBox = screen.getByText('Left tip').closest('span.fixed')!;
+    expect(tooltipBox.querySelector('span[class*="left-full"]')).toBeTruthy();
   });
 
   it('applies right position classes when side="right"', () => {
@@ -58,7 +62,8 @@ describe('Tooltip', () => {
         <span>Target</span>
       </Tooltip>,
     );
-    const tooltipWrapper = screen.getByText('Right tip').closest('span[class*="left-full"]');
-    expect(tooltipWrapper).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByText('Target').closest('span.inline-flex')!);
+    const tooltipBox = screen.getByText('Right tip').closest('span.fixed')!;
+    expect(tooltipBox.querySelector('span[class*="right-full"]')).toBeTruthy();
   });
 });

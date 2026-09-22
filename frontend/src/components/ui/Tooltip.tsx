@@ -128,11 +128,7 @@ export function Tooltip({ content, side = 'top', children }: TooltipProps) {
               {content}
             </span>
             <span
-              className={cn(
-                'absolute',
-                arrowClasses[side],
-                arrowOffset == null && arrowPositionClass,
-              )}
+              className={cn('absolute', arrowClasses[side], arrowPositionClass)}
               style={arrowStyle}
             />
           </span>,
