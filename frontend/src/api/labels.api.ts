@@ -1,6 +1,6 @@
-import { get, post, patch, del } from './client';
-
 import type { Label } from '@/lib/types';
+
+import { get, post, patch, del } from './client';
 
 export interface LabelWithDescription extends Label {
   description?: string;

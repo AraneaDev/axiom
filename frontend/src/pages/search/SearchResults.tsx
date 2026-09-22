@@ -3,11 +3,6 @@ import { AlertTriangle, Search, FileText, Code2, GitFork, BookOpen, X } from 'lu
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { SearchBar } from './SearchBar';
-import type { CodeItem } from './SearchResultRows';
-import { IssueRow, CodeRow, WikiRow, RepoRow } from './SearchResultRows';
-import { WikiFilters } from './WikiFilters';
-
 import type { SearchType, SearchFilters } from '@/api/search.api';
 import { searchApi } from '@/api/search.api';
 import { Button } from '@/components/ui/Button';
@@ -17,6 +12,11 @@ import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { SearchResult, SavedSearch } from '@/lib/types';
+
+import { SearchBar } from './SearchBar';
+import { IssueRow, CodeRow, WikiRow, RepoRow } from './SearchResultRows';
+import type { CodeItem } from './SearchResultRows';
+import { WikiFilters } from './WikiFilters';
 
 const SEARCH_TABS = [
   { key: 'all', label: 'All', icon: <Search className="h-4 w-4" /> },

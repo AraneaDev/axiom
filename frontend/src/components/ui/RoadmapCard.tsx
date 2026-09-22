@@ -1,13 +1,13 @@
 import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
 import { type DragEvent, useState } from 'react';
 
+import type { TimelineIssue } from '@/api/roadmap.api';
+import { cn } from '@/lib/utils';
+
 import { Avatar } from './Avatar';
 import { IssueTypeIcon } from './IssueTypeIcon';
 import { PriorityBadge } from './PriorityBadge';
 import { ProgressBar } from './ProgressBar';
-
-import type { TimelineIssue } from '@/api/roadmap.api';
-import { cn } from '@/lib/utils';
 
 interface RoadmapCardProps {
   issue: TimelineIssue;

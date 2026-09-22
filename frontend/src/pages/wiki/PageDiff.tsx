@@ -2,8 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, GitCompare } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 
-import { useWikiContext } from './WikiLayout';
-
 import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -11,6 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { PageLoader } from '@/components/ui/Spinner';
 import { cn, formatDate } from '@/lib/utils';
+
+import { useWikiContext } from './WikiLayout';
 
 /**
  * Side-by-side version comparison view for wiki pages.

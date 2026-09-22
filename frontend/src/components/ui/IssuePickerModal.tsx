@@ -2,13 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 
+import { cn } from '@/lib/utils';
+
 import { Button } from './Button';
 import { IssueTypeIcon } from './IssueTypeIcon';
 import { Modal } from './Modal';
 import { PriorityBadge } from './PriorityBadge';
 import { Spinner } from './Spinner';
-
-import { cn } from '@/lib/utils';
 
 interface PickerIssue {
   id: string;

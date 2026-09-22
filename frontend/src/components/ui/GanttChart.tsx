@@ -1,13 +1,13 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
+import { patch, del, post } from '@/api/client';
+import type { DependencyLink, TimelineIssue } from '@/api/roadmap.api';
+
 import { DependencyOverlay } from './DependencyOverlay';
 import { GanttRow, GanttRowLabel } from './GanttRow';
 import { GanttTimeAxis } from './GanttTimeAxis';
 import type { ZoomLevel } from './TimelineZoom';
-
-import { patch, del, post } from '@/api/client';
-import type { DependencyLink, TimelineIssue } from '@/api/roadmap.api';
 
 const MS_PER_DAY = 86_400_000;
 const ROW_HEIGHT = 36;

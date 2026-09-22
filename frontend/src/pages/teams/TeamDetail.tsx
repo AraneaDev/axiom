@@ -15,10 +15,6 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { TeamActivityCard } from './TeamActivityCard';
-import { TeamProjectsSection } from './TeamProjectsSection';
-import { TeamReposSection } from './TeamReposSection';
-
 import { projectsApi } from '@/api/projects.api';
 import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
@@ -32,6 +28,10 @@ import { PageLoader } from '@/components/ui/Spinner';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import { formatRelative } from '@/lib/utils';
+
+import { TeamActivityCard } from './TeamActivityCard';
+import { TeamProjectsSection } from './TeamProjectsSection';
+import { TeamReposSection } from './TeamReposSection';
 
 /**
  *

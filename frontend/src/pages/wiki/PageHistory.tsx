@@ -3,8 +3,6 @@ import { AlertTriangle, GitCompare, History, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 
-import { useWikiContext } from './WikiLayout';
-
 import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -15,6 +13,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatDate } from '@/lib/utils';
+
+import { useWikiContext } from './WikiLayout';
 
 /**
  * Page version history view with compare and restore functionality.

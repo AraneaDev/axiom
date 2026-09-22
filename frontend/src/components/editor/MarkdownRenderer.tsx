@@ -12,9 +12,9 @@ import {
 import { marked, type Token } from 'marked';
 import { useMemo, useState } from 'react';
 
-import { MermaidBlock } from './MermaidBlock';
-
 import { cn } from '@/lib/utils';
+
+import { MermaidBlock } from './MermaidBlock';
 
 // Slug formula must match extractToc in PageView.tsx
 function headingSlug(text: string): string {

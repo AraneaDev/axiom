@@ -1,6 +1,6 @@
-import { post } from './client';
-
 import type { AuthResponse } from '@/lib/types';
+
+import { post } from './client';
 
 /** Authentication API client for register, login, token refresh, and two-factor authentication. */
 export const authApi = {

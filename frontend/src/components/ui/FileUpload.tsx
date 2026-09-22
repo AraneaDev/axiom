@@ -1,11 +1,11 @@
 import { Upload, X, AlertCircle } from 'lucide-react';
 import { forwardRef, useCallback, useRef, useState, type DragEvent } from 'react';
 
-import { Button } from './Button';
-import { Spinner } from './Spinner';
-
 import { formatSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
+
+import { Button } from './Button';
+import { Spinner } from './Spinner';
 
 const ALLOWED_TYPES = [
   'image/png',

@@ -9,13 +9,13 @@ import {
   Rows3,
 } from 'lucide-react';
 
-import { getChangeType, getFileIcon } from './diff-utils';
-import type { FileStat } from './diff-utils';
-
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
+
+import type { FileStat } from './diff-utils';
+import { getChangeType, getFileIcon } from './diff-utils';
 
 interface DiffFileNavigatorProps {
   stats: FileStat[];

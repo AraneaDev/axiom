@@ -1,10 +1,10 @@
 import { Check, ListChecks, Loader2 } from 'lucide-react';
 
-import { parseSuggestion } from './suggestion-utils';
-
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { cn } from '@/lib/utils';
+
+import { parseSuggestion } from './suggestion-utils';
 
 interface SuggestionBlockProps {
   commentId: string;

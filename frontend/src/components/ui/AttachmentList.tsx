@@ -2,16 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { Download, Eye, Paperclip, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { AttachmentPreview } from './AttachmentPreview';
-import { Button } from './Button';
-import { ConfirmDialog } from './ConfirmDialog';
-
 import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
 import { fetchWithAuth } from '@/api/client';
 import { canPreview } from '@/lib/attachment-utils';
 import { formatSize } from '@/lib/format';
 import { cn, formatDate } from '@/lib/utils';
+
+import { AttachmentPreview } from './AttachmentPreview';
+import { Button } from './Button';
+import { ConfirmDialog } from './ConfirmDialog';
 
 function isImage(mimeType: string): boolean {
   return mimeType.startsWith('image/');

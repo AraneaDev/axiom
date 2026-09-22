@@ -1,5 +1,3 @@
-import { get, post, patch, put, del } from './client';
-
 import type {
   WikiSpace,
   Page,
@@ -11,6 +9,8 @@ import type {
   PageRestriction,
   DiffResult,
 } from '@/lib/types';
+
+import { get, post, patch, put, del } from './client';
 
 /** Wiki API client for spaces, pages, templates, comments, labels, and export. */
 export const wikiApi = {

@@ -14,8 +14,6 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
-import CreateReleaseModal from './CreateReleaseModal';
-
 import { deploymentsApi } from '@/api/deployments.api';
 import type { DeploymentEnvironment } from '@/api/deployments.api';
 import { releasesApi, type Release, type ReleaseDeployment } from '@/api/releases.api';
@@ -34,6 +32,8 @@ import { useModalState } from '@/hooks/useModalState';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatRelative } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
+
+import CreateReleaseModal from './CreateReleaseModal';
 
 interface Props {
   repoId: string;

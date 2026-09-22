@@ -13,13 +13,13 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 
-import type { DropTarget } from './wiki-tree-utils';
-
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Tooltip } from '@/components/ui/Tooltip';
 import type { PageTreeNode as PageTreeNodeType } from '@/lib/types';
 import { cn } from '@/lib/utils';
+
+import type { DropTarget } from './wiki-tree-utils';
 
 /**
  *

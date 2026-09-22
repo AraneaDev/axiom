@@ -1,9 +1,6 @@
 import { ChevronRight, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 
-import IssueDevelopmentCard from './IssueDevelopmentCard';
-import { IssueLinkedSection } from './IssueLinkedSection';
-
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -12,6 +9,9 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import type { IssueLink } from '@/lib/issue-types';
 import type { Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
+
+import IssueDevelopmentCard from './IssueDevelopmentCard';
+import { IssueLinkedSection } from './IssueLinkedSection';
 
 interface IssueDetailMetaPanelProps {
   issue: Issue;

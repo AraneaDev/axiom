@@ -4,13 +4,13 @@ import { ReactRenderer } from '@tiptap/react';
 import Suggestion, { type SuggestionProps } from '@tiptap/suggestion';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
 
+import { get } from '@/api/client';
+
 import { editorProjectIds } from './editor-state';
 import IssueReferenceSuggestionList, {
   type IssueReferenceItem,
   type IssueReferenceSuggestionListRef,
 } from './IssueReferenceSuggestionList';
-
-import { get } from '@/api/client';
 
 export interface IssueReferenceOptions {
   HTMLAttributes: Record<string, string>;

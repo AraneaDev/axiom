@@ -1,6 +1,6 @@
-import { get, post, del } from './client';
-
 import type { SearchResult, CodeSearchResult, SavedSearch } from '@/lib/types';
+
+import { get, post, del } from './client';
 
 export type SearchType = 'issues' | 'wiki' | 'repos' | 'code' | 'all';
 

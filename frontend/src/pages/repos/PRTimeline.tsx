@@ -1,8 +1,5 @@
 import { Check, X, ListChecks, Loader2, GitCommitHorizontal, Trash2 } from 'lucide-react';
 
-import type { Comment, CommentThreadData } from './CommentThread';
-import { CommentThread } from './CommentThread';
-
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +7,9 @@ import { Card } from '@/components/ui/Card';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { formatRelative } from '@/lib/utils';
+
+import { CommentThread } from './CommentThread';
+import type { Comment, CommentThreadData } from './CommentThread';
 
 interface Review {
   id: string;

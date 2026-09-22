@@ -1,6 +1,6 @@
-import { get, post, patch, del } from './client';
-
 import type { Team } from '@/lib/types';
+
+import { get, post, patch, del } from './client';
 
 /** Teams API client for team CRUD and member management within an organization. */
 export const teamsApi = {

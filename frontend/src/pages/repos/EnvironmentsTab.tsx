@@ -2,15 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 
-import { EnvironmentDeployments } from './EnvironmentDeployments';
-import { EnvironmentSecrets } from './EnvironmentSecrets';
-import { EnvironmentsList } from './EnvironmentsList';
-
 import { deploymentsApi } from '@/api/deployments.api';
 import type { DeploymentEnvironment } from '@/api/deployments.api';
 import { Button } from '@/components/ui/Button';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Tabs } from '@/components/ui/Tabs';
+
+import { EnvironmentDeployments } from './EnvironmentDeployments';
+import { EnvironmentSecrets } from './EnvironmentSecrets';
+import { EnvironmentsList } from './EnvironmentsList';
 
 interface EnvironmentsTabProps {
   repoId: string;

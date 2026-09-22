@@ -1,8 +1,8 @@
 import { Plus, Trash2 } from 'lucide-react';
 
-import { Button } from './Button';
-
 import { cn } from '@/lib/utils';
+
+import { Button } from './Button';
 
 export interface FieldOption {
   label: string;

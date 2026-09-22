@@ -3,13 +3,6 @@ import { Plus, Download, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
-import { IssueListBulkActions } from './IssueListBulkActions';
-import { IssueListFilters } from './IssueListFilters';
-import { IssueListSaveFilterModal } from './IssueListSaveFilterModal';
-import { IssueListSidebar } from './IssueListSidebar';
-import { IssueListTable } from './IssueListTable';
-import { IssueListToolbar } from './IssueListToolbar';
-
 import { fetchWithAuth } from '@/api/client';
 import { hydrateApi } from '@/api/hydrate.api';
 import { issuesApi } from '@/api/issues.api';
@@ -25,6 +18,13 @@ import { useIssueListFilters } from '@/hooks/useIssueListFilters';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import { useUIStore } from '@/stores/ui.store';
+
+import { IssueListBulkActions } from './IssueListBulkActions';
+import { IssueListFilters } from './IssueListFilters';
+import { IssueListSaveFilterModal } from './IssueListSaveFilterModal';
+import { IssueListSidebar } from './IssueListSidebar';
+import { IssueListTable } from './IssueListTable';
+import { IssueListToolbar } from './IssueListToolbar';
 
 /**
  *

@@ -1,14 +1,14 @@
 import { ShieldCheck } from 'lucide-react';
 import { useMemo } from 'react';
 
+import type { ApprovalRequest } from '@/api/approvals.api';
+import type { BoardColumn as BoardColumnType, Issue } from '@/lib/types';
+import { cn } from '@/lib/utils';
+
 import { applyFilters, groupIssues } from './board-utils';
 import type { Filters, GroupBy } from './BoardFilters';
 import { BoardIssueCard } from './BoardIssueCard';
 import { BoardSwimLaneSection } from './BoardSwimLane';
-
-import type { ApprovalRequest } from '@/api/approvals.api';
-import type { BoardColumn as BoardColumnType, Issue } from '@/lib/types';
-import { cn } from '@/lib/utils';
 
 /**
  *

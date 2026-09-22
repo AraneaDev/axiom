@@ -4,9 +4,6 @@ import { BookOpen, ChevronDown, FolderPlus, Library, Plus, Search, Star } from '
 import { useCallback, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
-import { CreateFolderModal } from './CreateFolderModal';
-import { PageViewSidebar } from './PageViewSidebar';
-
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
@@ -17,6 +14,9 @@ import { useTeamContext } from '@/hooks/useTeamContext';
 import type { PageTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import type { TocEntry } from '@/lib/wiki-types';
+
+import { CreateFolderModal } from './CreateFolderModal';
+import { PageViewSidebar } from './PageViewSidebar';
 
 export { useWikiContext } from '@/hooks/useWikiContext';
 

@@ -15,10 +15,6 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 
-import { PageViewHeader } from './PageViewHeader';
-import { extractToc } from './PageViewSidebar';
-import { useWikiContext } from './WikiLayout';
-
 import { attachmentsApi } from '@/api/attachments.api';
 import { hydrateApi } from '@/api/hydrate.api';
 import { wikiIssueLinksApi } from '@/api/wiki-issue-links.api';
@@ -40,6 +36,10 @@ import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useWikiInvalidation } from '@/hooks/useWikiInvalidation';
 import type { PageTreeNode } from '@/lib/types';
 import { useAuthStore } from '@/stores/auth.store';
+
+import { PageViewHeader } from './PageViewHeader';
+import { extractToc } from './PageViewSidebar';
+import { useWikiContext } from './WikiLayout';
 
 function TocSidebar({ tocEntries }: { tocEntries: { level: number; text: string; id: string }[] }) {
   if (!tocEntries.length) return null;

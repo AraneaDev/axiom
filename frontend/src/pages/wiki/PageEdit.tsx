@@ -3,10 +3,6 @@ import { Paperclip } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
-import { PageEditHeader } from './PageEditHeader';
-import { TemplatePicker } from './TemplatePicker';
-import { useWikiContext } from './WikiLayout';
-
 import { attachmentsApi } from '@/api/attachments.api';
 import { wikiApi } from '@/api/wiki.api';
 import { CollaborativeEditor } from '@/components/editor/CollaborativeEditor';
@@ -26,6 +22,10 @@ import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useWikiInvalidation } from '@/hooks/useWikiInvalidation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
+
+import { PageEditHeader } from './PageEditHeader';
+import { TemplatePicker } from './TemplatePicker';
+import { useWikiContext } from './WikiLayout';
 
 /**
  *

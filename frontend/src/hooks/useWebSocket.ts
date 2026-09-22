@@ -1,9 +1,9 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 
-import type { RealtimeEvent } from './useRealtimeInvalidation';
-
 import { getAccessToken } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
+
+import type { RealtimeEvent } from './useRealtimeInvalidation';
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 type EventCallback = (event: RealtimeEvent) => void;

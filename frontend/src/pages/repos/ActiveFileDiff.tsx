@@ -1,15 +1,15 @@
 import { Plus } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 
-import { getFileIcon, parseDiff } from './diff-utils';
-import type { FileChunk, FileStat } from './diff-utils';
-import { InlineCommentForm } from './InlineCommentForm';
-
 import { reposApi } from '@/api/repos.api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { cn } from '@/lib/utils';
+
+import type { FileChunk, FileStat } from './diff-utils';
+import { getFileIcon, parseDiff } from './diff-utils';
+import { InlineCommentForm } from './InlineCommentForm';
 
 interface CommentingOn {
   filePath: string;

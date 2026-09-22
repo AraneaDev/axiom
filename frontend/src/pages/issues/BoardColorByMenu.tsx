@@ -1,10 +1,10 @@
 import { Palette } from 'lucide-react';
 import { useState } from 'react';
 
-import { PRIORITY_LEGEND, TYPE_LEGEND } from './board-utils';
-
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
+
+import { PRIORITY_LEGEND, TYPE_LEGEND } from './board-utils';
 
 /**
  * @param root0

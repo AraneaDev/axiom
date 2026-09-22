@@ -15,13 +15,13 @@ import {
 import { useState } from 'react';
 import { Link } from 'react-router';
 
-import CreateBranchModal from './CreateBranchModal';
-
 import { developmentPanelApi } from '@/api/development-panel.api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
+
+import CreateBranchModal from './CreateBranchModal';
 
 interface Repo {
   id: string;

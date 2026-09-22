@@ -13,6 +13,15 @@ import { FileText, FolderPlus, Lock, Plus } from 'lucide-react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 
+import { wikiApi } from '@/api/wiki.api';
+import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import type { PageTreeNode } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import type { TocEntry } from '@/lib/wiki-types';
+
 import { PageTreeNodeItem } from './sidebar/PageTreeNode';
 import { TableOfContents } from './sidebar/TableOfContents';
 import {
@@ -24,15 +33,6 @@ import {
   type DropTarget,
   type DropZone,
 } from './sidebar/wiki-tree-utils';
-
-import { wikiApi } from '@/api/wiki.api';
-import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { Tooltip } from '@/components/ui/Tooltip';
-import { useMutationWithToast } from '@/hooks/useMutationWithToast';
-import type { PageTreeNode } from '@/lib/types';
-import { cn } from '@/lib/utils';
-import type { TocEntry } from '@/lib/wiki-types';
 
 // Re-export extractToc so existing consumers keep working
 export { extractToc } from './sidebar/wiki-tree-utils';

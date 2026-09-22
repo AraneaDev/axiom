@@ -1,6 +1,6 @@
-import { BucketColumn } from './BucketColumn';
-
 import type { BucketsViewData, TimelineIssue } from '@/api/roadmap.api';
+
+import { BucketColumn } from './BucketColumn';
 
 interface BucketBoardProps {
   data: BucketsViewData;

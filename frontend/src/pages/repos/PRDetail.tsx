@@ -3,11 +3,6 @@ import { AlertTriangle } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
 
-import { PRDiffView } from './PRDiffView';
-import { PRHeader } from './PRHeader';
-import { PRReviewPanel } from './PRReviewPanel';
-import { PRTimeline } from './PRTimeline';
-
 import { hydrateApi } from '@/api/hydrate.api';
 import { reposApi } from '@/api/repos.api';
 import { statusChecksApi } from '@/api/status-checks.api';
@@ -15,6 +10,11 @@ import { DetailSkeleton } from '@/components/ui/Skeleton';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 import { useAuthStore } from '@/stores/auth.store';
+
+import { PRDiffView } from './PRDiffView';
+import { PRHeader } from './PRHeader';
+import { PRReviewPanel } from './PRReviewPanel';
+import { PRTimeline } from './PRTimeline';
 
 /**
  *

@@ -27,9 +27,9 @@ vi.mock('@/lib/format', () => ({
 }));
 
 // Import after mocks
-import { AttachmentPreview } from './AttachmentPreview';
-
 import type { AttachmentMeta } from '@/api/attachments.api';
+
+import { AttachmentPreview } from './AttachmentPreview';
 
 const makeAttachment = (overrides: Partial<AttachmentMeta> = {}): AttachmentMeta => ({
   id: 'att-1',

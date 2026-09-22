@@ -1,7 +1,5 @@
 import { Link } from 'react-router';
 
-import { PRIORITY_CARD_COLORS, TYPE_CARD_COLORS } from './board-utils';
-
 import type { ApprovalRequest } from '@/api/approvals.api';
 import { ApprovalBadge } from '@/components/ui/ApprovalBadge';
 import { Avatar } from '@/components/ui/Avatar';
@@ -9,6 +7,8 @@ import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import type { Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
+
+import { PRIORITY_CARD_COLORS, TYPE_CARD_COLORS } from './board-utils';
 
 /**
  *

@@ -10,15 +10,6 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { TeamCard } from './DashboardTeamStats';
-import {
-  MyIssuesWidget,
-  ReviewRequestsWidget,
-  UpcomingDueDatesWidget,
-  RecentActivityWidget,
-  SprintHealthWidget,
-} from './DashboardWidgets';
-
 import { dashboardApi } from '@/api/dashboard.api';
 import type { DashboardTrends } from '@/api/dashboard.api';
 import { orgsApi } from '@/api/orgs.api';
@@ -34,6 +25,15 @@ import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { StatCard } from '@/components/ui/StatCard';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { useAuthStore } from '@/stores/auth.store';
+
+import { TeamCard } from './DashboardTeamStats';
+import {
+  MyIssuesWidget,
+  ReviewRequestsWidget,
+  UpcomingDueDatesWidget,
+  RecentActivityWidget,
+  SprintHealthWidget,
+} from './DashboardWidgets';
 
 /**
  *

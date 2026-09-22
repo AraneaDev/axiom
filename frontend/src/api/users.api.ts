@@ -1,6 +1,6 @@
-import { get, post, patch, del } from './client';
-
 import type { User, ApiToken, SshKey } from '@/lib/types';
+
+import { get, post, patch, del } from './client';
 
 interface UserSearchResult {
   id: string;

@@ -1,9 +1,5 @@
 import { Check, Hash, Pencil, Target, User } from 'lucide-react';
 
-import { CustomFieldEditor } from './CustomFieldEditor';
-import { IssueDetailWorklog } from './IssueDetailWorklog';
-import { ParentIssuePicker } from './ParentIssuePicker';
-
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -16,6 +12,10 @@ import { ISSUE_TYPE_LABELS, PRIORITY_LABELS } from '@/lib/constants';
 import type { TeamMember } from '@/lib/issue-types';
 import type { Issue, Sprint } from '@/lib/types';
 import { cn } from '@/lib/utils';
+
+import { CustomFieldEditor } from './CustomFieldEditor';
+import { IssueDetailWorklog } from './IssueDetailWorklog';
+import { ParentIssuePicker } from './ParentIssuePicker';
 
 interface IssueDetailFieldsPanelProps {
   issue: Issue;

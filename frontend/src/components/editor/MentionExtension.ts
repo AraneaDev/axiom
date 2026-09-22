@@ -3,9 +3,9 @@ import { ReactRenderer } from '@tiptap/react';
 import type { SuggestionProps } from '@tiptap/suggestion';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
 
-import MentionList, { type MentionListRef } from './MentionList';
-
 import { get } from '@/api/client';
+
+import MentionList, { type MentionListRef } from './MentionList';
 
 interface UserItem {
   id: string;

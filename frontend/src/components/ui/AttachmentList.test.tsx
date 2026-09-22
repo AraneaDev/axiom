@@ -28,9 +28,9 @@ vi.mock('@/lib/utils', () => ({
 }));
 
 // Import after mocks
-import { AttachmentList } from './AttachmentList';
-
 import type { AttachmentMeta } from '@/api/attachments.api';
+
+import { AttachmentList } from './AttachmentList';
 
 const makeAttachment = (overrides: Partial<AttachmentMeta> = {}): AttachmentMeta => ({
   id: 'att-1',

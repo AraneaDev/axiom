@@ -2,8 +2,6 @@ import { Archive, ArchiveRestore, BookOpen, Eye, EyeOff, Plus } from 'lucide-rea
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
-import { useWikiContext } from './WikiLayout';
-
 import { wikiApi } from '@/api/wiki.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +10,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { CardGridSkeleton } from '@/components/ui/Skeleton';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { cn } from '@/lib/utils';
+
+import { useWikiContext } from './WikiLayout';
 
 /**
  * Wiki home page -- shows list of spaces as cards.

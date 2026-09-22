@@ -1,13 +1,13 @@
 import { History } from 'lucide-react';
 
-import { IssueDetailFieldsPanel } from './IssueDetailFieldsPanel';
-import { IssueDetailMetaPanel } from './IssueDetailMetaPanel';
-
 import { type ActivityEvent } from '@/api/activity.api';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Card } from '@/components/ui/Card';
 import type { IssueLink, TeamMember } from '@/lib/issue-types';
 import type { Issue, Sprint } from '@/lib/types';
+
+import { IssueDetailFieldsPanel } from './IssueDetailFieldsPanel';
+import { IssueDetailMetaPanel } from './IssueDetailMetaPanel';
 
 interface IssueDetailSidebarProps {
   issue: Issue;

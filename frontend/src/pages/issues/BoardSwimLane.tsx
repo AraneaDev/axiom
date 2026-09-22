@@ -1,9 +1,9 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
-import type { SwimLane } from './board-utils';
-
 import { Button } from '@/components/ui/Button';
+
+import type { SwimLane } from './board-utils';
 
 /**
  *

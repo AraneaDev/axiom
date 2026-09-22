@@ -1,10 +1,10 @@
 import { Eye, Plus, Send } from 'lucide-react';
 
-import { Button } from './Button';
-import { FormPageEditor } from './FormPageEditor';
-
 import type { Form, FormField, FormPage } from '@/api/forms.api';
 import { cn } from '@/lib/utils';
+
+import { Button } from './Button';
+import { FormPageEditor } from './FormPageEditor';
 
 interface FormBuilderProps {
   form: Form;

@@ -2,14 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Download, FileWarning, Loader2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { Button } from './Button';
-import { Modal, ModalFooter } from './Modal';
-
 import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
 import { fetchWithAuth } from '@/api/client';
 import { canConvertToMarkdown, getPreviewType } from '@/lib/attachment-utils';
 import { formatSize } from '@/lib/format';
+
+import { Button } from './Button';
+import { Modal, ModalFooter } from './Modal';
 
 interface AttachmentPreviewProps {
   attachment: AttachmentMeta | null;

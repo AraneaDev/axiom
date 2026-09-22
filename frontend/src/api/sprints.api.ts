@@ -1,6 +1,6 @@
-import { get, post, patch, del } from './client';
-
 import type { Sprint, VelocityDataPoint, Issue } from '@/lib/types';
+
+import { get, post, patch, del } from './client';
 
 /** Sprints API client for sprint lifecycle, issue assignment, velocity, and backlog. */
 export const sprintsApi = {

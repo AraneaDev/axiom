@@ -46,6 +46,10 @@ import { Markdown } from 'tiptap-markdown';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { cn } from '@/lib/utils';
+
 import { CalloutExtension } from './CalloutExtension';
 import { CollapsibleExtension } from './CollapsibleExtension';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
@@ -55,10 +59,6 @@ import { MentionExtension } from './MentionExtension';
 import { SlashCommandExtension } from './SlashCommandExtension';
 import { SmartLinkExtension } from './SmartLinkExtension';
 import { TableOfContentsExtension } from './TableOfContentsExtension';
-
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { cn } from '@/lib/utils';
 
 const lowlight = createLowlight(common);
 

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import type { CommitInfo } from '@/api/repos.api';
+
 import { ActiveFileDiff } from './ActiveFileDiff';
 import { CommitList } from './CommitList';
 import { splitDiffByFile } from './diff-utils';
 import { DiffFileNavigator } from './DiffFileNavigator';
-
-import type { CommitInfo } from '@/api/repos.api';
 
 interface PRDiffViewProps {
   commits: CommitInfo[] | undefined;

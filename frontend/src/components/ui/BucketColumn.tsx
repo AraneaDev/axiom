@@ -1,9 +1,9 @@
 import { type DragEvent, useState, useCallback } from 'react';
 
-import { RoadmapCard } from './RoadmapCard';
-
 import type { TimelineIssue } from '@/api/roadmap.api';
 import { cn } from '@/lib/utils';
+
+import { RoadmapCard } from './RoadmapCard';
 
 interface BucketColumnProps {
   name: string;

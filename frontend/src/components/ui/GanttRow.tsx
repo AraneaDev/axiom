@@ -1,10 +1,10 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useRef } from 'react';
 
+import type { TimelineIssue } from '@/api/roadmap.api';
+
 import { GanttBar } from './GanttBar';
 import { GanttMilestone } from './GanttMilestone';
-
-import type { TimelineIssue } from '@/api/roadmap.api';
 
 const MS_PER_DAY = 86_400_000;
 

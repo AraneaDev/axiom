@@ -1,11 +1,11 @@
 import { ArrowLeft, ArrowRight, Send } from 'lucide-react';
 import { useState } from 'react';
 
-import { Button } from './Button';
-import { WizardProgress } from './WizardProgress';
-
 import type { Form, FormField, FormPage } from '@/api/forms.api';
 import { cn } from '@/lib/utils';
+
+import { Button } from './Button';
+import { WizardProgress } from './WizardProgress';
 
 interface FormWizardProps {
   form: Form;

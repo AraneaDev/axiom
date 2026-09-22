@@ -3,9 +3,6 @@ import { Plus, ArrowRight, GripVertical, Target, ChevronRight, AlertTriangle } f
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
-import { SprintCard } from './SprintCard';
-import { SprintFormModal } from './SprintFormModal';
-
 import { hydrateApi } from '@/api/hydrate.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { BurndownChart } from '@/components/BurndownChart';
@@ -23,6 +20,9 @@ import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 import type { Issue, Sprint } from '@/lib/types';
 import { useUIStore } from '@/stores/ui.store';
+
+import { SprintCard } from './SprintCard';
+import { SprintFormModal } from './SprintFormModal';
 
 const STATUS_BADGE: Record<string, 'default' | 'primary' | 'success'> = {
   PLANNING: 'default',

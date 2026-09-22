@@ -18,12 +18,6 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
-import EnvironmentsTab from './EnvironmentsTab';
-import InsightsTab from './InsightsTab';
-import PipelinesTab from './PipelinesTab';
-import PRList from './PRList';
-import ReleasesTab from './ReleasesTab';
-
 import { reposApi, type CommitInfo } from '@/api/repos.api';
 import { siteSettingsApi } from '@/api/site-settings.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
@@ -40,6 +34,12 @@ import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
 import { buildSshCloneUrl } from '@/lib/clone-url';
 import { formatRelative } from '@/lib/utils';
+
+import EnvironmentsTab from './EnvironmentsTab';
+import InsightsTab from './InsightsTab';
+import PipelinesTab from './PipelinesTab';
+import PRList from './PRList';
+import ReleasesTab from './ReleasesTab';
 
 /**
  *

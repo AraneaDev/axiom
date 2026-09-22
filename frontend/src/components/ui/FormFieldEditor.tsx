@@ -1,10 +1,10 @@
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
+import type { FormField } from '@/api/forms.api';
+
 import { Button } from './Button';
 import { FieldOptionEditor, type FieldOption } from './FieldOptionEditor';
-
-import type { FormField } from '@/api/forms.api';
 
 interface FormFieldEditorProps {
   field: FormField;

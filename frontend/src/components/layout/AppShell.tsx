@@ -1,10 +1,10 @@
 import { Outlet } from 'react-router';
 
+import { CommandPalette } from '@/components/ui/CommandPalette';
+
 import { Breadcrumbs } from './Breadcrumbs';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
-
-import { CommandPalette } from '@/components/ui/CommandPalette';
 
 /**
  *

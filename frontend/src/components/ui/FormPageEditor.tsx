@@ -1,11 +1,11 @@
 import { Plus, Trash2 } from 'lucide-react';
 
+import type { FormField, FormPage } from '@/api/forms.api';
+import { cn } from '@/lib/utils';
+
 import { BranchingConfig } from './BranchingConfig';
 import { Button } from './Button';
 import { FormFieldEditor } from './FormFieldEditor';
-
-import type { FormField, FormPage } from '@/api/forms.api';
-import { cn } from '@/lib/utils';
 
 interface FormPageEditorProps {
   page: FormPage;

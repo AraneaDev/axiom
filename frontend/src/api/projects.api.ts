@@ -1,6 +1,6 @@
-import { get, post, patch, del } from './client';
-
 import type { Project, ProjectAnalytics, TimeReport } from '@/lib/types';
+
+import { get, post, patch, del } from './client';
 
 /** Projects API client for project CRUD within a team. */
 export const projectsApi = {

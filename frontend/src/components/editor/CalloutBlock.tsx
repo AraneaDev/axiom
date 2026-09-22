@@ -3,9 +3,9 @@ import type { NodeViewProps } from '@tiptap/react';
 import { Info, AlertTriangle, StickyNote, CheckCircle, XCircle, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
-import type { CalloutType } from './CalloutExtension';
-
 import { cn } from '@/lib/utils';
+
+import type { CalloutType } from './CalloutExtension';
 
 const calloutConfig: Record<
   CalloutType,

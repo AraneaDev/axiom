@@ -1,7 +1,7 @@
-import type { Filters } from './BoardFilters';
-
 import { PRIORITY_LABELS } from '@/lib/constants';
 import type { Issue } from '@/lib/types';
+
+import type { Filters } from './BoardFilters';
 
 export const PRIORITY_CARD_COLORS: Record<string, string> = {
   CRITICAL: 'var(--card-color-critical)',

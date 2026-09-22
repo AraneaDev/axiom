@@ -3,11 +3,6 @@ import { AlertTriangle, MessageSquare, Paperclip, ShieldCheck } from 'lucide-rea
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
 
-import { IssueBodySection } from './IssueBodySection';
-import { IssueDetailComments } from './IssueDetailComments';
-import { IssueDetailSidebar } from './IssueDetailSidebar';
-import { IssueHeader } from './IssueHeader';
-
 import { activityApi } from '@/api/activity.api';
 import { attachmentsApi } from '@/api/attachments.api';
 import { hydrateApi } from '@/api/hydrate.api';
@@ -30,6 +25,11 @@ import { useProjectContext } from '@/hooks/useProjectContext';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
+
+import { IssueBodySection } from './IssueBodySection';
+import { IssueDetailComments } from './IssueDetailComments';
+import { IssueDetailSidebar } from './IssueDetailSidebar';
+import { IssueHeader } from './IssueHeader';
 
 /**
  *

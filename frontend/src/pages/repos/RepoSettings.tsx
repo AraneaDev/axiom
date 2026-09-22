@@ -2,9 +2,6 @@ import { ArrowLeft, FileText, Save, Trash2, Settings, AlertTriangle, GitMerge } 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
-import BranchProtectionSettings from './BranchProtectionSettings';
-import WebhooksSettings from './WebhooksSettings';
-
 import { reposApi } from '@/api/repos.api';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
@@ -14,6 +11,9 @@ import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
+
+import BranchProtectionSettings from './BranchProtectionSettings';
+import WebhooksSettings from './WebhooksSettings';
 
 /**
  *

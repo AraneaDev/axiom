@@ -2,9 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2, Pencil, Webhook, Globe, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
-import { WebhookDeliveriesPanel } from './WebhookDeliveries';
-import { WebhookFormModal } from './WebhookForm';
-
 import { webhooksApi, WEBHOOK_EVENTS, type Webhook as WebhookType } from '@/api/webhooks.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -15,6 +12,9 @@ import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Toggle } from '@/components/ui/Toggle';
 import { useModalState } from '@/hooks/useModalState';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+
+import { WebhookDeliveriesPanel } from './WebhookDeliveries';
+import { WebhookFormModal } from './WebhookForm';
 
 interface WebhooksSettingsProps {
   repoId: string;

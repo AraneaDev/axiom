@@ -2,9 +2,9 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 
-import SmartLinkNode from './SmartLinkNode';
-
 import { get } from '@/api/client';
+
+import SmartLinkNode from './SmartLinkNode';
 
 interface SmartLinkPreview {
   type: string;

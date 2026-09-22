@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { DependencyArrow } from './DependencyArrow';
-
 import type { DependencyLink } from '@/api/roadmap.api';
+
+import { DependencyArrow } from './DependencyArrow';
 
 interface IssuePosition {
   x: number;

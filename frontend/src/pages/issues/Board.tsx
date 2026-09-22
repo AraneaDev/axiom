@@ -3,12 +3,6 @@ import { Plus, Settings } from 'lucide-react';
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link } from 'react-router';
 
-import { BoardColorByMenu, BoardColorLegend } from './BoardColorByMenu';
-import { BoardColumn } from './BoardColumn';
-import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
-import type { Filters, GroupBy } from './BoardFilters';
-import { ColumnManager } from './ColumnManager';
-
 import { approvalsApi, type ApprovalGate, type ApprovalRequest } from '@/api/approvals.api';
 import { issuesApi } from '@/api/issues.api';
 import { projectsApi } from '@/api/projects.api';
@@ -23,6 +17,12 @@ import { useProjectContext } from '@/hooks/useProjectContext';
 import type { BoardColumn as BoardColumnType } from '@/lib/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { useUIStore } from '@/stores/ui.store';
+
+import { BoardColorByMenu, BoardColorLegend } from './BoardColorByMenu';
+import { BoardColumn } from './BoardColumn';
+import type { Filters, GroupBy } from './BoardFilters';
+import { BoardFilters, EMPTY_FILTERS } from './BoardFilters';
+import { ColumnManager } from './ColumnManager';
 
 /**
  *
