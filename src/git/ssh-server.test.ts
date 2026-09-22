@@ -15,6 +15,7 @@ import {
   addMemberToContext,
   cleanupTestContext,
   createTestContext,
+  createTestUser,
   type TestContext,
   type TestUser,
 } from '../test/factory';
@@ -223,5 +224,28 @@ describe('SSH git transport', () => {
 
   it('refuses an unregistered key', async () => {
     await expect(git(['ls-remote', url()], strangerKey.file)).rejects.toThrow(/Permission denied/);
+  });
+
+  it('refuses a deactivated user even with a registered key', async () => {
+    const deactivated = await createTestUser({
+      email: `sshdeactivated-${Date.now()}@test.dev`,
+      username: `sshdeactivated-${Date.now()}`,
+    });
+    const deactivatedKey = await makeKey(tmp, 'deactivated');
+    await authPost('/api/users/me/ssh-keys', deactivated.token, {
+      title: 'deactivated',
+      publicKey: deactivatedKey.pub,
+    });
+    await prisma.user.update({
+      where: { id: deactivated.id },
+      data: { deactivatedAt: new Date() },
+    });
+
+    await expect(git(['ls-remote', url()], deactivatedKey.file)).rejects.toThrow(
+      /Permission denied/,
+    );
+
+    await prisma.sshKey.deleteMany({ where: { userId: deactivated.id } });
+    await prisma.user.deleteMany({ where: { id: deactivated.id } });
   });
 });

@@ -17,6 +17,7 @@ describe('resolveRepoForGit', () => {
   let ctx: TestContext;
   let viewer: TestUser;
   let outsider: TestUser;
+  let deactivated: TestUser;
   let repoSlug: string;
 
   beforeAll(async () => {
@@ -41,11 +42,20 @@ describe('resolveRepoForGit', () => {
       email: `outsider-${Date.now()}@test.dev`,
       username: `outsider-${Date.now()}`,
     });
+
+    deactivated = await addMemberToContext(ctx, {
+      email: `deactivated-${Date.now()}@test.dev`,
+      username: `deactivated-${Date.now()}`,
+    });
+    await prisma.user.update({
+      where: { id: deactivated.id },
+      data: { deactivatedAt: new Date() },
+    });
   });
 
   afterAll(async () => {
     await cleanupTestContext(ctx);
-    await prisma.user.deleteMany({ where: { id: outsider.id } });
+    await prisma.user.deleteMany({ where: { id: { in: [outsider.id, deactivated.id] } } });
   });
 
   it('returns the repo with a disk path for the owner', async () => {
@@ -69,6 +79,18 @@ describe('resolveRepoForGit', () => {
   it('refuses a non-member on a private repo', async () => {
     await expect(
       resolveRepoForGit(outsider.id, ctx.orgSlug, ctx.teamSlug, repoSlug, false),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('refuses a deactivated member reading', async () => {
+    await expect(
+      resolveRepoForGit(deactivated.id, ctx.orgSlug, ctx.teamSlug, repoSlug, false),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('refuses a deactivated member writing', async () => {
+    await expect(
+      resolveRepoForGit(deactivated.id, ctx.orgSlug, ctx.teamSlug, repoSlug, true),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 

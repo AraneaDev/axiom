@@ -22,6 +22,14 @@ export async function resolveRepoForGit(
   repoSlug: string,
   needsWrite: boolean,
 ): Promise<Repository & { diskPath: string }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { deactivatedAt: true },
+  });
+  if (!user || user.deactivatedAt) {
+    throw new AppError(403, 'Account has been deactivated', 'ACCOUNT_DEACTIVATED');
+  }
+
   const org = await prisma.organization.findUnique({ where: { slug: orgSlug } });
   if (!org) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
 

@@ -102,6 +102,16 @@ export async function startSshServer(options: SshServerOptions = {}): Promise<Se
         });
         if (!sshKey) return ctx.reject(['publickey']);
 
+        // A deactivated user's key stays registered (deactivation only revokes JWTs),
+        // so refuse the session outright rather than letting resolveRepoForGit catch
+        // it later per-exec -- this also stops the deactivated user from probing which
+        // keys are still valid.
+        const keyUser = await prisma.user.findUnique({
+          where: { id: sshKey.userId },
+          select: { deactivatedAt: true },
+        });
+        if (!keyUser || keyUser.deactivatedAt) return ctx.reject(['publickey']);
+
         const result = verifyPublicKeyAuth(ctx, sshKey.publicKey);
         if (result === 'reject') return ctx.reject(['publickey']);
         if (result === 'authenticated') {
