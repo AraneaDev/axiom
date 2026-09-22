@@ -5,7 +5,7 @@ This file provides guidance to Claude Code when working in this repository.
 ## Quick Reference
 
 ```bash
-npm run docker:dev          # Start PostgreSQL + Redis + API + Frontend (ports 5432, 3000, 7000)
+npm run docker:dev          # Start PostgreSQL + Redis + API + Frontend (ports 5432, 3000, 7000, 2222)
 npm run docker:dev:down     # Stop all containers
 npm run db:seed             # Seed demo data (idempotent, safe to re-run)
 npm run tunnel              # Expose dev stack via Cloudflare tunnel (free, no account)
@@ -125,7 +125,7 @@ See [Design Patterns](docs/design-patterns.md) for the full component catalog (4
 
 ## Docker Development
 
-The dev compose (`docker-compose.dev.yml`) runs: PostgreSQL, Redis, Mailserver (SMTP), API (tsx watch), Web (Vite HMR).
+The dev compose (`docker-compose.dev.yml`) runs: PostgreSQL, Redis (password `axiom_dev_redis`), Mailserver (SMTP), migrate (one-shot), API (tsx watch), git-ssh (port 2222, `ssh` profile), worker, Web (Vite HMR).
 
 Bind mounts for hot reload: `src/`, `prisma/`, `prisma.config.ts`, `scripts/`, `frontend/src/`, `frontend/vite.config.ts`.
 

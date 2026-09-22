@@ -124,15 +124,49 @@ The seed script is idempotent and safe to re-run.
 
 ---
 
-## 6. Git Repository Access
+## 6. Git repository access
 
-HTTPS clone URLs follow this pattern:
+### HTTPS
 
 ```bash
-git clone https://staging.example.com/git/org-slug/team-slug/repo-slug.git
+git clone https://aranea.dev/git/org-slug/team-slug/repo-slug.git
 ```
 
-Credentials are the same as your Axiom login (HTTP basic auth over HTTPS).
+Use an API token (Settings > API tokens) as the password.
+
+### SSH
+
+SSH is served by the `git-ssh` container on host port `SSH_PORT` (default 2222). It runs when `COMPOSE_PROFILES=ssh` is set; set `SSH_ENABLED=true` at the same time so the UI shows SSH clone URLs.
+
+```bash
+git clone ssh://git@aranea.dev:2222/org-slug/team-slug/repo-slug.git
+```
+
+Users can hide the port with an entry in `~/.ssh/config`:
+
+```
+Host aranea.dev
+  Port 2222
+```
+
+The Apache reverse proxy does not carry SSH. Open `SSH_PORT` in the host firewall.
+
+### Port 22
+
+The host's own sshd normally holds port 22. Options, in order of preference:
+
+| Option | Clone URL | What to do |
+|---|---|---|
+| A. Non-standard port (default) | `ssh://git@host:2222/...` | Nothing beyond opening the port. |
+| B. Move the host sshd | `git@host:...` | Move sshd to another port (for example 2200) in `/etc/ssh/sshd_config`, then set `SSH_PORT=22` and `SSH_PUBLIC_PORT=22`. Keep a second session open while you switch. |
+| C. Second IP address | `git@git.host:...` | Bind the git-ssh port to the second IP (`ports: ["203.0.113.2:22:2222"]` in an override file) and set `SSH_PUBLIC_HOST` and `SSH_PUBLIC_PORT=22`. |
+| D. Host sshd passthrough | `git@host:...` | Not supported. |
+
+The Cloudflare quick tunnel (`npm run tunnel`) carries HTTP only. Use HTTPS clone URLs through it.
+
+### Host key
+
+The SSH host key is created on first start in the `ssh_host_key` volume. Back it up with the other volumes; losing it makes every client warn that the host identification changed.
 
 ---
 
@@ -144,7 +178,9 @@ git pull
 docker compose up -d --build
 ```
 
-Prisma migrations run automatically when the API container starts, so no manual migration step is needed.
+The `migrate` container runs Prisma migrations and rewrites the post-receive hook in every repository before the other containers start.
+
+If you are updating from a deployment that predates this container split, rotate `HOOK_SECRET` afterward. The old value was written in plain text into every repository's hook file; the rewritten hooks read it from the container environment instead, but the previous value should be treated as exposed. Generate a new one with `openssl rand -hex 16`, set it in `.env`, and run `docker compose up -d --build` again so `migrate` rewrites the hooks with the new secret.
 
 ---
 

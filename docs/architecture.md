@@ -46,6 +46,9 @@ graph TD
     subgraph Docker["Docker Compose (dev)"]
         Web["web :7000\nVite / React"]
         API["api :3000\nExpress 5"]
+        GitSSH["git-ssh :2222\nssh2, ssh profile"]
+        Worker["worker\nEmail queue, runner monitor"]
+        Migrate["migrate\nprisma migrate deploy, one-shot"]
         DB["db :5432\nPostgreSQL 16"]
         Redis["redis :6379\nRedis 7"]
         Mail["mailserver :25\nPostfix SMTP"]
@@ -57,8 +60,26 @@ graph TD
     API -->|ioredis| Redis
     API -->|nodemailer| Mail
     API -->|"spawn git-upload-pack\ngit-receive-pack"| BareRepos[".data/repos\nBare Git repos"]
-    API -->|"SSH :2222"| BareRepos
+    GitSSH -->|"SSH :2222"| BareRepos
+    Worker -->|Prisma + pg pool| DB
+    Worker -->|ioredis| Redis
+    Migrate -->|Prisma + pg pool| DB
 ```
+
+### Containers
+
+One image, one codebase. Each container runs a different entry point.
+
+| Service | Entry point | Volumes | Ports | Role |
+|---|---|---|---|---|
+| `migrate` | `node dist/migrate.js` (one-shot) | `git_repos` | none | Runs `prisma migrate deploy`, then reinstalls the post-receive hook in every repository. Exits 0. |
+| `api` | `node dist/index.js` | `git_repos`, `uploads` | internal 3000 | REST, WebSocket, git smart HTTP, MCP, internal hook endpoint. |
+| `git-ssh` | `node dist/ssh.js` | `git_repos`, `ssh_host_key` | `${SSH_PORT:-2222}:2222` | SSH git transport only. Runs only with the `ssh` compose profile. |
+| `worker` | `node dist/worker.js` | none | none | Email queue consumer, runner health monitor. |
+| `web` | nginx | none | `${PORT:-7000}:80` | Frontend, unchanged. |
+| `db`, `redis` | images | `pgdata`, `redis_data` | internal | `redis` requires `REDIS_PASSWORD`. |
+
+`api`, `git-ssh`, and `worker` each declare `depends_on: migrate: condition: service_completed_successfully`, so migrations and hook reinstallation finish before any of them start.
 
 ---
 
@@ -466,16 +487,36 @@ Implemented in `src/git/smart-http.ts` and mounted at the Express `/git` prefix.
 
 ### SSH Server
 
-Implemented in `src/git/ssh-server.ts` using the `ssh2` library. Listens on `SSH_PORT` (default 2222).
+Implemented in `src/git/ssh-server.ts` using the `ssh2` library, and run as the dedicated `git-ssh` container (`node dist/ssh.js`). Listens on `SSH_LISTEN_PORT` (default 2222).
 
-- **Authentication:** public key only; the connecting key's SHA-256 fingerprint is looked up in the `ssh_keys` table
+- **Authentication:** public key only. The connecting key's SHA-256 fingerprint is looked up in the `ssh_keys` table, and the client's signature over the auth request is verified against that key before the connection is accepted
+- Only `git-upload-pack` and `git-receive-pack` exec commands are allowed; anything else is rejected
 - Parses exec commands of the form `git-upload-pack '/org/team/repo.git'` and `git-receive-pack '/org/team/repo.git'`
 - Spawns the appropriate git process and pipes its stdin/stdout through the SSH channel
-- Host key is loaded from `SSH_HOST_KEY` (default `/data/ssh/host_key`)
+- Host key is loaded from `SSH_HOST_KEY` (default `/data/ssh/host_key`), generated on first start if it does not exist
 
 ### Post-Receive Hook
 
-`POST /api/internal/hooks/post-receive` (in `src/git/hook-handler.ts`) is called by the `post-receive` hook script installed in each bare repo. It is secured by a shared `HOOK_SECRET` value sent in the `X-Hook-Secret` header.
+`POST /api/internal/hooks/post-receive` (in `src/git/hook-handler.ts`) is called by the `post-receive` hook script installed in each bare repo. It is mounted early in `src/index.ts`, exempt from CSRF, and secured by a shared `HOOK_SECRET` value sent in the `X-Hook-Secret` header.
+
+The installed hook script is POSIX `sh` and contains only the repository id; it carries no secrets. It execs `post-receive-hook.ts` (`AXIOM_HOOK_ENTRY`, defaulting to `/app/dist/git/post-receive-hook.js`), which reads `oldrev newrev refname` lines from stdin and POSTs each to `${AXIOM_INTERNAL_URL}/api/internal/hooks/post-receive` with `X-Hook-Secret: ${HOOK_SECRET}`. Both `AXIOM_INTERNAL_URL` and `HOOK_SECRET` come from the environment of the git process (inherited from `api` or `git-ssh`, whichever spawned `git-receive-pack`), not from the hook file. A failed call is written to stderr and never fails the push.
+
+Push data flow, for both transports:
+
+```
+git push ──► api (/git, HTTP)  ─┐
+git push ──► git-ssh (ssh2)    ─┴─► git-receive-pack (child process, inherits env)
+                                        │
+                                        ▼
+                               hooks/post-receive  (#!/bin/sh)
+                                        │  exec node $AXIOM_HOOK_ENTRY <repoId>
+                                        ▼
+                         POST $AXIOM_INTERNAL_URL/api/internal/hooks/post-receive
+                              X-Hook-Secret: $HOOK_SECRET (from env, not file)
+                                        │
+                                        ▼
+                         api: webhooks, pipelines, smart commits (unchanged)
+```
 
 On each push, the hook handler:
 1. **Auto-links branches** -- Scans branch name for issue keys (e.g., `feature/AXM-42-fix`), creates `IssueBranch` records
@@ -665,7 +706,7 @@ Every mutating API route operating on an org, team, repo, or project resource is
 - `JWT_SECRET` and `JWT_REFRESH_SECRET` must each be at least 32 characters
 - API token raw values are never stored; only their SHA-256 hashes are persisted in `api_tokens`
 - Refresh tokens are stored as SHA-256 hashes with an expiry timestamp in `refresh_tokens`
-- SSH host private key is stored at the path in `SSH_HOST_KEY` (default `/data/ssh/host_key`)
+- SSH host private key is stored at the path in `SSH_HOST_KEY` (default `/data/ssh/host_key`), inside the `ssh_host_key` volume (`ssh-host-key` in dev), generated on the `git-ssh` container's first start
 - Deployment environment variable values are stored encrypted in `EnvironmentVariable.encryptedValue`
 - The post-receive hook is authenticated by a `HOOK_SECRET` random value shared between the API process and each bare repo's installed hook script
 
@@ -678,9 +719,12 @@ The dev stack is defined in `docker-compose.dev.yml` and started with `npm run d
 | Service | Image | Port | Purpose |
 |---------|-------|------|---------|
 | `db` | postgres:16-alpine | 5432 | Primary database |
-| `redis` | redis:7-alpine | 6379 | Cache and email queue broker |
+| `redis` | redis:7-alpine | 6379 | Cache and email queue broker, password `axiom_dev_redis` |
 | `mailserver` | docker-mailserver | 25 | Local SMTP for email testing |
+| `migrate` | Custom (Dockerfile.dev) | none | Runs `prisma migrate deploy` and reinstalls hooks, then exits (one-shot) |
 | `api` | Custom (Dockerfile.dev) | 3000 | Express API with `tsx` watch |
+| `git-ssh` | Custom (Dockerfile.dev) | 2222 | SSH git transport with `tsx` watch (Docker profile: `ssh`) |
+| `worker` | Custom (Dockerfile.dev) | none | Email queue consumer and runner health monitor with `tsx` watch |
 | `web` | Custom (Dockerfile.dev) | 7000 | Vite dev server |
 | `tunnel` | cloudflare/cloudflared | — | Optional Cloudflare tunnel (Docker profile: `tunnel`) |
 
