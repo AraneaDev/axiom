@@ -29,10 +29,11 @@ COPY --from=build /app/src/config/load-env.ts ./src/config/load-env.ts
 COPY package.json ./
 COPY scripts ./scripts
 
-RUN mkdir -p /data/repos /data/uploads && chown -R axiom:axiom /app /data
+RUN mkdir -p /data/repos /data/uploads /data/ssh && chown -R axiom:axiom /app /data
 
 USER axiom
 
-EXPOSE 3000
+EXPOSE 3000 2222
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db push --accept-data-loss && node dist/index.js"]
+# Entry point per container: dist/index.js (api), dist/ssh.js, dist/worker.js, dist/migrate.js
+CMD ["node", "dist/index.js"]
