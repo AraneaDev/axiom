@@ -17,6 +17,7 @@ const HEADERS = { 'X-Requested-With': 'XMLHttpRequest' };
 // user "admin" / "password123", org slug "axiom", team slug "core".
 const ORG_SLUG = 'axiom';
 const TEAM_SLUG = 'core';
+const GIT_USER = 'admin';
 
 test('a push inside Docker reaches the post-receive handler', async ({ request }) => {
   const login = await request.post(`${BASE}/api/auth/login`, {
@@ -48,53 +49,83 @@ test('a push inside Docker reaches the post-receive handler', async ({ request }
   expect(repoRes.ok()).toBeTruthy();
   const repo = await repoRes.json();
 
-  const hookRes = await request.post(`${BASE}/api/repos/${repo.id}/webhooks`, {
-    headers: auth,
-    data: { url: 'https://example.invalid/axiom-e2e', events: ['*'] },
-  });
-  expect(hookRes.ok()).toBeTruthy();
-  const webhook = await hookRes.json();
+  // Everything below can fail after the repo (and, once minted, the token) exist.
+  // Clean both up in `finally` so a poll timeout -- the exact failure this test
+  // exists to catch -- doesn't leak a bare repo directory or a live credential
+  // into the e2e database.
+  let tokenId: string | undefined;
+  try {
+    const hookRes = await request.post(`${BASE}/api/repos/${repo.id}/webhooks`, {
+      headers: auth,
+      data: { url: 'https://example.invalid/axiom-e2e', events: ['*'] },
+    });
+    expect(hookRes.ok()).toBeTruthy();
+    const webhook = await hookRes.json();
 
-  const tokenRes = await request.post(`${BASE}/api/users/me/tokens`, {
-    headers: auth,
-    data: { name: slug, scopes: ['repo:read', 'repo:write'] },
-  });
-  const token = (await tokenRes.json()).token as string;
+    const tokenRes = await request.post(`${BASE}/api/users/me/tokens`, {
+      headers: auth,
+      data: { name: slug, scopes: ['repo:read', 'repo:write'] },
+    });
+    const tokenBody = await tokenRes.json();
+    const token = tokenBody.token as string;
+    tokenId = tokenBody.id as string;
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-e2e-push-'));
-  const remote = new URL(`/git/${ORG_SLUG}/${TEAM_SLUG}/${slug}.git`, BASE);
-  remote.username = 'admin';
-  remote.password = token;
-  execFileSync('git', ['init', '-b', 'main', work]);
-  fs.writeFileSync(path.join(work, 'README.md'), '# e2e');
-  execFileSync('git', ['-C', work, 'add', '.']);
-  execFileSync('git', [
-    '-C',
-    work,
-    '-c',
-    'user.name=E2E',
-    '-c',
-    'user.email=e2e@test.dev',
-    'commit',
-    '-m',
-    'e2e',
-  ]);
-  execFileSync('git', ['-C', work, 'push', remote.toString(), 'main']);
-  fs.rmSync(work, { recursive: true, force: true });
+    // Keep the credential out of argv entirely (a failed execFileSync throws an
+    // Error whose message includes the full argv, and Playwright persists that
+    // into its report on disk). The remote URL carries no username/password;
+    // the Basic auth header is injected via GIT_CONFIG_KEY/VALUE env vars, which
+    // git reads for config but which never appear in the process argv.
+    const authHeader = `Authorization: Basic ${Buffer.from(`${GIT_USER}:${token}`).toString('base64')}`;
+    const gitEnv = {
+      ...process.env,
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.extraHeader',
+      GIT_CONFIG_VALUE_0: authHeader,
+    };
+    const remote = new URL(`/git/${ORG_SLUG}/${TEAM_SLUG}/${slug}.git`, BASE);
 
-  await expect
-    .poll(
-      async () => {
-        const res = await request.get(
-          `${BASE}/api/repos/${repo.id}/webhooks/${webhook.id}/deliveries`,
-          { headers: auth },
-        );
-        const body = await res.json();
-        return (Array.isArray(body) ? body : (body.data ?? [])).length;
-      },
-      { timeout: 60_000 },
-    )
-    .toBeGreaterThan(0);
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-e2e-push-'));
+    try {
+      execFileSync('git', ['init', '-b', 'main', work]);
+      fs.writeFileSync(path.join(work, 'README.md'), '# e2e');
+      execFileSync('git', ['-C', work, 'add', '.']);
+      execFileSync('git', [
+        '-C',
+        work,
+        '-c',
+        'user.name=E2E',
+        '-c',
+        'user.email=e2e@test.dev',
+        'commit',
+        '-m',
+        'e2e',
+      ]);
+      execFileSync('git', ['-C', work, 'push', remote.toString(), 'main'], { env: gitEnv });
+    } finally {
+      fs.rmSync(work, { recursive: true, force: true });
+    }
 
-  await request.delete(`${BASE}/api/repos/${repo.id}`, { headers: auth });
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get(
+            `${BASE}/api/repos/${repo.id}/webhooks/${webhook.id}/deliveries`,
+            { headers: auth },
+          );
+          const body = await res.json();
+          return (Array.isArray(body) ? body : (body.data ?? [])).length;
+        },
+        { timeout: 60_000 },
+      )
+      .toBeGreaterThan(0);
+  } finally {
+    if (tokenId) {
+      await request
+        .delete(`${BASE}/api/users/me/tokens/${tokenId}`, { headers: auth })
+        .catch((err) => console.warn('Failed to revoke e2e token', err));
+    }
+    await request
+      .delete(`${BASE}/api/repos/${repo.id}`, { headers: auth })
+      .catch((err) => console.warn('Failed to delete e2e repo', err));
+  }
 });
