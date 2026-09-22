@@ -183,6 +183,16 @@ describe('POST /api/internal/hooks/post-receive', () => {
       expect(res.status).toBe(403);
     });
 
+    it('rejects a wrong hook secret of the same length with 403', async () => {
+      const sameLengthWrongSecret =
+        HOOK_SECRET.slice(0, -1) + (HOOK_SECRET.endsWith('x') ? 'y' : 'x');
+      const res = await postHook(
+        { repo: 'repo-1', ref: 'refs/heads/main', before: 'aaa', after: 'bbb' },
+        sameLengthWrongSecret,
+      );
+      expect(res.status).toBe(403);
+    });
+
     it('accepts correct hook secret', async () => {
       const res = await postHook({
         repo: 'repo-1',

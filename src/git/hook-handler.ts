@@ -18,6 +18,22 @@ const ISSUE_KEY_IN_BRANCH = /([A-Z]+-\d+)/;
 
 export const HOOK_SECRET = env.HOOK_SECRET;
 
+/**
+ * Compare the request's hook secret against the configured one in constant time,
+ * so a timing side channel can't be used to guess it byte by byte.
+ * `crypto.timingSafeEqual` throws on unequal-length buffers, so a length
+ * mismatch is rejected up front instead.
+ * @param provided - Value of the X-Hook-Secret header
+ * @param expected - Configured HOOK_SECRET
+ * @returns True when both values match exactly
+ */
+function timingSafeEqualStrings(provided: string, expected: string): boolean {
+  const providedBuf = Buffer.from(provided);
+  const expectedBuf = Buffer.from(expected);
+  if (providedBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(providedBuf, expectedBuf);
+}
+
 const router = Router();
 
 interface PostReceivePayload {
@@ -35,7 +51,7 @@ interface PostReceivePayload {
 router.post('/post-receive', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const secret = req.headers['x-hook-secret'];
-    if (secret !== HOOK_SECRET) {
+    if (typeof secret !== 'string' || !timingSafeEqualStrings(secret, HOOK_SECRET)) {
       return res.status(403).json({ error: 'Invalid hook secret' });
     }
 
