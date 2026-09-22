@@ -5,6 +5,7 @@ import path from 'path';
 import { Server, utils, type AuthContext, type Connection, type ServerChannel } from 'ssh2';
 
 import { prisma } from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
 import { resolveRepoForGit } from './git-access';
@@ -190,7 +191,12 @@ export async function startSshServer(options: SshServerOptions = {}): Promise<Se
             });
             gitProcess.on('error', () => fail(channel, 'git operation failed'));
           } catch (err) {
-            fail(channel, err instanceof Error ? err.message : 'Unknown error');
+            if (err instanceof AppError) {
+              fail(channel, err.message);
+            } else {
+              logger.error('SSH exec error', { command: info.command }, err as Error);
+              fail(channel, 'internal error');
+            }
           }
         });
       });
