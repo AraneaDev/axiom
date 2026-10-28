@@ -1,3 +1,4 @@
+// Parked for the GitHub integration (roadmap project 3); no callers until then.
 export interface SmartCommitDirective {
   type: 'time' | 'comment' | 'transition' | 'assign' | 'label';
   value: string;

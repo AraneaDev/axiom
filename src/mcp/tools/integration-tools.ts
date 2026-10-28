@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
-import { getDevelopmentSummary } from '../../modules/issues/development-panel.service';
 import * as wikiIssueLinksService from '../../modules/wiki/wiki-issue-links.service';
 import { ERR } from '../../utils/error-messages';
 import { assertMcpPermission } from '../mcp-permissions';
@@ -14,22 +13,6 @@ import type { McpToolContext } from './types';
  */
 export function registerIntegrationTools(ctx: McpToolContext) {
   const { server, userId } = ctx;
-
-  server.tool(
-    'get_development_summary',
-    'Get the development summary for an issue (branches, commits, PRs, pipelines, wiki links)',
-    {
-      projectId: z.string().describe('The project ID'),
-      issueNumber: z.number().describe('The issue number within the project'),
-    },
-    async ({ projectId, issueNumber }) => {
-      const orgId = await ctx.getOrgIdFromProject(projectId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
-      await assertMcpPermission('get_development_summary', orgId);
-      const summary = await getDevelopmentSummary(projectId, issueNumber);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(summary, null, 2) }] };
-    },
-  );
 
   server.tool(
     'list_wiki_issue_links',

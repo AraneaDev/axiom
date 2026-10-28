@@ -1,7 +1,8 @@
 import bcrypt from 'bcryptjs';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
+import * as broadcast from '../../realtime/broadcast';
 
 import {
   addEmbedLink,
@@ -136,6 +137,19 @@ describe('Wiki Issue Links Service', () => {
         where: { username: 'wiki-issue-links-test-user' },
       })
       .catch(() => {});
+  });
+
+  it('linking a wiki page broadcasts issue:links-updated', async () => {
+    const spy = vi.spyOn(broadcast, 'broadcastToRoom').mockImplementation(() => {});
+    try {
+      await addEmbedLink(pageId, issueId, userId);
+      expect(spy).toHaveBeenCalledWith(`issue:${issueId}`, {
+        type: 'issue:links-updated',
+        issueId,
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('addEmbedLink creates an EMBED link between page and issue', async () => {

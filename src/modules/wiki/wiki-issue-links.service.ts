@@ -55,7 +55,7 @@ export async function addLink(
     update: {},
   });
 
-  broadcastToRoom(`issue:${issueId}`, { type: 'issue:development-updated', issueId });
+  broadcastToRoom(`issue:${issueId}`, { type: 'issue:links-updated', issueId });
 
   return result;
 }
@@ -105,7 +105,7 @@ export async function syncMentionLinks(pageId: string, issueIds: string[], userI
 
   const allAffectedIssueIds = new Set([...toAdd, ...removedIssueIds]);
   for (const issueId of allAffectedIssueIds) {
-    broadcastToRoom(`issue:${issueId}`, { type: 'issue:development-updated', issueId });
+    broadcastToRoom(`issue:${issueId}`, { type: 'issue:links-updated', issueId });
   }
 }
 

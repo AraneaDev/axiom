@@ -7,9 +7,7 @@ import { list as listSavedFilters } from '../saved-filters/saved-filters.service
 import { listSprints } from '../sprints/sprints.service';
 
 import { getBoard } from './issue-board.service';
-import { getBranches } from './issue-branches.service';
-import { getCommits } from './issue-commits.service';
-import { getChildren, getIssuePullRequests } from './issue-hierarchy.service';
+import { getChildren } from './issue-hierarchy.service';
 import { getLinks } from './issue-links.service';
 import { getWorklogs } from './issue-time.service';
 import { getVotes } from './issue-votes.service';
@@ -39,9 +37,6 @@ export async function hydrateIssueDetail(projectId: string, issueNumber: number,
     getLinks(projectId, issueNumber),
     getChildren(projectId, issueNumber),
     getEpicProgress(projectId, issueNumber),
-    getBranches(projectId, issueNumber),
-    getIssuePullRequests(projectId, issueNumber),
-    getCommits(projectId, issueNumber),
     getWorklogs(projectId, issueNumber),
     listActivities({ resourceType: 'issue', resourceId: issueId }),
     listAttachments({ issueId }, userId),
@@ -56,16 +51,11 @@ export async function hydrateIssueDetail(projectId: string, issueNumber: number,
     links: settled(results[2], 'links'),
     children: settled(results[3], 'children'),
     progress: settled(results[4], 'progress'),
-    development: {
-      branches: settled(results[5], 'branches'),
-      pullRequests: settled(results[6], 'pullRequests'),
-      commits: settled(results[7], 'commits'),
-    },
-    activity: settled(results[9], 'activity'),
-    attachments: settled(results[10], 'attachments'),
-    worklogs: settled(results[8], 'worklogs'),
-    sprints: settled(results[11], 'sprints'),
-    customFields: settled(results[12], 'customFields'),
+    worklogs: settled(results[5], 'worklogs'),
+    activity: settled(results[6], 'activity'),
+    attachments: settled(results[7], 'attachments'),
+    sprints: settled(results[8], 'sprints'),
+    customFields: settled(results[9], 'customFields'),
   };
 }
 

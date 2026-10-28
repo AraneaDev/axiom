@@ -91,14 +91,6 @@ export const board = asyncHandler(async (req: Request, res: Response) => {
   res.json(columns);
 });
 
-export const listPullRequests = asyncHandler(async (req: Request, res: Response) => {
-  const prs = await issuesService.getIssuePullRequests(
-    param(req, 'projectId'),
-    paramInt(req, 'issueNumber'),
-  );
-  res.json(prs);
-});
-
 export const moveIssue = asyncHandler(async (req: Request, res: Response) => {
   const { columnId, position } = req.body;
   const issue = await issuesService.moveIssue(

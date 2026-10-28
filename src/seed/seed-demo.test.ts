@@ -12,7 +12,7 @@ const prisma = new PrismaClient({ adapter });
 describe('seed-demo', () => {
   beforeAll(() => {
     execSync('npx tsx scripts/seed-demo.ts', {
-      cwd: '/root/axiom',
+      cwd: process.cwd(),
       stdio: 'pipe',
       timeout: 60_000,
       env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
@@ -157,7 +157,7 @@ describe('seed-demo', () => {
     const beforePRs = await prisma.pullRequest.count();
 
     execSync('npx tsx scripts/seed-demo.ts', {
-      cwd: '/root/axiom',
+      cwd: process.cwd(),
       stdio: 'pipe',
       timeout: 60_000,
     });

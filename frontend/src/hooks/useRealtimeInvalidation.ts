@@ -10,7 +10,7 @@ import { useWebSocket, useRealtimeListener } from './useWebSocket';
 export type RealtimeEvent =
   | { type: 'issue:updated'; projectId: string; issueId: string }
   | { type: 'issue:created'; projectId: string; issueId: string }
-  | { type: 'issue:development-updated'; issueId: string }
+  | { type: 'issue:links-updated'; issueId: string }
   | { type: 'comment:added'; projectId: string; issueId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
   | { type: 'pr:updated'; repoId: string; prId: string }

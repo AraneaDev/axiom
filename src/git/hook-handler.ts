@@ -6,7 +6,6 @@ import { Request, Response, NextFunction, Router } from 'express';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { cacheInvalidate } from '../config/redis';
-import { executeSmartCommit } from '../modules/issues/smart-commits.executor';
 import { triggerPipelineOnPush } from '../pipelines/trigger';
 import { broadcastToRoom } from '../realtime/broadcast';
 import { ERR } from '../utils/error-messages';
@@ -226,29 +225,6 @@ router.post('/post-receive', async (req: Request, res: Response, next: NextFunct
                 }
               }
             }
-          }
-
-          // Execute smart commit directives only for new commits (skip already-processed)
-          try {
-            const alreadyProcessed = await prisma.issueCommit.findFirst({
-              where: { sha: commit.sha, repoId: repo.id },
-              select: { createdAt: true },
-            });
-            // If commit was already linked before this push (createdAt > 5s ago), skip smart commits
-            const isNew =
-              !alreadyProcessed || Date.now() - alreadyProcessed.createdAt.getTime() < 5000;
-            if (isNew) {
-              const commitUser = commit.authorEmail
-                ? await prisma.user.findFirst({ where: { email: commit.authorEmail } })
-                : null;
-              await executeSmartCommit(commit.message, repo.id, commitUser?.id ?? null);
-            }
-          } catch (err) {
-            logger.error(
-              'smart commit execution error',
-              { repoId: repo.id, sha: commit.sha },
-              err as Error,
-            );
           }
         }
       } catch (err) {

@@ -27,28 +27,9 @@ describe('parseAxiomUrl', () => {
     });
   });
 
-  // ── PR patterns ─────────────────────────────────────────────────────
-
-  it('parses a PR path', () => {
-    const result = parseAxiomUrl('/acme/backend/repos/api-server/pulls/15');
-    expect(result).toEqual({
-      type: 'pr',
-      org: 'acme',
-      team: 'backend',
-      target: 'api-server',
-      identifier: '15',
-    });
-  });
-
-  it('parses a full PR URL with hostname', () => {
-    const result = parseAxiomUrl('http://localhost:7000/org/team/repos/repo/pulls/3');
-    expect(result).toEqual({
-      type: 'pr',
-      org: 'org',
-      team: 'team',
-      target: 'repo',
-      identifier: '3',
-    });
+  it('returns null for former PR paths', () => {
+    expect(parseAxiomUrl('/acme/backend/repos/api-server/pulls/15')).toBeNull();
+    expect(parseAxiomUrl('http://localhost:7000/org/team/repos/repo/pulls/3')).toBeNull();
   });
 
   // ── Wiki patterns ──────────────────────────────────────────────────

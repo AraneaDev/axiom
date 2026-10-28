@@ -39,10 +39,6 @@ vi.mock('../pipelines/trigger', () => ({
   triggerPipelineOnPush: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../modules/issues/smart-commits.executor', () => ({
-  executeSmartCommit: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('./git-commands', () => ({
   log: vi.fn().mockResolvedValue([]),
 }));

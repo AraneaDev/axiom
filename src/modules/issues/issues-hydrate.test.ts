@@ -92,10 +92,7 @@ describe('Issue Detail Hydrate API', () => {
     expect(res.body).toHaveProperty('links');
     expect(res.body).toHaveProperty('children');
     expect(res.body).toHaveProperty('progress');
-    expect(res.body).toHaveProperty('development');
-    expect(res.body.development).toHaveProperty('branches');
-    expect(res.body.development).toHaveProperty('pullRequests');
-    expect(res.body.development).toHaveProperty('commits');
+    expect(res.body).not.toHaveProperty('development');
     expect(res.body).toHaveProperty('activity');
     expect(res.body).toHaveProperty('attachments');
     expect(res.body).toHaveProperty('worklogs');

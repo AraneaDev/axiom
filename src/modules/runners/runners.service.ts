@@ -92,7 +92,6 @@ export async function deleteRunner(runnerId: string, scopeType: RunnerScope, sco
 
 /**
  *
- * @param projectId
  * @param taskId
  */
 export async function getTask(taskId: string) {

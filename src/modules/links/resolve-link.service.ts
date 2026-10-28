@@ -1,27 +1,23 @@
 import { prisma } from '../../config/database';
 import { formatIssueKey } from '../../utils/issue-key';
-import {
-  PROJECT_TEAM_ORG_INCLUDE,
-  REPO_TEAM_ORG_INCLUDE,
-  SPACE_TEAM_ORG_INCLUDE,
-} from '../../utils/prisma-selects';
+import { PROJECT_TEAM_ORG_INCLUDE, SPACE_TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface ParsedUrl {
-  type: 'issue' | 'pr' | 'wiki';
+  type: 'issue' | 'wiki';
   org: string;
   team: string;
-  /** project slug (issues), repo slug (PRs), or space slug (wiki) */
+  /** project slug (issues), space slug (wiki) */
   target: string;
   /** issue/PR number (string) or page slug (wiki) */
   identifier: string;
 }
 
 export interface LinkPreview {
-  type: 'issue' | 'pr' | 'wiki';
+  type: 'issue' | 'wiki';
   title: string;
   key: string;
   status: string;
@@ -34,7 +30,6 @@ export interface LinkPreview {
 // ---------------------------------------------------------------------------
 
 const ISSUE_PATTERN = /^\/([^/]+)\/([^/]+)\/([^/]+)\/issues\/(\d+)$/;
-const PR_PATTERN = /^\/([^/]+)\/([^/]+)\/repos\/([^/]+)\/pulls\/(\d+)$/;
 const WIKI_PATTERN = /^\/([^/]+)\/([^/]+)\/wiki\/([^/]+)\/([^/]+)$/;
 
 /**
@@ -59,11 +54,6 @@ export function parseAxiomUrl(urlOrPath: string): ParsedUrl | null {
   m = pathname.match(ISSUE_PATTERN);
   if (m) {
     return { type: 'issue', org: m[1], team: m[2], target: m[3], identifier: m[4] };
-  }
-
-  m = pathname.match(PR_PATTERN);
-  if (m) {
-    return { type: 'pr', org: m[1], team: m[2], target: m[3], identifier: m[4] };
   }
 
   m = pathname.match(WIKI_PATTERN);
@@ -91,8 +81,6 @@ export async function resolveLink(urlOrPath: string, _userId: string): Promise<L
   switch (parsed.type) {
     case 'issue':
       return resolveIssue(parsed);
-    case 'pr':
-      return resolvePr(parsed);
     case 'wiki':
       return resolveWiki(parsed);
     default:
@@ -132,37 +120,6 @@ async function resolveIssue(parsed: ParsedUrl): Promise<LinkPreview | null> {
     status: issue.column?.name ?? 'Unknown',
     icon: issue.type.toLowerCase(),
     url: `/${org}/${team}/${project}/issues/${issue.number}`,
-  };
-}
-
-async function resolvePr(parsed: ParsedUrl): Promise<LinkPreview | null> {
-  const pr = await prisma.pullRequest.findFirst({
-    where: {
-      number: Number(parsed.identifier),
-      repo: {
-        slug: parsed.target,
-        team: {
-          slug: parsed.team,
-          org: { slug: parsed.org },
-        },
-      },
-    },
-    include: REPO_TEAM_ORG_INCLUDE,
-  });
-
-  if (!pr) return null;
-
-  const org = pr.repo.team.org.slug;
-  const team = pr.repo.team.slug;
-  const repo = pr.repo.slug;
-
-  return {
-    type: 'pr',
-    title: pr.title,
-    key: `${pr.repo.name}#${pr.number}`,
-    status: pr.status,
-    icon: 'git-pull-request',
-    url: `/${org}/${team}/repos/${repo}/pulls/${pr.number}`,
   };
 }
 

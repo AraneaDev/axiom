@@ -5,9 +5,6 @@ import { requireProjectAccess } from '../../middleware/requireProjectAccess';
 import * as wikiLinkController from '../wiki/wiki-issue-links.controller';
 
 import * as boardColumnsCtrl from './board-columns.controller';
-import * as devPanelCtrl from './development-panel.controller';
-import * as branchesCtrl from './issue-branches.controller';
-import * as commitsCtrl from './issue-commits.controller';
 import * as linksCtrl from './issue-links.controller';
 import * as votesCtrl from './issue-votes.controller';
 import * as watchersCtrl from './issue-watchers.controller';
@@ -59,20 +56,6 @@ router.get('/:projectId/issues/:issueNumber/worklogs', issuesController.getWorkl
 router.get('/:projectId/issues/:issueNumber/links', linksCtrl.getLinks);
 router.post('/:projectId/issues/:issueNumber/links', linksCtrl.addLink);
 router.delete('/:projectId/issues/:issueNumber/links/:linkId', linksCtrl.deleteLink);
-
-// Issue commits
-router.get('/:projectId/issues/:issueNumber/commits', commitsCtrl.getCommits);
-
-// Issue branches
-router.get('/:projectId/issues/:issueNumber/branches/suggest', branchesCtrl.getSuggestedName);
-router.get('/:projectId/issues/:issueNumber/branches', branchesCtrl.getBranches);
-router.post('/:projectId/issues/:issueNumber/branches', branchesCtrl.createBranch);
-
-// Issue pull requests
-router.get('/:projectId/issues/:issueNumber/pull-requests', issuesController.listPullRequests);
-
-// Development panel (aggregated view)
-router.get('/:projectId/issues/:issueNumber/development', devPanelCtrl.getDevelopmentPanel);
 
 // Issue votes
 router.post('/:projectId/issues/:issueNumber/votes/toggle', votesCtrl.toggle);

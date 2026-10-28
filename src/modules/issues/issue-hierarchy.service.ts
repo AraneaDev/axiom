@@ -8,33 +8,6 @@ import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { findIssueOrThrow } from './issue-utils';
 
 /**
- * Get pull requests linked to an issue.
- * @param projectId - The project the issue belongs to
- * @param issueNumber - The issue number within the project
- * @returns List of linked pull requests with basic PR details
- * @throws {AppError} 404 if issue not found
- */
-export async function getIssuePullRequests(projectId: string, issueNumber: number) {
-  const issue = await findIssueOrThrow(projectId, issueNumber);
-
-  return prisma.issuePullRequest.findMany({
-    where: { issueId: issue.id },
-    include: {
-      pr: {
-        select: {
-          id: true,
-          number: true,
-          title: true,
-          status: true,
-          sourceBranch: true,
-          repo: { select: { id: true, slug: true, name: true } },
-        },
-      },
-    },
-  });
-}
-
-/**
  * Set the parent of an issue for epic hierarchy, validating against circular references.
  * @param projectId - The project both issues belong to
  * @param issueNumber - The child issue number
