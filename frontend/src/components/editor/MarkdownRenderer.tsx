@@ -109,6 +109,9 @@ function sanitize(raw: string, basePath?: string) {
     .replace(/<ul>([\s\S]*?<li class="task-list-item")/g, '<ul class="task-list">$1');
 }
 
+/** Same pattern the editor's issue embed node parses. */
+const ISSUE_EMBED_LINE = /^:::issue\s+([A-Z]+-\d+):::$/;
+
 const GFM_ALERT_TYPES: Record<string, string> = {
   NOTE: 'info',
   WARNING: 'warning',
@@ -118,10 +121,11 @@ const GFM_ALERT_TYPES: Record<string, string> = {
 };
 
 /**
- * Transform GFM alert blockquotes and [TOC] markers in rendered HTML
+ * Transform GFM alert blockquotes, [TOC] markers and issue embed lines in rendered HTML
  * into custom block elements that processCustomBlocks can handle.
  * Converts `> [!NOTE]` blockquotes into callout divs, `> [!DETAILS]` into
- * collapsible divs, and `[TOC]` paragraphs into table-of-contents divs.
+ * collapsible divs, `[TOC]` paragraphs into table-of-contents divs, and
+ * `:::issue KEY:::` paragraphs into `^KEY` references (rendered as badge links).
  * @param html
  */
 function transformGfmAlerts(html: string): string {
@@ -171,7 +175,11 @@ function transformGfmAlerts(html: string): string {
       const div = document.createElement('div');
       div.setAttribute('data-table-of-contents', '');
       p.replaceWith(div);
+      return;
     }
+    // `:::issue AXM-12:::` (the editor's issue embed): render it as the `^KEY` badge link
+    const embed = p.textContent?.trim().match(ISSUE_EMBED_LINE);
+    if (embed) p.textContent = `^${embed[1]}`;
   });
 
   return container.innerHTML;

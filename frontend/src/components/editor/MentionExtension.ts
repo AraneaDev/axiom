@@ -1,9 +1,10 @@
-import Mention, { type MentionNodeAttrs } from '@tiptap/extension-mention';
+import type { MentionNodeAttrs } from '@tiptap/extension-mention';
 import { ReactRenderer } from '@tiptap/react';
 import type { SuggestionProps } from '@tiptap/suggestion';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
 
 import { get } from '@/api/client';
+import { MentionNode } from '@/editor-core/nodes/mention';
 
 import MentionList, { type MentionListRef } from './MentionList';
 
@@ -18,15 +19,9 @@ interface UserItem {
  * TipTap extension for @-mention user references.
  * Configured with suggestion-based autocomplete triggered by "@".
  * Searches users via the /users API and renders as styled mention nodes.
+ * The shared node (schema, rendering) lives in the editor core; this adds the autocomplete.
  */
-export const MentionExtension = Mention.configure({
-  HTMLAttributes: { class: 'mention' },
-  renderText({ node }) {
-    return `@${node.attrs.label ?? node.attrs.id}`;
-  },
-  renderHTML({ node }) {
-    return ['span', { class: 'mention' }, `@${node.attrs.label ?? node.attrs.id}`];
-  },
+export const MentionExtension = MentionNode.configure({
   suggestion: {
     items: async ({ query }: { query: string }): Promise<UserItem[]> => {
       if (!query || query.length < 1) return [];

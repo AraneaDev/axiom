@@ -23,6 +23,7 @@ x-app-dev: &app-dev
     - ./scripts:/app/scripts
     - ./vitest.config.ts:/app/vitest.config.ts
     - ./package.json:/app/package.json
+    - ./frontend/src/editor-core:/app/frontend/src/editor-core
     - ./.data/uploads:/data/uploads
 
 services:
@@ -110,7 +111,7 @@ services:
 
   worker:
     <<: *app-dev
-    command: ["sh", "-c", "npx prisma generate && npx tsx watch src/worker.ts"]
+    command: ["sh", "-c", "npx prisma generate && node scripts/build-editor-core.mjs && npx tsx watch src/worker.ts"]
     depends_on:
       migrate:
         condition: service_completed_successfully

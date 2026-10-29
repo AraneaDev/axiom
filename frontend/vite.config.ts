@@ -10,6 +10,16 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // One copy of each, shared by the editor, the editor core and the Yjs bindings
+    dedupe: [
+      '@tiptap/core',
+      '@tiptap/pm',
+      'prosemirror-model',
+      'prosemirror-state',
+      'prosemirror-view',
+      'yjs',
+      'y-prosemirror',
+    ],
   },
   test: {
     globals: true,

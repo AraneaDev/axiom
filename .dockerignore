@@ -6,3 +6,4 @@ frontend/dist
 *.log
 .git
 .DS_Store
+dist-editor-core

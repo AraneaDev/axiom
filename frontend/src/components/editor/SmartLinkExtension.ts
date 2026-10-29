@@ -1,8 +1,8 @@
-import { Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 
 import { get } from '@/api/client';
+import { SmartLinkNode as SharedSmartLinkNode } from '@/editor-core/nodes/smart-link';
 
 import SmartLinkNode from './SmartLinkNode';
 
@@ -18,37 +18,10 @@ interface SmartLinkPreview {
 /**
  * TipTap extension that renders rich inline previews when Axiom URLs are pasted.
  * Matches issue, PR, and wiki page URLs and replaces them with a smartLink node
- * showing icon, key, title, and status.
+ * showing icon, key, title, and status. The shared node (schema, rendering) lives in
+ * the editor core; this adds the node view and the paste handling.
  */
-export const SmartLinkExtension = Node.create({
-  name: 'smartLink',
-  group: 'inline',
-  inline: true,
-  atom: true,
-
-  addAttributes() {
-    return {
-      url: { default: null },
-      type: { default: null },
-      title: { default: null },
-      key: { default: null },
-      status: { default: null },
-      icon: { default: null },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: 'span[data-smart-link]' }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return [
-      'span',
-      mergeAttributes(HTMLAttributes, { 'data-smart-link': '', class: 'smart-link' }),
-      `${HTMLAttributes.key ?? ''} ${HTMLAttributes.title ?? ''}`,
-    ];
-  },
-
+export const SmartLinkExtension = SharedSmartLinkNode.extend({
   addNodeView() {
     return ReactNodeViewRenderer(SmartLinkNode);
   },

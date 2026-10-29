@@ -4,6 +4,12 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 RUN npm ci
+
+# Frontend dependencies, only for bundling the shared editor core (frontend/src/editor-core)
+COPY frontend/package.json frontend/package-lock.json* ./frontend/
+RUN cd frontend && npm ci --ignore-scripts
+COPY frontend/tsconfig.json ./frontend/
+COPY frontend/src/editor-core ./frontend/src/editor-core
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 RUN npx prisma generate
@@ -14,5 +20,5 @@ COPY scripts ./scripts
 
 EXPOSE 3000
 
-# tsx watch for HMR on backend
-CMD ["sh", "-c", "npx prisma generate && npx tsx watch src/index.ts"]
+# tsx watch for HMR on backend; the editor core bundle is rebuilt on every start
+CMD ["sh", "-c", "npx prisma generate && node scripts/build-editor-core.mjs && npx tsx watch src/index.ts"]

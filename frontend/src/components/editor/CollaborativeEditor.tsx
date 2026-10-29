@@ -4,21 +4,8 @@
  * but backed by a shared Yjs document instead of local state.
  */
 
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Collaboration from '@tiptap/extension-collaboration';
-import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
-import Placeholder from '@tiptap/extension-placeholder';
-import { Table } from '@tiptap/extension-table';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import TableRow from '@tiptap/extension-table-row';
-import TaskItem from '@tiptap/extension-task-item';
-import TaskList from '@tiptap/extension-task-list';
-import Underline from '@tiptap/extension-underline';
 import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import { common, createLowlight } from 'lowlight';
 import {
   Bold,
   Italic,
@@ -41,7 +28,6 @@ import {
   ListTree,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Markdown } from 'tiptap-markdown';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 
@@ -49,18 +35,9 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 
-import { CalloutExtension } from './CalloutExtension';
 import { CollaborationCursorExtension } from './CollaborationCursorExtension';
-import { CollapsibleExtension } from './CollapsibleExtension';
+import { buildEditorExtensions } from './editor-extensions';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
-import { IssueEmbedExtension } from './IssueEmbedExtension';
-import { IssueReferenceExtension } from './IssueReferenceExtension';
-import { MentionExtension } from './MentionExtension';
-import { SlashCommandExtension } from './SlashCommandExtension';
-import { SmartLinkExtension } from './SmartLinkExtension';
-import { TableOfContentsExtension } from './TableOfContentsExtension';
-
-const lowlight = createLowlight(common);
 
 interface CollaborativeEditorProps {
   ydoc: Y.Doc;
@@ -130,39 +107,7 @@ export function CollaborativeEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
-        codeBlock: false,
-        heading: { levels: [1, 2, 3] },
-        underline: false,
-        link: false,
-      }),
-      Underline,
-      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-primary underline' } }),
-      Image,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableCell,
-      TableHeader,
-      Placeholder.configure({ placeholder: placeholder || 'Write something...' }),
-      CodeBlockLowlight.configure({ lowlight }),
-      Markdown.configure({
-        html: true,
-        transformPastedText: true,
-        transformCopiedText: true,
-      }),
-      MentionExtension,
-      IssueReferenceExtension.configure({
-        projectId: projectId ?? null,
-        instanceId,
-      }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      CalloutExtension,
-      CollapsibleExtension,
-      TableOfContentsExtension,
-      SlashCommandExtension,
-      SmartLinkExtension,
-      IssueEmbedExtension,
+      ...buildEditorExtensions({ placeholder, projectId, instanceId }),
       // Yjs collaboration
       Collaboration.configure({
         document: ydoc,
@@ -181,7 +126,9 @@ export function CollaborativeEditor({
       if (onChange) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tiptap-markdown storage type not exported
         const md = (e.storage as any).markdown.getMarkdown();
-        onChange(md);
+        // The initial Yjs sync fires an update while the editor is created during
+        // render; defer so the parent's state update does not run inside that render.
+        queueMicrotask(() => onChange(md));
       }
     },
     editorProps: {

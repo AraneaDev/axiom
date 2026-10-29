@@ -1,17 +1,4 @@
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
-import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
-import Placeholder from '@tiptap/extension-placeholder';
-import { Table } from '@tiptap/extension-table';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import TableRow from '@tiptap/extension-table-row';
-import TaskItem from '@tiptap/extension-task-item';
-import TaskList from '@tiptap/extension-task-list';
-import Underline from '@tiptap/extension-underline';
 import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import { common, createLowlight } from 'lowlight';
 import {
   Bold,
   Italic,
@@ -34,23 +21,13 @@ import {
   ListTree,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Markdown } from 'tiptap-markdown';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 
-import { CalloutExtension } from './CalloutExtension';
-import { CollapsibleExtension } from './CollapsibleExtension';
+import { buildEditorExtensions } from './editor-extensions';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
-import { IssueEmbedExtension } from './IssueEmbedExtension';
-import { IssueReferenceExtension } from './IssueReferenceExtension';
-import { MentionExtension } from './MentionExtension';
-import { SlashCommandExtension } from './SlashCommandExtension';
-import { SmartLinkExtension } from './SmartLinkExtension';
-import { TableOfContentsExtension } from './TableOfContentsExtension';
-
-const lowlight = createLowlight(common);
 
 interface MarkdownEditorProps {
   value: string;
@@ -122,41 +99,7 @@ export function MarkdownEditor({
   }, [instanceId, projectId]);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        codeBlock: false,
-        heading: { levels: [1, 2, 3] },
-        underline: false,
-        link: false,
-      }),
-      Underline,
-      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-primary underline' } }),
-      Image,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableCell,
-      TableHeader,
-      Placeholder.configure({ placeholder: placeholder || 'Write something...' }),
-      CodeBlockLowlight.configure({ lowlight }),
-      Markdown.configure({
-        html: true,
-        transformPastedText: true,
-        transformCopiedText: true,
-      }),
-      MentionExtension,
-      IssueReferenceExtension.configure({
-        projectId: projectId ?? null,
-        instanceId,
-      }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      CalloutExtension,
-      CollapsibleExtension,
-      TableOfContentsExtension,
-      SlashCommandExtension,
-      SmartLinkExtension,
-      IssueEmbedExtension,
-    ],
+    extensions: buildEditorExtensions({ placeholder, projectId, instanceId }),
     content: value || '',
     onUpdate: ({ editor: e }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tiptap-markdown storage type not exported

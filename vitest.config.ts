@@ -1,10 +1,20 @@
+import { createRequire } from 'module';
+
 import { defineConfig } from 'vitest/config';
 
+const require = createRequire(import.meta.url);
+
 export default defineConfig({
+  resolve: {
+    // Production runs the backend as CommonJS, where `yjs` is its CJS build, and the
+    // editor core bundle requires that same build. Vitest would otherwise load the ESM
+    // build for test files: a second copy of yjs whose types the bundle rejects.
+    alias: [{ find: /^yjs$/, replacement: require.resolve('yjs') }],
+  },
   test: {
     globals: true,
     environment: 'node',
-    globalSetup: ['./src/test/global-setup.ts'],
+    globalSetup: ['./src/test/global-setup.ts', './src/test/editor-core-setup.ts'],
     env: {
       DATABASE_URL: 'postgresql://axiom:axiom_dev@localhost:5432/axiom_test?schema=public',
       JWT_SECRET: 'test-secret-must-be-at-least-32-characters-long',

@@ -1,10 +1,11 @@
-import { Node, mergeAttributes, InputRule } from '@tiptap/core';
+import { InputRule } from '@tiptap/core';
 import { PluginKey } from '@tiptap/pm/state';
 import { ReactRenderer } from '@tiptap/react';
 import Suggestion, { type SuggestionProps } from '@tiptap/suggestion';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
 
 import { get } from '@/api/client';
+import { IssueReferenceNode } from '@/editor-core/nodes/issue-reference';
 
 import { editorProjectIds } from './editor-state';
 import IssueReferenceSuggestionList, {
@@ -12,74 +13,16 @@ import IssueReferenceSuggestionList, {
   type IssueReferenceSuggestionListRef,
 } from './IssueReferenceSuggestionList';
 
-export interface IssueReferenceOptions {
-  HTMLAttributes: Record<string, string>;
-  projectId: string | null;
-  instanceId: number | null;
-}
-
-declare module '@tiptap/core' {
-  interface Commands<ReturnType> {
-    issueReference: {
-      insertIssueReference: (key: string) => ReturnType;
-    };
-  }
-}
+export type { IssueReferenceOptions } from '@/editor-core/nodes/issue-reference';
 
 /**
  * TipTap extension for inline issue references (e.g. ^AXM-123).
- * Renders as an inline atom node with a data-issue-key attribute.
- * Provides suggestion-based autocomplete triggered by "^" and an input rule
- * that auto-converts "^PREFIX-123 " into a reference node.
+ * The shared node (schema, rendering, command) lives in the editor core; this adds
+ * the browser behaviour: suggestion-based autocomplete triggered by "^" and an input
+ * rule that auto-converts "^PREFIX-123 " into a reference node.
  * Configure with projectId to enable autocomplete against the issues API.
  */
-export const IssueReferenceExtension = Node.create<IssueReferenceOptions>({
-  name: 'issueReference',
-  group: 'inline',
-  inline: true,
-  selectable: false,
-  atom: true,
-
-  addOptions() {
-    return {
-      HTMLAttributes: {},
-      projectId: null,
-      instanceId: null,
-    };
-  },
-
-  addAttributes() {
-    return {
-      key: {
-        default: null,
-        parseHTML: (el) => el.getAttribute('data-issue-key'),
-        renderHTML: (attrs) => ({ 'data-issue-key': attrs.key }),
-      },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: 'span[data-issue-key]' }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return [
-      'span',
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { class: 'issue-ref' }),
-      `${HTMLAttributes['data-issue-key']}`,
-    ];
-  },
-
-  addCommands() {
-    return {
-      insertIssueReference:
-        (key: string) =>
-        ({ commands }) => {
-          return commands.insertContent({ type: this.name, attrs: { key } });
-        },
-    };
-  },
-
+export const IssueReferenceExtension = IssueReferenceNode.extend({
   addInputRules() {
     return [
       new InputRule({
