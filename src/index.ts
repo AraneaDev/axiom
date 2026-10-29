@@ -82,7 +82,21 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Global middleware
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        // Attachment thumbnails/previews use blob: URLs; editors embed external https images.
+        'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+        // The PDF attachment preview renders an iframe with a blob: URL.
+        'frame-src': ["'self'", 'blob:'],
+        // Audio/video attachment previews play from blob: URLs.
+        'media-src': ["'self'", 'blob:'],
+      },
+    },
+  }),
+);
 app.use(
   cors({
     origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',').map((o) => o.trim()),

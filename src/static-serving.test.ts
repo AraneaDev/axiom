@@ -64,6 +64,15 @@ describe('static frontend serving', () => {
     expect(res.text).not.toContain('axiom-spa');
   });
 
+  it('index.html CSP allows blob and external images and blob frames', async () => {
+    const res = await request(app).get('/');
+    const csp = res.headers['content-security-policy'];
+    expect(csp).toContain("img-src 'self' data: blob: https:");
+    expect(csp).toContain("frame-src 'self' blob:");
+    expect(csp).toContain("media-src 'self' blob:");
+    expect(csp).toContain("script-src 'self'");
+  });
+
   it('api routes are unaffected', async () => {
     const res = await request(app).get('/api/health');
     expect(res.status).toBe(200);
