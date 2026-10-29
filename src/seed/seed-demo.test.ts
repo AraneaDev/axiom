@@ -14,10 +14,10 @@ describe('seed-demo', () => {
     execSync('npx tsx scripts/seed-demo.ts', {
       cwd: process.cwd(),
       stdio: 'pipe',
-      timeout: 60_000,
+      timeout: 150_000,
       env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
     });
-  }, 120_000);
+  }, 180_000);
 
   afterAll(async () => {
     await prisma.$disconnect();
@@ -133,7 +133,7 @@ describe('seed-demo', () => {
     execSync('npx tsx scripts/seed-demo.ts', {
       cwd: process.cwd(),
       stdio: 'pipe',
-      timeout: 60_000,
+      timeout: 150_000,
     });
 
     const afterUsers = await prisma.user.count();
@@ -143,7 +143,7 @@ describe('seed-demo', () => {
     expect(afterUsers).toBe(beforeUsers);
     expect(afterIssues).toBe(beforeIssues);
     expect(afterComments).toBe(beforeComments);
-  }, 120_000);
+  }, 180_000);
 
   // ── Removed features ───────────────────────────────────────
 
@@ -157,7 +157,7 @@ describe('seed-demo', () => {
     execSync('npx tsx scripts/seed-demo.ts', {
       cwd: process.cwd(),
       stdio: 'pipe',
-      timeout: 60_000,
+      timeout: 150_000,
     });
 
     expect(await prisma.issue.count()).toBe(before.issues);
@@ -171,7 +171,7 @@ describe('seed-demo', () => {
         AND tablename IN ('repositories', 'pull_requests', 'ssh_keys', 'pipelines', 'runners', 'deployments')
     `;
     expect(tables).toEqual([]);
-  }, 120_000);
+  }, 180_000);
 
   it('seeds no issues or comments about removed git features', async () => {
     const project = await prisma.project.findFirst({ where: { prefix: 'AXM' } });

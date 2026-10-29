@@ -3,6 +3,16 @@ import type { PageVersion, PageVersionKind } from '@prisma/client';
 
 const MAX_ATTEMPTS = 3;
 
+/**
+ * Lock a page row for the rest of the transaction so concurrent writers queue behind it.
+ * Callers re-read the page after this call and base their checks on that fresh row.
+ * @param tx - Interactive transaction client
+ * @param pageId - The page to lock
+ */
+export async function lockPage(tx: Prisma.TransactionClient, pageId: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM pages WHERE id = ${pageId} FOR UPDATE`;
+}
+
 export interface CreatePageVersionInput {
   pageId: string;
   title: string;
@@ -26,7 +36,7 @@ export async function createPageVersion(
   tx: Prisma.TransactionClient,
   input: CreatePageVersionInput,
 ): Promise<PageVersion> {
-  await tx.$queryRaw`SELECT id FROM pages WHERE id = ${input.pageId} FOR UPDATE`;
+  await lockPage(tx, input.pageId);
 
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {

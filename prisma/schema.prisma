@@ -524,7 +524,7 @@ model PendingPageChange {
   page              Page        @relation(fields: [pageId], references: [id], onDelete: Cascade)
   baseBody          String
   externalVersionId String
-  externalVersion   PageVersion @relation(fields: [externalVersionId], references: [id])
+  externalVersion   PageVersion @relation(fields: [externalVersionId], references: [id], onDelete: Cascade)
   authorId          String
 
   createdAt DateTime @default(now())

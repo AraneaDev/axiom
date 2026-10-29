@@ -10,7 +10,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
-import { createPageVersion } from './page-versions';
+import { createPageVersion, lockPage } from './page-versions';
 import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
 import { canViewPage, canEditPage } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
@@ -242,18 +242,21 @@ export async function updatePage(
   const editAllowed = await canEditPage(authorId, page.id);
   if (!editAllowed) throw new AppError(403, 'You do not have permission to edit this page');
 
-  const newTitle = data.title ?? page.title;
-  const newBody = data.body ?? page.body;
-  const versionedChange = newTitle !== page.title || newBody !== page.body;
-
   const updated = await prisma.$transaction(async (tx) => {
+    // Lock first, then decide on fresh data: the read above may predate a concurrent write
+    await lockPage(tx, page.id);
+    const current = await tx.page.findUniqueOrThrow({ where: { id: page.id } });
+    const newTitle = data.title ?? current.title;
+    const newBody = data.body ?? current.body;
+    const versionedChange = newTitle !== current.title || newBody !== current.body;
+
     await tx.page.update({
       where: { id: page.id },
       data: {
         title: newTitle,
         body: newBody,
-        parentId: data.parentId !== undefined ? data.parentId : page.parentId,
-        isDraft: data.isDraft !== undefined ? data.isDraft : page.isDraft,
+        parentId: data.parentId !== undefined ? data.parentId : current.parentId,
+        isDraft: data.isDraft !== undefined ? data.isDraft : current.isDraft,
       },
     });
     if (versionedChange) {
@@ -266,6 +269,8 @@ export async function updatePage(
         changeDescription: data.changeDescription,
       });
     }
+    // The latest version is the real latest one: a change that is not versioned (for example only
+    // changeDescription) leaves it untouched rather than pretending a new version exists.
     return tx.page.findUniqueOrThrow({
       where: { id: page.id },
       include: { versions: { orderBy: { version: 'desc' }, take: 1 } },

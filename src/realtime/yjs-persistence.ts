@@ -8,7 +8,7 @@ import * as Y from 'yjs';
 
 import { prisma } from '../config/database';
 import { markdownToYFragment, normalizeMarkdown, yFragmentToMarkdown } from '../lib/editor-core';
-import { createPageVersion } from '../modules/wiki/page-versions';
+import { createPageVersion, lockPage } from '../modules/wiki/page-versions';
 import { logger } from '../utils/logger';
 
 const SAVE_DEBOUNCE_MS = 5_000;
@@ -65,13 +65,15 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<void> {
   if (!authorId) return;
 
   try {
-    const page = await prisma.page.findUnique({ where: { id: pageId } });
-    if (!page) return;
+    const saved = await prisma.$transaction(async (tx) => {
+      // Lock first, then check against the fresh row
+      await lockPage(tx, pageId);
+      const page = await tx.page.findUnique({ where: { id: pageId } });
+      if (!page) return false;
 
-    // Skip if content hasn't changed, or is still exactly what was loaded into the doc
-    if (page.body === body || loadedSnapshots.get(pageId) === body) return;
+      // Skip if content hasn't changed, or is still exactly what was loaded into the doc
+      if (page.body === body || loadedSnapshots.get(pageId) === body) return false;
 
-    await prisma.$transaction(async (tx) => {
       await tx.page.update({ where: { id: page.id }, data: { body } });
       await createPageVersion(tx, {
         pageId: page.id,
@@ -80,7 +82,9 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<void> {
         authorId,
         kind: 'EDIT',
       });
+      return true;
     });
+    if (!saved) return;
     // The skip above now means "unchanged since the last write", so a revert is still saved
     loadedSnapshots.set(pageId, body);
   } catch (err) {
