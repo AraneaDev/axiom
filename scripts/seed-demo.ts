@@ -4,15 +4,13 @@
  * Usage: npx tsx scripts/seed-demo.ts
  *
  * Creates a demo environment with users, org, team, project,
- * issues, comments, wiki space, and self-referential repository.
+ * issues, comments, and a wiki space.
  *
  * Safe to run multiple times (idempotent via upserts / existence checks).
  */
 
 import '../src/config/load-env';
 
-import { execSync } from 'child_process';
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -41,7 +39,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 1. Users
   // ────────────────────────────────────────────────────────────
-  console.warn('  [1/13] Users');
+  console.warn('  [1/10] Users');
   const passwordHash = await bcrypt.hash('password123', 12);
 
   const userData = [
@@ -64,7 +62,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 2. Organization + memberships
   // ────────────────────────────────────────────────────────────
-  console.warn('  [2/13] Organization');
+  console.warn('  [2/10] Organization');
   const org = await prisma.organization.upsert({
     where: { slug: 'aranea-dev' },
     update: {},
@@ -92,7 +90,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 3. Team + memberships
   // ────────────────────────────────────────────────────────────
-  console.warn('  [3/13] Team');
+  console.warn('  [3/10] Team');
 
   const team = await prisma.team.upsert({
     where: { orgId_slug: { orgId: org.id, slug: 'axiom' } },
@@ -122,7 +120,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 4. Project + board columns + labels
   // ────────────────────────────────────────────────────────────
-  console.warn('  [4/13] Project');
+  console.warn('  [4/10] Project');
 
   const columnDefs = [
     { name: 'Backlog', position: 0, isDefault: true, isDone: false },
@@ -155,7 +153,7 @@ async function main() {
         name: 'Axiom MVP',
         slug: 'axiom-mvp',
         prefix: 'AXM',
-        description: 'Axiom minimum viable product - project management, Git hosting, and documentation',
+        description: 'Axiom minimum viable product - project management and documentation',
         columns: { createMany: { data: columnDefs } },
       },
     });
@@ -179,7 +177,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 5. Issues
   // ────────────────────────────────────────────────────────────
-  console.warn('  [5/13] Issues');
+  console.warn('  [5/10] Issues');
 
   type IssueSeed = {
     title: string;
@@ -206,13 +204,6 @@ async function main() {
     { title: 'Repository settings page', body: 'Settings page for editing repo name, description, visibility, and default branch. Includes danger zone with delete confirmation.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend'] },
     { title: 'Fix TypeScript OOM during backend typecheck', body: 'The `@modelcontextprotocol/sdk` package causes tsc to resolve 430+ files consuming 4GB+ memory. Exclude src/mcp/ from tsconfig and use runtime require() for the MCP import. See: https://github.com/modelcontextprotocol/typescript-sdk/issues/985', type: 'BUG', priority: 'CRITICAL', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'bug', 'urgent'] },
     { title: 'Shared useRepoContext hook', body: 'Extract the org->team->repo cascading query pattern duplicated across every repo page into a shared hook at `hooks/useRepoContext.ts`.', type: 'TASK', priority: 'LOW', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
-    { title: 'Inline PR comments UI', body: 'Backend supports filePath/line on PR comments but the frontend only shows general comments. Add inline comment rendering on diff hunks.', type: 'STORY', priority: 'HIGH', column: 'Todo', creator: 'tim', labels: ['frontend', 'enhancement'] },
-    { title: 'Merge strategy selection', body: 'Allow selecting squash, rebase, or merge commit when merging a PR. Currently only merge commit is supported.', type: 'TASK', priority: 'MEDIUM', column: 'Backlog', creator: 'tim', labels: ['frontend', 'backend'] },
-    { title: 'Webhook management UI', body: 'Build a UI for managing repository webhooks. Backend CRUD endpoints already exist.', type: 'TASK', priority: 'MEDIUM', column: 'Backlog', creator: 'tim', labels: ['frontend'] },
-    { title: 'Branch protection rules UI', body: 'Frontend for configuring branch protection rules. Backend endpoints exist.', type: 'TASK', priority: 'MEDIUM', column: 'Backlog', creator: 'tim', labels: ['frontend'] },
-    { title: 'Download archive (zip/tar)', body: 'Add a download button to the repo page for downloading the current ref as a zip or tar archive.', type: 'TASK', priority: 'LOW', column: 'Backlog', creator: 'test', labels: ['backend', 'frontend'] },
-    { title: 'Code search within repository', body: 'Implement code search using `git grep` within a repository. Add a search bar to the repo page.', type: 'STORY', priority: 'MEDIUM', column: 'Backlog', creator: 'tim', labels: ['backend', 'frontend', 'enhancement'] },
-    { title: 'Contributor statistics page', body: 'Show contributor stats per repository: commits over time, lines added/removed, top contributors chart.', type: 'TASK', priority: 'LOW', column: 'Backlog', creator: 'test', labels: ['frontend', 'enhancement'] },
     { title: 'Dark mode support', body: 'Add dark mode theme toggle. The CSS variable design token system already supports it, just needs a toggle and persistence.', type: 'TASK', priority: 'MEDIUM', column: 'In Progress', assignee: 'test', creator: 'tim', dueDate: futureDate(7), labels: ['frontend'] },
   ];
 
@@ -265,7 +256,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 6. Comments
   // ────────────────────────────────────────────────────────────
-  console.warn('  [6/13] Comments');
+  console.warn('  [6/10] Comments');
 
   type CommentSeed = {
     issueTitle: string;
@@ -276,7 +267,7 @@ async function main() {
     {
       issueTitle: 'Repository file browser shows empty for folders',
       comments: [
-        { author: 'tim', body: 'Root cause found: `git ls-tree -l master -- frontend` returns the entry *for* `frontend`, not its contents. We need to append a trailing `/` to the tree path.\n\nFix is one line in `src/git/git-commands.ts` in `lsTree()`.' },
+        { author: 'tim', body: 'Root cause found: the tree listing returns the entry *for* `frontend`, not its contents. We need to append a trailing `/` to the tree path.\n\nFix is one line in the tree listing helper.' },
         { author: 'test', body: 'Confirmed this also fixes the empty root listing edge case when no default branch exists.' },
       ],
     },
@@ -292,12 +283,6 @@ async function main() {
       comments: [
         { author: 'test', body: 'The diff parser handles the standard unified diff format well. One suggestion: could we add syntax highlighting to the diff hunks in a follow-up?' },
         { author: 'tim', body: 'Good idea. Filed as a follow-up. The current plain diff with color-coded +/- lines is functional for MVP.' },
-      ],
-    },
-    {
-      issueTitle: 'Inline PR comments UI',
-      comments: [
-        { author: 'tim', body: 'The backend already stores `filePath` and `line` on PR comments. We just need to render them inline on the diff view.\n\nProposed approach:\n1. Group comments by filePath + line\n2. Insert comment threads between diff hunk rows\n3. Add a "+" button on hover over line numbers to start new comments' },
       ],
     },
     {
@@ -332,7 +317,7 @@ async function main() {
   // ────────────────────────────────────────────────────────────
   // 7. Wiki space + pages
   // ────────────────────────────────────────────────────────────
-  console.warn('  [7/13] Wiki');
+  console.warn('  [7/10] Wiki');
 
   // Wiki pages are sourced entirely from docs/*.md (auto-import block below)
 
@@ -421,102 +406,9 @@ async function main() {
   console.warn(`        Axiom Documentation (${totalPages} pages)`);
 
   // ────────────────────────────────────────────────────────────
-  // 8. Repository (self-referential bare clone)
+  // 8. Sprints
   // ────────────────────────────────────────────────────────────
-  console.warn('  [8/13] Repository');
-
-  const selfReposBase = process.env.REPOS_PATH ?? '/data/repos';
-  const selfDiskPath = path.join(selfReposBase, 'aranea-dev', 'axiom', 'axiom.git');
-
-  const selfRepo = await prisma.repository.upsert({
-      where: { teamId_slug: { teamId: team.id, slug: 'axiom' } },
-      update: { diskPath: selfDiskPath, description: 'The Axiom platform source code' },
-      create: {
-        teamId: team.id,
-        name: 'axiom',
-        slug: 'axiom',
-        description: 'The Axiom platform source code',
-        visibility: 'INTERNAL',
-        diskPath: selfDiskPath,
-        defaultBranch: 'master',
-      },
-    });
-
-    // Create bare clone on disk if not already present.
-    // When running inside the Docker container the source /root/axiom does not
-    // exist, so we skip the git operations and rely on init-self-repo.sh having
-    // been run on the host first.
-    const isInsideDocker = fs.existsSync('/.dockerenv');
-    const sourceExists = fs.existsSync('/root/axiom/.git');
-
-    // Only attempt a bare clone when on the host and the source repo has commits.
-    let sourceHasCommits = false;
-    if (!isInsideDocker && sourceExists) {
-      try {
-        execSync('git -C /root/axiom rev-parse HEAD', { stdio: 'pipe' });
-        sourceHasCommits = true;
-      } catch { /* no commits yet */ }
-    }
-
-    if (sourceHasCommits) {
-      if (!fs.existsSync(selfDiskPath)) {
-        fs.mkdirSync(path.dirname(selfDiskPath), { recursive: true });
-        execSync(`git clone --bare /root/axiom "${selfDiskPath}"`, { stdio: 'pipe' });
-        console.warn(`        axiom (INTERNAL) -- created bare clone at ${selfDiskPath}`);
-      } else {
-        execSync(`git -C "${selfDiskPath}" fetch /root/axiom '+refs/heads/*:refs/heads/*' --tags --prune`, { stdio: 'ignore' });
-        console.warn(`        axiom (INTERNAL) -- updated bare clone at ${selfDiskPath}`);
-      }
-
-      // Ensure bare repo accepts pushes
-      execSync(`git -C "${selfDiskPath}" config receive.denyCurrentBranch ignore`, { stdio: 'ignore' });
-    } else {
-      console.warn(`        axiom (INTERNAL) -- DB record upserted (run scripts/init-self-repo.sh on host after committing)`);
-    }
-
-    // Dev API token for git push/pull
-    // Use a deterministic token so the local .git/config remote stays valid across re-seeds.
-    const DEV_TOKEN = 'tk_dev_axiom_local_0000000000000000000000000000000000000000000000';
-    const devTokenHash = crypto.createHash('sha256').update(DEV_TOKEN).digest('hex');
-    const devTokenPrefix = DEV_TOKEN.slice(0, 11);
-
-    await prisma.apiToken.upsert({
-      where: { tokenHash: devTokenHash },
-      update: { name: 'dev-git-push' },
-      create: {
-        userId: users['tim'].id,
-        name: 'dev-git-push',
-        tokenHash: devTokenHash,
-        prefix: devTokenPrefix,
-        scopes: ['repo:read', 'repo:write'],
-        expiresAt: null,
-      },
-    });
-
-    // Set up git remote on host so pushes go through the Axiom server
-    if (!isInsideDocker && sourceExists) {
-      const remoteUrl = 'http://localhost:3000/git/aranea-dev/axiom/axiom.git';
-      try {
-        const existingRemote = execSync('git -C /root/axiom remote get-url axiom 2>/dev/null', { encoding: 'utf8' }).trim();
-        if (existingRemote !== remoteUrl) {
-          execSync(`git -C /root/axiom remote set-url axiom "${remoteUrl}"`, { stdio: 'pipe' });
-        }
-      } catch {
-        execSync(`git -C /root/axiom remote add axiom "${remoteUrl}"`, { stdio: 'pipe' });
-      }
-
-      // Configure git credential for the Axiom server
-      execSync(`git -C /root/axiom config credential."http://localhost:3000".username tim`, { stdio: 'pipe' });
-      execSync(`git -C /root/axiom config credential."http://localhost:3000".helper '!f() { echo "password=${DEV_TOKEN}"; }; f'`, { stdio: 'pipe' });
-
-      console.warn(`        dev API token created (deterministic)`);
-      console.warn(`        git remote "axiom" -> ${remoteUrl}`);
-    }
-
-  // ────────────────────────────────────────────────────────────
-  // 9. Sprints
-  // ────────────────────────────────────────────────────────────
-  console.warn('  [9/13] Sprints');
+  console.warn('  [8/10] Sprints');
 
   const sprintStartDate = new Date();
   sprintStartDate.setDate(sprintStartDate.getDate() - 14);
@@ -535,7 +427,7 @@ async function main() {
       data: {
         projectId: project.id,
         name: 'Sprint 1',
-        goal: 'Complete core repository browsing features and fix critical bugs',
+        goal: 'Complete core browsing features and fix critical bugs',
         startDate: sprintStartDate,
         endDate: sprintEndDate,
         status: 'COMPLETED',
@@ -595,7 +487,7 @@ async function main() {
       data: {
         projectId: project.id,
         name: 'Sprint 2',
-        goal: 'PR review improvements and dark mode',
+        goal: 'Dark mode',
         startDate: activeSprintStart,
         endDate: activeSprintEnd,
         status: 'ACTIVE',
@@ -604,7 +496,7 @@ async function main() {
     });
 
     // Add some in-progress/todo issues to active sprint
-    const activeIssueIndices = [12, 19]; // Inline PR comments, Dark mode
+    const activeIssueIndices = [12]; // Dark mode
     for (const idx of activeIssueIndices) {
       const issue = createdIssues[idx];
       if (!issue) continue;
@@ -627,9 +519,9 @@ async function main() {
   }
 
   // ────────────────────────────────────────────────────────────
-  // 10. Board settings (WIP limits + card colors)
+  // 9. Board settings (WIP limits + card colors)
   // ────────────────────────────────────────────────────────────
-  console.warn('  [10/13] Board settings');
+  console.warn('  [9/10] Board settings');
 
   // Set WIP limits on Review and In Progress columns
   if (columns['In Progress']) {
@@ -654,39 +546,9 @@ async function main() {
   console.warn('        Card colors: by priority');
 
   // ────────────────────────────────────────────────────────────
-  // 11. PR template
+  // 10. Space permissions
   // ────────────────────────────────────────────────────────────
-  console.warn('  [11/13] PR template');
-
-  await prisma.repository.update({
-    where: { id: selfRepo.id },
-    data: {
-      prTemplate: `## Summary
-
-What does this PR do? Why is it needed?
-
-## Changes
-
--
-
-## Testing
-
-- [ ] Unit tests added/updated
-- [ ] Manual testing done
-- [ ] No regressions found
-
-## Screenshots
-
-(if applicable)
-`,
-    },
-  });
-  console.warn('        PR template set on axiom repo');
-
-  // ────────────────────────────────────────────────────────────
-  // 12. Space permissions
-  // ────────────────────────────────────────────────────────────
-  console.warn('  [12/13] Space permissions');
+  console.warn('  [10/10] Space permissions');
 
   const existingPerm = await prisma.spacePermission.findFirst({
     where: { spaceId: wikiSpace.id },
@@ -711,42 +573,6 @@ What does this PR do? Why is it needed?
   } else {
     console.warn('        Permissions already exist');
   }
-
-  // ────────────────────────────────────────────────────────────
-  // 13. Development links (branches + commits)
-  // ────────────────────────────────────────────────────────────
-  console.warn('  [13/13] Development links');
-
-  let devLinksCreated = 0;
-
-  // Link some issues to branches (branches are display-only labels in the dev panel)
-  const branchSeeds = [
-    { issueIdx: 0, branchName: 'fix/AXM-1-file-browser-empty' },
-    { issueIdx: 1, branchName: 'fix/AXM-2-file-view-blank' },
-    { issueIdx: 3, branchName: 'feature/AXM-4-commit-detail' },
-    { issueIdx: 19, branchName: 'feature/AXM-20-dark-mode' },
-  ];
-
-  for (const seed of branchSeeds) {
-    const issue = createdIssues[seed.issueIdx];
-    if (!issue) continue;
-
-    const existingBranch = await prisma.issueBranch.findFirst({
-      where: { issueId: issue.id, repoId: selfRepo.id, branchName: seed.branchName },
-    });
-    if (!existingBranch) {
-      await prisma.issueBranch.create({
-        data: {
-          issueId: issue.id,
-          repoId: selfRepo.id,
-          branchName: seed.branchName,
-          createdById: users.tim.id,
-        },
-      });
-      devLinksCreated++;
-    }
-  }
-  console.warn(`        ${devLinksCreated} branch links created`);
 
   console.warn('\nDemo seed complete!');
   console.warn('Login at http://localhost:7000/login');

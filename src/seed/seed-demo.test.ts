@@ -93,7 +93,7 @@ describe('seed-demo', () => {
 
   it('creates issues across projects', async () => {
     const issueCount = await prisma.issue.count();
-    expect(issueCount).toBeGreaterThanOrEqual(15);
+    expect(issueCount).toBeGreaterThanOrEqual(10);
   });
 
   // ── Comments ───────────────────────────────────────────────
@@ -123,38 +123,12 @@ describe('seed-demo', () => {
     }
   });
 
-  // ── Repositories ───────────────────────────────────────────
-
-  it('creates 1 repository', async () => {
-    const repos = await prisma.repository.count();
-    expect(repos).toBeGreaterThanOrEqual(1);
-  });
-
-  // ── Pull Requests ──────────────────────────────────────────
-
-  it('creates pull requests if repo has branches', async () => {
-    // The seed creates PRs only when branches exist in the repo
-    const prs = await prisma.pullRequest.count();
-    expect(prs).toBeGreaterThanOrEqual(0);
-  });
-
-  it('creates PR reviews', async () => {
-    const reviews = await prisma.pRReview.count();
-    expect(reviews).toBeGreaterThanOrEqual(0);
-  });
-
-  it('creates PR comments', async () => {
-    const comments = await prisma.pRComment.count();
-    expect(comments).toBeGreaterThanOrEqual(0);
-  });
-
   // ── Idempotency ────────────────────────────────────────────
 
   it('is idempotent on re-run', async () => {
     const beforeUsers = await prisma.user.count();
     const beforeIssues = await prisma.issue.count();
     const beforeComments = await prisma.comment.count();
-    const beforePRs = await prisma.pullRequest.count();
 
     execSync('npx tsx scripts/seed-demo.ts', {
       cwd: process.cwd(),
@@ -165,11 +139,36 @@ describe('seed-demo', () => {
     const afterUsers = await prisma.user.count();
     const afterIssues = await prisma.issue.count();
     const afterComments = await prisma.comment.count();
-    const afterPRs = await prisma.pullRequest.count();
 
     expect(afterUsers).toBe(beforeUsers);
     expect(afterIssues).toBe(beforeIssues);
     expect(afterComments).toBe(beforeComments);
-    expect(afterPRs).toBe(beforePRs);
+  }, 120_000);
+
+  // ── Removed features ───────────────────────────────────────
+
+  it('seed creates no data for removed features', async () => {
+    const before = {
+      issues: await prisma.issue.count(),
+      pages: await prisma.page.count(),
+      sprints: await prisma.sprint.count(),
+    };
+
+    execSync('npx tsx scripts/seed-demo.ts', {
+      cwd: process.cwd(),
+      stdio: 'pipe',
+      timeout: 60_000,
+    });
+
+    expect(await prisma.issue.count()).toBe(before.issues);
+    expect(await prisma.page.count()).toBe(before.pages);
+    expect(await prisma.sprint.count()).toBe(before.sprints);
+
+    const tables = await prisma.$queryRaw<{ tablename: string }[]>`
+      SELECT tablename FROM pg_tables
+      WHERE schemaname = 'public'
+        AND tablename IN ('Repository', 'PullRequest', 'SshKey', 'Pipeline', 'Runner', 'Deployment')
+    `;
+    expect(tables).toEqual([]);
   }, 120_000);
 });
