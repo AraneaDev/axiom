@@ -76,4 +76,35 @@ describe('Yjs persistence', () => {
     expect(page.body).not.toBe(BODY);
     expect(await prisma.pageVersion.count({ where: { pageId } })).toBe(1);
   });
+
+  it('persists a revert to the loaded content after an earlier save', async () => {
+    const other = await prisma.page.create({
+      data: {
+        spaceId: (await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).spaceId,
+        title: 'Revert Page',
+        slug: 'revert-page',
+        body: BODY,
+      },
+    });
+    const id = other.id;
+    const doc = new Y.Doc();
+    await loadPageIntoDoc(id, doc);
+    const loaded = doc.getXmlFragment('default').toJSON();
+    setLastAuthor(id, userId);
+
+    const extra = new Y.XmlElement('paragraph');
+    doc.getXmlFragment('default').insert(0, [extra]);
+    await forceSave(id, doc);
+    const afterEdit = await prisma.page.findUniqueOrThrow({ where: { id } });
+    expect(afterEdit.body).not.toBe(loaded);
+    expect(await prisma.pageVersion.count({ where: { pageId: id } })).toBe(1);
+
+    doc.getXmlFragment('default').delete(0, 1); // back to exactly the loaded state
+    await forceSave(id, doc);
+    const afterRevert = await prisma.page.findUniqueOrThrow({ where: { id } });
+    expect(afterRevert.body).toBe(loaded);
+    expect(await prisma.pageVersion.count({ where: { pageId: id } })).toBe(2);
+    clearAuthor(id);
+    doc.destroy();
+  });
 });

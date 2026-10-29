@@ -97,6 +97,8 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<void> {
         },
       },
     });
+    // The skip above now means "unchanged since the last write", so a revert is still saved
+    loadedSnapshots.set(pageId, body);
   } catch (err) {
     logger.error('Failed to save page', { pageId }, err as Error);
   }
