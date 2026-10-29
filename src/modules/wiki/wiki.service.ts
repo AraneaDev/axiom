@@ -2,6 +2,7 @@ import * as Diff from 'diff';
 
 import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
+import { normalizeMarkdown } from '../../lib/editor-core';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { flushRoom } from '../../realtime/collaboration';
@@ -124,6 +125,7 @@ export async function createPage(
   },
 ) {
   await checkUnique('page', { spaceId, slug: data.slug }, 'Page slug already taken in this space');
+  const body = normalizeMarkdown(data.body ?? '');
 
   // Get next position
   const lastPage = await prisma.page.findFirst({
@@ -138,7 +140,7 @@ export async function createPage(
         spaceId,
         title: data.title,
         slug: data.slug,
-        body: data.body ?? '',
+        body,
         parentId: data.parentId,
         isDraft: data.isDraft ?? false,
         position: (lastPage?.position ?? 0) + 1,
@@ -147,7 +149,7 @@ export async function createPage(
     const version = await createPageVersion(tx, {
       pageId: created.id,
       title: data.title,
-      body: data.body ?? '',
+      body,
       authorId,
       kind: 'EDIT',
     });
@@ -157,8 +159,8 @@ export async function createPage(
   await cacheInvalidate(`wiki:tree:${spaceId}`);
   await logActivity('wiki_page', page.id, 'created', authorId, { title: data.title });
 
-  if (data.body) {
-    const issueIds = await extractIssueIdsFromContent(data.body);
+  if (body) {
+    const issueIds = await extractIssueIdsFromContent(body);
     await syncMentionLinks(page.id, issueIds, authorId);
   }
 
@@ -269,7 +271,14 @@ export async function updatePage(
 
   await logActivity('wiki_page', page.id, 'updated', authorId, { title: updated.title });
 
-  return { ...updated, pendingMerge: written.pendingMerge };
+  return {
+    ...updated,
+    pendingMerge: written.pendingMerge,
+    // What was stored for the open session to merge, after normalisation
+    ...(written.pendingMerge && written.version
+      ? { queuedBody: written.version.body, externalVersionId: written.version.id }
+      : {}),
+  };
 }
 
 /**

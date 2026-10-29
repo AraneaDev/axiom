@@ -39,6 +39,11 @@ type ExternalChangeHook = (pageId: string, pending: PendingPageChange) => void;
 
 const externalChangeHooks: ExternalChangeHook[] = [];
 
+/** Test-only: forget every registered hook. */
+export function resetExternalChangeHooksForTest(): void {
+  externalChangeHooks.length = 0;
+}
+
 /**
  * Register a listener that is told when an external change is recorded for a page with a live
  * collaboration room. The collaboration layer registers here to notify the room.
@@ -71,11 +76,21 @@ export async function writePageBody(
     const current = await tx.page.findUniqueOrThrow({ where: { id: input.pageId } });
 
     const newTitle = input.title ?? current.title;
-    const bodyChanged = normalizedBody !== undefined && normalizedBody !== current.body;
+    // While a change is queued for a live room, external writes compare against the queued body,
+    // not Page.body: otherwise a revert to the base would look like "no change"
+    const deferrable = input.source !== 'editor-session' && roomLive(input.pageId);
+    const existingPending = deferrable
+      ? await tx.pendingPageChange.findUnique({
+          where: { pageId: input.pageId },
+          include: { externalVersion: { select: { body: true } } },
+        })
+      : null;
+    const head = existingPending ? existingPending.externalVersion.body : current.body;
+    const bodyChanged = normalizedBody !== undefined && normalizedBody !== head;
     const newBody = bodyChanged ? normalizedBody : current.body;
     // A restore is a history event even when the content happens to match the head
     const versionedChange = newTitle !== current.title || bodyChanged || input.kind === 'RESTORE';
-    const defer = bodyChanged && input.source !== 'editor-session' && roomLive(input.pageId);
+    const defer = bodyChanged && deferrable;
 
     const page = await tx.page.update({
       where: { id: input.pageId },

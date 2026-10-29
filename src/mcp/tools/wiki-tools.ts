@@ -158,7 +158,12 @@ export function registerWikiTools(ctx: McpToolContext) {
           { title, body },
           { kind: 'EXTERNAL', source: 'mcp' },
         );
-        return { content: [{ type: 'text' as const, text: JSON.stringify(updated, null, 2) }] };
+        const note = updated.pendingMerge
+          ? 'Queued: the page is open in a live editing session, so Page.body is unchanged until the session merges this change. The normalised text stored is in queuedBody.\n'
+          : '';
+        return {
+          content: [{ type: 'text' as const, text: note + JSON.stringify(updated, null, 2) }],
+        };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Update failed';
         return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };

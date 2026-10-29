@@ -181,7 +181,14 @@ export default function PageEdit() {
       } else {
         // In a collaborative session the server holds the body: save the live document first,
         // then send only the metadata so a stale local copy can never overwrite it.
-        if (useCollab) await wikiApi.flushCollab(currentSpace.id, pageSlug!);
+        if (useCollab) {
+          try {
+            await wikiApi.flushCollab(currentSpace.id, pageSlug!);
+          } catch (err) {
+            // The room may have just closed (and saved itself): the metadata save still goes ahead
+            console.warn('Collab flush failed', err);
+          }
+        }
         return wikiApi.updatePage(currentSpace.id, pageSlug!, {
           title,
           ...(useCollab ? {} : { body }),
