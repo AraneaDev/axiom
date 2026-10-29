@@ -23,13 +23,23 @@ const SEARCH_TABS = [
   { key: 'wiki', label: 'Wiki', icon: <FileText className="h-4 w-4" /> },
 ];
 
+const SEARCH_TYPES: readonly SearchType[] = ['all', 'issues', 'wiki'];
+
+/**
+ * Unknown `?type=` values (e.g. `code`, `repos` from old links or saved filters) fall back to all.
+ * @param value raw `type` search param
+ */
+function toSearchType(value: string | null): SearchType {
+  return SEARCH_TYPES.includes(value as SearchType) ? (value as SearchType) : 'all';
+}
+
 /**
  *
  */
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
-  const activeType = (searchParams.get('type') || 'all') as SearchType;
+  const activeType = toSearchType(searchParams.get('type'));
   const [inputValue, setInputValue] = useState(query);
 
   // Wiki filter state from URL params
