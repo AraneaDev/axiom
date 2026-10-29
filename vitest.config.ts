@@ -9,16 +9,7 @@ export default defineConfig({
     // Production runs the backend as CommonJS, where `yjs` is its CJS build, and the
     // editor core bundle requires that same build. Vitest would otherwise load the ESM
     // build for test files: a second copy of yjs whose types the bundle rejects.
-    //
-    // The same goes for y-protocols: its ESM entry imports the ESM yjs, while its `require`
-    // entry (what the CommonJS backend resolves) uses the CJS yjs. Point it, and lib0, at
-    // their CJS builds so the collab server's sync code shares the one yjs.
-    alias: [
-      { find: /^yjs$/, replacement: require.resolve('yjs') },
-      ...['y-protocols/sync', 'y-protocols/awareness', 'lib0/encoding', 'lib0/decoding'].map(
-        (id) => ({ find: new RegExp(`^${id}$`), replacement: require.resolve(id) }),
-      ),
-    ],
+    alias: [{ find: /^yjs$/, replacement: require.resolve('yjs') }],
   },
   test: {
     globals: true,

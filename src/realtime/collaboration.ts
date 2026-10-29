@@ -8,6 +8,7 @@
  */
 
 import { IncomingMessage } from 'http';
+import { createRequire } from 'module';
 import { Duplex } from 'stream';
 
 import jwt from 'jsonwebtoken';
@@ -29,27 +30,33 @@ import {
   clearAuthor,
 } from './yjs-persistence';
 
-// y-protocols are ESM-only; use dynamic import cached as promises
-let syncProtocolPromise: Promise<typeof import('y-protocols/sync')> | null = null;
-let awarenessProtocolPromise: Promise<typeof import('y-protocols/awareness')> | null = null;
-let encodingPromise: Promise<typeof import('lib0/encoding')> | null = null;
-let decodingPromise: Promise<typeof import('lib0/decoding')> | null = null;
+// y-protocols and lib0 are loaded with a plain CommonJS require, never import(): their
+// `require` export condition points at the CJS builds that share this process's CJS `yjs`,
+// whereas import() (what tsx does for a dynamic import, even from CJS) takes the ESM
+// condition and loads a second copy, yjs.mjs, which breaks Yjs' constructor checks.
+const requireCjs = createRequire(__filename);
 
-function getSyncProtocol() {
-  if (!syncProtocolPromise) syncProtocolPromise = import('y-protocols/sync');
-  return syncProtocolPromise;
+function getSyncProtocol(): Promise<typeof import('y-protocols/sync')> {
+  return Promise.resolve(requireCjs('y-protocols/sync'));
 }
-function getAwarenessProtocol() {
-  if (!awarenessProtocolPromise) awarenessProtocolPromise = import('y-protocols/awareness');
-  return awarenessProtocolPromise;
+function getAwarenessProtocol(): Promise<typeof import('y-protocols/awareness')> {
+  return Promise.resolve(requireCjs('y-protocols/awareness'));
 }
-function getEncoding() {
-  if (!encodingPromise) encodingPromise = import('lib0/encoding');
-  return encodingPromise;
+function getEncoding(): Promise<typeof import('lib0/encoding')> {
+  return Promise.resolve(requireCjs('lib0/encoding'));
 }
-function getDecoding() {
-  if (!decodingPromise) decodingPromise = import('lib0/decoding');
-  return decodingPromise;
+function getDecoding(): Promise<typeof import('lib0/decoding')> {
+  return Promise.resolve(requireCjs('lib0/decoding'));
+}
+
+/** Test-only: the loaders the server uses, for the single-yjs probe under tsx. */
+export function __protocolsForProbe() {
+  return {
+    sync: getSyncProtocol,
+    awareness: getAwarenessProtocol,
+    encoding: getEncoding,
+    decoding: getDecoding,
+  };
 }
 
 const MESSAGE_SYNC = 0;
@@ -72,6 +79,8 @@ export interface CollabRoom {
 const rooms = new Map<string, CollabRoom>();
 /** In-flight or settled room creation per page, so concurrent first connections share one room */
 const roomPromises = new Map<string, Promise<CollabRoom>>();
+/** Rooms that are saving after their last client left; a new room for the page waits for it */
+const closing = new Map<string, Promise<void>>();
 let collabWss: WebSocketServer | null = null;
 
 /**
@@ -122,13 +131,21 @@ export function getOrCreateRoom(pageId: string): Promise<CollabRoom> {
  */
 async function createRoom(pageId: string): Promise<CollabRoom> {
   await loadEditorCore();
+  // A previous room for this page may still be saving: load only after it has.
+  await closing.get(pageId);
   const awarenessProtocol = await getAwarenessProtocol();
 
   const doc = new Y.Doc();
   const awareness = new awarenessProtocol.Awareness(doc);
 
   // Load existing page content into the doc
-  await loadPageIntoDoc(pageId, doc);
+  try {
+    await loadPageIntoDoc(pageId, doc);
+  } catch (err) {
+    awareness.destroy();
+    doc.destroy();
+    throw err;
+  }
 
   // Listen for doc updates to schedule persistence
   doc.on('update', () => {
@@ -144,6 +161,16 @@ async function createRoom(pageId: string): Promise<CollabRoom> {
 
   rooms.set(pageId, room);
   return room;
+}
+
+/**
+ * Test-only: run the same teardown as the last client leaving.
+ * @param room
+ */
+export async function closeRoomForTest(room: CollabRoom): Promise<void> {
+  const client = { ws: {} as WebSocket, userId: '', displayName: '', clientId: 0 };
+  room.clients.set(client.ws, client);
+  await handleDisconnect(room, client);
 }
 
 /**
@@ -298,24 +325,43 @@ async function handleMessage(
 async function handleDisconnect(room: CollabRoom, client: CollabClient): Promise<void> {
   room.clients.delete(client.ws);
 
-  // Remove awareness state for this client
-  if (room.awareness) {
-    const awarenessProtocol = await getAwarenessProtocol();
-    awarenessProtocol.removeAwarenessStates(room.awareness, [client.clientId], null);
+  // An emptied room leaves the maps at once, before any await, so a client connecting
+  // from here on gets a fresh room (loaded after the save below) and never joins a room
+  // that is about to be destroyed.
+  const emptied = room.clients.size === 0;
+  if (emptied) {
+    if (rooms.get(room.pageId) === room) rooms.delete(room.pageId);
+    if (roomPromises.has(room.pageId)) roomPromises.delete(room.pageId);
   }
 
-  // If room is empty, persist and clean up
-  if (room.clients.size === 0) {
-    await forceSave(room.pageId, room.doc);
+  const removeAwareness = async () => {
+    if (!room.awareness) return;
+    const awarenessProtocol = await getAwarenessProtocol();
+    awarenessProtocol.removeAwarenessStates(room.awareness, [client.clientId], null);
+  };
 
-    // Clean up awareness
-    if (room.awareness) {
-      room.awareness.destroy();
+  if (!emptied) {
+    await removeAwareness();
+    return;
+  }
+
+  // Persist and clean up. New rooms for this page wait on `closing`, which is set before
+  // the first await.
+  const closed = (async () => {
+    try {
+      await removeAwareness();
+      await forceSave(room.pageId, room.doc);
+    } finally {
+      room.awareness?.destroy();
+      room.doc.destroy();
+      clearAuthor(room.pageId);
     }
-    room.doc.destroy();
-    clearAuthor(room.pageId);
-    rooms.delete(room.pageId);
-    roomPromises.delete(room.pageId);
+  })();
+  closing.set(room.pageId, closed);
+  try {
+    await closed;
+  } finally {
+    if (closing.get(room.pageId) === closed) closing.delete(room.pageId);
   }
 }
 

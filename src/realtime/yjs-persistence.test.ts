@@ -1,3 +1,5 @@
+import { createRequire } from 'module';
+
 import bcrypt from 'bcryptjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as Y from 'yjs';
@@ -5,7 +7,7 @@ import * as Y from 'yjs';
 import { prisma } from '../config/database';
 import { markdownToYFragment, yFragmentToMarkdown } from '../lib/editor-core';
 
-import { getOrCreateRoom, releaseRoomForTest } from './collaboration';
+import { closeRoomForTest, getOrCreateRoom, releaseRoomForTest } from './collaboration';
 import { clearAuthor, forceSave, loadPageIntoDoc, setLastAuthor } from './yjs-persistence';
 
 describe('Yjs persistence', () => {
@@ -124,17 +126,46 @@ describe('Yjs persistence', () => {
   });
 
   it('concurrent first connections share one room', async () => {
-    const [a, b] = await Promise.all([getOrCreateRoom(pageId), getOrCreateRoom(pageId)]);
-    expect(a).toBe(b);
-    expect(await getOrCreateRoom(pageId)).toBe(a);
-    releaseRoomForTest(pageId);
+    try {
+      const [a, b] = await Promise.all([getOrCreateRoom(pageId), getOrCreateRoom(pageId)]);
+      expect(a).toBe(b);
+      expect(await getOrCreateRoom(pageId)).toBe(a);
+    } finally {
+      releaseRoomForTest(pageId);
+    }
+  });
+
+  it('a connection during teardown gets a fresh room loaded after the save', async () => {
+    const space = (await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).spaceId;
+    const other = await prisma.page.create({
+      data: { spaceId: space, title: 'Teardown Page', slug: 'teardown-page', body: 'before' },
+    });
+    try {
+      const first = await getOrCreateRoom(other.id);
+      const fragment = first.doc.getXmlFragment('default');
+      const paragraph = new Y.XmlElement('paragraph');
+      paragraph.insert(0, [new Y.XmlText('after')]);
+      fragment.insert(fragment.length, [paragraph]);
+      setLastAuthor(other.id, userId);
+
+      const closing = closeRoomForTest(first);
+      const second = await getOrCreateRoom(other.id); // connects while the save is running
+      await closing;
+
+      expect(second).not.toBe(first);
+      expect(yFragmentToMarkdown(second.doc.getXmlFragment('default'))).toBe('before\n\nafter');
+      expect(second.doc.isDestroyed).toBe(false);
+    } finally {
+      releaseRoomForTest(other.id);
+    }
   });
 
   it('uses one Yjs instance across converter, collab server and y-protocols', async () => {
     // The same specifiers collaboration.ts uses, resolved the same way.
-    const syncProtocol = await import('y-protocols/sync');
-    const encoding = await import('lib0/encoding');
-    const decoding = await import('lib0/decoding');
+    const load = createRequire(__filename);
+    const syncProtocol = load('y-protocols/sync') as typeof import('y-protocols/sync');
+    const encoding = load('lib0/encoding') as typeof import('lib0/encoding');
+    const decoding = load('lib0/decoding') as typeof import('lib0/decoding');
 
     const server = new Y.Doc();
     markdownToYFragment('# Title\n\n- one\n- two', server.getXmlFragment('default'));
