@@ -1,0 +1,1 @@
+Press <kbd>Ctrl</kbd> + <kbd>C</kbd>, H<sub>2</sub>O, x<sup>2</sup> and <span style="color: red">red</span>.

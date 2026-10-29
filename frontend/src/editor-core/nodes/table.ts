@@ -51,18 +51,50 @@ function serializeAsHTML(state: any, node: PMNode, parent: any) {
 }
 
 /**
- * Escape the cell separator inside code spans; plain text is already escaped by the serializer.
+ * Escape the cell separators in one serialized cell.
+ *
+ * GFM splits a row on every `|` not preceded by a backslash, and removes the
+ * backslash of each `\|` it skips, inside code spans too. Plain text arrives
+ * escaped already (`\|`, `\\`), so outside code only bare pipes get a backslash.
+ * Code span text is written raw, so there every `|` gets one: the code `a\|b`
+ * is written `a\\|b` and reads back as `a\|b`.
  * @param cell - The serialized cell content.
  */
 function escapeCellPipes(cell: string): string {
-  return cell.replace(/(^|[^\\])\|/g, '$1\\|').replace(/(^|[^\\])\|/g, '$1\\|');
+  let out = '';
+  let i = 0;
+  while (i < cell.length) {
+    const ch = cell[i];
+    if (ch === '\\' && i + 1 < cell.length) {
+      out += ch + cell[i + 1];
+      i += 2;
+      continue;
+    }
+    if (ch === '`') {
+      const run = cell.slice(i).match(/^`+/)![0];
+      const close = cell.indexOf(run, i + run.length);
+      // A matching run of the same length closes the code span
+      if (close !== -1 && cell[close + run.length] !== '`') {
+        const code = cell.slice(i + run.length, close);
+        out += run + code.replace(/\|/g, '\\|') + run;
+        i = close + run.length;
+        continue;
+      }
+      out += run;
+      i += run.length;
+      continue;
+    }
+    out += ch === '|' ? '\\|' : ch;
+    i++;
+  }
+  return out;
 }
 
 /**
- * Table with tiptap-markdown's GFM serializer, plus one fix: a `|` inside a code
- * span in a cell is written as `\|`. tiptap-markdown leaves it bare, which splits
- * the cell on the next parse (GFM strips the backslash again, so `` `a\|b` `` reads
- * back as the code `a|b`).
+ * Table with tiptap-markdown's GFM serializer, plus two fixes: pipes inside code
+ * spans in a cell are escaped (see `escapeCellPipes`; tiptap-markdown left them bare,
+ * which split the cell on the next parse), and a cell whose only content is an inline
+ * atom (mention, issue reference, smart link, image) is no longer written empty.
  */
 export const TableNode = Table.extend({
   addStorage() {
@@ -80,7 +112,7 @@ export const TableNode = Table.extend({
             row.forEach((col, _q, j) => {
               if (j) state.write(' | ');
               const cellContent = col.firstChild;
-              if (cellContent && cellContent.textContent.trim()) {
+              if (cellContent && cellContent.childCount > 0) {
                 const start = state.out.length;
                 state.renderInline(cellContent);
                 state.out = state.out.slice(0, start) + escapeCellPipes(state.out.slice(start));

@@ -26,9 +26,9 @@ function read(name: string): string {
  * stable after one normalisation.
  * - callout-important: `[!IMPORTANT]` parses to a warning callout, written back as `[!WARNING]`.
  * - seed-*: the seeded wiki pages (docs/*.md from seed-demo, and the seed-voorbeeld pages)
- *   are hand-written Markdown; tiptap-markdown
- *   rewrites formatting choices such as table delimiter rows, ordered list padding and
- *   `_emphasis_`, and drops headings below level 3 and bold around code.
+ *   are hand-written Markdown; tiptap-markdown rewrites formatting choices such as table
+ *   delimiter rows, ordered list padding, `_emphasis_`, `*` bullets and `>` as `&gt;`.
+ *   The document itself does not change (see 'normalisation keeps the document').
  * @param name - Fixture file name.
  */
 function normalisesOnce(name: string): boolean {
@@ -96,6 +96,17 @@ describe('editor core markdown round trip', () => {
     const md = read(name);
     expect(normalizeMarkdown(md)).not.toContain('<paragraph');
     expect(toYjsAndBack(md)).not.toContain('<paragraph');
+  });
+
+  it.each(fixtures)('normalisation keeps the document for %s', (name) => {
+    const md = read(name);
+    const fragmentJSON = (source: string) => {
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment('default');
+      markdownToYFragment(source, fragment);
+      return fragment.toJSON();
+    };
+    expect(fragmentJSON(normalizeMarkdown(md))).toBe(fragmentJSON(md));
   });
 
   it('raw HTML and unknown blocks pass through', () => {

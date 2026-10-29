@@ -8,7 +8,8 @@
  *
  * Usage: node scripts/build-editor-core.mjs [--if-stale]
  *   --if-stale  skip the build when the bundle is newer than every editor-core source
- *               file and the frontend lockfile (used by the test setup)
+ *               file, this script, frontend/tsconfig.json and the frontend lockfile
+ *               (used by the test setup)
  */
 
 import { existsSync, readdirSync, statSync } from 'node:fs';
@@ -21,8 +22,24 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outfile = path.join(root, 'dist-editor-core', 'editor-core.cjs');
 const sourceDir = path.join(root, 'frontend', 'src', 'editor-core');
 
+const frontendModules = path.join(root, 'frontend', 'node_modules');
+
+if (!existsSync(path.join(frontendModules, '@tiptap', 'core', 'package.json'))) {
+  console.error(
+    'editor core: frontend dependencies are missing (frontend/node_modules). ' +
+      'Run `cd frontend && npm ci` first.',
+  );
+  process.exit(1);
+}
+
 function newestInput() {
-  let newest = statSync(path.join(root, 'frontend', 'package-lock.json')).mtimeMs;
+  let newest = Math.max(
+    ...[
+      path.join(root, 'frontend', 'package-lock.json'),
+      path.join(root, 'frontend', 'tsconfig.json'),
+      fileURLToPath(import.meta.url),
+    ].map((file) => statSync(file).mtimeMs),
+  );
   for (const entry of readdirSync(sourceDir, { recursive: true, withFileTypes: true })) {
     if (entry.isFile()) {
       newest = Math.max(newest, statSync(path.join(entry.parentPath, entry.name)).mtimeMs);

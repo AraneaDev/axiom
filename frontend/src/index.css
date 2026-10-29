@@ -510,6 +510,16 @@ div[contenteditable].tiptap-editor {
   margin: 0.5rem 0;
 }
 
+/* Raw inline HTML tag or footnote reference kept verbatim (shown as source in the editor) */
+.raw-html-inline {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8em;
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-secondary);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
 /* Syntax highlighting — lowlight/highlight.js token classes */
 .hljs-comment,
 .hljs-quote {
