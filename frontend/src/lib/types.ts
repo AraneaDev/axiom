@@ -222,7 +222,26 @@ export interface PageVersion {
   body: string;
   author: { id: string; username: string; displayName: string };
   changeDescription?: string | null;
+  kind: PageVersionKind;
   createdAt: string;
+}
+
+export type PageVersionKind = 'EDIT' | 'EXTERNAL' | 'SESSION_DRAFT' | 'MERGE' | 'RESTORE';
+
+/** The three texts for merging a pending external change (GET .../pending-merge) */
+export interface PendingMerge {
+  base: string;
+  /** The side the person merging works on: the live session, or an ended session's draft */
+  ours: string;
+  /** The other side: the external change, the current page, or an ended session's draft */
+  theirs: string;
+  oursLabel: string;
+  theirsLabel: string;
+  externalVersionId: string;
+  authorName: string;
+  at: string;
+  draftAuthorName?: string;
+  draftAt?: string;
 }
 
 export interface DiffChange {

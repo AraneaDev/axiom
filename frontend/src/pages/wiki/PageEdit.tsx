@@ -15,10 +15,13 @@ import { Select } from '@/components/ui/Dropdown';
 import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
+import { ConflictView } from '@/components/wiki/ConflictView';
+import { ExternalChangeBanner } from '@/components/wiki/ExternalChangeBanner';
 import { TemplateVariablePanel } from '@/components/wiki/TemplateVariablePanel';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import { usePendingMerge } from '@/hooks/usePendingMerge';
 import { useWikiInvalidation } from '@/hooks/useWikiInvalidation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -79,6 +82,24 @@ export default function PageEdit() {
   });
   const useCollab =
     collabEnabled && collab.isConnected && collab.isSynced && collab.ydoc && collab.provider;
+
+  // A pending external change: the merge endpoints answer 403 to users who may only view
+  const pendingChange = useCollab ? collab.pendingChange : null;
+  const { forbidden: cannotMerge } = usePendingMerge(
+    currentSpace?.id,
+    pageSlug,
+    pendingChange?.externalVersionId,
+  );
+  const canEdit = !cannotMerge;
+  const [showConflicts, setShowConflicts] = useState(false);
+  const closeConflicts = () => setShowConflicts(false);
+  // Once the change is merged (here or by someone else) the conflict view has nothing left to show
+  const [shownPending, setShownPending] = useState(pendingChange);
+  if (shownPending !== pendingChange) {
+    setShownPending(pendingChange);
+    if (!pendingChange) setShowConflicts(false);
+  }
+  const conflictsOpen = showConflicts && !!pendingChange && canEdit;
 
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -275,6 +296,27 @@ export default function PageEdit() {
         />
       )}
 
+      {useCollab && currentSpace && pageSlug && (
+        <ExternalChangeBanner
+          spaceId={currentSpace.id}
+          pageSlug={pageSlug}
+          pendingChange={pendingChange}
+          resolvedBy={collab.resolvedBy}
+          canEdit={canEdit}
+          onOpenConflicts={() => setShowConflicts(true)}
+          onDismissResolved={collab.dismissResolved}
+        />
+      )}
+
+      {conflictsOpen && currentSpace && pageSlug && pendingChange && (
+        <ConflictView
+          spaceId={currentSpace.id}
+          pageSlug={pageSlug}
+          externalVersionId={pendingChange.externalVersionId}
+          onClose={closeConflicts}
+        />
+      )}
+
       <div className="space-y-4">
         <Input
           id="title"
@@ -305,7 +347,8 @@ export default function PageEdit() {
           />
         )}
 
-        <div className="flex gap-0">
+        {/* Hidden, not unmounted, while resolving conflicts: the merge replaces this content */}
+        <div className="flex gap-0" hidden={conflictsOpen}>
           <div className={cn('flex-1 gap-4', showPreview ? 'grid grid-cols-2' : '')}>
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-text">Content</label>
@@ -316,6 +359,8 @@ export default function PageEdit() {
                   fragmentName={collab.fragmentName}
                   onChange={setBody}
                   placeholder="Write your content..."
+                  locked={collab.locked}
+                  canEdit={canEdit}
                 />
               ) : (
                 <MarkdownEditor

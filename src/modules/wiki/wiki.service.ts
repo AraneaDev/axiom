@@ -14,7 +14,7 @@ import { logActivity } from '../activity/activity.service';
 
 import { applyMerge, getPendingMerge } from './page-merge';
 import { createPageVersion } from './page-versions';
-import { writePageBody } from './page-writes';
+import { restoreDescription, writePageBody } from './page-writes';
 import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
 import { canViewPage, canEditPage } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
@@ -545,7 +545,7 @@ export async function restoreVersion(
     authorId: userId,
     title: target.title,
     body: target.body,
-    changeDescription: `Restored to version ${targetVersion}`,
+    changeDescription: restoreDescription(targetVersion),
     kind: 'RESTORE',
     source: 'restore',
   });

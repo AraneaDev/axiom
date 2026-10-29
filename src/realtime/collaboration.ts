@@ -7,7 +7,8 @@
  * Message types: 0 sync and 1 awareness (y-protocols); 20 external-change state and 21 lock
  * state, both a varUint type followed by a varString of JSON. y-websocket reserves 0-3 (3 is
  * its query-awareness message), hence the gap.
- * - 20: `{ state: 'pending', externalVersionId, authorName, at, kind, draftAuthorName?, draftAt? }`
+ * - 20: `{ state: 'pending', externalVersionId, authorName, at, kind, restoredVersion?,
+ *   draftAuthorName?, draftAt? }`
  *   or `{ state: 'resolved', byName }`
  * - 21: `{ locked, byName }`
  *
@@ -27,7 +28,7 @@ import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { loadEditorCore, markdownToYFragment, yFragmentToMarkdown } from '../lib/editor-core';
 import type { AuthPayload } from '../middleware/auth';
-import { registerExternalChangeHook } from '../modules/wiki/page-writes';
+import { registerExternalChangeHook, restoredVersionOf } from '../modules/wiki/page-writes';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
 import { ERR } from '../utils/error-messages';
@@ -117,6 +118,8 @@ export type ExternalChangeMessage =
       authorName: string;
       at: string;
       kind: string;
+      /** For a restore: the version number that was restored */
+      restoredVersion?: number;
       draftAuthorName?: string;
       draftAt?: string;
     }
@@ -331,7 +334,7 @@ async function pendingPayload(
   const [version, authorName, draft] = await Promise.all([
     prisma.pageVersion.findUnique({
       where: { id: row.externalVersionId },
-      select: { kind: true, createdAt: true },
+      select: { kind: true, createdAt: true, changeDescription: true },
     }),
     displayNameOf(row.authorId),
     row.draftVersionId && draftIsMergeSide(room.pageId, row, true)
@@ -342,6 +345,7 @@ async function pendingPayload(
       : null,
   ]);
   if (!version) return null;
+  const restored = version.kind === 'RESTORE' ? restoredVersionOf(version.changeDescription) : null;
 
   return {
     state: 'pending',
@@ -349,6 +353,7 @@ async function pendingPayload(
     authorName,
     at: version.createdAt.toISOString(),
     kind: version.kind,
+    ...(restored !== null ? { restoredVersion: restored } : {}),
     ...(draft
       ? {
           draftAuthorName: draft.author.displayName ?? draft.author.username,

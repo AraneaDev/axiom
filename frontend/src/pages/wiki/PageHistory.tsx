@@ -12,9 +12,22 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import type { PageVersionKind } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
 
 import { useWikiContext } from './WikiLayout';
+
+/** History label and badge colour per version kind */
+const KIND_BADGES: Record<
+  PageVersionKind,
+  { label: string; variant: 'default' | 'primary' | 'warning' | 'success' | 'outline' }
+> = {
+  EDIT: { label: 'Edit', variant: 'default' },
+  EXTERNAL: { label: 'Agent/API', variant: 'primary' },
+  SESSION_DRAFT: { label: 'Session draft', variant: 'warning' },
+  MERGE: { label: 'Merge', variant: 'success' },
+  RESTORE: { label: 'Restore', variant: 'outline' },
+};
 
 /**
  * Page version history view with compare and restore functionality.
@@ -37,6 +50,15 @@ export default function PageHistory() {
     queryFn: () => wikiApi.getPageHistory(currentSpace!.id, pageSlug!),
     enabled: !!currentSpace?.id && !!pageSlug,
   });
+
+  // The page's head is its body, not the newest version (that can be an unmerged session draft)
+  const { data: page } = useQuery({
+    queryKey: ['page', currentSpace?.id, pageSlug],
+    queryFn: () => wikiApi.getPage(currentSpace!.id, pageSlug!),
+    enabled: !!currentSpace?.id && !!pageSlug,
+  });
+  const isHead = (v: { version: number; title: string; body: string }) =>
+    page ? v.body === page.body && v.title === page.title : v.version === versions?.[0]?.version;
 
   const restoreMutation = useMutationWithToast(
     (version: number) => wikiApi.restoreVersion(currentSpace!.id, pageSlug!, version),
@@ -110,6 +132,11 @@ export default function PageHistory() {
               aria-label={`Select version ${v.version} for comparison`}
             />
             <Badge variant="primary">v{v.version}</Badge>
+            {KIND_BADGES[v.kind] && (
+              <Badge size="sm" variant={KIND_BADGES[v.kind].variant} data-kind={v.kind}>
+                {KIND_BADGES[v.kind].label}
+              </Badge>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">{v.title}</p>
               <div className="flex items-center gap-2">
@@ -125,7 +152,7 @@ export default function PageHistory() {
               <Avatar name={v.author.displayName} size="sm" />
               <span className="text-sm text-text-secondary">{v.author.displayName}</span>
             </div>
-            {v.version !== versions[0]?.version && (
+            {!isHead(v) && (
               <Button
                 variant="ghost"
                 size="sm"

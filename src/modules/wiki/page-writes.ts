@@ -9,6 +9,21 @@ import { isRoomLive } from '../../realtime/collaboration';
 import { createPageVersion, lockPage } from './page-versions';
 import { extractIssueIdsFromContent, syncMentionLinks } from './wiki-issue-links.service';
 
+/**
+ * The change description of a RESTORE version.
+ * @param version - The version restored
+ */
+export const restoreDescription = (version: number) => `Restored to version ${version}`;
+
+/**
+ * The version a RESTORE version restored, read back from its change description.
+ * @param changeDescription
+ */
+export function restoredVersionOf(changeDescription: string | null): number | null {
+  const match = /^Restored to version (\d+)$/.exec(changeDescription ?? '');
+  return match ? Number(match[1]) : null;
+}
+
 export type PageWriteKind = 'EDIT' | 'EXTERNAL' | 'RESTORE';
 export type PageWriteSource = 'api' | 'mcp' | 'restore' | 'editor-session';
 

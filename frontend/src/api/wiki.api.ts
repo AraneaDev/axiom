@@ -3,6 +3,7 @@ import type {
   Page,
   PageTreeNode,
   PageVersion,
+  PendingMerge,
   PageTemplate,
   PageComment,
   PageLabel,
@@ -93,6 +94,28 @@ export const wikiApi = {
    */
   flushCollab: (spaceId: string, pageSlug: string) =>
     post<{ flushed: boolean }>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/collab/flush`, {}),
+  /**
+   * The three texts to merge for a page with a pending external change, or null when nothing is
+   * pending.
+   * @param spaceId
+   * @param pageSlug
+   */
+  getPendingMerge: (spaceId: string, pageSlug: string) =>
+    get<PendingMerge | null>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/pending-merge`),
+  /**
+   * Apply merged Markdown for the pending external change. Rejected with 409 when the change was
+   * merged already or a newer one arrived.
+   * @param spaceId
+   * @param pageSlug
+   * @param data
+   * @param data.externalVersionId - The external version the merge was computed against
+   * @param data.markdown - The merged Markdown
+   */
+  applyMerge: (
+    spaceId: string,
+    pageSlug: string,
+    data: { externalVersionId: string; markdown: string },
+  ) => post<void>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/merge`, data),
   /**
    * Delete a wiki page by slug.
    * @param spaceId

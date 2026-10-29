@@ -26,13 +26,15 @@ import {
   ListChecks,
   FoldVertical,
   ListTree,
+  Lock,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
 
 import { CollaborationCursorExtension } from './CollaborationCursorExtension';
@@ -46,6 +48,10 @@ interface CollaborativeEditorProps {
   onChange?: (md: string) => void;
   placeholder?: string;
   projectId?: string;
+  /** Set while a merge swaps the content: the editor is read-only and shows "Merging..." */
+  locked?: { byName: string } | null;
+  /** Whether the user may edit; viewers get a read-only editor */
+  canEdit?: boolean;
 }
 
 interface ToolbarButtonProps {
@@ -87,6 +93,8 @@ function ToolbarDivider() {
  * @param root0.onChange
  * @param root0.placeholder
  * @param root0.projectId
+ * @param root0.locked
+ * @param root0.canEdit
  */
 export function CollaborativeEditor({
   ydoc,
@@ -95,6 +103,8 @@ export function CollaborativeEditor({
   onChange,
   placeholder,
   projectId,
+  locked = null,
+  canEdit = true,
 }: CollaborativeEditorProps) {
   const [instanceId] = useState(() => nextEditorInstanceId());
 
@@ -139,6 +149,12 @@ export function CollaborativeEditor({
     },
   });
 
+  // Read-only during a merge lock; a layout effect, so it applies in the same render as the lock
+  const editable = !locked && canEdit;
+  useLayoutEffect(() => {
+    if (editor && editor.isEditable !== editable) editor.setEditable(editable, false);
+  }, [editor, editable]);
+
   // Clean up editor on unmount
   useEffect(() => {
     return () => {
@@ -169,9 +185,12 @@ export function CollaborativeEditor({
   }
 
   return (
-    <Card className="overflow-hidden">
-      {/* Toolbar */}
-      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-surface-secondary flex-wrap">
+    <Card className="relative overflow-hidden" aria-busy={!!locked}>
+      {/* Toolbar (not for viewers; covered by the overlay during a merge) */}
+      <div
+        hidden={!canEdit}
+        className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-surface-secondary flex-wrap"
+      >
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           active={editor.isActive('bold')}
@@ -306,6 +325,22 @@ export function CollaborativeEditor({
 
       {/* Editor */}
       <EditorContent editor={editor} />
+      {locked && (
+        <div
+          role="status"
+          className="absolute inset-0 z-10 flex items-center justify-center bg-surface/70 backdrop-blur-[1px]"
+        >
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-elevated px-4 py-2.5 text-sm shadow-sm">
+            <Spinner className="h-4 w-4" />
+            <span className="font-medium text-text">Merging…</span>
+            {locked.byName && (
+              <span className="flex items-center gap-1 text-text-secondary">
+                <Lock className="h-3.5 w-3.5" /> {locked.byName} is applying a merge
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

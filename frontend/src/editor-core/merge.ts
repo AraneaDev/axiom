@@ -4,7 +4,7 @@
  * so differences are content changes, not formatting.
  */
 
-import { diff3Merge } from 'node-diff3';
+import { diff3Merge, diffIndices } from 'node-diff3';
 
 export type MergeHunk =
   | { kind: 'clean'; text: string }
@@ -173,4 +173,69 @@ export function resolveMerge(hunks: MergeHunk[], choices: Record<string, string>
   return joinTexts(
     hunks.map((h) => (h.kind === 'clean' ? h.text : chosen(h.id, choices))).filter((t) => t !== ''),
   );
+}
+
+type Region = { start: number; length: number; content: string[] };
+
+/**
+ * Changed regions of one side against the base. A same-count replacement is split per block
+ * position, as mergeMarkdown splits same-count conflicts, so neighbouring edits stay apart.
+ * @param base
+ * @param side
+ */
+function regions(base: string[], side: string[]): Region[] {
+  return diffIndices(base, side).flatMap((r): Region[] => {
+    const [start, length] = r.buffer1;
+    const content = r.buffer2Content as string[];
+    if (length > 1 && content.length === length) {
+      return content
+        .map((block, i) => ({ start: start + i, length: 1, content: [block] }))
+        .filter((region, i) => region.content[0] !== base[start + i]);
+    }
+    return [{ start, length, content }];
+  });
+}
+
+/**
+ * Whether two changes to the base touch the same blocks (two insertions at one point do too)
+ * @param a
+ * @param b
+ */
+function overlaps(a: Region, b: Region): boolean {
+  if (a.length === 0 && b.length === 0) return a.start === b.start;
+  if (a.length === 0) return a.start > b.start && a.start < b.start + b.length;
+  if (b.length === 0) return b.start > a.start && b.start < a.start + a.length;
+  return a.start < b.start + b.length && b.start < a.start + a.length;
+}
+
+function sameChange(a: Region, b: Region): boolean {
+  return (
+    a.start === b.start &&
+    a.length === b.length &&
+    a.content.length === b.content.length &&
+    a.content.every((block, i) => block === b.content[i])
+  );
+}
+
+/**
+ * Counts for a merge notice: how many of their changes (block regions changed against the base)
+ * apply without touching a change of ours, and how many conflicts the merge has.
+ * @param base - common ancestor
+ * @param ours - our version
+ * @param theirs - their version
+ * @param hunks - mergeMarkdown(base, ours, theirs).hunks
+ * @returns clean change count and conflict count
+ */
+export function countMergeChanges(
+  base: string,
+  ours: string,
+  theirs: string,
+  hunks: MergeHunk[],
+): { clean: number; conflicts: number } {
+  const baseBlocks = splitBlocks(base);
+  const mine = regions(baseBlocks, splitBlocks(ours));
+  const clean = regions(baseBlocks, splitBlocks(theirs)).filter((t) =>
+    mine.every((o) => !overlaps(o, t) || sameChange(o, t)),
+  ).length;
+  return { clean, conflicts: hunks.filter((h) => h.kind === 'conflict').length };
 }

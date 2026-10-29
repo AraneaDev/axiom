@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
@@ -6,6 +7,15 @@ import { getAccessToken } from '@/api/client';
 import { COLLAB_COLORS } from '@/components/wiki/collab-colors';
 import type { PresenceUser } from '@/components/wiki/PresenceIndicators';
 import { useAuthStore } from '@/stores/auth.store';
+
+import {
+  MESSAGE_EXTERNAL_CHANGE,
+  MESSAGE_LOCK,
+  parseExternalChange,
+  parseLock,
+  readJsonPayload,
+  type PendingChange,
+} from './collab-messages';
 
 interface UseCollaborationOptions {
   /** The wiki page ID to collaborate on */
@@ -27,6 +37,14 @@ interface UseCollaborationReturn {
   presenceUsers: PresenceUser[];
   /** The collaboration fragment name used by TipTap */
   fragmentName: string;
+  /** An external change waiting to be merged into this session */
+  pendingChange: PendingChange | null;
+  /** Who merged the last pending change, until dismissed or a new change arrives */
+  resolvedBy: string | null;
+  /** Set while a merge swaps the content: the editor must be read-only */
+  locked: { byName: string } | null;
+  /** Clear the "Merged by" note */
+  dismissResolved: () => void;
 }
 
 /**
@@ -48,6 +66,10 @@ export function useCollaboration({
   const [isConnected, setIsConnected] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
+  const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
+  const [resolvedBy, setResolvedBy] = useState<string | null>(null);
+  const [locked, setLocked] = useState<{ byName: string } | null>(null);
+  const dismissResolved = useCallback(() => setResolvedBy(null), []);
 
   const fragmentName = 'default';
 
@@ -81,6 +103,27 @@ export function useCollaboration({
       params: { token },
     });
 
+    // Server state messages, registered before the first message can arrive. y-websocket and
+    // BroadcastChannel peers may deliver a bare message with no payload: readJsonPayload gives null.
+    newProvider.messageHandlers[MESSAGE_EXTERNAL_CHANGE] = (_encoder, decoder) => {
+      const message = parseExternalChange(readJsonPayload(decoder));
+      if (!message) return;
+      if (message.state === 'pending') {
+        const { state: _state, ...change } = message;
+        setPendingChange(change);
+        setResolvedBy(null);
+      } else {
+        setPendingChange(null);
+        setResolvedBy(message.byName);
+      }
+    };
+    newProvider.messageHandlers[MESSAGE_LOCK] = (_encoder, decoder) => {
+      const message = parseLock(readJsonPayload(decoder));
+      if (!message) return;
+      // Render now, not on the next tick, so the editor is read-only before any further keystroke
+      flushSync(() => setLocked(message.locked ? { byName: message.byName } : null));
+    };
+
     return { ydoc: newYdoc, provider: newProvider };
   }, [pageId, enabled, user]);
 
@@ -96,8 +139,13 @@ export function useCollaboration({
       userId: user.id,
     });
 
-    // Listen for connection status changes
+    // Listen for connection status changes. A fresh connection replays the lock and pending state,
+    // so whatever this client knew from the previous connection is dropped first.
     const onStatus = (event: { status: string }) => {
+      if (event.status === 'connected') {
+        setLocked(null);
+        setPendingChange(null);
+      }
       setIsConnected(event.status === 'connected');
     };
     provider.on('status', onStatus);
@@ -138,6 +186,9 @@ export function useCollaboration({
       setIsConnected(false);
       setIsSynced(false);
       setPresenceUsers([]);
+      setPendingChange(null);
+      setResolvedBy(null);
+      setLocked(null);
     };
   }, [provider, ydoc, user, getMyColor]);
 
@@ -148,5 +199,9 @@ export function useCollaboration({
     isSynced,
     presenceUsers,
     fragmentName,
+    pendingChange,
+    resolvedBy,
+    locked,
+    dismissResolved,
   };
 }

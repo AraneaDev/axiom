@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { mergeMarkdown, resolveMerge, splitBlocks } from './merge';
+import { countMergeChanges, mergeMarkdown, resolveMerge, splitBlocks } from './merge';
 
 describe('mergeMarkdown', () => {
   it('clean merge combines changes in different blocks', () => {
@@ -123,5 +123,28 @@ describe('fix round 1', () => {
     const c = r.hunks.find((h) => h.kind === 'conflict');
     expect(() => resolveMerge(r.hunks, {})).toThrow();
     expect(resolveMerge(r.hunks, { [(c as { id: string }).id]: '' })).toBe('');
+  });
+});
+
+describe('countMergeChanges', () => {
+  it('counts their changes that merge cleanly and the conflicts', () => {
+    const base = 'one\n\ntwo\n\nthree\n\nfour';
+    const ours = 'one\n\nOURS\n\nthree\n\nfour';
+    const theirs = 'ONE\n\nTHEIRS\n\nthree\n\nFOUR';
+    const { hunks } = mergeMarkdown(base, ours, theirs);
+    expect(countMergeChanges(base, ours, theirs, hunks)).toEqual({ clean: 2, conflicts: 1 });
+  });
+
+  it('a change both sides made identically counts as clean', () => {
+    const base = 'one\n\ntwo';
+    const same = 'one\n\nTWO';
+    const { hunks } = mergeMarkdown(base, same, same);
+    expect(countMergeChanges(base, same, same, hunks)).toEqual({ clean: 1, conflicts: 0 });
+  });
+
+  it('nothing changed on their side counts nothing', () => {
+    const base = 'one\n\ntwo';
+    const { hunks } = mergeMarkdown(base, 'one\n\nmine', base);
+    expect(countMergeChanges(base, 'one\n\nmine', base, hunks)).toEqual({ clean: 0, conflicts: 0 });
   });
 });

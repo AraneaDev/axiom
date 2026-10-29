@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 
 import { prisma } from '../config/database';
 import { yFragmentToMarkdown } from '../lib/editor-core';
-import { writePageBody } from '../modules/wiki/page-writes';
+import { restoreDescription, writePageBody } from '../modules/wiki/page-writes';
 import {
   appendParagraph,
   CollabTestClient,
@@ -187,6 +187,24 @@ describe('Collaboration server', () => {
     const late = await connect('viewer');
     await waitFor(() => late.changeMessages.length > 0);
     expect(late.changeMessages).toEqual([first.changeMessages[0]]);
+  });
+
+  it('a restore notice names the restored version', async () => {
+    const client = await connect('editor');
+    await writePageBody({
+      pageId,
+      authorId: users.owner,
+      body: 'Restored body',
+      kind: 'RESTORE',
+      source: 'restore',
+      changeDescription: restoreDescription(1),
+    });
+    await waitFor(() => client.changeMessages.length > 0);
+    expect(client.changeMessages[0]).toMatchObject({
+      state: 'pending',
+      kind: 'RESTORE',
+      restoredVersion: 1,
+    });
   });
 
   it('replay after an ended session includes draftAuthorName and draftAt', async () => {
