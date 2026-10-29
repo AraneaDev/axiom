@@ -13,18 +13,28 @@ import {
   replaceRoomContent,
   roomMarkdown,
 } from '../../realtime/collaboration';
-import { setLoadedSnapshot } from '../../realtime/yjs-persistence';
+import { getLoadedExternalVersion, markRoomMerged } from '../../realtime/yjs-persistence';
 
 import { createPageVersion, lockPage } from './page-versions';
 import { finishPageWrite, SyncIssueLinks } from './page-writes';
 
 export interface PendingMerge {
   base: string;
-  theirs: string;
+  /** The side the person merging is working on: the live session, or an ended session's draft */
   ours: string;
+  /** The other side: the external change, or an ended session's draft */
+  theirs: string;
+  /** "Yours" for the live session, "<name>'s session" for a draft */
+  oursLabel: string;
+  /** The external change's author, or "<name>'s session" for a draft */
+  theirsLabel: string;
   externalVersionId: string;
+  /** Author and time of the external change */
   authorName: string;
   at: string;
+  /** Set when one side is an ended session's unmerged draft */
+  draftAuthorName?: string;
+  draftAt?: string;
 }
 
 const STALE_MERGE = 'This page changed again: reload the pending merge';
@@ -46,10 +56,11 @@ async function nameOf(userId: string): Promise<string> {
  * merge sees no differences that are only formatting.
  *
  * - base: the body the external change replaced.
- * - theirs: Page.body, the external change.
- * - ours: the live room's document when that room holds state the database does not (it was
- *   opened before the change, or it has been edited since it loaded). Otherwise the latest
- *   session draft written since the change, or the base when there is none.
+ * - A live session opened before the change: ours = the session, theirs = Page.body.
+ * - A live session opened after the change (it holds the change and its own edits) while a
+ *   session open at the time of the change left an unmerged draft: ours = the live session,
+ *   theirs = that draft. Drafts of sessions opened after the change never take this place.
+ * - Nobody editing: ours = the unmerged draft (or the base), theirs = Page.body.
  * @param pageId - The page
  * @param _userId - The user asking (permission is checked by the caller)
  * @returns The merge input, or null when nothing is pending
@@ -63,33 +74,71 @@ export async function getPendingMerge(
     include: {
       externalVersion: { select: { createdAt: true } },
       page: { select: { body: true } },
+      draftVersion: {
+        select: {
+          body: true,
+          createdAt: true,
+          author: { select: { displayName: true, username: true } },
+        },
+      },
     },
   });
   if (!pending) return null;
 
-  let ours: string | undefined;
+  const authorName = await nameOf(pending.authorId);
+  const draft = pending.draftVersion;
+  const draftLabel = draft ? `${draft.author.displayName ?? draft.author.username}'s session` : '';
+  const draftInfo = draft
+    ? {
+        draftAuthorName: draft.author.displayName ?? draft.author.username,
+        draftAt: draft.createdAt.toISOString(),
+      }
+    : {};
+
   const room = getLiveRoom(pageId);
-  if (room) {
-    const live = roomMarkdown(room);
-    const openedBeforeChange = room.pendingIdAtLoad !== pending.id;
-    if (openedBeforeChange || live !== room.loadedBody) ours = live;
-  }
-  if (ours === undefined) {
-    const draft = await prisma.pageVersion.findFirst({
-      where: { pageId, kind: 'SESSION_DRAFT', createdAt: { gte: pending.createdAt } },
-      orderBy: { version: 'desc' },
-      select: { body: true },
-    });
-    ours = draft?.body ?? pending.baseBody;
+  let sides: Pick<PendingMerge, 'ours' | 'theirs' | 'oursLabel' | 'theirsLabel'>;
+  // The draft is named only when it is one of the sides: a live session's own autosaves are not
+  // "unmerged edits from" anyone
+  let draftIsSide = false;
+  if (room && getLoadedExternalVersion(pageId) === pending.externalVersionId && draft) {
+    // The live session opened after the change, so it holds the change plus its own edits. What
+    // is left to merge is the work of the session that was open when the change came in.
+    sides = {
+      ours: roomMarkdown(room),
+      oursLabel: 'Yours',
+      theirs: draft.body,
+      theirsLabel: draftLabel,
+    };
+    draftIsSide = true;
+  } else if (room) {
+    // The live session predates the change (or holds nothing else to merge with)
+    sides = {
+      ours: roomMarkdown(room),
+      oursLabel: 'Yours',
+      theirs: pending.page.body,
+      theirsLabel: authorName,
+    };
+  } else {
+    // Nobody is editing: the ended session's draft against the change
+    sides = {
+      ours: draft?.body ?? pending.baseBody,
+      oursLabel: draft ? draftLabel : 'Base',
+      theirs: pending.page.body,
+      theirsLabel: authorName,
+    };
+    draftIsSide = Boolean(draft);
   }
 
   return {
     base: normalizeMarkdown(pending.baseBody),
-    theirs: normalizeMarkdown(pending.page.body),
-    ours: normalizeMarkdown(ours),
+    ours: normalizeMarkdown(sides.ours),
+    theirs: normalizeMarkdown(sides.theirs),
+    oursLabel: sides.oursLabel,
+    theirsLabel: sides.theirsLabel,
     externalVersionId: pending.externalVersionId,
-    authorName: await nameOf(pending.authorId),
+    authorName,
     at: pending.externalVersion.createdAt.toISOString(),
+    ...(draftIsSide ? draftInfo : {}),
   };
 }
 
@@ -134,12 +183,6 @@ export async function applyMerge(
         throw new AppError(409, STALE_MERGE);
       }
       const row = await tx.page.findUniqueOrThrow({ where: { id: pageId } });
-
-      // Swap the live content while the page row is locked: a room save waiting on the lock then
-      // finds the merged text already stored and writes nothing over it
-      const room = getLiveRoom(pageId);
-      if (room) replaceRoomContent(room, merged);
-
       const updated = await tx.page.update({ where: { id: pageId }, data: { body: merged } });
       await createPageVersion(tx, {
         pageId,
@@ -152,8 +195,15 @@ export async function applyMerge(
       return updated;
     });
 
-    // The merged text is now what the live session and the database agree on
-    if (getLiveRoom(pageId)) setLoadedSnapshot(pageId, merged);
+    // Right after the commit, with no await in between and the room still locked: record the
+    // merged text as what the session and the database agree on, then swap the live content.
+    // flushRoom above waited for any save in flight and client updates are dropped while locked,
+    // so no save can run between the commit and the swap.
+    const room = getLiveRoom(pageId);
+    if (room) {
+      markRoomMerged(pageId, merged);
+      replaceRoomContent(room, merged);
+    }
     announceMergeResolved(pageId, byName);
     await finishPageWrite(page, userId, merged, deps.syncIssueLinks);
   } finally {

@@ -4,11 +4,12 @@
  * Implements the Yjs sync protocol manually using y-protocols,
  * handling sync messages and awareness updates between clients.
  *
- * Message types: 0 sync and 1 awareness (y-protocols); 3 external-change state and 4 lock
- * state, both a varUint type followed by a varString of JSON:
- * - 3: `{ state: 'pending', externalVersionId, authorName, at, kind, draftAuthorName?, draftAt? }`
+ * Message types: 0 sync and 1 awareness (y-protocols); 20 external-change state and 21 lock
+ * state, both a varUint type followed by a varString of JSON. y-websocket reserves 0-3 (3 is
+ * its query-awareness message), hence the gap.
+ * - 20: `{ state: 'pending', externalVersionId, authorName, at, kind, draftAuthorName?, draftAt? }`
  *   or `{ state: 'resolved', byName }`
- * - 4: `{ locked, byName }`
+ * - 21: `{ locked, byName }`
  *
  * Room naming: `wiki:{pageId}` -- each wiki page gets its own Yjs document.
  */
@@ -35,9 +36,12 @@ import { logger } from '../utils/logger';
 import {
   loadPageIntoDoc,
   scheduleSave,
+  cancelScheduledSave,
   forceSave,
   setLastAuthor,
   clearAuthor,
+  getLoadedExternalVersion,
+  settlePendingAfterSession,
 } from './yjs-persistence';
 
 // y-protocols and lib0 are loaded with a plain CommonJS require, never import(): their
@@ -71,11 +75,14 @@ export function __protocolsForProbe() {
 
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
-const MESSAGE_EXTERNAL_CHANGE = 3;
-const MESSAGE_LOCK = 4;
+const MESSAGE_EXTERNAL_CHANGE = 20;
+const MESSAGE_LOCK = 21;
 
-/** A lock nobody releases (a merge that died half way) frees the room after this long */
-const LOCK_TIMEOUT_MS = 10_000;
+/**
+ * Safety net only: the merge releases its lock when it finishes. A lock nobody releases (a merge
+ * that hung) frees the room after this long.
+ */
+const LOCK_TIMEOUT_MS = 30_000;
 
 /** Transaction origin of content the server itself writes into a room (a merge) */
 const SERVER_ORIGIN = Symbol('collab-server');
@@ -99,12 +106,6 @@ export interface CollabRoom {
   awareness: InstanceType<typeof import('y-protocols/awareness').Awareness> | null;
   clients: Map<WebSocket, CollabClient>;
   pageId: string;
-  /** Markdown of the doc right after it was loaded or last replaced by the server */
-  loadedBody: string;
-  /** The pending change that already existed when the room loaded (it loaded that change) */
-  pendingIdAtLoad: string | null;
-  /** Highest version number when the room loaded: drafts up to it come from ended sessions */
-  versionAtLoad: number;
   lock: RoomLock | null;
 }
 
@@ -182,17 +183,7 @@ async function createRoom(pageId: string): Promise<CollabRoom> {
   const doc = new Y.Doc();
   const awareness = new awarenessProtocol.Awareness(doc);
 
-  // Read before the body: a change written in between makes the room look older than it is,
-  // which only means the merge treats the loaded text as the session's own
-  let pendingIdAtLoad: string | null = null;
-  let versionAtLoad = 0;
   try {
-    const [pending, latest] = await Promise.all([
-      prisma.pendingPageChange.findUnique({ where: { pageId }, select: { id: true } }),
-      prisma.pageVersion.aggregate({ where: { pageId }, _max: { version: true } }),
-    ]);
-    pendingIdAtLoad = pending?.id ?? null;
-    versionAtLoad = latest._max.version ?? 0;
     await loadPageIntoDoc(pageId, doc);
   } catch (err) {
     awareness.destroy();
@@ -205,9 +196,6 @@ async function createRoom(pageId: string): Promise<CollabRoom> {
     awareness,
     clients: new Map(),
     pageId,
-    loadedBody: yFragmentToMarkdown(doc.getXmlFragment('default')),
-    pendingIdAtLoad,
-    versionAtLoad,
     lock: null,
   };
 
@@ -238,6 +226,7 @@ export async function closeRoomForTest(room: CollabRoom): Promise<void> {
 export function releaseRoomForTest(pageId: string): void {
   const room = rooms.get(pageId);
   if (room?.lock) clearTimeout(room.lock.timer);
+  cancelScheduledSave(pageId);
   room?.awareness?.destroy();
   room?.doc.destroy();
   rooms.delete(pageId);
@@ -282,7 +271,7 @@ async function broadcastUpdate(room: CollabRoom, update: Uint8Array): Promise<vo
 }
 
 /**
- * Encode a JSON state message (type 3 or 4).
+ * Encode a JSON state message (type 20 or 21).
  * @param type
  * @param payload
  */
@@ -324,8 +313,9 @@ async function displayNameOf(userId: string): Promise<string> {
 }
 
 /**
- * The type-3 payload for a pending change, seen from a room. When a session that has ended left
- * an unmerged draft for this change, the payload names its author and time.
+ * The type-20 payload for a pending change, seen from a room. When a session that has ended left
+ * an unmerged draft for this change (the room opened after the change, so the draft recorded on
+ * the pending row cannot be its own), the payload names its author and time.
  * @param room
  * @param pending - The pending row; read from the database when omitted
  */
@@ -343,16 +333,12 @@ async function pendingPayload(
       select: { kind: true, createdAt: true },
     }),
     displayNameOf(row.authorId),
-    prisma.pageVersion.findFirst({
-      where: {
-        pageId: room.pageId,
-        kind: 'SESSION_DRAFT',
-        createdAt: { gte: row.createdAt },
-        version: { lte: room.versionAtLoad },
-      },
-      orderBy: { version: 'desc' },
-      select: { createdAt: true, author: { select: { displayName: true, username: true } } },
-    }),
+    row.draftVersionId && getLoadedExternalVersion(room.pageId) !== null
+      ? prisma.pageVersion.findUnique({
+          where: { id: row.draftVersionId },
+          select: { createdAt: true, author: { select: { displayName: true, username: true } } },
+        })
+      : null,
   ]);
   if (!version) return null;
 
@@ -536,7 +522,10 @@ async function handleDisconnect(room: CollabRoom, client: CollabClient): Promise
   const closed = (async () => {
     try {
       await removeAwareness();
-      await forceSave(room.pageId, room.doc);
+      // A failed save leaves the pending row alone: the next session decides with a fresh load
+      if ((await forceSave(room.pageId, room.doc)) !== 'failed') {
+        await settlePendingAfterSession(room.pageId);
+      }
     } finally {
       if (room.lock) clearTimeout(room.lock.timer);
       room.lock = null;
@@ -676,6 +665,9 @@ export function createCollaborationServer(): {
   handleUpgrade: (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
 } {
   collabWss = new WebSocketServer({ noServer: true });
+  // page-writes imports this module (isRoomLive) and this module imports page-writes here: the
+  // cycle is safe because both sides only use the other's exports inside functions, at call time,
+  // never while the modules load
   registerExternalChangeHook(notifyExternalChange);
 
   collabWss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
@@ -726,8 +718,26 @@ export function roomMarkdown(room: CollabRoom): string {
 }
 
 /**
+ * Ask every client that may edit for what the server is missing: updates dropped while the room
+ * was locked would otherwise leave them out of sync, and Yjs holds back their later updates
+ * until the gap is filled. Their sync step 2 reply brings the dropped edits in.
+ * @param room
+ */
+function resyncEditors(room: CollabRoom): void {
+  const syncProtocol = requireCjs('y-protocols/sync') as typeof import('y-protocols/sync');
+  const encoding = requireCjs('lib0/encoding') as typeof import('lib0/encoding');
+  const encoder = encoding.createEncoder();
+  encoding.writeVarUint(encoder, MESSAGE_SYNC);
+  syncProtocol.writeSyncStep1(encoder, room.doc);
+  const message = encoding.toUint8Array(encoder);
+  for (const [ws, client] of room.clients) {
+    if (client.canEdit && ws.readyState === WebSocket.OPEN) ws.send(message);
+  }
+}
+
+/**
  * Lock a live room: every client goes read-only and their sync updates are dropped until the
- * returned release is called, or after 10 seconds.
+ * returned release is called. A timer releases it after 30 seconds as a safety net.
  * @param pageId
  * @param byName - Shown to the clients as who is merging
  * @returns The release function; a no-op when no room is live; null when the room is already
@@ -743,6 +753,7 @@ export function lockRoom(pageId: string, byName: string): (() => void) | null {
     clearTimeout(lock.timer);
     room.lock = null;
     sendJson(room, MESSAGE_LOCK, { locked: false, byName });
+    resyncEditors(room);
   };
   const lock: RoomLock = { byName, timer: setTimeout(release, LOCK_TIMEOUT_MS) };
   room.lock = lock;
@@ -760,7 +771,7 @@ export function isRoomLocked(pageId: string): boolean {
 
 /**
  * Replace the live room's content with the Markdown, in one Yjs transaction that every client
- * receives. The room then treats that Markdown as its loaded state.
+ * receives.
  * @param room
  * @param markdown - Normalised Markdown
  */
@@ -768,8 +779,6 @@ export function replaceRoomContent(room: CollabRoom, markdown: string): void {
   room.doc.transact(() => {
     markdownToYFragment(markdown, room.doc.getXmlFragment('default'));
   }, SERVER_ORIGIN);
-  room.loadedBody = roomMarkdown(room);
-  room.pendingIdAtLoad = null;
 }
 
 /**

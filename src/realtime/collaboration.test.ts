@@ -267,6 +267,60 @@ describe('Collaboration server', () => {
       where: { pageId, kind: 'SESSION_DRAFT' },
     });
     expect(draft.body).toBe('Original body\n\nlast words');
+    // The row stays, and it records the draft as the work still to merge
+    const pending = await prisma.pendingPageChange.findUniqueOrThrow({ where: { pageId } });
+    expect(pending.draftVersionId).toBe(draft.id);
+  });
+
+  it('a session that ends without edits clears the pending change', async () => {
+    // An agent writes while a session is open; the session closes without having edited
+    const session = await connect('editor');
+    await externalWrite('Agent body');
+    await waitFor(() => session.changeMessages.length > 0);
+    await session.close();
+    clients.splice(clients.indexOf(session), 1);
+    await waitFor(() => !isRoomLive(pageId));
+    await roomSettled(pageId);
+    expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
+
+    // The next session gets no notice, and its edits reach Page.body
+    const next = await connect('editor');
+    expect(yFragmentToMarkdown(next.doc.getXmlFragment('default'))).toBe('Agent body');
+    appendParagraph(next.doc, 'after the agent');
+    await waitFor(async () => (await roomMarkdown()).includes('after the agent'));
+    await flushRoom(pageId);
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
+      'Agent body\n\nafter the agent',
+    );
+    expect(next.changeMessages).toEqual([]);
+  });
+
+  it('a room that loads over a pending change without a draft clears it', async () => {
+    // A pending row left behind (for example by a save that failed) with no draft to merge
+    await writePageBody(
+      { pageId, authorId: users.owner, body: 'Agent body', kind: 'EXTERNAL', source: 'mcp' },
+      { isRoomLive: () => true },
+    );
+    expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(1);
+
+    const next = await connect('editor');
+    expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(next.changeMessages).toEqual([]);
+  });
+
+  it('a room that loads over a pending change with a draft keeps it', async () => {
+    const session = await connect('editor');
+    await externalWrite('Agent body');
+    appendParagraph(session.doc, 'unmerged');
+    await waitFor(async () => (await roomMarkdown()).includes('unmerged'));
+    await session.close();
+    clients.splice(clients.indexOf(session), 1);
+    await waitFor(() => !isRoomLive(pageId));
+    await roomSettled(pageId);
+
+    const next = await connect('editor');
+    await waitFor(() => next.changeMessages.length > 0);
     expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(1);
   });
 
@@ -310,7 +364,30 @@ describe('Collaboration server', () => {
     expect(isRoomLocked(pageId)).toBe(false);
   });
 
-  it('lock releases after 10s without apply', async () => {
+  it('an edit made while locked arrives after unlock', async () => {
+    const editor = await connect('editor');
+    const watcher = await connect('owner');
+    const release = lockRoom(pageId, 'Collab owner')!;
+    await waitFor(() => editor.lockMessages.length > 0);
+
+    appendParagraph(editor.doc, 'typed while locked');
+    await new Promise((r) => setTimeout(r, 150));
+    expect(await roomMarkdown()).not.toContain('typed while locked');
+
+    release();
+    await waitFor(async () => (await roomMarkdown()).includes('typed while locked'));
+    // Later incremental updates apply again instead of waiting on the missing one
+    appendParagraph(editor.doc, 'typed after unlock');
+    await waitFor(async () => (await roomMarkdown()).includes('typed after unlock'));
+    await waitFor(() =>
+      yFragmentToMarkdown(watcher.doc.getXmlFragment('default')).includes('typed after unlock'),
+    );
+    expect(yFragmentToMarkdown(watcher.doc.getXmlFragment('default'))).toContain(
+      'typed while locked',
+    );
+  });
+
+  it('lock releases after 30s without apply', async () => {
     const room = await getOrCreateRoom(pageId);
     const sent: Uint8Array[] = [];
     const fakeWs = { readyState: WebSocket.OPEN, send: (m: Uint8Array) => sent.push(m) };
@@ -325,11 +402,12 @@ describe('Collaboration server', () => {
     try {
       expect(lockRoom(pageId, 'Collab owner')).not.toBeNull();
       expect(isRoomLocked(pageId)).toBe(true);
-      vi.advanceTimersByTime(9_999);
+      vi.advanceTimersByTime(29_999);
       expect(isRoomLocked(pageId)).toBe(true);
       vi.advanceTimersByTime(1);
       expect(isRoomLocked(pageId)).toBe(false);
-      expect(sent).toHaveLength(2);
+      // locked, unlocked, then a sync step 1 asking the editor for what was dropped
+      expect(sent.map((m) => m[0])).toEqual([21, 21, 0]);
     } finally {
       vi.useRealTimers();
       releaseRoomForTest(pageId);

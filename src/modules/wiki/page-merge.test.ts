@@ -155,10 +155,26 @@ describe('Page merge', () => {
       base: normalizeMarkdown('Intro\n\nMiddle\n\nEnd'),
       theirs: 'Intro\n\nMiddle changed\n\nEnd',
       ours: 'Intro\n\nMiddle\n\nEnd\n\nMine',
+      oursLabel: 'Yours',
+      theirsLabel: 'Merge Owner',
       externalVersionId: written.version!.id,
       authorName: 'Merge Owner',
       at: written.version!.createdAt.toISOString(),
     });
+  });
+
+  it("a live session's own drafts are not reported as an ended session's", async () => {
+    const client = await connect(editorId);
+    await externalWrite('Intro\n\nMiddle changed\n\nEnd');
+    appendParagraph(client.doc, 'Autosaved');
+    await waitFor(async () => (await roomMarkdown()).includes('Autosaved'));
+    const { flushRoom } = await import('../../realtime/collaboration');
+    await flushRoom(pageId);
+
+    const merge = await getPendingMerge(pageId, editorId);
+    expect(merge?.ours).toBe('Intro\n\nMiddle\n\nEnd\n\nAutosaved');
+    expect(merge?.theirsLabel).toBe('Merge Owner');
+    expect(merge?.draftAuthorName).toBeUndefined();
   });
 
   it('pending merge with no room uses the latest session draft as ours', async () => {
@@ -178,12 +194,11 @@ describe('Page merge', () => {
     expect(merge?.base).toBe('Intro\n\nMiddle\n\nEnd');
   });
 
-  it('pending merge with no room and no draft uses the base as ours', async () => {
+  it('a session that ends without edits leaves nothing to merge', async () => {
     const client = await connect(editorId);
     await externalWrite('Intro\n\nMiddle changed\n\nEnd');
     await disconnect(client);
-    const merge = await getPendingMerge(pageId, editorId);
-    expect(merge?.ours).toBe('Intro\n\nMiddle\n\nEnd');
+    expect(await getPendingMerge(pageId, editorId)).toBeNull();
   });
 
   it('applyMerge writes MERGE, clears pending, and updates the live doc', async () => {
@@ -305,13 +320,23 @@ describe('Page merge', () => {
     expect(after.body).toBeNull();
   });
 
-  it('unmerged edits from an ended session merge from the draft', async () => {
-    // Session edits, an agent writes, the session ends: its work is kept as a draft
-    const session = await connect(editorId);
-    appendParagraph(session.doc, 'Session line');
-    await waitFor(async () => (await roomMarkdown()).includes('Session line'));
+  /** A's session edits, an agent writes, A's session ends: A's work is kept as a draft */
+  const endSessionWithUnmergedDraft = async () => {
+    const a = await connect(editorId);
+    appendParagraph(a.doc, 'Line from A');
+    await waitFor(async () => (await roomMarkdown()).includes('Line from A'));
     const written = await externalWrite('Intro\n\nMiddle changed\n\nEnd');
-    await disconnect(session);
+    await disconnect(a);
+    const pending = await prisma.pendingPageChange.findUniqueOrThrow({
+      where: { pageId },
+      include: { draftVersion: true },
+    });
+    expect(pending.draftVersion?.body).toBe('Intro\n\nMiddle\n\nEnd\n\nLine from A');
+    return { written, draft: pending.draftVersion! };
+  };
+
+  it('unmerged edits from an ended session merge from the draft', async () => {
+    const { written, draft } = await endSessionWithUnmergedDraft();
 
     // A new session opens from Page.body, the agent's version
     const next = await connect(ownerId);
@@ -322,29 +347,72 @@ describe('Page merge', () => {
     expect(next.changeMessages[0].draftAuthorName).toBe('Merge Editor');
 
     const merge = await getPendingMerge(pageId, ownerId);
-    expect(merge).toMatchObject({
+    expect(merge).toEqual({
       base: 'Intro\n\nMiddle\n\nEnd',
-      theirs: 'Intro\n\nMiddle changed\n\nEnd',
-      ours: 'Intro\n\nMiddle\n\nEnd\n\nSession line',
+      ours: 'Intro\n\nMiddle changed\n\nEnd',
+      oursLabel: 'Yours',
+      theirs: 'Intro\n\nMiddle\n\nEnd\n\nLine from A',
+      theirsLabel: "Merge Editor's session",
       externalVersionId: written.version!.id,
+      authorName: 'Merge Owner',
+      at: written.version!.createdAt.toISOString(),
+      draftAuthorName: 'Merge Editor',
+      draftAt: draft.createdAt.toISOString(),
     });
 
-    const result = 'Intro\n\nMiddle changed\n\nEnd\n\nSession line';
+    const result = 'Intro\n\nMiddle changed\n\nEnd\n\nLine from A';
     await applyMerge(pageId, ownerId, { externalVersionId: written.version!.id, markdown: result });
     expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(result);
     await waitFor(() => yFragmentToMarkdown(next.doc.getXmlFragment('default')) === result);
     expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
   });
 
-  it('a session opened after the change that has edits is ours', async () => {
-    const first = await connect(editorId);
-    await externalWrite('Intro\n\nMiddle changed\n\nEnd');
-    await disconnect(first);
+  it("a session opened after the change merges with the ended session's draft, keeping both", async () => {
+    const { written } = await endSessionWithUnmergedDraft();
 
-    const next = await connect(editorId);
-    appendParagraph(next.doc, 'New session line');
-    await waitFor(async () => (await roomMarkdown()).includes('New session line'));
+    // B opens after the change and edits on top of it
+    const b = await connect(ownerId);
+    appendParagraph(b.doc, 'Line from B');
+    await waitFor(async () => (await roomMarkdown()).includes('Line from B'));
+
+    const merge = await getPendingMerge(pageId, ownerId);
+    expect(merge).toMatchObject({
+      base: 'Intro\n\nMiddle\n\nEnd',
+      ours: 'Intro\n\nMiddle changed\n\nEnd\n\nLine from B',
+      oursLabel: 'Yours',
+      theirs: 'Intro\n\nMiddle\n\nEnd\n\nLine from A',
+      theirsLabel: "Merge Editor's session",
+    });
+
+    // What a block merge of those three produces: the agent's change, A's line and B's line
+    const result = 'Intro\n\nMiddle changed\n\nEnd\n\nLine from A\n\nLine from B';
+    await applyMerge(pageId, ownerId, { externalVersionId: written.version!.id, markdown: result });
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(result);
+    await waitFor(() => yFragmentToMarkdown(b.doc.getXmlFragment('default')) === result);
+  });
+
+  it("a later session's work never displaces the ended session's draft", async () => {
+    const { draft } = await endSessionWithUnmergedDraft();
+
+    // B opens after the change, edits and leaves: B builds on Page.body, so its work is saved
+    // there, and A's draft stays the work to merge
+    const b = await connect(ownerId);
+    appendParagraph(b.doc, 'Line from B');
+    await waitFor(async () => (await roomMarkdown()).includes('Line from B'));
+    await disconnect(b);
+
+    const pending = await prisma.pendingPageChange.findUniqueOrThrow({ where: { pageId } });
+    expect(pending.draftVersionId).toBe(draft.id);
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
+      'Intro\n\nMiddle changed\n\nEnd\n\nLine from B',
+    );
+
     const merge = await getPendingMerge(pageId, editorId);
-    expect(merge?.ours).toBe('Intro\n\nMiddle changed\n\nEnd\n\nNew session line');
+    expect(merge).toMatchObject({
+      ours: 'Intro\n\nMiddle\n\nEnd\n\nLine from A',
+      oursLabel: "Merge Editor's session",
+      theirs: 'Intro\n\nMiddle changed\n\nEnd\n\nLine from B',
+      theirsLabel: 'Merge Owner',
+    });
   });
 });

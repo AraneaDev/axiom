@@ -511,7 +511,8 @@ model PageVersion {
 
   createdAt DateTime @default(now())
 
-  pendingChanges PendingPageChange[]
+  pendingChanges PendingPageChange[] @relation("PendingExternalVersion")
+  pendingDrafts  PendingPageChange[] @relation("PendingDraftVersion")
 
   @@unique([pageId, version])
   @@map("page_versions")
@@ -519,13 +520,17 @@ model PageVersion {
 
 /// An external change to a page that is waiting to be merged into an open collaborative session.
 model PendingPageChange {
-  id                String      @id @default(cuid())
-  pageId            String      @unique
-  page              Page        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  id                String       @id @default(cuid())
+  pageId            String       @unique
+  page              Page         @relation(fields: [pageId], references: [id], onDelete: Cascade)
   baseBody          String
   externalVersionId String
-  externalVersion   PageVersion @relation(fields: [externalVersionId], references: [id], onDelete: Cascade)
+  externalVersion   PageVersion  @relation("PendingExternalVersion", fields: [externalVersionId], references: [id], onDelete: Cascade)
   authorId          String
+  /// The latest SESSION_DRAFT saved by a session opened before the change: the unmerged work
+  /// that keeps this change pending after that session ended
+  draftVersionId    String?
+  draftVersion      PageVersion? @relation("PendingDraftVersion", fields: [draftVersionId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

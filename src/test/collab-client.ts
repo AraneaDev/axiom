@@ -54,9 +54,9 @@ export function tokenFor(userId: string): string {
 export interface CollabTestClient {
   ws: WebSocket;
   doc: Y.Doc;
-  /** Parsed JSON payloads of message type 3 (external-change state) */
+  /** Parsed JSON payloads of message type 20 (external-change state) */
   changeMessages: Array<Record<string, unknown>>;
-  /** Parsed JSON payloads of message type 4 (lock state) */
+  /** Parsed JSON payloads of message type 21 (lock state) */
   lockMessages: Array<{ locked: boolean; byName: string | null }>;
   closeCode: Promise<number>;
   /** Resolves once the client has applied the server's document state */
@@ -100,9 +100,9 @@ export function connectCollabClient(
       const syncType = syncProtocol.readSyncMessage(decoder, encoder, doc, SERVER_ORIGIN);
       if (encoding.length(encoder) > 1) ws.send(encoding.toUint8Array(encoder));
       if (syncType === syncProtocol.messageYjsSyncStep2) resolveSynced();
-    } else if (type === 3) {
+    } else if (type === 20) {
       changeMessages.push(JSON.parse(decoding.readVarString(decoder)));
-    } else if (type === 4) {
+    } else if (type === 21) {
       lockMessages.push(JSON.parse(decoding.readVarString(decoder)));
     }
   });

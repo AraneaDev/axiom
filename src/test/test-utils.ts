@@ -1,10 +1,15 @@
-import { createPrismaClient } from '../config/database';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
 
 const TEST_DB_URL = 'postgresql://axiom:axiom_dev@localhost:5432/axiom_test?schema=public';
 
 // Create a dedicated client for teardown use; avoids relying on DATABASE_URL
-// being set in the globalSetup process context.
-const prisma = createPrismaClient(TEST_DB_URL);
+// being set in the globalSetup process context. The pool is kept so teardown can end it:
+// $disconnect does not close a pool the adapter was given, and its idle connection would
+// keep vitest from exiting ("close timed out").
+const pool = new Pool({ connectionString: TEST_DB_URL });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 /**
  * Tables in child-first order (leaf tables before parent tables).
@@ -74,4 +79,5 @@ export async function truncateAllTables(): Promise<void> {
  */
 export async function disconnectPrisma(): Promise<void> {
   await prisma.$disconnect();
+  await pool.end();
 }
