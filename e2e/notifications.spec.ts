@@ -35,12 +35,12 @@ test.describe('Notifications', () => {
   test('notification inbox page loads at /notifications', async ({ page }) => {
     await page.goto(NOTIFICATIONS_URL);
     // Full-page heading
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Notifications', exact: true })).toBeVisible({
       timeout: 10_000,
     });
 
     // Filter tabs should be present
-    await expect(page.getByRole('tab', { name: /all/i }).or(page.getByText('All').first())).toBeVisible({
+    await expect(page.getByRole('tab', { name: 'All' })).toBeVisible({
       timeout: 10_000,
     });
 
@@ -52,7 +52,7 @@ test.describe('Notifications', () => {
 
   test('notification inbox filter tabs switch correctly', async ({ page }) => {
     await page.goto(NOTIFICATIONS_URL);
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Notifications', exact: true })).toBeVisible({
       timeout: 10_000,
     });
 
@@ -70,7 +70,7 @@ test.describe('Notifications', () => {
 
     // Switch back to All tab
     await page.getByText('All').first().click();
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Notifications', exact: true })).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -86,7 +86,7 @@ test.describe('Notifications', () => {
     await viewAllLink.click();
 
     await expect(page).toHaveURL(/\/notifications/, { timeout: 10_000 });
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Notifications', exact: true })).toBeVisible({
       timeout: 10_000,
     });
   });

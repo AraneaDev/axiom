@@ -1,11 +1,24 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 import { DEMO_USERS, login, ORG } from './helpers';
 
-const TEAM = 'axiom';
-const PROJECT = 'axiom-mvp';
+const TEAM = 'core';
+const PROJECT = 'platform';
 const LABELS_URL = `/${ORG}/${TEAM}/${PROJECT}/settings/labels`;
 const ISSUES_URL = `/${ORG}/${TEAM}/${PROJECT}/issues`;
+
+/**
+ * Open the labels settings page and wait for the seeded labels to load. Without
+ * the wait, actions can race the initial empty list (which renders its own
+ * "New Label" button).
+ */
+async function gotoLabels(page: Page) {
+  await page.goto(LABELS_URL);
+  await expect(page.getByRole('heading', { name: /labels/i }).first()).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page.getByText('enhancement').first()).toBeVisible({ timeout: 10_000 });
+}
 
 test.describe('Labels', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,10 +26,7 @@ test.describe('Labels', () => {
   });
 
   test('can view labels in project settings', async ({ page }) => {
-    await page.goto(LABELS_URL);
-    await expect(page.getByRole('heading', { name: /labels/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoLabels(page);
 
     // Seed labels should be visible
     await expect(page.getByText('bug').first()).toBeVisible({ timeout: 10_000 });
@@ -26,18 +36,12 @@ test.describe('Labels', () => {
   });
 
   test('labels settings page shows New Label button', async ({ page }) => {
-    await page.goto(LABELS_URL);
-    await expect(page.getByRole('heading', { name: /labels/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoLabels(page);
     await expect(page.getByRole('button', { name: /new label/i })).toBeVisible();
   });
 
   test('can create a new label', async ({ page }) => {
-    await page.goto(LABELS_URL);
-    await expect(page.getByRole('heading', { name: /labels/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoLabels(page);
 
     // Open the add form
     await page.getByRole('button', { name: /new label/i }).click();
@@ -53,10 +57,7 @@ test.describe('Labels', () => {
   });
 
   test('create label form can be cancelled', async ({ page }) => {
-    await page.goto(LABELS_URL);
-    await expect(page.getByRole('heading', { name: /labels/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoLabels(page);
 
     await page.getByRole('button', { name: /new label/i }).click();
 
@@ -71,10 +72,7 @@ test.describe('Labels', () => {
   });
 
   test('can edit an existing label', async ({ page }) => {
-    await page.goto(LABELS_URL);
-    await expect(page.getByRole('heading', { name: /labels/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoLabels(page);
 
     // Click the edit (pencil) button for the 'docs' label
     await page.getByTitle('Edit label').first().click();
@@ -88,10 +86,7 @@ test.describe('Labels', () => {
 
   test('can delete a label with confirmation', async ({ page }) => {
     // First create a label so we can safely delete it
-    await page.goto(LABELS_URL);
-    await expect(page.getByRole('heading', { name: /labels/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoLabels(page);
 
     // Create a disposable label
     await page.getByRole('button', { name: /new label/i }).click();
@@ -99,47 +94,38 @@ test.describe('Labels', () => {
     await page.getByRole('button', { name: /create label/i }).click();
     await expect(page.getByText('delete-me-label').first()).toBeVisible({ timeout: 10_000 });
 
-    // Find its delete button and click it
-    // The delete button has title="Delete label" and is the last one added
-    const deleteButtons = page.getByTitle('Delete label');
-    await deleteButtons.last().click();
+    // Click the delete button in the row of the label we just created (the list is
+    // sorted, so the new label is not necessarily the last row)
+    const row = page
+      .locator('div:has(> button[title="Delete label"])')
+      .filter({ hasText: 'delete-me-label' });
+    await row.getByTitle('Delete label').click();
 
     // Confirm dialog should appear
     await expect(page.getByText(/delete label/i).first()).toBeVisible({ timeout: 5_000 });
     await page.getByRole('button', { name: /^delete$/i }).click();
 
     // Label should be gone
-    await expect(page.getByText('delete-me-label')).not.toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('delete-me-label')).toHaveCount(0, { timeout: 10_000 });
   });
 
   test('can view labels applied to an issue', async ({ page }) => {
-    await page.goto(ISSUES_URL);
-    await expect(page.getByRole('heading', { name: /issues/i })).toBeVisible({ timeout: 10_000 });
+    // PLAT-3 is seeded with the labels 'bug' and 'frontend'
+    await page.goto(`${ISSUES_URL}/3`);
+    await expect(page.getByText('PLAT-3').first()).toBeVisible({ timeout: 10_000 });
 
-    // Click an issue that has labels (seed issues have 'backend', 'bug', etc.)
-    await page.locator('a[href*="/issues/"]').first().click();
-    await expect(page).toHaveURL(/\/issues\/\d+/, { timeout: 10_000 });
-
-    // The issue detail may show a Labels section if labels are applied
-    // We check either labels section or the absence of it without error
-    const labelsHeading = page.getByText('Labels', { exact: true });
-    const hasLabels = await labelsHeading.isVisible({ timeout: 5_000 }).catch(() => false);
-
-    if (hasLabels) {
-      // At least one badge label should be visible under the heading
-      await expect(labelsHeading).toBeVisible();
-    }
-    // If no labels on that issue, the section is simply hidden — that's valid
+    await expect(page.getByText('Labels', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('bug', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('frontend', { exact: true }).first()).toBeVisible();
   });
 
   test('issue list shows label badges on issues', async ({ page }) => {
     await page.goto(ISSUES_URL);
-    await expect(page.getByRole('heading', { name: /issues/i })).toBeVisible({ timeout: 10_000 });
 
-    // At least one label badge should be visible somewhere in the issue list
-    // Seed data attaches labels like 'bug', 'frontend', 'backend' to issues
-    await expect(
-      page.getByText('bug').first().or(page.getByText('frontend').first())
-    ).toBeVisible({ timeout: 10_000 });
+    // PLAT-6 is seeded with the labels 'bug' and 'backend'
+    const row = page.getByRole('link', { name: /PLAT-6/ });
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await expect(row.getByText('bug', { exact: true })).toBeVisible();
+    await expect(row.getByText('backend', { exact: true })).toBeVisible();
   });
 });

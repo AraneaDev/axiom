@@ -4,7 +4,7 @@ import { login, logout, DEMO_USERS } from './helpers';
 test.describe('Authentication', () => {
   test('login with valid credentials redirects to dashboard', async ({ page }) => {
     await login(page);
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL('/dashboard');
     await expect(page.getByText('Admin User')).toBeVisible();
   });
 
@@ -21,12 +21,20 @@ test.describe('Authentication', () => {
     await page.getByLabel('Email or username').fill('admin@axiom.local');
     await page.getByLabel('Password').fill('password123');
     await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL('/dashboard');
   });
 
-  test('authenticated pages redirect to login when logged out', async ({ page }) => {
+  test('logged-out home page shows the landing page', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveURL('/login');
+    await expect(page).toHaveURL('/');
+    await expect(page.getByText('Powered by Axiom')).toBeVisible();
+    await expect(page.getByLabel('Email or username')).toHaveCount(0);
+  });
+
+  test('authenticated pages redirect to the landing page when logged out', async ({ page }) => {
+    await page.goto('/dashboard');
+    await expect(page).toHaveURL('/');
+    await expect(page.getByText('Powered by Axiom')).toBeVisible();
   });
 
   test('login as different users', async ({ page }) => {
@@ -37,12 +45,12 @@ test.describe('Authentication', () => {
     }
   });
 
-  test('logout clears session and redirects to login', async ({ page }) => {
+  test('logout clears session and returns to the landing page', async ({ page }) => {
     await login(page);
     await logout(page);
-    await expect(page).toHaveURL('/login');
-    // Navigating to protected route should redirect back to login
-    await page.goto('/');
-    await expect(page).toHaveURL('/login');
+    await expect(page).toHaveURL('/');
+    // Navigating to a protected route should redirect back to the landing page
+    await page.goto('/dashboard');
+    await expect(page).toHaveURL('/');
   });
 });

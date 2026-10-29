@@ -15,13 +15,18 @@ export async function login(page: Page, user = DEMO_USERS.admin) {
   await page.getByLabel('Email or username').fill(user.login);
   await page.getByLabel('Password').fill(user.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  // Wait for redirect away from /login (may land on '/' or '/axiom' depending on state)
+  // Wait for redirect away from /login (the app lands on '/dashboard')
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
 }
 
-/** Log out via the header user menu. */
+/** Log out via the header user menu; logging out returns to the landing page at '/'. */
 export async function logout(page: Page) {
   await page.getByRole('button', { name: /admin user|sarah chen|marcus kim/i }).first().click();
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await page.waitForURL('/login');
+  await page.waitForURL('/');
+}
+
+/** Links to individual issues (`.../issues/<number>`), excluding the "new issue" link. */
+export function issueLinks(page: Page) {
+  return page.locator('a[href*="/issues/"]:not([href$="/issues/new"])');
 }

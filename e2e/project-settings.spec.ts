@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 
 import { DEMO_USERS, login, ORG } from './helpers';
 
-const TEAM = 'axiom';
-const PROJECT = 'axiom-mvp';
+const TEAM = 'core';
+const PROJECT = 'platform';
 const SETTINGS_BASE = `/${ORG}/${TEAM}/${PROJECT}/settings`;
 
 test.describe('Project Settings', () => {
@@ -56,14 +56,11 @@ test.describe('Project Settings', () => {
 
   test('workflow settings page loads with statuses', async ({ page }) => {
     await page.goto(`${SETTINGS_BASE}/workflow`);
-    // Heading
-    await expect(
-      page.getByRole('heading', { name: /workflow/i }).first().or(
-        page.getByText(/workflow/i).first(),
-      ),
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: 'Workflow', exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Seed data includes standard statuses like "To Do", "In Progress", "Done"
+    // Seed data includes the board columns "To Do", "In Progress", "Done"
     await expect(
       page.getByText(/to do|backlog|in progress|done/i).first(),
     ).toBeVisible({ timeout: 10_000 });
@@ -71,39 +68,32 @@ test.describe('Project Settings', () => {
 
   test('automations settings page loads', async ({ page }) => {
     await page.goto(`${SETTINGS_BASE}/automation`);
-    await expect(
-      page.getByRole('heading', { name: /automation/i }).first().or(
-        page.getByText(/automation/i).first(),
-      ),
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: 'Automation Rules', exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Should show a button to create a rule
-    await expect(
-      page.getByRole('button', { name: /new rule|create rule|add rule/i }).first().or(
-        page.getByRole('button', { name: /new|create|add/i }).first(),
-      ),
-    ).toBeVisible({ timeout: 10_000 });
+    // The seeded rule is listed
+    await expect(page.getByText('Auto-label critical bugs')).toBeVisible({ timeout: 10_000 });
   });
 
   test('templates settings page loads', async ({ page }) => {
     await page.goto(`${SETTINGS_BASE}/templates`);
-    await expect(
-      page.getByRole('heading', { name: /template/i }).first().or(
-        page.getByText(/template/i).first(),
-      ),
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: 'Issue Templates', exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Should show a button to create a template
-    await expect(
-      page.getByRole('button', { name: /new template|create template|add template/i })
-        .first()
-        .or(page.getByRole('button', { name: /new|create|add/i }).first()),
-    ).toBeVisible({ timeout: 10_000 });
+    // The seeded template is listed, and a new one can be started
+    await expect(page.getByText('Bug Report', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: /new template/i })).toBeVisible();
   });
 
   test('can create and then cancel a new label', async ({ page }) => {
     await page.goto(`${SETTINGS_BASE}/labels`);
     await expect(page.getByRole('heading', { name: /labels/i }).first()).toBeVisible({
+      timeout: 10_000,
+    });
+    // Wait for the seeded labels, otherwise the empty state's own "New Label" button races in
+    await expect(page.getByText('enhancement', { exact: true }).first()).toBeVisible({
       timeout: 10_000,
     });
 

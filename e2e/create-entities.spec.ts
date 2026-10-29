@@ -17,8 +17,8 @@ test.describe('Create entity forms', () => {
     const slugInput = page.getByLabel('URL slug');
     await expect(slugInput).not.toHaveValue('');
 
-    // Fill the description textarea (shared Textarea component)
-    const descField = page.getByLabel(/description/i);
+    // Fill the description (markdown editor)
+    const descField = page.locator('form .ProseMirror');
     await expect(descField).toBeVisible();
     await descField.fill('Organization created by E2E test');
 
@@ -34,8 +34,8 @@ test.describe('Create entity forms', () => {
     const teamName = `E2E Test Team ${Date.now()}`;
     await page.getByLabel(/team name/i).fill(teamName);
 
-    // Fill the description textarea
-    const descField = page.getByLabel(/description/i);
+    // Fill the description (markdown editor)
+    const descField = page.locator('form .ProseMirror');
     await expect(descField).toBeVisible();
     await descField.fill('Team created by E2E test');
 

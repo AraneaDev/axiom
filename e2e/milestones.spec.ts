@@ -1,10 +1,19 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 import { DEMO_USERS, login, ORG } from './helpers';
 
-const TEAM = 'axiom';
-const PROJECT = 'axiom-mvp';
+const TEAM = 'core';
+const PROJECT = 'platform';
 const MILESTONES_URL = `/${ORG}/${TEAM}/${PROJECT}/milestones`;
+
+/** The innermost container holding the given milestone title and its action buttons. */
+function milestoneRow(page: Page, title: string) {
+  return page
+    .locator('div')
+    .filter({ hasText: title })
+    .filter({ has: page.locator('button[title$="milestone"]') })
+    .last();
+}
 
 test.describe('Milestones', () => {
   test.beforeEach(async ({ page }) => {
@@ -19,9 +28,9 @@ test.describe('Milestones', () => {
     });
 
     // Filter tabs should be visible
-    await expect(page.getByRole('button', { name: /open/i }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /closed/i }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /all/i }).first()).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^open$/i })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^closed$/i })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^all$/i })).toBeVisible();
 
     // New Milestone button should be present
     await expect(page.getByRole('button', { name: /new milestone/i })).toBeVisible();
@@ -39,7 +48,7 @@ test.describe('Milestones', () => {
 
     // Modal should appear
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('New Milestone')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'New Milestone' })).toBeVisible();
 
     // Fill in the title
     await page.getByLabel('Title').fill('E2E Test Milestone');
@@ -108,19 +117,19 @@ test.describe('Milestones', () => {
     });
 
     // Close the milestone using the Close button
-    await page.getByTitle('Close milestone').last().click();
+    await milestoneRow(page, 'Toggle Status Milestone').getByTitle('Close milestone').click();
 
     // Switch to Closed tab to verify it moved there
-    await page.getByRole('button', { name: /^closed$/i }).click();
+    await page.getByRole('tab', { name: /^closed$/i }).click();
     await expect(page.getByText('Toggle Status Milestone').first()).toBeVisible({
       timeout: 10_000,
     });
 
     // Reopen it
-    await page.getByTitle('Reopen milestone').last().click();
+    await milestoneRow(page, 'Toggle Status Milestone').getByTitle('Reopen milestone').click();
 
     // Switch back to Open tab to verify it is back
-    await page.getByRole('button', { name: /^open$/i }).click();
+    await page.getByRole('tab', { name: /^open$/i }).click();
     await expect(page.getByText('Toggle Status Milestone').first()).toBeVisible({
       timeout: 10_000,
     });

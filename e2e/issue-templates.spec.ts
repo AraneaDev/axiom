@@ -1,11 +1,24 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 import { DEMO_USERS, login, ORG } from './helpers';
 
-const TEAM = 'axiom';
-const PROJECT = 'axiom-mvp';
+const TEAM = 'core';
+const PROJECT = 'platform';
 const TEMPLATES_URL = `/${ORG}/${TEAM}/${PROJECT}/settings/templates`;
 const CREATE_ISSUE_URL = `/${ORG}/${TEAM}/${PROJECT}/issues/new`;
+
+/**
+ * Open the issue templates settings page and wait for the seeded template to load. Without
+ * the wait, actions can race the initial empty list (which renders its own "New Template"
+ * button).
+ */
+async function gotoTemplates(page: Page) {
+  await page.goto(TEMPLATES_URL);
+  await expect(page.getByRole('heading', { name: /issue templates/i }).first()).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page.getByText('Bug Report', { exact: true })).toBeVisible({ timeout: 10_000 });
+}
 
 test.describe('Issue Templates', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,18 +26,12 @@ test.describe('Issue Templates', () => {
   });
 
   test('can view issue templates settings page', async ({ page }) => {
-    await page.goto(TEMPLATES_URL);
-    await expect(page.getByRole('heading', { name: /issue templates/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoTemplates(page);
     await expect(page.getByRole('button', { name: /new template/i })).toBeVisible();
   });
 
   test('can create a new issue template', async ({ page }) => {
-    await page.goto(TEMPLATES_URL);
-    await expect(page.getByRole('heading', { name: /issue templates/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoTemplates(page);
 
     // Open the add form
     await page.getByRole('button', { name: /new template/i }).click();
@@ -42,17 +49,15 @@ test.describe('Issue Templates', () => {
 
   test('can create a template and use it on the issue creation form', async ({ page }) => {
     // Ensure a known template exists
-    await page.goto(TEMPLATES_URL);
-    await expect(page.getByRole('heading', { name: /issue templates/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoTemplates(page);
 
     await page.getByRole('button', { name: /new template/i }).click();
     await page.getByLabel('Template Name').fill('E2E Feature Request');
     await page.getByLabel('Title Pattern').fill('[Feature] My feature title');
 
     // Change type to STORY
-    await page.getByLabel('Type').selectOption('STORY');
+    await page.getByLabel('Type').click();
+    await page.getByRole('button', { name: 'Story', exact: true }).click();
 
     await page.getByRole('button', { name: /create template/i }).click();
     await expect(page.getByText('E2E Feature Request').first()).toBeVisible({ timeout: 10_000 });
@@ -67,7 +72,8 @@ test.describe('Issue Templates', () => {
     await expect(page.getByLabel(/from template/i)).toBeVisible({ timeout: 10_000 });
 
     // Select the template we just created
-    await page.getByLabel(/from template/i).selectOption({ label: /E2E Feature Request/i });
+    await page.getByLabel(/from template/i).click();
+    await page.getByRole('button', { name: /E2E Feature Request/ }).click();
 
     // Title field should be pre-populated with the template title
     await expect(page.getByLabel('Title')).toHaveValue('[Feature] My feature title', {
@@ -77,10 +83,7 @@ test.describe('Issue Templates', () => {
 
   test('can delete an issue template with confirmation', async ({ page }) => {
     // Create a disposable template
-    await page.goto(TEMPLATES_URL);
-    await expect(page.getByRole('heading', { name: /issue templates/i }).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await gotoTemplates(page);
 
     await page.getByRole('button', { name: /new template/i }).click();
     await page.getByLabel('Template Name').fill('delete-me-template');
@@ -88,14 +91,18 @@ test.describe('Issue Templates', () => {
     await page.getByRole('button', { name: /create template/i }).click();
     await expect(page.getByText('delete-me-template').first()).toBeVisible({ timeout: 10_000 });
 
-    // Click the delete button for the last (newest) template
-    await page.getByTitle('Delete template').last().click();
+    // Click the delete button in the row of the template we just created
+    await page
+      .locator('div:has(> button[title="Delete template"])')
+      .filter({ hasText: 'delete-me-template' })
+      .getByTitle('Delete template')
+      .click();
 
     // Confirm dialog
     await expect(page.getByText(/delete template/i).first()).toBeVisible({ timeout: 5_000 });
     await page.getByRole('button', { name: /^delete$/i }).click();
 
     // Template should be gone
-    await expect(page.getByText('delete-me-template')).not.toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('delete-me-template')).toHaveCount(0, { timeout: 10_000 });
   });
 });

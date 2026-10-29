@@ -13,19 +13,22 @@ test.describe('Wiki', () => {
     await page.goto(WIKI_URL);
     await expect(page.getByRole('heading', { name: /wiki/i })).toBeVisible();
     // Seed has "Docs" space for Core team
-    await expect(page.getByText('Docs')).toBeVisible();
+    await expect(page.getByRole('main').getByRole('heading', { name: 'Docs' })).toBeVisible();
   });
 
   test('wiki page renders markdown', async ({ page }) => {
-    await page.goto(`${WIKI_URL}/docs/getting-started`);
-    // Page should have rendered markdown content (headings, paragraphs)
-    await expect(page.locator('.prose h1, .prose h2').first()).toBeVisible({ timeout: 10_000 });
+    await page.goto(`${WIKI_URL}/docs/handbook`);
+    // Page should have rendered markdown content (headings, lists)
+    await expect(page.locator('.prose h2', { hasText: 'Working agreements' })).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.locator('.prose li', { hasText: 'Review before merge' })).toBeVisible();
   });
 
   test('wiki page with mermaid diagram renders', async ({ page }) => {
     await page.goto(`${WIKI_URL}/docs/architecture`);
     // Mermaid diagrams render as SVG
-    await expect(page.locator('svg').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('svg[id^="mermaid-"]')).toBeVisible({ timeout: 15_000 });
   });
 
   test('wiki page edit button navigates to editor', async ({ page }) => {

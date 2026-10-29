@@ -13,7 +13,7 @@ test.describe('Wiki Editing', () => {
   test('navigate to wiki and see spaces', async ({ page }) => {
     await page.goto(WIKI_URL);
     await expect(page.getByRole('heading', { name: /wiki/i })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Docs')).toBeVisible();
+    await expect(page.getByRole('main').getByRole('heading', { name: 'Docs' })).toBeVisible();
   });
 
   test('edit button navigates to editor', async ({ page }) => {
@@ -53,14 +53,13 @@ test.describe('Wiki Editing', () => {
   test('create new wiki page button exists', async ({ page }) => {
     await page.goto(`${WIKI_URL}/docs`);
     // Look for a create/new page button
-    await expect(
-      page.getByRole('link', { name: /new page|create page|add page/i }).first()
-        .or(page.getByRole('button', { name: /new page|create page|add page|new/i }).first())
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('link', { name: 'New Page' }).first()).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test('wiki page view renders markdown content', async ({ page }) => {
-    await page.goto(`${WIKI_URL}/docs/getting-started`);
+    await page.goto(`${WIKI_URL}/docs/handbook`);
     // The page should render markdown with prose styling
     await expect(
       page.locator('.prose').first()
@@ -77,10 +76,6 @@ test.describe('Wiki Editing', () => {
       page.locator('.ProseMirror, [contenteditable="true"]').first()
     ).toBeVisible({ timeout: 10_000 });
     // Editor toolbar should have formatting buttons (bold, italic, etc.)
-    await expect(
-      page.getByRole('button', { name: /bold/i }).first()
-        .or(page.locator('.editor-toolbar, .tiptap-toolbar, [data-testid="toolbar"]').first())
-        .or(page.locator('button[title*="Bold"], button[title*="bold"]').first())
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Bold' })).toBeVisible({ timeout: 10_000 });
   });
 });

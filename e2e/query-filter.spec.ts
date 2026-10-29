@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-import { login, ORG } from './helpers';
+import { login, ORG, issueLinks } from './helpers';
 
 const TEAM = 'core';
 const PROJECT = 'platform';
@@ -16,13 +16,28 @@ test.describe('Query Filter', () => {
     await login(page);
   });
 
-  test('shows all 7 seeded issues without filters', async ({ page }) => {
+  test('shows all seeded issues without filters', async ({ page }) => {
     await page.goto(ISSUES_URL);
     await expect(page.getByRole('heading', { name: /issues/i, level: 1 })).toBeVisible({
       timeout: 10_000,
     });
-    // Seed creates 7 issues
-    await expect(page.getByText(/showing 1-7 of 7/i)).toBeVisible({ timeout: 10_000 });
+    // Seed creates 7 issues; other specs may add more, so only require "all of N shown", N >= 7
+    const summary = page.getByText(/showing 1-\d+ of \d+/i);
+    await expect(summary).toBeVisible({ timeout: 10_000 });
+    const [, shown, total] = (await summary.innerText()).match(/1-(\d+) of (\d+)/i) ?? [];
+    expect(shown).toBe(total);
+    expect(Number(total)).toBeGreaterThanOrEqual(7);
+    for (const title of [
+      'Set up CI/CD pipeline',
+      'Add rate limiting to API',
+      'Login page shows blank on slow connection',
+      'User profile editing',
+      'Dark mode support',
+      'Fix broken search indexing',
+      'API response caching',
+    ]) {
+      await expect(page.getByText(title)).toBeVisible();
+    }
   });
 
   test('filters issues by type via q param', async ({ page }) => {

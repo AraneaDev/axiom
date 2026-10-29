@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-import { login, ORG } from './helpers';
+import { login, ORG, issueLinks } from './helpers';
 
 const BOARD_URL = `/${ORG}/core/platform/board`;
 
@@ -33,9 +33,10 @@ test.describe('Kanban Board', () => {
   test('clicking a board card navigates to issue detail', async ({ page }) => {
     await page.goto(BOARD_URL);
     // Click on an issue link within the board
-    const card = page.locator('a[href*="/issues/"]').first();
+    const card = issueLinks(page).first();
     await expect(card).toBeVisible({ timeout: 10_000 });
     await card.click();
-    await expect(page.getByText(/PLAT-\d+/)).toBeVisible();
+    await expect(page).toHaveURL(/\/issues\/\d+$/, { timeout: 10_000 });
+    await expect(page.getByText(/PLAT-\d+/).first()).toBeVisible();
   });
 });

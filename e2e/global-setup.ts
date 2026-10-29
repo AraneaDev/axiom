@@ -29,6 +29,8 @@ export default async function globalSetup() {
 
   try {
     // Clean existing data (idempotent re-runs) — order respects foreign keys
+    await prisma.notification.deleteMany();
+    await prisma.sprint.deleteMany();
     await prisma.issue.deleteMany();
     await prisma.automationRule.deleteMany();
     await prisma.pageTemplate.deleteMany();
@@ -147,6 +149,44 @@ export default async function globalSetup() {
       { title: 'API response caching', type: 'TASK' as const, priority: 'LOW' as const },
     ];
 
+    // Project labels (labels / project-settings specs expect these)
+    const labelNames = ['bug', 'frontend', 'backend', 'enhancement'];
+    for (const name of labelNames) {
+      await prisma.label.create({ data: { projectId: project.id, name } });
+    }
+    // A custom field, so the settings page starts non-empty (the empty state has its own "Add Field" button)
+    await prisma.customFieldDefinition.create({
+      data: { projectId: project.id, name: 'Customer', type: 'TEXT', position: 0 },
+    });
+
+    // An issue template, so the templates settings page starts non-empty
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        issueTemplates: [
+          {
+            id: 'e2e-bug-report',
+            name: 'Bug Report',
+            type: 'BUG',
+            title: '[Bug] Describe the problem',
+            body: '',
+            labels: ['bug'],
+          },
+        ],
+      },
+    });
+
+    // Which labels each issue carries, by index into `issues`
+    const issueLabels: string[][] = [
+      ['backend'],
+      ['backend', 'enhancement'],
+      ['bug', 'frontend'],
+      ['frontend'],
+      ['frontend', 'enhancement'],
+      ['bug', 'backend'],
+      ['backend'],
+    ];
+
     for (let i = 0; i < issues.length; i++) {
       await prisma.issue.create({
         data: {
@@ -158,9 +198,41 @@ export default async function globalSetup() {
           priority: issues[i].priority,
           creatorId: admin.id,
           columnId: backlogCol?.id,
+          labels: { connect: issueLabels[i].map((name) => ({ projectId_name: { projectId: project.id, name } })) },
         },
       });
     }
+
+    // Sprints: an active one holding PLAT-1 and PLAT-2, a planned one holding PLAT-4
+    const day = 24 * 60 * 60 * 1000;
+    const sprint1 = await prisma.sprint.create({
+      data: {
+        projectId: project.id,
+        name: 'Sprint 1',
+        goal: 'Get the platform basics in place',
+        status: 'ACTIVE',
+        startDate: new Date(Date.now() - 3 * day),
+        endDate: new Date(Date.now() + 11 * day),
+        committedAt: new Date(Date.now() - 3 * day),
+      },
+    });
+    const sprint2 = await prisma.sprint.create({
+      data: {
+        projectId: project.id,
+        name: 'Sprint 2',
+        status: 'PLANNING',
+        startDate: new Date(Date.now() + 11 * day),
+        endDate: new Date(Date.now() + 25 * day),
+      },
+    });
+    await prisma.issue.updateMany({
+      where: { projectId: project.id, number: { in: [1, 2] } },
+      data: { sprintId: sprint1.id },
+    });
+    await prisma.issue.updateMany({
+      where: { projectId: project.id, number: 4 },
+      data: { sprintId: sprint2.id },
+    });
 
     // Wiki space with built-in templates
     const space = await prisma.wikiSpace.create({
@@ -209,6 +281,55 @@ export default async function globalSetup() {
       },
     });
 
+    // Notifications for the admin: one unread, one read
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: admin.id,
+          type: 'issue:assigned',
+          title: 'Sarah Chen assigned PLAT-1 to you',
+          link: `/axiom/core/platform/issues/1`,
+          read: false,
+        },
+        {
+          userId: admin.id,
+          type: 'issue:commented',
+          title: 'Marcus Kim commented on PLAT-3',
+          link: `/axiom/core/platform/issues/3`,
+          read: true,
+        },
+      ],
+    });
+
+    // Read-only wiki pages. 'getting-started' is the page the editor specs open, and the
+    // collaborative editor auto-saves into it, so these keep the rendering specs independent.
+    const readOnlyPages = [
+      {
+        title: 'Handbook',
+        slug: 'handbook',
+        body: '# Team handbook\n\nHow the Core team works.\n\n## Working agreements\n\n- Review before merge\n- Keep the board current\n',
+      },
+      {
+        title: 'Architecture',
+        slug: 'architecture',
+        body: '# Architecture\n\n```mermaid\ngraph TD\n  A[Client] --> B[API]\n  B --> C[(Database)]\n```\n',
+      },
+    ];
+    for (const [i, pg] of readOnlyPages.entries()) {
+      await prisma.page.create({
+        data: {
+          spaceId: space.id,
+          title: pg.title,
+          slug: pg.slug,
+          body: pg.body,
+          position: i + 2,
+          versions: {
+            create: { version: 1, title: pg.title, body: pg.body, authorId: admin.id },
+          },
+        },
+      });
+    }
+
     // Create an automation rule for testing
     await prisma.automationRule.create({
       data: {
@@ -225,7 +346,7 @@ export default async function globalSetup() {
     });
 
     console.log(
-      'E2E seed complete: 3 users, 1 org, 1 team, 1 project, 7 issues, 1 wiki space, 5 templates, 1 automation rule',
+      'E2E seed complete: 3 users, 1 org, 1 team, 1 project, 7 issues, 4 labels, 1 custom field, 1 issue template, 1 wiki space (3 pages), 5 templates, 1 automation rule, 2 notifications, 2 sprints',
     );
   } finally {
     await prisma.$disconnect();

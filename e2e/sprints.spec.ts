@@ -1,67 +1,59 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 import { login, ORG } from './helpers';
 
 const TEAM = 'core';
 const PROJECT = 'platform';
-const SPRINTS_URL = `/${ORG}/${TEAM}/${PROJECT}/sprints`;
+// Sprints are managed on the backlog page; the seed has an active "Sprint 1"
+// (PLAT-1, PLAT-2) and a planned "Sprint 2" (PLAT-4).
 const BACKLOG_URL = `/${ORG}/${TEAM}/${PROJECT}/backlog`;
+
+/** The header row of each sprint panel (the sidebar summary repeats names and statuses). */
+function sprintHeaders(page: Page) {
+  return page.locator('div:has(> button[title="Collapse sprint"])');
+}
 
 test.describe('Sprints', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
   });
 
-  test('navigate to sprints view', async ({ page }) => {
-    await page.goto(SPRINTS_URL);
-    await expect(
-      page.getByRole('heading', { name: /sprint|backlog/i }).first()
-        .or(page.getByText(/sprint/i).first())
-    ).toBeVisible({ timeout: 10_000 });
+  test('backlog view loads', async ({ page }) => {
+    await page.goto(BACKLOG_URL);
+    await expect(page.getByRole('heading', { name: 'Backlog', level: 1 })).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByRole('button', { name: /create sprint/i })).toBeVisible();
   });
 
   test('sprint list renders sprints', async ({ page }) => {
-    await page.goto(SPRINTS_URL);
-    // Should show at least one sprint or a backlog section
-    await expect(
-      page.locator('[data-testid*="sprint"], .sprint-card, .sprint-section').first()
-        .or(page.getByText(/sprint \d+|backlog/i).first())
-    ).toBeVisible({ timeout: 10_000 });
+    await page.goto(BACKLOG_URL);
+    await expect(sprintHeaders(page)).toHaveCount(2, { timeout: 10_000 });
+    await expect(sprintHeaders(page).filter({ hasText: 'Sprint 1' })).toBeVisible();
+    await expect(sprintHeaders(page).filter({ hasText: 'Sprint 2' })).toBeVisible();
   });
 
   test('sprint shows issue cards', async ({ page }) => {
-    await page.goto(SPRINTS_URL);
-    // Wait for issue cards or rows within sprints
-    await expect(
-      page.locator('a[href*="/issues/"], [data-testid="issue-card"], .issue-card').first()
-        .or(page.getByText(/PLAT-\d+/i).first())
-    ).toBeVisible({ timeout: 15_000 });
+    await page.goto(BACKLOG_URL);
+    await expect(page.getByRole('button', { name: 'Set up CI/CD pipeline' })).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByRole('button', { name: 'Add rate limiting to API' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'User profile editing' })).toBeVisible();
   });
 
   test('sprint shows status indicators', async ({ page }) => {
-    await page.goto(SPRINTS_URL);
-    // Sprints should show status like Active, Planned, Completed
-    await expect(
-      page.getByText(/active|planned|completed|not started/i).first()
-    ).toBeVisible({ timeout: 10_000 });
-  });
-
-  test('backlog view loads', async ({ page }) => {
     await page.goto(BACKLOG_URL);
-    // Should display backlog heading or sprint/backlog content
-    await expect(
-      page.getByRole('heading', { name: /backlog|sprint/i }).first()
-        .or(page.getByText(/backlog/i).first())
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(sprintHeaders(page).filter({ hasText: 'Sprint 1' })).toContainText('ACTIVE', {
+      timeout: 10_000,
+    });
+    await expect(sprintHeaders(page).filter({ hasText: 'Sprint 2' })).toContainText('PLANNING');
   });
 
   test('clicking an issue card navigates to issue detail', async ({ page }) => {
-    await page.goto(SPRINTS_URL);
-    const issueLink = page.locator('a[href*="/issues/"]').first();
-    if (await issueLink.isVisible({ timeout: 10_000 }).catch(() => false)) {
-      await issueLink.click();
-      await expect(page).toHaveURL(/\/issues\/\d+/);
-      await expect(page.getByText(/PLAT-\d+/)).toBeVisible({ timeout: 10_000 });
-    }
+    await page.goto(BACKLOG_URL);
+    await page.getByRole('button', { name: 'Set up CI/CD pipeline' }).click();
+    await expect(page).toHaveURL(/\/issues\/1$/, { timeout: 10_000 });
+    await expect(page.getByText(/PLAT-1\b/).first()).toBeVisible({ timeout: 10_000 });
   });
 });
