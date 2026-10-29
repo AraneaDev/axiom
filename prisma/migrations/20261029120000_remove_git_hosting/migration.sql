@@ -11,17 +11,31 @@ DELETE FROM "notification_preferences" WHERE "eventType" LIKE 'pr\_%';
 -- Automation rules that fire on removed triggers.
 DELETE FROM "automation_rules" WHERE "trigger" IN ('pr:merged', 'workflow:completed', 'workflow:failed');
 
--- Automation rules: strip the removed run_workflow action.
+-- Automation rules whose only actions are the removed run_workflow would be
+-- left with nothing to do; remove them. Rules a user saved without actions
+-- (an empty array) are not touched. This runs before the strip below so it can
+-- tell the two apart. Each CASE guarantees jsonb_array_elements never sees a
+-- non-array value: AND gives no evaluation order, and actions is not validated
+-- on input, so it can hold a JSON object.
+DELETE FROM "automation_rules"
+WHERE CASE
+  WHEN jsonb_typeof("actions"::jsonb) = 'array'
+    THEN jsonb_array_length("actions"::jsonb) > 0
+      AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements("actions"::jsonb) AS a WHERE a->>'type' IS DISTINCT FROM 'run_workflow')
+  ELSE false
+END;
+
+-- Automation rules: strip the removed run_workflow action from the rest.
 UPDATE "automation_rules"
 SET "actions" = COALESCE(
   (SELECT jsonb_agg(a) FROM jsonb_array_elements("actions"::jsonb) AS a WHERE a->>'type' IS DISTINCT FROM 'run_workflow'),
   '[]'::jsonb
 )
-WHERE jsonb_typeof("actions"::jsonb) = 'array'
-  AND EXISTS (SELECT 1 FROM jsonb_array_elements("actions"::jsonb) AS a WHERE a->>'type' = 'run_workflow');
-
--- Rules left with no actions do nothing; remove them.
-DELETE FROM "automation_rules" WHERE "actions"::jsonb = '[]'::jsonb;
+WHERE CASE
+  WHEN jsonb_typeof("actions"::jsonb) = 'array'
+    THEN EXISTS (SELECT 1 FROM jsonb_array_elements("actions"::jsonb) AS a WHERE a->>'type' = 'run_workflow')
+  ELSE false
+END;
 
 -- Activity on pull requests and repositories.
 DELETE FROM "activities" WHERE "resourceType" IN ('pull_request', 'repository');

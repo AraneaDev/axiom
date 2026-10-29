@@ -82,6 +82,18 @@ describe('remove_git_hosting migration data cleanup', () => {
           trigger: 'issue:created',
           actions: [{ type: 'set_status' }],
         },
+        {
+          projectId,
+          name: 'user-empty',
+          trigger: 'issue:created',
+          actions: [],
+        },
+        {
+          projectId,
+          name: 'object-actions',
+          trigger: 'issue:created',
+          actions: { type: 'run_workflow' },
+        },
       ],
     });
     await prisma.activity.createMany({
@@ -130,9 +142,18 @@ describe('remove_git_hosting migration data cleanup', () => {
 
     const rules = await prisma.automationRule.findMany({ where: { projectId } });
     const byName = Object.fromEntries(rules.map((r) => [r.name, r]));
-    expect(Object.keys(byName).sort()).toEqual(['mixed', 'untouched']);
+    expect(Object.keys(byName).sort()).toEqual([
+      'mixed',
+      'object-actions',
+      'untouched',
+      'user-empty',
+    ]);
     expect(byName.mixed.actions).toEqual([{ type: 'add_label' }]);
     expect(byName.untouched.actions).toEqual([{ type: 'set_status' }]);
+    // A rule a user saved without actions is not the migration's to delete.
+    expect(byName['user-empty'].actions).toEqual([]);
+    // Unvalidated input can store a non-array; it must pass through untouched.
+    expect(byName['object-actions'].actions).toEqual({ type: 'run_workflow' });
 
     const acts = await prisma.activity.findMany({ where: { userId } });
     expect(acts.map((a) => a.resourceType)).toEqual(['issue']);
