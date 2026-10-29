@@ -16,6 +16,7 @@ import * as Y from 'yjs';
 
 import { prisma } from '../config/database';
 import { env } from '../config/env';
+import { loadEditorCore } from '../lib/editor-core';
 import type { AuthPayload } from '../middleware/auth';
 import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
@@ -61,7 +62,7 @@ interface CollabClient {
   clientId: number;
 }
 
-interface CollabRoom {
+export interface CollabRoom {
   doc: Y.Doc;
   awareness: InstanceType<typeof import('y-protocols/awareness').Awareness> | null;
   clients: Map<WebSocket, CollabClient>;
@@ -69,6 +70,8 @@ interface CollabRoom {
 }
 
 const rooms = new Map<string, CollabRoom>();
+/** In-flight or settled room creation per page, so concurrent first connections share one room */
+const roomPromises = new Map<string, Promise<CollabRoom>>();
 let collabWss: WebSocketServer | null = null;
 
 /**
@@ -97,13 +100,28 @@ function extractAuth(req: IncomingMessage): { userId: string } | null {
 }
 
 /**
- * Get or create a collaboration room for a page.
+ * Get or create a collaboration room for a page. Concurrent callers share one room.
  * @param pageId
  */
-async function getOrCreateRoom(pageId: string): Promise<CollabRoom> {
-  const existing = rooms.get(pageId);
-  if (existing) return existing;
+export function getOrCreateRoom(pageId: string): Promise<CollabRoom> {
+  const pending = roomPromises.get(pageId);
+  if (pending) return pending;
 
+  const created = createRoom(pageId);
+  roomPromises.set(pageId, created);
+  // A failed load must not poison the page: the next connection retries.
+  created.catch(() => {
+    if (roomPromises.get(pageId) === created) roomPromises.delete(pageId);
+  });
+  return created;
+}
+
+/**
+ * Build a room: load the converter, create the doc and fill it from the page.
+ * @param pageId
+ */
+async function createRoom(pageId: string): Promise<CollabRoom> {
+  await loadEditorCore();
   const awarenessProtocol = await getAwarenessProtocol();
 
   const doc = new Y.Doc();
@@ -126,6 +144,19 @@ async function getOrCreateRoom(pageId: string): Promise<CollabRoom> {
 
   rooms.set(pageId, room);
   return room;
+}
+
+/**
+ * Test-only: drop a room without saving.
+ * @param pageId
+ */
+export function releaseRoomForTest(pageId: string): void {
+  const room = rooms.get(pageId);
+  room?.awareness?.destroy();
+  room?.doc.destroy();
+  rooms.delete(pageId);
+  roomPromises.delete(pageId);
+  clearAuthor(pageId);
 }
 
 /**
@@ -284,6 +315,7 @@ async function handleDisconnect(room: CollabRoom, client: CollabClient): Promise
     room.doc.destroy();
     clearAuthor(room.pageId);
     rooms.delete(room.pageId);
+    roomPromises.delete(room.pageId);
   }
 }
 

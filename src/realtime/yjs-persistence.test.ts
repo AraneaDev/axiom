@@ -3,7 +3,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as Y from 'yjs';
 
 import { prisma } from '../config/database';
+import { markdownToYFragment, yFragmentToMarkdown } from '../lib/editor-core';
 
+import { getOrCreateRoom, releaseRoomForTest } from './collaboration';
 import { clearAuthor, forceSave, loadPageIntoDoc, setLastAuthor } from './yjs-persistence';
 
 describe('Yjs persistence', () => {
@@ -77,6 +79,89 @@ describe('Yjs persistence', () => {
     expect(await prisma.pageVersion.count({ where: { pageId } })).toBe(1);
   });
 
+  it('loads markdown as structure', async () => {
+    const other = await prisma.page.create({
+      data: {
+        spaceId: (await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).spaceId,
+        title: 'Structure Page',
+        slug: 'structure-page',
+        body: '# H\n\ntext',
+      },
+    });
+    const doc = new Y.Doc();
+    await loadPageIntoDoc(other.id, doc);
+    const first = doc.getXmlFragment('default').get(0) as Y.XmlElement;
+    expect(first.nodeName).toBe('heading');
+    clearAuthor(other.id);
+    doc.destroy();
+  });
+
+  it('saves markdown, not XML', async () => {
+    const other = await prisma.page.create({
+      data: {
+        spaceId: (await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).spaceId,
+        title: 'Save Page',
+        slug: 'save-page',
+        body: '# H\n\ntext',
+      },
+    });
+    const doc = new Y.Doc();
+    await loadPageIntoDoc(other.id, doc);
+    const fragment = doc.getXmlFragment('default');
+    const paragraph = new Y.XmlElement('paragraph');
+    paragraph.insert(0, [new Y.XmlText('added')]);
+    fragment.insert(fragment.length, [paragraph]);
+    setLastAuthor(other.id, userId);
+    await forceSave(other.id, doc);
+    clearAuthor(other.id);
+    doc.destroy();
+
+    const saved = await prisma.page.findUniqueOrThrow({ where: { id: other.id } });
+    expect(saved.body).not.toContain('<paragraph');
+    expect(saved.body).toBe('# H\n\ntext\n\nadded');
+    const version = await prisma.pageVersion.findFirstOrThrow({ where: { pageId: other.id } });
+    expect(version.body).toBe(saved.body);
+  });
+
+  it('concurrent first connections share one room', async () => {
+    const [a, b] = await Promise.all([getOrCreateRoom(pageId), getOrCreateRoom(pageId)]);
+    expect(a).toBe(b);
+    expect(await getOrCreateRoom(pageId)).toBe(a);
+    releaseRoomForTest(pageId);
+  });
+
+  it('uses one Yjs instance across converter, collab server and y-protocols', async () => {
+    // The same specifiers collaboration.ts uses, resolved the same way.
+    const syncProtocol = await import('y-protocols/sync');
+    const encoding = await import('lib0/encoding');
+    const decoding = await import('lib0/decoding');
+
+    const server = new Y.Doc();
+    markdownToYFragment('# Title\n\n- one\n- two', server.getXmlFragment('default'));
+    const client = new Y.Doc();
+
+    // Step 1 from the client, step 2 from the server, exactly like the collab handshake.
+    const e1 = encoding.createEncoder();
+    syncProtocol.writeSyncStep1(e1, client);
+    const reply = encoding.createEncoder();
+    syncProtocol.readSyncMessage(
+      decoding.createDecoder(encoding.toUint8Array(e1)),
+      reply,
+      server,
+      null,
+    );
+    syncProtocol.readSyncMessage(
+      decoding.createDecoder(encoding.toUint8Array(reply)),
+      encoding.createEncoder(),
+      client,
+      null,
+    );
+
+    expect(client.getXmlFragment('default').length).toBe(2);
+    expect((client.getXmlFragment('default').get(0) as Y.XmlElement).nodeName).toBe('heading');
+    expect(yFragmentToMarkdown(client.getXmlFragment('default'))).toBe('# Title\n\n- one\n- two');
+  });
+
   it('persists a revert to the loaded content after an earlier save', async () => {
     const other = await prisma.page.create({
       data: {
@@ -89,7 +174,7 @@ describe('Yjs persistence', () => {
     const id = other.id;
     const doc = new Y.Doc();
     await loadPageIntoDoc(id, doc);
-    const loaded = doc.getXmlFragment('default').toJSON();
+    const loaded = yFragmentToMarkdown(doc.getXmlFragment('default'));
     setLastAuthor(id, userId);
 
     const extra = new Y.XmlElement('paragraph');

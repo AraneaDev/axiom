@@ -7,6 +7,7 @@
 import * as Y from 'yjs';
 
 import { prisma } from '../config/database';
+import { markdownToYFragment, normalizeMarkdown, yFragmentToMarkdown } from '../lib/editor-core';
 import { logger } from '../utils/logger';
 
 const SAVE_DEBOUNCE_MS = 5_000;
@@ -43,19 +44,11 @@ export async function loadPageIntoDoc(pageId: string, doc: Y.Doc): Promise<void>
   if (!page) return;
 
   // Only populate if the doc is empty (no prior state)
-  const xmlFragment = doc.getXmlFragment('default');
-  if (xmlFragment.length === 0 && page.body) {
-    // Insert the body as initial content.
-    // TipTap collaboration uses the 'default' XML fragment, whose children must be
-    // elements (a bare text node at the top level cannot be rendered by y-tiptap and
-    // crashes the editor of the next client that connects), so wrap the text in a paragraph.
-    doc.transact(() => {
-      const paragraph = new Y.XmlElement('paragraph');
-      paragraph.insert(0, [new Y.XmlText(page.body)]);
-      xmlFragment.insert(0, [paragraph]);
-    });
+  const fragment = doc.getXmlFragment('default');
+  if (fragment.length === 0 && page.body) {
+    markdownToYFragment(page.body, fragment);
   }
-  loadedSnapshots.set(pageId, xmlFragment.toJSON());
+  loadedSnapshots.set(pageId, normalizeMarkdown(page.body));
 }
 
 /**
@@ -65,8 +58,7 @@ export async function loadPageIntoDoc(pageId: string, doc: Y.Doc): Promise<void>
  * @param doc
  */
 async function persistDoc(pageId: string, doc: Y.Doc): Promise<void> {
-  const xmlFragment = doc.getXmlFragment('default');
-  const body = xmlFragment.toJSON();
+  const body = yFragmentToMarkdown(doc.getXmlFragment('default'));
 
   const authorId = lastAuthors.get(pageId);
   if (!authorId) return;
