@@ -8,13 +8,8 @@ export type RealtimeEvent =
   | { type: 'issue:links-updated'; issueId: string }
   | { type: 'comment:added'; projectId: string; issueId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
-  | { type: 'pr:updated'; repoId: string; prId: string }
-  | { type: 'pr:merged'; repoId: string; prId: string }
   | { type: 'wiki:updated'; spaceId: string; pageId: string }
   | { type: 'notification'; userId: string; notificationId: string }
-  | { type: 'pipeline:updated'; repoId: string; runId: string }
-  | { type: 'repo:pushed'; repoId: string; ref: string }
-  | { type: 'runner-task:updated'; repoId: string; taskId: string }
   | { type: 'approval:request:created'; projectId: string; requestId: string; issueId: string }
   | {
       type: 'approval:request:updated';

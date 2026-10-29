@@ -161,7 +161,7 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
 
 /**
  * Broadcast a message to all clients subscribed to a given room.
- * @param room - The room name (e.g. "repo:abc123")
+ * @param room - The room name (e.g. "project:abc123")
  * @param payload - JSON-serializable event data
  */
 export function broadcastToRoom(room: string, payload: Record<string, unknown>): void {

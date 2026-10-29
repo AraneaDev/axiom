@@ -6,7 +6,6 @@ export interface SystemStats {
   totalIssues: number;
   totalWikiPages: number;
   storage: {
-    reposBytes: number;
     storageBytes: number;
     totalBytes: number;
   };
@@ -39,7 +38,6 @@ export interface UserListResponse {
 }
 
 export interface SystemSettings {
-  reposPath: string;
   storagePath: string;
   nodeEnv: string;
   port: number;

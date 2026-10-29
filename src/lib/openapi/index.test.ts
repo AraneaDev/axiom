@@ -3,8 +3,6 @@ import { describe, it, expect, beforeAll } from 'vitest';
 // Import route registrations (side-effect: populates registry)
 import './routes/auth';
 import './routes/issues';
-import './routes/repos';
-import './routes/pulls';
 import './routes/wiki';
 
 import { createOpenAPISpec } from './registry';
@@ -37,18 +35,6 @@ describe('OpenAPI spec', () => {
   it('has issue paths', () => {
     expect(spec.paths?.['/projects/{org}/{team}/{project}/issues']).toBeDefined();
     expect(spec.paths?.['/projects/{org}/{team}/{project}/issues/{num}']).toBeDefined();
-  });
-
-  it('has repo paths', () => {
-    expect(spec.paths?.['/repos/{org}/{team}']).toBeDefined();
-    expect(spec.paths?.['/repos/{org}/{team}/{repo}']).toBeDefined();
-    expect(spec.paths?.['/repos/{org}/{team}/{repo}/branches']).toBeDefined();
-    expect(spec.paths?.['/repos/{org}/{team}/{repo}/commits']).toBeDefined();
-  });
-
-  it('has pull request paths', () => {
-    expect(spec.paths?.['/repos/{org}/{team}/{repo}/pulls']).toBeDefined();
-    expect(spec.paths?.['/repos/{org}/{team}/{repo}/pulls/{prNumber}']).toBeDefined();
   });
 
   it('has wiki paths', () => {

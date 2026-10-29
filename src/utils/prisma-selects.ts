@@ -39,14 +39,6 @@ export const PROJECT_URL_WITH_NAME_SELECT = {
   team: { select: TEAM_ORG_SELECT },
 } as const;
 
-/** Repo select for URL building: id, slug, name, team.slug, org.slug */
-export const REPO_URL_SELECT = {
-  id: true,
-  slug: true,
-  name: true,
-  team: { select: TEAM_ORG_SELECT },
-} as const;
-
 /** Wiki space select for URL building: id, name, slug, team.slug, org.slug */
 export const SPACE_URL_SELECT = {
   id: true,
@@ -61,11 +53,6 @@ export const TEAM_ORG_INCLUDE = { team: { include: { org: true } } } as const;
 /** Include chain for project → team → org (used in issue URL building) */
 export const PROJECT_TEAM_ORG_INCLUDE = {
   project: { include: { team: { include: { org: true } } } },
-} as const;
-
-/** Include chain for repo → team → org (used in PR/repo URL building) */
-export const REPO_TEAM_ORG_INCLUDE = {
-  repo: { include: { team: { include: { org: true } } } },
 } as const;
 
 /** Include chain for space → team → org (used in wiki URL building) */

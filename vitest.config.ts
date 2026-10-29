@@ -10,10 +10,7 @@ export default defineConfig({
       JWT_SECRET: 'test-secret-must-be-at-least-32-characters-long',
       JWT_REFRESH_SECRET: 'test-refresh-secret-must-be-32-chars-long',
       PORT: '3001',
-      REPOS_PATH: '/tmp/axiom-test-repos',
       NODE_ENV: 'test',
-      AXIOM_HOOK_ENTRY: `${process.cwd()}/src/git/post-receive-hook.ts`,
-      AXIOM_INTERNAL_URL: 'http://127.0.0.1:9',
       REDIS_URL: 'redis://:axiom_dev_redis@localhost:6379',
     },
     coverage: {

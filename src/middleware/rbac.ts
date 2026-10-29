@@ -8,41 +8,6 @@ import { Action, hasPermission, hasOrgPermission } from '../utils/permissions';
 import { AppError } from './errorHandler';
 
 /**
- * Verify the authenticated user is a member of the org that owns the repo.
- * Expects :repoId in route params.
- * @returns Express middleware that checks org membership for the repo's org
- * @throws {AppError} 401 if not authenticated
- * @throws {AppError} 404 if repo not found
- * @throws {AppError} 403 if user is not an org member
- */
-export function requireRepoAccess() {
-  return async (req: Request, _res: Response, next: NextFunction) => {
-    try {
-      const repoId = param(req, 'repoId');
-      const userId = req.userId;
-      if (!userId) throw new AppError(401, 'Authentication required');
-
-      const repo = await prisma.repository.findUnique({
-        where: { id: repoId },
-        select: { team: { select: { orgId: true } } },
-      });
-      if (!repo) throw new AppError(404, ERR.REPOSITORY_NOT_FOUND);
-
-      const orgMembership = await prisma.orgMembership.findUnique({
-        where: { userId_orgId: { userId, orgId: repo.team.orgId } },
-      });
-      if (!orgMembership) {
-        throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
-      }
-
-      next();
-    } catch (err) {
-      next(err);
-    }
-  };
-}
-
-/**
  * Verify the authenticated user is a member of the org that owns the wiki space.
  * Expects :spaceId in route params.
  * @returns Express middleware that checks org membership for the space's org

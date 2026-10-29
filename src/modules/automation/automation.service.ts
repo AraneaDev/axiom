@@ -14,9 +14,7 @@ export type AutomationTrigger =
   | 'issue:created'
   | 'issue:status_changed'
   | 'issue:assigned'
-  | 'label:added'
-  | 'workflow:completed'
-  | 'workflow:failed';
+  | 'label:added';
 
 export interface AutomationCondition {
   field: string;

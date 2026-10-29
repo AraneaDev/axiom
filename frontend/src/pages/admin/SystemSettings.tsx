@@ -126,7 +126,6 @@ export default function SystemSettings() {
           <h3 className="font-semibold text-sm text-text">Storage</h3>
         </div>
         <div className="divide-y divide-border-light">
-          <SettingRow icon={FolderOpen} label="Repositories Path" value={settings.reposPath} />
           <SettingRow icon={FolderOpen} label="Storage Path" value={settings.storagePath} />
         </div>
       </Card>

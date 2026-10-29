@@ -43,7 +43,7 @@ export async function createTeam(
 }
 
 /**
- * Retrieve a team by ID with members, repos, projects, and wiki spaces.
+ * Retrieve a team by ID with members, projects, and wiki spaces.
  * @param teamId - The team ID
  * @returns The team with all related resources
  * @throws {AppError} 404 if team not found
@@ -67,7 +67,6 @@ export async function getTeam(teamId: string) {
           },
           orderBy: { createdAt: 'asc' },
         },
-        repos: { select: { id: true, name: true, slug: true, visibility: true } },
         projects: { select: { id: true, name: true, slug: true, prefix: true } },
         wikiSpaces: { select: { id: true, name: true, slug: true } },
       },
@@ -82,7 +81,7 @@ export async function getTeam(teamId: string) {
  * @param query - Pagination query params (limit, offset)
  * @param query.limit
  * @param query.offset
- * @returns Paginated list of teams with counts, repos, and wiki spaces
+ * @returns Paginated list of teams with counts and wiki spaces
  */
 export async function listOrgTeams(orgId: string, query: { limit?: string; offset?: string } = {}) {
   const { take, skip } = parsePagination(query, { limit: 50 });
@@ -92,11 +91,7 @@ export async function listOrgTeams(orgId: string, query: { limit?: string; offse
     prisma.team.findMany({
       where,
       include: {
-        _count: { select: { members: true, repos: true, projects: true } },
-        repos: {
-          select: { id: true, name: true, slug: true, visibility: true },
-          orderBy: { name: 'asc' },
-        },
+        _count: { select: { members: true, projects: true } },
         wikiSpaces: {
           select: { id: true, name: true, slug: true, _count: { select: { pages: true } } },
           orderBy: { name: 'asc' },

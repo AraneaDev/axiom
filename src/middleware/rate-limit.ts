@@ -40,11 +40,3 @@ export const searchLimiter = rateLimit({
   message: errorMessage('Too many search requests, please try again later'),
   skip,
 });
-
-/** Git smart HTTP: 120 req/min */
-export const gitLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 120,
-  message: errorMessage('Too many git requests, please try again later'),
-  skip,
-});

@@ -10,7 +10,6 @@ export type Action =
   | 'repo:delete'
   | 'repo:push'
   | 'repo:read'
-  | 'pr:manage'
   | 'project:create'
   | 'project:delete'
   | 'issue:create'
@@ -30,11 +29,6 @@ const orgPermissions: Record<OrgRole, Set<Action>> = {
     'team:create',
     'team:delete',
     'team:manage_members',
-    'repo:create',
-    'repo:delete',
-    'repo:push',
-    'repo:read',
-    'pr:manage',
     'project:create',
     'project:delete',
     'issue:create',
@@ -51,11 +45,6 @@ const orgPermissions: Record<OrgRole, Set<Action>> = {
     'team:create',
     'team:delete',
     'team:manage_members',
-    'repo:create',
-    'repo:delete',
-    'repo:push',
-    'repo:read',
-    'pr:manage',
     'project:create',
     'project:delete',
     'issue:create',
@@ -69,10 +58,6 @@ const orgPermissions: Record<OrgRole, Set<Action>> = {
     'audit:view',
   ]),
   MEMBER: new Set([
-    'repo:create',
-    'repo:push',
-    'repo:read',
-    'pr:manage',
     'project:create',
     'issue:create',
     'issue:edit',
@@ -82,7 +67,7 @@ const orgPermissions: Record<OrgRole, Set<Action>> = {
     'wiki:view',
     'api_key:manage_own',
   ]),
-  VIEWER: new Set(['repo:read', 'issue:view', 'wiki:view']),
+  VIEWER: new Set(['issue:view', 'wiki:view']),
   GUEST: new Set([
     // Guest permissions are granted per-resource, not org-wide
   ]),
@@ -92,11 +77,6 @@ const orgPermissions: Record<OrgRole, Set<Action>> = {
 const teamPermissions: Record<TeamRole, Set<Action>> = {
   ADMIN: new Set([
     'team:manage_members',
-    'repo:create',
-    'repo:delete',
-    'repo:push',
-    'repo:read',
-    'pr:manage',
     'project:create',
     'project:delete',
     'issue:create',
@@ -107,10 +87,6 @@ const teamPermissions: Record<TeamRole, Set<Action>> = {
     'wiki:view',
   ]),
   MEMBER: new Set([
-    'repo:create',
-    'repo:push',
-    'repo:read',
-    'pr:manage',
     'project:create',
     'issue:create',
     'issue:edit',
@@ -119,7 +95,7 @@ const teamPermissions: Record<TeamRole, Set<Action>> = {
     'wiki:edit',
     'wiki:view',
   ]),
-  VIEWER: new Set(['repo:read', 'issue:view', 'wiki:view']),
+  VIEWER: new Set(['issue:view', 'wiki:view']),
 };
 
 /**

@@ -62,7 +62,6 @@ export async function getSystemStats() {
   ]);
 
   const storagePath = process.env.STORAGE_PATH || '/data/storage';
-  const reposSize = getDirectorySize(env.REPOS_PATH);
   const storageSize = getDirectorySize(storagePath);
 
   return {
@@ -71,9 +70,8 @@ export async function getSystemStats() {
     totalIssues,
     totalWikiPages,
     storage: {
-      reposBytes: reposSize,
       storageBytes: storageSize,
-      totalBytes: reposSize + storageSize,
+      totalBytes: storageSize,
     },
     databaseSize: dbSize,
   };
@@ -258,7 +256,6 @@ export async function resetUserPassword(userId: string, newPassword: string) {
  */
 export function getSystemSettings() {
   return {
-    reposPath: env.REPOS_PATH,
     storagePath: process.env.STORAGE_PATH || '/data/storage',
     nodeEnv: env.NODE_ENV,
     port: env.PORT,

@@ -11,7 +11,6 @@ describe('RBAC Permission Boundaries', () => {
   let orgId: string;
   let teamId: string;
   let projectId: string;
-  let repoId: string;
   let wikiSpaceId: string;
   let issueNumber: number;
 
@@ -83,13 +82,6 @@ describe('RBAC Permission Boundaries', () => {
       .send({ name: 'RBAC Project', slug: 'rbac-project', prefix: 'RBC' });
     projectId = projectRes.body.id;
 
-    // Create repo
-    const repoRes = await request(app)
-      .post(`/api/repos/team/${teamId}`)
-      .set(authed(ownerToken))
-      .send({ name: 'RBAC Repo', slug: 'rbac-repo', description: 'Test repo for RBAC' });
-    repoId = repoRes.body.id;
-
     // Create wiki space
     const wikiRes = await request(app)
       .post(`/api/wiki/team/${teamId}/spaces`)
@@ -129,11 +121,6 @@ describe('RBAC Permission Boundaries', () => {
 
     it('should reject unauthenticated issue list', async () => {
       const res = await request(app).get(`/api/projects/${projectId}/issues`);
-      expect(res.status).toBe(401);
-    });
-
-    it('should reject unauthenticated repo list', async () => {
-      const res = await request(app).get(`/api/repos/team/${teamId}`);
       expect(res.status).toBe(401);
     });
 
@@ -209,14 +196,6 @@ describe('RBAC Permission Boundaries', () => {
         .post(`/api/teams/${teamId}/members`)
         .set(authed(outsiderToken))
         .send({ userId: 'some-id', role: 'MEMBER' });
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot create repos in team', async () => {
-      const res = await request(app)
-        .post(`/api/repos/team/${teamId}`)
-        .set(authed(outsiderToken))
-        .send({ name: 'Hacked Repo', slug: 'hacked-repo' });
       expect(res.status).toBe(403);
     });
 
@@ -303,85 +282,6 @@ describe('RBAC Permission Boundaries', () => {
         .set(authed(outsiderToken))
         .send({ issueIds: [], updates: { priority: 'LOW' } });
       expect(res.status).toBe(403);
-    });
-  });
-
-  // ---------------------------------------------------------------
-  // Repo-level: outsider cannot access repo-specific routes
-  // ---------------------------------------------------------------
-  describe('Repo-level permissions', () => {
-    it('outsider cannot create repos in team (requireTeamPermission enforced)', async () => {
-      const res = await request(app)
-        .post(`/api/repos/team/${teamId}`)
-        .set(authed(outsiderToken))
-        .send({ name: 'Outsider Repo', slug: 'outsider-repo' });
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot view repo details', async () => {
-      const res = await request(app).get(`/api/repos/${repoId}`).set(authed(outsiderToken));
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot update repo', async () => {
-      const res = await request(app)
-        .patch(`/api/repos/${repoId}`)
-        .set(authed(outsiderToken))
-        .send({ name: 'Hacked Repo' });
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot delete repo', async () => {
-      const res = await request(app).delete(`/api/repos/${repoId}`).set(authed(outsiderToken));
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot list repo branches', async () => {
-      const res = await request(app)
-        .get(`/api/repos/${repoId}/branches`)
-        .set(authed(outsiderToken));
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot list repo commits', async () => {
-      const res = await request(app).get(`/api/repos/${repoId}/commits`).set(authed(outsiderToken));
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot list repo tags', async () => {
-      const res = await request(app).get(`/api/repos/${repoId}/tags`).set(authed(outsiderToken));
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot create PRs', async () => {
-      const res = await request(app)
-        .post(`/api/repos/${repoId}/pulls`)
-        .set(authed(outsiderToken))
-        .send({ title: 'Outsider PR', sourceBranch: 'main', targetBranch: 'main' });
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot list PRs', async () => {
-      const res = await request(app).get(`/api/repos/${repoId}/pulls`).set(authed(outsiderToken));
-      expect(res.status).toBe(403);
-    });
-
-    it('outsider cannot manage webhooks', async () => {
-      const res = await request(app)
-        .post(`/api/repos/${repoId}/webhooks`)
-        .set(authed(outsiderToken))
-        .send({ url: 'https://evil.com/hook', events: ['push'] });
-      expect(res.status).toBe(403);
-    });
-
-    it('unauthenticated cannot view repo', async () => {
-      const res = await request(app).get(`/api/repos/${repoId}`);
-      expect(res.status).toBe(401);
-    });
-
-    it('unauthenticated cannot list repo branches', async () => {
-      const res = await request(app).get(`/api/repos/${repoId}/branches`);
-      expect(res.status).toBe(401);
     });
   });
 
@@ -519,11 +419,6 @@ describe('RBAC Permission Boundaries', () => {
 
     it('owner can list wiki spaces', async () => {
       const res = await request(app).get(`/api/wiki/team/${teamId}/spaces`).set(authed(ownerToken));
-      expect(res.status).toBe(200);
-    });
-
-    it('owner can view repo details', async () => {
-      const res = await request(app).get(`/api/repos/${repoId}`).set(authed(ownerToken));
       expect(res.status).toBe(200);
     });
 

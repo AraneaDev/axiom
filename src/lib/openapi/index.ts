@@ -4,8 +4,6 @@ import { Router } from 'express';
 // Import route registrations (side-effect: registers paths)
 import './routes/auth';
 import './routes/issues';
-import './routes/repos';
-import './routes/pulls';
 import './routes/wiki';
 
 import { createOpenAPISpec } from './registry';

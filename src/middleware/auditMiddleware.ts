@@ -13,7 +13,6 @@ const PATH_RESOURCE_MAP: [RegExp, string][] = [
   [/\/api\/orgs/, 'org'],
   [/\/api\/teams/, 'team'],
   [/\/api\/projects/, 'project'],
-  [/\/api\/repos/, 'repo'],
   [/\/api\/wiki/, 'wiki_page'],
   [/\/api\/users/, 'user'],
   [/\/api\/notifications/, 'notification'],
@@ -24,12 +23,7 @@ const PATH_RESOURCE_MAP: [RegExp, string][] = [
 
 function resolveResourceType(path: string): string {
   // Check specific sub-paths first
-  if (/\/pulls/.test(path)) return 'pull_request';
   if (/\/issues/.test(path)) return 'issue';
-  if (/\/releases/.test(path)) return 'release';
-  if (/\/pipelines/.test(path)) return 'pipeline';
-  if (/\/webhooks/.test(path)) return 'webhook';
-  if (/\/protection/.test(path)) return 'branch_protection';
 
   for (const [pattern, resourceType] of PATH_RESOURCE_MAP) {
     if (pattern.test(path)) return resourceType;

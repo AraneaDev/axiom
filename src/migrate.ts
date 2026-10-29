@@ -3,13 +3,10 @@ import './config/load-env';
 import { execFileSync } from 'child_process';
 
 import { prisma } from './config/database';
-import { reinstallAllHooks } from './git/reinstall-hooks';
 import { logger } from './utils/logger';
 
 async function main(): Promise<void> {
   execFileSync('npx', ['prisma', 'migrate', 'deploy'], { stdio: 'inherit' });
-  const result = await reinstallAllHooks();
-  logger.info('Post-receive hooks reinstalled', result);
 }
 
 main()

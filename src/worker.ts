@@ -1,12 +1,9 @@
 import './config/load-env';
 
 import { prisma } from './config/database';
-import { startRunnerHealthMonitor, stopRunnerHealthMonitor } from './modules/runners/runner-health';
 import { logger } from './utils/logger';
 
 async function main(): Promise<void> {
-  startRunnerHealthMonitor();
-
   let stopEmail: (() => Promise<void>) | null = null;
   if (process.env.SMTP_HOST) {
     const { startEmailWorker, stopEmailWorker } = await import('./email/queue');
@@ -20,7 +17,6 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string) => {
     logger.info('Worker shutting down', { signal });
-    stopRunnerHealthMonitor();
     if (stopEmail) await stopEmail();
     await prisma.$disconnect();
     process.exit(0);

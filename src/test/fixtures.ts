@@ -7,12 +7,6 @@ export const validIssue = {
   priority: 'MEDIUM',
 };
 
-export const validRepo = {
-  name: 'test-repo',
-  slug: 'test-repo',
-  description: 'A test repository',
-};
-
 export const validProject = {
   name: 'Test Project',
   slug: 'test-project',

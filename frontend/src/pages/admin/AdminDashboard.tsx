@@ -284,13 +284,7 @@ export default function AdminDashboard() {
           <HardDrive className="h-4 w-4 text-primary" />
           <h3 className="font-semibold text-sm text-text">Storage Breakdown</h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="rounded-lg bg-surface-secondary p-3">
-            <p className="text-xs text-text-tertiary">Git Repositories</p>
-            <p className="text-lg font-semibold text-text mt-1">
-              {formatSize(stats.storage.reposBytes)}
-            </p>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="rounded-lg bg-surface-secondary p-3">
             <p className="text-xs text-text-tertiary">File Storage</p>
             <p className="text-lg font-semibold text-text mt-1">

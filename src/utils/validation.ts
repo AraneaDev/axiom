@@ -46,30 +46,6 @@ export {
 } from './validation/issue-validators';
 
 export {
-  createRepoSchema,
-  updateRepoSchema,
-  forkRepoSchema,
-  createBranchSchema,
-  updateRepoSettingsSchema,
-  createPRSchema,
-  updatePRSchema,
-  mergePRSchema,
-  submitReviewSchema,
-  addPRCommentSchema,
-  applySuggestionSchema,
-  batchApplySuggestionsSchema,
-  createPipelineSchema,
-  updatePipelineSchema,
-  triggerRunSchema,
-  createReleaseSchema,
-  updateReleaseSchema,
-  createEnvironmentSchema,
-  updateEnvironmentSchema,
-  createDeploymentSchema,
-  updateFileSchema,
-} from './validation/repo-validators';
-
-export {
   createApiTokenSchema,
   createWikiSpaceSchema,
   createPageSchema,

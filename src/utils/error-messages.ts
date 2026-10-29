@@ -4,7 +4,6 @@
 export const ERR = {
   ISSUE_NOT_FOUND: 'Issue not found',
   PROJECT_NOT_FOUND: 'Project not found',
-  REPOSITORY_NOT_FOUND: 'Repository not found',
   TEAM_NOT_FOUND: 'Team not found',
   PAGE_NOT_FOUND: 'Page not found',
   USER_NOT_FOUND: 'User not found',
@@ -17,7 +16,6 @@ export const ERR = {
   WEBHOOK_NOT_FOUND: 'Webhook not found',
   SPACE_NOT_FOUND: 'Space not found',
   ATTACHMENT_NOT_FOUND: 'Attachment not found',
-  RELEASE_NOT_FOUND: 'Release not found',
   ORGANIZATION_NOT_FOUND: 'Organization not found',
   MEMBERSHIP_NOT_FOUND: 'Membership not found',
   MILESTONE_NOT_FOUND: 'Milestone not found',
