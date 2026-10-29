@@ -1,4 +1,4 @@
-import { Node } from '@tiptap/core';
+import { Mark, Node } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type MarkdownIt from 'markdown-it';
 
@@ -122,12 +122,13 @@ function footnoteDefinition(
  * @param silent - Validation mode.
  */
 function footnoteReference(state: StateInline, silent: boolean): boolean {
+  // Silent mode is markdown-it skipping over a link label: claiming `[^1]` there makes
+  // the link rule treat it as a nested link and give up on the whole link.
+  if (silent) return false;
   const match = state.src.slice(state.pos).match(/^\[\^[^\]\s]+\](?!:)/);
   if (!match) return false;
-  if (!silent) {
-    const token = state.push('html_inline', '', 0);
-    token.content = match[0];
-  }
+  const token = state.push('html_inline', '', 0);
+  token.content = match[0];
   state.pos += match[0].length;
   return true;
 }
@@ -160,7 +161,7 @@ function setupPassthrough(markdownit: MarkdownIt) {
     if (isStructuralInline(tokens, idx)) {
       return originalInline ? originalInline(tokens, idx, options, env, self) : tokens[idx].content;
     }
-    return `<span data-raw-html-inline="${escapeAttribute(tokens[idx].content)}"></span>`;
+    return `<span data-raw-html-inline="">${escapeAttribute(tokens[idx].content)}</span>`;
   };
 }
 
@@ -215,51 +216,39 @@ export const RawHtmlNode = Node.create({
 });
 
 /**
- * Raw inline HTML: one inline tag the schema has no mark for (`<kbd>`, `</kbd>`,
- * `<sub>`, a styled `<span>`), or a footnote reference, kept verbatim. The text
- * between an opening and a closing tag stays ordinary text.
+ * Raw inline HTML: the source of one inline tag the schema has no mark for (`<kbd>`,
+ * `</kbd>`, `<sub>`, a styled `<span>`), or of a footnote reference, kept as text with
+ * this mark and written back unescaped. The text between an opening and a closing
+ * tag stays ordinary text.
+ *
+ * A mark rather than an atom node, because the Yjs binding keeps marks on text but
+ * drops them on inline nodes: as an atom, a raw tag or footnote inside a link fell
+ * out of the link in the collaborative editor. The low priority makes it the
+ * innermost mark, which prosemirror-markdown needs to write the text unescaped.
  *
  * In the editor it shows as the tag's source text (never as live HTML).
  */
-export const RawHtmlInlineNode = Node.create({
+export const RawHtmlInlineMark = Mark.create({
   name: 'rawHtmlInline',
 
-  group: 'inline',
+  priority: 40,
 
-  inline: true,
+  inclusive: false,
 
-  atom: true,
-
-  addAttributes() {
-    return {
-      html: {
-        default: '',
-        parseHTML: (element: HTMLElement) => element.getAttribute('data-raw-html-inline') ?? '',
-        renderHTML: (attributes: Record<string, unknown>) => ({
-          'data-raw-html-inline': attributes.html,
-        }),
-      },
-    };
-  },
+  excludes: 'rawHtmlInline',
 
   parseHTML() {
     return [{ tag: 'span[data-raw-html-inline]', priority: 60 }];
   },
 
-  renderHTML({ node, HTMLAttributes }) {
-    return ['span', { ...HTMLAttributes, class: 'raw-html-inline' }, node.attrs.html as string];
-  },
-
-  renderText({ node }) {
-    return node.attrs.html as string;
+  renderHTML() {
+    return ['span', { 'data-raw-html-inline': '', class: 'raw-html-inline' }, 0];
   },
 
   addStorage() {
     return {
       markdown: {
-        serialize(state: any, node: PMNode) {
-          state.text(node.attrs.html as string, false);
-        },
+        serialize: { open: '', close: '', escape: false },
         parse: {
           setup: setupPassthrough,
         },

@@ -83,7 +83,9 @@ describe('editor core markdown round trip', () => {
   it.each(fixtures)('round-trips %s', (name) => {
     const md = read(name);
     const once = normalizeMarkdown(md);
-    expect(normalizeMarkdown(once)).toBe(once);
+    const twice = normalizeMarkdown(once);
+    expect(twice).toBe(once);
+    expect(normalizeMarkdown(twice)).toBe(once);
     if (!normalisesOnce(name)) expect(once).toBe(md);
   });
 

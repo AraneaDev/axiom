@@ -16,9 +16,14 @@ import { CodeNode } from './nodes/code';
 import { CollapsibleNode } from './nodes/collapsible';
 import { IssueEmbedNode } from './nodes/issue-embed';
 import { IssueReferenceNode } from './nodes/issue-reference';
-import { BulletListNode, ListItemNode, OrderedListNode } from './nodes/list-item';
+import {
+  BulletListNode,
+  ListItemFirstBlock,
+  ListItemNode,
+  OrderedListNode,
+} from './nodes/list-item';
 import { MentionNode } from './nodes/mention';
-import { RawHtmlInlineNode, RawHtmlNode } from './nodes/raw-html';
+import { RawHtmlInlineMark, RawHtmlNode } from './nodes/raw-html';
 import { SmartLinkNode } from './nodes/smart-link';
 import { TableNode } from './nodes/table';
 import { TableOfContentsNode } from './nodes/table-of-contents';
@@ -38,8 +43,8 @@ export interface SchemaExtensionOptions {
  * here and never change their schema or Markdown output.
  *
  * Several nodes fix tiptap-markdown round trips that dropped or merged content (see
- * their files): the list nodes, `code`, `table`, `mention`, and the raw passthrough
- * nodes `rawHtml` and `rawHtmlInline` (HTML, footnotes). Headings accept levels 1 to 6
+ * their files): the list nodes, `code`, `table`, `mention`, the raw passthrough
+ * node `rawHtml` and mark `rawHtmlInline` (HTML, footnotes). Headings accept levels 1 to 6
  * so deeper headings in Markdown survive; the toolbar still offers 1 to 3. Images are
  * inline, as in Markdown: a block image split its paragraph and emptied table cells.
  *
@@ -87,6 +92,8 @@ export function getSchemaExtensions(opts: SchemaExtensionOptions = {}): AnyExten
     SmartLinkNode,
     IssueEmbedNode,
     RawHtmlNode,
-    RawHtmlInlineNode,
+    RawHtmlInlineMark,
+    // Last: its parse step must run after every other node's updateDOM
+    ListItemFirstBlock,
   ];
 }

@@ -49,6 +49,20 @@ export const TableOfContentsNode = Node.create({
                 p.replaceWith(div);
               }
             });
+            // A tight list item has no <p>: the marker is the item's leading text
+            element.querySelectorAll('li').forEach((li: Element) => {
+              const text = li.firstChild;
+              if (
+                !text ||
+                text.nodeType !== 3 ||
+                (text.nextSibling && text.nextSibling.nodeType !== 1)
+              )
+                return;
+              if (text.textContent?.trim() !== '[TOC]') return;
+              const div = li.ownerDocument!.createElement('div');
+              div.setAttribute('data-table-of-contents', '');
+              li.replaceChild(div, text);
+            });
           },
         },
       },

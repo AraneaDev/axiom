@@ -61,7 +61,13 @@ export const CalloutNode = Node.create({
             error: 'CAUTION',
           };
           const alertType = typeMap[node.attrs.type as string] || 'NOTE';
-          state.wrapBlock('> ', `> [!${alertType}]\n> `, node, () => state.renderContent(node));
+          // The marker line goes inside the quote, so every line gets the current
+          // indent (a callout in a list item keeps the item's indent on each line).
+          state.wrapBlock('> ', null, node, () => {
+            state.write(`[!${alertType}]`);
+            state.ensureNewLine();
+            state.renderContent(node);
+          });
         },
         parse: {
           updateDOM(element: HTMLElement) {

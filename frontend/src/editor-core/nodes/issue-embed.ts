@@ -65,6 +65,23 @@ export const IssueEmbedNode = Node.create({
               div.textContent = `Issue: ${match[1]}`;
               p.replaceWith(div);
             });
+            // A tight list item has no <p>: the embed line is the item's leading text
+            element.querySelectorAll('li').forEach((li: Element) => {
+              const text = li.firstChild;
+              if (
+                !text ||
+                text.nodeType !== 3 ||
+                (text.nextSibling && text.nextSibling.nodeType !== 1)
+              )
+                return;
+              const match = (text.textContent || '').trim().match(/^:::issue\s+([A-Z]+-\d+):::$/);
+              if (!match) return;
+              const div = li.ownerDocument!.createElement('div');
+              div.setAttribute('data-issue-embed', '');
+              div.setAttribute('data-issue-key', match[1]);
+              div.textContent = `Issue: ${match[1]}`;
+              li.replaceChild(div, text);
+            });
           },
         },
       },

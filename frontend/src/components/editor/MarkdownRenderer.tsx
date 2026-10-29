@@ -109,6 +109,18 @@ function sanitize(raw: string, basePath?: string) {
     .replace(/<ul>([\s\S]*?<li class="task-list-item")/g, '<ul class="task-list">$1');
 }
 
+/**
+ * Parse HTML into a detached element of an inert document (no browsing context):
+ * images do not load and event handlers never run, whatever the HTML contains.
+ * @param html - HTML to parse.
+ * @returns A container element holding the parsed nodes.
+ */
+function inertContainer(html: string): HTMLElement {
+  const container = document.implementation.createHTMLDocument('').createElement('div');
+  container.innerHTML = html;
+  return container;
+}
+
 /** Same pattern the editor's issue embed node parses. */
 const ISSUE_EMBED_LINE = /^:::issue\s+([A-Z]+-\d+):::$/;
 
@@ -129,8 +141,9 @@ const GFM_ALERT_TYPES: Record<string, string> = {
  * @param html
  */
 function transformGfmAlerts(html: string): string {
-  const container = document.createElement('div');
-  container.innerHTML = html;
+  // Runs before DOMPurify: parse in an inert document so nothing in the raw HTML loads or runs
+  const container = inertContainer(html);
+  const doc = container.ownerDocument;
 
   container.querySelectorAll('blockquote').forEach((bq) => {
     const firstP = bq.querySelector('p');
@@ -149,7 +162,7 @@ function transformGfmAlerts(html: string): string {
         if (!firstNode.textContent) firstNode.remove();
       }
       if (!firstP.innerHTML.trim()) firstP.remove();
-      const div = document.createElement('div');
+      const div = doc.createElement('div');
       div.setAttribute('data-callout-type', GFM_ALERT_TYPES[alertMatch[1]] || 'info');
       div.innerHTML = bq.innerHTML;
       bq.replaceWith(div);
@@ -161,7 +174,7 @@ function transformGfmAlerts(html: string): string {
         if (!firstNode.textContent) firstNode.remove();
       }
       if (!firstP.innerHTML.trim()) firstP.remove();
-      const div = document.createElement('div');
+      const div = doc.createElement('div');
       div.setAttribute('data-collapsible', '');
       div.setAttribute('data-title', title);
       div.setAttribute('data-open', 'true');
@@ -172,7 +185,7 @@ function transformGfmAlerts(html: string): string {
 
   container.querySelectorAll('p').forEach((p) => {
     if (p.textContent?.trim() === '[TOC]') {
-      const div = document.createElement('div');
+      const div = doc.createElement('div');
       div.setAttribute('data-table-of-contents', '');
       p.replaceWith(div);
       return;
@@ -340,8 +353,7 @@ function ReadOnlyTableOfContents({
 function processCustomBlocks(html: string, allHtml: string): React.ReactNode[] {
   // Parse the full document HTML for headings (used by TOC blocks)
   const tocHeadings: { level: number; text: string; id: string }[] = [];
-  const tocParser = document.createElement('div');
-  tocParser.innerHTML = allHtml;
+  const tocParser = inertContainer(allHtml);
   tocParser.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((el) => {
     const level = parseInt(el.tagName[1], 10);
     const text = el.textContent || '';
@@ -354,8 +366,7 @@ function processCustomBlocks(html: string, allHtml: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
 
   // Use a DOM parser for reliable attribute extraction instead of fragile regexes
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = html;
+  const tempDiv = inertContainer(html);
 
   // Walk top-level children and identify custom blocks
   let htmlBuffer = '';

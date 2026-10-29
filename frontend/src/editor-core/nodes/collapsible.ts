@@ -64,7 +64,13 @@ export const CollapsibleNode = Node.create({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         serialize(state: any, node: any) {
           const title = (node.attrs.title as string) || 'Click to expand';
-          state.wrapBlock('> ', `> [!DETAILS] ${title}\n> `, node, () => state.renderContent(node));
+          // The marker line goes inside the quote, so every line gets the current
+          // indent (a section in a list item keeps the item's indent on each line).
+          state.wrapBlock('> ', null, node, () => {
+            state.write(`[!DETAILS] ${title}`);
+            state.ensureNewLine();
+            state.renderContent(node);
+          });
         },
         parse: {
           updateDOM(element: HTMLElement) {

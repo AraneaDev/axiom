@@ -1,28 +1,57 @@
+import { Extension } from '@tiptap/core';
 import { BulletList, ListItem, OrderedList } from '@tiptap/extension-list';
 import type { Node as PMNode } from '@tiptap/pm/model';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- tiptap-markdown serializer state is untyped */
 
 /**
+ * Whether a list's first line is a list marker with content. CommonMark lets a list
+ * interrupt a paragraph only when its first item does not start empty.
+ * @param list - A bullet or ordered list.
+ */
+function listStartsWithContent(list: PMNode): boolean {
+  const first = list.firstChild?.firstChild;
+  return !!first && (!first.isTextblock || first.content.size > 0);
+}
+
+/**
  * Blocks that interrupt a paragraph in CommonMark, so they can follow it on the
- * next line inside a tight list item. An ordered list only interrupts a paragraph
- * when it starts at 1.
+ * next line inside a tight list item. A list only interrupts a paragraph when its
+ * first item has content, and an ordered list only when it starts at 1.
  * @param node - The block that follows.
  */
 function interruptsParagraph(node: PMNode): boolean {
   switch (node.type.name) {
     case 'codeBlock':
-    case 'bulletList':
     case 'blockquote':
     case 'callout':
     case 'collapsible':
     case 'heading':
       return true;
+    case 'bulletList':
+      return listStartsWithContent(node);
     case 'orderedList':
-      return (node.attrs.start ?? 1) === 1;
+      return (node.attrs.start ?? 1) === 1 && listStartsWithContent(node);
     default:
       return false;
   }
+}
+
+/**
+ * The blocks of a list item as written. An empty first paragraph followed by more
+ * blocks is not written: the item becomes a bare marker line with the next block on
+ * the line below (CommonMark's "item starting with a blank line"; a blank line there
+ * would end the item). `ListItemFirstBlock` puts the empty paragraph back on parse.
+ * @param item - A list item.
+ */
+function writtenChildren(item: PMNode): PMNode[] {
+  const children: PMNode[] = [];
+  item.forEach((child) => children.push(child));
+  const [first] = children;
+  if (children.length > 1 && first.type.name === 'paragraph' && first.content.size === 0) {
+    return children.slice(1);
+  }
+  return children;
 }
 
 /**
@@ -48,8 +77,9 @@ function canJoinTightly(prev: PMNode, next: PMNode): boolean {
 function tightIsSafe(list: PMNode): boolean {
   let safe = true;
   list.forEach((item) => {
-    for (let i = 1; i < item.childCount; i++) {
-      if (!canJoinTightly(item.child(i - 1), item.child(i))) safe = false;
+    const children = writtenChildren(item);
+    for (let i = 1; i < children.length; i++) {
+      if (!canJoinTightly(children[i - 1], children[i])) safe = false;
     }
   });
   return safe;
@@ -70,7 +100,8 @@ function effectiveList(list: PMNode): PMNode {
  * list, the blocks of one item (a paragraph followed by a code block, say) are
  * separated by a single newline. The default puts a blank line between them,
  * which turns the whole list loose on the next parse. The list nodes below only
- * keep a list tight when that join is safe.
+ * keep a list tight when that join is safe. An empty first paragraph before other
+ * blocks is not written (see `writtenChildren`).
  */
 export const ListItemNode = ListItem.extend({
   addStorage() {
@@ -78,13 +109,13 @@ export const ListItemNode = ListItem.extend({
       ...this.parent?.(),
       markdown: {
         serialize(state: any, node: PMNode) {
-          if (!state.inTightList) {
-            state.renderContent(node);
-            return;
-          }
-          node.forEach((child, _offset, i) => {
-            if (i) state.flushClose(1);
-            state.render(child, node, i);
+          const children = writtenChildren(node);
+          const offset = node.childCount - children.length;
+          // Bare marker line: the first written block goes on the next line, no blank line
+          if (offset) state.ensureNewLine();
+          children.forEach((child, i) => {
+            if (i && state.inTightList) state.flushClose(1);
+            state.render(child, node, i + offset);
           });
         },
         parse: {
@@ -139,6 +170,62 @@ export const OrderedListNode = OrderedList.extend({
         },
         parse: {
           // handled by markdown-it
+        },
+      },
+    };
+  },
+});
+
+const BLOCK_TAGS = new Set([
+  'PRE',
+  'UL',
+  'OL',
+  'BLOCKQUOTE',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'HR',
+  'DIV',
+  'TABLE',
+]);
+
+/**
+ * Parse fix: a list item whose content starts with a block (code block, heading,
+ * quote, callout, list, rule, embed) gets an empty first paragraph, as the schema
+ * requires (`paragraph block*`). Without it ProseMirror moved the block out of the
+ * list. Registered last, so it sees the DOM after the other nodes' `updateDOM`.
+ */
+export const ListItemFirstBlock = Extension.create({
+  name: 'listItemFirstBlock',
+
+  addStorage() {
+    return {
+      markdown: {
+        parse: {
+          updateDOM(element: HTMLElement) {
+            // markdown-it marks a tight list by leaving out its items' own <p>. The
+            // stock rule (no <p> anywhere inside) also counted paragraphs nested in a
+            // quote or callout, and would count the placeholders below; mark tight
+            // lists explicitly from their items' direct children instead.
+            const tightLists = [...element.querySelectorAll('ul, ol')].filter((list) =>
+              [...list.children].every(
+                (li) => li.tagName !== 'LI' || ![...li.children].some((c) => c.tagName === 'P'),
+              ),
+            );
+            element.querySelectorAll('li').forEach((li) => {
+              let first = li.firstChild;
+              while (first && first.nodeType === 3 && !first.textContent?.trim()) {
+                first = first.nextSibling;
+              }
+              if (first && first.nodeType === 1 && BLOCK_TAGS.has((first as Element).tagName)) {
+                li.insertBefore(li.ownerDocument.createElement('p'), first);
+              }
+            });
+            tightLists.forEach((list) => list.setAttribute('data-tight', 'true'));
+          },
         },
       },
     };

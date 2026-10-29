@@ -54,13 +54,12 @@ describe('editor core converter', () => {
     expect(proseMirrorJSONToMarkdown(json)).toBe('# Title\n\n:::issue AXM-1:::\n');
   });
 
-  it('keeps inline HTML tags as raw inline nodes, not live HTML', () => {
+  it('keeps inline HTML tags as raw text, not live HTML', () => {
     const json = markdownToProseMirrorJSON('a <kbd>b</kbd> <img src=x onerror=alert(1)>');
     const inline = json.content?.[0].content ?? [];
-    expect(inline.filter((n) => n.type === 'rawHtmlInline').map((n) => n.attrs?.html)).toEqual([
-      '<kbd>',
-      '</kbd>',
-    ]);
+    const raw = inline.filter((n) => n.marks?.some((m) => m.type === 'rawHtmlInline'));
+    expect(raw.map((n) => n.text)).toEqual(['<kbd>', '</kbd>']);
+    expect(inline.find((n) => n.type === 'image')?.attrs).toMatchObject({ src: 'x' });
   });
 
   it('parses a mention span back into a mention node', () => {
@@ -102,6 +101,16 @@ describe('editor core converter', () => {
       paragraph: p('second'),
       issueEmbed: { type: 'issueEmbed', attrs: { issueKey: 'AXM-1' } },
       tableOfContents: { type: 'tableOfContents' },
+      emptyBulletList: {
+        type: 'bulletList',
+        attrs: { tight: true },
+        content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }],
+      },
+      emptyOrderedList: {
+        type: 'orderedList',
+        attrs: { tight: true, start: 1, type: null },
+        content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }],
+      },
       codeBlock: {
         type: 'codeBlock',
         attrs: { language: 'bash' },
@@ -116,6 +125,37 @@ describe('editor core converter', () => {
       expect(shape(back)).toBe(shape(doc as ReturnType<typeof markdownToProseMirrorJSON>));
       expect(normalizeMarkdown(md)).toBe(md);
     });
+    it('keeps a code block in an item whose first paragraph is empty', () => {
+      const doc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'bulletList',
+            attrs: { tight: true },
+            content: [
+              {
+                type: 'listItem',
+                content: [
+                  { type: 'paragraph' },
+                  {
+                    type: 'codeBlock',
+                    attrs: { language: 'bash' },
+                    content: [{ type: 'text', text: 'npm ci' }],
+                  },
+                ],
+              },
+              { type: 'listItem', content: [p('b')] },
+            ],
+          },
+        ],
+      };
+      const md = proseMirrorJSONToMarkdown(doc);
+      expect(shape(markdownToProseMirrorJSON(md))).toBe(
+        shape(doc as ReturnType<typeof markdownToProseMirrorJSON>),
+      );
+      expect(normalizeMarkdown(md)).toBe(md);
+    });
+
     it('stays tight when the next block interrupts a paragraph', () => {
       expect(proseMirrorJSONToMarkdown(tightList(cases.codeBlock))).toBe(
         '- a\n  ```bash\n  npm ci\n  ```\n- b',

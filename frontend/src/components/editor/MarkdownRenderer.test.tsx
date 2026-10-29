@@ -33,3 +33,38 @@ describe('MarkdownRenderer issue embeds', () => {
     expect(container.textContent).toContain(':::foo bar:::');
   });
 });
+
+describe('MarkdownRenderer sanitising', () => {
+  const body = [
+    '# Title',
+    '<img src=x onerror="window.__xss=1">',
+    '<svg onload="window.__xss=1"></svg>',
+    '> [!WARNING]\n> careful <img src=y onerror="window.__xss=1">',
+    '[TOC]',
+  ].join('\n\n');
+
+  it('never parses unsanitised HTML into the live document', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')!;
+    const liveAssignments: string[] = [];
+    const spy = vi.spyOn(Element.prototype, 'innerHTML', 'set').mockImplementation(function (
+      this: Element,
+      value: string,
+    ) {
+      if (this.ownerDocument === document) liveAssignments.push(String(value));
+      descriptor.set!.call(this, value);
+    });
+    try {
+      render(<MarkdownRenderer content={body} />);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(liveAssignments.filter((v) => /onerror|onload/i.test(v))).toEqual([]);
+  });
+
+  it('renders no event handler attributes and runs no script', () => {
+    const { container } = render(<MarkdownRenderer content={body} />);
+    expect(container.querySelector('[onerror], [onload]')).toBeNull();
+    expect(container.innerHTML).not.toMatch(/onerror|onload/i);
+    expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
+  });
+});
