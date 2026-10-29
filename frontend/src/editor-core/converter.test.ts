@@ -187,6 +187,91 @@ describe('editor core converter', () => {
       expect(normalizeMarkdown(md)).toBe(md);
     });
 
+    it('keeps a task item whose empty first paragraph is followed by a nested list', () => {
+      const doc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'taskList',
+            content: [
+              {
+                type: 'taskItem',
+                attrs: { checked: false },
+                content: [
+                  { type: 'paragraph' },
+                  {
+                    type: 'bulletList',
+                    attrs: { tight: true },
+                    content: [{ type: 'listItem', content: [p('sub')] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const md = proseMirrorJSONToMarkdown(doc);
+      expect(shape(markdownToProseMirrorJSON(md))).toBe(
+        shape(doc as ReturnType<typeof markdownToProseMirrorJSON>),
+      );
+      expect(normalizeMarkdown(md)).toBe(md);
+    });
+
+    const typesOf = (md: string) => {
+      const list = markdownToProseMirrorJSON(md).content?.[0];
+      return {
+        list: list?.type,
+        item: list?.content?.[0].type,
+        first: list?.content?.[0].content?.[0],
+      };
+    };
+
+    it('keeps an escaped literal box before a nested list as text', () => {
+      const doc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'bulletList',
+            attrs: { tight: true },
+            content: [
+              {
+                type: 'listItem',
+                content: [
+                  p('[x]'),
+                  {
+                    type: 'bulletList',
+                    attrs: { tight: true },
+                    content: [{ type: 'listItem', content: [p('sub')] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const md = proseMirrorJSONToMarkdown(doc);
+      expect(md).toBe('- \\[x\\]\n  - sub');
+      expect(shape(markdownToProseMirrorJSON(md))).toBe(
+        shape(doc as ReturnType<typeof markdownToProseMirrorJSON>),
+      );
+      expect(normalizeMarkdown(md)).toBe(md);
+    });
+
+    it('reads a box with no space after it before a nested list as a plain bullet', () => {
+      expect(typesOf('- [ ]\n  - sub')).toEqual({
+        list: 'bulletList',
+        item: 'listItem',
+        first: p('[ ]'),
+      });
+    });
+
+    it('never turns an ordered item into a task item', () => {
+      for (const md of ['1. [ ]\n   ```\n   c\n   ```', '1. [ ] \n   ```\n   c\n   ```']) {
+        expect(typesOf(md)).toEqual({ list: 'orderedList', item: 'listItem', first: p('[ ]') });
+        expect(normalizeMarkdown(md)).toBe('1. \\[ \\]\n   ```\n   c\n   ```');
+      }
+    });
+
     it('stays tight when the next block interrupts a paragraph', () => {
       expect(proseMirrorJSONToMarkdown(tightList(cases.codeBlock))).toBe(
         '- a\n  ```bash\n  npm ci\n  ```\n- b',

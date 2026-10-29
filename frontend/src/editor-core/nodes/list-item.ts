@@ -192,6 +192,48 @@ const BLOCK_TAGS = new Set([
   'TABLE',
 ]);
 
+/** Attribute that marks a bare task marker line found in the markdown-it token stream. */
+const TASK_BOX_ATTR = 'data-task-box';
+
+/**
+ * markdown-it core rule: mark the task items that `TaskItemNode` writes as a bare
+ * marker line (`- [ ] ` or `- [x] `, trailing space, block on the next line), which
+ * markdown-it-task-lists does not recognise. Only the raw source counts: an escaped
+ * `\[x\]` (literal text) is not a marker, a box without the trailing space is a plain
+ * bullet (as on GitHub), and an ordered item is never a task item.
+ * @param state - markdown-it core state.
+ */
+function markBareTaskMarkers(state: any): void {
+  const tokens = state.tokens;
+  const lines: string[] = state.src.split('\n');
+  const lists: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.type === 'bullet_list_open' || token.type === 'ordered_list_open') {
+      lists.push(token.type);
+    } else if (token.type === 'bullet_list_close' || token.type === 'ordered_list_close') {
+      lists.pop();
+    } else if (token.type === 'list_item_open' && lists[lists.length - 1] === 'bullet_list_open') {
+      const [open, inline, close, next] = tokens.slice(i + 1, i + 5);
+      const box = inline?.type === 'inline' ? /^\[([ xX])\]$/.exec(inline.content) : null;
+      const map = open?.map;
+      if (
+        open.type !== 'paragraph_open' ||
+        !box ||
+        close?.type !== 'paragraph_close' ||
+        !next ||
+        next.type === 'list_item_close' ||
+        !map ||
+        map[1] - map[0] !== 1 ||
+        !/\[[ xX]\][ \t]+$/.test(lines[map[0]] ?? '')
+      ) {
+        continue;
+      }
+      token.attrSet(TASK_BOX_ATTR, box[1] === ' ' ? 'false' : 'true');
+    }
+  }
+}
+
 /**
  * Parse fix: a list item whose content starts with a block (code block, heading,
  * quote, callout, list, rule, embed) gets an empty first paragraph, as the schema
@@ -205,6 +247,9 @@ export const ListItemFirstBlock = Extension.create({
     return {
       markdown: {
         parse: {
+          setup(markdownit: any) {
+            markdownit.core.ruler.push('bare_task_marker', markBareTaskMarkers);
+          },
           updateDOM(element: HTMLElement) {
             // markdown-it marks a tight list by leaving out its items' own <p>. The
             // stock rule (no <p> anywhere inside) also counted paragraphs nested in a
@@ -215,22 +260,22 @@ export const ListItemFirstBlock = Extension.create({
                 (li) => li.tagName !== 'LI' || ![...li.children].some((c) => c.tagName === 'P'),
               ),
             );
-            // A task item written as a bare marker line (`- [ ]` with a block below)
-            // is not recognised by markdown-it-task-lists, which wants text after the
-            // box: mark it as a task item here, before the placeholder goes in.
-            element.querySelectorAll('li').forEach((li) => {
-              const nodes = [...li.childNodes].filter(
+            // A task item written as a bare marker line, marked in the token stream by
+            // `markBareTaskMarkers`: turn it into a task item before the placeholder
+            // goes in. The box is the item's leading text (tight) or a lone <p> (loose).
+            element.querySelectorAll(`li[${TASK_BOX_ATTR}]`).forEach((li) => {
+              const checked = li.getAttribute(TASK_BOX_ATTR);
+              li.removeAttribute(TASK_BOX_ATTR);
+              const [marker, next] = [...li.childNodes].filter(
                 (n) => n.nodeType !== 3 || n.textContent?.trim(),
               );
-              const [marker, next] = nodes;
-              // The box is the item's leading text (tight list) or a lone <p> (loose list)
               const isBoxNode =
                 marker &&
                 (marker.nodeType === 3 ||
-                  ((marker as Element).tagName === 'P' && marker.childNodes.length === 1));
-              const box = isBoxNode ? marker.textContent?.match(/^\s*\[([ xX])\]\s*$/) : null;
+                  ((marker as Element).tagName === 'P' && marker.childNodes.length === 1)) &&
+                /^\s*\[[ xX]\]\s*$/.test(marker.textContent ?? '');
               if (
-                !box ||
+                !isBoxNode ||
                 !next ||
                 next.nodeType !== 1 ||
                 !BLOCK_TAGS.has((next as Element).tagName)
@@ -239,7 +284,7 @@ export const ListItemFirstBlock = Extension.create({
               }
               li.removeChild(marker);
               li.setAttribute('data-type', 'taskItem');
-              li.setAttribute('data-checked', String(box[1] !== ' '));
+              li.setAttribute('data-checked', checked ?? 'false');
               li.parentElement?.setAttribute('data-type', 'taskList');
             });
             element.querySelectorAll('li').forEach((li) => {
