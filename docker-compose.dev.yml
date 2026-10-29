@@ -9,7 +9,6 @@ x-app-dev: &app-dev
     JWT_SECRET: axiom-dev-jwt-secret-change-in-production-must-be-32-chars
     JWT_REFRESH_SECRET: axiom-dev-refresh-secret-change-in-prod-32-chars-min
     PORT: 3000
-    REPOS_PATH: /data/repos
     STORAGE_PATH: /data/uploads
     NODE_ENV: development
     REDIS_URL: redis://:axiom_dev_redis@redis:6379
@@ -17,11 +16,6 @@ x-app-dev: &app-dev
     SMTP_PORT: 25
     SMTP_FROM: "Axiom <noreply@mail.axiom.local>"
     FRONTEND_URL: http://localhost:7000
-    HOOK_SECRET: axiom-dev-hook-secret-min-16-chars
-    AXIOM_INTERNAL_URL: http://api:3000
-    AXIOM_HOOK_ENTRY: /app/src/git/post-receive-hook.ts
-    SSH_ENABLED: "true"
-    SSH_PORT: "2222"
   volumes: &app-dev-volumes
     - ./src:/app/src
     - ./prisma:/app/prisma
@@ -29,7 +23,6 @@ x-app-dev: &app-dev
     - ./scripts:/app/scripts
     - ./vitest.config.ts:/app/vitest.config.ts
     - ./package.json:/app/package.json
-    - ./.data/repos:/data/repos
     - ./.data/uploads:/data/uploads
 
 services:
@@ -115,30 +108,6 @@ services:
       redis:
         condition: service_healthy
 
-  git-ssh:
-    <<: *app-dev
-    profiles: [ssh]
-    command: ["sh", "-c", "npx prisma generate && npx tsx watch src/ssh.ts"]
-    environment:
-      <<: *app-dev-env
-      SSH_LISTEN_PORT: 2222
-      SSH_HOST_KEY: /data/ssh/host_key
-    ports:
-      - "2222:2222"
-    volumes:
-      - ./src:/app/src
-      - ./prisma:/app/prisma
-      - ./prisma.config.ts:/app/prisma.config.ts
-      - ./scripts:/app/scripts
-      - ./vitest.config.ts:/app/vitest.config.ts
-      - ./package.json:/app/package.json
-      - ./.data/repos:/data/repos
-      - ./.data/uploads:/data/uploads
-      - ssh-host-key:/data/ssh
-    depends_on:
-      api:
-        condition: service_healthy
-
   worker:
     <<: *app-dev
     command: ["sh", "-c", "npx prisma generate && npx tsx watch src/worker.ts"]
@@ -185,4 +154,3 @@ volumes:
   redis-data:
   maildata:
   mailstate:
-  ssh-host-key:

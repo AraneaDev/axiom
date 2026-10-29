@@ -1,5 +1,5 @@
 FROM node:25-alpine AS base
-RUN apk add --no-cache git pandoc weasyprint font-noto
+RUN apk add --no-cache pandoc weasyprint font-noto
 RUN addgroup -S axiom && adduser -S -G axiom axiom
 WORKDIR /app
 
@@ -29,11 +29,11 @@ COPY --from=build /app/src/config/load-env.ts ./src/config/load-env.ts
 COPY package.json ./
 COPY scripts ./scripts
 
-RUN mkdir -p /data/repos /data/uploads /data/ssh && chown -R axiom:axiom /app /data
+RUN mkdir -p /data/uploads && chown -R axiom:axiom /app /data
 
 USER axiom
 
-EXPOSE 3000 2222
+EXPOSE 3000
 
-# Entry point per container: dist/index.js (api), dist/ssh.js, dist/worker.js, dist/migrate.js
+# Entry point per container: dist/index.js (api), dist/worker.js, dist/migrate.js
 CMD ["node", "dist/index.js"]

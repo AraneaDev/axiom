@@ -42,7 +42,6 @@ A self-hosted project management platform with integrated Git hosting, CI/CD, an
 ```bash
 npm run docker:dev          # Start PostgreSQL + API + Frontend (ports 5432, 3000, 7000)
 npm run db:seed             # Seed demo data (idempotent, safe to re-run)
-./scripts/init-self-repo.sh # Initialize the self-hosted git repo
 ```
 
 ---

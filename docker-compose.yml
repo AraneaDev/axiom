@@ -8,8 +8,6 @@ x-app: &app
   environment: &app-env
     DATABASE_URL: postgresql://${POSTGRES_USER:-axiom}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-axiom}?schema=public
     REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379
-    AXIOM_INTERNAL_URL: http://api:3000
-    REPOS_PATH: /data/repos
     STORAGE_PATH: /data/uploads
     NODE_ENV: production
   logging:
@@ -73,8 +71,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - git_repos:/data/repos
 
   api:
     <<: *app
@@ -90,7 +86,6 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - git_repos:/data/repos
       - uploads:/data/uploads
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
@@ -100,27 +95,6 @@ services:
       start_period: 15s
     mem_limit: 512m
     cpus: 1.0
-
-  git-ssh:
-    <<: *app
-    profiles: [ssh]
-    command: ["node", "dist/ssh.js"]
-    environment:
-      <<: *app-env
-      SSH_LISTEN_PORT: 2222
-      SSH_HOST_KEY: /data/ssh/host_key
-    ports:
-      - "${SSH_PORT:-2222}:2222"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      api:
-        condition: service_healthy
-    volumes:
-      - git_repos:/data/repos
-      - ssh_host_key:/data/ssh
-    mem_limit: 256m
-    cpus: 0.5
 
   worker:
     <<: *app
@@ -158,7 +132,5 @@ services:
 
 volumes:
   pgdata:
-  git_repos:
   uploads:
   redis_data:
-  ssh_host_key:

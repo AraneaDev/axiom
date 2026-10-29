@@ -2,7 +2,7 @@
 # =============================================================================
 # Axiom Backup Script
 # =============================================================================
-# Dumps PostgreSQL, tars git repos and uploads volumes.
+# Dumps PostgreSQL, tars the uploads volumes.
 # Rotation: 7 daily, 4 weekly.
 #
 # Usage: ./scripts/backup.sh
@@ -30,22 +30,7 @@ docker compose -f "$COMPOSE_DIR/docker-compose.yml" exec -T db \
 DB_SIZE=$(du -h "$DB_FILE" | cut -f1)
 echo "  Database: $DB_SIZE -> $DB_FILE"
 
-# -- 2. Git repos volume -----------------------------------------------------
-REPOS_FILE="$DAILY_DIR/axiom-repos-$DATE.tar.gz"
-REPOS_VOLUME=$(docker volume inspect axiom_git_repos --format '{{ .Mountpoint }}' 2>/dev/null || echo "")
-if [ -n "$REPOS_VOLUME" ] && [ -d "$REPOS_VOLUME" ]; then
-  LAST_REPOS=$(ls -t "$DAILY_DIR"/axiom-repos-*.tar.gz 2>/dev/null | head -1)
-  if [ -z "$LAST_REPOS" ] || [ -n "$(find "$REPOS_VOLUME" -newer "$LAST_REPOS" -type f 2>/dev/null | head -1)" ]; then
-    echo "  Archiving git repos..."
-    tar -czf "$REPOS_FILE" -C "$REPOS_VOLUME" .
-    REPOS_SIZE=$(du -h "$REPOS_FILE" | cut -f1)
-    echo "  Repos: $REPOS_SIZE -> $REPOS_FILE"
-  else
-    echo "  Repos: no changes since last backup, skipping"
-  fi
-fi
-
-# -- 3. Uploads volume -------------------------------------------------------
+# -- 2. Uploads volume -------------------------------------------------------
 UPLOADS_FILE="$DAILY_DIR/axiom-uploads-$DATE.tar.gz"
 UPLOADS_VOLUME=$(docker volume inspect axiom_uploads --format '{{ .Mountpoint }}' 2>/dev/null || echo "")
 if [ -n "$UPLOADS_VOLUME" ] && [ -d "$UPLOADS_VOLUME" ]; then
@@ -60,7 +45,7 @@ if [ -n "$UPLOADS_VOLUME" ] && [ -d "$UPLOADS_VOLUME" ]; then
   fi
 fi
 
-# -- 4. Weekly copy (Sundays) ------------------------------------------------
+# -- 3. Weekly copy (Sundays) ------------------------------------------------
 if [ "$DAY_OF_WEEK" -eq 7 ]; then
   echo "  Creating weekly backup copy..."
   for f in "$DAILY_DIR"/axiom-*-"$DATE".*; do
@@ -69,7 +54,7 @@ if [ "$DAY_OF_WEEK" -eq 7 ]; then
   echo "  Weekly copy done"
 fi
 
-# -- 5. Rotate old backups ---------------------------------------------------
+# -- 4. Rotate old backups ---------------------------------------------------
 echo "  Rotating old backups..."
 
 # Keep 7 daily
