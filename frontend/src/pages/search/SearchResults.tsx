@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Search, FileText, Code2, GitFork, BookOpen, X } from 'lucide-react';
+import { AlertTriangle, Search, FileText, BookOpen, X } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -14,16 +14,13 @@ import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import type { SearchResult, SavedSearch } from '@/lib/types';
 
 import { SearchBar } from './SearchBar';
-import { IssueRow, CodeRow, WikiRow, RepoRow } from './SearchResultRows';
-import type { CodeItem } from './SearchResultRows';
+import { IssueRow, WikiRow } from './SearchResultRows';
 import { WikiFilters } from './WikiFilters';
 
 const SEARCH_TABS = [
   { key: 'all', label: 'All', icon: <Search className="h-4 w-4" /> },
   { key: 'issues', label: 'Issues', icon: <BookOpen className="h-4 w-4" /> },
-  { key: 'code', label: 'Code', icon: <Code2 className="h-4 w-4" /> },
   { key: 'wiki', label: 'Wiki', icon: <FileText className="h-4 w-4" /> },
-  { key: 'repos', label: 'Repositories', icon: <GitFork className="h-4 w-4" /> },
 ];
 
 /**
@@ -227,21 +224,8 @@ export default function SearchResults() {
             <Card className="divide-y divide-border">
               {group.type === 'issues' &&
                 group.items.map((item) => <IssueRow key={item.id} item={item} />)}
-              {group.type === 'code' &&
-                group.items.map((item, idx) => {
-                  const codeItem = item as unknown as CodeItem;
-                  return (
-                    <CodeRow
-                      key={`${codeItem.repoId}-${codeItem.filePath}-${idx}`}
-                      item={codeItem}
-                      query={query}
-                    />
-                  );
-                })}
               {group.type === 'wiki' &&
                 group.items.map((item) => <WikiRow key={item.id} item={item} />)}
-              {group.type === 'repos' &&
-                group.items.map((item) => <RepoRow key={item.id} item={item} />)}
             </Card>
           )}
         </div>

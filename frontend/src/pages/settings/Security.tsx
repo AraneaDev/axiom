@@ -1,4 +1,4 @@
-import { Shield, Key, KeyRound } from 'lucide-react';
+import { Shield, KeyRound } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { Badge } from '@/components/ui/Badge';
@@ -26,14 +26,9 @@ export default function Security() {
             '2FA adds an extra layer of protection by requiring a code from your authenticator app when signing in.',
         },
         {
-          title: 'SSH Keys',
-          description:
-            'SSH keys let you authenticate with git repositories without entering your password each time.',
-        },
-        {
           title: 'API Tokens',
           description:
-            'Tokens provide programmatic access to the API and can also be used for git HTTPS authentication.',
+            'Tokens provide programmatic access to the API and are scoped to your account.',
         },
       ]}
     >
@@ -63,18 +58,6 @@ export default function Security() {
           )}
         </Card>
 
-        {/* SSH Keys link */}
-        <Link
-          to="/settings/ssh-keys"
-          className="bg-surface rounded-lg border border-border p-4 flex items-center gap-3 hover:border-primary/50 transition-all block"
-        >
-          <Key className="h-5 w-5 text-text-secondary" />
-          <div className="flex-1">
-            <p className="font-medium text-sm">SSH Keys</p>
-            <p className="text-xs text-text-secondary">Manage SSH keys for git access</p>
-          </div>
-        </Link>
-
         {/* API Tokens link */}
         <Link
           to="/settings/tokens"
@@ -83,9 +66,7 @@ export default function Security() {
           <KeyRound className="h-5 w-5 text-text-secondary" />
           <div className="flex-1">
             <p className="font-medium text-sm">API Tokens</p>
-            <p className="text-xs text-text-secondary">
-              Manage tokens for API and git HTTPS access
-            </p>
+            <p className="text-xs text-text-secondary">Manage tokens for API access</p>
           </div>
         </Link>
       </div>

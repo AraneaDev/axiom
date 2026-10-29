@@ -179,45 +179,6 @@ export function DetailSkeleton() {
 }
 
 /**
- * Skeleton for repo detail -- tab bar + file list rows.
- */
-export function RepoSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Skeleton className="h-7 w-48 mb-2" />
-          <Skeleton className="h-4 w-64" />
-        </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-8 w-20 rounded-md" />
-          <Skeleton className="h-8 w-8 rounded-md" />
-        </div>
-      </div>
-      <div className="flex gap-3 border-b border-border pb-4">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-4 w-24" />
-      </div>
-      <div className="flex gap-2 border-b border-border pb-2">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-8 w-24 rounded-md" />
-        ))}
-      </div>
-      <Card className="divide-y divide-border">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 px-4 py-2">
-            <Skeleton className="h-4 w-4 rounded" />
-            <Skeleton className={cn('h-4', i < 2 ? 'w-32' : i < 5 ? 'w-40' : 'w-28')} />
-            <Skeleton className="ml-auto h-3 w-14" />
-          </div>
-        ))}
-      </Card>
-    </div>
-  );
-}
-
-/**
  * Skeleton for analytics pages with a 2-column card grid.
  * @param root0
  * @param root0.showPeriod

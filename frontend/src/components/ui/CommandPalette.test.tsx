@@ -44,7 +44,7 @@ describe('CommandPalette', () => {
   it('renders the search input when open', () => {
     render(<CommandPalette />);
     expect(
-      screen.getByPlaceholderText('Search issues, wiki, repos... (type:bug status:open)'),
+      screen.getByPlaceholderText('Search issues and wiki... (type:bug status:open)'),
     ).toBeInTheDocument();
   });
 
@@ -63,27 +63,21 @@ describe('CommandPalette', () => {
 
   it('calls toggleSearch when Escape key is pressed in input', () => {
     render(<CommandPalette />);
-    const input = screen.getByPlaceholderText(
-      'Search issues, wiki, repos... (type:bug status:open)',
-    );
+    const input = screen.getByPlaceholderText('Search issues and wiki... (type:bug status:open)');
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(mockToggleSearch).toHaveBeenCalled();
   });
 
   it('updates query on input change', () => {
     render(<CommandPalette />);
-    const input = screen.getByPlaceholderText(
-      'Search issues, wiki, repos... (type:bug status:open)',
-    );
+    const input = screen.getByPlaceholderText('Search issues and wiki... (type:bug status:open)');
     fireEvent.change(input, { target: { value: 'test query' } });
     expect(input).toHaveValue('test query');
   });
 
   it('shows no results message after debounce', () => {
     render(<CommandPalette />);
-    const input = screen.getByPlaceholderText(
-      'Search issues, wiki, repos... (type:bug status:open)',
-    );
+    const input = screen.getByPlaceholderText('Search issues and wiki... (type:bug status:open)');
     fireEvent.change(input, { target: { value: 'nonexistent' } });
 
     // Before debounce, no message

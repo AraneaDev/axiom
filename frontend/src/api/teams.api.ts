@@ -64,26 +64,6 @@ export const teamsApi = {
    */
   removeMember: (teamId: string, memberId: string) => del(`/teams/${teamId}/members/${memberId}`),
   /**
-   * List open pull requests across all repos in a team.
-   * @param teamId
-   */
-  listOpenPRs: (teamId: string) =>
-    get<
-      {
-        id: string;
-        number: number;
-        title: string;
-        status: string;
-        sourceBranch: string;
-        targetBranch: string;
-        createdAt: string;
-        updatedAt: string;
-        repo: { id: string; name: string; slug: string };
-        author: { id: string; displayName: string; username: string; avatarUrl: string | null };
-        _count?: { reviews: number; comments: number };
-      }[]
-    >(`/teams/${teamId}/open-prs`),
-  /**
    * Get team activity feed.
    * @param teamId
    */
@@ -118,7 +98,6 @@ export const teamsApi = {
       role: string;
       joinedAt: string;
       assignedIssuesCount: number;
-      openPRsCount: number;
       recentActivity: {
         id: string;
         action: string;

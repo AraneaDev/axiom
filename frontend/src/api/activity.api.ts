@@ -2,7 +2,7 @@ import { get } from './client';
 
 export interface ActivityEvent {
   id: string;
-  resourceType: 'issue' | 'pull_request' | 'wiki_page' | 'repository';
+  resourceType: 'issue' | 'wiki_page';
   resourceId: string;
   action: string;
   userId: string;

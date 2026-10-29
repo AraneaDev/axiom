@@ -2,17 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import {
   ListChecks,
-  GitPullRequest,
   Activity,
   CalendarClock,
-  Clock,
   AlertTriangle,
   ExternalLink,
   TrendingDown,
 } from 'lucide-react';
 import { Link } from 'react-router';
 
-import type { DashboardIssue, DashboardPR, DashboardActivity } from '@/api/dashboard.api';
+import type { DashboardIssue, DashboardActivity } from '@/api/dashboard.api';
 import { projectsApi } from '@/api/projects.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { BurndownChart } from '@/components/BurndownChart';
@@ -138,59 +136,6 @@ export function MyIssuesWidget({ issues }: { issues: DashboardIssue[] }) {
 
 // --- Review Requests widget ---
 
-/**
- *
- * @param root0
- * @param root0.prs
- */
-export function ReviewRequestsWidget({ prs }: { prs: DashboardPR[] }) {
-  return (
-    <Widget icon={GitPullRequest} title="Review Requests" count={prs.length}>
-      {prs.length === 0 ? (
-        <div className="p-6 text-center text-sm text-text-tertiary">No pending review requests</div>
-      ) : (
-        <div className="divide-y divide-border">
-          {prs.map((pr) => {
-            const prLink = pr.repo.team
-              ? `/${pr.repo.team.org.slug}/${pr.repo.team.slug}/repos/${pr.repo.slug}/pulls/${pr.number}`
-              : null;
-            const content = (
-              <>
-                <GitPullRequest className="h-4 w-4 text-success shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{pr.title}</p>
-                  <p className="text-xs text-text-tertiary">
-                    {pr.repo.name} #{pr.number} by {pr.author.displayName}
-                  </p>
-                </div>
-                <span className="text-xs text-text-tertiary shrink-0 flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> {formatRelative(pr.createdAt)}
-                </span>
-              </>
-            );
-            return prLink ? (
-              <Link
-                key={pr.id}
-                to={prLink}
-                className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-secondary transition-colors"
-              >
-                {content}
-              </Link>
-            ) : (
-              <div
-                key={pr.id}
-                className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-secondary transition-colors"
-              >
-                {content}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </Widget>
-  );
-}
-
 // --- Recent Activity widget ---
 
 const ACTION_LABELS: Record<string, string> = {
@@ -200,23 +145,17 @@ const ACTION_LABELS: Record<string, string> = {
   assigned: 'assigned',
   unassigned: 'unassigned',
   commented: 'commented on',
-  merged: 'merged',
   closed: 'closed',
   labeled: 'labeled',
   priority_changed: 'changed priority of',
   type_changed: 'changed type of',
-  review_submitted: 'reviewed',
   deleted: 'deleted',
   time_logged: 'logged time on',
-  suggestion_applied: 'applied suggestion on',
-  suggestions_batch_applied: 'applied suggestions on',
 };
 
 const RESOURCE_TYPE_LABELS: Record<string, string> = {
   issue: 'issue',
-  pull_request: 'PR',
   wiki_page: 'page',
-  repository: 'repo',
 };
 
 function formatActivityDetails(action: string, details: Record<string, unknown> | null): string {
@@ -226,14 +165,6 @@ function formatActivityDetails(action: string, details: Record<string, unknown> 
   if (action === 'priority_changed' && details.from && details.to)
     return `${details.from} -> ${details.to}`;
   if (action === 'updated' && details.field) return String(details.field);
-  if (action === 'review_submitted' && details.status) {
-    const m: Record<string, string> = {
-      APPROVED: 'approved',
-      CHANGES_REQUESTED: 'requested changes',
-      COMMENTED: 'commented',
-    };
-    return m[String(details.status)] ?? '';
-  }
   return '';
 }
 

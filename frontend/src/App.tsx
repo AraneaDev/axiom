@@ -11,7 +11,6 @@ import { useRealtimeInvalidation } from '@/hooks/useRealtimeInvalidation';
 import { AuthGuard, GuestGuard } from '@/lib/guards';
 import { adminRoutes } from '@/routes/admin-routes';
 import { projectRoutes } from '@/routes/project-routes';
-import { repoRoutes } from '@/routes/repo-routes';
 import { useAuthStore } from '@/stores/auth.store';
 import { useUIStore } from '@/stores/ui.store';
 
@@ -173,9 +172,6 @@ function AppWithKeyboard() {
                 </ErrorBoundary>
               }
             />
-
-            {/* Repo routes */}
-            {repoRoutes()}
 
             {/* Project + Wiki routes */}
             {projectRoutes()}

@@ -1,4 +1,4 @@
-import { ArrowRight, Users, GitBranch, FolderKanban } from 'lucide-react';
+import { ArrowRight, Users, FolderKanban } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
@@ -14,7 +14,7 @@ export function TeamCard({
   team,
   orgSlug,
 }: {
-  team: Team & { _count?: { members: number; repos: number; projects: number } };
+  team: Team & { _count?: { members: number; projects: number } };
   orgSlug: string;
 }) {
   return (
@@ -40,9 +40,6 @@ export function TeamCard({
       <div className="flex gap-4 text-xs text-text-tertiary">
         <span className="flex items-center gap-1">
           <FolderKanban className="h-3 w-3" /> {team._count?.projects ?? 0} projects
-        </span>
-        <span className="flex items-center gap-1">
-          <GitBranch className="h-3 w-3" /> {team._count?.repos ?? 0} repos
         </span>
         <span className="flex items-center gap-1">
           <Users className="h-3 w-3" /> {team._count?.members ?? 0} members

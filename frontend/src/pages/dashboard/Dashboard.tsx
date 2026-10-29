@@ -1,13 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  Plus,
-  ArrowRight,
-  ListChecks,
-  GitPullRequest,
-  Activity,
-  CalendarClock,
-  AlertTriangle,
-} from 'lucide-react';
+import { Plus, ArrowRight, ListChecks, Activity, CalendarClock, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { dashboardApi } from '@/api/dashboard.api';
@@ -29,7 +21,6 @@ import { useAuthStore } from '@/stores/auth.store';
 import { TeamCard } from './DashboardTeamStats';
 import {
   MyIssuesWidget,
-  ReviewRequestsWidget,
   UpcomingDueDatesWidget,
   RecentActivityWidget,
   SprintHealthWidget,
@@ -77,8 +68,8 @@ export default function Dashboard() {
               <Skeleton className="h-4 w-40" />
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
               <CardSkeleton key={i} />
             ))}
           </div>
@@ -133,7 +124,7 @@ export default function Dashboard() {
             <>
               {/* Quick stats */}
               {dashboardData && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   {(
                     [
                       {
@@ -143,14 +134,6 @@ export default function Dashboard() {
                         variant: 'primary' as const,
                         color: 'var(--color-primary)',
                         trendKey: 'assignedIssues' as keyof DashboardTrends,
-                      },
-                      {
-                        icon: GitPullRequest,
-                        label: 'Review Requests',
-                        value: dashboardData.reviewRequests?.length ?? 0,
-                        variant: 'default' as const,
-                        color: 'var(--color-accent)',
-                        trendKey: 'reviewRequests' as keyof DashboardTrends,
                       },
                       {
                         icon: CalendarClock,
@@ -188,7 +171,6 @@ export default function Dashboard() {
               {/* Widget grid */}
               <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
                 <MyIssuesWidget issues={dashboardData?.assignedIssues ?? []} />
-                <ReviewRequestsWidget prs={dashboardData?.reviewRequests ?? []} />
                 <UpcomingDueDatesWidget issues={dashboardData?.upcomingDueDates ?? []} />
                 {teams &&
                   teams.length > 0 &&

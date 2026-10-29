@@ -1,5 +1,4 @@
 import {
-  GitCommit,
   MessageSquare,
   ArrowRight,
   UserPlus,
@@ -9,7 +8,6 @@ import {
   Trash2,
   GitMerge,
   XCircle,
-  ClipboardCheck,
   AlertTriangle,
   FileText,
   Paperclip,
@@ -32,15 +30,13 @@ const ACTION_CONFIG: Record<string, { icon: React.ElementType; label: string; co
   unlabeled: { icon: Tag, label: 'removed label', color: 'text-text-secondary' },
   priority_changed: { icon: AlertTriangle, label: 'changed priority', color: 'text-warning' },
   type_changed: { icon: FileText, label: 'changed type', color: 'text-text-secondary' },
-  review_submitted: { icon: ClipboardCheck, label: 'submitted review', color: 'text-primary' },
   deleted: { icon: Trash2, label: 'deleted', color: 'text-danger' },
-  commit: { icon: GitCommit, label: 'committed', color: 'text-text-secondary' },
   attachment_added: { icon: Paperclip, label: 'added attachment', color: 'text-success' },
   attachment_removed: { icon: Paperclip, label: 'removed attachment', color: 'text-danger' },
 };
 
 function getActionConfig(action: string) {
-  return ACTION_CONFIG[action] ?? { icon: GitCommit, label: action, color: 'text-text-secondary' };
+  return ACTION_CONFIG[action] ?? { icon: FileText, label: action, color: 'text-text-secondary' };
 }
 
 function formatDetails(action: string, details: Record<string, unknown> | null): string {

@@ -4,9 +4,6 @@ import {
   BookOpen,
   Users,
   Plus,
-  GitBranch,
-  GitPullRequest,
-  Clock,
   Shield,
   ArrowRight,
   FileText,
@@ -16,7 +13,6 @@ import {
 import { Link } from 'react-router';
 
 import { projectsApi } from '@/api/projects.api';
-import { reposApi } from '@/api/repos.api';
 import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
@@ -27,11 +23,9 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useTeamContext } from '@/hooks/useTeamContext';
-import { formatRelative } from '@/lib/utils';
 
 import { TeamActivityCard } from './TeamActivityCard';
 import { TeamProjectsSection } from './TeamProjectsSection';
-import { TeamReposSection } from './TeamReposSection';
 
 /**
  *
@@ -49,12 +43,6 @@ export default function TeamDetail() {
     enabled: !!currentTeam?.id,
   });
 
-  const { data: repos } = useQuery({
-    queryKey: ['repos', currentTeam?.id],
-    queryFn: () => reposApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-
   const { data: spaces } = useQuery({
     queryKey: ['wikiSpaces', currentTeam?.id],
     queryFn: () => wikiApi.listSpaces(currentTeam!.id),
@@ -64,12 +52,6 @@ export default function TeamDetail() {
   const { data: teamDetail } = useQuery({
     queryKey: ['team', currentTeam?.id],
     queryFn: () => teamsApi.get(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-  });
-
-  const { data: openPRs } = useQuery({
-    queryKey: ['team-open-prs', currentTeam?.id],
-    queryFn: () => teamsApi.listOpenPRs(currentTeam!.id),
     enabled: !!currentTeam?.id,
   });
 
@@ -184,52 +166,6 @@ export default function TeamDetail() {
               />
             </section>
           )}
-
-          {/* Open Pull Requests */}
-          {(openPRs?.length ?? 0) > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <GitPullRequest className="h-5 w-5 text-success" />
-                  <h2 className="h3">Open Pull Requests</h2>
-                  <Badge variant="default" size="sm">
-                    {openPRs!.length}
-                  </Badge>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {openPRs!.map((pr) => (
-                  <Link
-                    key={pr.id}
-                    to={`/${org}/${teamSlug}/repos/${pr.repo.slug}/pulls/${pr.number}`}
-                    className="group bg-surface flex items-center gap-3 rounded-lg border border-border px-4 py-3 hover:border-primary/50 hover:shadow-sm transition-all"
-                  >
-                    <GitPullRequest className="h-4 w-4 text-success shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm text-text truncate">{pr.title}</span>
-                        <Badge variant="outline" size="sm">
-                          {pr.repo.name}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-text-tertiary mt-0.5">
-                        #{pr.number} by {pr.author.displayName}
-                        <span className="mx-1">&middot;</span>
-                        {pr.sourceBranch} <ArrowRight className="h-3 w-3 inline" />{' '}
-                        {pr.targetBranch}
-                      </p>
-                    </div>
-                    <span className="text-xs text-text-tertiary shrink-0 flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> {formatRelative(pr.createdAt)}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Repositories */}
-          <TeamReposSection repos={repos} orgSlug={org} teamSlug={teamSlug} />
         </div>
 
         {/* Sidebar: Members + Activity (sticky, like issue detail) */}
@@ -249,20 +185,6 @@ export default function TeamDetail() {
                 <span className="text-lg font-bold text-text">{spaces?.length ?? 0}</span>
               </div>
               <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Wiki</p>
-            </Card>
-            <Card className="p-3 text-center">
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <GitPullRequest className="h-3.5 w-3.5 text-success" />
-                <span className="text-lg font-bold text-text">{openPRs?.length ?? 0}</span>
-              </div>
-              <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Open PRs</p>
-            </Card>
-            <Card className="p-3 text-center">
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <GitBranch className="h-3.5 w-3.5 text-primary" />
-                <span className="text-lg font-bold text-text">{repos?.length ?? 0}</span>
-              </div>
-              <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Repos</p>
             </Card>
           </div>
 

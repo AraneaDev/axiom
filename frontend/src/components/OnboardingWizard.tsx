@@ -208,7 +208,7 @@ export function OnboardingWizard() {
               <div className="mb-6">
                 <h2 className="text-xl font-bold text-text mb-1">Create your first team</h2>
                 <p className="text-sm text-text-secondary">
-                  Teams contain repositories, issues, wikis, and more.
+                  Teams contain projects, issues, wikis, and more.
                 </p>
               </div>
 

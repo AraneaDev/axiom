@@ -48,7 +48,7 @@ export function SearchBar({
           onKeyDown={(e) => {
             if (e.key === 'Enter') onSearch(inputValue);
           }}
-          placeholder="Search issues, code, wiki pages, repos..."
+          placeholder="Search issues and wiki pages..."
           className="flex-1 text-lg border-none outline-none bg-transparent placeholder:text-text-secondary text-text"
           autoFocus
         />

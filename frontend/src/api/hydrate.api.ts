@@ -36,25 +36,12 @@ export interface BacklogHydration {
   velocity: unknown[] | null;
 }
 
-export interface PRDetailHydration {
-  pr: Record<string, unknown>;
-  mergeChecks: Record<string, unknown> | null;
-  diff: { stats: Record<string, unknown> } | null;
-  commits: unknown[] | null;
-  reviews: unknown[] | null;
-  comments: unknown[] | null;
-  linkedIssues: unknown[] | null;
-}
-
 /**
  * Hydration API -- aggregated endpoints for initial page load.
  */
 export const hydrateApi = {
   issueDetail: (projectId: string, issueNumber: number) =>
     get<IssueDetailHydration>(`/projects/${projectId}/issues/${issueNumber}/hydrate`),
-
-  prDetail: (repoId: string, prNumber: number) =>
-    get<PRDetailHydration>(`/repos/${repoId}/pulls/${prNumber}/hydrate`),
 
   wikiPage: (spaceId: string, pageSlug: string) =>
     get<WikiPageHydration>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/hydrate`),

@@ -69,7 +69,7 @@ export const SmartLinkExtension = Node.create({
 
             // Only handle URLs that look like Axiom paths
             const axiomPattern =
-              /^(https?:\/\/[^/]+)?\/[^/]+\/[^/]+\/(([^/]+\/issues\/\d+)|(repos\/[^/]+\/pulls\/\d+)|(wiki\/[^/]+\/[^/]+))$/;
+              /^(https?:\/\/[^/]+)?\/[^/]+\/[^/]+\/(([^/]+\/issues\/\d+)|(wiki\/[^/]+\/[^/]+))$/;
             if (!axiomPattern.test(text)) return false;
 
             // Resolve the link asynchronously

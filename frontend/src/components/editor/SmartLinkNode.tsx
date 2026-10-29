@@ -1,13 +1,5 @@
 import { type NodeViewProps, NodeViewWrapper } from '@tiptap/react';
-import {
-  Bug,
-  BookOpen,
-  CheckSquare,
-  Layers,
-  GitPullRequest,
-  FileText,
-  CircleDot,
-} from 'lucide-react';
+import { Bug, BookOpen, CheckSquare, Layers, FileText, CircleDot } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 import { Link } from 'react-router';
 
@@ -23,7 +15,6 @@ const ICON_MAP: Record<
   story: BookOpen,
   task: CheckSquare,
   epic: Layers,
-  'git-pull-request': GitPullRequest,
   'file-text': FileText,
 };
 

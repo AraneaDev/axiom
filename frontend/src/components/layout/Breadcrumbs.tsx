@@ -1,14 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  Building2,
-  ChevronRight,
-  FolderKanban,
-  Home,
-  Users,
-  BookOpen,
-  GitBranch,
-  Search,
-} from 'lucide-react';
+import { Building2, ChevronRight, FolderKanban, Home, Users, BookOpen, Search } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
@@ -19,15 +10,11 @@ import { STABLE_STALE_TIME } from '@/lib/constants';
 
 /** Map well-known team-level route keywords to icons and friendly labels */
 const SECTION_META: Record<string, { icon: React.ElementType; label: string }> = {
-  repos: { icon: GitBranch, label: 'Repositories' },
   wiki: { icon: BookOpen, label: 'Wiki' },
   search: { icon: Search, label: 'Search' },
   new: { icon: FolderKanban, label: 'New' },
   create: { icon: FolderKanban, label: 'Create' },
 };
-
-/** Segments inside repo file views (blob, tree, blame) where ref + path should be preserved as-is */
-const REPO_FILE_VIEWS = new Set(['blob', 'tree', 'blame']);
 
 /**
  * Project-level view segments that should NOT appear as breadcrumbs.
@@ -65,7 +52,7 @@ function deSlugify(seg: string) {
  *
  * Project routes (/:org/:team/:project/board etc.) show: Org > Team > Project
  * Issues routes (/:org/:team/:project/issues/123) show: Org > Team > Project > 123
- * Team-level routes (/:org/:team/repos/:repo) keep existing behavior.
+ * Team-level routes (/:org/:team/wiki/:space) keep existing behavior.
  */
 export function Breadcrumbs() {
   const { pathname } = useLocation();
@@ -99,7 +86,7 @@ export function Breadcrumbs() {
 
   if (segments.length === 0) return null;
 
-  // Determine whether segment[2] is a project slug vs a team-level section (repos, wiki, etc.).
+  // Determine whether segment[2] is a project slug vs a team-level section (wiki, etc.).
   // Only treat it as a project when it is not a known SECTION_META keyword and we can confirm
   // a matching project exists in the fetched list (or the list is still loading).
   const thirdSeg = segments[2] ?? '';
@@ -160,7 +147,7 @@ export function Breadcrumbs() {
         }
         return;
       }
-      // Team-level section keyword (repos, wiki, etc.)
+      // Team-level section keyword (wiki, etc.)
       const meta = SECTION_META[seg];
       if (meta) {
         crumbs.push({ label: meta.label, path, icon: meta.icon });
@@ -181,17 +168,14 @@ export function Breadcrumbs() {
       return;
     }
 
-    // Segment 3+ on team-level routes: repo name, wiki space/page, etc.
+    // Segment 3+ on team-level routes: wiki space/page, etc.
     const meta = SECTION_META[seg];
     if (meta) {
       crumbs.push({ label: meta.label, path, icon: meta.icon });
       return;
     }
 
-    // Inside repo file views (blob/tree/blame), preserve ref and filename casing exactly
-    const isInRepoFileView = segments.some((s, idx) => REPO_FILE_VIEWS.has(s) && i > idx);
-    const decoded = decodeURIComponent(seg);
-    crumbs.push({ label: isInRepoFileView ? decoded : deSlugify(decoded), path });
+    crumbs.push({ label: deSlugify(decodeURIComponent(seg)), path });
   });
 
   return (

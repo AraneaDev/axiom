@@ -1,8 +1,8 @@
-import type { SearchResult, CodeSearchResult, SavedSearch } from '@/lib/types';
+import type { SearchResult, SavedSearch } from '@/lib/types';
 
 import { get, post, del } from './client';
 
-export type SearchType = 'issues' | 'wiki' | 'repos' | 'code' | 'all';
+export type SearchType = 'issues' | 'wiki' | 'all';
 
 export interface SearchFilters {
   spaceId?: string;
@@ -11,7 +11,7 @@ export interface SearchFilters {
   until?: string;
 }
 
-/** Search API client for full-text search across issues, wiki, repos, and code. */
+/** Search API client for full-text search across issues and wiki pages. */
 export const searchApi = {
   /**
    * Search across all entity types or a specific type with optional wiki filters.
@@ -26,17 +26,6 @@ export const searchApi = {
     if (filters?.since) params.set('since', filters.since);
     if (filters?.until) params.set('until', filters.until);
     return get<SearchResult[]>(`/search?${params.toString()}`);
-  },
-
-  /**
-   * Search code content across repositories, optionally filtered by repo IDs.
-   * @param q
-   * @param repoIds
-   */
-  searchCode: (q: string, repoIds?: string) => {
-    const params = new URLSearchParams({ q });
-    if (repoIds) params.set('repoIds', repoIds);
-    return get<CodeSearchResult>(`/search/code?${params.toString()}`);
   },
 
   /** Get the current user's saved searches. */

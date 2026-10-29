@@ -30,26 +30,11 @@ const ACTION_OPTIONS = [
   'delete',
   'login',
   'logout',
-  'merge',
-  'push',
   'invite',
   'permission_change',
 ];
 
-const RESOURCE_TYPE_OPTIONS = [
-  'user',
-  'org',
-  'team',
-  'project',
-  'issue',
-  'repo',
-  'pull_request',
-  'wiki_page',
-  'branch_protection',
-  'webhook',
-  'release',
-  'pipeline',
-];
+const RESOURCE_TYPE_OPTIONS = ['user', 'org', 'team', 'project', 'issue', 'wiki_page'];
 
 const ACTION_VARIANT_MAP: Record<string, 'default' | 'primary' | 'danger' | 'warning' | 'success'> =
   {
@@ -58,8 +43,6 @@ const ACTION_VARIANT_MAP: Record<string, 'default' | 'primary' | 'danger' | 'war
     delete: 'danger',
     login: 'primary',
     logout: 'default',
-    merge: 'success',
-    push: 'primary',
     invite: 'warning',
     permission_change: 'warning',
   };

@@ -25,9 +25,8 @@ export interface Team {
   name: string;
   slug: string;
   description?: string;
-  _count?: { members: number; repos: number; projects: number };
+  _count?: { members: number; projects: number };
   members?: TeamMember[];
-  repos?: { id: string; name: string; slug: string; visibility: string }[];
   projects?: { id: string; name: string; slug: string; prefix: string }[];
   wikiSpaces?: { id: string; name: string; slug: string }[];
 }
@@ -308,14 +307,6 @@ export interface ApiToken {
   token?: string; // Only returned on creation
 }
 
-export interface SshKey {
-  id: string;
-  title: string;
-  fingerprint: string;
-  createdAt: string;
-  lastUsedAt?: string;
-}
-
 export interface SearchResultItem {
   id: string;
   url: string;
@@ -336,23 +327,8 @@ export interface SearchResultItem {
 }
 
 export interface SearchResult {
-  type: 'issues' | 'wiki' | 'repos' | 'code';
+  type: 'issues' | 'wiki';
   items: SearchResultItem[];
-  total: number;
-}
-
-export interface CodeMatch {
-  repoId: string;
-  repoName: string;
-  repoUrl: string;
-  filePath: string;
-  lineNumber: number;
-  lineContent: string;
-}
-
-export interface CodeSearchResult {
-  type: 'code';
-  items: CodeMatch[];
   total: number;
 }
 

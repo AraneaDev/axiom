@@ -1,4 +1,4 @@
-import type { User, ApiToken, SshKey } from '@/lib/types';
+import type { User, ApiToken } from '@/lib/types';
 
 import { get, post, patch, del } from './client';
 
@@ -9,7 +9,7 @@ interface UserSearchResult {
   avatarUrl: string | null;
 }
 
-/** Users API client for profile management, SSH keys, and API tokens. */
+/** Users API client for profile management and API tokens. */
 export const usersApi = {
   /**
    * Search users by username or display name.
@@ -25,21 +25,6 @@ export const usersApi = {
    * @param data.avatarUrl
    */
   updateMe: (data: { displayName?: string; avatarUrl?: string }) => patch<User>('/users/me', data),
-  /** List the current user's SSH keys. */
-  listSshKeys: () => get<SshKey[]>('/users/me/ssh-keys'),
-  /**
-   * Add a new SSH public key for git access.
-   * @param data
-   * @param data.title
-   * @param data.publicKey
-   */
-  addSshKey: (data: { title: string; publicKey: string }) =>
-    post<SshKey>('/users/me/ssh-keys', data),
-  /**
-   * Delete an SSH key by ID.
-   * @param keyId
-   */
-  deleteSshKey: (keyId: string) => del(`/users/me/ssh-keys/${keyId}`),
   /** List the current user's API tokens. */
   listApiTokens: () => get<ApiToken[]>('/users/me/tokens'),
   /**

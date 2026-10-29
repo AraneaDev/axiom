@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Search, FileText, BookOpen, GitFork, ArrowRight, Info } from 'lucide-react';
+import { Search, FileText, BookOpen, ArrowRight, Info } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
@@ -11,7 +11,7 @@ import { useUIStore } from '@/stores/ui.store';
 
 interface FlatItem {
   id: string;
-  type: 'issues' | 'wiki' | 'repos';
+  type: 'issues' | 'wiki';
   title: string;
   url: string;
 }
@@ -122,7 +122,6 @@ export function CommandPalette() {
 
   const issueItems = flatItems.filter((i) => i.type === 'issues');
   const wikiItems = flatItems.filter((i) => i.type === 'wiki');
-  const repoItems = flatItems.filter((i) => i.type === 'repos');
 
   const renderGroup = (label: string, icon: React.ReactNode, items: FlatItem[]) => {
     if (items.length === 0) return null;
@@ -171,7 +170,7 @@ export function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search issues, wiki, repos... (type:bug status:open)"
+            placeholder="Search issues and wiki... (type:bug status:open)"
             className="flex-1 bg-transparent text-base text-text placeholder:text-text-tertiary outline-none"
           />
           <kbd className="hidden sm:inline-flex items-center rounded bg-surface-tertiary px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary">
@@ -200,7 +199,6 @@ export function CommandPalette() {
           )}
           {renderGroup('Issues', <FileText className="h-3.5 w-3.5" />, issueItems)}
           {renderGroup('Wiki', <BookOpen className="h-3.5 w-3.5" />, wikiItems)}
-          {renderGroup('Repositories', <GitFork className="h-3.5 w-3.5" />, repoItems)}
         </div>
 
         {/* Footer hint */}

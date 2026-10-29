@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Calendar,
   Clock,
-  GitPullRequest,
   ListChecks,
   Mail,
   Shield,
@@ -134,12 +133,6 @@ export default function MemberProfile() {
                 <ListChecks className="h-4 w-4" /> Assigned Issues
               </span>
               <span className="text-sm font-semibold">{profile.assignedIssuesCount}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary flex items-center gap-2">
-                <GitPullRequest className="h-4 w-4" /> Open PRs
-              </span>
-              <span className="text-sm font-semibold">{profile.openPRsCount}</span>
             </div>
           </Card>
 

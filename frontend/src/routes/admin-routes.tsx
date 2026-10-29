@@ -7,7 +7,6 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 const Profile = lazy(() => import('@/pages/settings/Profile'));
 const Security = lazy(() => import('@/pages/settings/Security'));
-const SshKeys = lazy(() => import('@/pages/settings/SshKeys'));
 const ApiTokens = lazy(() => import('@/pages/settings/ApiTokens'));
 const NotificationSettings = lazy(() => import('@/pages/settings/NotificationSettings'));
 const SearchResults = lazy(() => import('@/pages/search/SearchResults'));
@@ -47,7 +46,6 @@ export function adminRoutes() {
         <Route index element={<Navigate to="profile" replace />} />
         <Route path="profile" element={<Profile />} />
         <Route path="security" element={<Security />} />
-        <Route path="ssh-keys" element={<SshKeys />} />
         <Route path="tokens" element={<ApiTokens />} />
         <Route path="notifications" element={<NotificationSettings />} />
       </Route>

@@ -8,7 +8,6 @@ import {
   TableSkeleton,
   BoardSkeleton,
   DetailSkeleton,
-  RepoSkeleton,
   CardGridSkeleton,
 } from './Skeleton';
 
@@ -90,18 +89,6 @@ describe('DetailSkeleton', () => {
 
   it('produces multiple skeleton elements', () => {
     const { container } = render(<DetailSkeleton />);
-    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(5);
-  });
-});
-
-describe('RepoSkeleton', () => {
-  it('renders without crashing', () => {
-    const { container } = render(<RepoSkeleton />);
-    expect(container.firstChild).toBeTruthy();
-  });
-
-  it('produces multiple skeleton elements', () => {
-    const { container } = render(<RepoSkeleton />);
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(5);
   });
 });

@@ -25,21 +25,6 @@ export interface DashboardIssue {
   };
 }
 
-export interface DashboardPR {
-  id: string;
-  number: number;
-  title: string;
-  status: string;
-  createdAt: string;
-  repo: {
-    id: string;
-    name: string;
-    slug: string;
-    team?: { slug: string; org: { slug: string } };
-  };
-  author: { id: string; displayName: string; username: string; avatarUrl: string | null };
-}
-
 export interface DashboardActivity {
   id: string;
   action: string;
@@ -55,14 +40,12 @@ export interface DashboardActivity {
 
 export interface DashboardTrends {
   assignedIssues: number[];
-  reviewRequests: number[];
   upcomingDueDates: number[];
   recentActivity: number[];
 }
 
 export interface DashboardData {
   assignedIssues: DashboardIssue[];
-  reviewRequests: DashboardPR[];
   recentActivity: DashboardActivity[];
   upcomingDueDates: DashboardIssue[];
   trends?: DashboardTrends;

@@ -2,7 +2,7 @@ import type { Issue, BoardColumn, Comment, EpicProgress, RoadmapEpic } from '@/l
 
 import { get, post, patch, del } from './client';
 
-/** Issues API client for CRUD operations, comments, links, branches, PRs, hierarchy, and bulk actions. */
+/** Issues API client for CRUD operations, comments, links, hierarchy, and bulk actions. */
 export const issuesApi = {
   /**
    * List issues for a project with optional query/filter parameters.
@@ -143,85 +143,6 @@ export const issuesApi = {
     issueNumber: number,
     data: { targetProjectId: string; targetIssueNumber: number; type: string },
   ) => post<{ id: string }>(`/projects/${projectId}/issues/${issueNumber}/links`, data),
-  /**
-   * List git commits associated with an issue.
-   * @param projectId
-   * @param issueNumber
-   */
-  listIssueCommits: (projectId: string, issueNumber: number) =>
-    get<
-      {
-        id: string;
-        sha: string;
-        message: string;
-        authorName: string;
-        committedAt: string;
-        refType: string;
-        repo: { id: string; slug: string; name: string };
-      }[]
-    >(`/projects/${projectId}/issues/${issueNumber}/commits`),
-
-  /**
-   * List git branches associated with an issue.
-   * @param projectId
-   * @param issueNumber
-   */
-  listIssueBranches: (projectId: string, issueNumber: number) =>
-    get<
-      {
-        id: string;
-        branchName: string;
-        repoId: string;
-        repo: { id: string; slug: string; name: string };
-      }[]
-    >(`/projects/${projectId}/issues/${issueNumber}/branches`),
-  /**
-   * Create a new git branch linked to an issue.
-   * @param projectId
-   * @param issueNumber
-   * @param data
-   * @param data.repoId
-   * @param data.branchName
-   * @param data.startPoint
-   */
-  createIssueBranch: (
-    projectId: string,
-    issueNumber: number,
-    data: { repoId: string; branchName: string; startPoint?: string },
-  ) =>
-    post<{ id: string; branchName: string; repo: { id: string; slug: string; name: string } }>(
-      `/projects/${projectId}/issues/${issueNumber}/branches`,
-      data,
-    ),
-  /**
-   * Get a server-suggested branch name for an issue.
-   * @param projectId
-   * @param issueNumber
-   */
-  suggestBranchName: (projectId: string, issueNumber: number) =>
-    get<{ suggestion: string }>(`/projects/${projectId}/issues/${issueNumber}/branches/suggest`),
-
-  /**
-   * List pull requests linked to an issue.
-   * @param projectId
-   * @param issueNumber
-   */
-  listIssuePRs: (projectId: string, issueNumber: number) =>
-    get<
-      {
-        id: string;
-        refType: string;
-        pr: {
-          id: string;
-          number: number;
-          title: string;
-          status: string;
-          sourceBranch: string;
-          repo: { id: string; slug: string; name: string };
-        };
-      }[]
-    >(`/projects/${projectId}/issues/${issueNumber}/pull-requests`),
-
   /**
    * Set or clear the parent issue for hierarchy (epic/sub-task).
    * @param projectId

@@ -8,7 +8,6 @@ import {
   AtSign,
   Inbox,
   MessageSquare,
-  GitPullRequest,
   UserCheck,
   AlertCircle,
   ChevronLeft,
@@ -35,7 +34,6 @@ type FilterTab = 'all' | 'unread' | 'mentions' | 'watching';
 function notificationIcon(type: string) {
   if (type.includes('comment') || type.includes('mention')) return MessageSquare;
   if (type.includes('assign')) return UserCheck;
-  if (type.includes('pr:') || type.includes('pull')) return GitPullRequest;
   if (type.includes('watch')) return Eye;
   return AlertCircle;
 }
@@ -155,7 +153,7 @@ export default function NotificationInbox() {
           description={
             filter === 'unread'
               ? 'You have no unread notifications.'
-              : 'Notifications will appear here when there is activity on issues, pull requests, and other items you are involved with.'
+              : 'Notifications will appear here when there is activity on issues, wiki pages, and other items you are involved with.'
           }
         />
       ) : (

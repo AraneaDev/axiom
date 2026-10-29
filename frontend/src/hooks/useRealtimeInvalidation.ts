@@ -13,13 +13,8 @@ export type RealtimeEvent =
   | { type: 'issue:links-updated'; issueId: string }
   | { type: 'comment:added'; projectId: string; issueId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
-  | { type: 'pr:updated'; repoId: string; prId: string }
-  | { type: 'pr:merged'; repoId: string; prId: string }
   | { type: 'wiki:updated'; spaceId: string; pageId: string }
   | { type: 'notification'; userId: string; notificationId: string }
-  | { type: 'pipeline:updated'; repoId: string; runId: string }
-  | { type: 'repo:pushed'; repoId: string; ref: string }
-  | { type: 'runner-task:updated'; repoId: string; taskId: string }
   | { type: 'approval:request:created'; projectId: string; requestId: string; issueId: string }
   | {
       type: 'approval:request:updated';
@@ -43,7 +38,6 @@ export function useRealtimeInvalidation(): void {
     org?: string;
     team?: string;
     project?: string;
-    repo?: string;
     space?: string;
     num?: string;
   }>();
@@ -58,11 +52,6 @@ export function useRealtimeInvalidation(): void {
     // We use the project slug as room identifier since we don't have IDs on the frontend route
     if (params.project) {
       rooms.push(`project:${params.org}/${params.team}/${params.project}`);
-    }
-
-    // If on a repo page, subscribe to repo-level events
-    if (params.repo) {
-      rooms.push(`repo:${params.org}/${params.team}/${params.repo}`);
     }
 
     // If on a wiki page, subscribe to space-level events
@@ -89,7 +78,7 @@ export function useRealtimeInvalidation(): void {
         unsubscribe(rooms);
       }
     };
-  }, [params.org, params.team, params.project, params.repo, params.space, subscribe, unsubscribe]);
+  }, [params.org, params.team, params.project, params.space, subscribe, unsubscribe]);
 
   // Map events to query invalidations
   const handleEvent = useCallback(
@@ -114,34 +103,12 @@ export function useRealtimeInvalidation(): void {
           queryClient.invalidateQueries({ queryKey: ['board', event.projectId] });
           break;
 
-        case 'pr:updated':
-        case 'pr:merged':
-          queryClient.invalidateQueries({ queryKey: ['prs', event.repoId] });
-          queryClient.invalidateQueries({ queryKey: ['pr', event.repoId] });
-          break;
-
         case 'wiki:updated':
           queryClient.invalidateQueries({ queryKey: ['page', event.spaceId] });
           break;
 
         case 'notification':
           queryClient.invalidateQueries({ queryKey: ['notifications'] });
-          break;
-
-        case 'pipeline:updated':
-          queryClient.invalidateQueries({ queryKey: ['pipeline', event.repoId] });
-          queryClient.invalidateQueries({ queryKey: ['pipelines', event.repoId] });
-          queryClient.invalidateQueries({ queryKey: ['pipeline-runs', event.repoId] });
-          queryClient.invalidateQueries({ queryKey: ['pipeline-run', event.runId] });
-          queryClient.invalidateQueries({ queryKey: ['pipeline-run'] });
-          break;
-
-        case 'repo:pushed':
-          queryClient.invalidateQueries({ queryKey: ['tree'] });
-          queryClient.invalidateQueries({ queryKey: ['blob'] });
-          queryClient.invalidateQueries({ queryKey: ['commits'] });
-          queryClient.invalidateQueries({ queryKey: ['branches'] });
-          queryClient.invalidateQueries({ queryKey: ['prs', event.repoId] });
           break;
 
         case 'approval:request:created':
