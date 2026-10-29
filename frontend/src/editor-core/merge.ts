@@ -22,9 +22,12 @@ const isRow = (b: string) => b.startsWith('|');
  * blocks (a table header and its delimiter row stay together); fenced code is one
  * block. An item followed by a blank line and another item ends with "\n", which
  * marks a loose list so the join below can restore the blank line.
- * @param md
+ * CRLF input is normalised to LF first.
+ * @param md - Markdown, ideally already normalised by the converter
+ * @returns the top-level blocks
  */
 export function splitBlocks(md: string): string[] {
+  md = md.replace(/\r\n?/g, '\n');
   const blocks: string[] = [];
   let cur: string[] = [];
   let fence: string | null = null;
@@ -104,10 +107,14 @@ function joinBlocks(blocks: string[]): string {
 }
 
 /**
- *
- * @param base
- * @param ours
- * @param theirs
+ * Three-way merge at block level. Inputs should be converter-normalised Markdown:
+ * spacing that is not normalised is not preserved exactly. CRLF is normalised to LF.
+ * A conflict whose ours, theirs and base sides have the same number of blocks is
+ * split per block position, so edits to different neighbouring blocks merge cleanly.
+ * @param base - common ancestor
+ * @param ours - our version
+ * @param theirs - their version
+ * @returns merged text (null when there are conflicts) and the hunks
  */
 export function mergeMarkdown(
   base: string,
@@ -119,32 +126,51 @@ export function mergeMarkdown(
   });
   const hunks: MergeHunk[] = [];
   let n = 0;
+  const conflict = (o: string[], a: string[], b: string[]) =>
+    hunks.push({
+      kind: 'conflict',
+      id: `c${n++}`,
+      base: joinBlocks(o),
+      ours: joinBlocks(a),
+      theirs: joinBlocks(b),
+    });
   for (const r of result) {
     if (r.ok) {
       if (r.ok.length) hunks.push({ kind: 'clean', text: joinBlocks(r.ok) });
     } else if (r.conflict) {
-      hunks.push({
-        kind: 'conflict',
-        id: `c${n++}`,
-        base: joinBlocks(r.conflict.o),
-        ours: joinBlocks(r.conflict.a),
-        theirs: joinBlocks(r.conflict.b),
-      });
+      const { a, o, b } = r.conflict;
+      if (a.length === o.length && b.length === o.length && o.length > 1) {
+        a.forEach((ai, i) => {
+          if (ai === b[i]) hunks.push({ kind: 'clean', text: ai });
+          else if (ai === o[i]) hunks.push({ kind: 'clean', text: b[i] });
+          else if (b[i] === o[i]) hunks.push({ kind: 'clean', text: ai });
+          else conflict([o[i]], [ai], [b[i]]);
+        });
+      } else {
+        conflict(o, a, b);
+      }
     }
   }
   if (hunks.some((h) => h.kind === 'conflict')) return { merged: null, hunks };
   return { merged: joinTexts(hunks.map((h) => (h.kind === 'clean' ? h.text : ''))), hunks };
 }
 
+function chosen(id: string, choices: Record<string, string>): string {
+  if (!Object.prototype.hasOwnProperty.call(choices, id)) {
+    throw new Error(`resolveMerge: no choice for conflict ${id}`);
+  }
+  return choices[id];
+}
+
 /**
- * Joins hunks, using the chosen text for each conflict id (empty text drops the hunk).
- * @param hunks
- * @param choices
+ * Joins hunks, using the chosen text for each conflict id. An empty string drops the
+ * hunk; a conflict without a choice throws.
+ * @param hunks - hunks from mergeMarkdown
+ * @param choices - chosen text per conflict id
+ * @returns the resolved Markdown
  */
 export function resolveMerge(hunks: MergeHunk[], choices: Record<string, string>): string {
   return joinTexts(
-    hunks
-      .map((h) => (h.kind === 'clean' ? h.text : (choices[h.id] ?? h.ours)))
-      .filter((t) => t !== ''),
+    hunks.map((h) => (h.kind === 'clean' ? h.text : chosen(h.id, choices))).filter((t) => t !== ''),
   );
 }

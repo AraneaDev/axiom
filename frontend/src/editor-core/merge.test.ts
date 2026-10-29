@@ -91,3 +91,37 @@ describe('splitBlocks', () => {
     expect(mergeMarkdown(md, md, md).merged).toBe(md);
   });
 });
+
+describe('fix round 1', () => {
+  it('normalises CRLF input', () => {
+    const r = mergeMarkdown('a\r\n\r\nb', 'a\n\nB', 'A\r\n\r\nb');
+    expect(r.merged).toBe('A\n\nB');
+    expect(splitBlocks('a\r\n\r\nb')).toEqual(['a', 'b']);
+  });
+
+  it('adjacent list items edited on each side merge cleanly', () => {
+    expect(mergeMarkdown('- a\n- b\n- c', '- a\n- B\n- c', '- a\n- b\n- C').merged).toBe(
+      '- a\n- B\n- C',
+    );
+  });
+
+  it('adjacent table rows edited on each side merge cleanly', () => {
+    const t = (x: string, y: string) => `| h | v |\n| --- | --- |\n| a | ${x} |\n| b | ${y} |`;
+    expect(mergeMarkdown(t('1', '2'), t('10', '2'), t('1', '20')).merged).toBe(t('10', '20'));
+  });
+
+  it('same block edited on both sides in a same-count conflict stays a conflict', () => {
+    const r = mergeMarkdown('- a\n- b\n- c', '- a\n- B1\n- C', '- a\n- B2\n- c');
+    expect(r.merged).toBeNull();
+    const cs = r.hunks.filter((h) => h.kind === 'conflict');
+    expect(cs).toHaveLength(1);
+    expect(cs[0]).toMatchObject({ ours: '- B1', theirs: '- B2' });
+  });
+
+  it('resolveMerge throws on a conflict without a choice and allows an empty choice', () => {
+    const r = mergeMarkdown('x', 'y', 'z');
+    const c = r.hunks.find((h) => h.kind === 'conflict');
+    expect(() => resolveMerge(r.hunks, {})).toThrow();
+    expect(resolveMerge(r.hunks, { [(c as { id: string }).id]: '' })).toBe('');
+  });
+});
