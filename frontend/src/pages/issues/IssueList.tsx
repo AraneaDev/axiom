@@ -259,7 +259,7 @@ export default function IssueList() {
     />
   );
 
-  if (isLoading)
+  if (isLoading || !currentProject)
     return (
       <PageLayout>
         <div className="flex items-center justify-between mb-4">

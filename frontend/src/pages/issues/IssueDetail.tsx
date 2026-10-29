@@ -156,10 +156,12 @@ export default function IssueDetail() {
   const { data: links = [] } = useQuery({
     queryKey: ['issue-links', currentProject?.id, issue?.number],
     queryFn: () => issuesApi.listLinks(currentProject!.id, issue!.number),
+    // Enabled once hydration settles so that invalidating this key (after adding a link)
+    // refetches; the hydrated links are seeded into the cache and stay fresh via staleTime.
     enabled:
       !!currentProject?.id &&
       !!issue?.number &&
-      (hydrationQuery.isError || (hydrationQuery.isSuccess && hydrationQuery.data?.links === null)),
+      (hydrationQuery.isError || hydrationQuery.isSuccess),
     staleTime: 30_000,
   });
 

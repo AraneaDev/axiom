@@ -183,7 +183,7 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(
       label,
       error,
       hint,
-      id,
+      id: idProp,
       options,
       value,
       onChange,
@@ -196,6 +196,9 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(
   ) => {
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const generatedId = useId();
+    // Fall back to a generated id so the label is always associated with the control
+    const id = idProp ?? generatedId;
 
     useEffect(() => {
       if (!open) return;

@@ -6,7 +6,6 @@
 
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -51,6 +50,7 @@ import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 
 import { CalloutExtension } from './CalloutExtension';
+import { CollaborationCursorExtension } from './CollaborationCursorExtension';
 import { CollapsibleExtension } from './CollapsibleExtension';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
 import { IssueEmbedExtension } from './IssueEmbedExtension';
@@ -169,7 +169,7 @@ export function CollaborativeEditor({
         field: fragmentName,
       }),
       // Cursor sharing
-      CollaborationCursor.configure({
+      CollaborationCursorExtension.configure({
         provider,
         user: provider.awareness.getLocalState()?.user ?? {
           name: 'Anonymous',
