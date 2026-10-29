@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import multer, { FileFilterCallback } from 'multer';
 
 import { authenticate } from '../../middleware/auth';
+import { AppError } from '../../middleware/errorHandler';
 
 import * as controller from './attachments.controller';
 
@@ -33,7 +34,7 @@ function fileFilter(_req: Express.Request, file: Express.Multer.File, cb: FileFi
   if (allowed) {
     cb(null, true);
   } else {
-    cb(new Error(`File type ${file.mimetype} is not allowed`));
+    cb(new AppError(415, `File type ${file.mimetype} is not allowed`));
   }
 }
 

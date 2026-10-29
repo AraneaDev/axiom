@@ -141,7 +141,8 @@ describe('Attachments API', () => {
         contentType: 'application/x-msdownload',
       });
 
-    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBe(415);
+    expect(res.body.error.message).toContain('not allowed');
   });
 
   it('should reject upload with no file', async () => {
