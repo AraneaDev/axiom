@@ -6,7 +6,7 @@ This guide covers deploying Axiom on a VPS using Docker Compose, with Apache han
 
 ## 1. Overview
 
-Axiom runs as a set of Docker containers (API, frontend, PostgreSQL, Redis) orchestrated by Docker Compose. An Apache reverse proxy sits in front of the stack on the host, handling TLS termination, WebSocket upgrades, and routing all traffic to the frontend container on port 7000. The frontend's internal nginx then proxies `/api/` paths to the API container.
+Axiom runs as a set of Docker containers (API, worker, PostgreSQL, Redis) orchestrated by Docker Compose. An Apache reverse proxy sits in front of the stack on the host, handling TLS termination, WebSocket upgrades, and routing all traffic to the `api` container, published on port 7000 (`${PORT:-7000}`). In production there is a single application container: Express serves the built SPA from `/app/public` (hashed assets cached for a year, `index.html` never cached, index.html fallback for client-side routes) next to `/api` and `/ws`. There is no nginx.
 
 ---
 
@@ -163,7 +163,6 @@ docker run --rm -v axiom_uploads:/data -v $(pwd):/backup alpine \
 
 ```bash
 docker compose logs -f api     # Backend logs
-docker compose logs -f web     # Nginx access logs
 docker compose logs -f db      # PostgreSQL logs
 docker compose ps              # Container health status
 ```
@@ -183,7 +182,7 @@ docker compose logs -f
 | API not responding | `curl http://localhost:3000/api/health` |
 | Site not loading externally | `curl https://staging.example.com/api/health` |
 | WebSocket connection failures | Verify `mod_proxy_wstunnel` is enabled: `apachectl -M \| grep wstunnel` |
-| Upload returns 413 | Increase Apache `LimitRequestBody` and check nginx `client_max_body_size` in `frontend/nginx.conf` |
+| Upload returns 413 | Increase Apache `LimitRequestBody` |
 | Container won't start | `docker compose logs <service>` to inspect startup errors |
 | SSL certificate expired | `certbot renew && systemctl reload apache2` |
 | Database connection refused | `docker compose ps db` -- ensure the container is healthy |

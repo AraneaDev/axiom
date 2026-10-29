@@ -43,7 +43,7 @@ graph TD
     end
 
     subgraph Docker["Docker Compose (dev)"]
-        Web["web :7000\nVite / React"]
+        Web["web :7000\nVite dev server (dev only)"]
         API["api :3000\nExpress 5"]
         Worker["worker\nEmail queue consumer"]
         Migrate["migrate\nprisma migrate deploy, one-shot"]
@@ -64,14 +64,13 @@ graph TD
 
 ### Containers
 
-One image, one codebase. Each container runs a different entry point.
+One image, one codebase. Each container runs a different entry point. Production has no separate web container: Express serves the built frontend (`STATIC_DIR`, default `public`), so the `web` node in the diagram above exists only in development (Vite with HMR).
 
 | Service | Entry point | Volumes | Ports | Role |
 |---|---|---|---|---|
 | `migrate` | `node dist/migrate.js` (one-shot) | none | Runs `prisma migrate deploy`. Exits 0. |
-| `api` | `node dist/index.js` | `uploads` | internal 3000 | REST, WebSocket, MCP. |
+| `api` | `node dist/index.js` | `uploads` | `${PORT:-7000}:3000` | REST, WebSocket, MCP, and the built SPA (served from `/app/public`). |
 | `worker` | `node dist/worker.js` | none | none | Email queue consumer. |
-| `web` | nginx | none | `${PORT:-7000}:80` | Frontend, unchanged. |
 | `db`, `redis` | images | `pgdata`, `redis_data` | internal | `redis` requires `REDIS_PASSWORD`. |
 
 `api` and `worker` each declare `depends_on: migrate: condition: service_completed_successfully`, so migrations finish before either of them starts.

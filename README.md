@@ -29,6 +29,7 @@ A self-hosted Jira and Confluence replacement built for agents. You get issue tr
 | Real-time | WebSocket, Yjs CRDT |
 | Testing | Vitest (unit/integration), Playwright (E2E) |
 | AI | MCP server with 24 tools |
+| Production | One container: Express serves the built SPA and the API |
 
 ---
 

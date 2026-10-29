@@ -17,6 +17,14 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
+# Frontend build
+FROM node:25-alpine AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci
+COPY frontend ./
+RUN npx vite build
+
 # Production
 FROM base AS production
 ENV NODE_ENV=production
@@ -25,6 +33,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
 COPY --from=deps /app/prisma.config.ts ./
 COPY --from=build /app/dist ./dist
+COPY --from=frontend-build /app/frontend/dist ./public
 COPY --from=build /app/src/config/load-env.ts ./src/config/load-env.ts
 COPY package.json ./
 COPY scripts ./scripts

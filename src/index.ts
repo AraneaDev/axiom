@@ -15,6 +15,7 @@ import { metricsCollector } from './middleware/metricsCollector';
 import { globalLimiter, authLimiter, searchLimiter } from './middleware/rate-limit.js';
 import { requestLogger } from './middleware/requestLogger';
 import { require2fa } from './middleware/require2fa';
+import { mountStaticFrontend, resolveStaticDir } from './middleware/static-frontend';
 import activityRoutes from './modules/activity/activity.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
@@ -165,6 +166,16 @@ app.post('/api/mcp/messages', authenticate, handleMcpMessage);
 
 // OpenAPI spec + Scalar docs UI
 app.use('/api', openApiRouter);
+
+// Unknown /api routes get a JSON 404, never the SPA index.html
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: { message: 'Not found' } });
+});
+
+// Built frontend (production, or whenever STATIC_DIR is set). After all API routes.
+if (process.env.NODE_ENV === 'production' || env.STATIC_DIR) {
+  mountStaticFrontend(app, resolveStaticDir(env.STATIC_DIR));
+}
 
 // Error handler (must be last)
 app.use(errorHandler);

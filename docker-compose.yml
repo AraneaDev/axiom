@@ -75,8 +75,8 @@ services:
   api:
     <<: *app
     command: ["node", "dist/index.js"]
-    expose:
-      - "3000"
+    ports:
+      - "${PORT:-7000}:3000"
     environment:
       <<: *app-env
       PORT: 3000
@@ -106,29 +106,6 @@ services:
         condition: service_healthy
     mem_limit: 256m
     cpus: 0.5
-
-  web:
-    build:
-      context: ./frontend
-      target: production
-    restart: unless-stopped
-    ports:
-      - "${PORT:-7000}:80"
-    depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    mem_limit: 128m
-    cpus: 0.5
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
 volumes:
   pgdata:
