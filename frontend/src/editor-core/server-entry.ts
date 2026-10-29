@@ -6,3 +6,4 @@
 import './dom-globals';
 
 export * from './converter';
+export * from './merge';
