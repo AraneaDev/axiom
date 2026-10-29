@@ -14,7 +14,9 @@ test.describe('Routing after git hosting removal', () => {
 
   test('the sidebar has no Repositories item', async ({ page }) => {
     await page.goto(`/${ORG}/core`);
-    await expect(page.getByRole('link', { name: 'Issues' }).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Repositories' })).toHaveCount(0);
+    const sidebar = page.getByRole('complementary');
+    // The team sidebar lists Projects, Wiki, Members and Roadmap; wait for it to render
+    await expect(sidebar.getByRole('link', { name: 'Wiki' })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: 'Repositories' })).toHaveCount(0);
   });
 });
