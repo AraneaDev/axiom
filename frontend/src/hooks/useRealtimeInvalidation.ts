@@ -102,6 +102,10 @@ export function useRealtimeInvalidation(): void {
           queryClient.invalidateQueries({ queryKey: ['issue', event.projectId] });
           break;
 
+        case 'issue:links-updated':
+          queryClient.invalidateQueries({ queryKey: ['issue-wiki-links'] });
+          break;
+
         case 'comment:added':
           queryClient.invalidateQueries({ queryKey: ['issue', event.projectId] });
           break;

@@ -7,7 +7,6 @@ import { activityApi } from '@/api/activity.api';
 import { attachmentsApi } from '@/api/attachments.api';
 import { hydrateApi } from '@/api/hydrate.api';
 import { issuesApi } from '@/api/issues.api';
-import { reposApi } from '@/api/repos.api';
 import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { PageLayout } from '@/components/layout/PageLayout';
@@ -22,7 +21,6 @@ import { useDraftState } from '@/hooks/useDraftState';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
-import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -87,21 +85,6 @@ export default function IssueDetail() {
           queryClient.setQueryData(['issue-children', currentProject?.id, issueNum], hd.children);
         if (hd.progress !== null)
           queryClient.setQueryData(['issue-progress', currentProject?.id, issueNum], hd.progress);
-        if (hd.development.branches !== null)
-          queryClient.setQueryData(
-            ['issue-branches', currentProject?.id, issueNum],
-            hd.development.branches,
-          );
-        if (hd.development.pullRequests !== null)
-          queryClient.setQueryData(
-            ['issue-prs', currentProject?.id, issueNum],
-            hd.development.pullRequests,
-          );
-        if (hd.development.commits !== null)
-          queryClient.setQueryData(
-            ['issue-commits', currentProject?.id, issueNum],
-            hd.development.commits,
-          );
       }
       if (issueId && hd.attachments !== null) {
         queryClient.setQueryData(['attachments', issueId], hd.attachments);
@@ -163,13 +146,6 @@ export default function IssueDetail() {
       onSuccess: () => invalidateAll(),
     },
   );
-
-  const { data: repos = [] } = useQuery({
-    queryKey: ['repos', currentTeam?.id],
-    queryFn: () => reposApi.listByTeam(currentTeam!.id),
-    enabled: !!currentTeam?.id,
-    staleTime: STABLE_STALE_TIME,
-  });
 
   const { data: teamDetail } = useQuery({
     queryKey: ['team-detail', currentTeam?.id],
@@ -293,7 +269,6 @@ export default function IssueDetail() {
       children={children}
       progress={progress}
       links={links}
-      repos={repos}
       activities={activityData?.activities ?? []}
       editingField={editingField}
       onEditField={setEditingField}

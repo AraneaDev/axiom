@@ -7,11 +7,6 @@ export interface IssueDetailHydration {
   links: unknown[] | null;
   children: unknown[] | null;
   progress: { total: number; completed: number; inProgress: number; percentage: number } | null;
-  development: {
-    branches: unknown[] | null;
-    pullRequests: unknown[] | null;
-    commits: unknown[] | null;
-  };
   activity: unknown[] | null;
   attachments: unknown[] | null;
   worklogs: unknown[] | null;

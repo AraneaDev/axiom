@@ -10,7 +10,7 @@ import type { IssueLink } from '@/lib/issue-types';
 import type { Issue } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-import IssueDevelopmentCard from './IssueDevelopmentCard';
+import { IssueLinkedPagesCard } from './IssueLinkedPagesCard';
 import { IssueLinkedSection } from './IssueLinkedSection';
 
 interface IssueDetailMetaPanelProps {
@@ -22,7 +22,6 @@ interface IssueDetailMetaPanelProps {
   children: Issue[];
   progress: { total: number; completed: number; percentage: number } | undefined;
   links: IssueLink[];
-  repos: { id: string; slug: string; name: string; defaultBranch: string }[];
 }
 
 /**
@@ -36,7 +35,6 @@ interface IssueDetailMetaPanelProps {
  * @param root0.children
  * @param root0.progress
  * @param root0.links
- * @param root0.repos
  */
 export function IssueDetailMetaPanel({
   issue,
@@ -47,7 +45,6 @@ export function IssueDetailMetaPanel({
   children: childIssues,
   progress,
   links,
-  repos,
 }: IssueDetailMetaPanelProps) {
   return (
     <>
@@ -116,15 +113,8 @@ export function IssueDetailMetaPanel({
         )}
       </Card>
 
-      {/* Development Card */}
-      <IssueDevelopmentCard
-        projectId={projectId}
-        issueNumber={issue.number}
-        issueId={issue.id}
-        org={org}
-        teamSlug={teamSlug}
-        repos={repos}
-      />
+      {/* Linked pages */}
+      <IssueLinkedPagesCard projectId={projectId} issueNumber={issue.number} />
 
       {/* Linked Issues */}
       <IssueLinkedSection

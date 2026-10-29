@@ -21,7 +21,6 @@ interface IssueDetailSidebarProps {
   children: Issue[];
   progress: { total: number; completed: number; percentage: number } | undefined;
   links: IssueLink[];
-  repos: { id: string; slug: string; name: string; defaultBranch: string }[];
   activities: ActivityEvent[];
   editingField: string | null;
   onEditField: (field: string | null) => void;
@@ -43,7 +42,6 @@ interface IssueDetailSidebarProps {
  * @param root0.children
  * @param root0.progress
  * @param root0.links
- * @param root0.repos
  * @param root0.activities
  * @param root0.editingField
  * @param root0.onEditField
@@ -62,7 +60,6 @@ export function IssueDetailSidebar({
   children: childIssues,
   progress,
   links,
-  repos,
   activities,
   editingField,
   onEditField,
@@ -91,7 +88,6 @@ export function IssueDetailSidebar({
         projectSlug={projectSlug}
         progress={progress}
         links={links}
-        repos={repos}
       >
         {childIssues}
       </IssueDetailMetaPanel>
