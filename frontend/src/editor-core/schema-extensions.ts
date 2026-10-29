@@ -5,7 +5,6 @@ import Link from '@tiptap/extension-link';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import TableRow from '@tiptap/extension-table-row';
-import TaskItem from '@tiptap/extension-task-item';
 import TaskList from '@tiptap/extension-task-list';
 import Underline from '@tiptap/extension-underline';
 import StarterKit from '@tiptap/starter-kit';
@@ -25,8 +24,10 @@ import {
 import { MentionNode } from './nodes/mention';
 import { RawHtmlInlineMark, RawHtmlNode } from './nodes/raw-html';
 import { SmartLinkNode } from './nodes/smart-link';
+import { SoftBreakAfterInline } from './nodes/soft-break';
 import { TableNode } from './nodes/table';
 import { TableOfContentsNode } from './nodes/table-of-contents';
+import { TaskItemNode } from './nodes/task-item';
 
 export interface SchemaExtensionOptions {
   /** Project used by the issue reference autocomplete (browser only). */
@@ -85,7 +86,7 @@ export function getSchemaExtensions(opts: SchemaExtensionOptions = {}): AnyExten
     MentionNode,
     IssueReferenceNode.configure({ projectId: opts.projectId ?? null }),
     TaskList,
-    TaskItem.configure({ nested: true }),
+    TaskItemNode.configure({ nested: true }),
     CalloutNode,
     CollapsibleNode,
     TableOfContentsNode,
@@ -93,6 +94,7 @@ export function getSchemaExtensions(opts: SchemaExtensionOptions = {}): AnyExten
     IssueEmbedNode,
     RawHtmlNode,
     RawHtmlInlineMark,
+    SoftBreakAfterInline,
     // Last: its parse step must run after every other node's updateDOM
     ListItemFirstBlock,
   ];

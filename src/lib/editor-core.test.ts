@@ -29,10 +29,18 @@ function read(name: string): string {
  *   are hand-written Markdown; tiptap-markdown rewrites formatting choices such as table
  *   delimiter rows, ordered list padding, `_emphasis_`, `*` bullets and `>` as `&gt;`.
  *   The document itself does not change (see 'normalisation keeps the document').
+ * - soft-break-*: a soft line break is written as a space, the editor's normal form
+ *   (see SOFT_BREAKS for the exact output).
  * @param name - Fixture file name.
  */
+const SOFT_BREAKS: Record<string, string> = {
+  'soft-break-mark.md': 'a *x* b and **y** c and `z` d',
+  'soft-break-raw-html.md': 'a <kbd>x</kbd> b',
+  'soft-break-footnote.md': 'a [^1] b\n\n[^1]: note',
+};
+
 function normalisesOnce(name: string): boolean {
-  return name === 'callout-important.md' || name.startsWith('seed-');
+  return name === 'callout-important.md' || name.startsWith('seed-') || name in SOFT_BREAKS;
 }
 
 function toYjsAndBack(md: string): string {
@@ -109,6 +117,10 @@ describe('editor core markdown round trip', () => {
       return fragment.toJSON();
     };
     expect(fragmentJSON(normalizeMarkdown(md))).toBe(fragmentJSON(md));
+  });
+
+  it.each(Object.entries(SOFT_BREAKS))('keeps the soft break in %s as a space', (name, out) => {
+    expect(normalizeMarkdown(read(name))).toBe(out);
   });
 
   it('raw HTML and unknown blocks pass through', () => {

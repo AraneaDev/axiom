@@ -1,0 +1,2 @@
+> > [!DETAILS] More
+> > hidden

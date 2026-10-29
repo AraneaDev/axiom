@@ -215,6 +215,33 @@ export const ListItemFirstBlock = Extension.create({
                 (li) => li.tagName !== 'LI' || ![...li.children].some((c) => c.tagName === 'P'),
               ),
             );
+            // A task item written as a bare marker line (`- [ ]` with a block below)
+            // is not recognised by markdown-it-task-lists, which wants text after the
+            // box: mark it as a task item here, before the placeholder goes in.
+            element.querySelectorAll('li').forEach((li) => {
+              const nodes = [...li.childNodes].filter(
+                (n) => n.nodeType !== 3 || n.textContent?.trim(),
+              );
+              const [marker, next] = nodes;
+              // The box is the item's leading text (tight list) or a lone <p> (loose list)
+              const isBoxNode =
+                marker &&
+                (marker.nodeType === 3 ||
+                  ((marker as Element).tagName === 'P' && marker.childNodes.length === 1));
+              const box = isBoxNode ? marker.textContent?.match(/^\s*\[([ xX])\]\s*$/) : null;
+              if (
+                !box ||
+                !next ||
+                next.nodeType !== 1 ||
+                !BLOCK_TAGS.has((next as Element).tagName)
+              ) {
+                return;
+              }
+              li.removeChild(marker);
+              li.setAttribute('data-type', 'taskItem');
+              li.setAttribute('data-checked', String(box[1] !== ' '));
+              li.parentElement?.setAttribute('data-type', 'taskList');
+            });
             element.querySelectorAll('li').forEach((li) => {
               let first = li.firstChild;
               while (first && first.nodeType === 3 && !first.textContent?.trim()) {

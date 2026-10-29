@@ -146,7 +146,8 @@ function transformGfmAlerts(html: string): string {
   const doc = container.ownerDocument;
 
   container.querySelectorAll('blockquote').forEach((bq) => {
-    const firstP = bq.querySelector('p');
+    // Only the quote's own first block: a nested quote's paragraph is not this quote's marker
+    const firstP = bq.firstElementChild?.tagName === 'P' ? bq.firstElementChild : null;
     if (!firstP) return;
     const firstNode = firstP.childNodes[0];
     if (!firstNode || firstNode.nodeType !== Node.TEXT_NODE) return;

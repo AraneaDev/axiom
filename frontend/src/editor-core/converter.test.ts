@@ -156,6 +156,37 @@ describe('editor core converter', () => {
       expect(normalizeMarkdown(md)).toBe(md);
     });
 
+    it('keeps a task item whose first paragraph is empty', () => {
+      const doc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'taskList',
+            content: [
+              {
+                type: 'taskItem',
+                attrs: { checked: true },
+                content: [
+                  { type: 'paragraph' },
+                  {
+                    type: 'codeBlock',
+                    attrs: { language: 'bash' },
+                    content: [{ type: 'text', text: 'npm ci' }],
+                  },
+                ],
+              },
+              { type: 'taskItem', attrs: { checked: false }, content: [p('b')] },
+            ],
+          },
+        ],
+      };
+      const md = proseMirrorJSONToMarkdown(doc);
+      expect(shape(markdownToProseMirrorJSON(md))).toBe(
+        shape(doc as ReturnType<typeof markdownToProseMirrorJSON>),
+      );
+      expect(normalizeMarkdown(md)).toBe(md);
+    });
+
     it('stays tight when the next block interrupts a paragraph', () => {
       expect(proseMirrorJSONToMarkdown(tightList(cases.codeBlock))).toBe(
         '- a\n  ```bash\n  npm ci\n  ```\n- b',

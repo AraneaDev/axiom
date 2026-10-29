@@ -75,7 +75,8 @@ export const CollapsibleNode = Node.create({
         parse: {
           updateDOM(element: HTMLElement) {
             element.querySelectorAll('blockquote').forEach((bq: Element) => {
-              const firstP = bq.querySelector('p');
+              // Only the quote's own first block: a nested quote's paragraph is not this quote's marker
+              const firstP = bq.firstElementChild?.tagName === 'P' ? bq.firstElementChild : null;
               if (!firstP) return;
               const firstNode = firstP.childNodes[0];
               if (!firstNode || firstNode.nodeType !== 3) return;
