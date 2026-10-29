@@ -10,6 +10,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
+import { createPageVersion } from './page-versions';
 import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
 import { canViewPage, canEditPage } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
@@ -129,25 +130,26 @@ export async function createPage(
     select: { position: true },
   });
 
-  const page = await prisma.page.create({
-    data: {
-      spaceId,
-      title: data.title,
-      slug: data.slug,
-      body: data.body ?? '',
-      parentId: data.parentId,
-      isDraft: data.isDraft ?? false,
-      position: (lastPage?.position ?? 0) + 1,
-      versions: {
-        create: {
-          version: 1,
-          title: data.title,
-          body: data.body ?? '',
-          authorId,
-        },
+  const page = await prisma.$transaction(async (tx) => {
+    const created = await tx.page.create({
+      data: {
+        spaceId,
+        title: data.title,
+        slug: data.slug,
+        body: data.body ?? '',
+        parentId: data.parentId,
+        isDraft: data.isDraft ?? false,
+        position: (lastPage?.position ?? 0) + 1,
       },
-    },
-    include: { versions: true },
+    });
+    const version = await createPageVersion(tx, {
+      pageId: created.id,
+      title: data.title,
+      body: data.body ?? '',
+      authorId,
+      kind: 'EDIT',
+    });
+    return { ...created, versions: [version] };
   });
 
   await cacheInvalidate(`wiki:tree:${spaceId}`);
@@ -240,26 +242,34 @@ export async function updatePage(
   const editAllowed = await canEditPage(authorId, page.id);
   if (!editAllowed) throw new AppError(403, 'You do not have permission to edit this page');
 
-  const nextVersion = (page.versions[0]?.version ?? 0) + 1;
+  const newTitle = data.title ?? page.title;
+  const newBody = data.body ?? page.body;
+  const versionedChange = newTitle !== page.title || newBody !== page.body;
 
-  const updated = await prisma.page.update({
-    where: { id: page.id },
-    data: {
-      title: data.title ?? page.title,
-      body: data.body ?? page.body,
-      parentId: data.parentId !== undefined ? data.parentId : page.parentId,
-      isDraft: data.isDraft !== undefined ? data.isDraft : page.isDraft,
-      versions: {
-        create: {
-          version: nextVersion,
-          title: data.title ?? page.title,
-          body: data.body ?? page.body,
-          authorId,
-          changeDescription: data.changeDescription,
-        },
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.page.update({
+      where: { id: page.id },
+      data: {
+        title: newTitle,
+        body: newBody,
+        parentId: data.parentId !== undefined ? data.parentId : page.parentId,
+        isDraft: data.isDraft !== undefined ? data.isDraft : page.isDraft,
       },
-    },
-    include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+    });
+    if (versionedChange) {
+      await createPageVersion(tx, {
+        pageId: page.id,
+        title: newTitle,
+        body: newBody,
+        authorId,
+        kind: 'EDIT',
+        changeDescription: data.changeDescription,
+      });
+    }
+    return tx.page.findUniqueOrThrow({
+      where: { id: page.id },
+      include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+    });
   });
 
   await cacheInvalidate(`wiki:tree:${spaceId}`);
@@ -415,6 +425,7 @@ export async function diffVersions(
       body: fromVer.body,
       author: fromVer.author,
       changeDescription: fromVer.changeDescription,
+      kind: fromVer.kind,
       createdAt: fromVer.createdAt,
     },
     to: {
@@ -423,6 +434,7 @@ export async function diffVersions(
       body: toVer.body,
       author: toVer.author,
       changeDescription: toVer.changeDescription,
+      kind: toVer.kind,
       createdAt: toVer.createdAt,
     },
     changes: changes.map((c) => ({
@@ -451,7 +463,6 @@ export async function restoreVersion(
   const page = await findOrThrow(
     prisma.page.findUnique({
       where: { spaceId_slug: { spaceId, slug: pageSlug } },
-      include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
     }),
     ERR.PAGE_NOT_FOUND,
   );
@@ -463,24 +474,23 @@ export async function restoreVersion(
     `Version ${targetVersion} not found`,
   );
 
-  const nextVersion = (page.versions[0]?.version ?? 0) + 1;
-
-  const updated = await prisma.page.update({
-    where: { id: page.id },
-    data: {
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.page.update({
+      where: { id: page.id },
+      data: { title: target.title, body: target.body },
+    });
+    await createPageVersion(tx, {
+      pageId: page.id,
       title: target.title,
       body: target.body,
-      versions: {
-        create: {
-          version: nextVersion,
-          title: target.title,
-          body: target.body,
-          authorId: userId,
-          changeDescription: `Restored to version ${targetVersion}`,
-        },
-      },
-    },
-    include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+      authorId: userId,
+      kind: 'RESTORE',
+      changeDescription: `Restored to version ${targetVersion}`,
+    });
+    return tx.page.findUniqueOrThrow({
+      where: { id: page.id },
+      include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+    });
   });
 
   await cacheInvalidate(`wiki:tree:${spaceId}`);
@@ -599,23 +609,24 @@ export async function copyPage(
     select: { position: true },
   });
 
-  return prisma.page.create({
-    data: {
-      spaceId: destSpaceId,
-      title: `${page.title} (copy)`,
-      slug: destSlug,
-      body: page.body,
-      position: (lastPage?.position ?? 0) + 1,
-      versions: {
-        create: {
-          version: 1,
-          title: `${page.title} (copy)`,
-          body: page.body,
-          authorId,
-        },
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.page.create({
+      data: {
+        spaceId: destSpaceId,
+        title: `${page.title} (copy)`,
+        slug: destSlug,
+        body: page.body,
+        position: (lastPage?.position ?? 0) + 1,
       },
-    },
-    include: { versions: true },
+    });
+    const version = await createPageVersion(tx, {
+      pageId: created.id,
+      title: created.title,
+      body: page.body,
+      authorId,
+      kind: 'EDIT',
+    });
+    return { ...created, versions: [version] };
   });
 }
 
