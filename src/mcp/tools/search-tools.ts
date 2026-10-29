@@ -13,7 +13,7 @@ export function registerSearchTools(ctx: McpToolContext) {
 
   server.tool(
     'search',
-    'Global search across issues, repos, and wiki pages with a query string',
+    'Global search across issues and wiki pages with a query string',
     {
       query: z
         .string()
@@ -21,7 +21,7 @@ export function registerSearchTools(ctx: McpToolContext) {
           'Search query string. Supports structured filters like type:bug, priority:high, assignee:username',
         ),
       type: z
-        .enum(['issues', 'wiki', 'repos', 'all'])
+        .enum(['issues', 'wiki', 'all'])
         .default('all')
         .describe('Type of resources to search'),
       limit: z.number().default(10),
@@ -49,31 +49,6 @@ export function registerSearchTools(ctx: McpToolContext) {
             title: i.title,
             priority: i.priority,
             issueType: i.type,
-          })),
-        );
-      }
-      if (type === 'repos' || type === 'all') {
-        const orgIds = await getUserOrgIds();
-        const repos = await prisma.repository.findMany({
-          where: {
-            OR: [
-              { name: { contains: query, mode: 'insensitive' } },
-              { description: { contains: query, mode: 'insensitive' } },
-            ],
-            team: { orgId: { in: orgIds } },
-          },
-          select: { id: true, name: true, slug: true, description: true, visibility: true },
-          take: limit,
-          orderBy: { updatedAt: 'desc' },
-        });
-        results.push(
-          ...repos.map((r) => ({
-            type: 'repo',
-            id: r.id,
-            name: r.name,
-            slug: r.slug,
-            description: r.description,
-            visibility: r.visibility,
           })),
         );
       }

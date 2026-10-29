@@ -32,7 +32,6 @@ const TRIGGER_OPTIONS = [
   { value: 'issue:created', label: 'Issue Created' },
   { value: 'issue:status_changed', label: 'Status Changed' },
   { value: 'issue:assigned', label: 'Issue Assigned' },
-  { value: 'pr:merged', label: 'PR Merged' },
   { value: 'label:added', label: 'Label Added' },
 ];
 

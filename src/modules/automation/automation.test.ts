@@ -1,9 +1,13 @@
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
+import { createTestContext, cleanupTestContext } from '../../test/factory';
+import { logger } from '../../utils/logger';
+
+import { evaluateRules } from './automation.service';
 
 const XHR = { 'X-Requested-With': 'XMLHttpRequest' };
 
@@ -223,5 +227,48 @@ describe('Automation API', () => {
       });
     expect(res.status).toBe(201);
     expect(res.body.actions[0].body).toBe('Issue created: {{issue.title}} ({{issue.number}})');
+  });
+});
+
+describe('Automation engine', () => {
+  it('a rule with an unknown action type runs its other actions', async () => {
+    const tctx = await createTestContext('auto4');
+    try {
+      const issue = await prisma.issue.create({
+        data: {
+          projectId: tctx.projectId,
+          number: 1,
+          title: 'Unknown action host',
+          body: '',
+          creatorId: tctx.owner.id,
+        },
+      });
+      await prisma.automationRule.create({
+        data: {
+          projectId: tctx.projectId,
+          name: 'unknown then label',
+          trigger: 'issue:created',
+          conditions: [],
+          actions: [{ type: 'run_workflow' }, { type: 'add_label', name: 'survivor' }],
+        },
+      });
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      await evaluateRules(tctx.projectId, 'issue:created', {
+        issue: { id: issue.id, projectId: tctx.projectId },
+        actorId: tctx.owner.id,
+      });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('unknown automation action'),
+        expect.objectContaining({ actionType: 'run_workflow' }),
+      );
+      warn.mockRestore();
+      const labelled = await prisma.issue.findUnique({
+        where: { id: issue.id },
+        include: { labels: true },
+      });
+      expect(labelled?.labels.map((l) => l.name)).toContain('survivor');
+    } finally {
+      await cleanupTestContext(tctx);
+    }
   });
 });

@@ -13,13 +13,6 @@ export const MCP_TOOL_PERMISSIONS: Record<string, Action> = {
   get_issue: 'issue:view',
   create_issue: 'issue:create',
   add_comment: 'issue:edit',
-  list_repos: 'repo:read',
-  browse_files: 'repo:read',
-  read_file: 'repo:read',
-  get_commits: 'repo:read',
-  get_branches: 'repo:read',
-  get_diff: 'repo:read',
-  list_pull_requests: 'repo:read',
   list_wiki_spaces: 'wiki:view',
   get_wiki_page: 'wiki:view',
   get_page_tree: 'wiki:view',
@@ -27,17 +20,12 @@ export const MCP_TOOL_PERMISSIONS: Record<string, Action> = {
   search: 'issue:view',
   list_wiki_issue_links: 'wiki:view',
   link_wiki_to_issue: 'wiki:edit',
-  search_code: 'repo:read',
-  get_pr_diff: 'repo:read',
-  get_pr_comments: 'repo:read',
-  get_recent_merges: 'repo:read',
 };
 
 /**
  * Required ApiToken scopes per tool group:
  * "issues:read"  → list_issues, get_issue, search
  * "issues:write" → create_issue, add_comment
- * "repo:read"    → list_repos, browse_files, read_file, get_commits, get_branches, get_diff, list_pull_requests
  * "wiki:read"    → list_wiki_spaces, get_wiki_page, get_page_tree
  * "wiki:write"   → create_wiki_page
  * @param toolName

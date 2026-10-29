@@ -14,7 +14,6 @@ export type AutomationTrigger =
   | 'issue:created'
   | 'issue:status_changed'
   | 'issue:assigned'
-  | 'pr:merged'
   | 'label:added'
   | 'workflow:completed'
   | 'workflow:failed';
@@ -35,8 +34,7 @@ export interface AutomationAction {
     | 'set_field'
     | 'create_issue'
     | 'send_email'
-    | 'webhook'
-    | 'run_workflow';
+    | 'webhook';
   columnId?: string;
   userId?: string;
   name?: string;
@@ -50,14 +48,6 @@ export interface AutomationAction {
   method?: string;
   headers?: Record<string, string>;
   data?: Record<string, unknown>;
-  // run_workflow fields
-  source?: 'repo_file' | 'pipeline';
-  repoId?: string;
-  workflowPath?: string;
-  pipelineId?: string;
-  ref?: string;
-  labels?: string[];
-  variables?: Record<string, string>;
 }
 
 export interface AutomationContext {
@@ -385,25 +375,13 @@ async function executeActions(
             );
           }
           break;
-        case 'run_workflow': {
-          if (action.source && (action.workflowPath || action.pipelineId)) {
-            const { createRunnerTask } = await import('../runners/connect-rpc.service');
-            await createRunnerTask({
-              source: action.source,
-              workflowPath: action.workflowPath,
-              pipelineId: action.pipelineId,
-              repoId: action.repoId,
-              ref: action.ref,
-              labels: action.labels ?? [],
-              variables: action.variables,
-              projectId,
-              issueId: issue.id,
-              actorId: context.actorId,
-              templateCtx,
-            });
-          }
+        default:
+          logger.warn('Skipping unknown automation action type', {
+            projectId,
+            issueId: issue.id,
+            actionType: String((action as { type?: unknown }).type),
+          });
           break;
-        }
       }
     } catch (err) {
       logger.error(

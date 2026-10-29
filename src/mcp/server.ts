@@ -8,14 +8,17 @@ import { mcpContext } from './context';
 import { registerIntegrationTools } from './tools/integration-tools';
 import { registerIssueTools } from './tools/issue-tools';
 import { registerOrgTools } from './tools/org-tools';
-import { registerRepoTools } from './tools/repo-tools';
 import { registerSearchTools } from './tools/search-tools';
 import type { McpToolContext } from './tools/types';
 import { registerWikiTools } from './tools/wiki-tools';
 
 const connections = new Map<string, { transport: SSEServerTransport; userId: string }>();
 
-function createMcpServer(userId: string) {
+/**
+ * Build an MCP server with all tools registered for the given user.
+ * @param userId
+ */
+export function createMcpServer(userId: string) {
   const server = new McpServer({ name: 'axiom', version: '0.1.0' });
 
   async function getUserOrgIds() {
@@ -32,14 +35,6 @@ function createMcpServer(userId: string) {
       include: { team: { select: { orgId: true } } },
     });
     return project?.team?.orgId;
-  }
-
-  async function getOrgIdFromRepo(repoId: string) {
-    const repo = await prisma.repository.findUnique({
-      where: { id: repoId },
-      include: { team: { select: { orgId: true } } },
-    });
-    return repo?.team?.orgId;
   }
 
   async function getOrgIdFromSprint(sprintId: string) {
@@ -63,7 +58,6 @@ function createMcpServer(userId: string) {
     userId,
     getUserOrgIds,
     getOrgIdFromProject,
-    getOrgIdFromRepo,
     getOrgIdFromSprint,
     getOrgIdFromPage,
   };
@@ -71,7 +65,6 @@ function createMcpServer(userId: string) {
   registerOrgTools(ctx);
   registerIssueTools(ctx);
   registerWikiTools(ctx);
-  registerRepoTools(ctx);
   registerSearchTools(ctx);
   registerIntegrationTools(ctx);
 
