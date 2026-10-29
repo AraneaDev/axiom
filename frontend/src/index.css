@@ -451,6 +451,33 @@ div[contenteditable].tiptap-editor {
   color: var(--color-text-secondary);
 }
 
+/* Remote collaborator cursors (CollaborationCursorExtension). The per-user colour
+   is set inline from Yjs awareness; everything else comes from tokens. */
+.collaboration-cursor__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid;
+  border-right: 1px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+.collaboration-cursor__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-sm) var(--radius-sm) var(--radius-sm) 0;
+  color: var(--color-text-inverse);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+  user-select: none;
+}
+
 .mention {
   color: var(--color-primary);
   font-weight: 500;
