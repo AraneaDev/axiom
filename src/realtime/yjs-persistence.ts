@@ -4,6 +4,7 @@
  * and debounce-saves merged content back to the DB.
  */
 
+import type { PendingPageChange } from '@prisma/client';
 import * as Y from 'yjs';
 
 import { prisma } from '../config/database';
@@ -19,6 +20,12 @@ const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 /** Map of pageId -> serialization of the doc as loaded, so sessions without edits do not persist */
 const loadedSnapshots = new Map<string, string>();
 
+/**
+ * Map of pageId -> the Page.body the live session last loaded, wrote or merged, as stored. A
+ * different Page.body at save time means someone else wrote it.
+ */
+const knownBodies = new Map<string, string>();
+
 /** Map of pageId -> authorId (last user to edit, for version attribution) */
 const lastAuthors = new Map<string, string>();
 
@@ -32,6 +39,39 @@ const loadedExternalVersions = new Map<string, string | null>();
 const saveChains = new Map<string, Promise<SaveOutcome>>();
 
 export type SaveOutcome = 'saved' | 'skipped' | 'failed';
+
+type PendingRecordedListener = (pageId: string, pending: PendingPageChange) => void;
+let pendingRecordedListener: PendingRecordedListener | null = null;
+
+/**
+ * Be told when a save finds that someone else changed Page.body under the session and records
+ * a pending change for it. The collaboration server registers here to notify the room.
+ * @param fn
+ */
+export function onPendingRecorded(fn: PendingRecordedListener): void {
+  pendingRecordedListener = fn;
+}
+
+/**
+ * Whether a pending change's recorded draft is one of the two sides a merge would use, which is
+ * also when a notice should name it. With a live session, only when that session opened after the
+ * change (it holds the change, the draft holds the earlier session's work); with nobody editing,
+ * whenever there is a draft. getPendingMerge and the room notice both decide with this.
+ * @param pageId
+ * @param pending
+ * @param pending.externalVersionId
+ * @param pending.draftVersionId
+ * @param roomLive - Whether a session is open on the page
+ */
+export function draftIsMergeSide(
+  pageId: string,
+  pending: { externalVersionId: string; draftVersionId: string | null },
+  roomLive: boolean,
+): boolean {
+  if (!pending.draftVersionId) return false;
+  if (!roomLive) return true;
+  return getLoadedExternalVersion(pageId) === pending.externalVersionId;
+}
 
 /**
  * Set the author who should be credited for the next auto-save.
@@ -82,6 +122,7 @@ export async function loadPageIntoDoc(pageId: string, doc: Y.Doc): Promise<void>
     markdownToYFragment(loaded.body, fragment);
   }
   loadedSnapshots.set(pageId, normalizeMarkdown(loaded.body));
+  knownBodies.set(pageId, loaded.body);
   loadedExternalVersions.set(pageId, loaded.externalVersionId);
 }
 
@@ -93,6 +134,7 @@ export async function loadPageIntoDoc(pageId: string, doc: Y.Doc): Promise<void>
  */
 export function markRoomMerged(pageId: string, markdown: string): void {
   loadedSnapshots.set(pageId, markdown);
+  knownBodies.set(pageId, markdown);
   loadedExternalVersions.set(pageId, null);
 }
 
@@ -138,11 +180,46 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
             data: { draftVersionId: draft.id },
           });
         }
-        return body;
+        return { body, recorded: null, wroteBody: false };
       }
 
       // Skip if content hasn't changed, or is still exactly what was loaded into the doc
-      if (page.body === body || loadedSnapshots.get(pageId) === body) return null;
+      const snapshot = loadedSnapshots.get(pageId);
+      // The page already holds exactly the session's state: nothing to write, but it is now known
+      if (page.body === body) return { body, recorded: null, wroteBody: true };
+      if (snapshot === body) return null;
+
+      // Someone else wrote Page.body since this session last loaded or saved it (for example in
+      // the moment the room was closing or loading, when no live room deferred the write). Never
+      // overwrite that: record it as a pending change and keep the session's work as its draft.
+      const known = knownBodies.get(pageId);
+      if (known !== undefined && page.body !== known) {
+        const external = await tx.pageVersion.findFirst({
+          where: { pageId, kind: { not: 'SESSION_DRAFT' } },
+          orderBy: { version: 'desc' },
+        });
+        if (external) {
+          const draft = await createPageVersion(tx, {
+            pageId: page.id,
+            title: page.title,
+            body,
+            authorId,
+            kind: 'SESSION_DRAFT',
+          });
+          const recorded = pending
+            ? null // a row this session descends from: keep it and its draft as they are
+            : await tx.pendingPageChange.create({
+                data: {
+                  pageId,
+                  baseBody: snapshot ?? known,
+                  externalVersionId: external.id,
+                  authorId: external.authorId,
+                  draftVersionId: draft.id,
+                },
+              });
+          return { body, recorded, wroteBody: false };
+        }
+      }
 
       await tx.page.update({ where: { id: page.id }, data: { body } });
       await createPageVersion(tx, {
@@ -152,11 +229,17 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
         authorId,
         kind: 'EDIT',
       });
-      return body;
+      return { body, recorded: null, wroteBody: true };
     });
     if (saved === null) return 'skipped';
     // The skip above now means "unchanged since the last write", so a revert is still saved
-    loadedSnapshots.set(pageId, saved);
+    loadedSnapshots.set(pageId, saved.body);
+    if (saved.wroteBody) knownBodies.set(pageId, saved.body);
+    if (saved.recorded) {
+      // This session now predates the recorded change, and its later drafts are the work to merge
+      loadedExternalVersions.set(pageId, null);
+      pendingRecordedListener?.(pageId, saved.recorded);
+    }
     return 'saved';
   } catch (err) {
     logger.error('Failed to save page', { pageId }, err as Error);
@@ -239,5 +322,6 @@ export async function settlePendingAfterSession(pageId: string): Promise<void> {
 export function clearAuthor(pageId: string): void {
   lastAuthors.delete(pageId);
   loadedSnapshots.delete(pageId);
+  knownBodies.delete(pageId);
   loadedExternalVersions.delete(pageId);
 }

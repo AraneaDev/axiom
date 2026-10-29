@@ -40,7 +40,8 @@ import {
   forceSave,
   setLastAuthor,
   clearAuthor,
-  getLoadedExternalVersion,
+  draftIsMergeSide,
+  onPendingRecorded,
   settlePendingAfterSession,
 } from './yjs-persistence';
 
@@ -313,9 +314,9 @@ async function displayNameOf(userId: string): Promise<string> {
 }
 
 /**
- * The type-20 payload for a pending change, seen from a room. When a session that has ended left
- * an unmerged draft for this change (the room opened after the change, so the draft recorded on
- * the pending row cannot be its own), the payload names its author and time.
+ * The type-20 payload for a pending change, seen from a room. When the recorded draft is a side
+ * the merge would use (draftIsMergeSide, the same rule as getPendingMerge), the payload names
+ * its author and time.
  * @param room
  * @param pending - The pending row; read from the database when omitted
  */
@@ -333,7 +334,7 @@ async function pendingPayload(
       select: { kind: true, createdAt: true },
     }),
     displayNameOf(row.authorId),
-    row.draftVersionId && getLoadedExternalVersion(room.pageId) !== null
+    row.draftVersionId && draftIsMergeSide(room.pageId, row, true)
       ? prisma.pageVersion.findUnique({
           where: { id: row.draftVersionId },
           select: { createdAt: true, author: { select: { displayName: true, username: true } } },
@@ -669,6 +670,8 @@ export function createCollaborationServer(): {
   // cycle is safe because both sides only use the other's exports inside functions, at call time,
   // never while the modules load
   registerExternalChangeHook(notifyExternalChange);
+  // A session save that finds Page.body changed under it records a pending change itself
+  onPendingRecorded(notifyExternalChange);
 
   collabWss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     acceptConnection(ws, req).catch((err: unknown) => {

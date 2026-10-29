@@ -25,6 +25,7 @@ describe('Page merge', () => {
   let orgId: string;
   let ownerId: string;
   let editorId: string;
+  let otherId: string;
   let spaceId: string;
   let pageId: string;
   const clients: CollabTestClient[] = [];
@@ -53,6 +54,17 @@ describe('Page merge', () => {
       },
     });
     editorId = editor.id;
+    const other = await prisma.user.upsert({
+      where: { username: `${SLUG}-other` },
+      update: {},
+      create: {
+        email: `${SLUG}-other@axiom.dev`,
+        username: `${SLUG}-other`,
+        displayName: 'Merge Other',
+        passwordHash,
+      },
+    });
+    otherId = other.id;
     const org = await prisma.organization.create({
       data: {
         name: 'Merge Test Org',
@@ -61,6 +73,7 @@ describe('Page merge', () => {
           create: [
             { userId: ownerId, role: 'OWNER' },
             { userId: editorId, role: 'MEMBER' },
+            { userId: otherId, role: 'MEMBER' },
           ],
         },
       },
@@ -75,6 +88,7 @@ describe('Page merge', () => {
           create: [
             { userId: ownerId, role: 'ADMIN' },
             { userId: editorId, role: 'MEMBER' },
+            { userId: otherId, role: 'MEMBER' },
           ],
         },
       },
@@ -192,6 +206,8 @@ describe('Page merge', () => {
     expect(merge?.ours).toBe('Intro\n\nMiddle\n\nEnd\n\nFirst draft\n\nSecond draft');
     expect(merge?.theirs).toBe('Intro\n\nMiddle changed\n\nEnd');
     expect(merge?.base).toBe('Intro\n\nMiddle\n\nEnd');
+    // Nobody saved over the change: the page side is still the agent's
+    expect(merge?.theirsLabel).toBe('Merge Owner');
   });
 
   it('a session that ends without edits leaves nothing to merge', async () => {
@@ -371,11 +387,11 @@ describe('Page merge', () => {
     const { written } = await endSessionWithUnmergedDraft();
 
     // B opens after the change and edits on top of it
-    const b = await connect(ownerId);
+    const b = await connect(otherId);
     appendParagraph(b.doc, 'Line from B');
     await waitFor(async () => (await roomMarkdown()).includes('Line from B'));
 
-    const merge = await getPendingMerge(pageId, ownerId);
+    const merge = await getPendingMerge(pageId, otherId);
     expect(merge).toMatchObject({
       base: 'Intro\n\nMiddle\n\nEnd',
       ours: 'Intro\n\nMiddle changed\n\nEnd\n\nLine from B',
@@ -386,7 +402,7 @@ describe('Page merge', () => {
 
     // What a block merge of those three produces: the agent's change, A's line and B's line
     const result = 'Intro\n\nMiddle changed\n\nEnd\n\nLine from A\n\nLine from B';
-    await applyMerge(pageId, ownerId, { externalVersionId: written.version!.id, markdown: result });
+    await applyMerge(pageId, otherId, { externalVersionId: written.version!.id, markdown: result });
     expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(result);
     await waitFor(() => yFragmentToMarkdown(b.doc.getXmlFragment('default')) === result);
   });
@@ -396,7 +412,7 @@ describe('Page merge', () => {
 
     // B opens after the change, edits and leaves: B builds on Page.body, so its work is saved
     // there, and A's draft stays the work to merge
-    const b = await connect(ownerId);
+    const b = await connect(otherId);
     appendParagraph(b.doc, 'Line from B');
     await waitFor(async () => (await roomMarkdown()).includes('Line from B'));
     await disconnect(b);
@@ -412,7 +428,8 @@ describe('Page merge', () => {
       ours: 'Intro\n\nMiddle\n\nEnd\n\nLine from A',
       oursLabel: "Merge Editor's session",
       theirs: 'Intro\n\nMiddle changed\n\nEnd\n\nLine from B',
-      theirsLabel: 'Merge Owner',
+      // Page.body holds B's work on top of the agent's change now
+      theirsLabel: 'Current page',
     });
   });
 });

@@ -13,7 +13,7 @@ import {
   replaceRoomContent,
   roomMarkdown,
 } from '../../realtime/collaboration';
-import { getLoadedExternalVersion, markRoomMerged } from '../../realtime/yjs-persistence';
+import { draftIsMergeSide, markRoomMerged } from '../../realtime/yjs-persistence';
 
 import { createPageVersion, lockPage } from './page-versions';
 import { finishPageWrite, SyncIssueLinks } from './page-writes';
@@ -26,7 +26,10 @@ export interface PendingMerge {
   theirs: string;
   /** "Yours" for the live session, "<name>'s session" for a draft */
   oursLabel: string;
-  /** The external change's author, or "<name>'s session" for a draft */
+  /**
+   * The external change's author; "Current page" when sessions saved edits on top of it since;
+   * "<name>'s session" for a draft
+   */
   theirsLabel: string;
   externalVersionId: string;
   /** Author and time of the external change */
@@ -72,7 +75,7 @@ export async function getPendingMerge(
   const pending = await prisma.pendingPageChange.findUnique({
     where: { pageId },
     include: {
-      externalVersion: { select: { createdAt: true } },
+      externalVersion: { select: { createdAt: true, version: true } },
       page: { select: { body: true } },
       draftVersion: {
         select: {
@@ -96,11 +99,20 @@ export async function getPendingMerge(
     : {};
 
   const room = getLiveRoom(pageId);
+  // The same rule decides the room notice, so the notice never names a draft the merge ignores
+  const draftIsSide = Boolean(draft) && draftIsMergeSide(pageId, pending, Boolean(room));
+  // Page.body is the external change, unless a session that opened after it saved edits on top
+  const editedSince = await prisma.pageVersion.count({
+    where: {
+      pageId,
+      version: { gt: pending.externalVersion.version },
+      kind: { not: 'SESSION_DRAFT' },
+    },
+  });
+  const currentLabel = editedSince > 0 ? 'Current page' : authorName;
+
   let sides: Pick<PendingMerge, 'ours' | 'theirs' | 'oursLabel' | 'theirsLabel'>;
-  // The draft is named only when it is one of the sides: a live session's own autosaves are not
-  // "unmerged edits from" anyone
-  let draftIsSide = false;
-  if (room && getLoadedExternalVersion(pageId) === pending.externalVersionId && draft) {
+  if (room && draft && draftIsSide) {
     // The live session opened after the change, so it holds the change plus its own edits. What
     // is left to merge is the work of the session that was open when the change came in.
     sides = {
@@ -109,24 +121,22 @@ export async function getPendingMerge(
       theirs: draft.body,
       theirsLabel: draftLabel,
     };
-    draftIsSide = true;
   } else if (room) {
     // The live session predates the change (or holds nothing else to merge with)
     sides = {
       ours: roomMarkdown(room),
       oursLabel: 'Yours',
       theirs: pending.page.body,
-      theirsLabel: authorName,
+      theirsLabel: currentLabel,
     };
   } else {
-    // Nobody is editing: the ended session's draft against the change
+    // Nobody is editing: the ended session's draft against the page
     sides = {
       ours: draft?.body ?? pending.baseBody,
       oursLabel: draft ? draftLabel : 'Base',
       theirs: pending.page.body,
-      theirsLabel: authorName,
+      theirsLabel: currentLabel,
     };
-    draftIsSide = Boolean(draft);
   }
 
   return {

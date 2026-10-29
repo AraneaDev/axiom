@@ -272,6 +272,100 @@ describe('Collaboration server', () => {
     expect(pending.draftVersionId).toBe(draft.id);
   });
 
+  /**
+   * An external write in the moment no live room is registered (closing or loading).
+   * @param body
+   */
+  const writeInWindow = (body: string) =>
+    writePageBody(
+      { pageId, authorId: users.owner, body, kind: 'EXTERNAL', source: 'mcp' },
+      { isRoomLive: () => false },
+    );
+
+  it('a session save never overwrites an external write made while no room was registered', async () => {
+    const session = await connect('editor');
+    appendParagraph(session.doc, 'session edit');
+    await waitFor(async () => (await roomMarkdown()).includes('session edit'));
+    const written = await writeInWindow('Agent body');
+    expect(written.pendingMerge).toBe(false);
+
+    await flushRoom(pageId);
+
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
+      'Agent body',
+    );
+    const pending = await prisma.pendingPageChange.findUniqueOrThrow({
+      where: { pageId },
+      include: { draftVersion: true },
+    });
+    expect(pending.baseBody).toBe('Original body');
+    expect(pending.externalVersionId).toBe(written.version!.id);
+    expect(pending.draftVersion?.kind).toBe('SESSION_DRAFT');
+    expect(pending.draftVersion?.body).toBe('Original body\n\nsession edit');
+    // The live room is told, and the notice names no draft: the draft is this session's own
+    await waitFor(() => session.changeMessages.length > 0);
+    expect(session.changeMessages[0]).toMatchObject({
+      state: 'pending',
+      externalVersionId: written.version!.id,
+    });
+    expect(session.changeMessages[0].draftAuthorName).toBeUndefined();
+    const { getPendingMerge } = await import('../modules/wiki/page-merge');
+    const merge = await getPendingMerge(pageId, users.editor);
+    expect(merge).toMatchObject({
+      ours: 'Original body\n\nsession edit',
+      theirs: 'Agent body',
+      base: 'Original body',
+    });
+    expect(merge?.draftAuthorName).toBeUndefined();
+  });
+
+  it('a closing session never overwrites an external write made in the closing window', async () => {
+    const session = await connect('editor');
+    appendParagraph(session.doc, 'closing edit');
+    await waitFor(async () => (await roomMarkdown()).includes('closing edit'));
+    await writeInWindow('Agent body');
+
+    await session.close();
+    clients.splice(clients.indexOf(session), 1);
+    await waitFor(() => !isRoomLive(pageId));
+    await roomSettled(pageId);
+
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
+      'Agent body',
+    );
+    const pending = await prisma.pendingPageChange.findUniqueOrThrow({
+      where: { pageId },
+      include: { draftVersion: true },
+    });
+    expect(pending.draftVersion?.body).toBe('Original body\n\nclosing edit');
+  });
+
+  it('the notice names a draft only when the merge would use it', async () => {
+    // A edits, the agent writes, A leaves: A's draft is the unmerged work
+    const a = await connect('editor');
+    appendParagraph(a.doc, 'from A');
+    await waitFor(async () => (await roomMarkdown()).includes('from A'));
+    await externalWrite('Agent one');
+    await a.close();
+    clients.splice(clients.indexOf(a), 1);
+    await waitFor(() => !isRoomLive(pageId));
+    await roomSettled(pageId);
+
+    // B opens after that change: the notice names A's draft, and so does the merge
+    const b = await connect('owner');
+    await waitFor(() => b.changeMessages.length > 0);
+    const { getPendingMerge } = await import('../modules/wiki/page-merge');
+    expect(b.changeMessages[0].draftAuthorName).toBe('Collab editor');
+    expect((await getPendingMerge(pageId, users.owner))?.draftAuthorName).toBe('Collab editor');
+
+    // The agent writes again: B now predates the change, the merge is B against the page, and
+    // the notice no longer names A's draft
+    await externalWrite('Agent two');
+    await waitFor(() => b.changeMessages.length > 1);
+    expect(b.changeMessages[1].draftAuthorName).toBeUndefined();
+    expect((await getPendingMerge(pageId, users.owner))?.draftAuthorName).toBeUndefined();
+  });
+
   it('a session that ends without edits clears the pending change', async () => {
     // An agent writes while a session is open; the session closes without having edited
     const session = await connect('editor');

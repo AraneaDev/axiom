@@ -535,6 +535,7 @@ model PendingPageChange {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([draftVersionId])
   @@map("pending_page_changes")
 }
 
