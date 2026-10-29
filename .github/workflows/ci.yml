@@ -14,19 +14,41 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: axiom
+          POSTGRES_PASSWORD: axiom_dev
           POSTGRES_DB: axiom_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U postgres"
+          --health-cmd="pg_isready -U axiom"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/axiom_test?schema=public
+          POSTGRES_USER: axiom
+          POSTGRES_PASSWORD: axiom_dev
+          POSTGRES_DB: axiom_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U axiom"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7
+        # The tests connect with redis://:axiom_dev_redis@localhost:6379
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://axiom:axiom_dev@localhost:5432/axiom_test?schema=public
       JWT_SECRET: ci-test-jwt-secret-must-be-at-least-32-characters-long
       JWT_REFRESH_SECRET: ci-test-refresh-secret-must-be-at-least-32-chars
       NODE_ENV: test
@@ -38,6 +60,10 @@ jobs:
         with:
           node-version: 25
           cache: npm
+
+      - name: Start Redis
+        # Service containers cannot take a command, and the tests expect a password.
+        run: docker run -d --name redis -p 6379:6379 redis:7-alpine redis-server --requirepass axiom_dev_redis
 
       - name: Install backend dependencies
         run: npm ci
