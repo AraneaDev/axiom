@@ -96,15 +96,11 @@ export function registerWikiTools(ctx: McpToolContext) {
         }
       }
 
-      const page = await prisma.page.create({
-        data: {
-          spaceId,
-          title,
-          slug,
-          body: pageBody,
-          parentId,
-          versions: { create: { version: 1, title, body: pageBody, authorId: userId } },
-        },
+      const page = await wikiService.createPage(spaceId, userId, {
+        title,
+        slug,
+        body: pageBody,
+        parentId,
       });
       return { content: [{ type: 'text' as const, text: JSON.stringify(page, null, 2) }] };
     },
@@ -154,37 +150,19 @@ export function registerWikiTools(ctx: McpToolContext) {
       const team = await prisma.team.findUnique({ where: { id: space.teamId } });
       if (team) await assertMcpPermission('update_wiki_page', team.orgId);
 
-      const page = await prisma.page.findUnique({
-        where: { spaceId_slug: { spaceId, slug: pageSlug } },
-      });
-      if (!page) return { content: [{ type: 'text' as const, text: ERR.PAGE_NOT_FOUND }] };
-
-      const updateData: Record<string, unknown> = {};
-      if (title !== undefined) updateData.title = title;
-      if (body !== undefined) updateData.body = body;
-
-      const lastVersion = await prisma.pageVersion.findFirst({
-        where: { pageId: page.id },
-        orderBy: { version: 'desc' },
-        select: { version: true },
-      });
-      const nextVersion = (lastVersion?.version ?? 0) + 1;
-
-      const updated = await prisma.page.update({
-        where: { id: page.id },
-        data: {
-          ...updateData,
-          versions: {
-            create: {
-              version: nextVersion,
-              title: title ?? page.title,
-              body: body ?? page.body,
-              authorId: userId,
-            },
-          },
-        },
-      });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(updated, null, 2) }] };
+      try {
+        const updated = await wikiService.updatePage(
+          spaceId,
+          pageSlug,
+          userId,
+          { title, body },
+          { kind: 'EXTERNAL', source: 'mcp' },
+        );
+        return { content: [{ type: 'text' as const, text: JSON.stringify(updated, null, 2) }] };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Update failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+      }
     },
   );
 

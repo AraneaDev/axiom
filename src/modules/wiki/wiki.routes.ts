@@ -94,6 +94,12 @@ router.patch(
   requireSpacePermission('EDIT'),
   wikiController.updatePage,
 );
+router.post(
+  '/spaces/:spaceId/pages/:pageSlug/collab/flush',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('EDIT'),
+  wikiController.flushPageSession,
+);
 router.delete(
   '/spaces/:spaceId/pages/:pageSlug',
   requireWikiSpaceAccess(),

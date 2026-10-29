@@ -60,6 +60,15 @@ export const updatePage = asyncHandler(async (req: Request, res: Response) => {
   res.json(page);
 });
 
+export const flushPageSession = asyncHandler(async (req: Request, res: Response) => {
+  const result = await wikiService.flushPageSession(
+    param(req, 'spaceId'),
+    param(req, 'pageSlug'),
+    req.userId!,
+  );
+  res.json(result);
+});
+
 export const deletePage = asyncHandler(async (req: Request, res: Response) => {
   await wikiService.deletePage(param(req, 'spaceId'), param(req, 'pageSlug'), req.userId);
   res.status(204).send();

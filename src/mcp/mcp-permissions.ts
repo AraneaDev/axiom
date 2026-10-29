@@ -17,6 +17,7 @@ export const MCP_TOOL_PERMISSIONS: Record<string, Action> = {
   get_wiki_page: 'wiki:view',
   get_page_tree: 'wiki:view',
   create_wiki_page: 'wiki:edit',
+  update_wiki_page: 'wiki:edit',
   search: 'issue:view',
   list_wiki_issue_links: 'wiki:view',
   link_wiki_to_issue: 'wiki:edit',

@@ -87,6 +87,13 @@ export const wikiApi = {
     },
   ) => patch<Page>(`/wiki/spaces/${spaceId}/pages/${pageSlug}`, data),
   /**
+   * Save the live collaboration session of a page so the stored body matches the editor.
+   * @param spaceId
+   * @param pageSlug
+   */
+  flushCollab: (spaceId: string, pageSlug: string) =>
+    post<{ flushed: boolean }>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/collab/flush`, {}),
+  /**
    * Delete a wiki page by slug.
    * @param spaceId
    * @param pageSlug

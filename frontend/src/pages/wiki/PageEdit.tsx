@@ -179,9 +179,12 @@ export default function PageEdit() {
           ...(parentId ? { parentId } : {}),
         });
       } else {
+        // In a collaborative session the server holds the body: save the live document first,
+        // then send only the metadata so a stale local copy can never overwrite it.
+        if (useCollab) await wikiApi.flushCollab(currentSpace.id, pageSlug!);
         return wikiApi.updatePage(currentSpace.id, pageSlug!, {
           title,
-          body,
+          ...(useCollab ? {} : { body }),
           ...(parentId ? { parentId } : { parentId: null }),
           ...(changeDescription.trim() ? { changeDescription: changeDescription.trim() } : {}),
         });

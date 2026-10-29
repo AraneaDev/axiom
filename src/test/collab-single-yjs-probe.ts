@@ -10,6 +10,7 @@
 import { createRequire } from 'module';
 
 const reports: string[] = [];
+/* eslint-disable no-console -- the hook must wrap console.warn/error by computed name to catch yjs's duplicate-import report, then pass the call through */
 for (const method of ['warn', 'error'] as const) {
   const original = console[method];
   console[method] = (...args: unknown[]) => {
@@ -17,6 +18,7 @@ for (const method of ['warn', 'error'] as const) {
     original(...args);
   };
 }
+/* eslint-enable no-console */
 
 const load = createRequire(__filename);
 

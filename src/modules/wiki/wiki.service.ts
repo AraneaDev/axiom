@@ -4,13 +4,15 @@ import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { flushRoom } from '../../realtime/collaboration';
 import { checkUnique } from '../../utils/check-unique';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
-import { createPageVersion, lockPage } from './page-versions';
+import { createPageVersion } from './page-versions';
+import { writePageBody } from './page-writes';
 import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
 import { canViewPage, canEditPage } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
@@ -216,7 +218,10 @@ export async function getPage(spaceId: string, pageSlug: string, userId?: string
  * @param data.parentId
  * @param data.isDraft
  * @param data.changeDescription
- * @returns The updated page with latest version
+ * @param opts - Version kind and write source; defaults to an API edit
+ * @param opts.kind
+ * @param opts.source
+ * @returns The updated page with latest version and whether the body change awaits a merge
  * @throws {AppError} 404 if page not found
  */
 export async function updatePage(
@@ -226,10 +231,11 @@ export async function updatePage(
   data: {
     title?: string;
     body?: string;
-    parentId?: string;
+    parentId?: string | null;
     isDraft?: boolean;
     changeDescription?: string;
   },
+  opts: { kind?: 'EDIT' | 'EXTERNAL'; source?: 'api' | 'mcp' } = {},
 ) {
   const page = await findOrThrow(
     prisma.page.findUnique({
@@ -242,52 +248,47 @@ export async function updatePage(
   const editAllowed = await canEditPage(authorId, page.id);
   if (!editAllowed) throw new AppError(403, 'You do not have permission to edit this page');
 
-  const updated = await prisma.$transaction(async (tx) => {
-    // Lock first, then decide on fresh data: the read above may predate a concurrent write
-    await lockPage(tx, page.id);
-    const current = await tx.page.findUniqueOrThrow({ where: { id: page.id } });
-    const newTitle = data.title ?? current.title;
-    const newBody = data.body ?? current.body;
-    const versionedChange = newTitle !== current.title || newBody !== current.body;
-
-    await tx.page.update({
-      where: { id: page.id },
-      data: {
-        title: newTitle,
-        body: newBody,
-        parentId: data.parentId !== undefined ? data.parentId : current.parentId,
-        isDraft: data.isDraft !== undefined ? data.isDraft : current.isDraft,
-      },
-    });
-    if (versionedChange) {
-      await createPageVersion(tx, {
-        pageId: page.id,
-        title: newTitle,
-        body: newBody,
-        authorId,
-        kind: 'EDIT',
-        changeDescription: data.changeDescription,
-      });
-    }
-    // The latest version is the real latest one: a change that is not versioned (for example only
-    // changeDescription) leaves it untouched rather than pretending a new version exists.
-    return tx.page.findUniqueOrThrow({
-      where: { id: page.id },
-      include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
-    });
+  const written = await writePageBody({
+    pageId: page.id,
+    authorId,
+    title: data.title,
+    body: data.body,
+    parentId: data.parentId,
+    isDraft: data.isDraft,
+    changeDescription: data.changeDescription,
+    kind: opts.kind ?? 'EDIT',
+    source: opts.source ?? 'api',
   });
 
-  await cacheInvalidate(`wiki:tree:${spaceId}`);
+  // The latest version is the real latest one: a change that is not versioned (for example only
+  // changeDescription) leaves it untouched rather than pretending a new version exists.
+  const updated = await prisma.page.findUniqueOrThrow({
+    where: { id: page.id },
+    include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+  });
+
   await logActivity('wiki_page', page.id, 'updated', authorId, { title: updated.title });
 
-  if (data.body) {
-    const issueIds = await extractIssueIdsFromContent(data.body);
-    await syncMentionLinks(page.id, issueIds, authorId);
+  return { ...updated, pendingMerge: written.pendingMerge };
+}
+
+/**
+ * Save the live collaboration room of a page, so the stored body matches the editor.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @param userId - The user asking for the flush
+ * @returns Whether a live room was saved
+ * @throws {AppError} 404 if page not found, 403 if the user may not edit it
+ */
+export async function flushPageSession(spaceId: string, pageSlug: string, userId: string) {
+  const page = await findOrThrow(
+    prisma.page.findUnique({ where: { spaceId_slug: { spaceId, slug: pageSlug } } }),
+    ERR.PAGE_NOT_FOUND,
+  );
+  if (!(await canEditPage(userId, page.id))) {
+    throw new AppError(403, 'You do not have permission to edit this page');
   }
-
-  broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
-
-  return updated;
+  return { flushed: await flushRoom(page.id) };
 }
 
 /**
@@ -479,34 +480,26 @@ export async function restoreVersion(
     `Version ${targetVersion} not found`,
   );
 
-  const updated = await prisma.$transaction(async (tx) => {
-    await tx.page.update({
-      where: { id: page.id },
-      data: { title: target.title, body: target.body },
-    });
-    await createPageVersion(tx, {
-      pageId: page.id,
-      title: target.title,
-      body: target.body,
-      authorId: userId,
-      kind: 'RESTORE',
-      changeDescription: `Restored to version ${targetVersion}`,
-    });
-    return tx.page.findUniqueOrThrow({
-      where: { id: page.id },
-      include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
-    });
+  const written = await writePageBody({
+    pageId: page.id,
+    authorId: userId,
+    title: target.title,
+    body: target.body,
+    changeDescription: `Restored to version ${targetVersion}`,
+    kind: 'RESTORE',
+    source: 'restore',
+  });
+  const updated = await prisma.page.findUniqueOrThrow({
+    where: { id: page.id },
+    include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
   });
 
-  await cacheInvalidate(`wiki:tree:${spaceId}`);
   await logActivity('wiki_page', page.id, 'updated', userId, {
     title: updated.title,
     restoredToVersion: targetVersion,
   });
 
-  broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
-
-  return updated;
+  return { ...updated, pendingMerge: written.pendingMerge };
 }
 
 // ─── Re-exports from sub-services ───────────────────────────

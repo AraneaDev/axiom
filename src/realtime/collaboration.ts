@@ -464,6 +464,27 @@ export function createCollaborationServer(): {
 }
 
 /**
+ * Whether a collaboration room currently exists for the page.
+ * @param pageId
+ */
+export function isRoomLive(pageId: string): boolean {
+  return rooms.has(pageId);
+}
+
+/**
+ * Save the live room's document now, if there is one. Used before a REST save so the page
+ * holds what the editor shows.
+ * @param pageId
+ * @returns True when a live room was saved
+ */
+export async function flushRoom(pageId: string): Promise<boolean> {
+  const room = rooms.get(pageId);
+  if (!room) return false;
+  await forceSave(pageId, room.doc);
+  return true;
+}
+
+/**
  * Get the list of active users in a collaboration room for a page.
  * @param pageId
  */
