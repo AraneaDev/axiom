@@ -124,7 +124,7 @@ npm run tunnel:down
     "paths": { "@/*": ["./*"] }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts", "src/mcp/**"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }
 ```
 
@@ -230,7 +230,6 @@ export default defineConfig({
       JWT_SECRET: 'test-secret-must-be-at-least-32-characters-long',
       JWT_REFRESH_SECRET: 'test-refresh-secret-must-be-32-chars-long',
       PORT: '3001',
-      REPOS_PATH: '/tmp/axiom-test-repos',
       NODE_ENV: 'test',
     },
     testTimeout: 15000,
@@ -325,17 +324,25 @@ E2E tests live in `e2e/`. Spec files:
 ```
 e2e/
   auth.spec.ts
+  automation-rules.spec.ts
   board.spec.ts
   create-entities.spec.ts
-  helpers.ts
+  custom-fields.spec.ts
+  issue-links.spec.ts
+  issue-templates.spec.ts
   issues.spec.ts
+  labels.spec.ts
+  milestones.spec.ts
   navigation.spec.ts
-  pulls.spec.ts
-  repos.spec.ts
+  notifications.spec.ts
+  project-settings.spec.ts
+  query-filter.spec.ts
+  routing.spec.ts
   search.spec.ts
   settings.spec.ts
   sprints.spec.ts
   wiki-edit.spec.ts
+  wiki-templates.spec.ts
   wiki.spec.ts
 ```
 
@@ -598,21 +605,17 @@ export const issueFieldRegistry: FieldRegistry = {
 
 ### Adding a field registry for a new resource type
 
-To support filtering on a different resource (e.g., wiki pages, pull requests), create a new registry file following the same pattern:
+To support filtering on a different resource (e.g., sprints, wiki pages), create a new registry file following the same pattern:
 
 ```ts
-// src/lib/query-engine/fields/pr-fields.ts
+// src/lib/query-engine/fields/sprint-fields.ts
 import type { FieldRegistry } from '../types';
 
-export const prFieldRegistry: FieldRegistry = {
-  state: {
+export const sprintFieldRegistry: FieldRegistry = {
+  status: {
     type: 'enum',
-    column: 'state',
-    values: ['OPEN', 'MERGED', 'CLOSED'],
-  },
-  author: {
-    type: 'user',
-    column: 'authorId',
+    column: 'status',
+    values: ['PLANNING', 'ACTIVE', 'COMPLETED'],
   },
 };
 ```
@@ -650,8 +653,6 @@ case 'SET_MILESTONE': {
 | Creation limits | Caps the number of sub-issues or comments that can be created in a single automation run |
 
 Always check these guards before performing any write in a new action case.
-
-**Note:** The `run_workflow` action type is handled specially -- it creates a `RunnerTask` record and delegates execution to an external runner rather than performing the action inline. See [Runner Module Pattern](design-patterns.md#runner-module-pattern) for details.
 
 ---
 
@@ -780,56 +781,6 @@ feat/widget-crud
 fix/issue-pagination
 refactor/label-badge
 ```
-
----
-
-## Setting Up a Local Runner
-
-A local runner is only needed if you want to test the `run_workflow` automation action. Axiom is compatible with Gitea's `act_runner`.
-
-### 1. Download act_runner
-
-Check https://gitea.com/gitea/act_runner/releases for the latest version.
-
-```bash
-# Linux amd64
-curl -L https://gitea.com/gitea/act_runner/releases/latest/download/act_runner-linux-amd64 -o act_runner
-chmod +x act_runner
-```
-
-### 2. Generate a registration token
-
-The dev stack must be running (`npm run docker:dev`). Log in to get an access token, then generate a registration token at the desired scope (org, team, or project):
-
-```bash
-# Get an access token
-ACCESS_TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -H 'X-Requested-With: XMLHttpRequest' \
-  -d '{"username":"tim","password":"password123"}' | jq -r '.accessToken')
-
-# Generate a registration token (replace <orgId> with the actual org ID)
-curl -X POST http://localhost:3000/api/orgs/<orgId>/runners/registration-token \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H 'X-Requested-With: XMLHttpRequest'
-```
-
-### 3. Register the runner
-
-```bash
-./act_runner register \
-  --instance http://localhost:3000 \
-  --token <registration-token> \
-  --name local-runner
-```
-
-### 4. Start the runner daemon
-
-```bash
-./act_runner daemon
-```
-
-The runner will poll `FetchTask` for available work. You can verify it appears in the runner list via the API or the Axiom UI.
 
 ---
 

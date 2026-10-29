@@ -1,6 +1,6 @@
 # MCP Server Install & Test Protocol
 
-Step-by-step protocol for installing the Axiom MCP server into Claude Code and verifying all 48 tools work correctly.
+Step-by-step protocol for installing the Axiom MCP server into Claude Code and verifying all 24 tools work correctly.
 
 ---
 
@@ -88,58 +88,7 @@ These tools form the foundation -- every other tool depends on IDs from this cha
 
 ---
 
-## Step 6: Test Repository & Git Tools (13 tools)
-
-| # | Tool | Input | Expected |
-|---|------|-------|----------|
-| 1 | `list_repos` | `teamId` | Returns seeded repos |
-| 2 | `browse_files` | `repoId` | File listing at root |
-| 3 | `read_file` | `repoId, filePath: "README.md"` | File content |
-| 4 | `get_commits` | `repoId` | Commit history |
-| 5 | `get_branches` | `repoId` | Branch list |
-| 6 | `list_branches` | `repoId` | Branches with commit info |
-| 7 | `get_diff` | `repoId, base, head` | Diff output |
-| 8 | `search_code` | `repoId, query: "README"` | Search results |
-| 9 | `get_pr_diff` | `repoId, pullNumber` | PR diff |
-| 10 | `get_pr_comments` | `repoId, pullNumber` | PR comments |
-| 11 | `get_recent_merges` | `repoId` | Merged PRs |
-
----
-
-## Step 7: Test Pull Request Tools (4 tools)
-
-| # | Tool | Input | Expected |
-|---|------|-------|----------|
-| 1 | `list_pull_requests` | `repoId` | Returns PRs |
-| 2 | `get_pull_request` | `repoId, pullNumber` | PR details |
-| 3 | `create_pull_request` | `repoId, title, sourceBranch, targetBranch` | PR created |
-| 4 | `merge_pull_request` | `repoId, pullNumber` | PR merged |
-
----
-
-## Step 8: Test CI/CD & Release Tools (4 tools)
-
-| # | Tool | Input | Expected |
-|---|------|-------|----------|
-| 1 | `list_pipelines` | `repoId` | Pipeline list |
-| 2 | `trigger_pipeline` | `pipelineId, ref: "main"` | Run triggered |
-| 3 | `list_releases` | `repoId` | Release list |
-| 4 | `create_release` | `repoId, tagName: "v0.0.1-test", targetBranch: "main"` | Release created |
-
----
-
-## Step 9: Test Runner Tools (4 tools)
-
-| # | Tool | Input | Expected |
-|---|------|-------|----------|
-| 1 | `list_runners` | `orgId` | Runner list (may be empty) |
-| 2 | `generate_runner_registration_token` | `orgId` | Token returned |
-
-(Runner task tools require an active runner task -- skip if none exist.)
-
----
-
-## Step 10: Test Wiki Tools (6 tools)
+## Step 6: Test Wiki Tools (6 tools)
 
 | # | Tool | Input | Expected |
 |---|------|-------|----------|
@@ -152,7 +101,7 @@ These tools form the foundation -- every other tool depends on IDs from this cha
 
 ---
 
-## Step 11: Test Search Tool (1 tool)
+## Step 7: Test Search Tool (1 tool)
 
 | # | Tool | Input | Expected |
 |---|------|-------|----------|
@@ -160,13 +109,12 @@ These tools form the foundation -- every other tool depends on IDs from this cha
 
 ---
 
-## Step 12: Test Integration Tools (3 tools)
+## Step 8: Test Integration Tools (2 tools)
 
 | # | Tool | Input | Expected |
 |---|------|-------|----------|
-| 1 | `get_development_summary` | `projectId, issueNumber` | Linked PRs/branches/CI |
-| 2 | `list_wiki_issue_links` | `issueId` | Linked wiki pages |
-| 3 | `link_wiki_to_issue` | `pageId, issueId` | Link created |
+| 1 | `list_wiki_issue_links` | `issueId` | Linked wiki pages |
+| 2 | `link_wiki_to_issue` | `pageId, issueId` | Link created |
 
 ---
 
@@ -174,7 +122,7 @@ These tools form the foundation -- every other tool depends on IDs from this cha
 
 After testing, remove test artifacts:
 
-- Delete any test issues, sprints, wiki pages, and releases created during testing
+- Delete any test issues, sprints, and wiki pages created during testing
 - Or re-run `npm run db:seed` to reset to baseline
 
 To remove the MCP server from Claude Code:

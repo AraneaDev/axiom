@@ -74,7 +74,7 @@ Use **card hover** for navigation tiles (dashboards, team overview -- few items,
 </Link>
 ```
 
-Use **row hover** for dense data lists (repo list, PR list, file browser -- many items, scannable):
+Use **row hover** for dense data lists (issue list, wiki page list -- many items, scannable):
 ```tsx
 <div className="rounded-lg border border-border bg-surface divide-y divide-border">
   <Link className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors">
@@ -234,7 +234,7 @@ All live in `frontend/src/components/ui/`. Every component uses `forwardRef`, `c
 </TableContainer>
 ```
 
-Use raw `<table>` elements only for specialized displays (code diffs, blame views, file listings).
+Use raw `<table>` elements only for specialized displays (wide, dense, specialized data).
 
 ### Editor Components
 
@@ -311,8 +311,7 @@ toast.info('Processing...');
 | `useDebounce(value, delay?)` | Debounce a value (default 300ms) | `const q = useDebounce(search)` |
 | `usePaginatedQuery({ queryKey, queryFn, pageSize? })` | Pagination + React Query | Returns `{ data, page, setPage, totalPages, isLoading }` |
 | `useMutationWithToast(fn, opts?)` | Mutation + toast + invalidation | `useMutationWithToast(api.delete, { successMessage: 'Deleted', invalidateKeys: [['items']] })` |
-| `useRepoContext()` | Current repo from URL params | Returns `{ org, teamSlug, repoSlug, basePath }` |
-| `useKeyboard()` | Global keyboard shortcuts | Cmd+K search, ? help, / focus |
+| `useGlobalKeyboard()` | Global keyboard shortcuts | Cmd+K search, ? help, / focus |
 | `useDarkMode()` | Dark mode toggle | Returns `{ isDark, toggle }` |
 | `useWebSocket()` | Singleton WebSocket connection | Auto-reconnect with backoff |
 | `useIssueListFilters(issues)` | Multi-filter/sort for issue lists | Returns filtered issues + filter state |
@@ -416,29 +415,6 @@ throw new AppError(403, 'Not authorized', 'INSUFFICIENT_PERMISSIONS');
 import { parseServicePagination } from '../../utils/pagination';
 const { take, skip } = parseServicePagination(opts);  // defaults: take=25, skip=0, max take=100
 ```
-
----
-
-## Runner Module Pattern
-
-The runner subsystem extends the standard backend module pattern with a Connect-RPC protocol layer. The module is split across two routing groups:
-
-```
-src/modules/runners/
-  runners.routes.ts           # REST management API (CRUD, registration tokens)
-  runners.controller.ts       # Request handlers for management endpoints
-  runners.service.ts          # Business logic: runner lifecycle, token generation
-  runner-protocol.routes.ts   # Connect-RPC endpoints (Ping, Register, Declare, FetchTask, UpdateTask, UpdateLog)
-  runner-protocol.controller.ts # Handlers that decode Connect-RPC wire format
-  runner-protocol.service.ts  # Protocol logic: task claiming, log ingestion
-  runner-tasks.routes.ts      # Task status + SSE log streaming
-  runner-tasks.controller.ts  # Task query and SSE handlers
-  runner-health.service.ts    # Background health monitor (stale/dead detection)
-```
-
-The REST management routes are mounted per-scope (`/api/orgs/:orgId/runners`, `/api/teams/:teamId/runners`, `/api/projects/:projectId/runners`). The Connect-RPC protocol routes are mounted at `/api/actions/*` for Gitea `act_runner` compatibility. Task and log endpoints are mounted at `/api/runner-tasks/*`.
-
-The `run_workflow` automation action type dispatches a workflow to an external runner. It creates a `RunnerTask` record scoped to the issue's project (falling back to team, then org). On completion, an auto-comment is posted on the triggering issue and automation rules are re-evaluated.
 
 ---
 

@@ -8,20 +8,19 @@
 4. [Database Schema](#database-schema)
 5. [Authentication and Authorization](#authentication-and-authorization)
 6. [Real-time Architecture](#real-time-architecture)
-7. [Git Hosting Architecture](#git-hosting-architecture)
-8. [Frontend Architecture](#frontend-architecture)
-9. [Caching Strategy](#caching-strategy)
-10. [File Storage](#file-storage)
-11. [Email](#email)
-12. [Error Handling](#error-handling)
-13. [Security Model](#security-model)
-14. [Development Infrastructure](#development-infrastructure)
+7. [Frontend Architecture](#frontend-architecture)
+8. [Caching Strategy](#caching-strategy)
+9. [File Storage](#file-storage)
+10. [Email](#email)
+11. [Error Handling](#error-handling)
+12. [Security Model](#security-model)
+13. [Development Infrastructure](#development-infrastructure)
 
 ---
 
 ## System Overview
 
-Axiom is a self-hosted software development platform providing Git hosting, issue tracking, wiki, CI/CD pipelines, and project management. It is built as a monorepo with a Node.js/Express API backend and a React single-page application frontend.
+Axiom is a self-hosted Jira and Confluence replacement built for agents: issue tracking, sprints and boards, a collaborative wiki, and an MCP server so agents can work in the same projects you do. A GitHub integration is planned for the code side. It is built as a monorepo with a Node.js/Express API backend and a React single-page application frontend.
 
 **Key versions:**
 - Node.js 25
@@ -46,8 +45,7 @@ graph TD
     subgraph Docker["Docker Compose (dev)"]
         Web["web :7000\nVite / React"]
         API["api :3000\nExpress 5"]
-        GitSSH["git-ssh :2222\nssh2, ssh profile"]
-        Worker["worker\nEmail queue, runner monitor"]
+        Worker["worker\nEmail queue consumer"]
         Migrate["migrate\nprisma migrate deploy, one-shot"]
         DB["db :5432\nPostgreSQL 16"]
         Redis["redis :6379\nRedis 7"]
@@ -59,8 +57,6 @@ graph TD
     API -->|Prisma + pg pool| DB
     API -->|ioredis| Redis
     API -->|nodemailer| Mail
-    API -->|"spawn git-upload-pack\ngit-receive-pack"| BareRepos[".data/repos\nBare Git repos"]
-    GitSSH -->|"SSH :2222"| BareRepos
     Worker -->|Prisma + pg pool| DB
     Worker -->|ioredis| Redis
     Migrate -->|Prisma + pg pool| DB
@@ -72,14 +68,13 @@ One image, one codebase. Each container runs a different entry point.
 
 | Service | Entry point | Volumes | Ports | Role |
 |---|---|---|---|---|
-| `migrate` | `node dist/migrate.js` (one-shot) | `git_repos` | none | Runs `prisma migrate deploy`, then reinstalls the post-receive hook in every repository. Exits 0. |
-| `api` | `node dist/index.js` | `git_repos`, `uploads` | internal 3000 | REST, WebSocket, git smart HTTP, MCP, internal hook endpoint. |
-| `git-ssh` | `node dist/ssh.js` | `git_repos`, `ssh_host_key` | `${SSH_PORT:-2222}:2222` | SSH git transport only. Runs only with the `ssh` compose profile. |
-| `worker` | `node dist/worker.js` | none | none | Email queue consumer, runner health monitor. |
+| `migrate` | `node dist/migrate.js` (one-shot) | none | Runs `prisma migrate deploy`. Exits 0. |
+| `api` | `node dist/index.js` | `uploads` | internal 3000 | REST, WebSocket, MCP. |
+| `worker` | `node dist/worker.js` | none | none | Email queue consumer. |
 | `web` | nginx | none | `${PORT:-7000}:80` | Frontend, unchanged. |
 | `db`, `redis` | images | `pgdata`, `redis_data` | internal | `redis` requires `REDIS_PASSWORD`. |
 
-`api`, `git-ssh`, and `worker` each declare `depends_on: migrate: condition: service_completed_successfully`, so migrations and hook reinstallation finish before any of them start.
+`api` and `worker` each declare `depends_on: migrate: condition: service_completed_successfully`, so migrations finish before either of them starts.
 
 ---
 
@@ -128,21 +123,14 @@ Controllers receive `req`/`res` and call service functions. Services never touch
 | `/api/projects` | projects, issues, activity, sprints, custom-fields, workflows, automation, labels, issue-templates, milestones |
 | `/api/wiki` | wiki |
 | `/api/search` | search |
-| `/api/repos` | repos, insights, pulls, protection, webhooks, releases, pipelines, status-checks, code-owners, deployments |
 | `/api/attachments` | attachments |
 | `/api/notifications` | notifications |
 | `/api/saved-filters` | saved-filters |
 | `/api/admin` | admin, audit |
-| `/api/orgs/:orgId/runners`, `/api/teams/:teamId/runners`, `/api/projects/:projectId/runners` | runners (management) |
-| `/api/actions` | runners (Connect-RPC protocol) |
-| `/api/runner-tasks` | runner-tasks (task status + log streaming) |
-| `/api/internal/hooks` | git post-receive hook handler |
-| `/git/*` | smart HTTP git protocol |
 | `/api/mcp` | Model Context Protocol SSE endpoint (authenticated) |
 
 ### Supporting Infrastructure
 
-- `src/git/` — Git protocol, SSH server, bare repo lifecycle
 - `src/realtime/` — WebSocket server, Yjs collaboration
 - `src/storage/` — File storage abstraction
 - `src/email/` — BullMQ-backed email queue (started only when `SMTP_HOST` is set)
@@ -232,30 +220,10 @@ Automation rules are stored as `AutomationRule` records and evaluated at trigger
 | `create_issue` | Create a linked child issue |
 | `send_email` | Send an email to a specified address |
 | `webhook` | POST a JSON payload to an external URL (SSRF-protected) |
-| `run_workflow` | Dispatch a workflow to an external Gitea-compatible runner |
 
 **Template expressions in actions:** Action field values support `{{expression}}` syntax resolved via the template resolver. At execution time the resolver receives an `AutomationTemplateContext` containing the triggering issue and actor.
 
 **SSRF protection:** The `webhook` action validates the target URL against a blocklist of private IP ranges and loopback addresses before dispatching the request.
-
-### Runner Subsystem
-
-The runner subsystem enables Axiom to dispatch workflow tasks to external execution environments via Gitea-compatible `act_runner` instances. Runners register at three scope levels -- organization, team, or project -- and inherit downward (an org-level runner can pick up tasks from any project in that org).
-
-**Protocol:** Runners communicate using a Connect-RPC protocol compatible with Gitea's `act_runner`. Six RPC endpoints handle the full lifecycle:
-
-1. `Ping` -- runner heartbeat
-2. `Register` -- exchange a registration token for persistent runner credentials
-3. `Declare` -- runner advertises its labels (capabilities)
-4. `FetchTask` -- runner polls for available work (atomic claim via database transaction)
-5. `UpdateTask` -- runner reports execution progress and final status
-6. `UpdateLog` -- runner streams log lines during execution
-
-**Task dispatch flow:** When an automation rule fires a `run_workflow` action, the automation engine creates a `RunnerTask` record in the database. A runner matching the task's scope calls `FetchTask`, which atomically claims the task. During execution the runner streams logs via `UpdateLog` and reports completion via `UpdateTask`. On completion, the system posts an auto-comment on the triggering issue and re-evaluates automation rules against the updated issue state.
-
-**Log streaming:** Logs are stored as `RunnerTaskLog` rows (one per line) and served to the frontend via a Server-Sent Events (SSE) endpoint (`GET /api/runner-tasks/:taskId/logs`). New log lines are pushed in real-time as they arrive from the runner.
-
-**Health monitoring:** A background monitor runs on a configurable interval (default: 60 seconds) and marks runners as `offline` if no heartbeat has been received within the stale threshold (default: 5 minutes). Runners that have been offline beyond the dead threshold (default: 24 hours) are marked as `dead`.
 
 ### Template Variables
 
@@ -294,14 +262,12 @@ erDiagram
     User ||--o{ OrgMembership : "belongs to"
     User ||--o{ TeamMembership : "belongs to"
     User ||--o{ ApiToken : has
-    User ||--o{ SshKey : has
     User ||--o{ RefreshToken : has
 
     Organization ||--o{ OrgMembership : has
     Organization ||--o{ Team : has
 
     Team ||--o{ TeamMembership : has
-    Team ||--o{ Repository : owns
     Team ||--o{ Project : owns
     Team ||--o{ WikiSpace : owns
 
@@ -314,27 +280,10 @@ erDiagram
 
     Issue ||--o{ Comment : has
     Issue ||--o{ IssueLink : "links to"
-    Issue ||--o{ IssueBranch : has
-    Issue ||--o{ IssueCommit : has
-    Issue ||--o{ IssuePullRequest : "linked to"
     Issue }o--|| BoardColumn : "placed in"
     Issue }o--o| Sprint : "assigned to"
     Issue }o--o| Milestone : "assigned to"
     Issue }o--o| Issue : "child of (epic)"
-
-    Repository ||--o{ PullRequest : has
-    Repository ||--o{ Pipeline : has
-    Repository ||--o{ Release : has
-    Repository ||--o{ BranchProtection : has
-    Repository ||--o{ Webhook : has
-    Repository ||--o{ DeploymentEnvironment : has
-
-    PullRequest ||--o{ PRReview : has
-    PullRequest ||--o{ PRComment : has
-
-    Pipeline ||--o{ PipelineRun : has
-    PipelineRun ||--o{ PipelineJob : has
-    PipelineJob ||--o{ PipelineStep : has
 
     WikiSpace ||--o{ Page : contains
     Page }o--o| Page : "child of"
@@ -343,19 +292,15 @@ erDiagram
 
 ### Schema Groups
 
-**Identity and Auth:** `User`, `ApiToken`, `SshKey`, `RefreshToken`, `PasswordResetToken`, `InviteLink`, `Invitation`
+**Identity and Auth:** `User`, `ApiToken`, `RefreshToken`, `PasswordResetToken`, `InviteLink`, `Invitation`
 
 **Organizations and Teams:** `Organization`, `OrgMembership` (roles: OWNER/ADMIN/MEMBER/VIEWER/GUEST), `Team`, `TeamMembership` (roles: ADMIN/MEMBER/VIEWER)
 
-**Repositories:** `Repository` (visibility: PRIVATE/INTERNAL/PUBLIC), `PullRequest`, `PRReview`, `PRComment`, `Webhook`, `WebhookDelivery`, `BranchProtection`, `CommitStatus`
-
-**Projects and Issues:** `Project`, `BoardColumn`, `Issue` (types: TASK/BUG/STORY/EPIC; priorities: CRITICAL/HIGH/MEDIUM/LOW), `Label`, `Comment`, `IssueLink` (types: BLOCKS/IS_BLOCKED_BY/RELATES_TO/DUPLICATES), `IssueCommit`, `IssuePullRequest`, `IssueBranch`, `IssueVote`, `IssueWatcher`, `TimeEntry`
+**Projects and Issues:** `Project`, `BoardColumn`, `Issue` (types: TASK/BUG/STORY/EPIC; priorities: CRITICAL/HIGH/MEDIUM/LOW), `Label`, `Comment`, `IssueLink` (types: BLOCKS/IS_BLOCKED_BY/RELATES_TO/DUPLICATES), `IssueVote`, `IssueWatcher`, `TimeEntry`
 
 **Planning:** `Sprint`, `Milestone`, `CustomFieldDefinition`, `CustomFieldValue`, `WorkflowRule`, `AutomationRule` (`condition String?` — query string format; `conditions Json?` — deprecated, kept for migration), `SavedFilter`
 
 **Wiki:** `WikiSpace`, `Page`, `PageVersion`, `PageComment`, `PageLabel`, `PageTemplate`
-
-**CI/CD and Deployments:** `Pipeline`, `PipelineRun`, `PipelineJob`, `PipelineStep`, `Release`, `DeploymentEnvironment`, `Deployment`, `EnvironmentVariable`
 
 **Platform:** `Notification`, `NotificationPreference`, `Attachment`, `Activity`, `AuditLog`
 
@@ -365,7 +310,7 @@ erDiagram
 
 ### Authentication Methods
 
-Axiom supports three authentication methods, all resolved in `src/middleware/auth.ts`:
+Axiom supports two authentication methods, all resolved in `src/middleware/auth.ts`:
 
 **1. JWT Bearer tokens (browser sessions)**
 - Short-lived access tokens signed with `JWT_SECRET`
@@ -373,15 +318,10 @@ Axiom supports three authentication methods, all resolved in `src/middleware/aut
 - Payload: `{ userId: string }`
 - Auto-refresh: the frontend API client intercepts 401 responses, calls `POST /api/auth/refresh`, and retries the original request. Concurrent 401s share a single refresh promise to avoid token races.
 
-**2. API tokens (programmatic / git HTTP)**
+**2. API tokens (programmatic)**
 - Long-lived tokens with the prefix `tk_`, stored as SHA-256 hashes in the `api_tokens` table
 - `Authorization: Token tk_...`
-- Support optional expiry and scopes (e.g., `["repo:read", "issues:write"]`)
-- Git smart HTTP uses HTTP Basic Auth with the API token as the password (username is ignored)
-
-**3. SSH keys (git SSH)**
-- Public keys stored with SHA-256 fingerprints in `ssh_keys`
-- SSH server authenticates by looking up the fingerprint from the connecting client's public key
+- Support optional expiry and scopes (e.g., `["issues:read", "issues:write"]`)
 
 ### JWT Refresh Flow
 
@@ -429,7 +369,7 @@ graph LR
     Client -->|"WS /ws?token=JWT"| MainWS["Main WS Server\nsrc/realtime/ws-server.ts"]
     Client -->|"WS /ws/wiki/{pageId}?token=JWT"| CollabWS["Collaboration WS Server\nsrc/realtime/collaboration.ts"]
 
-    MainWS --> Rooms["Room subscriptions\nuser:{id}, project:{id}, repo:{id}"]
+    MainWS --> Rooms["Room subscriptions\nuser:{id}, project:{id}"]
     CollabWS --> YjsDocs["In-memory Y.Doc per page\n+ PostgreSQL persistence"]
 ```
 
@@ -450,11 +390,9 @@ graph LR
 | `issue:created` | New issue | `project:{projectId}` |
 | `comment:added` | New comment | `project:{projectId}` |
 | `board:moved` | Column change | `project:{projectId}` |
-| `pr:updated` | PR mutation | `repo:{repoId}` |
-| `pr:merged` | PR merge | `repo:{repoId}` |
+| `issue:links-updated` | Wiki page linked to or unlinked from an issue | `issue:{issueId}` |
 | `wiki:updated` | Page save | `wiki:{spaceId}` |
 | `notification` | Any notification | `user:{userId}` |
-| `pipeline:updated` | Pipeline run change | `repo:{repoId}` |
 
 The frontend hook `useRealtimeInvalidation` subscribes to relevant rooms and calls `queryClient.invalidateQueries()` on matching events, keeping TanStack Query caches fresh without polling.
 
@@ -468,69 +406,6 @@ Implements the Yjs sync protocol for real-time collaborative wiki editing:
 - On connect: server sends sync step 1 and current awareness state to the new client
 - Document updates are debounce-persisted to PostgreSQL via `scheduleSave`; on the last client disconnect, `forceSave` is called immediately
 - Rooms are destroyed and memory freed when the last client disconnects
-
----
-
-## Git Hosting Architecture
-
-Bare Git repositories are stored at `{REPOS_PATH}/{orgSlug}/{teamSlug}/{repoSlug}.git`. In development, `REPOS_PATH` is `.data/repos` (bind-mounted into the container). In production, it is a Docker named volume at `/data/repos`.
-
-### Smart HTTP (`/git/*`)
-
-Implemented in `src/git/smart-http.ts` and mounted at the Express `/git` prefix.
-
-- **Authentication:** HTTP Basic Auth with an API token (`tk_...`) as the password; username field is ignored
-- **Clone/fetch:** `GET /git/{org}/{team}/{repo}.git/info/refs?service=git-upload-pack`
-- **Push:** `POST /git/{org}/{team}/{repo}.git/git-receive-pack`
-- Git processes (`git-upload-pack`, `git-receive-pack`) are spawned via `child_process.spawn` with stdio piped directly to the HTTP request/response streams
-- Write access requires the user to have appropriate org membership; the API token is validated against the `api_tokens` table
-
-### SSH Server
-
-Implemented in `src/git/ssh-server.ts` using the `ssh2` library, and run as the dedicated `git-ssh` container (`node dist/ssh.js`). Listens on `SSH_LISTEN_PORT` (default 2222).
-
-- **Authentication:** public key only. The connecting key's SHA-256 fingerprint is looked up in the `ssh_keys` table, and the client's signature over the auth request is verified against that key before the connection is accepted
-- Only `git-upload-pack` and `git-receive-pack` exec commands are allowed; anything else is rejected
-- Parses exec commands of the form `git-upload-pack '/org/team/repo.git'` and `git-receive-pack '/org/team/repo.git'`
-- Spawns the appropriate git process and pipes its stdin/stdout through the SSH channel
-- Host key is loaded from `SSH_HOST_KEY` (default `/data/ssh/host_key`), generated on first start if it does not exist
-
-### Post-Receive Hook
-
-`POST /api/internal/hooks/post-receive` (in `src/git/hook-handler.ts`) is called by the `post-receive` hook script installed in each bare repo. It is mounted early in `src/index.ts`, exempt from CSRF, and secured by a shared `HOOK_SECRET` value sent in the `X-Hook-Secret` header.
-
-The installed hook script is POSIX `sh` and contains only the repository id; it carries no secrets. It execs `post-receive-hook.ts` (`AXIOM_HOOK_ENTRY`, defaulting to `/app/dist/git/post-receive-hook.js`), which reads `oldrev newrev refname` lines from stdin and POSTs each to `${AXIOM_INTERNAL_URL}/api/internal/hooks/post-receive` with `X-Hook-Secret: ${HOOK_SECRET}`. Both `AXIOM_INTERNAL_URL` and `HOOK_SECRET` come from the environment of the git process (inherited from `api` or `git-ssh`, whichever spawned `git-receive-pack`), not from the hook file. A failed call is written to stderr and never fails the push.
-
-Push data flow, for both transports:
-
-```
-git push ──► api (/git, HTTP)  ─┐
-git push ──► git-ssh (ssh2)    ─┴─► git-receive-pack (child process, inherits env)
-                                        │
-                                        ▼
-                               hooks/post-receive  (#!/bin/sh)
-                                        │  exec node $AXIOM_HOOK_ENTRY <repoId>
-                                        ▼
-                         POST $AXIOM_INTERNAL_URL/api/internal/hooks/post-receive
-                              X-Hook-Secret: $HOOK_SECRET (from env, not file)
-                                        │
-                                        ▼
-                         api: webhooks, pipelines, smart commits (unchanged)
-```
-
-On each push, the hook handler:
-1. **Auto-links branches** -- Scans branch name for issue keys (e.g., `feature/AXM-42-fix`), creates `IssueBranch` records
-2. Parses commit messages for issue references (`Closes AXM-42`, `Fixes AXM-7`, `Refs AXM-3`)
-3. Creates `IssueCommit` records linking commits to issues with the appropriate `CommitRefType`
-4. Closes issues when `CLOSES` or `FIXES` ref types are detected
-5. **Executes smart commit directives** -- Parses `#time`, `#comment`, `#resolve`, `#close`, `#reopen`, `#assign`, `#label` directives and applies them to referenced issues (via `smart-commits.executor.ts`)
-6. Triggers pipeline runs via `triggerPipelineOnPush`
-7. Dispatches outbound webhooks to all active webhook URLs configured on the repository
-8. Invalidates relevant Redis cache keys via `cacheInvalidate`
-
-### Repo Manager
-
-`src/git/repo-manager.ts` handles bare repo lifecycle: creating new repos (`git init --bare`), computing disk paths, and installing the post-receive hook script into each new repo.
 
 ---
 
@@ -563,7 +438,7 @@ frontend/src/
     ui/                 # Shared components (Button, Modal, Input, etc.)
     editor/             # MarkdownRenderer, MarkdownEditor (TipTap)
   pages/                # Route components (lazy-loaded)
-  routes/               # Route group definitions (project-routes, repo-routes, admin-routes)
+  routes/               # Route group definitions (project-routes, admin-routes)
   stores/               # Zustand stores
   hooks/                # Custom hooks
   lib/                  # Types, utils, guards
@@ -578,7 +453,6 @@ React Router v7 is used throughout. All imports come from `'react-router'` (not 
   - `/` — Dashboard
   - `/:org` — Team list for org
   - `/:org/:team` — Team detail
-  - `/:org/:team/repos/:repo/*` — Repository routes (files, commits, branches, PRs, releases, pipelines, settings)
   - `/:org/:team/:project/*` — Project routes (issues, board, backlog, sprints, wiki, settings)
   - `/admin/*` — Platform admin routes
 
@@ -613,7 +487,7 @@ Binary downloads (e.g., Pandoc wiki exports) use raw `fetch` with a manual `Auth
 
 Redis 7 is used via `ioredis` for server-side caching. The client is configured in `src/config/redis.ts` with lazy connect and a retry strategy that gives up after 3 attempts. If Redis is unavailable, the application logs a warning and continues without caching (graceful degradation — `connected` flag gates all cache reads/writes).
 
-Cache operations are centralized through `cacheGet(key)` and `cacheSet(key, value, ttl)` helpers exposed from `src/config/redis.ts`. The default TTL is 60 seconds. `cacheInvalidate(key)` is called from the post-receive hook handler and from service mutations to bust stale entries.
+Cache operations are centralized through `cacheGet(key)` and `cacheSet(key, value, ttl)` helpers exposed from `src/config/redis.ts`. The default TTL is 60 seconds. `cacheInvalidate(key)` is called from service mutations to bust stale entries.
 
 On the frontend, TanStack Query provides client-side caching of all server state with configurable `staleTime` and `gcTime` per query. The `useRealtimeInvalidation` hook bridges WebSocket events to query invalidation, ensuring the cache stays fresh without polling.
 
@@ -688,12 +562,11 @@ Standard `RateLimit-*` response headers are sent; legacy `X-RateLimit-*` headers
 
 ### RBAC
 
-Every mutating API route operating on an org, team, repo, or project resource is protected by one or more guard middleware:
+Every mutating API route operating on an org, team, or project resource is protected by one or more guard middleware:
 
 - `authenticate` — verifies JWT or API token, sets `req.userId`
 - `requireOrgPermission(action)` — checks `OrgMembership.role` against the permission matrix
 - `requireTeamPermission(action)` — checks `TeamMembership.role` with org-level fallback
-- `requireRepoAccess()` — verifies org membership for the repo's owning org
 - `requireWikiSpaceAccess()` / `requireWikiPageAccess()` / `requireWikiCommentAccess()` / `requireWikiTemplateAccess()` — org membership checks for wiki resources
 - `requireProjectAccess` — verifies project membership
 
@@ -706,9 +579,6 @@ Every mutating API route operating on an org, team, repo, or project resource is
 - `JWT_SECRET` and `JWT_REFRESH_SECRET` must each be at least 32 characters
 - API token raw values are never stored; only their SHA-256 hashes are persisted in `api_tokens`
 - Refresh tokens are stored as SHA-256 hashes with an expiry timestamp in `refresh_tokens`
-- SSH host private key is stored at the path in `SSH_HOST_KEY` (default `/data/ssh/host_key`), inside the `ssh_host_key` volume (`ssh-host-key` in dev), generated on the `git-ssh` container's first start
-- Deployment environment variable values are stored encrypted in `EnvironmentVariable.encryptedValue`
-- The post-receive hook is authenticated by a `HOOK_SECRET` random value shared between the API process and each bare repo's installed hook script
 
 ---
 
@@ -721,10 +591,9 @@ The dev stack is defined in `docker-compose.dev.yml` and started with `npm run d
 | `db` | postgres:16-alpine | 5432 | Primary database |
 | `redis` | redis:7-alpine | 6379 | Cache and email queue broker, password `axiom_dev_redis` |
 | `mailserver` | docker-mailserver | 25 | Local SMTP for email testing |
-| `migrate` | Custom (Dockerfile.dev) | none | Runs `prisma migrate deploy` and reinstalls hooks, then exits (one-shot) |
+| `migrate` | Custom (Dockerfile.dev) | none | Runs `prisma migrate deploy`, then exits (one-shot) |
 | `api` | Custom (Dockerfile.dev) | 3000 | Express API with `tsx` watch |
-| `git-ssh` | Custom (Dockerfile.dev) | 2222 | SSH git transport with `tsx` watch (Docker profile: `ssh`) |
-| `worker` | Custom (Dockerfile.dev) | none | Email queue consumer and runner health monitor with `tsx` watch |
+| `worker` | Custom (Dockerfile.dev) | none | Email queue consumer with `tsx` watch |
 | `web` | Custom (Dockerfile.dev) | 7000 | Vite dev server |
 | `tunnel` | cloudflare/cloudflared | — | Optional Cloudflare tunnel (Docker profile: `tunnel`) |
 

@@ -2,10 +2,12 @@
 
 This file provides guidance to Claude Code when working in this repository.
 
+Axiom is a self-hosted Jira and Confluence replacement built for agents (issues, sprints, boards, wiki, MCP server). It has no git hosting; a GitHub integration is planned.
+
 ## Quick Reference
 
 ```bash
-npm run docker:dev          # Start PostgreSQL + Redis + API + Frontend (ports 5432, 3000, 7000, 2222)
+npm run docker:dev          # Start PostgreSQL + Redis + API + Frontend (ports 5432, 3000, 7000)
 npm run docker:dev:down     # Stop all containers
 npm run db:seed             # Seed demo data (idempotent, safe to re-run)
 npm run tunnel              # Expose dev stack via Cloudflare tunnel (free, no account)
@@ -29,9 +31,9 @@ Detailed docs live in `/docs/`. Read these before making changes in their domain
 |----------|--------|
 | [Architecture](docs/architecture.md) | System diagram, tech stack, data flow, deployment model |
 | [Design Patterns](docs/design-patterns.md) | Non-negotiable rules, all shared UI components, custom hooks, backend module pattern, building checklists |
-| [Development Guide](docs/development-guide.md) | Dev commands, testing, linting, git conventions, commit message format |
-| [API Reference](docs/api-reference.md) | REST endpoint summary (auth, issues, repos, PRs, wiki) |
-| [MCP Server](docs/axiom-mcp-server.md) | 44 MCP tools, Claude Desktop/Code setup, discovery chains, query language, example workflows |
+| [Development Guide](docs/development-guide.md) | Dev commands, testing, linting, commit message format |
+| [API Reference](docs/api-reference.md) | REST endpoint summary (auth, issues, sprints, wiki, search) |
+| [MCP Server](docs/axiom-mcp-server.md) | 24 MCP tools, Claude Desktop/Code setup, discovery chains, query language, example workflows |
 | [Getting Started](docs/getting-started.md) | New developer onboarding, prerequisites, installation |
 
 ---
@@ -69,7 +71,7 @@ These are enforced across the entire codebase. See [Design Patterns](docs/design
 
 ## Architecture (Summary)
 
-**Backend:** `src/modules/{feature}/` with `*.routes.ts` > `*.controller.ts` > `*.service.ts`. Controllers handle req/res; services contain business logic with Prisma. Routes mounted under `/api/*`, git protocol under `/git/*`.
+**Backend:** `src/modules/{feature}/` with `*.routes.ts` > `*.controller.ts` > `*.service.ts`. Controllers handle req/res; services contain business logic with Prisma. Routes mounted under `/api/*`.
 
 **Query Engine:** `src/lib/query-engine/` -- shared lexer/parser/AST pipeline powering issue search, automation conditions, and template variables. Two backends: AST-to-Prisma compiler (search) and AST-to-Boolean evaluator (automation). Extend by adding fields to `issueFieldRegistry` in `fields/issue-fields.ts`. Tests: `cd src/lib/query-engine && npx vitest run --config vitest.config.ts` (no DB needed).
 
@@ -81,14 +83,11 @@ These are enforced across the entire codebase. See [Design Patterns](docs/design
 
 **URL patterns:**
 - Issues: `/:org/:team/:project/issues/:num`
-- Repos: `/:org/:team/repos/:repo`
 - Wiki: `/:org/:team/wiki/:space/:page`
 
-**Git storage:** Bare repos at `{REPOS_PATH}/{orgSlug}/{teamSlug}/{repoSlug}.git`
+**Real-time:** WebSocket server with JWT auth. Events broadcast for issue, comment, board, wiki, notification, approval and form changes, plus `issue:links-updated` when a wiki page is linked to an issue. Frontend auto-invalidates React Query cache via `useRealtimeInvalidation`.
 
-**Real-time:** WebSocket server with JWT auth. Events broadcast for issue/PR/wiki/board/pipeline changes. Frontend auto-invalidates React Query cache via `useRealtimeInvalidation`.
-
-**Automation:** Rules in `src/modules/automation/`. Conditions use query strings (`type = Bug AND priority > Medium`). 8 action types (set_status, set_assignee, add_label, add_comment, set_field, create_issue, send_email, webhook). Actions support `{{expression}}` template variables. Trigger sites pass hydrated issues via `AUTOMATION_ISSUE_INCLUDE`.
+**Automation:** Rules in `src/modules/automation/`. Conditions use query strings (`type = Bug AND priority > Medium`). 8 action types (set_status, set_assignee, add_label, add_comment, set_field, create_issue, send_email, webhook). Triggers: `issue:created`, `issue:status_changed`, `issue:assigned`, `label:added`. Actions support `{{expression}}` template variables. Trigger sites pass hydrated issues via `AUTOMATION_ISSUE_INCLUDE`.
 
 **Template Variables:** `{{expression}}` syntax shared by automation actions and wiki templates. Dot-path traversal (`{{issue.assignee.displayName}}`), built-in functions (`now()`, `currentUser()`, `empty()`). Wiki templates resolved server-side via `POST /api/wiki/resolve-template`.
 
@@ -125,7 +124,7 @@ See [Design Patterns](docs/design-patterns.md) for the full component catalog (4
 
 ## Docker Development
 
-The dev compose (`docker-compose.dev.yml`) runs: PostgreSQL, Redis (password `axiom_dev_redis`), Mailserver (SMTP), migrate (one-shot), API (tsx watch), git-ssh (port 2222, `ssh` profile), worker, Web (Vite HMR).
+The dev compose (`docker-compose.dev.yml`) runs: PostgreSQL, Redis (password `axiom_dev_redis`), Mailserver (SMTP), migrate (one-shot), API (tsx watch), worker, Web (Vite HMR).
 
 Bind mounts for hot reload: `src/`, `prisma/`, `prisma.config.ts`, `scripts/`, `frontend/src/`, `frontend/vite.config.ts`.
 

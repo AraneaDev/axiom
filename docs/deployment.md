@@ -6,7 +6,7 @@ This guide covers deploying Axiom on a VPS using Docker Compose, with Apache han
 
 ## 1. Overview
 
-Axiom runs as a set of Docker containers (API, frontend, PostgreSQL, Redis) orchestrated by Docker Compose. An Apache reverse proxy sits in front of the stack on the host, handling TLS termination, WebSocket upgrades, and routing all traffic to the frontend container on port 7000. The frontend's internal nginx then proxies `/api/` and `/git/` paths to the API container.
+Axiom runs as a set of Docker containers (API, frontend, PostgreSQL, Redis) orchestrated by Docker Compose. An Apache reverse proxy sits in front of the stack on the host, handling TLS termination, WebSocket upgrades, and routing all traffic to the frontend container on port 7000. The frontend's internal nginx then proxies `/api/` paths to the API container.
 
 ---
 
@@ -91,7 +91,7 @@ Create `/etc/apache2/sites-available/axiom.conf`:
     ProxyPass / http://localhost:7000/
     ProxyPassReverse / http://localhost:7000/
 
-    # Git large uploads (100 MB)
+    # Large uploads, such as attachments (100 MB)
     LimitRequestBody 104857600
 </VirtualHost>
 
@@ -125,53 +125,7 @@ The seed script is idempotent and safe to re-run.
 
 ---
 
-## 6. Git repository access
-
-### HTTPS
-
-```bash
-git clone https://aranea.dev/git/org-slug/team-slug/repo-slug.git
-```
-
-Use an API token (Settings > API tokens) as the password.
-
-### SSH
-
-SSH is served by the `git-ssh` container on host port `SSH_PORT` (default 2222). It runs when `COMPOSE_PROFILES=ssh` is set; set `SSH_ENABLED=true` at the same time so the UI shows SSH clone URLs.
-
-```bash
-git clone ssh://git@aranea.dev:2222/org-slug/team-slug/repo-slug.git
-```
-
-Users can hide the port with an entry in `~/.ssh/config`:
-
-```
-Host aranea.dev
-  Port 2222
-```
-
-The Apache reverse proxy does not carry SSH. Open `SSH_PORT` in the host firewall.
-
-### Port 22
-
-The host's own sshd normally holds port 22. Options, in order of preference:
-
-| Option | Clone URL | What to do |
-|---|---|---|
-| A. Non-standard port (default) | `ssh://git@host:2222/...` | Nothing beyond opening the port. |
-| B. Move the host sshd | `git@host:...` | Move sshd to another port (for example 2200) in `/etc/ssh/sshd_config`, then set `SSH_PORT=22` and `SSH_PUBLIC_PORT=22`. Keep a second session open while you switch. |
-| C. Second IP address | `git@git.host:...` | Bind the git-ssh port to the second IP (`ports: ["203.0.113.2:22:2222"]` in an override file) and set `SSH_PUBLIC_HOST` and `SSH_PUBLIC_PORT=22`. |
-| D. Host sshd passthrough | `git@host:...` | Not supported. |
-
-The Cloudflare quick tunnel (`npm run tunnel`) carries HTTP only. Use HTTPS clone URLs through it.
-
-### Host key
-
-The SSH host key is created on first start in the `ssh_host_key` volume. Back it up with the other volumes; losing it makes every client warn that the host identification changed.
-
----
-
-## 7. Updating
+## 6. Updating
 
 ```bash
 cd /opt/axiom
@@ -179,13 +133,11 @@ git pull
 docker compose up -d --build
 ```
 
-The `migrate` container runs Prisma migrations and rewrites the post-receive hook in every repository before the other containers start.
-
-If you are updating from a deployment that predates this container split, rotate `HOOK_SECRET` afterward. The old value was written in plain text into every repository's hook file; the rewritten hooks no longer contain the secret at all, they read it from the container environment on every call instead. So rotating it does not require touching the hook files: generate a new value with `openssl rand -hex 16`, set it in `.env`, and run `docker compose up -d` so the `api` and `git-ssh` containers pick up the new environment. The hook reinstall in `migrate` enumerates repositories from the database, so any repository directory left on disk without a matching database row is never visited and keeps its old bash hook, which still contains the old secret in plain text. Inspect or delete those directories separately.
+The `migrate` container runs Prisma migrations before the other containers start.
 
 ---
 
-## 8. Backups
+## 7. Backups
 
 ### Database
 
@@ -199,16 +151,16 @@ To restore:
 docker compose exec -T db psql -U axiom axiom < backup-2026-04-05.sql
 ```
 
-### Git Repositories
+### Uploads
 
 ```bash
-docker run --rm -v axiom_git_repos:/data -v $(pwd):/backup alpine \
-  tar czf /backup/repos-$(date +%F).tar.gz -C /data .
+docker run --rm -v axiom_uploads:/data -v $(pwd):/backup alpine \
+  tar czf /backup/uploads-$(date +%F).tar.gz -C /data .
 ```
 
 ---
 
-## 9. Logs
+## 8. Logs
 
 ```bash
 docker compose logs -f api     # Backend logs
@@ -225,14 +177,14 @@ docker compose logs -f
 
 ---
 
-## 10. Troubleshooting
+## 9. Troubleshooting
 
 | Problem | Diagnostic Step |
 |---------|----------------|
 | API not responding | `curl http://localhost:3000/api/health` |
 | Site not loading externally | `curl https://staging.example.com/api/health` |
 | WebSocket connection failures | Verify `mod_proxy_wstunnel` is enabled: `apachectl -M \| grep wstunnel` |
-| Git push returns 413 | Increase Apache `LimitRequestBody` and check nginx `client_max_body_size` in `frontend/nginx.conf` |
+| Upload returns 413 | Increase Apache `LimitRequestBody` and check nginx `client_max_body_size` in `frontend/nginx.conf` |
 | Container won't start | `docker compose logs <service>` to inspect startup errors |
 | SSL certificate expired | `certbot renew && systemctl reload apache2` |
 | Database connection refused | `docker compose ps db` -- ensure the container is healthy |

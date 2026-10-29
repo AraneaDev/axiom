@@ -1,6 +1,6 @@
 # Axiom MCP Server
 
-Axiom exposes a Model Context Protocol (MCP) server that lets Claude interact with your projects, issues, repositories, wiki, and CI/CD pipelines directly -- without opening the browser.
+Axiom exposes a Model Context Protocol (MCP) server that lets Claude interact with your projects, issues, sprints, and wiki directly, without opening the browser.
 
 ## Connection
 
@@ -66,7 +66,7 @@ Obtain an access token by calling `POST /api/auth/login` with your Axiom credent
 
 ---
 
-## Available Tools (48)
+## Available Tools (24)
 
 ### Organization (3 tools)
 
@@ -220,252 +220,6 @@ Add one or more issues to a sprint.
 
 ---
 
-### Repositories & Git (13 tools)
-
-#### `list_repos`
-
-List repositories in a team.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`teamId`|string|yes|Team ID|
-
-#### `browse_files`
-
-List files and directories at a path in a repository.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`ref`|string|no|Branch, tag, or SHA (default: `HEAD`)|
-|`path`|string|no|Directory path (default: root)|
-
-#### `read_file`
-
-Read the contents of a file at a given ref.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`filePath`|string|yes|Path to file|
-|`ref`|string|no|Branch, tag, or SHA (default: `HEAD`)|
-
-#### `get_commits`
-
-Get recent commits on a branch or ref.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`ref`|string|no|Branch, tag, or SHA (default: `HEAD`)|
-|`limit`|number|no|Max commits (default: 10)|
-
-#### `get_branches`
-
-List all branches in a repository.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-
-#### `list_branches`
-
-List all branches with their latest commit info.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-
-#### `get_diff`
-
-Get a diff between two refs.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`base`|string|yes|Base branch/tag/SHA|
-|`head`|string|yes|Head branch/tag/SHA|
-
-#### `search_code`
-
-Search for text or regex patterns across all files in a repository. Returns matching file paths and line numbers.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`query`|string|yes|Search string or regex pattern|
-|`ref`|string|no|Branch, tag, or SHA (default: `HEAD`)|
-|`path`|string|no|Limit search to a subdirectory|
-|`limit`|number|no|Max results (default: 20)|
-
-Example: `search_code(repoId, query: "loginTimeout", ref: "main")`
-
-#### `get_pr_diff`
-
-Get the full unified diff for a pull request.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`pullNumber`|number|yes|PR number|
-
-Example: `get_pr_diff(repoId, pullNumber: 12)`
-
-#### `get_pr_comments`
-
-List all review comments and general comments on a pull request.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`pullNumber`|number|yes|PR number|
-
-Example: `get_pr_comments(repoId, pullNumber: 12)`
-
-#### `get_recent_merges`
-
-List recently merged pull requests for a repository within a date range.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`since`|string|no|ISO date string -- only include merges after this date|
-|`limit`|number|no|Max results (default: 10)|
-
-Example: `get_recent_merges(repoId, since: "2026-03-01T00:00:00Z")`
-
----
-
-### Pull Requests (4 tools)
-
-#### `list_pull_requests`
-
-List pull requests in a repository.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`status`|`OPEN\|MERGED\|CLOSED`|no|Filter by status|
-
-#### `create_pull_request`
-
-Open a new pull request.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`title`|string|yes|PR title|
-|`sourceBranch`|string|yes|Branch with changes|
-|`targetBranch`|string|yes|Branch to merge into|
-|`body`|string|no|PR description (markdown)|
-
-#### `get_pull_request`
-
-Get details of a specific pull request including diff stats.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`pullNumber`|number|yes|PR number|
-
-#### `merge_pull_request`
-
-Merge an open pull request.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`pullNumber`|number|yes|PR number|
-|`strategy`|`merge\|squash\|rebase`|no|Merge strategy (default: `merge`)|
-
----
-
-### CI/CD & Releases (4 tools)
-
-#### `list_pipelines`
-
-List CI/CD pipelines for a repository.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-
-#### `trigger_pipeline`
-
-Trigger a CI/CD pipeline run on a specific git ref.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`pipelineId`|string|yes|Pipeline ID|
-|`ref`|string|yes|Branch, tag, or SHA to run against|
-
-#### `list_releases`
-
-List releases for a repository.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`draft`|boolean|no|Filter to draft releases|
-|`prerelease`|boolean|no|Filter to prereleases|
-
-#### `create_release`
-
-Create a new release with a tag name and target branch.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`repoId`|string|yes|Repository ID|
-|`tagName`|string|yes|Tag name (e.g. `v1.2.0`)|
-|`targetBranch`|string|yes|Branch to tag|
-|`name`|string|no|Release title|
-|`body`|string|no|Release notes (markdown)|
-|`draft`|boolean|no|Save as draft|
-|`prerelease`|boolean|no|Mark as prerelease|
-
----
-
-### Runners (4 tools)
-
-#### `list_runners`
-
-List registered runners at a given scope (org, team, or project).
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`orgId`|string|conditional|Organization ID (provide one scope)|
-|`teamId`|string|conditional|Team ID|
-|`projectId`|string|conditional|Project ID|
-
-#### `generate_runner_registration_token`
-
-Generate a one-time registration token for a new runner.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`orgId`|string|conditional|Organization ID (provide one scope)|
-|`teamId`|string|conditional|Team ID|
-|`projectId`|string|conditional|Project ID|
-
-#### `get_runner_task`
-
-Get the current status of a runner task.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`taskId`|string|yes|Runner task ID|
-
-#### `get_runner_task_logs`
-
-Get log output from a runner task.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`taskId`|string|yes|Runner task ID|
-|`limit`|number|no|Max log lines (default: 100)|
-
----
-
 ### Wiki (6 tools)
 
 #### `list_wiki_spaces`
@@ -540,18 +294,7 @@ Search across issues and wiki pages by keyword.
 
 ---
 
-### Cross-Product Integration (3 tools)
-
-#### `get_development_summary`
-
-Get a consolidated development summary for an issue: linked PRs, branches, commits, and current CI status.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`projectId`|string|yes|Project ID|
-|`issueNumber`|number|yes|Issue number|
-
-Example: `get_development_summary(projectId, issueNumber: 45)`
+### Cross-Product Integration (2 tools)
 
 #### `list_wiki_issue_links`
 
@@ -598,7 +341,7 @@ created > now(-7d) AND status != Done
 assignee = @me AND sprint = active
 ```
 
-Simple and complex syntax can be combined in the same string. For full operator and field reference see [api-reference.md](api-reference.md#query-language).
+Simple and complex syntax can be combined in the same string. For full operator and field reference see [api-reference.md](api-reference.md#query-language-reference).
 
 **Example MCP calls:**
 
@@ -622,17 +365,6 @@ list_issues(projectId)       -> work with issues
 list_teams(orgId)            -> get teamId
 list_wiki_spaces(teamId)     -> get spaceId
 get_page_tree(spaceId)       -> navigate pages
-
-list_teams(orgId)            -> get teamId
-list_repos(teamId)           -> get repoId
-browse_files(repoId)         -> explore code
-```
-
-```
-list_orgs()                  -> get orgId
-list_runners(orgId)          -> see registered runners
-get_runner_task(taskId)      -> check task status
-get_runner_task_logs(taskId) -> read execution logs
 ```
 
 ---
@@ -670,17 +402,6 @@ get_runner_task_logs(taskId) -> read execution logs
 4. create_wiki_page(spaceId, title, slug, body) -> publish the doc
 ```
 
-### Review and merge a pull request
-
-```
-1. list_repos(teamId) -> find the repo
-2. list_pull_requests(repoId, status: "OPEN") -> find open PRs
-3. get_pull_request(repoId, pullNumber) -> review diff stats
-4. get_diff(repoId, base, head) -> read the full diff
-5. read_file(repoId, filePath, ref) -> inspect specific files
-6. merge_pull_request(repoId, pullNumber, strategy: "squash") -> merge
-```
-
 ### Bulk issue creation from a spec
 
 ```
@@ -697,30 +418,10 @@ get_runner_task_logs(taskId) -> read execution logs
 2. create_wiki_page(spaceId, title: "Sprint Retro", slug: "sprint-retro-26", templateId: "...") -> page created with resolved variables (currentUser, team, now() etc.)
 ```
 
-### Create a release
-
-```
-1. list_repos(teamId) -> find the repo
-2. list_pipelines(repoId) -> verify CI is green
-3. create_release(repoId, tagName: "v1.0.0", targetBranch: "main", body: "...") -> publish
-```
-
 ### Investigate and triage
 
 ```
-search("login timeout error") -> get_issue(AXM-45) -> get_development_summary(AXM-45) -> search_code("loginTimeout") -> list_wiki_issue_links(issueId)
-```
-
-### Code review context
-
-```
-get_pull_request(PR #12) -> get_pr_diff(PR #12) -> get_pr_comments(PR #12) -> get_issue(linked issues) -> list_wiki_issue_links(issueId) -> get_wiki_page(design doc)
-```
-
-### Doc sync after merges
-
-```
-get_recent_merges(repoId, since) -> get_issue(linked issues) -> list_wiki_issue_links(issueId) -> update_wiki_page() -> link_wiki_to_issue()
+search("login timeout error") -> get_issue(AXM-45) -> list_wiki_issue_links(issueId) -> get_wiki_page(related runbook)
 ```
 
 ---

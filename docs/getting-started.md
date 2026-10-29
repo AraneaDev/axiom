@@ -10,7 +10,7 @@ This guide covers everything you need to get Axiom running locally, from prerequ
 |-------------|----------------|-------|
 | Node.js | 24.0.0 | The `engines` field in `package.json` enforces this. Node 25 is used in active development. |
 | Docker Desktop | any recent | Required for the recommended Docker path. Compose v2 (`docker compose`) must be available. |
-| Git | 2.x | Needed to clone the repo and to run `init-self-repo.sh`. |
+| Git | 2.x | Needed to clone the repo. |
 
 For the manual (non-Docker) path you also need PostgreSQL 16 and Redis 7 running locally.
 
@@ -18,12 +18,11 @@ For the manual (non-Docker) path you also need PostgreSQL 16 and Redis 7 running
 
 ## Quick Start with Docker (Recommended)
 
-Three commands get the full stack running:
+Two commands get the full stack running:
 
 ```bash
 npm run docker:dev          # Start PostgreSQL, Redis, mailserver, API (port 3000), frontend (port 7000)
 npm run db:seed             # Seed demo users, org, team, project, issues, wiki
-./scripts/init-self-repo.sh # Populate the self-hosted git repo
 ```
 
 Once the containers are healthy, open http://localhost:7000 and log in with the demo credentials listed in the [Seed Data](#seed-data) section below.
@@ -129,11 +128,9 @@ Copy `.env.example` to `.env`. The table below describes each variable.
 | `PORT` | `3000` | No | Port the Express API listens on. |
 | `NODE_ENV` | `development` | No | `development`, `test`, or `production`. Controls logging verbosity and error detail. |
 | `CORS_ORIGIN` | `http://localhost:7000` | Yes | Allowed origin(s) for CORS. Use `*` in dev only. Set to your domain in production. |
-| `REPOS_PATH` | `.data/repos` | Yes | Filesystem path where bare git repositories are stored. In the Docker dev stack this is bind-mounted to `/data/repos` inside the API container. |
 | `STORAGE_PATH` | `.data/uploads` | Yes | Filesystem path for uploaded file attachments. |
 | `VITE_API_URL` | `http://localhost:3000` | Yes | The API base URL used by the Vite frontend at build and dev time. Must be reachable from the browser. |
 | `REDIS_URL` | `redis://localhost:6379` | No | Redis connection string. The app runs without Redis but loses job queuing and caching. |
-| `HOOK_SECRET` | `axiom-internal-hook-secret` | Yes | Shared secret between the API server and the git post-receive hook. Must match in both places. |
 | `SMTP_HOST` | _(empty)_ | No | SMTP hostname. When unset, email delivery is disabled and the app continues to work without it. In Docker dev, `mailserver` handles this automatically. |
 | `SMTP_PORT` | `25` | No | SMTP port. |
 | `SMTP_USER` | _(empty)_ | No | SMTP authentication username. |
@@ -193,7 +190,6 @@ npm run db:seed
 - Project: `Axiom MVP` (issue prefix: `AXM`)
 - Issues with comments, labels, and assignments
 - A wiki space with pages
-- A repository record pointing to the self-hosted bare git repo
 
 ### Demo credentials
 
@@ -201,34 +197,6 @@ npm run db:seed
 |----------|-------|----------|------|
 | `tim` | `tim@aranea.dev` | `password123` | OWNER |
 | `test` | `test@aranea.dev` | `password123` | MEMBER |
-
----
-
-## Initializing the Self-Hosted Git Repository
-
-After seeding, run:
-
-```bash
-./scripts/init-self-repo.sh
-```
-
-This creates a bare clone of the Axiom source repository at `.data/repos/aranea-dev/axiom/axiom.git`, which is the disk path that matches the repository record created by the seed. The repository is then browsable inside the app under the Axiom team's Repos section.
-
-The script detects the correct base path automatically. If `REPOS_PATH` is set in the environment it uses that value; otherwise it defaults to `.data/repos/` next to the project root.
-
-Run the script again at any time to pull your latest local commits into the bare clone:
-
-```bash
-./scripts/init-self-repo.sh
-```
-
----
-
-## Runner Setup (Optional)
-
-A local runner is only required if you want to test the `run_workflow` automation action, which dispatches workflows to external Gitea-compatible runners. Most developers do not need this for day-to-day work.
-
-For full setup instructions -- downloading `act_runner`, generating registration tokens, and starting the daemon -- see the [Setting Up a Local Runner](development-guide.md#setting-up-a-local-runner) section in the Development Guide.
 
 ---
 
@@ -251,10 +219,6 @@ A healthy response is `200 OK`.
 ### Browse issues
 
 Navigate to the `Axiom` team and open the `Axiom MVP` project. The Issues and Board views should show seeded items.
-
-### Browse the repository
-
-Navigate to `Aranea.Dev > Axiom > Repos > axiom`. The file tree and commit history from your local git checkout should be visible. This requires `init-self-repo.sh` to have run successfully.
 
 ---
 
@@ -281,10 +245,6 @@ Ensure `DATABASE_URL` points to an existing database and the user has `CREATE` p
 ### Seed script fails with "relation does not exist"
 
 Migrations have not been applied. Run `npm run db:migrate` first, then re-run `npm run db:seed`.
-
-### `init-self-repo.sh` exits with "not a git repository"
-
-The script expects a `.git` directory at `/root/axiom` (the hardcoded `SOURCE_DIR` at line 17 of the script). If you cloned the repo to a different path, update that variable before running.
 
 ### Frontend shows a blank page or API 4xx/5xx errors
 
