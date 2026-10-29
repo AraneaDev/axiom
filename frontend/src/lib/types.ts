@@ -320,7 +320,6 @@ export interface SearchResultItem {
   spaceName?: string;
   snippet?: string;
   description?: string;
-  visibility?: string;
   assignee?: { id: string; username: string; displayName: string; avatarUrl?: string };
   space?: { name: string };
   slug?: string;

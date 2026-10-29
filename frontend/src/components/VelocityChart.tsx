@@ -4,7 +4,7 @@ import type { VelocityDataPoint } from '@/lib/types';
 
 /**
  * SVG bar chart showing completed story points per sprint.
- * Follows the InsightsTab SVG chart pattern.
+ * Plain SVG bars sized from the largest sprint total, no chart library.
  * @param root0
  * @param root0.data
  */

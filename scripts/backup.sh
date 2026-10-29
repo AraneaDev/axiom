@@ -2,7 +2,7 @@
 # =============================================================================
 # Axiom Backup Script
 # =============================================================================
-# Dumps PostgreSQL, tars the uploads volumes.
+# Dumps PostgreSQL, tars the uploads volume.
 # Rotation: 7 daily, 4 weekly.
 #
 # Usage: ./scripts/backup.sh

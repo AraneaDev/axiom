@@ -1516,7 +1516,6 @@ async function main() {
 
   const notificationDefs = [
     { username: 'sanne', type: 'issue:assigned', title: 'Je bent toegewezen aan PPT-1', body: 'SAML-authenticatie provider implementeren', link: '/voorbeeld/team-noord/partnerportaal/issues/1' },
-    { username: 'sanne', type: 'pr:review_requested', title: 'Code review gevraagd voor PPT-4', body: 'Partnerdashboard query optimalisatie', link: '/voorbeeld/team-noord/partnerportaal/issues/4' },
     { username: 'joris', type: 'issue:assigned', title: 'Je bent toegewezen aan KPT-2', body: 'Navigatie component refactoring', link: '/voorbeeld/team-zuid/klantportaal/issues/2' },
     { username: 'anika', type: 'issue:commented', title: 'Nieuw commentaar op AIA-1', body: 'Thijs heeft gereageerd op Document ingestion pipeline', link: '/voorbeeld/team-ai/ai-assistent/issues/1' },
     { username: 'tim', type: 'issue:assigned', title: 'Je bent toegewezen aan CME-1', body: 'Commissierapport per partner genereren', link: '/voorbeeld/team-noord/commissie-engine/issues/1' },

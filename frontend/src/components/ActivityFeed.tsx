@@ -6,7 +6,6 @@ import {
   Tag,
   Plus,
   Trash2,
-  GitMerge,
   XCircle,
   AlertTriangle,
   FileText,
@@ -24,7 +23,6 @@ const ACTION_CONFIG: Record<string, { icon: React.ElementType; label: string; co
   assigned: { icon: UserPlus, label: 'assigned', color: 'text-primary' },
   unassigned: { icon: UserMinus, label: 'unassigned', color: 'text-text-secondary' },
   commented: { icon: MessageSquare, label: 'commented', color: 'text-primary' },
-  merged: { icon: GitMerge, label: 'merged', color: 'text-success' },
   closed: { icon: XCircle, label: 'closed', color: 'text-danger' },
   labeled: { icon: Tag, label: 'updated labels', color: 'text-warning' },
   unlabeled: { icon: Tag, label: 'removed label', color: 'text-text-secondary' },
@@ -35,8 +33,15 @@ const ACTION_CONFIG: Record<string, { icon: React.ElementType; label: string; co
   attachment_removed: { icon: Paperclip, label: 'removed attachment', color: 'text-danger' },
 };
 
+// Unknown actions (including ones from removed features, e.g. old PR rows) still render.
 function getActionConfig(action: string) {
-  return ACTION_CONFIG[action] ?? { icon: FileText, label: action, color: 'text-text-secondary' };
+  return (
+    ACTION_CONFIG[action] ?? {
+      icon: FileText,
+      label: action.replace(/_/g, ' '),
+      color: 'text-text-secondary',
+    }
+  );
 }
 
 function formatDetails(action: string, details: Record<string, unknown> | null): string {
@@ -62,14 +67,6 @@ function formatDetails(action: string, details: Record<string, unknown> | null):
   }
   if (action === 'labeled' && Array.isArray(details.labels)) {
     return (details.labels as string[]).join(', ');
-  }
-  if (action === 'review_submitted' && details.status) {
-    const statusMap: Record<string, string> = {
-      APPROVED: 'approved',
-      CHANGES_REQUESTED: 'requested changes',
-      COMMENTED: 'commented',
-    };
-    return statusMap[String(details.status)] ?? String(details.status);
   }
   if (action === 'created' && details.title) {
     return String(details.title);

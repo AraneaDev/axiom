@@ -164,11 +164,26 @@ describe('seed-demo', () => {
     expect(await prisma.page.count()).toBe(before.pages);
     expect(await prisma.sprint.count()).toBe(before.sprints);
 
+    // The real @@map table names, so this fails if any of them comes back.
     const tables = await prisma.$queryRaw<{ tablename: string }[]>`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
-        AND tablename IN ('Repository', 'PullRequest', 'SshKey', 'Pipeline', 'Runner', 'Deployment')
+        AND tablename IN ('repositories', 'pull_requests', 'ssh_keys', 'pipelines', 'runners', 'deployments')
     `;
     expect(tables).toEqual([]);
   }, 120_000);
+
+  it('seeds no issues or comments about removed git features', async () => {
+    const project = await prisma.project.findFirst({ where: { prefix: 'AXM' } });
+    const issues = await prisma.issue.findMany({
+      where: { projectId: project!.id },
+      select: { title: true, body: true, comments: { select: { body: true } } },
+    });
+    const gitWords = /\b(repo|repos|repository|blob|blame|clone|commit|branch|README)\b/i;
+    const offenders = issues.filter((i) => gitWords.test(i.title)).map((i) => i.title);
+    expect(offenders).toEqual([]);
+    // Task 4 reversed the src/mcp exclusion; no seed may tell readers to exclude it.
+    const text = issues.flatMap((i) => [i.body ?? '', ...i.comments.map((c) => c.body)]);
+    expect(text.filter((t) => t.includes('src/mcp'))).toEqual([]);
+  });
 });

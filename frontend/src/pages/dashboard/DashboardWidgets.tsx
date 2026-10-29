@@ -134,8 +134,6 @@ export function MyIssuesWidget({ issues }: { issues: DashboardIssue[] }) {
   );
 }
 
-// --- Review Requests widget ---
-
 // --- Recent Activity widget ---
 
 const ACTION_LABELS: Record<string, string> = {
@@ -181,7 +179,7 @@ export function RecentActivityWidget({ activities }: { activities: DashboardActi
       ) : (
         <div className="divide-y divide-border">
           {activities.map((a) => {
-            const actionLabel = ACTION_LABELS[a.action] ?? a.action;
+            const actionLabel = ACTION_LABELS[a.action] ?? a.action.replace(/_/g, ' ');
             const typeLabel = RESOURCE_TYPE_LABELS[a.resourceType] ?? a.resourceType;
             const detail = formatActivityDetails(a.action, a.details);
 

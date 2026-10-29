@@ -13,12 +13,10 @@ const ACTION_LABELS: Record<string, string> = {
   assigned: 'assigned',
   unassigned: 'unassigned',
   commented: 'commented on',
-  merged: 'merged',
   closed: 'closed',
   labeled: 'labeled',
   priority_changed: 'changed priority of',
   type_changed: 'changed type of',
-  review_submitted: 'reviewed',
   deleted: 'deleted',
   time_logged: 'logged time on',
 };
@@ -69,7 +67,7 @@ export function TeamActivityCard({ activity, orgSlug, teamSlug }: TeamActivityCa
       ) : (
         <div className="space-y-0 divide-y divide-border-light">
           {activity.slice(0, 5).map((a) => {
-            const actionLabel = ACTION_LABELS[a.action] ?? a.action;
+            const actionLabel = ACTION_LABELS[a.action] ?? a.action.replace(/_/g, ' ');
 
             const resourceContent = a.resourceTitle ? (
               <>

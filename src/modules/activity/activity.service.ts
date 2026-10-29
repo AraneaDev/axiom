@@ -13,13 +13,11 @@ export type ActivityAction =
   | 'assigned'
   | 'unassigned'
   | 'commented'
-  | 'merged'
   | 'closed'
   | 'labeled'
   | 'unlabeled'
   | 'priority_changed'
   | 'type_changed'
-  | 'review_submitted'
   | 'deleted';
 
 /**

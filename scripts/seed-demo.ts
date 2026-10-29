@@ -192,18 +192,18 @@ async function main() {
   };
 
   const issues: IssueSeed[] = [
-    { title: 'Repository file browser shows empty for folders', body: 'Navigating to a subfolder in the file browser shows nothing. The `git ls-tree` call returns the tree entry itself instead of its contents because the trailing slash is missing from the path.', type: 'BUG', priority: 'CRITICAL', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'bug'] },
-    { title: 'File view renders blank page', body: 'Opening a file in the repo viewer shows a blank page with no error. The blob query fails silently and the component has no error state or empty state fallback.', type: 'BUG', priority: 'HIGH', column: 'Done', assignee: 'tim', creator: 'test', labels: ['frontend', 'bug'] },
-    { title: 'Breadcrumb crash on bare /blob route', body: 'Navigating to `/:org/:team/repos/:repo/blob` without ref/path params causes a crash. FileView needs to guard missing params and redirect.', type: 'BUG', priority: 'HIGH', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'bug'] },
-    { title: 'Add commit detail view', body: 'Commits in the repo detail page are static divs with no click action. Need a CommitDetail page that shows metadata, diff, and file stats. Backend API already exists.', type: 'STORY', priority: 'HIGH', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
-    { title: 'README rendering on repo landing page', body: 'Detect README.md in the tree listing, fetch its blob content, and render it with MarkdownRenderer below the file tree on the repo landing page.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend'] },
-    { title: 'Clone URL display with copy button', body: 'Add a "Clone" dropdown to the repo header showing the HTTPS clone URL with a copy-to-clipboard button.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend'] },
-    { title: 'Blame view for files', body: 'New page showing file content with blame annotations (author, date, SHA) in a left gutter. Link from the file view with a "Blame" button.', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
-    { title: 'File history view', body: 'Show commit log filtered to a single file path. Add a "History" button to the file view. Backend needs a path filter on the commits endpoint.', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'test', labels: ['frontend', 'backend'] },
-    { title: 'Branch comparison view', body: 'New page with two branch selectors showing commit differences between branches. Route: `/:org/:team/repos/:repo/compare`.', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
-    { title: 'Repository settings page', body: 'Settings page for editing repo name, description, visibility, and default branch. Includes danger zone with delete confirmation.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend'] },
-    { title: 'Fix TypeScript OOM during backend typecheck', body: 'The `@modelcontextprotocol/sdk` package causes tsc to resolve 430+ files consuming 4GB+ memory. Exclude src/mcp/ from tsconfig and use runtime require() for the MCP import. See: https://github.com/modelcontextprotocol/typescript-sdk/issues/985', type: 'BUG', priority: 'CRITICAL', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'bug', 'urgent'] },
-    { title: 'Shared useRepoContext hook', body: 'Extract the org->team->repo cascading query pattern duplicated across every repo page into a shared hook at `hooks/useRepoContext.ts`.', type: 'TASK', priority: 'LOW', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
+    { title: 'Board drop puts the card at the bottom of the column', body: 'Dropping a card between two others in a board column moves it to the bottom. The move endpoint ignores the target index and appends to the column.', type: 'BUG', priority: 'CRITICAL', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'bug'] },
+    { title: 'Issue search ignores quoted phrases', body: 'Searching for `"dark mode"` with quotes matches every issue that contains either word. The query lexer drops the quotes before the parser sees them.', type: 'BUG', priority: 'HIGH', column: 'Done', assignee: 'tim', creator: 'test', labels: ['backend', 'bug'] },
+    { title: 'Wiki page shows a blank editor after a failed save', body: 'When a save fails (for example on an expired session) the editor clears instead of keeping the draft. The page needs an error state that keeps the unsaved content.', type: 'BUG', priority: 'HIGH', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'bug'] },
+    { title: 'Linked wiki pages on the issue detail sidebar', body: 'Show the wiki pages that mention or embed an issue in a card on the issue detail sidebar, with a link to each page.', type: 'STORY', priority: 'HIGH', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
+    { title: 'Automation conditions use the query language', body: 'Automation rule conditions should accept the same query strings as issue search, for example `type = Bug AND priority > Medium`, evaluated against the issue that triggered the rule.', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'enhancement'] },
+    { title: 'Saved filters on the issue list', body: 'Let users save the current issue list query under a name and pick it again from the filter bar.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend'] },
+    { title: 'Sprint report with burndown chart', body: 'Add a sprint report page with a burndown chart, the committed and completed issue counts, and the scope added after the sprint started.', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
+    { title: 'Notification preferences per event type', body: 'Users can turn in-app and email notifications on or off for each event type (assigned, mentioned, commented, status changed).', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'test', labels: ['frontend', 'backend'] },
+    { title: 'Require two-factor authentication per organization', body: 'Organization owners can require 2FA. Members without it are sent to the 2FA setup page before they can use any other route.', type: 'STORY', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'enhancement'] },
+    { title: 'Approval gates on status transitions', body: 'Settings page for approval gates: moving an issue into a gated column creates an approval request that the listed approvers vote on.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend'] },
+    { title: 'Template variables in wiki templates', body: 'Resolve `{{expression}}` variables such as `{{currentUser().displayName}}` and `{{now()}}` when a page is created from a template.', type: 'TASK', priority: 'MEDIUM', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['backend', 'enhancement'] },
+    { title: 'Public intake forms create issues', body: 'A project can publish a form at a public URL. Each submission creates an issue in the project with the answers in the body.', type: 'TASK', priority: 'LOW', column: 'Done', assignee: 'tim', creator: 'tim', labels: ['frontend', 'enhancement'] },
     { title: 'Dark mode support', body: 'Add dark mode theme toggle. The CSS variable design token system already supports it, just needs a toggle and persistence.', type: 'TASK', priority: 'MEDIUM', column: 'In Progress', assignee: 'test', creator: 'tim', dueDate: futureDate(7), labels: ['frontend'] },
   ];
 
@@ -265,24 +265,17 @@ async function main() {
 
   const commentSeeds: CommentSeed[] = [
     {
-      issueTitle: 'Repository file browser shows empty for folders',
+      issueTitle: 'Board drop puts the card at the bottom of the column',
       comments: [
-        { author: 'tim', body: 'Root cause found: the tree listing returns the entry *for* `frontend`, not its contents. We need to append a trailing `/` to the tree path.\n\nFix is one line in the tree listing helper.' },
-        { author: 'test', body: 'Confirmed this also fixes the empty root listing edge case when no default branch exists.' },
+        { author: 'tim', body: 'Root cause found: the move handler computed the new position before reading the target index from the request. Fix is to pass the index through and renumber the column in one transaction.' },
+        { author: 'test', body: 'Confirmed. Dropping at the top, in the middle and at the bottom of a column all land where expected now.' },
       ],
     },
     {
-      issueTitle: 'Fix TypeScript OOM during backend typecheck',
+      issueTitle: 'Linked wiki pages on the issue detail sidebar',
       comments: [
-        { author: 'tim', body: 'Tracked this down to the MCP SDK. It causes TypeScript to resolve 430+ files (104 `.d.ts`, 9.1MB total) leading to 4GB+ memory consumption. Known issue: https://github.com/modelcontextprotocol/typescript-sdk/issues/985\n\nEven with `skipLibCheck: true`, `skipDefaultLibCheck: true`, `isolatedModules: true`, and `strict: false` it still OOMs.' },
-        { author: 'tim', body: 'Fix: exclude `src/mcp/**` from `tsconfig.json` and use `require()` in `src/index.ts` for the MCP import. Only 3 files affected and they are only imported from one place.\n\nAlso fixed ~44 pre-existing type errors that were masked by the OOM:\n- `string | string[]` param issues across 7 controller files\n- implicit `any` on `.map()` callbacks\n- enum string literal mismatches' },
-      ],
-    },
-    {
-      issueTitle: 'Add commit detail view',
-      comments: [
-        { author: 'test', body: 'The diff parser handles the standard unified diff format well. One suggestion: could we add syntax highlighting to the diff hunks in a follow-up?' },
-        { author: 'tim', body: 'Good idea. Filed as a follow-up. The current plain diff with color-coded +/- lines is functional for MVP.' },
+        { author: 'test', body: 'Works well. One suggestion: could the card update live when someone mentions the issue in a page that is open elsewhere?' },
+        { author: 'tim', body: 'Good idea. The card now refreshes on the realtime link update event.' },
       ],
     },
     {
@@ -427,7 +420,7 @@ async function main() {
       data: {
         projectId: project.id,
         name: 'Sprint 1',
-        goal: 'Complete core browsing features and fix critical bugs',
+        goal: 'Complete core planning features and fix critical bugs',
         startDate: sprintStartDate,
         endDate: sprintEndDate,
         status: 'COMPLETED',
@@ -496,9 +489,9 @@ async function main() {
     });
 
     // Add some in-progress/todo issues to active sprint
-    const activeIssueIndices = [12]; // Dark mode
-    for (const idx of activeIssueIndices) {
-      const issue = createdIssues[idx];
+    const activeIssueTitles = ['Dark mode support'];
+    for (const title of activeIssueTitles) {
+      const issue = createdIssues.find((i) => i.title === title);
       if (!issue) continue;
       await prisma.issue.update({
         where: { id: issue.id },
