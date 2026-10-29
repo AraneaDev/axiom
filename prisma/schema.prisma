@@ -17,7 +17,7 @@ model User {
   avatarUrl    String?
 
   // Platform admin
-  isAdmin  Boolean @default(false)
+  isAdmin Boolean @default(false)
 
   // 2FA
   twoFactorEnabled Boolean @default(false)
@@ -31,7 +31,6 @@ model User {
 
   // Relations
   apiTokens               ApiToken[]
-  sshKeys                 SshKey[]
   orgMemberships          OrgMembership[]
   teamMemberships         TeamMembership[]
   assignedIssues          Issue[]                  @relation("assignee")
@@ -39,30 +38,26 @@ model User {
   comments                Comment[]
   pageEdits               PageVersion[]
   notifications           Notification[]
-  createdBranches         IssueBranch[]            @relation("CreatedBranches")
-  authoredReleases        Release[]                @relation("AuthoredReleases")
-  triggeredRuns           PipelineRun[]            @relation("TriggeredRuns")
   attachments             Attachment[]
   activities              Activity[]
   pageComments            PageComment[]
   savedFilters            SavedFilter[]
-  starredPages            StarredPage[]    @relation("UserStarredPages")
-  pageViews               PageView[]       @relation("UserPageViews")
-  deployments             Deployment[]             @relation("DeployedBy")
+  starredPages            StarredPage[]            @relation("UserStarredPages")
+  pageViews               PageView[]               @relation("UserPageViews")
   issueVotes              IssueVote[]
   notificationPreferences NotificationPreference[]
   watchedIssues           IssueWatcher[]
   sentInvitations         Invitation[]
   timeEntries             TimeEntry[]
   passwordResetTokens     PasswordResetToken[]
-  pageRestrictions        PageRestriction[]    @relation("UserPageRestrictions")
-  commentReactions        CommentReaction[]    @relation("UserCommentReactions")
-  spacePermissions        SpacePermission[]    @relation("SpacePermissions")
-  wikiPageIssueLinks      WikiPageIssueLink[]  @relation("WikiPageIssueLinks")
-  approvalRequestsMade    ApprovalRequest[]    @relation("approvalRequester")
+  pageRestrictions        PageRestriction[]        @relation("UserPageRestrictions")
+  commentReactions        CommentReaction[]        @relation("UserCommentReactions")
+  spacePermissions        SpacePermission[]        @relation("SpacePermissions")
+  wikiPageIssueLinks      WikiPageIssueLink[]      @relation("WikiPageIssueLinks")
+  approvalRequestsMade    ApprovalRequest[]        @relation("approvalRequester")
   approvalVotes           ApprovalVote[]
-  formsCreated            Form[]               @relation("formCreator")
-  submissionsReviewed     FormSubmission[]     @relation("submissionReviewer")
+  formsCreated            Form[]                   @relation("formCreator")
+  submissionsReviewed     FormSubmission[]         @relation("submissionReviewer")
 
   @@map("users")
 }
@@ -74,25 +69,12 @@ model ApiToken {
   name       String
   tokenHash  String    @unique
   prefix     String // first 8 chars for identification
-  scopes     String[] // e.g. ["repo:read", "issues:write", "wiki:read"]
+  scopes     String[] // e.g. ["issues:write", "wiki:read"]
   lastUsedAt DateTime?
   expiresAt  DateTime?
   createdAt  DateTime  @default(now())
 
   @@map("api_tokens")
-}
-
-model SshKey {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title       String
-  fingerprint String    @unique
-  publicKey   String
-  lastUsedAt  DateTime?
-  createdAt   DateTime  @default(now())
-
-  @@map("ssh_keys")
 }
 
 model InviteLink {
@@ -207,7 +189,6 @@ model Team {
   updatedAt DateTime @updatedAt
 
   members     TeamMembership[]
-  repos       Repository[]
   projects    Project[]
   wikiSpaces  WikiSpace[]
   invitations Invitation[]
@@ -235,154 +216,6 @@ model TeamMembership {
 
   @@unique([userId, teamId])
   @@map("team_memberships")
-}
-
-// ─── Repositories (Git Hosting) ─────────────────────────────
-
-enum RepoVisibility {
-  PRIVATE
-  INTERNAL
-  PUBLIC
-}
-
-model Repository {
-  id            String         @id @default(cuid())
-  teamId        String
-  team          Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  name          String
-  slug          String
-  description   String?
-  visibility    RepoVisibility @default(PRIVATE)
-  diskPath      String? // path to bare git repo on disk
-  defaultBranch String         @default("main")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  defaultMergeStrategy String  @default("MERGE")
-  codeOwnersEnabled    Boolean @default(false)
-  prTemplate           String? // Markdown template for PR descriptions
-
-  pullRequests           PullRequest[]
-  webhooks               Webhook[]
-  branchProtections      BranchProtection[]
-  issueCommits           IssueCommit[]
-  issueBranches          IssueBranch[]
-  releases               Release[]
-  pipelines              Pipeline[]
-  pipelineRuns           PipelineRun[]
-  commitStatuses         CommitStatus[]
-  deploymentEnvironments DeploymentEnvironment[]
-  runnerTasks            RunnerTask[]
-
-  @@unique([teamId, slug])
-  @@map("repositories")
-}
-
-model PullRequest {
-  id           String     @id @default(cuid())
-  repoId       String
-  repo         Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  number       Int
-  title        String
-  body         String // markdown
-  authorId     String
-  sourceBranch String
-  targetBranch String
-  status       PRStatus   @default(OPEN)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  mergeStrategy String? // MERGE, SQUASH, REBASE
-
-  reviews      PRReview[]
-  comments     PRComment[]
-  linkedIssues IssuePullRequest[]
-  ciStatus     RunStatus?
-
-  @@unique([repoId, number])
-  @@map("pull_requests")
-}
-
-enum PRStatus {
-  OPEN
-  MERGED
-  CLOSED
-}
-
-model PRReview {
-  id         String       @id @default(cuid())
-  prId       String
-  pr         PullRequest  @relation(fields: [prId], references: [id], onDelete: Cascade)
-  reviewerId String
-  status     ReviewStatus
-  body       String? // markdown
-  createdAt  DateTime     @default(now())
-
-  @@index([prId])
-  @@index([reviewerId])
-  @@map("pr_reviews")
-}
-
-enum ReviewStatus {
-  APPROVED
-  CHANGES_REQUESTED
-  COMMENTED
-}
-
-model PRComment {
-  id        String      @id @default(cuid())
-  prId      String
-  pr        PullRequest @relation(fields: [prId], references: [id], onDelete: Cascade)
-  authorId  String
-  body      String // markdown
-  filePath  String? // for inline comments
-  line      Int? // for inline comments
-  parentId  String?
-  parent    PRComment?  @relation("commentThread", fields: [parentId], references: [id], onDelete: Cascade)
-  replies   PRComment[] @relation("commentThread")
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-
-  @@index([prId])
-  @@index([authorId])
-  @@index([parentId])
-  @@map("pr_comments")
-}
-
-model Webhook {
-  id     String     @id @default(cuid())
-  repoId String
-  repo   Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  url    String
-  secret String?
-  events String[] // e.g. ["push", "pr:created", "pr:merged"]
-  active Boolean    @default(true)
-
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  deliveries WebhookDelivery[]
-
-  @@map("webhooks")
-}
-
-model WebhookDelivery {
-  id           String   @id @default(cuid())
-  webhookId    String
-  webhook      Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
-  event        String
-  url          String
-  statusCode   Int?
-  success      Boolean
-  duration     Int // ms
-  requestBody  String?  @db.Text
-  responseBody String?  @db.Text
-  error        String?
-  createdAt    DateTime @default(now())
-
-  @@index([webhookId, createdAt])
-  @@map("webhook_deliveries")
 }
 
 // ─── Projects & Issues ──────────────────────────────────────
@@ -475,16 +308,16 @@ model Issue {
   position   Int          @default(0) // ordering within column
 
   // Epic hierarchy & sprint planning
-  parentId     String?
-  parent       Issue?      @relation("issueHierarchy", fields: [parentId], references: [id])
-  children     Issue[]     @relation("issueHierarchy")
-  storyPoints  Int?
-  sprintId     String?
-  sprint       Sprint?     @relation(fields: [sprintId], references: [id])
-  milestoneId  String?
-  milestone    Milestone?  @relation(fields: [milestoneId], references: [id])
-  timeEstimate Int? // minutes
-  timeSpent    Int? // minutes
+  parentId        String?
+  parent          Issue?         @relation("issueHierarchy", fields: [parentId], references: [id])
+  children        Issue[]        @relation("issueHierarchy")
+  storyPoints     Int?
+  sprintId        String?
+  sprint          Sprint?        @relation(fields: [sprintId], references: [id])
+  milestoneId     String?
+  milestone       Milestone?     @relation(fields: [milestoneId], references: [id])
+  timeEstimate    Int? // minutes
+  timeSpent       Int? // minutes
   startDate       DateTime?
   roadmapBucketId String?
   roadmapBucket   RoadmapBucket? @relation(fields: [roadmapBucketId], references: [id], onDelete: SetNull)
@@ -495,11 +328,8 @@ model Issue {
   labels            Label[]
   comments          Comment[]
   // Issue linking
-  linksFrom         IssueLink[]        @relation("linkFrom")
-  linksTo           IssueLink[]        @relation("linkTo")
-  commits           IssueCommit[]
-  linkedPrs         IssuePullRequest[]
-  branches          IssueBranch[]
+  linksFrom         IssueLink[]          @relation("linkFrom")
+  linksTo           IssueLink[]          @relation("linkTo")
   customFieldValues CustomFieldValue[]
   attachments       Attachment[]
   votes             IssueVote[]
@@ -507,7 +337,6 @@ model Issue {
   timeEntries       TimeEntry[]
   sprintHistory     SprintIssueHistory[]
   wikiIssueLinks    WikiPageIssueLink[]
-  runnerTasks       RunnerTask[]
   approvalRequests  ApprovalRequest[]
   formSubmissions   FormSubmission[]
 
@@ -619,7 +448,7 @@ model SpacePermission {
   space    WikiSpace            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   userId   String?
   user     User?                @relation("SpacePermissions", fields: [userId], references: [id], onDelete: Cascade)
-  teamRole String?              // "ADMIN", "MEMBER", "VIEWER" -- applies to all users with this team role
+  teamRole String? // "ADMIN", "MEMBER", "VIEWER" -- applies to all users with this team role
   level    SpacePermissionLevel
 
   createdAt DateTime @default(now())
@@ -646,28 +475,28 @@ model Page {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  versions     PageVersion[]
-  pageComments PageComment[]
-  pageLabels   PageLabel[]
-  attachments  Attachment[]
-  restrictions PageRestriction[]
-  starredBy       StarredPage[]
-  views           PageView[]
-  wikiIssueLinks  WikiPageIssueLink[]
+  versions       PageVersion[]
+  pageComments   PageComment[]
+  pageLabels     PageLabel[]
+  attachments    Attachment[]
+  restrictions   PageRestriction[]
+  starredBy      StarredPage[]
+  views          PageView[]
+  wikiIssueLinks WikiPageIssueLink[]
 
   @@unique([spaceId, slug])
   @@map("pages")
 }
 
 model PageVersion {
-  id       String @id @default(cuid())
-  pageId   String
-  page     Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  version  Int
-  title    String
+  id                String  @id @default(cuid())
+  pageId            String
+  page              Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  version           Int
+  title             String
   body              String // markdown
   authorId          String
-  author            User   @relation(fields: [authorId], references: [id])
+  author            User    @relation(fields: [authorId], references: [id])
   changeDescription String?
 
   createdAt DateTime @default(now())
@@ -682,7 +511,7 @@ model Notification {
   id     String  @id @default(cuid())
   userId String
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type   String // e.g. "issue:assigned", "pr:review_requested", "mention"
+  type   String // e.g. "issue:assigned", "mention"
   title  String
   body   String?
   link   String? // deep link within app
@@ -698,7 +527,7 @@ model NotificationPreference {
   id        String  @id @default(cuid())
   userId    String
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  eventType String // e.g. "issue_assigned", "issue_commented", "pr_review_requested", "pr_merged", "mention"
+  eventType String // e.g. "issue_assigned", "issue_commented", "mention"
   inApp     Boolean @default(true)
   email     Boolean @default(false)
 
@@ -707,110 +536,6 @@ model NotificationPreference {
 
   @@unique([userId, eventType])
   @@map("notification_preferences")
-}
-
-// ─── Branch Protection ──────────────────────────────────────
-
-model BranchProtection {
-  id              String     @id @default(cuid())
-  repoId          String
-  repo            Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  pattern         String // glob: "main", "release/*"
-  requiredReviews Int        @default(1)
-  requireCI       Boolean    @default(false)
-  noForcePush     Boolean    @default(true)
-  noDirectPush    Boolean    @default(false)
-  requireLinear   Boolean    @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([repoId, pattern])
-  @@map("branch_protections")
-}
-
-// ─── Dev Cycle: Enums ───────────────────────────────────────
-
-enum CommitRefType {
-  CLOSES
-  FIXES
-  REFS
-}
-
-enum RunStatus {
-  PENDING
-  RUNNING
-  SUCCESS
-  FAILURE
-  CANCELLED
-  SKIPPED
-}
-
-enum RunnerStatus {
-  OFFLINE
-  IDLE
-  ACTIVE
-}
-
-enum RunnerScope {
-  ORG
-  TEAM
-  PROJECT
-}
-
-enum TriggerType {
-  PUSH
-  PULL_REQUEST
-  MANUAL
-  SCHEDULE
-}
-
-// ─── Dev Cycle: Models ──────────────────────────────────────
-
-model IssueCommit {
-  id          String        @id @default(cuid())
-  issueId     String
-  issue       Issue         @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  repoId      String
-  repo        Repository    @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  sha         String
-  message     String
-  authorName  String
-  authorEmail String
-  committedAt DateTime
-  refType     CommitRefType @default(REFS)
-  createdAt   DateTime      @default(now())
-
-  @@unique([issueId, sha])
-  @@map("issue_commits")
-}
-
-model IssuePullRequest {
-  id        String        @id @default(cuid())
-  issueId   String
-  issue     Issue         @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  prId      String
-  pr        PullRequest   @relation(fields: [prId], references: [id], onDelete: Cascade)
-  refType   CommitRefType @default(REFS)
-  createdAt DateTime      @default(now())
-
-  @@unique([issueId, prId])
-  @@map("issue_pull_requests")
-}
-
-model IssueBranch {
-  id          String     @id @default(cuid())
-  issueId     String
-  issue       Issue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  repoId      String
-  repo        Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  branchName  String
-  createdById String
-  createdBy   User       @relation("CreatedBranches", fields: [createdById], references: [id])
-  createdAt   DateTime   @default(now())
-
-  @@unique([issueId, repoId, branchName])
-  @@map("issue_branches")
 }
 
 enum WikiIssueLinkType {
@@ -833,97 +558,6 @@ model WikiPageIssueLink {
   @@index([pageId])
   @@index([issueId])
   @@map("wiki_page_issue_links")
-}
-
-model Release {
-  id           String     @id @default(cuid())
-  repoId       String
-  repo         Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  tagName      String
-  title        String
-  body         String     @default("")
-  isDraft      Boolean    @default(false)
-  isPrerelease Boolean    @default(false)
-  targetBranch String
-  commitSha    String?
-  authorId     String
-  author       User       @relation("AuthoredReleases", fields: [authorId], references: [id])
-  publishedAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-
-  deployments  Deployment[]
-
-  @@unique([repoId, tagName])
-  @@map("releases")
-}
-
-model Pipeline {
-  id          String        @id @default(cuid())
-  repoId      String
-  repo        Repository    @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  name        String
-  slug        String
-  yamlContent String
-  isActive    Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  runs        PipelineRun[]
-
-  @@unique([repoId, slug])
-  @@map("pipelines")
-}
-
-model PipelineRun {
-  id            String        @id @default(cuid())
-  pipelineId    String
-  pipeline      Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  repoId        String
-  repo          Repository    @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  triggerType   TriggerType
-  triggerRef    String
-  commitSha     String?
-  status        RunStatus     @default(PENDING)
-  startedAt     DateTime?
-  finishedAt    DateTime?
-  triggeredById String?
-  triggeredBy   User?         @relation("TriggeredRuns", fields: [triggeredById], references: [id])
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  jobs          PipelineJob[]
-  deployments   Deployment[]
-
-  @@index([pipelineId])
-  @@index([repoId])
-  @@map("pipeline_runs")
-}
-
-model PipelineJob {
-  id         String         @id @default(cuid())
-  runId      String
-  run        PipelineRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
-  name       String
-  status     RunStatus      @default(PENDING)
-  startedAt  DateTime?
-  finishedAt DateTime?
-  steps      PipelineStep[]
-
-  @@map("pipeline_jobs")
-}
-
-model PipelineStep {
-  id         String      @id @default(cuid())
-  jobId      String
-  job        PipelineJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  name       String
-  command    String
-  status     RunStatus   @default(PENDING)
-  output     String      @default("")
-  startedAt  DateTime?
-  finishedAt DateTime?
-  exitCode   Int?
-
-  @@map("pipeline_steps")
 }
 
 // ─── Audit Log ──────────────────────────────────────────────
@@ -955,20 +589,6 @@ enum SprintIssueAction {
   REMOVED
 }
 
-enum CommitStatusState {
-  PENDING
-  SUCCESS
-  FAILURE
-  ERROR
-}
-
-enum DeploymentStatus {
-  PENDING
-  IN_PROGRESS
-  SUCCESS
-  FAILURE
-}
-
 // ─── Platform Expansion Models ───────────────────────────────
 
 model Sprint {
@@ -991,13 +611,13 @@ model Sprint {
 }
 
 model SprintIssueHistory {
-  id        String              @id @default(cuid())
+  id        String            @id @default(cuid())
   sprintId  String
-  sprint    Sprint              @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  sprint    Sprint            @relation(fields: [sprintId], references: [id], onDelete: Cascade)
   issueId   String
-  issue     Issue               @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  issue     Issue             @relation(fields: [issueId], references: [id], onDelete: Cascade)
   action    SprintIssueAction
-  timestamp DateTime            @default(now())
+  timestamp DateTime          @default(now())
 
   @@index([sprintId])
   @@index([issueId])
@@ -1058,8 +678,6 @@ model AutomationRule {
   enabled    Boolean  @default(true)
   createdAt  DateTime @default(now())
 
-  runnerTasks RunnerTask[]
-
   @@map("automation_rules")
 }
 
@@ -1097,22 +715,6 @@ model Activity {
   @@map("activities")
 }
 
-
-model CommitStatus {
-  id          String            @id @default(cuid())
-  repoId      String
-  repo        Repository        @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  sha         String
-  context     String
-  state       CommitStatusState @default(PENDING)
-  targetUrl   String?
-  description String?
-  createdAt   DateTime          @default(now())
-
-  @@unique([repoId, sha, context])
-  @@map("commit_statuses")
-}
-
 model PageComment {
   id         String   @id @default(cuid())
   pageId     String
@@ -1124,7 +726,7 @@ model PageComment {
   resolved   Boolean  @default(false)
   createdAt  DateTime @default(now())
 
-  reactions  CommentReaction[]
+  reactions CommentReaction[]
 
   @@index([pageId])
   @@map("page_comments")
@@ -1198,57 +800,6 @@ model SavedFilter {
   createdAt DateTime @default(now())
 
   @@map("saved_filters")
-}
-
-
-
-model DeploymentEnvironment {
-  id              String     @id @default(cuid())
-  repoId          String
-  repo            Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  name            String
-  url             String?
-  lastDeployedAt  DateTime?
-  protectionRules Json?
-  createdAt       DateTime   @default(now())
-
-  deployments Deployment[]
-  variables   EnvironmentVariable[]
-
-  @@map("deployment_environments")
-}
-
-model Deployment {
-  id            String                @id @default(cuid())
-  environmentId String
-  environment   DeploymentEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
-  commitSha     String
-  pipelineRunId String?
-  pipelineRun   PipelineRun?          @relation(fields: [pipelineRunId], references: [id])
-  releaseId     String?
-  release       Release?              @relation(fields: [releaseId], references: [id])
-  status        DeploymentStatus      @default(PENDING)
-  deployedById  String
-  deployedBy    User                  @relation("DeployedBy", fields: [deployedById], references: [id])
-  createdAt     DateTime              @default(now())
-
-  @@map("deployments")
-}
-
-// ─── Environment Variables (Secrets) ────────────────────────
-
-model EnvironmentVariable {
-  id              String                @id @default(cuid())
-  environmentId   String
-  environment     DeploymentEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
-  name            String
-  encryptedValue  String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([environmentId, name])
-  @@map("environment_variables")
 }
 
 // ─── Issue Votes ────────────────────────────────────────────
@@ -1334,85 +885,6 @@ model PageView {
   @@map("page_views")
 }
 
-// ─── Runners ────────────────────────────────────────────────
-
-model Runner {
-  id         String       @id @default(cuid())
-  uuid       String       @unique
-  name       String
-  tokenHash  String
-  status     RunnerStatus @default(IDLE)
-  labels     Json         @default("[]")
-  version    String       @default("")
-  lastSeenAt DateTime?
-  scopeType  RunnerScope
-  scopeId    String
-  tasks      RunnerTask[]
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-
-  @@index([scopeType, scopeId])
-  @@index([status])
-  @@map("runners")
-}
-
-model RunnerRegistrationToken {
-  id        String      @id @default(cuid())
-  tokenHash String      @unique
-  scopeType RunnerScope
-  scopeId   String
-  usedBy    String?
-  expiresAt DateTime
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-
-  @@index([scopeType, scopeId])
-  @@map("runner_registration_tokens")
-}
-
-model RunnerTask {
-  id               String          @id @default(cuid())
-  runnerId         String?
-  runner           Runner?         @relation(fields: [runnerId], references: [id])
-  automationRuleId String?
-  automationRule   AutomationRule? @relation(fields: [automationRuleId], references: [id], onDelete: SetNull)
-  issueId          String?
-  issue            Issue?          @relation(fields: [issueId], references: [id])
-  workflowSource   String
-  workflowRef      String
-  workflowContent  String
-  repoId           String
-  repo             Repository      @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  gitRef           String          @default("HEAD")
-  status           RunStatus       @default(PENDING)
-  context          Json            @default("{}")
-  labels           Json            @default("[]")
-  startedAt        DateTime?
-  finishedAt       DateTime?
-  logs             RunnerTaskLog[]
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-
-  @@index([status])
-  @@index([runnerId])
-  @@index([issueId])
-  @@index([repoId])
-  @@map("runner_tasks")
-}
-
-model RunnerTaskLog {
-  id        String     @id @default(cuid())
-  taskId    String
-  task      RunnerTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  lineIndex Int
-  content   String
-  timestamp DateTime   @default(now())
-
-  @@unique([taskId, lineIndex])
-  @@index([taskId])
-  @@map("runner_task_logs")
-}
-
 // ─── Approval Workflows ─────────────────────────────────────
 
 enum ApprovalRequestStatus {
@@ -1438,9 +910,9 @@ model ApprovalGate {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  fromColumn BoardColumn @relation("approvalGateFrom", fields: [fromColumnId], references: [id], onDelete: Cascade)
-  toColumn   BoardColumn @relation("approvalGateTo", fields: [toColumnId], references: [id], onDelete: Cascade)
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromColumn BoardColumn       @relation("approvalGateFrom", fields: [fromColumnId], references: [id], onDelete: Cascade)
+  toColumn   BoardColumn       @relation("approvalGateTo", fields: [toColumnId], references: [id], onDelete: Cascade)
   requests   ApprovalRequest[]
 
   @@unique([projectId, fromColumnId, toColumnId])
@@ -1458,10 +930,10 @@ model ApprovalRequest {
   createdAt      DateTime              @default(now())
   resolvedAt     DateTime?
 
-  issue        Issue        @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  approvalGate ApprovalGate @relation(fields: [approvalGateId], references: [id], onDelete: Cascade)
-  targetColumn BoardColumn  @relation("approvalRequestTarget", fields: [targetColumnId], references: [id], onDelete: Cascade)
-  requestedBy  User         @relation("approvalRequester", fields: [requestedById], references: [id])
+  issue        Issue          @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  approvalGate ApprovalGate   @relation(fields: [approvalGateId], references: [id], onDelete: Cascade)
+  targetColumn BoardColumn    @relation("approvalRequestTarget", fields: [targetColumnId], references: [id], onDelete: Cascade)
+  requestedBy  User           @relation("approvalRequester", fields: [requestedById], references: [id])
   votes        ApprovalVote[]
 
   @@index([issueId])
@@ -1551,7 +1023,7 @@ model Form {
 }
 
 model FormPage {
-  id                String     @id @default(cuid())
+  id                String  @id @default(cuid())
   formId            String
   title             String
   position          Int
@@ -1559,9 +1031,9 @@ model FormPage {
   conditionOperator String?
   conditionValue    String?
 
-  form            Form        @relation(fields: [formId], references: [id], onDelete: Cascade)
-  conditionField  FormField?  @relation("pageCondition", fields: [conditionFieldId], references: [id], onDelete: SetNull)
-  fields          FormField[] @relation("pageFields")
+  form           Form        @relation(fields: [formId], references: [id], onDelete: Cascade)
+  conditionField FormField?  @relation("pageCondition", fields: [conditionFieldId], references: [id], onDelete: SetNull)
+  fields         FormField[] @relation("pageFields")
 
   @@index([formId])
 }
@@ -1600,10 +1072,10 @@ model FormSubmission {
   reviewNote     String?
   createdAt      DateTime         @default(now())
 
-  form       Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
-  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  issue      Issue?   @relation(fields: [issueId], references: [id], onDelete: SetNull)
-  reviewedBy User?    @relation("submissionReviewer", fields: [reviewedById], references: [id])
+  form       Form    @relation(fields: [formId], references: [id], onDelete: Cascade)
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issue      Issue?  @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  reviewedBy User?   @relation("submissionReviewer", fields: [reviewedById], references: [id])
 
   @@index([formId, status])
   @@index([projectId, status])

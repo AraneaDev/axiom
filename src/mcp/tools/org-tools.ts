@@ -53,7 +53,7 @@ export function registerOrgTools(ctx: McpToolContext) {
       const teams = await prisma.team.findMany({
         where: { orgId, members: { some: { userId } } },
         include: {
-          _count: { select: { members: true, repos: true, projects: true, wikiSpaces: true } },
+          _count: { select: { members: true, projects: true, wikiSpaces: true } },
         },
         orderBy: { id: 'asc' },
         take: take + 1,

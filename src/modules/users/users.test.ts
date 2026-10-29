@@ -65,7 +65,7 @@ describe('Users API', () => {
       .post('/api/users/me/tokens')
       .set('Authorization', `Bearer ${token}`)
       .set('X-Requested-With', 'XMLHttpRequest')
-      .send({ name: 'Test Token', scopes: ['repo:read'] });
+      .send({ name: 'Test Token', scopes: ['issues:read'] });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeDefined();
     expect(res.body.id).toBeDefined();
