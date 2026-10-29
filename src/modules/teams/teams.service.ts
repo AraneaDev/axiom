@@ -76,7 +76,7 @@ export async function getTeam(teamId: string) {
 }
 
 /**
- * List all teams in an organization with member/repo/project counts and pagination.
+ * List all teams in an organization with member/project counts and pagination.
  * @param orgId - The organization ID
  * @param query - Pagination query params (limit, offset)
  * @param query.limit
