@@ -1,18 +1,27 @@
 /**
- * Probe for single-yjs-tsx.test.ts: drives the collab server's sync path under tsx and
- * fails on any "Yjs was already imported" warning.
+ * Probe for single-yjs-tsx.test.ts: loads yjs and the collab server's y-protocols and
+ * lib0 the way the server does, under tsx, and fails when a second copy of yjs appears.
+ *
+ * A second copy is detected two ways, because a mixed-copy sync round trip can still
+ * "work": yjs logs "Yjs was already imported" through console.error when it loads twice
+ * (hooked before anything is loaded), and no ESM build (yjs.mjs) may be in the module cache,
+ * with at most one yjs entry.
  */
-import * as Y from 'yjs';
+import { createRequire } from 'module';
 
-const warnings: string[] = [];
-const original = console.warn;
-console.warn = (...args: unknown[]) => {
-  warnings.push(args.join(' '));
-  original(...args);
-};
+const reports: string[] = [];
+for (const method of ['warn', 'error'] as const) {
+  const original = console[method];
+  console[method] = (...args: unknown[]) => {
+    reports.push(args.map(String).join(' '));
+    original(...args);
+  };
+}
+
+const load = createRequire(__filename);
 
 async function main() {
-  // The collab server's own loaders, so this tests the resolution it really uses.
+  const Y = load('yjs') as typeof import('yjs');
   const collab = await import('../realtime/collaboration');
   const server = collab.__protocolsForProbe();
   const [sync, awareness, enc, dec] = await Promise.all([
@@ -21,6 +30,7 @@ async function main() {
     server.encoding(),
     server.decoding(),
   ]);
+
   const a = new Y.Doc();
   const b = new Y.Doc();
   a.getXmlFragment('default').insert(0, [new Y.XmlElement('paragraph')]);
@@ -29,9 +39,18 @@ async function main() {
   sync.writeSyncStep2(e, a);
   sync.readSyncMessage(dec.createDecoder(enc.toUint8Array(e)), enc.createEncoder(), b, null);
   if (b.getXmlFragment('default').length !== 1) throw new Error('sync did not apply');
-  if (warnings.some((w) => w.includes('Yjs was already imported'))) {
-    throw new Error('two yjs copies: ' + warnings.join('\n'));
+
+  const duplicate = reports.filter((r) => r.includes('Yjs was already imported'));
+  if (duplicate.length > 0) throw new Error('two yjs copies (reported by yjs): ' + duplicate[0]);
+
+  const yjsModules = Object.keys(load.cache).filter((f) =>
+    /[\\/]node_modules[\\/]yjs[\\/]dist[\\/]/.test(f),
+  );
+  const esm = yjsModules.filter((f) => f.endsWith('.mjs'));
+  if (esm.length > 0 || yjsModules.length !== 1) {
+    throw new Error('two yjs copies (module cache): ' + yjsModules.join(', '));
   }
+
   process.stdout.write('probe-ok\n');
   process.exit(0);
 }
