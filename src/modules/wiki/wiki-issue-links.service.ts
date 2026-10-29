@@ -69,9 +69,13 @@ export const addEmbedLink = (pageId: string, issueId: string, userId: string) =>
  * @param issueId
  */
 export async function removeEmbedLink(pageId: string, issueId: string) {
-  return prisma.wikiPageIssueLink.deleteMany({
+  const result = await prisma.wikiPageIssueLink.deleteMany({
     where: { pageId, issueId, linkType: 'EMBED' },
   });
+  if (result.count > 0) {
+    broadcastToRoom(`issue:${issueId}`, { type: 'issue:links-updated', issueId });
+  }
+  return result;
 }
 
 /**

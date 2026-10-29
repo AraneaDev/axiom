@@ -152,6 +152,43 @@ describe('Wiki Issue Links Service', () => {
     }
   });
 
+  it('syncMentionLinks broadcasts issue:links-updated for added and removed issues only', async () => {
+    await prisma.wikiPageIssueLink.deleteMany({ where: { pageId } });
+    await syncMentionLinks(pageId, [issueId, issueId2], userId);
+    const spy = vi.spyOn(broadcast, 'broadcastToRoom').mockImplementation(() => {});
+    try {
+      // issueId is dropped, issueId2 stays, issueId3 is new.
+      await syncMentionLinks(pageId, [issueId2, issueId3], userId);
+      const rooms = spy.mock.calls.map(([room]) => room).sort();
+      expect(rooms).toEqual([`issue:${issueId}`, `issue:${issueId3}`].sort());
+      expect(spy).toHaveBeenCalledWith(`issue:${issueId3}`, {
+        type: 'issue:links-updated',
+        issueId: issueId3,
+      });
+    } finally {
+      spy.mockRestore();
+      await prisma.wikiPageIssueLink.deleteMany({ where: { pageId } });
+    }
+  });
+
+  it('removeEmbedLink broadcasts issue:links-updated when a link was removed', async () => {
+    await addEmbedLink(pageId, issueId, userId);
+    const spy = vi.spyOn(broadcast, 'broadcastToRoom').mockImplementation(() => {});
+    try {
+      await removeEmbedLink(pageId, issueId);
+      expect(spy).toHaveBeenCalledWith(`issue:${issueId}`, {
+        type: 'issue:links-updated',
+        issueId,
+      });
+      spy.mockClear();
+      // Nothing left to remove: no event.
+      await removeEmbedLink(pageId, issueId);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('addEmbedLink creates an EMBED link between page and issue', async () => {
     const link = await addEmbedLink(pageId, issueId, userId);
     expect(link).toBeDefined();

@@ -9,6 +9,14 @@ vi.mock('@/api/wiki-issue-links.api', () => ({
   wikiIssueLinksApi: { listForIssue: (...args: unknown[]) => mockListForIssue(...args) },
 }));
 
+const mockSubscribe = vi.fn();
+const mockUnsubscribe = vi.fn();
+
+vi.mock('@/hooks/useWebSocket', () => ({
+  subscribe: (...args: unknown[]) => mockSubscribe(...args),
+  unsubscribe: (...args: unknown[]) => mockUnsubscribe(...args),
+}));
+
 import { IssueLinkedPagesCard } from './IssueLinkedPagesCard';
 
 const makeLink = (id: string, title: string, slug: string) => ({
@@ -32,7 +40,7 @@ function renderCard() {
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <IssueLinkedPagesCard projectId="proj1" issueNumber={7} />
+        <IssueLinkedPagesCard projectId="proj1" issueId="issue-1" issueNumber={7} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -67,5 +75,14 @@ describe('IssueLinkedPagesCard', () => {
     renderCard();
     await screen.findByText('No linked pages yet.');
     expect(screen.queryByText(/branch|commit|pull request/i)).toBeNull();
+  });
+
+  it('joins the issue room so issue:links-updated reaches it, and leaves on unmount', async () => {
+    mockListForIssue.mockResolvedValue([]);
+    const { unmount } = renderCard();
+    await screen.findByText('No linked pages yet.');
+    expect(mockSubscribe).toHaveBeenCalledWith(['issue:issue-1']);
+    unmount();
+    expect(mockUnsubscribe).toHaveBeenCalledWith(['issue:issue-1']);
   });
 });

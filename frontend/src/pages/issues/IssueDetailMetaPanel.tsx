@@ -114,7 +114,7 @@ export function IssueDetailMetaPanel({
       </Card>
 
       {/* Linked pages */}
-      <IssueLinkedPagesCard projectId={projectId} issueNumber={issue.number} />
+      <IssueLinkedPagesCard projectId={projectId} issueId={issue.id} issueNumber={issue.number} />
 
       {/* Linked Issues */}
       <IssueLinkedSection

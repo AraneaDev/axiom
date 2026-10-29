@@ -1,23 +1,39 @@
 import { useQuery } from '@tanstack/react-query';
 import { FileText } from 'lucide-react';
+import { useEffect } from 'react';
 import { Link } from 'react-router';
 
 import { wikiIssueLinksApi } from '@/api/wiki-issue-links.api';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
+import { subscribe, unsubscribe } from '@/hooks/useWebSocket';
 
 interface IssueLinkedPagesCardProps {
   projectId: string;
+  issueId: string;
   issueNumber: number;
 }
 
 /**
  * Right-sidebar card listing the wiki pages linked to an issue.
+ * Joins the `issue:{id}` room while mounted: the backend broadcasts
+ * `issue:links-updated` there when a wiki page links or unlinks this issue.
  * @param root0
  * @param root0.projectId
+ * @param root0.issueId
  * @param root0.issueNumber
  */
-export function IssueLinkedPagesCard({ projectId, issueNumber }: IssueLinkedPagesCardProps) {
+export function IssueLinkedPagesCard({
+  projectId,
+  issueId,
+  issueNumber,
+}: IssueLinkedPagesCardProps) {
+  useEffect(() => {
+    const rooms = [`issue:${issueId}`];
+    subscribe(rooms);
+    return () => unsubscribe(rooms);
+  }, [issueId]);
+
   const { data: pages = [], isLoading } = useQuery({
     queryKey: ['issue-wiki-links', projectId, issueNumber],
     queryFn: () => wikiIssueLinksApi.listForIssue(projectId, issueNumber),
