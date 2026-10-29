@@ -14,6 +14,9 @@ const SAVE_DEBOUNCE_MS = 5_000;
 /** Map of pageId -> debounce timer */
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** Map of pageId -> serialization of the doc as loaded, so sessions without edits do not persist */
+const loadedSnapshots = new Map<string, string>();
+
 /** Map of pageId -> authorId (last user to edit, for version attribution) */
 const lastAuthors = new Map<string, string>();
 
@@ -52,6 +55,7 @@ export async function loadPageIntoDoc(pageId: string, doc: Y.Doc): Promise<void>
       xmlFragment.insert(0, [paragraph]);
     });
   }
+  loadedSnapshots.set(pageId, xmlFragment.toJSON());
 }
 
 /**
@@ -74,8 +78,8 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<void> {
     });
     if (!page) return;
 
-    // Skip if content hasn't changed
-    if (page.body === body) return;
+    // Skip if content hasn't changed, or is still exactly what was loaded into the doc
+    if (page.body === body || loadedSnapshots.get(pageId) === body) return;
 
     const nextVersion = (page.versions[0]?.version ?? 0) + 1;
 
@@ -136,4 +140,5 @@ export async function forceSave(pageId: string, doc: Y.Doc): Promise<void> {
  */
 export function clearAuthor(pageId: string): void {
   lastAuthors.delete(pageId);
+  loadedSnapshots.delete(pageId);
 }
