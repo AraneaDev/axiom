@@ -10,3 +10,5 @@ playwright-report/
 test-results/
 .playwright-mcp/
 /dist-editor-core/
+/.claude/settings.local.json
+/.claude/scheduled_tasks.lock
