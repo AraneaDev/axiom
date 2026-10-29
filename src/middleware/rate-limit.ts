@@ -8,10 +8,11 @@ const errorMessage = (msg: string) => ({
   error: { message: msg, code: 'RATE_LIMITED' },
 });
 
-/** Global: 300 req/min */
+/** Global API limit: 300 req/min per IP. Mounted on /api only. */
+export const GLOBAL_LIMIT = { windowMs: 60_000, max: 300 } as const;
+
 export const globalLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 300,
+  ...GLOBAL_LIMIT,
   standardHeaders: true,
   legacyHeaders: false,
   skip,

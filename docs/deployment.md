@@ -8,6 +8,8 @@ This guide covers deploying Axiom on a VPS using Docker Compose, with Apache han
 
 Axiom runs as a set of Docker containers (API, worker, PostgreSQL, Redis) orchestrated by Docker Compose. An Apache reverse proxy sits in front of the stack on the host, handling TLS termination, WebSocket upgrades, and routing all traffic to the `api` container, published on port 7000 (`${PORT:-7000}`). In production there is a single application container: Express serves the built SPA from `/app/public` (hashed assets cached for a year, `index.html` never cached, index.html fallback for client-side routes) next to `/api` and `/ws`. There is no nginx.
 
+**The host reverse proxy is the only entry point.** The `api` container is published on `127.0.0.1:7000` only, so it cannot be reached from outside the host. Keep it that way: in production Express trusts one proxy hop (`trust proxy 1`) and takes the client IP from `X-Forwarded-For`, so a client that could reach port 7000 directly could spoof that header and get around the login rate limit. Apache (`ProxyPass / http://localhost:7000/`, section 4) also does TLS termination and HSTS; the app does not upgrade HTTP to HTTPS itself.
+
 ---
 
 ## 2. Prerequisites

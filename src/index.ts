@@ -87,6 +87,11 @@ app.use(
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
+        // TLS and HSTS belong to the host reverse proxy. Upgrading here would blank the
+        // page for anyone reaching the app over plain HTTP on a non-localhost host.
+        'upgrade-insecure-requests': null,
+        // Explicit ws:/wss: for the realtime socket; older Safari does not match them to 'self'.
+        'connect-src': ["'self'", 'ws:', 'wss:'],
         // Attachment thumbnails/previews use blob: URLs; editors embed external https images.
         'img-src': ["'self'", 'data:', 'blob:', 'https:'],
         // The PDF attachment preview renders an iframe with a blob: URL.
@@ -111,8 +116,9 @@ app.use((req, res, next) => {
   express.json({ limit: '5mb' })(req, res, next);
 });
 
-// Rate limiting
-app.use(globalLimiter);
+// Rate limiting. The global limit covers the API only: one page load fetches many
+// static assets, and users behind one NAT would otherwise get 429 blank pages.
+app.use('/api', globalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
 app.use('/api/auth/register', authLimiter);

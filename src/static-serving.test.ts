@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const INDEX_HTML = '<!doctype html><html><body><div id="root">axiom-spa</div></body></html>';
 let dir: string;
@@ -73,10 +73,33 @@ describe('static frontend serving', () => {
     expect(csp).toContain("script-src 'self'");
   });
 
+  it('CSP allows the realtime socket and does not force an HTTPS upgrade', async () => {
+    const res = await request(app).get('/');
+    const csp = res.headers['content-security-policy'];
+    expect(csp).toContain("connect-src 'self' ws: wss:");
+    // TLS belongs to the reverse proxy; upgrading would blank plain-HTTP deployments.
+    expect(csp).not.toContain('upgrade-insecure-requests');
+  });
+
   it('api routes are unaffected', async () => {
     const res = await request(app).get('/api/health');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/json');
+  });
+
+  it('warns with the directory when index.html is missing', async () => {
+    const { mountStaticFrontend } = await import('./middleware/static-frontend');
+    const { logger } = await import('./utils/logger');
+    const { default: express } = await import('express');
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-static-empty-'));
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(mountStaticFrontend(express(), empty)).toBe(false);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('index.html'), { dir: empty });
+    } finally {
+      warn.mockRestore();
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
   });
 
   it('does not serve index.html for a missing asset', async () => {
