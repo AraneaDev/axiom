@@ -9,7 +9,6 @@ describe('Users API', () => {
   let token: string;
   let tokenId: string;
   let apiToken: string;
-  let sshKeyId: string;
 
   beforeAll(async () => {
     const passwordHash = await bcrypt.hash('testpassword123', 4);
@@ -96,41 +95,6 @@ describe('Users API', () => {
   it('6. should revoke an API token', async () => {
     const res = await request(app)
       .delete(`/api/users/me/tokens/${tokenId}`)
-      .set('Authorization', `Bearer ${token}`)
-      .set('X-Requested-With', 'XMLHttpRequest');
-    expect(res.status).toBe(204);
-  });
-
-  // 7. Add SSH key
-  it('7. should add an SSH key', async () => {
-    const res = await request(app)
-      .post('/api/users/me/ssh-keys')
-      .set('Authorization', `Bearer ${token}`)
-      .set('X-Requested-With', 'XMLHttpRequest')
-      .send({
-        title: 'Test Key',
-        publicKey: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC3test+key+data+here== test@example.com',
-      });
-    expect(res.status).toBe(201);
-    expect(res.body.id).toBeDefined();
-    sshKeyId = res.body.id;
-  });
-
-  // 8. List SSH keys
-  it('8. should list SSH keys', async () => {
-    const res = await request(app)
-      .get('/api/users/me/ssh-keys')
-      .set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    const found = res.body.find((k: { id: string }) => k.id === sshKeyId);
-    expect(found).toBeDefined();
-  });
-
-  // 9. Delete SSH key
-  it('9. should delete an SSH key', async () => {
-    const res = await request(app)
-      .delete(`/api/users/me/ssh-keys/${sshKeyId}`)
       .set('Authorization', `Bearer ${token}`)
       .set('X-Requested-With', 'XMLHttpRequest');
     expect(res.status).toBe(204);

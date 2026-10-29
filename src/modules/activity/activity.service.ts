@@ -4,7 +4,7 @@ import { prisma } from '../../config/database';
 import { parseServicePagination } from '../../utils/pagination';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
-export type ResourceType = 'issue' | 'pull_request' | 'wiki_page' | 'repository';
+export type ResourceType = 'issue' | 'wiki_page';
 
 export type ActivityAction =
   | 'created'
@@ -24,7 +24,7 @@ export type ActivityAction =
 
 /**
  * Log an activity event. Non-critical -- silently catches errors to avoid breaking the main flow.
- * @param resourceType - The type of resource (issue, pull_request, wiki_page, repository)
+ * @param resourceType - The type of resource (issue, wiki_page)
  * @param resourceId - The ID of the resource
  * @param action - The action performed (created, updated, status_changed, etc.)
  * @param userId - The user who performed the action

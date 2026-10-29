@@ -124,7 +124,7 @@ export const updateLabelSchema = createLabelSchema.partial();
 
 export const searchSchema = z.object({
   q: z.string().min(1).max(1000),
-  type: z.enum(['issues', 'wiki', 'repos', 'code', 'all']).default('all'),
+  type: z.enum(['issues', 'wiki', 'all']).default('all'),
   teamId: z.string().optional(),
   projectId: z.string().optional(),
   spaceId: z.string().optional(),
@@ -133,12 +133,6 @@ export const searchSchema = z.object({
   until: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
-});
-
-export const codeSearchSchema = z.object({
-  q: z.string().min(1).max(1000),
-  repoIds: z.string().optional(), // comma-separated repo IDs
-  limit: z.coerce.number().int().min(1).max(50).default(50),
 });
 
 export const savedSearchSchema = z.object({

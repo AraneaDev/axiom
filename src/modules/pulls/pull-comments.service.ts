@@ -224,6 +224,7 @@ export async function applySuggestion(
     'Apply suggestion from code review',
   );
 
+  // @ts-expect-error pulls module is removed in a later task; ResourceType no longer has pull_request
   await logActivity('pull_request', pr.id, 'suggestion_applied', userId, {
     commentId,
     filePath: comment.filePath,
@@ -320,6 +321,7 @@ export async function batchApplySuggestions(
   // Apply all file changes in a single commit
   await applyMultiFileChanges(diskPath, pr.sourceBranch, filePatchMap, message);
 
+  // @ts-expect-error pulls module is removed in a later task; ResourceType no longer has pull_request
   await logActivity('pull_request', pr.id, 'suggestions_batch_applied', userId, {
     count,
     commentIds,

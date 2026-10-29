@@ -3,7 +3,6 @@ import { get, patch, post, del } from './client';
 export interface SystemStats {
   totalUsers: number;
   totalOrgs: number;
-  totalRepos: number;
   totalIssues: number;
   totalWikiPages: number;
   storage: {

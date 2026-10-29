@@ -10,7 +10,6 @@ export interface SiteSettings {
   registrationMode: 'INVITE_ONLY' | 'OPEN' | 'DISABLED';
   enforce2fa: boolean;
   updatedAt: string;
-  ssh: { enabled: boolean; host: string | null; port: number };
 }
 
 export const siteSettingsApi = {

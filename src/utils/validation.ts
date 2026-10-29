@@ -17,7 +17,6 @@ export {
   createLabelSchema,
   updateLabelSchema,
   searchSchema,
-  codeSearchSchema,
   savedSearchSchema,
   adminListUsersQuerySchema,
   adminUpdateUserSchema,
@@ -72,7 +71,6 @@ export {
 
 export {
   createApiTokenSchema,
-  addSshKeySchema,
   createWikiSpaceSchema,
   createPageSchema,
   updatePageSchema,

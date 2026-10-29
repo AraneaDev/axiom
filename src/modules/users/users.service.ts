@@ -1,12 +1,10 @@
 import crypto from 'crypto';
 
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
 import {
-  REPO_URL_SELECT,
   TEAM_ORG_INCLUDE,
   TEAM_ORG_SELECT,
   USER_WITH_AVATAR_SELECT,
@@ -82,15 +80,15 @@ export async function searchUsers(query: string, limit = 10) {
 // ─── Dashboard ──────────────────────────────────────────────
 
 /**
- * Get aggregated dashboard data for the current user including assigned issues, review requests, and upcoming due dates.
+ * Get aggregated dashboard data for the current user including assigned issues, recent activity, and upcoming due dates.
  * @param userId - The user ID
- * @returns Dashboard data with assignedIssues, reviewRequests, recentActivity, and upcomingDueDates
+ * @returns Dashboard data with assignedIssues, recentActivity, and upcomingDueDates
  */
 export async function getDashboard(userId: string) {
   const now = new Date();
   const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  const [assignedIssues, reviewRequests, recentActivity, upcomingDueDates] = await Promise.all([
+  const [assignedIssues, recentActivity, upcomingDueDates] = await Promise.all([
     // Open issues assigned to user across all projects
     prisma.issue.findMany({
       where: {
@@ -104,19 +102,6 @@ export async function getDashboard(userId: string) {
       },
       orderBy: { updatedAt: 'desc' },
       take: 50,
-    }),
-
-    // Open PRs where user is a reviewer
-    prisma.pullRequest.findMany({
-      where: {
-        reviews: { some: { reviewerId: userId } },
-        status: 'OPEN',
-      },
-      include: {
-        repo: { select: REPO_URL_SELECT },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
     }),
 
     // Recent activity for user
@@ -145,36 +130,10 @@ export async function getDashboard(userId: string) {
     }),
   ]);
 
-  // Fetch author info for PRs separately since PullRequest has no author relation
-  const authorIds = [
-    ...new Set(reviewRequests.map((pr: (typeof reviewRequests)[number]) => pr.authorId)),
-  ];
-  const authors =
-    authorIds.length > 0
-      ? await prisma.user.findMany({
-          where: { id: { in: authorIds } },
-          select: { id: true, displayName: true, username: true, avatarUrl: true },
-        })
-      : [];
-  const authorMap = new Map(authors.map((a: (typeof authors)[number]) => [a.id, a] as const));
-
-  const reviewRequestsWithAuthors = reviewRequests.map((pr: (typeof reviewRequests)[number]) => ({
-    ...pr,
-    author: authorMap.get(pr.authorId) ?? {
-      id: pr.authorId,
-      displayName: 'Unknown',
-      username: 'unknown',
-      avatarUrl: null,
-    },
-  }));
-
   // Hydrate activities with resource titles and links
   type RecentActivity = (typeof recentActivity)[number];
   const issueActivityIds = recentActivity
     .filter((a: RecentActivity) => a.resourceType === 'issue')
-    .map((a: RecentActivity) => a.resourceId);
-  const prActivityIds = recentActivity
-    .filter((a: RecentActivity) => a.resourceType === 'pull_request')
     .map((a: RecentActivity) => a.resourceId);
   const wikiActivityIds = recentActivity
     .filter((a: RecentActivity) => a.resourceType === 'wiki_page')
@@ -200,24 +159,6 @@ export async function getDashboard(userId: string) {
         })
       : [];
 
-  const prSelect = {
-    id: true,
-    number: true,
-    title: true,
-    repo: { select: { slug: true, team: { select: teamOrgSelect } } },
-  } as const;
-  type PRResult = Awaited<
-    ReturnType<typeof prisma.pullRequest.findMany<{ select: typeof prSelect }>>
-  >[number];
-
-  const activityPRs: PRResult[] =
-    prActivityIds.length > 0
-      ? await prisma.pullRequest.findMany({
-          where: { id: { in: prActivityIds } },
-          select: prSelect,
-        })
-      : [];
-
   const wikiSelect = {
     id: true,
     title: true,
@@ -239,7 +180,6 @@ export async function getDashboard(userId: string) {
   const issueMap = new Map(
     activityIssues.map((i: (typeof activityIssues)[number]) => [i.id, i] as const),
   );
-  const prMap = new Map(activityPRs.map((p: (typeof activityPRs)[number]) => [p.id, p] as const));
   const wikiMap = new Map(
     activityWikiPages.map((w: (typeof activityWikiPages)[number]) => [w.id, w] as const),
   );
@@ -255,13 +195,6 @@ export async function getDashboard(userId: string) {
         resourceTitle = issue.title;
         resourceKey = `${issue.project.prefix}-${issue.number}`;
         resourceLink = `/${issue.project.team.org.slug}/${issue.project.team.slug}/${issue.project.slug}/issues/${issue.number}`;
-      }
-    } else if (a.resourceType === 'pull_request') {
-      const pr = prMap.get(a.resourceId);
-      if (pr) {
-        resourceTitle = pr.title;
-        resourceKey = `#${pr.number}`;
-        resourceLink = `/${pr.repo.team?.org.slug}/${pr.repo.team?.slug}/repos/${pr.repo.slug}/pulls/${pr.number}`;
       }
     } else if (a.resourceType === 'wiki_page') {
       const page = wikiMap.get(a.resourceId);
@@ -286,18 +219,10 @@ export async function getDashboard(userId: string) {
   const dayEnd = (i: number) =>
     i < 6 ? dayBoundaries[i + 1] : new Date(dayBoundaries[6].getTime() + 24 * 60 * 60 * 1000);
 
-  const [trendIssues, trendPRs, trendDueDates, trendActivity] = await Promise.all([
+  const [trendIssues, trendDueDates, trendActivity] = await Promise.all([
     // Issues created (assigned to user) per day
     prisma.issue.findMany({
       where: { assigneeId: userId, createdAt: { gte: sevenDaysAgo } },
-      select: { createdAt: true },
-    }),
-    // PRs requesting review per day
-    prisma.pullRequest.findMany({
-      where: {
-        reviews: { some: { reviewerId: userId } },
-        createdAt: { gte: sevenDaysAgo },
-      },
       select: { createdAt: true },
     }),
     // Issues that became due per day
@@ -325,7 +250,6 @@ export async function getDashboard(userId: string) {
 
   const trends = {
     assignedIssues: bucketByDay(trendIssues.map((i) => new Date(i.createdAt))),
-    reviewRequests: bucketByDay(trendPRs.map((p) => new Date(p.createdAt))),
     upcomingDueDates: bucketByDay(
       trendDueDates.filter((i) => i.dueDate != null).map((i) => new Date(i.dueDate!)),
     ),
@@ -334,74 +258,10 @@ export async function getDashboard(userId: string) {
 
   return {
     assignedIssues,
-    reviewRequests: reviewRequestsWithAuthors,
     recentActivity: enrichedActivity,
     upcomingDueDates,
     trends,
   };
-}
-
-// ─── SSH Keys ───────────────────────────────────────────────
-
-function parseAndFingerprintKey(publicKey: string): string {
-  // Extract the key data (second field of "type base64data comment")
-  const parts = publicKey.trim().split(/\s+/);
-  if (parts.length < 2) throw new AppError(400, 'Invalid SSH public key format');
-
-  const keyData = Buffer.from(parts[1], 'base64');
-  const hash = crypto.createHash('sha256').update(keyData).digest('base64');
-  return `SHA256:${hash.replace(/=+$/, '')}`;
-}
-
-/**
- * List all SSH keys for a user.
- * @param userId - The user ID
- * @returns List of SSH keys with id, title, fingerprint, and timestamps
- */
-export async function listSshKeys(userId: string) {
-  return prisma.sshKey.findMany({
-    where: { userId },
-    select: { id: true, title: true, fingerprint: true, createdAt: true, lastUsedAt: true },
-    orderBy: { createdAt: 'desc' },
-  });
-}
-
-/**
- * Add an SSH public key to a user's account after computing its fingerprint.
- * @param userId - The user ID
- * @param data - SSH key data including title and public key string
- * @param data.title
- * @param data.publicKey
- * @returns The created SSH key record
- * @throws {AppError} 409 if SSH key fingerprint already registered
- * @throws {AppError} 400 if public key format is invalid
- */
-export async function addSshKey(userId: string, data: { title: string; publicKey: string }) {
-  const fingerprint = parseAndFingerprintKey(data.publicKey);
-
-  const { checkUnique } = await import('../../utils/check-unique');
-  await checkUnique('sshKey', { fingerprint }, 'SSH key already registered');
-
-  return prisma.sshKey.create({
-    data: {
-      userId,
-      title: data.title,
-      publicKey: data.publicKey.trim(),
-      fingerprint,
-    },
-    select: { id: true, title: true, fingerprint: true, createdAt: true },
-  });
-}
-
-/**
- * Delete an SSH key belonging to a user.
- * @param userId - The user ID
- * @param keyId - The SSH key ID to delete
- * @throws {AppError} 404 if SSH key not found
- */
-export async function deleteSshKey(userId: string, keyId: string) {
-  await findOrThrow(prisma.sshKey.findFirst({ where: { id: keyId, userId } }), 'SSH key not found');
-  await prisma.sshKey.delete({ where: { id: keyId } });
 }
 
 // ─── API Tokens ─────────────────────────────────────────────

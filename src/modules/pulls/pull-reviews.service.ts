@@ -73,6 +73,7 @@ export async function submitReview(
     });
   }
 
+  // @ts-expect-error pulls module is removed in a later task; ResourceType no longer has pull_request
   await logActivity('pull_request', pr.id, 'review_submitted', reviewerId, {
     status: data.status,
     prNumber,

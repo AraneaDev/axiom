@@ -53,15 +53,13 @@ function getDatabaseSize(): Promise<string> {
  *
  */
 export async function getSystemStats() {
-  const [totalUsers, totalOrgs, totalRepos, totalIssues, totalWikiPages, dbSize] =
-    await Promise.all([
-      prisma.user.count(),
-      prisma.organization.count(),
-      prisma.repository.count(),
-      prisma.issue.count(),
-      prisma.page.count(),
-      getDatabaseSize(),
-    ]);
+  const [totalUsers, totalOrgs, totalIssues, totalWikiPages, dbSize] = await Promise.all([
+    prisma.user.count(),
+    prisma.organization.count(),
+    prisma.issue.count(),
+    prisma.page.count(),
+    getDatabaseSize(),
+  ]);
 
   const storagePath = process.env.STORAGE_PATH || '/data/storage';
   const reposSize = getDirectorySize(env.REPOS_PATH);
@@ -70,7 +68,6 @@ export async function getSystemStats() {
   return {
     totalUsers,
     totalOrgs,
-    totalRepos,
     totalIssues,
     totalWikiPages,
     storage: {

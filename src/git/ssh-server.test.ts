@@ -31,6 +31,15 @@ async function makeKey(dir: string, name: string): Promise<{ file: string; pub: 
   return { file, pub: (await fs.readFile(`${file}.pub`, 'utf8')).trim() };
 }
 
+// Register a public key for a user directly; the REST endpoint was removed with SSH key management.
+async function registerKey(userId: string, title: string, publicKey: string) {
+  const keyData = Buffer.from(publicKey.trim().split(/\s+/)[1], 'base64');
+  const hash = crypto.createHash('sha256').update(keyData).digest('base64').replace(/=+$/, '');
+  await prisma.sshKey.create({
+    data: { userId, title, publicKey: publicKey.trim(), fingerprint: `SHA256:${hash}` },
+  });
+}
+
 describe('parseGitCommand', () => {
   it('parses quoted paths with a leading slash', () => {
     expect(parseGitCommand("git-upload-pack '/o/t/r.git'")).toEqual({
@@ -113,14 +122,8 @@ describe('SSH git transport', () => {
     ownerKey = await makeKey(tmp, 'owner');
     viewerKey = await makeKey(tmp, 'viewer');
     strangerKey = await makeKey(tmp, 'stranger');
-    await authPost('/api/users/me/ssh-keys', ctx.owner.token, {
-      title: 'owner',
-      publicKey: ownerKey.pub,
-    });
-    await authPost('/api/users/me/ssh-keys', viewer.token, {
-      title: 'viewer',
-      publicKey: viewerKey.pub,
-    });
+    await registerKey(ctx.owner.id, 'owner', ownerKey.pub);
+    await registerKey(viewer.id, 'viewer', viewerKey.pub);
 
     hostKeyPath = path.join(tmp, 'host', 'host_key');
     server = await startSshServer({
@@ -232,10 +235,7 @@ describe('SSH git transport', () => {
       username: `sshdeactivated-${Date.now()}`,
     });
     const deactivatedKey = await makeKey(tmp, 'deactivated');
-    await authPost('/api/users/me/ssh-keys', deactivated.token, {
-      title: 'deactivated',
-      publicKey: deactivatedKey.pub,
-    });
+    await registerKey(deactivated.id, 'deactivated', deactivatedKey.pub);
     await prisma.user.update({
       where: { id: deactivated.id },
       data: { deactivatedAt: new Date() },

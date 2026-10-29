@@ -5,7 +5,6 @@ import {
   Users,
   Building2,
   Database,
-  GitFork,
   CircleDot,
   Cpu,
   FileText,
@@ -274,7 +273,6 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard icon={Users} label="Users" value={stats.totalUsers} />
         <StatCard icon={Building2} label="Organizations" value={stats.totalOrgs} />
-        <StatCard icon={GitFork} label="Repositories" value={stats.totalRepos} />
         <StatCard icon={CircleDot} label="Issues" value={stats.totalIssues} />
         <StatCard icon={FileText} label="Wiki Pages" value={stats.totalWikiPages} />
         <StatCard icon={HardDrive} label="Storage" value={formatSize(stats.storage.totalBytes)} />

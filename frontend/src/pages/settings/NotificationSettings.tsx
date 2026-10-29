@@ -17,14 +17,6 @@ const EVENT_TYPE_LABELS: Record<string, { label: string; description: string }> 
     label: 'Issue commented',
     description: 'When someone comments on an issue you are involved in',
   },
-  pr_review_requested: {
-    label: 'Review requested',
-    description: 'When someone requests your review on a pull request',
-  },
-  pr_merged: {
-    label: 'Pull request merged',
-    description: 'When a pull request you authored or reviewed is merged',
-  },
   mention: {
     label: 'Mentions',
     description: 'When someone mentions you in a comment or description',

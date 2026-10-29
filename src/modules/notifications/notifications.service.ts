@@ -131,13 +131,7 @@ export async function getUnreadCount(userId: string) {
 
 // ─── Notification Preferences ──────────────────────────────
 
-const DEFAULT_EVENT_TYPES = [
-  'issue_assigned',
-  'issue_commented',
-  'pr_review_requested',
-  'pr_merged',
-  'mention',
-] as const;
+const DEFAULT_EVENT_TYPES = ['issue_assigned', 'issue_commented', 'mention'] as const;
 
 /**
  * Get all notification preferences for a user, filling in defaults for

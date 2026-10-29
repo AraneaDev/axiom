@@ -1,12 +1,7 @@
 import { Request, Response } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler';
-import {
-  validate,
-  searchSchema,
-  codeSearchSchema,
-  savedSearchSchema,
-} from '../../utils/validation';
+import { validate, searchSchema, savedSearchSchema } from '../../utils/validation';
 
 import * as searchService from './search.service';
 
@@ -14,12 +9,6 @@ export const search = asyncHandler(async (req: Request, res: Response) => {
   const params = validate(searchSchema, req.query);
   const orgIds = await searchService.getUserOrgIds(req.userId!);
   const results = await searchService.search({ ...params, userId: req.userId!, orgIds });
-  res.json(results);
-});
-
-export const searchCodeEndpoint = asyncHandler(async (req: Request, res: Response) => {
-  const params = validate(codeSearchSchema, req.query);
-  const results = await searchService.searchCode({ ...params, userId: req.userId! });
   res.json(results);
 });
 

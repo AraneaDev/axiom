@@ -148,6 +148,7 @@ export async function createPR(
   });
 
   await parseAndLinkIssues(pr.id, repoId, `${data.title}\n${data.body ?? ''}`);
+  // @ts-expect-error pulls module is removed in a later task; ResourceType no longer has pull_request
   await logActivity('pull_request', pr.id, 'created', authorId, { title: data.title, number });
 
   broadcastToRoom(`repo:${repoId}`, { type: 'pr:updated', repoId, prId: pr.id });
@@ -308,6 +309,7 @@ export async function closePR(repoId: string, prNumber: number) {
     where: { id: pr.id },
     data: { status: 'CLOSED' },
   });
+  // @ts-expect-error pulls module is removed in a later task; ResourceType no longer has pull_request
   await logActivity('pull_request', pr.id, 'closed', pr.authorId, { number: prNumber });
 
   broadcastToRoom(`repo:${repoId}`, { type: 'pr:updated', repoId, prId: pr.id });
@@ -525,6 +527,7 @@ export async function mergePR(
     }
   }
 
+  // @ts-expect-error pulls module is removed in a later task; ResourceType no longer has pull_request
   await logActivity('pull_request', pr.id, 'merged', pr.authorId, {
     number: prNumber,
     strategy: effectiveStrategy,

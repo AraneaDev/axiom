@@ -73,11 +73,6 @@ export const removeMember = asyncHandler(async (req: Request, res: Response) => 
   res.status(204).send();
 });
 
-export const listOpenPRs = asyncHandler(async (req: Request, res: Response) => {
-  const prs = await teamsService.listTeamOpenPRs(param(req, 'teamId'));
-  res.json(prs);
-});
-
 export const getActivity = asyncHandler(async (req: Request, res: Response) => {
   const activity = await teamsService.getTeamActivity(param(req, 'teamId'));
   res.json(activity);

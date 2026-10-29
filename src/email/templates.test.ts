@@ -24,16 +24,6 @@ describe('Email Templates', () => {
       expect(result.subject).toBe('New comment: Test Issue #42');
     });
 
-    it('should render pr_review_requested subject', () => {
-      const result = renderEmailTemplate('pr_review_requested', baseData);
-      expect(result.subject).toBe('Review requested: Test Issue #42');
-    });
-
-    it('should render pr_merged subject', () => {
-      const result = renderEmailTemplate('pr_merged', baseData);
-      expect(result.subject).toBe('Pull request merged: Test Issue #42');
-    });
-
     it('should render mention subject', () => {
       const result = renderEmailTemplate('mention', baseData);
       expect(result.subject).toBe('You were mentioned: Test Issue #42');
@@ -165,16 +155,10 @@ describe('Email Templates', () => {
     });
   });
 
-  // ── All 5 Template Types ──────────────────────────────────
+  // ── All Template Types ──────────────────────────────────
 
   describe('all template types render without error', () => {
-    const types = [
-      'issue_assigned',
-      'issue_commented',
-      'pr_review_requested',
-      'pr_merged',
-      'mention',
-    ];
+    const types = ['issue_assigned', 'issue_commented', 'mention'];
 
     for (const type of types) {
       it(`should render ${type} with all fields`, () => {

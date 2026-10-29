@@ -1,13 +1,7 @@
 import { prisma } from '../../config/database';
 import { parseServicePagination } from '../../utils/pagination';
 
-import { searchCode } from './search-code.service';
-import {
-  searchIssues,
-  searchWiki,
-  searchRepos,
-  parseStructuredQuery,
-} from './search-queries.service';
+import { searchIssues, searchWiki, parseStructuredQuery } from './search-queries.service';
 import type { SearchParams, SearchResultSection } from './search-queries.service';
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -28,7 +22,7 @@ export async function getUserOrgIds(userId: string): Promise<string[]> {
 // ─── Main Search ────────────────────────────────────────────
 
 /**
- * Perform a cross-resource search across issues, wiki pages, repos, and code.
+ * Perform a cross-resource search across issues, and wiki pages.
  * @param params - Search parameters including query, type filter, team/project scope, and pagination
  * @returns Array of result sections by resource type with items and totals
  */
@@ -48,27 +42,11 @@ export async function search(params: SearchParams) {
     results.push(wikiResults);
   }
 
-  if (params.type === 'repos' || params.type === 'all') {
-    const repoResults = await searchRepos(freeText, params);
-    results.push(repoResults);
-  }
-
-  if (params.type === 'code') {
-    const codeResults = await searchCode({
-      q: freeText || params.q,
-      limit: params.limit,
-      userId: params.userId,
-    });
-    results.push(codeResults);
-  }
-
   return results;
 }
 
 // ─── Re-exports ─────────────────────────────────────────────
 
-export { searchCode } from './search-code.service';
-export type { CodeMatch } from './search-code.service';
 export {
   getAccessibleSpaces,
   createSavedSearch,

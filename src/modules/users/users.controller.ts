@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
-import { validate, addSshKeySchema, createApiTokenSchema } from '../../utils/validation';
+import { validate, createApiTokenSchema } from '../../utils/validation';
 
 import * as usersService from './users.service';
 
@@ -27,23 +27,6 @@ export const updateMe = asyncHandler(async (req: Request, res: Response) => {
 export const getDashboard = asyncHandler(async (req: Request, res: Response) => {
   const data = await usersService.getDashboard(req.userId!);
   res.json(data);
-});
-
-// SSH Keys
-export const listSshKeys = asyncHandler(async (req: Request, res: Response) => {
-  const keys = await usersService.listSshKeys(req.userId!);
-  res.json(keys);
-});
-
-export const addSshKey = asyncHandler(async (req: Request, res: Response) => {
-  const data = validate(addSshKeySchema, req.body);
-  const key = await usersService.addSshKey(req.userId!, data);
-  res.status(201).json(key);
-});
-
-export const deleteSshKey = asyncHandler(async (req: Request, res: Response) => {
-  await usersService.deleteSshKey(req.userId!, param(req, 'keyId'));
-  res.status(204).send();
 });
 
 // API Tokens

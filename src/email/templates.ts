@@ -15,8 +15,6 @@ interface RenderedEmail {
 const SUBJECTS: Record<string, (data: TemplateData) => string> = {
   issue_assigned: (d) => `Issue assigned: ${d.title}`,
   issue_commented: (d) => `New comment: ${d.title}`,
-  pr_review_requested: (d) => `Review requested: ${d.title}`,
-  pr_merged: (d) => `Pull request merged: ${d.title}`,
   mention: (d) => `You were mentioned: ${d.title}`,
   password_reset: () => 'Reset your Axiom password',
 };

@@ -225,47 +225,6 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
 }
 
 /**
- * List open pull requests across all repositories in a team.
- * @param teamId - The team ID
- * @returns List of open PRs with repo and author info
- */
-export async function listTeamOpenPRs(teamId: string) {
-  const prs = await prisma.pullRequest.findMany({
-    where: {
-      status: 'OPEN',
-      repo: { teamId },
-    },
-    include: {
-      repo: { select: { id: true, name: true, slug: true } },
-      _count: { select: { reviews: true, comments: true } },
-    },
-    orderBy: { updatedAt: 'desc' },
-    take: 25,
-  });
-
-  // Fetch author info
-  const authorIds = [...new Set(prs.map((pr: (typeof prs)[number]) => pr.authorId))];
-  const authors =
-    authorIds.length > 0
-      ? await prisma.user.findMany({
-          where: { id: { in: authorIds } },
-          select: USER_BASIC_SELECT,
-        })
-      : [];
-  const authorMap = new Map(authors.map((a: (typeof authors)[number]) => [a.id, a] as const));
-
-  return prs.map((pr: (typeof prs)[number]) => ({
-    ...pr,
-    author: authorMap.get(pr.authorId) ?? {
-      id: pr.authorId,
-      displayName: 'Unknown',
-      username: 'unknown',
-      avatarUrl: null,
-    },
-  }));
-}
-
-/**
  * Remove a member from a team.
  * @param teamId - The team ID
  * @param memberId - The user to remove
@@ -282,7 +241,7 @@ export async function removeTeamMember(teamId: string, memberId: string) {
 }
 
 /**
- * Get recent activity across a team's projects and repos.
+ * Get recent activity across a team's projects.
  * @param teamId - The team ID
  * @param rawLimit - Max results (default 20)
  * @returns List of recent activity entries with user info
@@ -314,9 +273,6 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
   const issueIds = activities
     .filter((a: Activity) => a.resourceType === 'issue')
     .map((a: Activity) => a.resourceId);
-  const prIds = activities
-    .filter((a: Activity) => a.resourceType === 'pull_request')
-    .map((a: Activity) => a.resourceId);
   const wikiIds = activities
     .filter((a: Activity) => a.resourceType === 'wiki_page')
     .map((a: Activity) => a.resourceId);
@@ -339,24 +295,6 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
         })
       : [];
 
-  const prSelect = {
-    id: true,
-    number: true,
-    title: true,
-    repo: { select: { slug: true, team: { select: teamOrgSelect } } },
-  } as const;
-  type PRResult = Awaited<
-    ReturnType<typeof prisma.pullRequest.findMany<{ select: typeof prSelect }>>
-  >[number];
-
-  const prs: PRResult[] =
-    prIds.length > 0
-      ? await prisma.pullRequest.findMany({
-          where: { id: { in: prIds } },
-          select: prSelect,
-        })
-      : [];
-
   const wikiSelect = {
     id: true,
     title: true,
@@ -376,7 +314,6 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
       : [];
 
   const issueMap = new Map(issues.map((i: (typeof issues)[number]) => [i.id, i] as const));
-  const prMap = new Map(prs.map((p: (typeof prs)[number]) => [p.id, p] as const));
   const wikiMap = new Map(wikiPages.map((w: (typeof wikiPages)[number]) => [w.id, w] as const));
 
   return activities.map((a: Activity) => {
@@ -390,13 +327,6 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
         resourceTitle = issue.title;
         resourceKey = `${issue.project.prefix}-${issue.number}`;
         resourceLink = `/${issue.project.team.org.slug}/${issue.project.team.slug}/${issue.project.slug}/issues/${issue.number}`;
-      }
-    } else if (a.resourceType === 'pull_request') {
-      const pr = prMap.get(a.resourceId);
-      if (pr) {
-        resourceTitle = pr.title;
-        resourceKey = `#${pr.number}`;
-        resourceLink = `/${pr.repo.team?.org.slug}/${pr.repo.team?.slug}/repos/${pr.repo.slug}/pulls/${pr.number}`;
       }
     } else if (a.resourceType === 'wiki_page') {
       const page = wikiMap.get(a.resourceId);
@@ -414,7 +344,7 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
  * Get a member's profile with stats scoped to a team.
  * @param teamId - The team ID
  * @param username - The member's username
- * @returns Profile info with assigned issues count, open PRs, and recent activity
+ * @returns Profile info with assigned issues count and recent activity
  * @throws {AppError} 404 if user not found or not a team member
  */
 export async function getTeamMemberProfile(teamId: string, username: string) {
@@ -440,31 +370,22 @@ export async function getTeamMemberProfile(teamId: string, username: string) {
     'User is not a member of this team',
   );
 
-  // Get team's projects and repos for scoped stats
+  // Get team's projects for scoped stats
   const team = await prisma.team.findUnique({
     where: { id: teamId },
     select: {
       projects: { select: { id: true } },
-      repos: { select: { id: true } },
     },
   });
 
   const projectIds = team?.projects.map((p: { id: string }) => p.id) ?? [];
-  const repoIds = team?.repos.map((r: { id: string }) => r.id) ?? [];
 
-  const [assignedIssuesCount, openPRsCount, recentActivity] = await Promise.all([
+  const [assignedIssuesCount, recentActivity] = await Promise.all([
     prisma.issue.count({
       where: {
         assigneeId: user.id,
         projectId: { in: projectIds },
         OR: [{ column: { isDone: false } }, { columnId: null }],
-      },
-    }),
-    prisma.pullRequest.count({
-      where: {
-        authorId: user.id,
-        repoId: { in: repoIds },
-        status: 'OPEN',
       },
     }),
     prisma.activity.findMany({
@@ -482,7 +403,6 @@ export async function getTeamMemberProfile(teamId: string, username: string) {
     role: membership.role,
     joinedAt: membership.createdAt,
     assignedIssuesCount,
-    openPRsCount,
     recentActivity,
   };
 }

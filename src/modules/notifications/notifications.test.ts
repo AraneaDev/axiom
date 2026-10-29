@@ -161,19 +161,19 @@ describe('Notifications API', () => {
   // ── Notification Preferences ──────────────────────────────
 
   describe('GET /api/notifications/preferences', () => {
-    it('should return default preferences for all 5 event types', async () => {
+    it('should return default preferences for all 3 event types', async () => {
       const res = await request(app)
         .get('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('preferences');
-      expect(res.body.preferences).toHaveLength(5);
+      expect(res.body.preferences).toHaveLength(3);
 
       const eventTypes = res.body.preferences.map((p: { eventType: string }) => p.eventType);
       expect(eventTypes).toContain('issue_assigned');
       expect(eventTypes).toContain('issue_commented');
-      expect(eventTypes).toContain('pr_review_requested');
-      expect(eventTypes).toContain('pr_merged');
+      expect(eventTypes).not.toContain('pr_review_requested');
+      expect(eventTypes).not.toContain('pr_merged');
       expect(eventTypes).toContain('mention');
 
       for (const pref of res.body.preferences) {
@@ -189,17 +189,17 @@ describe('Notifications API', () => {
         .patch('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`)
         .set('X-Requested-With', 'XMLHttpRequest')
-        .send({ eventType: 'pr_review_requested', email: true });
+        .send({ eventType: 'issue_assigned', email: true });
       expect(res.status).toBe(200);
       expect(res.body.preference.email).toBe(true);
-      expect(res.body.preference.eventType).toBe('pr_review_requested');
+      expect(res.body.preference.eventType).toBe('issue_assigned');
 
       // Verify it persists
       const getRes = await request(app)
         .get('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`);
       const pref = getRes.body.preferences.find(
-        (p: { eventType: string }) => p.eventType === 'pr_review_requested',
+        (p: { eventType: string }) => p.eventType === 'issue_assigned',
       );
       expect(pref.email).toBe(true);
     });
@@ -209,7 +209,7 @@ describe('Notifications API', () => {
         .patch('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`)
         .set('X-Requested-With', 'XMLHttpRequest')
-        .send({ eventType: 'pr_review_requested', email: false });
+        .send({ eventType: 'issue_assigned', email: false });
       expect(res.status).toBe(200);
       expect(res.body.preference.email).toBe(false);
     });
@@ -219,7 +219,7 @@ describe('Notifications API', () => {
         .patch('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`)
         .set('X-Requested-With', 'XMLHttpRequest')
-        .send({ eventType: 'pr_merged', inApp: false, email: true });
+        .send({ eventType: 'issue_commented', inApp: false, email: true });
       expect(res.status).toBe(200);
       expect(res.body.preference.inApp).toBe(false);
       expect(res.body.preference.email).toBe(true);
@@ -229,7 +229,7 @@ describe('Notifications API', () => {
         .patch('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`)
         .set('X-Requested-With', 'XMLHttpRequest')
-        .send({ eventType: 'pr_merged', inApp: true, email: false });
+        .send({ eventType: 'issue_commented', inApp: true, email: false });
     });
 
     it('should update a single preference (disable inApp for mention)', async () => {

@@ -8,13 +8,6 @@ export const createApiTokenSchema = z.object({
   expiresInDays: z.number().int().min(1).max(365).optional(),
 });
 
-// ─── SSH Keys ───────────────────────────────────────────────
-
-export const addSshKeySchema = z.object({
-  title: z.string().min(1).max(100),
-  publicKey: z.string().min(1).max(10_000),
-});
-
 // ─── Wiki ───────────────────────────────────────────────────
 
 export const createWikiSpaceSchema = z.object({

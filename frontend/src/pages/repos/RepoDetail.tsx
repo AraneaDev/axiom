@@ -19,7 +19,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { reposApi, type CommitInfo } from '@/api/repos.api';
-import { siteSettingsApi } from '@/api/site-settings.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -32,7 +31,6 @@ import { RepoSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useRepoContext } from '@/hooks/useRepoContext';
-import { buildSshCloneUrl } from '@/lib/clone-url';
 import { formatRelative } from '@/lib/utils';
 
 import EnvironmentsTab from './EnvironmentsTab';
@@ -139,21 +137,10 @@ export default function RepoDetail() {
     enabled: !!currentRepo?.id && !!readmeEntry,
   });
 
-  const { data: siteSettings } = useQuery({
-    queryKey: ['site-settings'],
-    queryFn: siteSettingsApi.get,
-  });
-
   if (!currentRepo) return <RepoSkeleton />;
   const httpCloneUrl = `${window.location.origin}/git/${org}/${teamSlug}/${repoSlug}.git`;
-  const ssh = siteSettings?.ssh;
-  const sshCloneUrl = ssh?.enabled
-    ? buildSshCloneUrl(
-        ssh.host ?? window.location.hostname,
-        ssh.port,
-        `${org}/${teamSlug}/${repoSlug}`,
-      )
-    : null;
+  // SSH clone URLs are gone with the site-settings ssh block; this page is deleted with the git UI.
+  const sshCloneUrl: string | null = null;
 
   const tabs = [
     { key: 'code', label: 'Files', icon: <FolderOpen className="h-4 w-4" /> },

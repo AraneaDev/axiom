@@ -14,7 +14,7 @@ import {
 
 export interface SearchParams {
   q: string;
-  type: 'issues' | 'wiki' | 'repos' | 'code' | 'all';
+  type: 'issues' | 'wiki' | 'all';
   teamId?: string;
   projectId?: string;
   spaceId?: string;
@@ -406,57 +406,6 @@ export async function searchWiki(
       spaceId: p.spaceId,
       labels: p.pageLabels.map((l: { label: string }) => l.label),
       snippet: '',
-    })),
-  };
-}
-
-// ─── Repo Search ────────────────────────────────────────────
-
-/**
- *
- * @param freeText
- * @param params
- */
-export async function searchRepos(freeText: string, params: SearchParams) {
-  if (!freeText) {
-    return { type: 'repos', items: [], total: 0 };
-  }
-
-  const where: Prisma.RepositoryWhereInput = {
-    OR: [
-      { name: { contains: freeText, mode: 'insensitive' } },
-      { description: { contains: freeText, mode: 'insensitive' } },
-    ],
-    ...(params.orgIds && params.orgIds.length > 0
-      ? { team: { orgId: { in: params.orgIds } } }
-      : {}),
-  };
-
-  const [repos, total] = await Promise.all([
-    prisma.repository.findMany({
-      where,
-      include: {
-        team: { select: { slug: true, org: { select: { slug: true } } } },
-      },
-      take: params.limit,
-      skip: params.offset,
-      orderBy: { updatedAt: 'desc' },
-    }),
-    prisma.repository.count({ where }),
-  ]);
-
-  return {
-    type: 'repos',
-    total,
-    items: repos.map((r: (typeof repos)[number]) => ({
-      id: r.id,
-      name: r.name,
-      slug: r.slug,
-      description: r.description,
-      visibility: r.visibility,
-      defaultBranch: r.defaultBranch,
-      url: `/${r.team.org.slug}/${r.team.slug}/repos/${r.slug}`,
-      updatedAt: r.updatedAt,
     })),
   };
 }

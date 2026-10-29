@@ -131,8 +131,6 @@ describe('Email Queue', () => {
       const cases = [
         { type: 'issue_assigned', expected: 'Issue assigned: Title' },
         { type: 'issue_commented', expected: 'New comment: Title' },
-        { type: 'pr_review_requested', expected: 'Review requested: Title' },
-        { type: 'pr_merged', expected: 'Pull request merged: Title' },
         { type: 'mention', expected: 'You were mentioned: Title' },
       ];
 

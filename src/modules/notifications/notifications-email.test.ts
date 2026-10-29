@@ -127,12 +127,12 @@ describe('Notification Email Enqueue Integration', () => {
   it('should still create notification even if email enqueue fails', async () => {
     process.env.SMTP_HOST = 'localhost';
 
-    await updatePreference(userId, 'pr_merged', { email: true });
+    await updatePreference(userId, 'issue_commented', { email: true });
     mockAdd.mockRejectedValueOnce(new Error('Redis down'));
 
     const notification = await createNotification(
       userId,
-      'pr_merged',
+      'issue_commented',
       'PR merged',
       'Your PR was merged',
       '/pulls/1',
@@ -150,16 +150,10 @@ describe('Notification Email Enqueue Integration', () => {
     delete process.env.SMTP_HOST;
   });
 
-  it('should enqueue for each of the 5 notification types when enabled', async () => {
+  it('should enqueue for each of the 3 notification types when enabled', async () => {
     process.env.SMTP_HOST = 'localhost';
 
-    const types = [
-      'issue_assigned',
-      'issue_commented',
-      'pr_review_requested',
-      'pr_merged',
-      'mention',
-    ];
+    const types = ['issue_assigned', 'issue_commented', 'mention'];
 
     for (const type of types) {
       await updatePreference(userId, type, { email: true });
@@ -175,7 +169,7 @@ describe('Notification Email Enqueue Integration', () => {
       );
     }
 
-    expect(mockAdd).toHaveBeenCalledTimes(5);
+    expect(mockAdd).toHaveBeenCalledTimes(3);
 
     for (let i = 0; i < types.length; i++) {
       expect(mockAdd).toHaveBeenCalledWith(
