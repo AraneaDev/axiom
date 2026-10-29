@@ -45,7 +45,6 @@ Edit `.env` and fill in all `[REQUIRED]` values. Generate secrets with:
 openssl rand -hex 32  # for JWT_SECRET
 openssl rand -hex 32  # for JWT_REFRESH_SECRET
 openssl rand -hex 32  # for REDIS_PASSWORD
-openssl rand -hex 16  # for HOOK_SECRET
 ```
 
 Start the stack:

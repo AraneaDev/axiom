@@ -11,7 +11,7 @@ interface AuthenticatedSocket extends WebSocket {
 
 /**
  * Broadcast an event to all clients subscribed to a given room.
- * Room naming convention: `project:{id}`, `repo:{id}`, `space:{id}`, `user:{id}`
+ * Room naming convention: `project:{id}`, `space:{id}`, `user:{id}`
  * @param room
  * @param event
  */

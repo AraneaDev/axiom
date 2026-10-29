@@ -6,7 +6,7 @@ export const ISSUE_LIST_TTL = 30;
 /** Cache TTL for board queries (seconds) */
 export const BOARD_TTL = 30;
 
-/** Cache TTL for repo/wiki content (seconds) */
+/** Cache TTL for wiki content (seconds) */
 export const CONTENT_TTL = 120;
 
 /**

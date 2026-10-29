@@ -2444,10 +2444,12 @@ Get platform-wide statistics.
 
 ```json
 {
-  "users": { "total": 42, "active": 38 },
-  "orgs": { "total": 5 },
-  "repos": { "total": 23 },
-  "issues": { "total": 1204 }
+  "totalUsers": 42,
+  "totalOrgs": 5,
+  "totalIssues": 1204,
+  "totalWikiPages": 310,
+  "storage": { "storageBytes": 52428800, "totalBytes": 52428800 },
+  "databaseSize": "18 MB"
 }
 ```
 
