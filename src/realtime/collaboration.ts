@@ -4,6 +4,12 @@
  * Implements the Yjs sync protocol manually using y-protocols,
  * handling sync messages and awareness updates between clients.
  *
+ * Message types: 0 sync and 1 awareness (y-protocols); 3 external-change state and 4 lock
+ * state, both a varUint type followed by a varString of JSON:
+ * - 3: `{ state: 'pending', externalVersionId, authorName, at, kind, draftAuthorName?, draftAt? }`
+ *   or `{ state: 'resolved', byName }`
+ * - 4: `{ locked, byName }`
+ *
  * Room naming: `wiki:{pageId}` -- each wiki page gets its own Yjs document.
  */
 
@@ -11,14 +17,18 @@ import { IncomingMessage } from 'http';
 import { createRequire } from 'module';
 import { Duplex } from 'stream';
 
+import type { PendingPageChange } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { WebSocketServer, WebSocket } from 'ws';
 import * as Y from 'yjs';
 
 import { prisma } from '../config/database';
 import { env } from '../config/env';
-import { loadEditorCore } from '../lib/editor-core';
+import { loadEditorCore, markdownToYFragment, yFragmentToMarkdown } from '../lib/editor-core';
 import type { AuthPayload } from '../middleware/auth';
+import { registerExternalChangeHook } from '../modules/wiki/page-writes';
+import { canAccessSpace } from '../modules/wiki/space-permissions.service';
+import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
 import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 
@@ -61,12 +71,27 @@ export function __protocolsForProbe() {
 
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
+const MESSAGE_EXTERNAL_CHANGE = 3;
+const MESSAGE_LOCK = 4;
+
+/** A lock nobody releases (a merge that died half way) frees the room after this long */
+const LOCK_TIMEOUT_MS = 10_000;
+
+/** Transaction origin of content the server itself writes into a room (a merge) */
+const SERVER_ORIGIN = Symbol('collab-server');
 
 interface CollabClient {
   ws: WebSocket;
   userId: string;
   displayName: string;
   clientId: number;
+  /** False for users who may only view the page: their sync updates are dropped */
+  canEdit: boolean;
+}
+
+interface RoomLock {
+  byName: string;
+  timer: ReturnType<typeof setTimeout>;
 }
 
 export interface CollabRoom {
@@ -74,7 +99,26 @@ export interface CollabRoom {
   awareness: InstanceType<typeof import('y-protocols/awareness').Awareness> | null;
   clients: Map<WebSocket, CollabClient>;
   pageId: string;
+  /** Markdown of the doc right after it was loaded or last replaced by the server */
+  loadedBody: string;
+  /** The pending change that already existed when the room loaded (it loaded that change) */
+  pendingIdAtLoad: string | null;
+  /** Highest version number when the room loaded: drafts up to it come from ended sessions */
+  versionAtLoad: number;
+  lock: RoomLock | null;
 }
+
+export type ExternalChangeMessage =
+  | {
+      state: 'pending';
+      externalVersionId: string;
+      authorName: string;
+      at: string;
+      kind: string;
+      draftAuthorName?: string;
+      draftAt?: string;
+    }
+  | { state: 'resolved'; byName: string };
 
 const rooms = new Map<string, CollabRoom>();
 /** In-flight or settled room creation per page, so concurrent first connections share one room */
@@ -138,8 +182,17 @@ async function createRoom(pageId: string): Promise<CollabRoom> {
   const doc = new Y.Doc();
   const awareness = new awarenessProtocol.Awareness(doc);
 
-  // Load existing page content into the doc
+  // Read before the body: a change written in between makes the room look older than it is,
+  // which only means the merge treats the loaded text as the session's own
+  let pendingIdAtLoad: string | null = null;
+  let versionAtLoad = 0;
   try {
+    const [pending, latest] = await Promise.all([
+      prisma.pendingPageChange.findUnique({ where: { pageId }, select: { id: true } }),
+      prisma.pageVersion.aggregate({ where: { pageId }, _max: { version: true } }),
+    ]);
+    pendingIdAtLoad = pending?.id ?? null;
+    versionAtLoad = latest._max.version ?? 0;
     await loadPageIntoDoc(pageId, doc);
   } catch (err) {
     awareness.destroy();
@@ -147,17 +200,22 @@ async function createRoom(pageId: string): Promise<CollabRoom> {
     throw err;
   }
 
-  // Listen for doc updates to schedule persistence
-  doc.on('update', () => {
-    scheduleSave(pageId, doc);
-  });
-
   const room: CollabRoom = {
     doc,
     awareness,
     clients: new Map(),
     pageId,
+    loadedBody: yFragmentToMarkdown(doc.getXmlFragment('default')),
+    pendingIdAtLoad,
+    versionAtLoad,
+    lock: null,
   };
+
+  doc.on('update', (update: Uint8Array, origin: unknown) => {
+    scheduleSave(pageId, doc);
+    // Client updates are forwarded as received; the server's own writes go to everyone
+    if (origin === SERVER_ORIGIN) void broadcastUpdate(room, update);
+  });
 
   rooms.set(pageId, room);
   return room;
@@ -168,7 +226,7 @@ async function createRoom(pageId: string): Promise<CollabRoom> {
  * @param room
  */
 export async function closeRoomForTest(room: CollabRoom): Promise<void> {
-  const client = { ws: {} as WebSocket, userId: '', displayName: '', clientId: 0 };
+  const client = { ws: {} as WebSocket, userId: '', displayName: '', clientId: 0, canEdit: false };
   room.clients.set(client.ws, client);
   await handleDisconnect(room, client);
 }
@@ -179,11 +237,20 @@ export async function closeRoomForTest(room: CollabRoom): Promise<void> {
  */
 export function releaseRoomForTest(pageId: string): void {
   const room = rooms.get(pageId);
+  if (room?.lock) clearTimeout(room.lock.timer);
   room?.awareness?.destroy();
   room?.doc.destroy();
   rooms.delete(pageId);
   roomPromises.delete(pageId);
   clearAuthor(pageId);
+}
+
+/**
+ * Resolves once a room that is closing for the page has finished saving (immediately if none).
+ * @param pageId
+ */
+export function roomSettled(pageId: string): Promise<void> {
+  return (closing.get(pageId) ?? Promise.resolve()).catch(() => undefined);
 }
 
 /**
@@ -198,6 +265,127 @@ function broadcastToRoom(room: CollabRoom, message: Uint8Array, exclude?: WebSoc
       ws.send(message);
     }
   }
+}
+
+/**
+ * Send a Yjs update that the server made to every client.
+ * @param room
+ * @param update
+ */
+async function broadcastUpdate(room: CollabRoom, update: Uint8Array): Promise<void> {
+  const syncProtocol = await getSyncProtocol();
+  const encoding = await getEncoding();
+  const encoder = encoding.createEncoder();
+  encoding.writeVarUint(encoder, MESSAGE_SYNC);
+  syncProtocol.writeUpdate(encoder, update);
+  broadcastToRoom(room, encoding.toUint8Array(encoder));
+}
+
+/**
+ * Encode a JSON state message (type 3 or 4).
+ * @param type
+ * @param payload
+ */
+function encodeJsonMessage(type: number, payload: unknown): Uint8Array {
+  const encoding = requireCjs('lib0/encoding') as typeof import('lib0/encoding');
+  const encoder = encoding.createEncoder();
+  encoding.writeVarUint(encoder, type);
+  encoding.writeVarString(encoder, JSON.stringify(payload));
+  return encoding.toUint8Array(encoder);
+}
+
+/**
+ * Send a JSON state message to one client, or to the whole room when no client is given.
+ * Synchronous, so a lock reaches the clients before the caller goes on.
+ * @param room
+ * @param type
+ * @param payload
+ * @param ws
+ */
+function sendJson(room: CollabRoom, type: number, payload: unknown, ws?: WebSocket): void {
+  const message = encodeJsonMessage(type, payload);
+  if (!ws) {
+    broadcastToRoom(room, message);
+  } else if (ws.readyState === WebSocket.OPEN) {
+    ws.send(message);
+  }
+}
+
+/**
+ * Display name for a user id, as shown in notices.
+ * @param userId
+ */
+async function displayNameOf(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { displayName: true, username: true },
+  });
+  return user?.displayName ?? user?.username ?? 'Unknown';
+}
+
+/**
+ * The type-3 payload for a pending change, seen from a room. When a session that has ended left
+ * an unmerged draft for this change, the payload names its author and time.
+ * @param room
+ * @param pending - The pending row; read from the database when omitted
+ */
+async function pendingPayload(
+  room: CollabRoom,
+  pending?: PendingPageChange | null,
+): Promise<ExternalChangeMessage | null> {
+  const row =
+    pending ?? (await prisma.pendingPageChange.findUnique({ where: { pageId: room.pageId } }));
+  if (!row) return null;
+
+  const [version, authorName, draft] = await Promise.all([
+    prisma.pageVersion.findUnique({
+      where: { id: row.externalVersionId },
+      select: { kind: true, createdAt: true },
+    }),
+    displayNameOf(row.authorId),
+    prisma.pageVersion.findFirst({
+      where: {
+        pageId: room.pageId,
+        kind: 'SESSION_DRAFT',
+        createdAt: { gte: row.createdAt },
+        version: { lte: room.versionAtLoad },
+      },
+      orderBy: { version: 'desc' },
+      select: { createdAt: true, author: { select: { displayName: true, username: true } } },
+    }),
+  ]);
+  if (!version) return null;
+
+  return {
+    state: 'pending',
+    externalVersionId: row.externalVersionId,
+    authorName,
+    at: version.createdAt.toISOString(),
+    kind: version.kind,
+    ...(draft
+      ? {
+          draftAuthorName: draft.author.displayName ?? draft.author.username,
+          draftAt: draft.createdAt.toISOString(),
+        }
+      : {}),
+  };
+}
+
+/**
+ * Tell a live room that an external change is waiting for it. Registered as the write helper's
+ * external-change hook.
+ * @param pageId
+ * @param pending
+ */
+function notifyExternalChange(pageId: string, pending: PendingPageChange): void {
+  const room = rooms.get(pageId);
+  if (!room) return;
+  void (async () => {
+    const payload = await pendingPayload(room, pending);
+    if (payload) sendJson(room, MESSAGE_EXTERNAL_CHANGE, payload);
+  })().catch((err: unknown) =>
+    logger.error('Failed to notify room of external change', { pageId }, err as Error),
+  );
 }
 
 /**
@@ -268,31 +456,28 @@ async function handleMessage(
 
     switch (messageType) {
       case MESSAGE_SYNC: {
-        const encoder = encoding.createEncoder();
-        encoding.writeVarUint(encoder, MESSAGE_SYNC);
-        const syncMessageType = syncProtocol.readSyncMessage(decoder, encoder, room.doc, client);
+        const syncMessageType = decoding.readVarUint(decoder);
 
-        // If the response encoder has content, send it back
-        if (encoding.length(encoder) > 1) {
-          const reply = encoding.toUint8Array(encoder);
+        if (syncMessageType === syncProtocol.messageYjsSyncStep1) {
+          // Anyone may read: answer with what the client is missing
+          const encoder = encoding.createEncoder();
+          encoding.writeVarUint(encoder, MESSAGE_SYNC);
+          syncProtocol.readSyncStep1(decoder, encoder, room.doc);
           if (client.ws.readyState === WebSocket.OPEN) {
-            client.ws.send(reply);
+            client.ws.send(encoding.toUint8Array(encoder));
           }
-        }
-
-        // If we received an update (step 2 or update), broadcast to other clients
-        if (
+        } else if (
           syncMessageType === syncProtocol.messageYjsSyncStep2 ||
           syncMessageType === syncProtocol.messageYjsUpdate
         ) {
+          // Viewers never write, and nobody writes while a merge swaps the content
+          if (!client.canEdit || room.lock) break;
+          syncProtocol.readSyncStep2(decoder, room.doc, client);
+
           // Track the author for persistence attribution
           setLastAuthor(room.pageId, client.userId);
 
-          // Broadcast the update to other clients
-          const updateEncoder = encoding.createEncoder();
-          encoding.writeVarUint(updateEncoder, MESSAGE_SYNC);
-          syncProtocol.writeUpdate(updateEncoder, Y.encodeStateAsUpdate(room.doc));
-          // Actually, we should just forward the original message
+          // Forward the original message to the other clients
           broadcastToRoom(room, data, client.ws);
         }
         break;
@@ -323,6 +508,7 @@ async function handleMessage(
  * @param client
  */
 async function handleDisconnect(room: CollabRoom, client: CollabClient): Promise<void> {
+  if (!room.clients.has(client.ws)) return;
   room.clients.delete(client.ws);
 
   // An emptied room leaves the maps at once, before any await, so a client connecting
@@ -346,12 +532,14 @@ async function handleDisconnect(room: CollabRoom, client: CollabClient): Promise
   }
 
   // Persist and clean up. New rooms for this page wait on `closing`, which is set before
-  // the first await.
+  // the first await. With a change pending, the save is a SESSION_DRAFT and the pending row stays.
   const closed = (async () => {
     try {
       await removeAwareness();
       await forceSave(room.pageId, room.doc);
     } finally {
+      if (room.lock) clearTimeout(room.lock.timer);
+      room.lock = null;
       room.awareness?.destroy();
       room.doc.destroy();
       clearAuthor(room.pageId);
@@ -366,6 +554,121 @@ async function handleDisconnect(room: CollabRoom, client: CollabClient): Promise
 }
 
 /**
+ * Convert a ws message payload to bytes.
+ * @param data
+ */
+function toBytes(data: Buffer | ArrayBuffer | Buffer[]): Uint8Array | null {
+  if (data instanceof Buffer) return new Uint8Array(data);
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (Array.isArray(data)) return new Uint8Array(Buffer.concat(data));
+  return null;
+}
+
+/**
+ * Admit a connection: check access, join the room, sync, and replay lock and pending state.
+ * Messages that arrive while this runs are queued and handled in order once the client joined.
+ * @param ws
+ * @param req
+ */
+async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<void> {
+  const queued: Uint8Array[] = [];
+  let joined: { room: CollabRoom; client: CollabClient } | null = null;
+  let member: { room: CollabRoom; client: CollabClient } | null = null;
+  let closed = false;
+
+  ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
+    const bytes = toBytes(data);
+    if (!bytes) return;
+    if (joined) void handleMessage(joined.room, joined.client, bytes);
+    else queued.push(bytes);
+  });
+  const onClose = () => {
+    if (closed) return;
+    closed = true;
+    if (member) void handleDisconnect(member.room, member.client);
+  };
+  ws.on('close', onClose);
+  ws.on('error', onClose);
+
+  const auth = extractAuth(req);
+  if (!auth) {
+    ws.close(4001, 'Unauthorized');
+    return;
+  }
+
+  // Extract page ID from the URL path: /ws/wiki/{pageId}
+  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+  const pathParts = url.pathname.split('/').filter(Boolean);
+  // Path: ws / wiki / {pageId}
+  const pageId = pathParts[2];
+
+  if (!pageId) {
+    ws.close(4002, 'Missing page ID');
+    return;
+  }
+
+  // Verify the page exists
+  const page = await prisma.page.findUnique({
+    where: { id: pageId },
+    select: { id: true, spaceId: true },
+  });
+  if (!page) {
+    ws.close(4004, ERR.PAGE_NOT_FOUND);
+    return;
+  }
+
+  // The same checks as the REST routes: space access first, then the page's restrictions
+  const [spaceView, pageView] = await Promise.all([
+    canAccessSpace(page.spaceId, auth.userId, 'VIEW'),
+    canViewPage(auth.userId, pageId),
+  ]);
+  if (!spaceView || !pageView) {
+    ws.close(4003, 'Forbidden');
+    return;
+  }
+  const [spaceEdit, pageEdit, displayName] = await Promise.all([
+    canAccessSpace(page.spaceId, auth.userId, 'EDIT'),
+    canEditPage(auth.userId, pageId),
+    displayNameOf(auth.userId),
+  ]);
+  if (closed) return;
+
+  const room = await getOrCreateRoom(pageId);
+
+  const client: CollabClient = {
+    ws,
+    userId: auth.userId,
+    displayName,
+    clientId: room.doc.clientID + room.clients.size + 1,
+    canEdit: spaceEdit && pageEdit,
+  };
+
+  room.clients.set(ws, client);
+  member = { room, client };
+  if (closed) {
+    // Left while the room was loading: run the normal teardown so the room does not linger
+    await handleDisconnect(room, client);
+    return;
+  }
+
+  // Send sync step 1 to the new client (server initiates sync)
+  await sendSyncStep1(room, ws);
+
+  // Send current awareness state to the new client
+  await sendAwareness(room, ws);
+
+  // Late joiners learn about a running merge and a waiting change at once
+  if (room.lock) {
+    sendJson(room, MESSAGE_LOCK, { locked: true, byName: room.lock.byName }, ws);
+  }
+  const pending = await pendingPayload(room);
+  if (pending) sendJson(room, MESSAGE_EXTERNAL_CHANGE, pending, ws);
+
+  for (const bytes of queued.splice(0)) void handleMessage(room, client, bytes);
+  joined = { room, client };
+}
+
+/**
  * Create the collaboration WebSocket server.
  * Returns a handler for the HTTP upgrade event for paths starting with /ws/wiki/.
  */
@@ -373,77 +676,12 @@ export function createCollaborationServer(): {
   handleUpgrade: (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
 } {
   collabWss = new WebSocketServer({ noServer: true });
+  registerExternalChangeHook(notifyExternalChange);
 
-  collabWss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
-    const auth = extractAuth(req);
-    if (!auth) {
-      ws.close(4001, 'Unauthorized');
-      return;
-    }
-
-    // Extract page ID from the URL path: /ws/wiki/{pageId}
-    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
-    const pathParts = url.pathname.split('/').filter(Boolean);
-    // Path: ws / wiki / {pageId}
-    const pageId = pathParts[2];
-
-    if (!pageId) {
-      ws.close(4002, 'Missing page ID');
-      return;
-    }
-
-    // Verify the page exists
-    const page = await prisma.page.findUnique({ where: { id: pageId } });
-    if (!page) {
-      ws.close(4004, ERR.PAGE_NOT_FOUND);
-      return;
-    }
-
-    // Fetch user display name for awareness
-    const user = await prisma.user.findUnique({
-      where: { id: auth.userId },
-      select: { displayName: true, username: true },
-    });
-    const displayName = user?.displayName ?? user?.username ?? 'Unknown';
-
-    const room = await getOrCreateRoom(pageId);
-
-    const client: CollabClient = {
-      ws,
-      userId: auth.userId,
-      displayName,
-      clientId: room.doc.clientID + room.clients.size + 1,
-    };
-
-    room.clients.set(ws, client);
-
-    // Send sync step 1 to the new client (server initiates sync)
-    await sendSyncStep1(room, ws);
-
-    // Send current awareness state to the new client
-    await sendAwareness(room, ws);
-
-    // Handle incoming messages
-    ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
-      let uint8: Uint8Array;
-      if (data instanceof Buffer) {
-        uint8 = new Uint8Array(data);
-      } else if (data instanceof ArrayBuffer) {
-        uint8 = new Uint8Array(data);
-      } else if (Array.isArray(data)) {
-        uint8 = new Uint8Array(Buffer.concat(data));
-      } else {
-        return;
-      }
-      void handleMessage(room, client, uint8);
-    });
-
-    ws.on('close', () => {
-      void handleDisconnect(room, client);
-    });
-
-    ws.on('error', () => {
-      void handleDisconnect(room, client);
+  collabWss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+    acceptConnection(ws, req).catch((err: unknown) => {
+      logger.error('Failed to open collaboration session', {}, err as Error);
+      ws.close(1011, 'Internal error');
     });
   });
 
@@ -469,6 +707,80 @@ export function createCollaborationServer(): {
  */
 export function isRoomLive(pageId: string): boolean {
   return rooms.has(pageId);
+}
+
+/**
+ * The live room for a page, if there is one.
+ * @param pageId
+ */
+export function getLiveRoom(pageId: string): CollabRoom | undefined {
+  return rooms.get(pageId);
+}
+
+/**
+ * The live room's document as Markdown.
+ * @param room
+ */
+export function roomMarkdown(room: CollabRoom): string {
+  return yFragmentToMarkdown(room.doc.getXmlFragment('default'));
+}
+
+/**
+ * Lock a live room: every client goes read-only and their sync updates are dropped until the
+ * returned release is called, or after 10 seconds.
+ * @param pageId
+ * @param byName - Shown to the clients as who is merging
+ * @returns The release function; a no-op when no room is live; null when the room is already
+ *   locked
+ */
+export function lockRoom(pageId: string, byName: string): (() => void) | null {
+  const room = rooms.get(pageId);
+  if (!room) return () => undefined;
+  if (room.lock) return null;
+
+  const release = () => {
+    if (room.lock !== lock) return;
+    clearTimeout(lock.timer);
+    room.lock = null;
+    sendJson(room, MESSAGE_LOCK, { locked: false, byName });
+  };
+  const lock: RoomLock = { byName, timer: setTimeout(release, LOCK_TIMEOUT_MS) };
+  room.lock = lock;
+  sendJson(room, MESSAGE_LOCK, { locked: true, byName });
+  return release;
+}
+
+/**
+ * Whether the page's live room is locked for a merge.
+ * @param pageId
+ */
+export function isRoomLocked(pageId: string): boolean {
+  return Boolean(rooms.get(pageId)?.lock);
+}
+
+/**
+ * Replace the live room's content with the Markdown, in one Yjs transaction that every client
+ * receives. The room then treats that Markdown as its loaded state.
+ * @param room
+ * @param markdown - Normalised Markdown
+ */
+export function replaceRoomContent(room: CollabRoom, markdown: string): void {
+  room.doc.transact(() => {
+    markdownToYFragment(markdown, room.doc.getXmlFragment('default'));
+  }, SERVER_ORIGIN);
+  room.loadedBody = roomMarkdown(room);
+  room.pendingIdAtLoad = null;
+}
+
+/**
+ * Tell every client in the page's live room that the pending change was merged.
+ * @param pageId
+ * @param byName
+ */
+export function announceMergeResolved(pageId: string, byName: string): void {
+  const room = rooms.get(pageId);
+  if (!room) return;
+  sendJson(room, MESSAGE_EXTERNAL_CHANGE, { state: 'resolved', byName });
 }
 
 /**

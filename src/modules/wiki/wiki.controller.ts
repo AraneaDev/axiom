@@ -11,6 +11,7 @@ import {
   reorderPageSchema,
   copyPageSchema,
   restoreVersionSchema,
+  applyMergeSchema,
 } from '../../utils/validation';
 
 import * as wikiExportService from './wiki-export.service';
@@ -67,6 +68,26 @@ export const flushPageSession = asyncHandler(async (req: Request, res: Response)
     req.userId!,
   );
   res.json(result);
+});
+
+export const getPendingMerge = asyncHandler(async (req: Request, res: Response) => {
+  const merge = await wikiService.getPagePendingMerge(
+    param(req, 'spaceId'),
+    param(req, 'pageSlug'),
+    req.userId!,
+  );
+  res.json(merge);
+});
+
+export const applyMerge = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(applyMergeSchema, req.body);
+  await wikiService.applyPageMerge(
+    param(req, 'spaceId'),
+    param(req, 'pageSlug'),
+    req.userId!,
+    data,
+  );
+  res.status(204).send();
 });
 
 export const deletePage = asyncHandler(async (req: Request, res: Response) => {

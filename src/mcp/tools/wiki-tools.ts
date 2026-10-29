@@ -159,7 +159,7 @@ export function registerWikiTools(ctx: McpToolContext) {
           { kind: 'EXTERNAL', source: 'mcp' },
         );
         const note = updated.pendingMerge
-          ? 'Queued: the page is open in a live editing session, so Page.body is unchanged until the session merges this change. The normalised text stored is in queuedBody.\n'
+          ? 'Saved, and the page is open in a live editing session: Page.body holds this change, and the session will merge it with its own edits (externalVersionId).\n'
           : '';
         return {
           content: [{ type: 'text' as const, text: note + JSON.stringify(updated, null, 2) }],

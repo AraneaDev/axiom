@@ -1,0 +1,338 @@
+import bcrypt from 'bcryptjs';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import WebSocket from 'ws';
+
+import { prisma } from '../config/database';
+import { yFragmentToMarkdown } from '../lib/editor-core';
+import { writePageBody } from '../modules/wiki/page-writes';
+import {
+  appendParagraph,
+  CollabTestClient,
+  CollabTestServer,
+  connectCollabClient,
+  startCollabTestServer,
+  waitFor,
+} from '../test/collab-client';
+
+import {
+  flushRoom,
+  getOrCreateRoom,
+  isRoomLive,
+  isRoomLocked,
+  lockRoom,
+  releaseRoomForTest,
+  roomSettled,
+} from './collaboration';
+
+describe('Collaboration server', () => {
+  const SLUG = 'collab-test';
+  let server: CollabTestServer;
+  let orgId: string;
+  let spaceId: string;
+  let pageId: string;
+  const users: Record<'owner' | 'editor' | 'viewer' | 'outsider', string> = {
+    owner: '',
+    editor: '',
+    viewer: '',
+    outsider: '',
+  };
+  const clients: CollabTestClient[] = [];
+
+  beforeAll(async () => {
+    const passwordHash = await bcrypt.hash('testpassword123', 4);
+    for (const key of Object.keys(users) as Array<keyof typeof users>) {
+      const user = await prisma.user.upsert({
+        where: { username: `${SLUG}-${key}` },
+        update: {},
+        create: {
+          email: `${SLUG}-${key}@axiom.dev`,
+          username: `${SLUG}-${key}`,
+          displayName: `Collab ${key}`,
+          passwordHash,
+        },
+      });
+      users[key] = user.id;
+    }
+    const org = await prisma.organization.create({
+      data: {
+        name: 'Collab Test Org',
+        slug: `${SLUG}-org`,
+        members: { create: { userId: users.owner, role: 'OWNER' } },
+      },
+    });
+    orgId = org.id;
+    const team = await prisma.team.create({
+      data: {
+        orgId,
+        name: 'Collab Team',
+        slug: `${SLUG}-team`,
+        members: {
+          create: [
+            { userId: users.editor, role: 'MEMBER' },
+            { userId: users.viewer, role: 'MEMBER' },
+          ],
+        },
+      },
+    });
+    const space = await prisma.wikiSpace.create({
+      data: {
+        teamId: team.id,
+        name: 'Collab Space',
+        slug: `${SLUG}-space`,
+        // Custom permissions: only listed users get in, the viewer only to read
+        permissions: {
+          create: [
+            { userId: users.editor, level: 'EDIT' },
+            { userId: users.viewer, level: 'VIEW' },
+          ],
+        },
+      },
+    });
+    spaceId = space.id;
+    server = await startCollabTestServer();
+  });
+
+  beforeEach(async () => {
+    await prisma.page.deleteMany({ where: { spaceId } });
+    const page = await prisma.page.create({
+      data: { spaceId, title: 'Collab Page', slug: 'collab-page', body: 'Original body' },
+    });
+    pageId = page.id;
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await Promise.all(clients.splice(0).map((c) => c.close()));
+    await waitFor(() => !isRoomLive(pageId));
+    await roomSettled(pageId);
+  });
+
+  afterAll(async () => {
+    await server.close();
+    await prisma.organization.delete({ where: { id: orgId } });
+    await prisma.user.deleteMany({ where: { username: { startsWith: `${SLUG}-` } } });
+  });
+
+  const connect = async (who: keyof typeof users) => {
+    const client = connectCollabClient(server, pageId, users[who]);
+    clients.push(client);
+    await client.synced;
+    return client;
+  };
+
+  const roomMarkdown = async () =>
+    yFragmentToMarkdown((await getOrCreateRoom(pageId)).doc.getXmlFragment('default'));
+
+  const externalWrite = (body: string) =>
+    writePageBody({ pageId, authorId: users.owner, body, kind: 'EXTERNAL', source: 'mcp' });
+
+  it('closes with 4003 for a user without access to the space', async () => {
+    const client = connectCollabClient(server, pageId, users.outsider);
+    clients.push(client);
+    expect(await client.closeCode).toBe(4003);
+  });
+
+  it('closes with 4003 for a user the page hides', async () => {
+    await prisma.pageRestriction.create({
+      data: { pageId, type: 'VIEW', userId: users.owner },
+    });
+    const client = connectCollabClient(server, pageId, users.editor);
+    clients.push(client);
+    expect(await client.closeCode).toBe(4003);
+  });
+
+  it('viewer cannot push updates', async () => {
+    const viewer = await connect('viewer');
+    const editor = await connect('editor');
+
+    appendParagraph(viewer.doc, 'from viewer');
+    appendParagraph(editor.doc, 'from editor');
+
+    // The viewer still receives the editor's update
+    await waitFor(() =>
+      yFragmentToMarkdown(viewer.doc.getXmlFragment('default')).includes('from editor'),
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    const stored = await roomMarkdown();
+    expect(stored).toContain('from editor');
+    expect(stored).not.toContain('from viewer');
+    expect(yFragmentToMarkdown(editor.doc.getXmlFragment('default'))).not.toContain('from viewer');
+  });
+
+  it('a page EDIT restriction makes a space editor read-only', async () => {
+    await prisma.pageRestriction.create({ data: { pageId, type: 'EDIT', userId: users.owner } });
+    const editor = await connect('editor');
+    appendParagraph(editor.doc, 'restricted');
+    await new Promise((r) => setTimeout(r, 150));
+    expect(await roomMarkdown()).not.toContain('restricted');
+  });
+
+  it('external change notifies the room once and replays on connect', async () => {
+    const first = await connect('editor');
+    const result = await externalWrite('Agent body');
+    expect(result.pendingMerge).toBe(true);
+
+    await waitFor(() => first.changeMessages.length > 0);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(first.changeMessages).toHaveLength(1);
+    expect(first.changeMessages[0]).toMatchObject({
+      state: 'pending',
+      externalVersionId: result.version!.id,
+      authorName: 'Collab owner',
+      kind: 'EXTERNAL',
+    });
+    expect(typeof first.changeMessages[0].at).toBe('string');
+    expect(first.changeMessages[0].draftAuthorName).toBeUndefined();
+
+    const late = await connect('viewer');
+    await waitFor(() => late.changeMessages.length > 0);
+    expect(late.changeMessages).toEqual([first.changeMessages[0]]);
+  });
+
+  it('replay after an ended session includes draftAuthorName and draftAt', async () => {
+    const session = await connect('editor');
+    appendParagraph(session.doc, 'session work');
+    await waitFor(async () => (await roomMarkdown()).includes('session work'));
+    await externalWrite('Agent body');
+    await session.close();
+    clients.splice(clients.indexOf(session), 1);
+    await waitFor(() => !isRoomLive(pageId));
+    await roomSettled(pageId);
+
+    const draft = await prisma.pageVersion.findFirstOrThrow({
+      where: { pageId, kind: 'SESSION_DRAFT' },
+    });
+    const next = await connect('owner');
+    await waitFor(() => next.changeMessages.length > 0);
+    expect(next.changeMessages[0]).toMatchObject({
+      state: 'pending',
+      draftAuthorName: 'Collab editor',
+      draftAt: draft.createdAt.toISOString(),
+    });
+    // The new session opens from Page.body, which is the agent's version
+    expect(yFragmentToMarkdown(next.doc.getXmlFragment('default'))).toBe('Agent body');
+  });
+
+  it('three external writes leave one pending row with the last version', async () => {
+    const client = await connect('editor');
+    await externalWrite('Agent one');
+    await externalWrite('Agent two');
+    const last = await externalWrite('Agent three');
+
+    const rows = await prisma.pendingPageChange.findMany({ where: { pageId } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].externalVersionId).toBe(last.version!.id);
+    expect(rows[0].baseBody).toBe('Original body');
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
+      'Agent three',
+    );
+    await waitFor(() => client.changeMessages.length === 3);
+    expect(client.changeMessages[2].externalVersionId).toBe(last.version!.id);
+  });
+
+  it('autosave while pending writes SESSION_DRAFT and keeps Page.body', async () => {
+    const client = await connect('editor');
+    await externalWrite('Agent body');
+    appendParagraph(client.doc, 'typed while pending');
+    await waitFor(async () => (await roomMarkdown()).includes('typed while pending'));
+
+    expect(await flushRoom(pageId)).toBe(true);
+
+    const page = await prisma.page.findUniqueOrThrow({ where: { id: pageId } });
+    expect(page.body).toBe('Agent body');
+    const drafts = await prisma.pageVersion.findMany({ where: { pageId, kind: 'SESSION_DRAFT' } });
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].body).toBe('Original body\n\ntyped while pending');
+    expect(drafts[0].authorId).toBe(users.editor);
+    // Saving the same state again adds nothing
+    await flushRoom(pageId);
+    expect(await prisma.pageVersion.count({ where: { pageId, kind: 'SESSION_DRAFT' } })).toBe(1);
+    expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(1);
+  });
+
+  it('disconnect while pending saves a draft and keeps the pending row', async () => {
+    const client = await connect('editor');
+    await externalWrite('Agent body');
+    appendParagraph(client.doc, 'last words');
+    await waitFor(async () => (await roomMarkdown()).includes('last words'));
+
+    await client.close();
+    clients.splice(clients.indexOf(client), 1);
+    await waitFor(() => !isRoomLive(pageId));
+    await roomSettled(pageId);
+
+    const page = await prisma.page.findUniqueOrThrow({ where: { id: pageId } });
+    expect(page.body).toBe('Agent body');
+    const draft = await prisma.pageVersion.findFirstOrThrow({
+      where: { pageId, kind: 'SESSION_DRAFT' },
+    });
+    expect(draft.body).toBe('Original body\n\nlast words');
+    expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(1);
+  });
+
+  it('a session opened after the change writes no draft without edits', async () => {
+    const session = await connect('editor');
+    await externalWrite('Agent body');
+    await session.close();
+    clients.splice(clients.indexOf(session), 1);
+    await waitFor(() => !isRoomLive(pageId));
+    await roomSettled(pageId);
+
+    const reopened = await connect('editor');
+    await reopened.close();
+    clients.splice(clients.indexOf(reopened), 1);
+    await waitFor(() => !isRoomLive(pageId));
+    await roomSettled(pageId);
+    expect(await prisma.pageVersion.count({ where: { pageId, kind: 'SESSION_DRAFT' } })).toBe(0);
+  });
+
+  it('a locked room drops updates and tells clients', async () => {
+    const editor = await connect('editor');
+    const release = lockRoom(pageId, 'Collab owner');
+    expect(release).not.toBeNull();
+    await waitFor(() => editor.lockMessages.length > 0);
+    expect(editor.lockMessages[0]).toEqual({ locked: true, byName: 'Collab owner' });
+
+    appendParagraph(editor.doc, 'typed while locked');
+    await new Promise((r) => setTimeout(r, 150));
+    expect(await roomMarkdown()).not.toContain('typed while locked');
+    // A second lock while one is held is refused
+    expect(lockRoom(pageId, 'Someone else')).toBeNull();
+
+    // A client joining during the lock is told at once
+    const late = await connect('viewer');
+    await waitFor(() => late.lockMessages.length > 0);
+    expect(late.lockMessages[0]).toEqual({ locked: true, byName: 'Collab owner' });
+
+    release!();
+    await waitFor(() => editor.lockMessages.length > 1);
+    expect(editor.lockMessages[1]).toEqual({ locked: false, byName: 'Collab owner' });
+    expect(isRoomLocked(pageId)).toBe(false);
+  });
+
+  it('lock releases after 10s without apply', async () => {
+    const room = await getOrCreateRoom(pageId);
+    const sent: Uint8Array[] = [];
+    const fakeWs = { readyState: WebSocket.OPEN, send: (m: Uint8Array) => sent.push(m) };
+    room.clients.set(fakeWs as unknown as WebSocket, {
+      ws: fakeWs as unknown as WebSocket,
+      userId: users.editor,
+      displayName: 'Fake',
+      clientId: 1,
+      canEdit: true,
+    });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      expect(lockRoom(pageId, 'Collab owner')).not.toBeNull();
+      expect(isRoomLocked(pageId)).toBe(true);
+      vi.advanceTimersByTime(9_999);
+      expect(isRoomLocked(pageId)).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(isRoomLocked(pageId)).toBe(false);
+      expect(sent).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+      releaseRoomForTest(pageId);
+    }
+  });
+});

@@ -12,6 +12,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
+import { applyMerge, getPendingMerge } from './page-merge';
 import { createPageVersion } from './page-versions';
 import { writePageBody } from './page-writes';
 import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
@@ -274,10 +275,8 @@ export async function updatePage(
   return {
     ...updated,
     pendingMerge: written.pendingMerge,
-    // What was stored for the open session to merge, after normalisation
-    ...(written.pendingMerge && written.version
-      ? { queuedBody: written.version.body, externalVersionId: written.version.id }
-      : {}),
+    // The change the open session will merge; Page.body already holds it
+    ...(written.externalVersionId ? { externalVersionId: written.externalVersionId } : {}),
   };
 }
 
@@ -298,6 +297,58 @@ export async function flushPageSession(spaceId: string, pageSlug: string, userId
     throw new AppError(403, 'You do not have permission to edit this page');
   }
   return { flushed: await flushRoom(page.id) };
+}
+
+/**
+ * Resolve a page by slug and require edit permission on it.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @param userId - The user
+ * @returns The page id
+ * @throws {AppError} 404 if page not found, 403 if the user may not edit it
+ */
+async function editablePageId(spaceId: string, pageSlug: string, userId: string) {
+  const page = await findOrThrow(
+    prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId, slug: pageSlug } },
+      select: { id: true },
+    }),
+    ERR.PAGE_NOT_FOUND,
+  );
+  if (!(await canEditPage(userId, page.id))) {
+    throw new AppError(403, 'You do not have permission to edit this page');
+  }
+  return page.id;
+}
+
+/**
+ * The base, theirs and ours texts for merging a page's pending external change.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @param userId - The user who will merge
+ * @returns The merge input, or null when nothing is pending
+ */
+export async function getPagePendingMerge(spaceId: string, pageSlug: string, userId: string) {
+  return getPendingMerge(await editablePageId(spaceId, pageSlug, userId), userId);
+}
+
+/**
+ * Apply a merged body for a page's pending external change.
+ * @param spaceId - The wiki space ID
+ * @param pageSlug - The page slug within the space
+ * @param userId - The user merging
+ * @param data - The external version merged against and the merged Markdown
+ * @param data.externalVersionId
+ * @param data.markdown
+ * @throws {AppError} 409 when the pending change is no longer the one merged against
+ */
+export async function applyPageMerge(
+  spaceId: string,
+  pageSlug: string,
+  userId: string,
+  data: { externalVersionId: string; markdown: string },
+) {
+  await applyMerge(await editablePageId(spaceId, pageSlug, userId), userId, data);
 }
 
 /**

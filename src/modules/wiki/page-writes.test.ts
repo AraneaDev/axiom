@@ -89,13 +89,14 @@ describe('writePageBody', () => {
     expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
   });
 
-  it('external write with a live room records a pending change and keeps Page.body', async () => {
+  it('external write with a live room records a pending change and stores theirs as Page.body', async () => {
     const notified: string[] = [];
     registerExternalChangeHook((id) => notified.push(id));
     const result = await write('Changed outside', live);
     expect(result.pendingMerge).toBe(true);
+    expect(result.externalVersionId).toBe(result.version!.id);
     const page = await prisma.page.findUniqueOrThrow({ where: { id: pageId } });
-    expect(page.body).toBe('Original body');
+    expect(page.body).toBe('Changed outside');
     const pending = await prisma.pendingPageChange.findUniqueOrThrow({ where: { pageId } });
     expect(pending.baseBody).toBe('Original body');
     expect(pending.externalVersionId).toBe(result.version!.id);
@@ -143,11 +144,31 @@ describe('writePageBody', () => {
     expect(external).toBe(2);
   });
 
-  it('an identical repeat of the queued body creates no new version', async () => {
-    await write('First change', live);
+  it('an identical repeat of the queued body creates no new version but reports the pending state', async () => {
+    const notified: string[] = [];
+    registerExternalChangeHook((id) => notified.push(id));
+    const first = await write('First change', live);
     const again = await write('First change', live);
     expect(again.version).toBeNull();
+    expect(again.pendingMerge).toBe(true);
+    expect(again.externalVersionId).toBe(first.version!.id);
+    expect(again.page.body).toBe('First change');
+    expect(notified).toHaveLength(1);
     expect(await prisma.pageVersion.count({ where: { pageId, kind: 'EXTERNAL' } })).toBe(1);
+  });
+
+  it('a write after the session ended moves a pending change to the newest version', async () => {
+    const first = await write('First change', live);
+    const later = await write('Later change', notLive);
+    expect(later.pendingMerge).toBe(true);
+    expect(later.externalVersionId).toBe(later.version!.id);
+    const pending = await prisma.pendingPageChange.findUniqueOrThrow({ where: { pageId } });
+    expect(pending.externalVersionId).not.toBe(first.version!.id);
+    expect(pending.externalVersionId).toBe(later.version!.id);
+    expect(pending.baseBody).toBe('Original body');
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
+      'Later change',
+    );
   });
 
   it('restore with a live room records a pending RESTORE change', async () => {
@@ -171,10 +192,12 @@ describe('writePageBody', () => {
       include: { externalVersion: true },
     });
     expect(pending.externalVersion.kind).toBe('RESTORE');
+    expect(pending.baseBody).toBe('Original body');
     expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
-      'Original body',
+      'Older body',
     );
-    // restoreVersion with no live room still goes through the same helper
+    // restoreVersion with no live room and nothing pending still goes through the same helper
+    await prisma.pendingPageChange.deleteMany({ where: { pageId } });
     const restored = await restoreVersion(spaceId, 'pw-page', 1, userId);
     expect(restored.pendingMerge).toBe(false);
   });

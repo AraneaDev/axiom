@@ -27,7 +27,10 @@ export interface WritePageBodyInput {
 export interface WritePageBodyResult {
   page: Page;
   version: PageVersion | null;
+  /** True while an external change waits for the live session to merge it */
   pendingMerge: boolean;
+  /** The external version the session will merge, when pendingMerge is true */
+  externalVersionId?: string;
 }
 
 /** Dependencies that tests may replace; production uses the live collaboration registry. */
@@ -50,15 +53,49 @@ export function resetExternalChangeHooksForTest(): void {
  * @param fn - Called after the pending change is committed
  */
 export function registerExternalChangeHook(fn: ExternalChangeHook): void {
-  externalChangeHooks.push(fn);
+  if (!externalChangeHooks.includes(fn)) externalChangeHooks.push(fn);
+}
+
+/** Replaceable issue-link sync (tests); production extracts the issue ids from the body. */
+export type SyncIssueLinks = (pageId: string, body: string, authorId: string) => Promise<void>;
+
+const defaultSyncIssueLinks: SyncIssueLinks = async (pageId, body, authorId) => {
+  const issueIds = await extractIssueIdsFromContent(body);
+  await syncMentionLinks(pageId, issueIds, authorId);
+};
+
+/**
+ * What every page write does after its transaction: invalidate the tree cache, sync issue links
+ * for a body that was written, and tell the space's subscribers.
+ * @param page - The written page
+ * @param page.id
+ * @param page.spaceId
+ * @param authorId - Who wrote it
+ * @param writtenBody - The body stored in Page.body, or null when the body was not written
+ * @param syncIssueLinks - Link sync (tests may replace it)
+ */
+export async function finishPageWrite(
+  page: { id: string; spaceId: string },
+  authorId: string,
+  writtenBody: string | null,
+  syncIssueLinks: SyncIssueLinks = defaultSyncIssueLinks,
+): Promise<void> {
+  await cacheInvalidate(`wiki:tree:${page.spaceId}`);
+  if (writtenBody !== null) await syncIssueLinks(page.id, writtenBody, authorId);
+  broadcastToRoom(`space:${page.spaceId}`, {
+    type: 'wiki:updated',
+    spaceId: page.spaceId,
+    pageId: page.id,
+  });
 }
 
 /**
  * The single write path for page bodies outside the collaborative editor.
  *
- * Non-body fields apply immediately. A body change from anything but an editor session, while a
- * collaboration room is live for the page, is recorded as a pending change and leaves Page.body
- * alone, so the open session can merge it. Otherwise Page.body and a version are written.
+ * Non-body fields apply immediately, and a body change always lands in Page.body plus a version,
+ * so readers see the latest stored text. When it comes from anything but an editor session while
+ * a collaboration room is live for the page, it is also recorded as a pending change: the room
+ * keeps the session's text and merges the change later, against the body it replaced.
  * @param input - What to write and who is writing it
  * @param deps - Replaceable dependencies (tests)
  * @returns The page, the version created (if any) and whether a merge is pending
@@ -76,27 +113,24 @@ export async function writePageBody(
     const current = await tx.page.findUniqueOrThrow({ where: { id: input.pageId } });
 
     const newTitle = input.title ?? current.title;
-    // While a change is queued for a live room, external writes compare against the queued body,
-    // not Page.body: otherwise a revert to the base would look like "no change"
-    const deferrable = input.source !== 'editor-session' && roomLive(input.pageId);
-    const existingPending = deferrable
-      ? await tx.pendingPageChange.findUnique({
-          where: { pageId: input.pageId },
-          include: { externalVersion: { select: { body: true } } },
-        })
-      : null;
-    const head = existingPending ? existingPending.externalVersion.body : current.body;
-    const bodyChanged = normalizedBody !== undefined && normalizedBody !== head;
+    // A change waiting for a merge outlives its session (the draft is merged later), so a write
+    // must keep the pending row pointing at the newest body even when no room is live
+    const existingPending =
+      input.source !== 'editor-session'
+        ? await tx.pendingPageChange.findUnique({ where: { pageId: input.pageId } })
+        : null;
+    const deferrable =
+      input.source !== 'editor-session' && (existingPending !== null || roomLive(input.pageId));
+    const bodyChanged = normalizedBody !== undefined && normalizedBody !== current.body;
     const newBody = bodyChanged ? normalizedBody : current.body;
     // A restore is a history event even when the content happens to match the head
     const versionedChange = newTitle !== current.title || bodyChanged || input.kind === 'RESTORE';
-    const defer = bodyChanged && deferrable;
 
     const page = await tx.page.update({
       where: { id: input.pageId },
       data: {
         title: newTitle,
-        ...(bodyChanged && !defer ? { body: newBody } : {}),
+        ...(bodyChanged ? { body: newBody } : {}),
         parentId: input.parentId !== undefined ? input.parentId : current.parentId,
         isDraft: input.isDraft !== undefined ? input.isDraft : current.isDraft,
       },
@@ -115,7 +149,8 @@ export async function writePageBody(
     }
 
     let pending: PendingPageChange | null = null;
-    if (defer && version) {
+    let notify = false;
+    if (deferrable && bodyChanged && version) {
       pending = await tx.pendingPageChange.upsert({
         where: { pageId: input.pageId },
         create: {
@@ -124,29 +159,27 @@ export async function writePageBody(
           externalVersionId: version.id,
           authorId: input.authorId,
         },
-        // baseBody stays: it is the body the open session last saw
+        // baseBody stays: it is the body the open session last had in sync with the database
         update: { externalVersionId: version.id, authorId: input.authorId },
       });
+      notify = true;
+    } else {
+      // Nothing new to merge, but a change may already be waiting: report it
+      pending = existingPending;
     }
-    return { page, version, pending, bodyWritten: bodyChanged && !defer, newBody };
+    return { page, version, pending, notify, newBody: bodyChanged ? newBody : null };
   });
 
-  await cacheInvalidate(`wiki:tree:${result.page.spaceId}`);
+  await finishPageWrite(result.page, input.authorId, result.newBody);
 
-  if (result.bodyWritten) {
-    const issueIds = await extractIssueIdsFromContent(result.newBody);
-    await syncMentionLinks(input.pageId, issueIds, input.authorId);
-  }
-
-  broadcastToRoom(`space:${result.page.spaceId}`, {
-    type: 'wiki:updated',
-    spaceId: result.page.spaceId,
-    pageId: input.pageId,
-  });
-
-  if (result.pending) {
+  if (result.pending && result.notify) {
     for (const hook of externalChangeHooks) hook(input.pageId, result.pending);
   }
 
-  return { page: result.page, version: result.version, pendingMerge: result.pending !== null };
+  return {
+    page: result.page,
+    version: result.version,
+    pendingMerge: result.pending !== null,
+    ...(result.pending ? { externalVersionId: result.pending.externalVersionId } : {}),
+  };
 }

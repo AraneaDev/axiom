@@ -100,6 +100,18 @@ router.post(
   requireSpacePermission('EDIT'),
   wikiController.flushPageSession,
 );
+router.get(
+  '/spaces/:spaceId/pages/:pageSlug/pending-merge',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('EDIT'),
+  wikiController.getPendingMerge,
+);
+router.post(
+  '/spaces/:spaceId/pages/:pageSlug/merge',
+  requireWikiSpaceAccess(),
+  requireSpacePermission('EDIT'),
+  wikiController.applyMerge,
+);
 router.delete(
   '/spaces/:spaceId/pages/:pageSlug',
   requireWikiSpaceAccess(),

@@ -46,6 +46,11 @@ export const restoreVersionSchema = z.object({
   version: z.number().int().min(1),
 });
 
+export const applyMergeSchema = z.object({
+  externalVersionId: z.string().min(1),
+  markdown: z.string().max(500_000),
+});
+
 // ─── Wiki Templates ─────────────────────────────────────────
 
 export const createPageTemplateSchema = z.object({

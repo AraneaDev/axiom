@@ -53,8 +53,21 @@ export async function loadPageIntoDoc(pageId: string, doc: Y.Doc): Promise<void>
 }
 
 /**
+ * Record the Markdown the session and the database agree on, after the room's content was
+ * replaced from the server (a merge). Saves skip while the doc still equals it.
+ * @param pageId
+ * @param markdown
+ */
+export function setLoadedSnapshot(pageId: string, markdown: string): void {
+  loadedSnapshots.set(pageId, markdown);
+}
+
+/**
  * Persist the Yjs doc content back to the wiki page in the database.
- * Creates a new page version for history tracking.
+ *
+ * Normally this writes Page.body plus an EDIT version. While an external change is pending,
+ * Page.body holds that change until someone merges it, so the session's state is kept as a
+ * SESSION_DRAFT version only.
  * @param pageId
  * @param doc
  */
@@ -66,10 +79,28 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<void> {
 
   try {
     const saved = await prisma.$transaction(async (tx) => {
-      // Lock first, then check against the fresh row
+      // Lock first, then check against the fresh rows
       await lockPage(tx, pageId);
       const page = await tx.page.findUnique({ where: { id: pageId } });
       if (!page) return false;
+
+      const pending = await tx.pendingPageChange.findUnique({
+        where: { pageId },
+        select: { id: true },
+      });
+      if (pending) {
+        // Page.body is the external change here, not the session's state: compare only with
+        // what this session last loaded or saved
+        if (loadedSnapshots.get(pageId) === body) return false;
+        await createPageVersion(tx, {
+          pageId: page.id,
+          title: page.title,
+          body,
+          authorId,
+          kind: 'SESSION_DRAFT',
+        });
+        return true;
+      }
 
       // Skip if content hasn't changed, or is still exactly what was loaded into the doc
       if (page.body === body || loadedSnapshots.get(pageId) === body) return false;

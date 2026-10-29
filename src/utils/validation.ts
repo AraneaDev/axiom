@@ -57,5 +57,6 @@ export {
   reorderPageSchema,
   copyPageSchema,
   restoreVersionSchema,
+  applyMergeSchema,
   setRestrictionsSchema,
 } from './validation/user-validators';
