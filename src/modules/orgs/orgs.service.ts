@@ -75,9 +75,14 @@ export async function getOrg(orgId: string, viewerId?: string) {
     ERR.ORGANIZATION_NOT_FOUND,
   );
   if (!viewerId) return org;
-  // Emails are for org OWNERs and ADMINs; a GUEST only sees the teams they belong to
+  // Emails are for org OWNERs and ADMINs and platform admins; a GUEST only sees the teams
+  // they belong to
   const role = org.members.find((m) => m.userId === viewerId)?.role;
-  const admin = role === 'OWNER' || role === 'ADMIN';
+  const viewer = await prisma.user.findUnique({
+    where: { id: viewerId },
+    select: { isAdmin: true },
+  });
+  const admin = role === 'OWNER' || role === 'ADMIN' || viewer?.isAdmin === true;
   return {
     ...org,
     teams: org.teams

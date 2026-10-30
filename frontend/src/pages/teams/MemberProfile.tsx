@@ -139,10 +139,13 @@ export default function MemberProfile() {
           {/* Details */}
           <Card className="p-5 space-y-3">
             <p className="text-xs text-text-secondary uppercase font-semibold">Details</p>
-            <div className="flex items-center gap-2 text-sm">
-              <Mail className="h-4 w-4 text-text-tertiary" />
-              <span className="text-text-secondary">{profile.email}</span>
-            </div>
+            {/* Only team ADMINs, org OWNERs/ADMINs and platform admins receive the email */}
+            {profile.email && (
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="h-4 w-4 text-text-tertiary" />
+                <span className="text-text-secondary">{profile.email}</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 text-sm">
               <User className="h-4 w-4 text-text-tertiary" />
               <span className="text-text-secondary">@{profile.username}</span>

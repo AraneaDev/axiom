@@ -217,4 +217,20 @@ describe('Team access', () => {
       await prisma.user.deleteMany({ where: { id: platformAdmin.id } });
     }
   });
+
+  it('Tim: team member emails only for team ADMINs, org OWNER/ADMIN and platform admins', async () => {
+    const member = await prisma.user.findUniqueOrThrow({ where: { id: teamMember.id } });
+    const path = `/api/teams/${ctx.teamId}/members/profile/${member.username}`;
+    const asViewer = await authGet(path, teamViewer.token);
+    expect(asViewer.status).toBe(200);
+    expect(asViewer.body.email).toBeUndefined();
+    const asOwner = await authGet(path, ctx.owner.token);
+    expect(asOwner.body.email).toBe(member.email);
+
+    // The members list doesn't reveal a member's other orgs either
+    const list = await authGet(`/api/teams/${ctx.teamId}/members`, teamViewer.token);
+    expect(list.status).toBe(200);
+    expect(JSON.stringify(list.body)).not.toContain(other.orgId);
+    expect(JSON.stringify(list.body)).not.toContain(member.email);
+  });
 });

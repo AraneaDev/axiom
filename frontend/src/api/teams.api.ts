@@ -90,7 +90,7 @@ export const teamsApi = {
   getMemberProfile: (teamId: string, username: string) =>
     get<{
       id: string;
-      email: string;
+      email?: string;
       username: string;
       displayName: string;
       avatarUrl: string | null;

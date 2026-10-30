@@ -162,7 +162,10 @@ export async function deleteTeam(teamId: string) {
  * @throws {AppError} 404 if team not found
  */
 export async function listTeamMembers(teamId: string) {
-  await findOrThrow(prisma.team.findUnique({ where: { id: teamId } }), ERR.TEAM_NOT_FOUND);
+  const team = await findOrThrow(
+    prisma.team.findUnique({ where: { id: teamId } }),
+    ERR.TEAM_NOT_FOUND,
+  );
 
   return prisma.teamMembership.findMany({
     where: { teamId },
@@ -171,7 +174,9 @@ export async function listTeamMembers(teamId: string) {
         select: {
           ...USER_BASIC_SELECT,
           isAdmin: true,
+          // Only the membership in this team's org: a member's other orgs are not shown
           orgMemberships: {
+            where: { orgId: team.orgId },
             select: { orgId: true, role: true },
           },
         },
@@ -216,7 +221,9 @@ export async function addTeamMember(
         select: {
           ...USER_BASIC_SELECT,
           isAdmin: true,
+          // Only the membership in this team's org: a member's other orgs are not shown
           orgMemberships: {
+            where: { orgId: team.orgId },
             select: { orgId: true, role: true },
           },
         },
@@ -417,6 +424,30 @@ export async function getTeamActivity(teamId: string, viewerId: string, rawLimit
 }
 
 /**
+ * Whether a viewer may see team members' emails: team ADMINs, org OWNERs/ADMINs and
+ * platform admins.
+ * @param viewerId
+ * @param teamId
+ */
+export async function canSeeTeamEmails(viewerId: string, teamId: string): Promise<boolean> {
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { orgId: true } });
+  if (!team) return false;
+  const [user, orgMembership, teamMembership] = await Promise.all([
+    prisma.user.findUnique({ where: { id: viewerId }, select: { isAdmin: true } }),
+    prisma.orgMembership.findUnique({
+      where: { userId_orgId: { userId: viewerId, orgId: team.orgId } },
+    }),
+    prisma.teamMembership.findUnique({ where: { userId_teamId: { userId: viewerId, teamId } } }),
+  ]);
+  return (
+    user?.isAdmin === true ||
+    orgMembership?.role === 'OWNER' ||
+    orgMembership?.role === 'ADMIN' ||
+    teamMembership?.role === 'ADMIN'
+  );
+}
+
+/**
  * Get a member's profile with stats scoped to a team.
  * @param teamId - The team ID
  * @param username - The member's username
@@ -476,8 +507,11 @@ export async function getTeamMemberProfile(teamId: string, username: string, vie
     }),
   ]);
 
+  // Emails are for team ADMINs, org OWNERs/ADMINs and platform admins, as on the org page
+  const { email, ...publicUser } = user;
   return {
-    ...user,
+    ...publicUser,
+    ...((await canSeeTeamEmails(viewerId, teamId)) ? { email } : {}),
     role: membership.role,
     joinedAt: membership.createdAt,
     assignedIssuesCount,
