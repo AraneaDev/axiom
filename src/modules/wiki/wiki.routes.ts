@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import {
+  requireTeamMember,
   requireTeamPermission,
   requireWikiSpaceAccess,
   requireWikiPageAccess,
@@ -31,6 +32,8 @@ router.use(authenticate);
 // Wiki spaces (scoped to team)
 router.post(
   '/team/:teamId/spaces',
+  // Creating in a team needs what reading it needs (team membership), then the role
+  requireTeamMember(),
   requireTeamPermission('wiki:create_space'),
   wikiController.createSpace,
 );

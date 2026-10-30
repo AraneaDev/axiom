@@ -17,7 +17,7 @@ import {
   type TestContext,
   type TestUser,
 } from '../../test/factory';
-import { authDel, authGet, authPatch } from '../../test/helpers';
+import { authDel, authGet, authPatch, authPost } from '../../test/helpers';
 
 describe('Team access', () => {
   let ctx: TestContext;
@@ -168,4 +168,18 @@ describe('Team access', () => {
       });
     }
   }, 60_000);
+
+  it('24: creating a project or space in a team needs team membership', async () => {
+    const stamp = Date.now();
+    const project = await authPost(`/api/projects/team/${ctx.teamId}`, orgOnly.token, {
+      name: 'Sneaky',
+      slug: `sneaky-${stamp}`,
+      prefix: 'SNK',
+    });
+    const space = await authPost(`/api/wiki/team/${ctx.teamId}/spaces`, orgOnly.token, {
+      name: 'Sneaky',
+      slug: `sneaky-${stamp}`,
+    });
+    expect([project.status, space.status]).toEqual([403, 403]);
+  });
 });

@@ -11,7 +11,13 @@ const router = Router();
 
 router.use(authenticate);
 
-router.post('/team/:teamId', requireTeamPermission('project:create'), projectsController.create);
+// Creating in a team needs what reading it needs (team membership), then the role
+router.post(
+  '/team/:teamId',
+  requireTeamMember(),
+  requireTeamPermission('project:create'),
+  projectsController.create,
+);
 router.get('/team/:teamId', requireTeamMember(), projectsController.list);
 router.get('/:projectId', requireProjectAccess, projectsController.get);
 router.get('/:projectId/analytics', requireProjectAccess, projectsController.analytics);
