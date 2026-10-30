@@ -308,4 +308,54 @@ describe('Hidden pages in listings', () => {
       await prisma.user.deleteMany({ where: { id: viewer.id } });
     }
   });
+
+  it('18: MCP list_wiki_spaces pages through every visible space', async () => {
+    const team = await prisma.team.create({
+      data: {
+        orgId: ctx.orgId,
+        name: 'Paging',
+        slug: `paging-${Date.now()}`,
+        members: { create: { userId: member.id, role: 'MEMBER' } },
+      },
+    });
+    // Ids sort in creation order: visible, hidden, visible
+    const first = await prisma.wikiSpace.create({
+      data: { teamId: team.id, name: 'P1', slug: 'p1' },
+    });
+    await prisma.wikiSpace.create({
+      data: {
+        teamId: team.id,
+        name: 'P2',
+        slug: 'p2',
+        permissions: { create: { userId: ctx.owner.id, level: 'ADMIN' } },
+      },
+    });
+    const third = await prisma.wikiSpace.create({
+      data: { teamId: team.id, name: 'P3', slug: 'p3' },
+    });
+
+    const server = createMcpServer(member.id);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'paging', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < 5; i++) {
+      const res = await mcpContext.run({ userId: member.id }, () =>
+        client.callTool({
+          name: 'list_wiki_spaces',
+          arguments: { teamId: team.id, limit: 1, ...(cursor ? { cursor } : {}) },
+        }),
+      );
+      const body = JSON.parse((res.content as Array<{ text: string }>)[0].text) as {
+        data: Array<{ id: string }>;
+        next_cursor?: string;
+      };
+      seen.push(...body.data.map((d) => d.id));
+      cursor = body.next_cursor;
+      if (!cursor) break;
+    }
+    await client.close();
+    expect(seen).toEqual([first.id, third.id]);
+  });
 });

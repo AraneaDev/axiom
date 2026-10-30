@@ -34,18 +34,25 @@ export function registerWikiTools(ctx: McpToolContext) {
       if (!team) return { content: [{ type: 'text' as const, text: ERR.TEAM_NOT_FOUND }] };
       await assertMcpTeamPermission('list_wiki_spaces', teamId);
       const take = Math.min(limit, 100);
-      const spaces = await prisma.wikiSpace.findMany({
+      // Spaces whose own permissions leave the user out are not listed. Filter first, then
+      // paginate, so a hidden space can't end a page early and hide the ones after it.
+      const teamSpaceIds = await prisma.wikiSpace.findMany({
         where: { teamId },
+        select: { id: true },
+      });
+      const allowed = await Promise.all(
+        teamSpaceIds.map((sp) => canAccessSpace(sp.id, userId, 'VIEW')),
+      );
+      const visibleIds = teamSpaceIds.filter((_, i) => allowed[i]).map((sp) => sp.id);
+      const spaces = await prisma.wikiSpace.findMany({
+        where: { id: { in: visibleIds } },
         include: { _count: { select: { pages: true } } },
         orderBy: { id: 'asc' },
         take: take + 1,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
-      // Spaces whose own permissions leave the user out are not listed
-      const allowed = await Promise.all(spaces.map((sp) => canAccessSpace(sp.id, userId, 'VIEW')));
-      const visible = spaces.filter((_, i) => allowed[i]);
-      const hasMore = visible.length > take;
-      const page = hasMore ? visible.slice(0, take) : visible;
+      const hasMore = spaces.length > take;
+      const page = hasMore ? spaces.slice(0, take) : spaces;
       const result: Record<string, unknown> = { data: page };
       if (hasMore) result.next_cursor = page[page.length - 1].id;
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
