@@ -278,6 +278,10 @@ export async function checkTeamPermission(
   const team = await prisma.team.findUnique({ where: { id: teamId }, select: { orgId: true } });
   if (!team) return 'not_found';
 
+  // Platform admins keep full rights, as in checkProjectAction and canAccessSpace
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  if (user?.isAdmin) return 'ok';
+
   const orgMembership = await prisma.orgMembership.findUnique({
     where: { userId_orgId: { userId, orgId: team.orgId } },
   });

@@ -202,4 +202,19 @@ describe('Team access', () => {
     });
     expect(byMember.status).toBe(201);
   });
+
+  it('N9: a platform admin outside the org passes team permission checks', async () => {
+    const platformAdmin = await createTestUser();
+    await prisma.user.update({ where: { id: platformAdmin.id }, data: { isAdmin: true } });
+    try {
+      const res = await authPost(`/api/projects/team/${ctx.teamId}`, platformAdmin.token, {
+        name: 'By admin',
+        slug: `by-admin-${Date.now()}`,
+        prefix: 'ADM',
+      });
+      expect(res.status).toBe(201);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: platformAdmin.id } });
+    }
+  });
 });
