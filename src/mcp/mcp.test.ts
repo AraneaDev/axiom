@@ -239,3 +239,128 @@ describe('MCP permission mapping', () => {
     expect(await prisma.page.count({ where: { id: page.id } })).toBe(1);
   });
 });
+
+describe('MCP checks match REST', () => {
+  let tctx: TestContext;
+  let orgOnly: TestUser;
+  let orgOnlyClient: Client;
+  let member: TestUser;
+  let memberClient: Client;
+
+  const connectAs = async (userId: string) => {
+    const server = createMcpServer(userId);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const c = new Client({ name: userId, version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), c.connect(clientTransport)]);
+    return c;
+  };
+
+  const callAs = async (userId: string, c: Client, name: string, args: Record<string, unknown>) => {
+    try {
+      const res = await mcpContext.run({ userId }, () => c.callTool({ name, arguments: args }));
+      return { failed: res.isError === true, text: JSON.stringify(res.content) };
+    } catch (err) {
+      return { failed: true, text: (err as Error).message };
+    }
+  };
+
+  beforeAll(async () => {
+    tctx = await createTestContext('mcprest');
+    member = await addMemberToContext(tctx);
+    // In the org, but not on the team that owns the project
+    orgOnly = await createTestUser();
+    await prisma.orgMembership.create({
+      data: { orgId: tctx.orgId, userId: orgOnly.id, role: 'MEMBER' },
+    });
+    orgOnlyClient = await connectAs(orgOnly.id);
+    memberClient = await connectAs(member.id);
+    await prisma.issue.create({
+      data: {
+        projectId: tctx.projectId,
+        number: 1,
+        title: 'Team only',
+        body: '',
+        creatorId: tctx.owner.id,
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await orgOnlyClient.close();
+    await memberClient.close();
+    await cleanupTestContext(tctx);
+    await prisma.user.deleteMany({ where: { id: { in: [orgOnly.id, member.id] } } });
+  });
+
+  it('denies issue tools to an org member who is not on the project team', async () => {
+    const list = await callAs(orgOnly.id, orgOnlyClient, 'list_issues', {
+      projectId: tctx.projectId,
+    });
+    const get = await callAs(orgOnly.id, orgOnlyClient, 'get_issue', {
+      projectId: tctx.projectId,
+      issueNumber: 1,
+    });
+    expect(list.failed).toBe(true);
+    expect(get.failed).toBe(true);
+    expect(get.text).not.toContain('Team only');
+
+    const sprint = await prisma.sprint.create({
+      data: {
+        projectId: tctx.projectId,
+        name: 'S1',
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const getSprint = await callAs(orgOnly.id, orgOnlyClient, 'get_sprint', {
+      sprintId: sprint.id,
+    });
+    expect(getSprint.failed).toBe(true);
+
+    // A team member still gets through
+    const ok = await callAs(member.id, memberClient, 'get_issue', {
+      projectId: tctx.projectId,
+      issueNumber: 1,
+    });
+    expect(ok.failed).toBe(false);
+    expect(ok.text).toContain('Team only');
+  });
+
+  it('does not reveal a VIEW-restricted page through get_wiki_page', async () => {
+    const space = await prisma.wikiSpace.create({
+      data: { teamId: tctx.teamId, name: 'Rest Space', slug: 'rest-space' },
+    });
+    const page = await prisma.page.create({
+      data: { spaceId: space.id, title: 'Secret', slug: 'secret', body: 'classified body' },
+    });
+    await prisma.pageRestriction.create({
+      data: { pageId: page.id, type: 'VIEW', userId: tctx.owner.id },
+    });
+    const res = await callAs(member.id, memberClient, 'get_wiki_page', {
+      spaceId: space.id,
+      pageSlug: 'secret',
+    });
+    expect(res.failed).toBe(true);
+    expect(res.text).not.toContain('classified body');
+  });
+
+  it('denies get_wiki_page in a space whose permissions leave the user out', async () => {
+    const space = await prisma.wikiSpace.create({
+      data: {
+        teamId: tctx.teamId,
+        name: 'Locked Space',
+        slug: 'rest-locked-space',
+        permissions: { create: { userId: tctx.owner.id, level: 'ADMIN' } },
+      },
+    });
+    await prisma.page.create({
+      data: { spaceId: space.id, title: 'Locked', slug: 'locked', body: 'locked body' },
+    });
+    const res = await callAs(member.id, memberClient, 'get_wiki_page', {
+      spaceId: space.id,
+      pageSlug: 'locked',
+    });
+    expect(res.failed).toBe(true);
+    expect(res.text).not.toContain('locked body');
+  });
+});

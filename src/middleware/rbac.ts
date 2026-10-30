@@ -232,6 +232,35 @@ export function requireOrgPermission(action: Action) {
 }
 
 /**
+ * Check a team-scoped permission: the user must be in the team's org, and the action must
+ * be allowed by their org role or by their role in this team (not some other team).
+ * @param userId - The user to check
+ * @param teamId - The team that owns the resource
+ * @param action - The permission action to check
+ * @returns 'ok', 'not_found', 'not_org_member' or 'forbidden'
+ */
+export async function checkTeamPermission(
+  userId: string,
+  teamId: string,
+  action: Action,
+): Promise<'ok' | 'not_found' | 'not_org_member' | 'forbidden'> {
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { orgId: true } });
+  if (!team) return 'not_found';
+
+  const orgMembership = await prisma.orgMembership.findUnique({
+    where: { userId_orgId: { userId, orgId: team.orgId } },
+  });
+  if (!orgMembership) return 'not_org_member';
+
+  const teamMembership = await prisma.teamMembership.findUnique({
+    where: { userId_teamId: { userId, teamId } },
+  });
+  return hasPermission(orgMembership.role, teamMembership?.role ?? null, action)
+    ? 'ok'
+    : 'forbidden';
+}
+
+/**
  * Require team-level permission. Expects :teamId in route params.
  * Also checks org-level permissions as a fallback (org admins/owners bypass team checks).
  * @param action - The permission action to check
@@ -247,26 +276,12 @@ export function requireTeamPermission(action: Action) {
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
 
-      // Get team to find org
-      const team = await prisma.team.findUnique({ where: { id: teamId } });
-      if (!team) throw new AppError(404, ERR.TEAM_NOT_FOUND);
-
-      // Check org membership first
-      const orgMembership = await prisma.orgMembership.findUnique({
-        where: { userId_orgId: { userId, orgId: team.orgId } },
-      });
-      if (!orgMembership) {
+      const access = await checkTeamPermission(userId, teamId, action);
+      if (access === 'not_found') throw new AppError(404, ERR.TEAM_NOT_FOUND);
+      if (access === 'not_org_member') {
         throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
       }
-
-      // Check team membership
-      const teamMembership = await prisma.teamMembership.findUnique({
-        where: { userId_teamId: { userId, teamId } },
-      });
-
-      if (hasPermission(orgMembership.role, teamMembership?.role ?? null, action)) {
-        return next();
-      }
+      if (access === 'ok') return next();
 
       throw new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN');
     } catch (err) {

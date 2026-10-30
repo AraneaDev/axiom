@@ -1,10 +1,15 @@
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
+import { canViewPage } from '../../modules/wiki/wiki-permissions.service';
 import { resolveWikiTemplate } from '../../modules/wiki/wiki-template-resolver.service';
 import * as wikiService from '../../modules/wiki/wiki.service';
 import { ERR } from '../../utils/error-messages';
-import { assertMcpPermission } from '../mcp-permissions';
+import {
+  assertMcpPagePermission,
+  assertMcpSpacePermission,
+  assertMcpTeamPermission,
+} from '../mcp-permissions';
 
 import type { McpToolContext } from './types';
 
@@ -26,7 +31,7 @@ export function registerWikiTools(ctx: McpToolContext) {
     async ({ teamId, cursor, limit }) => {
       const team = await prisma.team.findUnique({ where: { id: teamId } });
       if (!team) return { content: [{ type: 'text' as const, text: ERR.TEAM_NOT_FOUND }] };
-      await assertMcpPermission('list_wiki_spaces', team.orgId);
+      await assertMcpTeamPermission('list_wiki_spaces', teamId);
       const take = Math.min(limit, 100);
       const spaces = await prisma.wikiSpace.findMany({
         where: { teamId },
@@ -50,14 +55,23 @@ export function registerWikiTools(ctx: McpToolContext) {
     async ({ spaceId, pageSlug }) => {
       const space = await prisma.wikiSpace.findUnique({ where: { id: spaceId } });
       if (!space) return { content: [{ type: 'text' as const, text: ERR.SPACE_NOT_FOUND }] };
-      const team = await prisma.team.findUnique({ where: { id: space.teamId } });
-      if (team) await assertMcpPermission('get_wiki_page', team.orgId);
+      await assertMcpSpacePermission('get_wiki_page', spaceId, 'VIEW');
       const page = await prisma.page.findUnique({
         where: { spaceId_slug: { spaceId, slug: pageSlug } },
-        include: { children: { select: { title: true, slug: true } } },
+        include: { children: { select: { id: true, title: true, slug: true } } },
       });
       if (!page) return { content: [{ type: 'text' as const, text: ERR.PAGE_NOT_FOUND }] };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(page, null, 2) }] };
+      await assertMcpPagePermission('get_wiki_page', page.id, 'view');
+      // Child links follow the same rule: titles of pages the user can't view stay hidden
+      const children = [];
+      for (const child of page.children) {
+        if (await canViewPage(userId, child.id)) {
+          children.push({ title: child.title, slug: child.slug });
+        }
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ ...page, children }, null, 2) }],
+      };
     },
   );
 
@@ -78,8 +92,7 @@ export function registerWikiTools(ctx: McpToolContext) {
     async ({ spaceId, title, slug, body, parentId, templateId }) => {
       const space = await prisma.wikiSpace.findUnique({ where: { id: spaceId } });
       if (!space) return { content: [{ type: 'text' as const, text: ERR.SPACE_NOT_FOUND }] };
-      const team = await prisma.team.findUnique({ where: { id: space.teamId } });
-      if (team) await assertMcpPermission('create_wiki_page', team.orgId);
+      await assertMcpSpacePermission('create_wiki_page', spaceId, 'EDIT');
       const existing = await prisma.page.findUnique({ where: { spaceId_slug: { spaceId, slug } } });
       if (existing)
         return { content: [{ type: 'text' as const, text: 'Page slug already exists' }] };
@@ -113,8 +126,7 @@ export function registerWikiTools(ctx: McpToolContext) {
     async ({ spaceId }) => {
       const space = await prisma.wikiSpace.findUnique({ where: { id: spaceId } });
       if (!space) return { content: [{ type: 'text' as const, text: ERR.SPACE_NOT_FOUND }] };
-      const team = await prisma.team.findUnique({ where: { id: space.teamId } });
-      if (team) await assertMcpPermission('get_page_tree', team.orgId);
+      await assertMcpSpacePermission('get_page_tree', spaceId, 'VIEW');
       const pages = await prisma.page.findMany({
         where: { spaceId },
         select: { id: true, title: true, slug: true, parentId: true, position: true },
@@ -147,8 +159,7 @@ export function registerWikiTools(ctx: McpToolContext) {
     async ({ spaceId, pageSlug, title, body }) => {
       const space = await prisma.wikiSpace.findUnique({ where: { id: spaceId } });
       if (!space) return { content: [{ type: 'text' as const, text: ERR.SPACE_NOT_FOUND }] };
-      const team = await prisma.team.findUnique({ where: { id: space.teamId } });
-      if (team) await assertMcpPermission('update_wiki_page', team.orgId);
+      await assertMcpSpacePermission('update_wiki_page', spaceId, 'EDIT');
 
       try {
         const updated = await wikiService.updatePage(
@@ -181,8 +192,7 @@ export function registerWikiTools(ctx: McpToolContext) {
     async ({ spaceId, pageSlug }) => {
       const space = await prisma.wikiSpace.findUnique({ where: { id: spaceId } });
       if (!space) return { content: [{ type: 'text' as const, text: ERR.SPACE_NOT_FOUND }] };
-      const team = await prisma.team.findUnique({ where: { id: space.teamId } });
-      if (team) await assertMcpPermission('delete_wiki_page', team.orgId);
+      await assertMcpSpacePermission('delete_wiki_page', spaceId, 'EDIT');
       try {
         await wikiService.deletePage(spaceId, pageSlug, userId);
         return {

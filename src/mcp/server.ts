@@ -37,14 +37,6 @@ export function createMcpServer(userId: string) {
     return project?.team?.orgId;
   }
 
-  async function getOrgIdFromSprint(sprintId: string) {
-    const sprint = await prisma.sprint.findUnique({
-      where: { id: sprintId },
-      include: { project: { include: { team: { select: { orgId: true } } } } },
-    });
-    return sprint?.project?.team?.orgId;
-  }
-
   async function getOrgIdFromPage(pageId: string) {
     const page = await prisma.page.findUnique({
       where: { id: pageId },
@@ -58,7 +50,6 @@ export function createMcpServer(userId: string) {
     userId,
     getUserOrgIds,
     getOrgIdFromProject,
-    getOrgIdFromSprint,
     getOrgIdFromPage,
   };
 

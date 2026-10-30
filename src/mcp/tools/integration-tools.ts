@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/database';
 import * as wikiIssueLinksService from '../../modules/wiki/wiki-issue-links.service';
 import { ERR } from '../../utils/error-messages';
-import { assertMcpPermission } from '../mcp-permissions';
+import { assertMcpPagePermission, assertMcpProjectPermission } from '../mcp-permissions';
 
 import type { McpToolContext } from './types';
 
@@ -31,7 +31,7 @@ export function registerIntegrationTools(ctx: McpToolContext) {
       if (pageId) {
         const orgId = await ctx.getOrgIdFromPage(pageId);
         if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PAGE_NOT_FOUND }] };
-        await assertMcpPermission('list_wiki_issue_links', orgId);
+        await assertMcpPagePermission('list_wiki_issue_links', pageId, 'view');
         const links = await wikiIssueLinksService.getLinksForPage(pageId);
         return { content: [{ type: 'text' as const, text: JSON.stringify(links, null, 2) }] };
       }
@@ -42,7 +42,8 @@ export function registerIntegrationTools(ctx: McpToolContext) {
         include: { project: { include: { team: { select: { orgId: true } } } } },
       });
       if (!issue) return { content: [{ type: 'text' as const, text: ERR.ISSUE_NOT_FOUND }] };
-      await assertMcpPermission('list_wiki_issue_links', issue.project.team.orgId);
+      // Reading an issue's links needs what reading the issue needs
+      await assertMcpProjectPermission('get_issue', issue.projectId);
       const links = await wikiIssueLinksService.getLinksForIssue(issueId!);
       return { content: [{ type: 'text' as const, text: JSON.stringify(links, null, 2) }] };
     },
@@ -59,7 +60,14 @@ export function registerIntegrationTools(ctx: McpToolContext) {
     async ({ pageId, issueId, linkType }) => {
       const orgId = await ctx.getOrgIdFromPage(pageId);
       if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PAGE_NOT_FOUND }] };
-      await assertMcpPermission('link_wiki_to_issue', orgId);
+      await assertMcpPagePermission('link_wiki_to_issue', pageId, 'edit');
+      // The issue must be one the user can see, as on the REST link routes
+      const issue = await prisma.issue.findUnique({
+        where: { id: issueId },
+        select: { projectId: true },
+      });
+      if (!issue) return { content: [{ type: 'text' as const, text: ERR.ISSUE_NOT_FOUND }] };
+      await assertMcpProjectPermission('get_issue', issue.projectId);
       const link = await wikiIssueLinksService.addLink(pageId, issueId, linkType, userId);
       return { content: [{ type: 'text' as const, text: JSON.stringify(link, null, 2) }] };
     },

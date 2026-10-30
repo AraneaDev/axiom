@@ -5,6 +5,5 @@ export interface McpToolContext {
   userId: string;
   getUserOrgIds: () => Promise<string[]>;
   getOrgIdFromProject: (projectId: string) => Promise<string | undefined>;
-  getOrgIdFromSprint: (sprintId: string) => Promise<string | undefined>;
   getOrgIdFromPage: (pageId: string) => Promise<string | undefined>;
 }

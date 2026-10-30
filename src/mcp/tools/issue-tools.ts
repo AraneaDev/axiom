@@ -5,7 +5,7 @@ import * as issuesService from '../../modules/issues/issues.service';
 import * as sprintsService from '../../modules/sprints/sprints.service';
 import { ERR } from '../../utils/error-messages';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
-import { assertMcpPermission } from '../mcp-permissions';
+import { assertMcpProjectPermission } from '../mcp-permissions';
 
 import type { McpToolContext } from './types';
 
@@ -14,7 +14,15 @@ import type { McpToolContext } from './types';
  * @param ctx
  */
 export function registerIssueTools(ctx: McpToolContext) {
-  const { server, userId, getOrgIdFromProject, getOrgIdFromSprint } = ctx;
+  const { server, userId, getOrgIdFromProject } = ctx;
+
+  async function getSprintProjectId(sprintId: string) {
+    const sprint = await prisma.sprint.findUnique({
+      where: { id: sprintId },
+      select: { projectId: true },
+    });
+    return sprint?.projectId;
+  }
 
   server.tool(
     'list_issues',
@@ -34,7 +42,7 @@ export function registerIssueTools(ctx: McpToolContext) {
     async ({ projectId, query, type, priority, assigneeId, cursor, limit }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
-      await assertMcpPermission('list_issues', orgId);
+      await assertMcpProjectPermission('list_issues', projectId);
 
       const take = Math.min(limit, 100);
       // Convert cursor to offset: walk through pages to find position
@@ -88,7 +96,7 @@ export function registerIssueTools(ctx: McpToolContext) {
     async ({ projectId, issueNumber }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
-      await assertMcpPermission('get_issue', orgId);
+      await assertMcpProjectPermission('get_issue', projectId);
       const project = await prisma.project.findUnique({ where: { id: projectId } });
       if (!project) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
       const issue = await prisma.issue.findUnique({
@@ -130,7 +138,7 @@ export function registerIssueTools(ctx: McpToolContext) {
     async ({ projectId, title, body, type, priority, assigneeId }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
-      await assertMcpPermission('create_issue', orgId);
+      await assertMcpProjectPermission('create_issue', projectId);
       const project = await prisma.project.findUnique({ where: { id: projectId } });
       if (!project) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
       const lastIssue = await prisma.issue.findFirst({
@@ -177,7 +185,7 @@ export function registerIssueTools(ctx: McpToolContext) {
     async ({ projectId, issueNumber, body }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
-      await assertMcpPermission('add_comment', orgId);
+      await assertMcpProjectPermission('add_comment', projectId);
       const issue = await prisma.issue.findUnique({
         where: { projectId_number: { projectId, number: issueNumber } },
       });
@@ -220,43 +228,28 @@ export function registerIssueTools(ctx: McpToolContext) {
     }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
-      await assertMcpPermission('update_issue', orgId);
-      const issue = await prisma.issue.findUnique({
-        where: { projectId_number: { projectId, number: issueNumber } },
-      });
-      if (!issue) return { content: [{ type: 'text' as const, text: ERR.ISSUE_NOT_FOUND }] };
-
-      const updateData: Record<string, unknown> = {};
-      if (columnId !== undefined) updateData.column = { connect: { id: columnId } };
-      if (priority !== undefined) updateData.priority = priority;
-      if (assigneeId !== undefined) {
-        updateData.assignee = assigneeId ? { connect: { id: assigneeId } } : { disconnect: true };
+      await assertMcpProjectPermission('update_issue', projectId);
+      // The REST update path: workflow transition rules, activity, automation and the
+      // realtime broadcast all apply to MCP edits too
+      let updated;
+      try {
+        updated = await issuesService.updateIssue(
+          projectId,
+          issueNumber,
+          {
+            columnId,
+            priority,
+            assigneeId,
+            labels,
+            storyPoints,
+            sprintId: sprintId === undefined ? undefined : sprintId || null,
+          },
+          userId,
+        );
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Update failed';
+        return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
       }
-      if (storyPoints !== undefined) updateData.storyPoints = storyPoints;
-      if (sprintId !== undefined) {
-        updateData.sprint = sprintId ? { connect: { id: sprintId } } : { disconnect: true };
-      }
-      if (labels !== undefined) {
-        updateData.labels = {
-          set: [],
-          connectOrCreate: labels.map((name) => ({
-            where: { projectId_name: { projectId, name } },
-            create: { projectId, name },
-          })),
-        };
-      }
-
-      const updated = await prisma.issue.update({
-        where: { id: issue.id },
-        data: updateData,
-        include: {
-          project: { select: { prefix: true } },
-          assignee: { select: USER_BASIC_SELECT },
-          labels: true,
-          column: { select: { name: true } },
-          sprint: { select: { id: true, name: true } },
-        },
-      });
       return {
         content: [
           {
@@ -282,7 +275,7 @@ export function registerIssueTools(ctx: McpToolContext) {
     async ({ projectId, issueNumber }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
-      await assertMcpPermission('delete_issue', orgId);
+      await assertMcpProjectPermission('delete_issue', projectId);
       try {
         await issuesService.deleteIssue(projectId, issueNumber, userId);
         return {
@@ -317,7 +310,7 @@ export function registerIssueTools(ctx: McpToolContext) {
     async ({ projectId, status, cursor, limit }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
-      await assertMcpPermission('list_sprints', orgId);
+      await assertMcpProjectPermission('list_sprints', projectId);
 
       const where: Record<string, unknown> = { projectId };
       if (status) where.status = status;
@@ -359,7 +352,7 @@ export function registerIssueTools(ctx: McpToolContext) {
         },
       });
       if (!sprint) return { content: [{ type: 'text' as const, text: ERR.SPRINT_NOT_FOUND }] };
-      await assertMcpPermission('get_sprint', sprint.project.team.orgId);
+      await assertMcpProjectPermission('get_sprint', sprint.projectId);
 
       const result = {
         ...sprint,
@@ -386,7 +379,7 @@ export function registerIssueTools(ctx: McpToolContext) {
     async ({ projectId, name, goal, startDate, endDate }) => {
       const orgId = await getOrgIdFromProject(projectId);
       if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
-      await assertMcpPermission('create_sprint', orgId);
+      await assertMcpProjectPermission('create_sprint', projectId);
       try {
         const sprint = await sprintsService.createSprint(projectId, {
           name,
@@ -409,9 +402,11 @@ export function registerIssueTools(ctx: McpToolContext) {
       sprintId: z.string().describe('Sprint ID'),
     },
     async ({ sprintId }) => {
-      const orgId = await getOrgIdFromSprint(sprintId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.SPRINT_NOT_FOUND }] };
-      await assertMcpPermission('start_sprint', orgId);
+      const sprintProjectId = await getSprintProjectId(sprintId);
+      if (!sprintProjectId) {
+        return { content: [{ type: 'text' as const, text: ERR.SPRINT_NOT_FOUND }] };
+      }
+      await assertMcpProjectPermission('start_sprint', sprintProjectId);
       try {
         const sprint = await sprintsService.startSprint(sprintId);
         return { content: [{ type: 'text' as const, text: JSON.stringify(sprint, null, 2) }] };
@@ -433,9 +428,11 @@ export function registerIssueTools(ctx: McpToolContext) {
         .describe('Sprint ID to move incomplete issues to. Omit to move to backlog.'),
     },
     async ({ sprintId, moveToSprintId }) => {
-      const orgId = await getOrgIdFromSprint(sprintId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.SPRINT_NOT_FOUND }] };
-      await assertMcpPermission('complete_sprint', orgId);
+      const sprintProjectId = await getSprintProjectId(sprintId);
+      if (!sprintProjectId) {
+        return { content: [{ type: 'text' as const, text: ERR.SPRINT_NOT_FOUND }] };
+      }
+      await assertMcpProjectPermission('complete_sprint', sprintProjectId);
       try {
         const sprint = await sprintsService.completeSprint(sprintId, moveToSprintId);
         return { content: [{ type: 'text' as const, text: JSON.stringify(sprint, null, 2) }] };
@@ -454,9 +451,11 @@ export function registerIssueTools(ctx: McpToolContext) {
       issueIds: z.array(z.string()).describe('Array of issue IDs to add to the sprint'),
     },
     async ({ sprintId, issueIds }) => {
-      const orgId = await getOrgIdFromSprint(sprintId);
-      if (!orgId) return { content: [{ type: 'text' as const, text: ERR.SPRINT_NOT_FOUND }] };
-      await assertMcpPermission('add_issues_to_sprint', orgId);
+      const sprintProjectId = await getSprintProjectId(sprintId);
+      if (!sprintProjectId) {
+        return { content: [{ type: 'text' as const, text: ERR.SPRINT_NOT_FOUND }] };
+      }
+      await assertMcpProjectPermission('add_issues_to_sprint', sprintProjectId);
       try {
         const sprint = await sprintsService.addIssuesToSprint(sprintId, issueIds);
         return { content: [{ type: 'text' as const, text: JSON.stringify(sprint, null, 2) }] };

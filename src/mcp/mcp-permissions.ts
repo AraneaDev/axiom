@@ -1,5 +1,12 @@
+import type { SpacePermissionLevel } from '@prisma/client';
+
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { checkTeamPermission, checkWikiSpaceOrgAccess } from '../middleware/rbac';
+import { checkProjectAccess } from '../middleware/requireProjectAccess';
+import { canAccessSpace } from '../modules/wiki/space-permissions.service';
+import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
+import { ERR } from '../utils/error-messages';
 import type { Action } from '../utils/permissions';
 import { hasPermission } from '../utils/permissions';
 
@@ -35,36 +42,140 @@ export const MCP_TOOL_PERMISSIONS: Record<string, Action> = {
 };
 
 /**
- * Required ApiToken scopes per tool group:
- * "issues:read"  → list_issues, get_issue, search
- * "issues:write" → create_issue, add_comment
- * "wiki:read"    → list_wiki_spaces, get_wiki_page, get_page_tree
- * "wiki:write"   → create_wiki_page
+ * The action a tool needs. Fails closed: a tool without a mapping is refused, never waved
+ * through.
  * @param toolName
- * @param orgId
  */
-export async function assertMcpPermission(toolName: string, orgId: string): Promise<void> {
-  const ctx = mcpContext.getStore();
-  if (!ctx) throw new AppError(401, 'No MCP context');
-  // Fail closed: a tool without a mapping is refused, never waved through
+function actionFor(toolName: string): Action {
   const action = Object.hasOwn(MCP_TOOL_PERMISSIONS, toolName)
     ? MCP_TOOL_PERMISSIONS[toolName]
     : undefined;
   if (!action) throw new AppError(403, `No permission mapping for MCP tool ${toolName}`);
+  return action;
+}
+
+function currentUserId(): string {
+  const ctx = mcpContext.getStore();
+  if (!ctx) throw new AppError(401, 'No MCP context');
+  return ctx.userId;
+}
+
+async function isSystemAdmin(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  return user?.isAdmin === true;
+}
+
+/**
+ * The tool's action must be allowed by the user's org role or by their role in the team
+ * that owns the resource, as `requireTeamPermission` decides on the REST side.
+ * @param userId
+ * @param teamId
+ * @param action
+ */
+async function assertTeamRole(userId: string, teamId: string, action: Action): Promise<void> {
+  const access = await checkTeamPermission(userId, teamId, action);
+  if (access === 'not_found') throw new AppError(404, ERR.TEAM_NOT_FOUND);
+  if (access !== 'ok') throw new AppError(403, 'Forbidden');
+}
+
+/**
+ * Org-wide tools (list_teams): the user must be in the org, and the action must be allowed
+ * by their org role or their role in at least one of the org's teams.
+ * @param toolName
+ * @param orgId
+ */
+export async function assertMcpPermission(toolName: string, orgId: string): Promise<void> {
+  const userId = currentUserId();
+  const action = actionFor(toolName);
 
   const orgMembership = await prisma.orgMembership.findUnique({
-    where: { userId_orgId: { orgId, userId: ctx.userId } },
+    where: { userId_orgId: { orgId, userId } },
   });
-  if (!orgMembership) {
-    throw new AppError(403, 'Forbidden');
-  }
+  if (!orgMembership) throw new AppError(403, 'Forbidden');
 
-  const teamMembership = await prisma.teamMembership.findFirst({
-    where: { userId: ctx.userId, team: { orgId } },
+  const teamRoles = await prisma.teamMembership.findMany({
+    where: { userId, team: { orgId } },
+    select: { role: true },
   });
+  const allowed =
+    hasPermission(orgMembership.role, null, action) ||
+    teamRoles.some((t) => hasPermission(orgMembership.role, t.role, action));
+  if (!allowed) throw new AppError(403, 'Forbidden');
+}
 
-  const allowed = hasPermission(orgMembership.role, teamMembership?.role ?? null, action);
-  if (!allowed) {
-    throw new AppError(403, 'Forbidden');
-  }
+/**
+ * Team-scoped tools (list_projects, list_wiki_spaces): as `requireTeamPermission`.
+ * @param toolName
+ * @param teamId
+ */
+export async function assertMcpTeamPermission(toolName: string, teamId: string): Promise<void> {
+  await assertTeamRole(currentUserId(), teamId, actionFor(toolName));
+}
+
+/**
+ * Project and issue tools: the REST project check (team member or system admin), then the
+ * tool's action against the role in the project's own team.
+ * @param toolName
+ * @param projectId
+ */
+export async function assertMcpProjectPermission(
+  toolName: string,
+  projectId: string,
+): Promise<void> {
+  const userId = currentUserId();
+  const action = actionFor(toolName);
+  const access = await checkProjectAccess(userId, projectId);
+  if (access === 'not_found') throw new AppError(404, ERR.PROJECT_NOT_FOUND);
+  if (access === 'forbidden') throw new AppError(403, 'Forbidden');
+  if (await isSystemAdmin(userId)) return;
+  const project = await prisma.project.findUniqueOrThrow({
+    where: { id: projectId },
+    select: { teamId: true },
+  });
+  await assertTeamRole(userId, project.teamId, action);
+}
+
+/**
+ * Wiki space tools: the REST space checks (org membership, then the space permission at the
+ * given level), then the tool's action against the role in the space's own team.
+ * @param toolName
+ * @param spaceId
+ * @param level - VIEW for reads, EDIT for writes
+ */
+export async function assertMcpSpacePermission(
+  toolName: string,
+  spaceId: string,
+  level: SpacePermissionLevel,
+): Promise<void> {
+  const userId = currentUserId();
+  const action = actionFor(toolName);
+  const orgAccess = await checkWikiSpaceOrgAccess(spaceId, userId);
+  if (orgAccess === 'not_found') throw new AppError(404, ERR.SPACE_NOT_FOUND);
+  if (orgAccess === 'forbidden') throw new AppError(403, 'Forbidden');
+  if (!(await canAccessSpace(spaceId, userId, level))) throw new AppError(403, 'Forbidden');
+  const space = await prisma.wikiSpace.findUniqueOrThrow({
+    where: { id: spaceId },
+    select: { teamId: true },
+  });
+  await assertTeamRole(userId, space.teamId, action);
+}
+
+/**
+ * Wiki page tools: the space checks, then the page's own view or edit restrictions.
+ * @param toolName
+ * @param pageId
+ * @param mode - 'view' for reads, 'edit' for writes
+ */
+export async function assertMcpPagePermission(
+  toolName: string,
+  pageId: string,
+  mode: 'view' | 'edit',
+): Promise<void> {
+  const userId = currentUserId();
+  const page = await prisma.page.findUnique({ where: { id: pageId }, select: { spaceId: true } });
+  if (!page) throw new AppError(404, ERR.PAGE_NOT_FOUND);
+  await assertMcpSpacePermission(toolName, page.spaceId, mode === 'view' ? 'VIEW' : 'EDIT');
+  const allowed =
+    mode === 'view' ? await canViewPage(userId, pageId) : await canEditPage(userId, pageId);
+  if (!allowed) throw new AppError(403, 'Forbidden');
 }
