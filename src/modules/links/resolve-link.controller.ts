@@ -16,7 +16,7 @@ export async function resolveLinkHandler(req: Request, res: Response) {
     return;
   }
 
-  const preview = await resolveLink(url, (req as unknown as { user: { id: string } }).user.id);
+  const preview = await resolveLink(url, req.userId!);
 
   if (!preview) {
     res.status(404).json({ error: { message: 'Could not resolve link' } });

@@ -1,7 +1,11 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
-import { requireOrgPermission, requireTeamPermission } from '../../middleware/rbac';
+import {
+  requireOrgMember,
+  requireOrgPermission,
+  requireTeamPermission,
+} from '../../middleware/rbac';
 
 import * as teamsController from './teams.controller';
 
@@ -11,21 +15,24 @@ router.use(authenticate);
 
 // Org-scoped team routes
 router.post('/org/:orgId', requireOrgPermission('team:create'), teamsController.create);
-router.get('/org/:orgId', teamsController.list);
+router.get('/org/:orgId', requireOrgMember(), teamsController.list);
 
 // Team-specific routes
-router.get('/:teamId', teamsController.get);
+// Reading a team needs what reading its work needs: org membership and issue:view by org
+// or team role
+const teamRead = requireTeamPermission('issue:view');
+router.get('/:teamId', teamRead, teamsController.get);
 router.patch('/:teamId', requireTeamPermission('team:manage_members'), teamsController.update);
 router.delete('/:teamId', requireTeamPermission('team:delete'), teamsController.remove);
 
 // Team activity feed
-router.get('/:teamId/activity', teamsController.getActivity);
+router.get('/:teamId/activity', teamRead, teamsController.getActivity);
 
 // Team member profile
-router.get('/:teamId/members/profile/:username', teamsController.getMemberProfile);
+router.get('/:teamId/members/profile/:username', teamRead, teamsController.getMemberProfile);
 
 // Team members
-router.get('/:teamId/members', teamsController.listMembers);
+router.get('/:teamId/members', teamRead, teamsController.listMembers);
 router.post(
   '/:teamId/members',
   requireTeamPermission('team:manage_members'),

@@ -127,12 +127,20 @@ export async function deleteFieldDefinition(fieldId: string) {
  * @param value
  */
 export async function setFieldValue(issueId: string, fieldDefinitionId: string, value: string) {
-  await findOrThrow(
+  const definition = await findOrThrow(
     prisma.customFieldDefinition.findUnique({
       where: { id: fieldDefinitionId },
     }),
     'Custom field definition not found',
   );
+  // A project's fields only apply to its own issues
+  const issue = await prisma.issue.findUnique({
+    where: { id: issueId },
+    select: { projectId: true },
+  });
+  if (issue?.projectId !== definition.projectId) {
+    throw new AppError(400, 'The custom field does not belong to the project of this issue');
+  }
 
   return prisma.customFieldValue.upsert({
     where: {

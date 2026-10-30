@@ -207,6 +207,29 @@ export function requireWikiRestrictionAccess() {
 }
 
 /**
+ * Require membership of the org in :orgId, in any role. For reads that every member may
+ * make, such as listing the org's teams.
+ * @returns Express middleware
+ */
+export function requireOrgMember() {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      const userId = req.userId;
+      if (!userId) throw new AppError(401, 'Authentication required');
+      const membership = await prisma.orgMembership.findUnique({
+        where: { userId_orgId: { userId, orgId: param(req, 'orgId') } },
+      });
+      if (!membership) {
+        throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/**
  * Require org-level permission. Expects :orgId in route params.
  * @param action - The permission action to check (e.g., 'manage_members', 'delete')
  * @returns Express middleware that checks org-level permissions

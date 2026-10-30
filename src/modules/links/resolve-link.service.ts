@@ -1,4 +1,6 @@
 import { prisma } from '../../config/database';
+import { assertPageAccess } from '../../middleware/rbac';
+import { checkProjectAccess } from '../../middleware/requireProjectAccess';
 import { formatIssueKey } from '../../utils/issue-key';
 import { PROJECT_TEAM_ORG_INCLUDE, SPACE_TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 
@@ -72,17 +74,17 @@ export function parseAxiomUrl(urlOrPath: string): ParsedUrl | null {
  * Resolve a parsed URL into a rich link preview by querying the database.
  * Returns null when the resource is not found.
  * @param urlOrPath
- * @param _userId
+ * @param userId - The viewer: only resources they could open are previewed
  */
-export async function resolveLink(urlOrPath: string, _userId: string): Promise<LinkPreview | null> {
+export async function resolveLink(urlOrPath: string, userId: string): Promise<LinkPreview | null> {
   const parsed = parseAxiomUrl(urlOrPath);
   if (!parsed) return null;
 
   switch (parsed.type) {
     case 'issue':
-      return resolveIssue(parsed);
+      return resolveIssue(parsed, userId);
     case 'wiki':
-      return resolveWiki(parsed);
+      return resolveWiki(parsed, userId);
     default:
       return null;
   }
@@ -92,7 +94,7 @@ export async function resolveLink(urlOrPath: string, _userId: string): Promise<L
 // Individual resolvers
 // ---------------------------------------------------------------------------
 
-async function resolveIssue(parsed: ParsedUrl): Promise<LinkPreview | null> {
+async function resolveIssue(parsed: ParsedUrl, userId: string): Promise<LinkPreview | null> {
   const issue = await prisma.issue.findFirst({
     where: {
       number: Number(parsed.identifier),
@@ -107,7 +109,8 @@ async function resolveIssue(parsed: ParsedUrl): Promise<LinkPreview | null> {
     include: { ...PROJECT_TEAM_ORG_INCLUDE, column: true },
   });
 
-  if (!issue) return null;
+  // Same answer for "no such issue" and "not yours", so a preview reveals nothing
+  if (!issue || (await checkProjectAccess(userId, issue.projectId)) !== 'ok') return null;
 
   const org = issue.project.team.org.slug;
   const team = issue.project.team.slug;
@@ -123,7 +126,7 @@ async function resolveIssue(parsed: ParsedUrl): Promise<LinkPreview | null> {
   };
 }
 
-async function resolveWiki(parsed: ParsedUrl): Promise<LinkPreview | null> {
+async function resolveWiki(parsed: ParsedUrl, userId: string): Promise<LinkPreview | null> {
   const page = await prisma.page.findFirst({
     where: {
       slug: parsed.identifier,
@@ -139,6 +142,11 @@ async function resolveWiki(parsed: ParsedUrl): Promise<LinkPreview | null> {
   });
 
   if (!page) return null;
+  try {
+    await assertPageAccess(userId, page.id, 'view');
+  } catch {
+    return null;
+  }
 
   const org = page.space.team.org.slug;
   const team = page.space.team.slug;

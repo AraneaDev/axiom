@@ -8,6 +8,8 @@ import { createId } from '@paralleldrive/cuid2';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { assertPageAccess } from '../../middleware/rbac';
+import { checkProjectAccess } from '../../middleware/requireProjectAccess';
 import { getStorage } from '../../storage/storage';
 import { ERR } from '../../utils/error-messages';
 import { PROJECT_TEAM_ORG_INCLUDE, SPACE_TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
@@ -56,6 +58,14 @@ export async function uploadAttachment(
   uploaderId: string,
   opts: { issueId?: string; pageId?: string; commentId?: string },
 ) {
+  // Attaching writes to the parent: refuse before storing anything, and drop the upload
+  try {
+    await assertAttachmentParentAccess(uploaderId, opts, 'edit');
+  } catch (err) {
+    if (file.path) await fs.unlink(file.path).catch(() => {});
+    throw err;
+  }
+
   const storageKey = buildStorageKey(file.originalname);
   const storage = getStorage();
 
@@ -105,6 +115,35 @@ export async function getAttachment(id: string) {
 }
 
 /**
+ * Whether a user may see (or attach to) an attachment's parent, by the parent's own REST
+ * rules: an issue needs project access; a page needs org membership, space access and the
+ * page's restrictions (edit level to attach, view level to read).
+ * @param userId - The user
+ * @param parent - The parent issue or page
+ * @param parent.issueId
+ * @param parent.pageId
+ * @param mode - 'view' to read, 'edit' to attach
+ * @throws {AppError} 404 when the parent doesn't exist, 403 when access is refused
+ */
+export async function assertAttachmentParentAccess(
+  userId: string,
+  parent: { issueId?: string | null; pageId?: string | null },
+  mode: 'view' | 'edit',
+): Promise<void> {
+  if (parent.issueId) {
+    const issue = await prisma.issue.findUnique({
+      where: { id: parent.issueId },
+      select: { projectId: true },
+    });
+    if (!issue) throw new AppError(404, ERR.ISSUE_NOT_FOUND, 'NOT_FOUND');
+    if ((await checkProjectAccess(userId, issue.projectId)) !== 'ok') {
+      throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
+    }
+  }
+  if (parent.pageId) await assertPageAccess(userId, parent.pageId, mode);
+}
+
+/**
  * Get attachment with authorization check.
  * Verifies the requesting user has access to the attachment's parent resource.
  * @param id - The attachment ID
@@ -122,16 +161,12 @@ export async function getAttachmentAuthorized(id: string, userId: string) {
   });
   if (!attachment) throw new AppError(404, ERR.ATTACHMENT_NOT_FOUND, 'NOT_FOUND');
 
-  // Determine the org from the parent resource
-  const orgId = attachment.issue?.project?.team?.org?.id ?? attachment.page?.space?.team?.org?.id;
-
-  if (!orgId) return attachment; // Orphan attachment, allow access
-
-  // Check user is a member of the org
-  const membership = await prisma.orgMembership.findFirst({
-    where: { orgId, userId },
-  });
-  if (!membership) throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
+  if (!attachment.issueId && !attachment.pageId) {
+    // No parent to inherit access from: only the uploader may open it
+    if (attachment.uploaderId !== userId) throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
+    return attachment;
+  }
+  await assertAttachmentParentAccess(userId, attachment, 'view');
 
   return attachment;
 }
@@ -152,31 +187,7 @@ export async function listAttachments(opts: { issueId?: string; pageId?: string 
     throw new AppError(400, 'issueId or pageId is required', 'MISSING_PARAM');
   }
 
-  // Determine the org from the parent resource to enforce access control
-  let orgId: string | undefined;
-
-  if (opts.issueId) {
-    const issue = await prisma.issue.findUnique({
-      where: { id: opts.issueId },
-      include: PROJECT_TEAM_ORG_INCLUDE,
-    });
-    if (!issue) throw new AppError(404, ERR.ISSUE_NOT_FOUND, 'NOT_FOUND');
-    orgId = issue.project?.team?.org?.id;
-  } else if (opts.pageId) {
-    const page = await prisma.page.findUnique({
-      where: { id: opts.pageId },
-      include: SPACE_TEAM_ORG_INCLUDE,
-    });
-    if (!page) throw new AppError(404, ERR.PAGE_NOT_FOUND, 'NOT_FOUND');
-    orgId = page.space?.team?.org?.id;
-  }
-
-  if (orgId) {
-    const membership = await prisma.orgMembership.findFirst({
-      where: { orgId, userId },
-    });
-    if (!membership) throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
-  }
+  await assertAttachmentParentAccess(userId, opts, 'view');
 
   const where: Record<string, string> = {};
   if (opts.issueId) where.issueId = opts.issueId;
