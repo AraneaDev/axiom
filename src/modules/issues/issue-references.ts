@@ -57,7 +57,7 @@ export async function assertAssignable(
 
 /**
  * Every status change goes through here: the workflow rules must allow the move, and a
- * move an enabled approval gate covers is refused. Gated moves only happen when an
+ * move into a column an enabled approval gate guards is refused, whatever the source. Gated moves only happen when an
  * approval request is approved (castVote moves the issue itself).
  * @param projectId - The issue's project
  * @param fromColumnId - The issue's current column
@@ -71,9 +71,10 @@ export async function assertColumnTransition(
 ): Promise<void> {
   if (fromColumnId === toColumnId) return;
   await validateTransition(projectId, fromColumnId, toColumnId);
-  if (!fromColumnId) return;
+  // A gate guards entry into its column from anywhere: other columns, no column, or a
+  // detour through an intermediate column
   const gate = await prisma.approvalGate.findFirst({
-    where: { projectId, fromColumnId, toColumnId, enabled: true },
+    where: { projectId, toColumnId, enabled: true },
     select: { id: true },
   });
   if (gate) {

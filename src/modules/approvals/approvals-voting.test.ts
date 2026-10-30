@@ -190,4 +190,44 @@ describe('Approval voting', () => {
       await prisma.user.deleteMany({ where: { id: viewer.id } });
     }
   });
+
+  it('N8: a gate guards entry into its column from any source', async () => {
+    const cols = await prisma.boardColumn.findMany({
+      where: { projectId: ctx.projectId },
+      orderBy: { position: 'asc' },
+    });
+    const elsewhere = cols.find((c) => c.id !== toColumnId && c.position > 1) ?? cols[2];
+    const fromOther = await prisma.issue.create({
+      data: {
+        projectId: ctx.projectId,
+        number: 30,
+        title: 'From another column',
+        body: '',
+        creatorId: ctx.owner.id,
+        columnId: elsewhere.id,
+      },
+    });
+    const noColumn = await prisma.issue.create({
+      data: {
+        projectId: ctx.projectId,
+        number: 31,
+        title: 'No column',
+        body: '',
+        creatorId: ctx.owner.id,
+      },
+    });
+    const P = `/api/projects/${ctx.projectId}`;
+    const a = await authPatch(`${P}/issues/30`, approver.token, { columnId: toColumnId });
+    const b2 = await authPatch(`${P}/issues/31`, approver.token, { columnId: toColumnId });
+    expect([a.status, b2.status]).toEqual([409, 409]);
+
+    // The approval path works from that column too
+    const created = await authPost(
+      `/api/issues/${fromOther.id}/approval-requests/${toColumnId}`,
+      ctx.owner.token,
+      { approverIds: [approver.id] },
+    );
+    expect(created.status).toBe(201);
+    void noColumn;
+  });
 });

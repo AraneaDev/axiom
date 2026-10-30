@@ -209,15 +209,23 @@ export async function createApprovalRequestWithTarget(
     ERR.ISSUE_NOT_FOUND,
   );
 
-  // Find enabled gate for the transition
-  const gate = await prisma.approvalGate.findFirst({
-    where: {
-      projectId: issue.projectId,
-      fromColumnId: issue.columnId ?? undefined,
-      toColumnId: targetColumnId,
-      enabled: true,
-    },
-  });
+  // The gate guarding the target column: the one for this exact transition if there is
+  // one, otherwise any enabled gate into that column (gates guard the destination)
+  const gate =
+    (issue.columnId
+      ? await prisma.approvalGate.findFirst({
+          where: {
+            projectId: issue.projectId,
+            fromColumnId: issue.columnId,
+            toColumnId: targetColumnId,
+            enabled: true,
+          },
+        })
+      : null) ??
+    (await prisma.approvalGate.findFirst({
+      where: { projectId: issue.projectId, toColumnId: targetColumnId, enabled: true },
+      orderBy: { createdAt: 'asc' },
+    }));
 
   if (!gate) {
     throw new AppError(400, 'No approval gate found for this column transition');
