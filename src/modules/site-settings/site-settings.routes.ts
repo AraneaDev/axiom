@@ -1,10 +1,8 @@
 import { Router } from 'express';
-import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 
 import { authenticate } from '../../middleware/auth';
-import { AppError } from '../../middleware/errorHandler';
-import { isUserAdmin } from '../admin/admin.service';
+import { requireAdmin } from '../../middleware/requireAdmin';
 
 import * as controller from './site-settings.controller';
 
@@ -22,19 +20,6 @@ export const updateSiteSettingsSchema = z.object({
 
 // Public — no auth required
 router.get('/', controller.getSiteSettings);
-
-// Admin-only — update settings
-async function requireAdmin(req: Request, _res: Response, next: NextFunction) {
-  try {
-    const admin = await isUserAdmin(req.userId!);
-    if (!admin) {
-      return next(new AppError(403, 'Admin access required', 'FORBIDDEN'));
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
 
 router.put('/', authenticate, requireAdmin, controller.updateSiteSettings);
 
