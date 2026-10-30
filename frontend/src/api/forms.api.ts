@@ -36,7 +36,6 @@ export interface Form {
   description?: string | null;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   authMode: 'PUBLIC' | 'TOKEN_GATED';
-  sharedSecret?: string | null;
   spamProtection: 'NONE' | 'CAPTCHA' | 'RATE_LIMIT';
   rateLimitPerHour?: number | null;
   successMessage?: string | null;
@@ -86,13 +85,13 @@ export const formsApi = {
       slug: string;
       description: string;
       authMode: 'PUBLIC' | 'TOKEN_GATED';
-      sharedSecret: string;
+      regenerateSecret: boolean;
       spamProtection: 'NONE' | 'CAPTCHA' | 'RATE_LIMIT';
       rateLimitPerHour: number;
       successMessage: string;
       redirectUrl: string;
     }>,
-  ) => patch<Form>(`/projects/${projectId}/forms/${formId}`, data),
+  ) => patch<Form & { accessCode?: string }>(`/projects/${projectId}/forms/${formId}`, data),
 
   /**
    * Delete a form.

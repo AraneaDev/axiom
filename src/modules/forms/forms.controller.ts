@@ -106,11 +106,6 @@ export const reorderFields = asyncHandler(async (req: Request, res: Response) =>
 
 // ─── Public ──────────────────────────────────────────────────
 
-export const getPublic = asyncHandler(async (req: Request, res: Response) => {
-  const form = await formsService.getPublicForm(param(req, 'slug'));
-  res.json(form);
-});
-
 export const submit = asyncHandler(async (req: Request, res: Response) => {
   const {
     data,
