@@ -23,7 +23,7 @@ import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automatio
 import { createNotification } from '../notifications/notifications.service';
 import { validateTransition } from '../workflows/workflows.service';
 
-import { assertIssueRefsInProject } from './issue-references';
+import { assertAssignable, assertIssueRefsInProject } from './issue-references';
 
 // Re-export from sub-modules for backwards compatibility
 export { findIssueOrThrow } from './issue-utils';
@@ -69,6 +69,7 @@ export async function createIssue(
     prisma.project.findUnique({ where: { id: projectId } }),
     ERR.PROJECT_NOT_FOUND,
   );
+  await assertAssignable(projectId, data.assigneeId);
 
   // Find default column
   const defaultColumn = await prisma.boardColumn.findFirst({
@@ -388,6 +389,7 @@ export async function updateIssue(
     (issue as unknown as { labels?: { name: string }[] }).labels?.map((l) => l.name) ?? [];
 
   await assertIssueRefsInProject(projectId, { columnId: data.columnId, sprintId: data.sprintId });
+  await assertAssignable(projectId, data.assigneeId);
 
   // Validate workflow transition before updating column
   if (data.columnId !== undefined && data.columnId !== issue.columnId) {

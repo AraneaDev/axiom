@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
+import { assertAssignable } from '../../modules/issues/issue-references';
 import * as issuesService from '../../modules/issues/issues.service';
 import * as sprintsService from '../../modules/sprints/sprints.service';
 import { ERR } from '../../utils/error-messages';
@@ -141,6 +142,7 @@ export function registerIssueTools(ctx: McpToolContext) {
       await assertMcpProjectPermission('create_issue', projectId);
       const project = await prisma.project.findUnique({ where: { id: projectId } });
       if (!project) return { content: [{ type: 'text' as const, text: ERR.PROJECT_NOT_FOUND }] };
+      await assertAssignable(projectId, assigneeId);
       const lastIssue = await prisma.issue.findFirst({
         where: { projectId },
         orderBy: { number: 'desc' },

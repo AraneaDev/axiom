@@ -171,4 +171,25 @@ describe('Project-scoped ids', () => {
     });
     expect(issue.columnId).not.toBe(foreignColumn.id);
   });
+
+  it('W: refuses an assignee who is not on the project team', async () => {
+    const t = b.owner.token;
+    const P = `/api/projects/${b.projectId}`;
+    const outsider = a.owner.id;
+    const create = await authPost(`${P}/issues`, t, { title: 'x', assigneeId: outsider });
+    const update = await authPatch(`${P}/issues/1`, t, { assigneeId: outsider });
+    const issue = await prisma.issue.findFirstOrThrow({
+      where: { projectId: b.projectId, number: 1 },
+    });
+    const bulk = await authPatch(`${P}/issues/bulk`, t, {
+      issueIds: [issue.id],
+      updates: { assigneeId: outsider },
+    });
+    expect([create.status, update.status, bulk.status]).toEqual([400, 400, 400]);
+    expect(
+      await prisma.issue.count({ where: { assigneeId: outsider, projectId: b.projectId } }),
+    ).toBe(0);
+    // A team member, or no one, is fine
+    expect((await authPatch(`${P}/issues/1`, t, { assigneeId: b.owner.id })).status).toBe(200);
+  });
 });
