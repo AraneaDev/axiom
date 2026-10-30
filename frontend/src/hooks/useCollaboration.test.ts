@@ -113,4 +113,18 @@ describe('useCollaboration state messages', () => {
     expect(result.current.locked).toBeNull();
     expect(result.current.isConnected).toBe(true);
   });
+
+  it('15: a lost-edit notice is dropped on reconnect and when access comes back', () => {
+    const { result } = renderHook(() => useCollaboration({ pageId: 'p1' }));
+    const provider = providers[0];
+    deliver(provider, 22, { canEdit: false });
+    expect(result.current.locked).toEqual({ byName: '' });
+
+    act(() => provider.emit('status', { status: 'connected' }));
+    expect(result.current.locked).toBeNull();
+
+    deliver(provider, 22, { canEdit: false });
+    deliver(provider, 22, { canEdit: true });
+    expect(result.current.locked).toBeNull();
+  });
 });

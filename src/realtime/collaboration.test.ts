@@ -194,6 +194,14 @@ describe('Collaboration server', () => {
     expect(await client.closeCode).toBe(4003);
   });
 
+  it('tells each connection its edit access on join', async () => {
+    const editor = await connect('editor');
+    const viewer = await connect('viewer');
+    await waitFor(() => editor.accessMessages.length > 0 && viewer.accessMessages.length > 0);
+    expect(editor.accessMessages[0]).toEqual({ canEdit: true });
+    expect(viewer.accessMessages[0]).toEqual({ canEdit: false });
+  });
+
   it('tells an editor demoted to read-only, and drops their updates', async () => {
     const editor = await connect('editor');
     // Lower the editor's grant on the space from EDIT to VIEW

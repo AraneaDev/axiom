@@ -155,6 +155,8 @@ export function useCollaboration({
       if (event.status === 'connected') {
         setLocked(null);
         setPendingChange(null);
+        // The server sends this connection's edit access after it joins
+        setReadOnly(false);
       }
       setIsConnected(event.status === 'connected');
     };

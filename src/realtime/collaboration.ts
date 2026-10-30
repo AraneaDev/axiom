@@ -784,6 +784,10 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
   // Send current awareness state to the new client
   await sendAwareness(room, ws);
 
+  // Every connection learns its own edit access, so a client that was read-only on an
+  // earlier connection doesn't stay that way (or the reverse)
+  sendJson(room, MESSAGE_ACCESS, { canEdit: client.canEdit }, ws);
+
   // Late joiners learn about a running merge and a waiting change at once
   if (room.lock) {
     sendJson(room, MESSAGE_LOCK, { locked: true, byName: room.lock.byName }, ws);
