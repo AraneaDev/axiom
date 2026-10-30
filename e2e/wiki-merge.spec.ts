@@ -12,6 +12,31 @@ async function openEditor(page: Page, slug: string, firstText: string) {
   return editor;
 }
 
+/**
+ * Save the live session until the stored body holds `typed`, and return that body.
+ * @param api - The wiki API client
+ * @param slug - The page
+ * @param typed - Text typed in the editor
+ */
+async function bodyOnceFlushed(
+  api: Awaited<ReturnType<typeof wikiApi>>,
+  slug: string,
+  typed: string,
+): Promise<string> {
+  let body = '';
+  await expect
+    .poll(
+      async () => {
+        await api.flush(slug);
+        body = (await api.getPage(slug)).body;
+        return body;
+      },
+      { timeout: 10_000, intervals: [250] },
+    )
+    .toContain(typed);
+  return body;
+}
+
 /** Click at the end of the paragraph that starts with `text` and type `typed` there. */
 async function typeAtEnd(page: Page, text: string, typed: string) {
   await page.locator('.ProseMirror p', { hasText: text }).first().click();
@@ -32,11 +57,11 @@ test.describe('Wiki live merge', () => {
     const editor = await openEditor(page, slug, 'Alpha block.');
     await typeAtEnd(page, 'Alpha block.', ' Yours was typed here.');
     await expect(editor).toContainText('Yours was typed here.');
-    // Let the keystrokes reach the collaboration server before the external change
-    await page.waitForTimeout(1000);
+    // Save the session until the server holds the keystrokes, then the agent edits what it reads
+    const current = await bodyOnceFlushed(api, slug, 'Yours was typed here.');
 
     const res = await api.patchPage(slug, {
-      body: 'Alpha block.\n\nBravo block.\n\nCharlie block. The agent added this.\n',
+      body: current.replace('Charlie block.', 'Charlie block. The agent added this.'),
     });
     expect(res.pendingMerge).toBe(true);
     expect(res.externalVersionId).toBeTruthy();
@@ -68,13 +93,26 @@ test.describe('Wiki live merge', () => {
     await api.createPage(slug, 'Conflicts', 'Block A text.\n\nBlock B text.\n\nBlock C text.\n');
 
     const editor = await openEditor(page, slug, 'Block A text.');
+    // A first agent change, in block C only, so the session's edits below stay its own work
+    await api.patchPage(slug, {
+      body: 'Block A text.\n\nBlock B text.\n\nBlock C text. agent-C\n',
+    });
+    await expect(page.getByText(/updated this page/)).toBeVisible({ timeout: 10_000 });
+
     await typeAtEnd(page, 'Block A text.', ' yours-A');
     await typeAtEnd(page, 'Block B text.', ' yours-B');
     await expect(editor).toContainText('yours-B');
-    await page.waitForTimeout(1000);
+    // The server holds the keystrokes once the pending merge shows them as ours
+    await expect
+      .poll(async () => ((await api.pendingMerge(slug)) as { ours: string }).ours, {
+        timeout: 10_000,
+        intervals: [250],
+      })
+      .toContain('Block B text. yours-B');
 
+    // The agent's second change overlaps both edits
     await api.patchPage(slug, {
-      body: 'Block A text. agent-A\n\nBlock B text. agent-B\n\nBlock C text.\n',
+      body: 'Block A text. agent-A\n\nBlock B text. agent-B\n\nBlock C text. agent-C\n',
     });
 
     await expect(page.getByText(/2 overlap with yours/)).toBeVisible({ timeout: 10_000 });
@@ -103,6 +141,7 @@ test.describe('Wiki live merge', () => {
     const { body } = await api.getPage(slug);
     expect(body).toContain('Block A text. yours-A');
     expect(body).toContain('Block B text. agent-B');
+    expect(body).toContain('Block C text. agent-C');
     expect(body).not.toContain('agent-A');
     expect(body).not.toContain('yours-B');
     expect(body).not.toContain('<paragraph');

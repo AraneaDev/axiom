@@ -21,7 +21,10 @@ export async function login(page: Page, user = DEMO_USERS.admin) {
 
 /** Log out via the header user menu; logging out returns to the landing page at '/'. */
 export async function logout(page: Page) {
-  await page.getByRole('button', { name: /admin user|sarah chen|marcus kim/i }).first().click();
+  await page
+    .getByRole('button', { name: /admin user|sarah chen|marcus kim/i })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await page.waitForURL('/');
 }
@@ -43,7 +46,9 @@ export async function wikiApi(request: APIRequestContext, user = DEMO_USERS.admi
 
   const orgs = await (await request.get('/api/orgs', { headers: h })).json();
   const teams = await (await request.get(`/api/teams/org/${orgs[0].id}`, { headers: h })).json();
-  const spaces = await (await request.get(`/api/wiki/team/${teams.data[0].id}/spaces`, { headers: h })).json();
+  const spaces = await (
+    await request.get(`/api/wiki/team/${teams.data[0].id}/spaces`, { headers: h })
+  ).json();
   const spaceId: string = spaces.find((s: { slug: string }) => s.slug === 'docs').id;
   const pageUrl = (slug: string) => `/api/wiki/spaces/${spaceId}/pages/${slug}`;
 
@@ -67,6 +72,52 @@ export async function wikiApi(request: APIRequestContext, user = DEMO_USERS.admi
     },
     async history(slug: string) {
       return (await request.get(`${pageUrl(slug)}/history`, { headers: h })).json();
+    },
+    /** Save the page's live editing session now, as the editor's Save does. */
+    async flush(slug: string) {
+      const res = await request.post(`${pageUrl(slug)}/collab/flush`, { headers: h, data: {} });
+      if (!res.ok()) throw new Error(`flush failed: ${res.status()}`);
+      return res.json();
+    },
+    /** The pending merge (base, ours, theirs), or null when nothing is pending. */
+    async pendingMerge(slug: string) {
+      return (await request.get(`${pageUrl(slug)}/pending-merge`, { headers: h })).json();
+    },
+  };
+}
+
+/** A small authenticated API client for the seeded Platform project's issues. */
+export async function issuesApi(request: APIRequestContext, user = DEMO_USERS.admin) {
+  const base = { 'X-Requested-With': 'XMLHttpRequest' };
+  const loginRes = await request.post('/api/auth/login', {
+    headers: base,
+    data: { login: user.login, password: user.password },
+  });
+  const { accessToken } = await loginRes.json();
+  const h = { ...base, Authorization: `Bearer ${accessToken}` };
+
+  const orgs = await (await request.get('/api/orgs', { headers: h })).json();
+  const teams = await (await request.get(`/api/teams/org/${orgs[0].id}`, { headers: h })).json();
+  const projects = await (
+    await request.get(`/api/projects/team/${teams.data[0].id}`, { headers: h })
+  ).json();
+  const list: { id: string; slug: string }[] = Array.isArray(projects) ? projects : projects.data;
+  const projectId = list.find((p) => p.slug === 'platform')!.id;
+
+  return {
+    projectId,
+    async create(title: string, body: string) {
+      const res = await request.post(`/api/projects/${projectId}/issues`, {
+        headers: h,
+        data: { title, body, type: 'TASK', priority: 'MEDIUM' },
+      });
+      if (res.status() !== 201) throw new Error(`create issue failed: ${res.status()}`);
+      return res.json() as Promise<{ number: number }>;
+    },
+    async get(number: number) {
+      return (
+        await request.get(`/api/projects/${projectId}/issues/${number}`, { headers: h })
+      ).json();
     },
   };
 }

@@ -24,19 +24,19 @@ test.describe('Wiki Editing', () => {
     await expect(page).toHaveURL(/\/edit$/);
     // TipTap editor should load
     await expect(
-      page.locator('.tiptap-editor, .ProseMirror, [contenteditable="true"]').first()
+      page.locator('.tiptap-editor, .ProseMirror, [contenteditable="true"]').first(),
     ).toBeVisible({ timeout: 10_000 });
   });
 
   test('editor has save button', async ({ page }) => {
     await page.goto(`${WIKI_URL}/docs/getting-started/edit`);
     await expect(
-      page.locator('.tiptap-editor, .ProseMirror, [contenteditable="true"]').first()
+      page.locator('.tiptap-editor, .ProseMirror, [contenteditable="true"]').first(),
     ).toBeVisible({ timeout: 10_000 });
     // Should show a save/publish button
-    await expect(
-      page.getByRole('button', { name: /save|publish|update/i }).first()
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: /save|publish|update/i }).first()).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test('editor allows typing content', async ({ page }) => {
@@ -61,23 +61,22 @@ test.describe('Wiki Editing', () => {
   test('wiki page view renders markdown content', async ({ page }) => {
     await page.goto(`${WIKI_URL}/docs/handbook`);
     // The page should render markdown with prose styling
-    await expect(
-      page.locator('.prose').first()
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.prose').first()).toBeVisible({ timeout: 10_000 });
     // Should contain heading elements from the markdown
-    await expect(
-      page.locator('.prose h1, .prose h2, .prose h3, .prose p').first()
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.prose h1, .prose h2, .prose h3, .prose p').first()).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test('editor toolbar is visible', async ({ page }) => {
     await page.goto(`${WIKI_URL}/docs/getting-started/edit`);
-    await expect(
-      page.locator('.ProseMirror, [contenteditable="true"]').first()
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.ProseMirror, [contenteditable="true"]').first()).toBeVisible({
+      timeout: 10_000,
+    });
     // Editor toolbar should have formatting buttons (bold, italic, etc.)
     await expect(page.getByRole('button', { name: 'Bold' })).toBeVisible({ timeout: 10_000 });
   });
+
   test('a page with a heading, list, table and code renders as structure in the editor', async ({
     page,
     request,

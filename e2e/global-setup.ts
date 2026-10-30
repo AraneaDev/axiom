@@ -315,6 +315,35 @@ export default async function globalSetup() {
         body: '# Architecture\n\n```mermaid\ngraph TD\n  A[Client] --> B[API]\n  B --> C[(Database)]\n```\n',
       },
     ];
+    // Every custom block the collaborative editor renders with a node view, in the exact
+    // Markdown the editor writes, so a spec can edit around them and compare the stored body
+    const customBlocksBody = [
+      '# Custom blocks',
+      '',
+      '[TOC]',
+      '',
+      '## Callout',
+      '',
+      '> [!WARNING]',
+      '> Careful with this.',
+      '',
+      '## Collapsible',
+      '',
+      '> [!DETAILS] More details',
+      '> Hidden text.',
+      '',
+      '## References',
+      '',
+      'See <span data-issue-key="PLAT-1" class="issue-ref">PLAT-1</span> and ask <span class="mention">@Sarah Chen</span>.',
+      '',
+      ':::issue PLAT-2:::',
+      '',
+      'Link <span url="http://localhost:7000/axiom/core/platform/issues/1" type="issue" title="Set up CI/CD pipeline" key="PLAT-1" status="Backlog" data-smart-link="" class="smart-link">PLAT-1 Set up CI/CD pipeline</span>',
+      '',
+      'Edit this paragraph.',
+    ].join('\n');
+    readOnlyPages.push({ title: 'Custom blocks', slug: 'custom-blocks', body: customBlocksBody });
+
     for (const [i, pg] of readOnlyPages.entries()) {
       await prisma.page.create({
         data: {
@@ -346,7 +375,7 @@ export default async function globalSetup() {
     });
 
     console.log(
-      'E2E seed complete: 3 users, 1 org, 1 team, 1 project, 7 issues, 4 labels, 1 custom field, 1 issue template, 1 wiki space (3 pages), 5 templates, 1 automation rule, 2 notifications, 2 sprints',
+      'E2E seed complete: 3 users, 1 org, 1 team, 1 project, 7 issues, 4 labels, 1 custom field, 1 issue template, 1 wiki space (4 pages), 5 templates, 1 automation rule, 2 notifications, 2 sprints',
     );
   } finally {
     await prisma.$disconnect();
