@@ -6,11 +6,14 @@ import { prisma } from '../config/database';
 import {
   addMemberToContext,
   createTestContext,
+  createTestUser,
   cleanupTestContext,
   type TestContext,
+  type TestUser,
 } from '../test/factory';
 
 import { mcpContext } from './context';
+import { assertMcpPermission, MCP_TOOL_PERMISSIONS } from './mcp-permissions';
 import { createMcpServer } from './server';
 
 describe('MCP server', () => {
@@ -28,7 +31,6 @@ describe('MCP server', () => {
   afterAll(async () => {
     await client.close();
     await cleanupTestContext(tctx);
-    await prisma.$disconnect();
   });
 
   it('tools/list returns exactly the 24 issue, wiki, org, search and integration tools', async () => {
@@ -152,5 +154,88 @@ describe('MCP server', () => {
     expect(create.failed).toBe(true);
     expect((await prisma.page.findUniqueOrThrow({ where: { id: page.id } })).body).toBe('before');
     expect(await prisma.page.count({ where: { spaceId: space.id, slug: 'sneaky' } })).toBe(0);
+  });
+});
+
+describe('MCP permission mapping', () => {
+  let tctx: TestContext;
+  let stranger: TestUser;
+  let strangerClient: Client;
+
+  const callAs = async (
+    userId: string,
+    c: Client,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<{ failed: boolean; text: string }> => {
+    try {
+      const res = await mcpContext.run({ userId }, () => c.callTool({ name, arguments: args }));
+      return { failed: res.isError === true, text: JSON.stringify(res.content) };
+    } catch (err) {
+      return { failed: true, text: (err as Error).message };
+    }
+  };
+
+  beforeAll(async () => {
+    tctx = await createTestContext('mcpmap');
+    // A user of a different org, with full rights there
+    stranger = await createTestUser();
+    const server = createMcpServer(stranger.id);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    strangerClient = new Client({ name: 'stranger', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), strangerClient.connect(clientTransport)]);
+  });
+
+  afterAll(async () => {
+    await strangerClient.close();
+    await cleanupTestContext(tctx);
+    await prisma.user.deleteMany({ where: { id: stranger.id } });
+  });
+
+  it('maps every registered tool to a permission', async () => {
+    const { tools } = await strangerClient.listTools();
+    const unmapped = tools.map((t) => t.name).filter((n) => !(n in MCP_TOOL_PERMISSIONS));
+    expect(unmapped).toEqual([]);
+  });
+
+  it('refuses a tool with no permission mapping', async () => {
+    await expect(
+      mcpContext.run({ userId: tctx.owner.id }, () =>
+        assertMcpPermission('not_a_mapped_tool', tctx.orgId),
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('denies delete_issue on a project in another org', async () => {
+    const issue = await prisma.issue.create({
+      data: {
+        projectId: tctx.projectId,
+        number: 1,
+        title: 'Keep me',
+        body: '',
+        creatorId: tctx.owner.id,
+      },
+    });
+    const res = await callAs(stranger.id, strangerClient, 'delete_issue', {
+      projectId: tctx.projectId,
+      issueNumber: 1,
+    });
+    expect(res.failed).toBe(true);
+    expect(await prisma.issue.count({ where: { id: issue.id } })).toBe(1);
+  });
+
+  it('denies delete_wiki_page in another org', async () => {
+    const space = await prisma.wikiSpace.create({
+      data: { teamId: tctx.teamId, name: 'Map Space', slug: 'map-space' },
+    });
+    const page = await prisma.page.create({
+      data: { spaceId: space.id, title: 'Keep me', slug: 'keep-me', body: 'x' },
+    });
+    const res = await callAs(stranger.id, strangerClient, 'delete_wiki_page', {
+      spaceId: space.id,
+      pageSlug: 'keep-me',
+    });
+    expect(res.failed).toBe(true);
+    expect(await prisma.page.count({ where: { id: page.id } })).toBe(1);
   });
 });
