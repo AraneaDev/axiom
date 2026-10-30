@@ -8,6 +8,12 @@ import { validate } from '../../utils/validation';
 import * as formsService from './forms.service';
 import { submitFormSchema, verifyFormSchema } from './forms.validation';
 
+/**
+ * The sender's IP, as the per-IP form limits key it
+ * @param req
+ */
+const clientIp = (req: Request) => req.ip || req.socket.remoteAddress || 'unknown';
+
 export const getPublicForm = asyncHandler(async (req: Request, res: Response) => {
   const form = await formsService.getPublicForm(param(req, 'formSlug'));
   // Strip sensitive fields
@@ -18,7 +24,7 @@ export const getPublicForm = asyncHandler(async (req: Request, res: Response) =>
     let authorized = false;
     if (secret) {
       try {
-        await formsService.assertFormSecret(form, secret);
+        await formsService.assertFormSecret(form, secret, clientIp(req));
         authorized = true;
       } catch (err) {
         // A lockout is reported as such; a wrong secret just keeps the form locked
@@ -45,7 +51,7 @@ export const submitForm = asyncHandler(async (req: Request, res: Response) => {
     submitFormSchema,
     req.body,
   );
-  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const ip = clientIp(req);
   const submission = await formsService.submitForm(
     param(req, 'formSlug'),
     data as Record<string, unknown>,
@@ -60,6 +66,6 @@ export const submitForm = asyncHandler(async (req: Request, res: Response) => {
 
 export const verifyAccess = asyncHandler(async (req: Request, res: Response) => {
   const { secret } = validate(verifyFormSchema, req.body);
-  const result = await formsService.verifyFormAccess(param(req, 'formSlug'), secret);
+  const result = await formsService.verifyFormAccess(param(req, 'formSlug'), secret, clientIp(req));
   res.json(result);
 });

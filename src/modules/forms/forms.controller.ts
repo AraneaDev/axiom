@@ -131,6 +131,10 @@ export const submit = asyncHandler(async (req: Request, res: Response) => {
 
 export const verifyAccess = asyncHandler(async (req: Request, res: Response) => {
   const { secret } = validate(verifyFormSchema, req.body);
-  const result = await formsService.verifyFormAccess(param(req, 'slug'), secret);
+  const result = await formsService.verifyFormAccess(
+    param(req, 'slug'),
+    secret,
+    req.ip || req.socket.remoteAddress || 'unknown',
+  );
   res.json(result);
 });

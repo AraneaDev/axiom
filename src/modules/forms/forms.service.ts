@@ -556,7 +556,7 @@ export async function submitForm(
 ) {
   const form = await getPublicForm(slug);
   // A gated form takes submissions only with its secret, not just its slug
-  await assertFormSecret(form, secret);
+  await assertFormSecret(form, secret, submitterIp);
 
   // Per-IP and form-wide hourly caps, counted atomically
   await consumeSubmissionSlot(form, submitterIp);
@@ -594,12 +594,13 @@ export async function submitForm(
  *
  * @param slug
  * @param secret
+ * @param ip
  */
-export async function verifyFormAccess(slug: string, secret?: string) {
+export async function verifyFormAccess(slug: string, secret: string | undefined, ip: string) {
   const form = await prisma.form.findUnique({ where: { slug } });
   if (!form) throw new AppError(404, ERR.FORM_NOT_FOUND);
   if (form.status !== 'PUBLISHED') throw new AppError(404, ERR.FORM_NOT_FOUND);
-  await assertFormSecret(form, secret);
+  await assertFormSecret(form, secret, ip);
   return { authorized: true, authMode: form.authMode };
 }
 
@@ -610,19 +611,21 @@ export async function verifyFormAccess(slug: string, secret?: string) {
  * @param form.authMode
  * @param form.sharedSecret
  * @param secret - The secret the submitter gave
+ * @param ip - The sender's IP (the lockout is per IP)
  * @throws {AppError} 401 when the secret is missing or wrong
  */
 export async function assertFormSecret(
   form: { id: string; authMode: string; sharedSecret: string | null },
-  secret?: string,
+  secret: string | undefined,
+  ip: string,
 ): Promise<void> {
   if (form.authMode !== 'TOKEN_GATED') return;
   if (!secret) throw new AppError(401, 'Access token required');
   if (!form.sharedSecret) throw new AppError(500, 'Form is misconfigured');
-  // Locked out after too many wrong secrets, whichever route they came through
-  await assertSecretAttemptsLeft(form.id);
+  // This IP is locked out after too many wrong secrets, whichever route they came through
+  await assertSecretAttemptsLeft(form.id, ip);
   if (!(await bcrypt.compare(secret, form.sharedSecret))) {
-    await recordSecretFailure(form.id);
+    await recordSecretFailure(form.id, ip);
     throw new AppError(401, 'Invalid access token');
   }
 }
