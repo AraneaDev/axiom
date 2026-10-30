@@ -5,6 +5,7 @@ import {
   projectOf,
   requireProjectAccess,
   requireOwnedByProject,
+  requireProjectWrite,
 } from '../../middleware/requireProjectAccess';
 import { hydrateBacklog } from '../issues/backlog-hydrate.controller';
 
@@ -13,6 +14,9 @@ import * as sprintsController from './sprints.controller';
 const router = Router();
 
 router.use(authenticate);
+// Writes follow the permission matrix: VIEWERs and GUESTs can read, not change
+router.use('/:projectId', requireProjectWrite());
+
 router.use('/:projectId/sprints', requireProjectAccess);
 router.use('/:projectId/velocity', requireProjectAccess);
 router.use('/:projectId/backlog', requireProjectAccess);

@@ -167,6 +167,28 @@ export const projectOf = {
 };
 
 /**
+ * Whether the user's role allows `action` on a project: platform admins always, otherwise
+ * the org role or the role in the project's team (checkTeamPermission).
+ * @param userId
+ * @param projectId
+ * @param action
+ * @returns 'ok', 'not_found' or 'forbidden'
+ */
+export async function checkProjectAction(
+  userId: string,
+  projectId: string,
+  action: Action,
+): Promise<'ok' | 'not_found' | 'forbidden'> {
+  const [user, project] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { teamId: true } }),
+  ]);
+  if (!project) return 'not_found';
+  if (user?.isAdmin) return 'ok';
+  return (await checkTeamPermission(userId, project.teamId, action)) === 'ok' ? 'ok' : 'forbidden';
+}
+
+/**
  * Project actions beyond reading, such as changing settings or deleting the project: the
  * user's org role or their role in the project's team must allow `action`. Platform admins
  * pass. Use after requireProjectAccess.
@@ -176,16 +198,68 @@ export const projectOf = {
 export function requireProjectAction(action: Action) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
-      const userId = req.userId!;
-      const projectId = param(req, 'projectId');
-      const [user, project] = await Promise.all([
-        prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } }),
-        prisma.project.findUnique({ where: { id: projectId }, select: { teamId: true } }),
-      ]);
-      if (!project) return next(new AppError(404, ERR.PROJECT_NOT_FOUND));
-      if (user?.isAdmin) return next();
-      const access = await checkTeamPermission(userId, project.teamId, action);
-      if (access !== 'ok') {
+      const access = await checkProjectAction(req.userId!, param(req, 'projectId'), action);
+      if (access === 'not_found') return next(new AppError(404, ERR.PROJECT_NOT_FOUND));
+      if (access === 'forbidden') {
+        return next(new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN'));
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * Role check for every write under /:projectId, following the permission matrix: reads
+ * pass through, writes need `action` (issue:edit by default; VIEWERs and GUESTs lack it).
+ * Mount with router.use('/:projectId', ...). A first segment that is not a project id
+ * (e.g. /milestones/:id) passes through to its own checks.
+ * @param action - The action writes need
+ * @returns Express middleware
+ */
+export function requireProjectWrite(action: Action = 'issue:edit') {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    if (SAFE_METHODS.has(req.method)) return next();
+    // Watching an issue is a personal subscription, not a change to the project
+    if (/\/issues\/\d+\/watchers\/toggle$/.test(req.originalUrl.split('?')[0])) return next();
+    try {
+      // Several project routers share /api/projects and each mounts this guard: decide once
+      const key = `${param(req, 'projectId')}:${action}`;
+      const checked = req as Request & { projectWriteChecked?: string };
+      if (checked.projectWriteChecked === key) return next();
+      const access = await checkProjectAction(req.userId!, param(req, 'projectId'), action);
+      if (access === 'forbidden') {
+        return next(new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN'));
+      }
+      checked.projectWriteChecked = key;
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/**
+ * requireProjectWrite for routes that name a project-owned record instead of the project.
+ * @param paramName - The route param holding the record id
+ * @param resolve - Returns the record's project id
+ * @param action - The action writes need
+ * @returns Express middleware
+ */
+export function requireProjectWriteVia(
+  paramName: string,
+  resolve: ProjectResolver,
+  action: Action = 'issue:edit',
+) {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    if (SAFE_METHODS.has(req.method)) return next();
+    try {
+      const projectId = await resolve(param(req, paramName));
+      if (!projectId) return next();
+      if ((await checkProjectAction(req.userId!, projectId, action)) === 'forbidden') {
         return next(new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN'));
       }
       next();

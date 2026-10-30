@@ -4,6 +4,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { ERR } from '../../utils/error-messages';
+import { hasPermission, type Action } from '../../utils/permissions';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
 const LEVEL_HIERARCHY: Record<SpacePermissionLevel, number> = {
@@ -12,9 +13,38 @@ const LEVEL_HIERARCHY: Record<SpacePermissionLevel, number> = {
   ADMIN: 3,
 };
 
+const LEVEL_ACTION: Record<SpacePermissionLevel, Action> = {
+  VIEW: 'wiki:view',
+  EDIT: 'wiki:edit',
+  ADMIN: 'team:manage_members',
+};
+
+async function roleAllowsSpaceLevel(
+  spaceId: string,
+  userId: string,
+  level: SpacePermissionLevel,
+): Promise<boolean> {
+  const space = await prisma.wikiSpace.findUnique({
+    where: { id: spaceId },
+    select: { teamId: true, team: { select: { orgId: true } } },
+  });
+  if (!space) return false;
+  const [orgMembership, teamMembership] = await Promise.all([
+    prisma.orgMembership.findUnique({
+      where: { userId_orgId: { userId, orgId: space.team.orgId } },
+    }),
+    prisma.teamMembership.findUnique({
+      where: { userId_teamId: { userId, teamId: space.teamId } },
+    }),
+  ]);
+  if (!orgMembership) return false;
+  return hasPermission(orgMembership.role, teamMembership?.role ?? null, LEVEL_ACTION[level]);
+}
+
 /**
  * Check whether a user can access a space at the required permission level.
- * If no custom permissions exist on the space, all team members have full access.
+ * If no custom permissions exist on the space, the role matrix decides (org role or the
+ * role in the space's team).
  * If custom permissions exist, checks both direct user permission and team role permission,
  * taking the highest granted level.
  * @param spaceId - The space to check access for
@@ -34,8 +64,10 @@ export async function canAccessSpace(
   // 1. Count custom permissions on space
   const permCount = await prisma.spacePermission.count({ where: { spaceId } });
 
-  // 2. If no custom permissions, all team members have full access
-  if (permCount === 0) return true;
+  // 2. No custom permissions: the role matrix decides (src/utils/permissions.ts). Reading
+  // needs wiki:view and editing wiki:edit, by org role or the role in the space's team;
+  // administering needs team:manage_members (org OWNER/ADMIN or team ADMIN)
+  if (permCount === 0) return roleAllowsSpaceLevel(spaceId, userId, requiredLevel);
 
   // 3. Get user's team role via TeamMember lookup
   const space = await prisma.wikiSpace.findUnique({

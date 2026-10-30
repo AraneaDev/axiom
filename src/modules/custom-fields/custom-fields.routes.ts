@@ -1,13 +1,15 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
-import { requireProjectAccess } from '../../middleware/requireProjectAccess';
+import { requireProjectAccess, requireProjectWrite } from '../../middleware/requireProjectAccess';
 
 import * as customFieldsCtrl from './custom-fields.controller';
 
 const router = Router();
 
 router.use(authenticate);
+// Writes follow the permission matrix: VIEWERs and GUESTs can read, not change
+router.use('/:projectId', requireProjectWrite());
 
 // Project-scoped definition routes
 router.use('/:projectId/custom-fields', requireProjectAccess);

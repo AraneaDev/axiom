@@ -5,6 +5,7 @@ import {
   projectOf,
   requireProjectAccess,
   requireOwnedByProject,
+  requireProjectWrite,
 } from '../../middleware/requireProjectAccess';
 import * as wikiLinkController from '../wiki/wiki-issue-links.controller';
 
@@ -18,6 +19,9 @@ import * as issuesController from './issues.controller';
 const router = Router();
 
 router.use(authenticate);
+// Writes follow the permission matrix: VIEWERs and GUESTs can read, not change
+router.use('/:projectId', requireProjectWrite());
+
 router.use('/:projectId/issues', requireProjectAccess);
 router.use('/:projectId/board', requireProjectAccess);
 router.use('/:projectId/time-report', requireProjectAccess);

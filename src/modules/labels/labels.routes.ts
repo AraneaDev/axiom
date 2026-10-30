@@ -1,13 +1,16 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
-import { requireProjectAccess } from '../../middleware/requireProjectAccess';
+import { requireProjectAccess, requireProjectWrite } from '../../middleware/requireProjectAccess';
 
 import * as labelsController from './labels.controller';
 
 const router = Router();
 
 router.use(authenticate);
+// Writes follow the permission matrix: VIEWERs and GUESTs can read, not change
+router.use('/:projectId', requireProjectWrite());
+
 router.use('/:projectId/labels', requireProjectAccess);
 
 router.post('/:projectId/labels', labelsController.create);

@@ -9,7 +9,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { assertPageAccess } from '../../middleware/rbac';
-import { checkProjectAccess } from '../../middleware/requireProjectAccess';
+import { checkProjectAccess, checkProjectAction } from '../../middleware/requireProjectAccess';
 import { getStorage } from '../../storage/storage';
 import { ERR } from '../../utils/error-messages';
 import { PROJECT_TEAM_ORG_INCLUDE, SPACE_TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
@@ -148,6 +148,13 @@ export async function assertAttachmentParentAccess(
     if (!issue) throw new AppError(404, ERR.ISSUE_NOT_FOUND, 'NOT_FOUND');
     if ((await checkProjectAccess(userId, issue.projectId)) !== 'ok') {
       throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
+    }
+    // Attaching changes the issue: the role must allow issue:edit
+    if (
+      mode === 'edit' &&
+      (await checkProjectAction(userId, issue.projectId, 'issue:edit')) !== 'ok'
+    ) {
+      throw new AppError(403, 'Insufficient permissions: issue:edit', 'FORBIDDEN');
     }
   }
   if (parent.pageId) await assertPageAccess(userId, parent.pageId, mode);

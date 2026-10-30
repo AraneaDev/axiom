@@ -5,12 +5,15 @@ import {
   projectOf,
   requireProjectAccess,
   requireOwnedByProject,
+  requireProjectWrite,
 } from '../../middleware/requireProjectAccess';
 
 import * as formsController from './forms.controller';
 
 const router = Router();
 router.use(authenticate);
+// Writes follow the permission matrix: VIEWERs and GUESTs can read, not change
+router.use('/:projectId', requireProjectWrite());
 
 // ─── Form CRUD ───────────────────────────────────────────────
 router.get('/:projectId/forms', requireProjectAccess, formsController.list);

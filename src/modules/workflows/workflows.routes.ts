@@ -5,6 +5,7 @@ import {
   projectOf,
   requireProjectAccess,
   requireOwnedByProject,
+  requireProjectWrite,
 } from '../../middleware/requireProjectAccess';
 
 import * as workflowController from './workflows.controller';
@@ -12,6 +13,9 @@ import * as workflowController from './workflows.controller';
 const router = Router();
 
 router.use(authenticate);
+// Writes follow the permission matrix: VIEWERs and GUESTs can read, not change
+router.use('/:projectId', requireProjectWrite());
+
 router.use('/:projectId/workflow-rules', requireProjectAccess);
 router.use(
   '/:projectId/workflow-rules/:ruleId',

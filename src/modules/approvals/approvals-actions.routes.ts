@@ -2,7 +2,10 @@ import { Router } from 'express';
 
 import { prisma } from '../../config/database';
 import { authenticate } from '../../middleware/auth';
-import { requireProjectAccessVia } from '../../middleware/requireProjectAccess';
+import {
+  requireProjectAccessVia,
+  requireProjectWriteVia,
+} from '../../middleware/requireProjectAccess';
 import { ERR } from '../../utils/error-messages';
 
 import * as approvalsController from './approvals.controller';
@@ -11,12 +14,13 @@ const router = Router();
 router.use(authenticate);
 
 // Approval requests belong to an issue: the user needs access to its project
-const issueAccess = requireProjectAccessVia(
-  'issueId',
-  async (id) =>
-    (await prisma.issue.findUnique({ where: { id }, select: { projectId: true } }))?.projectId,
-  ERR.ISSUE_NOT_FOUND,
-);
+const issueProject = async (id: string) =>
+  (await prisma.issue.findUnique({ where: { id }, select: { projectId: true } }))?.projectId;
+// Requesting an approval moves an issue: it needs issue:edit by role, like other writes
+const issueAccess = [
+  requireProjectAccessVia('issueId', issueProject, ERR.ISSUE_NOT_FOUND),
+  requireProjectWriteVia('issueId', issueProject),
+];
 const requestAccess = requireProjectAccessVia(
   'requestId',
   async (id) =>
@@ -31,12 +35,12 @@ const requestAccess = requireProjectAccessVia(
 
 router.post(
   '/issues/:issueId/approval-requests/:targetColumnId',
-  issueAccess,
+  ...issueAccess,
   approvalsController.createRequest,
 );
 router.get(
   '/issues/:issueId/approval-requests',
-  issueAccess,
+  ...issueAccess,
   approvalsController.listRequestsForIssue,
 );
 router.post('/approval-requests/:requestId/vote', requestAccess, approvalsController.vote);
