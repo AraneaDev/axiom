@@ -1,10 +1,13 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { assertPageAccess } from '../../middleware/rbac';
 import { assertAuthor } from '../../utils/assert-author';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+
+import { canAccessSpace } from './space-permissions.service';
 
 const VALID_REACTION_TYPES = ['thumbsup', 'heart', 'eyes', 'rocket', 'thinking', 'check'] as const;
 
@@ -86,16 +89,25 @@ export async function updatePageComment(commentId: string, userId: string, body:
 }
 
 /**
- * Toggle the resolved status of a wiki page comment.
+ * Toggle the resolved status of a wiki page comment. The comment's author may, and so may
+ * anyone who can edit the page; a read-only viewer can't resolve other people's comments.
  * @param commentId - The comment to resolve/unresolve
+ * @param userId - The user toggling it
  * @returns The updated comment with user relation
- * @throws {AppError} 404 if comment not found
+ * @throws {AppError} 404 if comment not found, 403 if not allowed
  */
-export async function resolveComment(commentId: string) {
+export async function resolveComment(commentId: string, userId: string) {
   const comment = await findOrThrow(
     prisma.pageComment.findUnique({ where: { id: commentId } }),
     ERR.COMMENT_NOT_FOUND,
   );
+  if (comment.userId !== userId) {
+    try {
+      await assertPageAccess(userId, comment.pageId, 'edit');
+    } catch {
+      throw new AppError(403, 'Only the author or a page editor can resolve this comment');
+    }
+  }
 
   return prisma.pageComment.update({
     where: { id: commentId },
@@ -105,15 +117,22 @@ export async function resolveComment(commentId: string) {
 }
 
 /**
- * Delete a wiki page comment.
+ * Delete a wiki page comment: its author, or an ADMIN of the page's space.
  * @param commentId - The comment to delete
- * @throws {AppError} 404 if comment not found
+ * @param userId - The user deleting it
+ * @throws {AppError} 404 if comment not found, 403 if not allowed
  */
-export async function deletePageComment(commentId: string) {
-  await findOrThrow(
-    prisma.pageComment.findUnique({ where: { id: commentId } }),
+export async function deletePageComment(commentId: string, userId: string) {
+  const comment = await findOrThrow(
+    prisma.pageComment.findUnique({
+      where: { id: commentId },
+      select: { userId: true, page: { select: { spaceId: true } } },
+    }),
     ERR.COMMENT_NOT_FOUND,
   );
+  if (comment.userId !== userId && !(await canAccessSpace(comment.page.spaceId, userId, 'ADMIN'))) {
+    throw new AppError(403, 'Only the author or a space admin can delete this comment');
+  }
   await prisma.pageComment.delete({ where: { id: commentId } });
 }
 

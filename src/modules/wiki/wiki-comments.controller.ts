@@ -28,13 +28,13 @@ export const patchComment = asyncHandler(async (req: Request, res: Response) => 
     const comment = await svc.updatePageComment(param(req, 'commentId'), req.userId!, body);
     res.json(comment);
   } else {
-    const comment = await svc.resolveComment(param(req, 'commentId'));
+    const comment = await svc.resolveComment(param(req, 'commentId'), req.userId!);
     res.json(comment);
   }
 });
 
 export const deletePageComment = asyncHandler(async (req: Request, res: Response) => {
-  await svc.deletePageComment(param(req, 'commentId'));
+  await svc.deletePageComment(param(req, 'commentId'), req.userId!);
   res.status(204).send();
 });
 

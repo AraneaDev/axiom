@@ -264,4 +264,48 @@ describe('Hidden pages in listings', () => {
     await client.close();
     expect(JSON.stringify(mcp.content)).not.toContain(locked.id);
   });
+
+  it("O: a viewer can't delete or resolve someone else's comment", async () => {
+    const openPage = await prisma.page.findFirstOrThrow({ where: { spaceId, slug: 'parent' } });
+    // A read-only member: VIEW on this space only
+    const viewer = await addMemberToContext(ctx);
+    const roSpace = await prisma.wikiSpace.create({
+      data: {
+        teamId: ctx.teamId,
+        name: 'RO',
+        slug: 'vis-ro',
+        permissions: {
+          create: [
+            { userId: viewer.id, level: 'VIEW' },
+            { userId: ctx.owner.id, level: 'ADMIN' },
+          ],
+        },
+      },
+    });
+    const roPage = await prisma.page.create({
+      data: { spaceId: roSpace.id, title: 'RO', slug: 'ro', body: 'x' },
+    });
+    const c1 = await prisma.pageComment.create({
+      data: { pageId: roPage.id, userId: ctx.owner.id, body: 'owner says' },
+    });
+    try {
+      const del = await authDel(`/api/wiki/comments/${c1.id}`, viewer.token);
+      const resolve = await authPatch(`/api/wiki/comments/${c1.id}`, viewer.token, {});
+      expect([del.status, resolve.status]).toEqual([403, 403]);
+      const after = await prisma.pageComment.findUniqueOrThrow({ where: { id: c1.id } });
+      expect(after.resolved).toBe(false);
+
+      // The author may delete their own comment; an editor may resolve one on an editable page
+      const own = await prisma.pageComment.create({
+        data: { pageId: roPage.id, userId: viewer.id, body: 'mine' },
+      });
+      expect((await authDel(`/api/wiki/comments/${own.id}`, viewer.token)).status).toBe(204);
+      const c2 = await prisma.pageComment.create({
+        data: { pageId: openPage.id, userId: ctx.owner.id, body: 'resolve me' },
+      });
+      expect((await authPatch(`/api/wiki/comments/${c2.id}`, member.token, {})).status).toBe(200);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: viewer.id } });
+    }
+  });
 });
