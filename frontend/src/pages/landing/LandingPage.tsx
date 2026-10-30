@@ -8,6 +8,7 @@ import type { SiteSettings } from '@/api/site-settings.api';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { sanitizeLandingHtml } from '@/lib/sanitize-html';
 
 function HeroSkeleton() {
   return (
@@ -19,94 +20,13 @@ function HeroSkeleton() {
   );
 }
 
-const ALLOWED_TAGS = new Set([
-  'h1',
-  'h2',
-  'h3',
-  'h4',
-  'h5',
-  'h6',
-  'p',
-  'br',
-  'hr',
-  'ul',
-  'ol',
-  'li',
-  'a',
-  'strong',
-  'em',
-  'b',
-  'i',
-  'u',
-  'code',
-  'pre',
-  'blockquote',
-  'img',
-  'table',
-  'thead',
-  'tbody',
-  'tr',
-  'th',
-  'td',
-  'div',
-  'span',
-  'section',
-]);
-
-const ALLOWED_ATTRS = new Set([
-  'href',
-  'src',
-  'alt',
-  'title',
-  'class',
-  'id',
-  'target',
-  'rel',
-  'width',
-  'height',
-  'colspan',
-  'rowspan',
-]);
-
-function sanitizeHtml(html: string): string {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-
-  function clean(node: Node): void {
-    const children = Array.from(node.childNodes);
-    for (const child of children) {
-      if (child.nodeType === Node.ELEMENT_NODE) {
-        const el = child as Element;
-        if (!ALLOWED_TAGS.has(el.tagName.toLowerCase())) {
-          el.replaceWith(...Array.from(el.childNodes));
-          continue;
-        }
-        for (const attr of Array.from(el.attributes)) {
-          if (!ALLOWED_ATTRS.has(attr.name.toLowerCase())) {
-            el.removeAttribute(attr.name);
-          }
-        }
-        if (el.tagName === 'A') {
-          const href = el.getAttribute('href') || '';
-          if (href.startsWith('javascript:')) {
-            el.removeAttribute('href');
-          }
-          el.setAttribute('rel', 'noopener noreferrer');
-        }
-        clean(el);
-      }
-    }
-  }
-
-  clean(doc.body);
-  return doc.body.innerHTML;
-}
-
 function MarkdownBody({ content }: { content: string }) {
-  const sanitized = useMemo(() => sanitizeHtml(content), [content]);
+  const sanitized = useMemo(() => sanitizeLandingHtml(content), [content]);
   if (!content.trim()) return null;
 
   return (
     <section className="max-w-3xl mx-auto px-6 pb-16">
+      {/* eslint-disable-next-line react/no-danger -- sanitized with DOMPurify (lib/sanitize-html) */}
       <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: sanitized }} />
     </section>
   );
