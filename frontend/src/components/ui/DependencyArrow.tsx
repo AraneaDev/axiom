@@ -11,21 +11,14 @@ interface DependencyArrowProps {
 /**
  * SVG path arrow drawn between two Gantt bars representing a dependency link.
  * Uses right-angle routing: horizontal from source, vertical connector, horizontal to target.
+ * @param props - Component props
  * @param props.fromX - X coordinate of the source bar's right edge.
- * @param root0
- * @param root0.fromX
  * @param props.fromY - Y coordinate (center) of the source bar.
- * @param root0.fromY
  * @param props.toX - X coordinate of the target bar's left edge.
- * @param root0.toX
  * @param props.toY - Y coordinate (center) of the target bar.
- * @param root0.toY
  * @param props.isViolation - True when the blocked issue starts before the blocker ends.
- * @param root0.isViolation
  * @param props.isSelected - Whether the arrow is currently selected for deletion.
- * @param root0.isSelected
  * @param props.onClick - Click handler for selecting/deselecting.
- * @param root0.onClick
  */
 export function DependencyArrow({
   fromX,

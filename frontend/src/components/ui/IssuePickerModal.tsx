@@ -29,17 +29,12 @@ interface IssuePickerModalProps {
 
 /**
  * Modal that lets users search for and select an issue.
+ * @param props - Component props
  * @param props.open - Whether the modal is visible.
- * @param root0
- * @param root0.open
  * @param props.onClose - Callback to dismiss the modal.
- * @param root0.onClose
  * @param props.projectId - Project to search within.
- * @param root0.projectId
  * @param props.onSelect - Called with the selected issue id.
- * @param root0.onSelect
  * @param props.fetchIssues - Async function returning matching issues.
- * @param root0.fetchIssues
  */
 export function IssuePickerModal({
   open,

@@ -7,13 +7,10 @@ interface DragHandleProps {
 /**
  * Small circle on bar edges for creating dependency links.
  * Visible only on hover of the parent group element.
+ * @param props - Component props
  * @param props.cx - Circle center X coordinate.
- * @param root0
- * @param root0.cx
  * @param props.cy - Circle center Y coordinate.
- * @param root0.cy
  * @param props.onDragStart - Pointer-down handler to initiate link creation.
- * @param root0.onDragStart
  */
 export function DragHandle({ cx, cy, onDragStart }: DragHandleProps) {
   return (

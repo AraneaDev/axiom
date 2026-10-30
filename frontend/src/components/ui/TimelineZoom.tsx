@@ -17,11 +17,9 @@ const LEVELS: { value: ZoomLevel; label: string }[] = [
 
 /**
  * Segmented control for selecting timeline zoom level.
+ * @param props - Component props
  * @param props.value - Currently active zoom level.
- * @param root0
- * @param root0.value
  * @param props.onChange - Callback when the user selects a different level.
- * @param root0.onChange
  */
 export function TimelineZoom({ value, onChange }: TimelineZoomProps) {
   return (

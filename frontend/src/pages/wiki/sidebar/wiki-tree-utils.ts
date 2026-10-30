@@ -4,7 +4,6 @@ import type { TocEntry } from '@/lib/wiki-types';
 /**
  * Extract a table-of-contents from raw markdown headings (h1-h3).
  * @param markdown
- * @param markdown
  */
 export function extractToc(markdown: string): TocEntry[] {
   const headingRegex = /^(#{1,3})\s+(.+)$/gm;
@@ -24,7 +23,6 @@ export function extractToc(markdown: string): TocEntry[] {
 /**
  * @param node
  * Count all descendants of a tree node recursively.
- * @param node
  */
 export function countDescendants(node: PageTreeNode): number {
   let count = node.children.length;
@@ -40,9 +38,6 @@ export function countDescendants(node: PageTreeNode): number {
  * @param ancestors
  * Walk the tree and return the IDs of all ancestors of the node whose slug
  * matches `targetSlug`. Returns `null` when the target is not found.
- * @param nodes
- * @param targetSlug
- * @param ancestors
  */
 export function collectAncestorIds(
   nodes: PageTreeNode[],

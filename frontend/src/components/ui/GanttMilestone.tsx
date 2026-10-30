@@ -8,17 +8,12 @@ interface GanttMilestoneProps {
 
 /**
  * Diamond marker for issues that have only a dueDate (no date range).
+ * @param props - Component props
  * @param props.x - Horizontal pixel offset.
- * @param root0
- * @param root0.x
  * @param props.y - Vertical pixel offset.
- * @param root0.y
  * @param props.color - CSS variable color string.
- * @param root0.color
  * @param props.label - Tooltip text shown on hover.
- * @param root0.label
  * @param props.onClick - Click handler.
- * @param root0.onClick
  */
 export function GanttMilestone({ x, y, color, label, onClick }: GanttMilestoneProps) {
   return (

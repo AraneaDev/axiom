@@ -20,14 +20,10 @@ interface DependencyOverlayProps {
 /**
  * SVG overlay that renders all dependency arrows between Gantt bars.
  * Supports selecting an arrow and deleting it with the Delete/Backspace key.
+ * @param props - Component props
  * @param props.links - Array of dependency links to render.
- * @param root0
- * @param root0.links
  * @param props.issuePositions - Map of issue ID to pixel position and width.
- * @param root0.issuePositions
  * @param props.onDeleteLink - Callback to delete a link.
- * @param props.onCreateLink - Callback to create a new link (future drag-to-link).
- * @param root0.onDeleteLink
  */
 export function DependencyOverlay({ links, issuePositions, onDeleteLink }: DependencyOverlayProps) {
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);

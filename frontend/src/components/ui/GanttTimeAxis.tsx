@@ -116,15 +116,11 @@ function computeDivisions(startDate: Date, totalDays: number, zoom: ZoomLevel): 
 
 /**
  * Time header with division labels and vertical gridlines for the Gantt chart.
+ * @param props - Component props
  * @param props.startDate - The start date of the visible timeline range.
- * @param root0
- * @param root0.startDate
  * @param props.totalDays - Total number of days in the visible range.
- * @param root0.totalDays
  * @param props.dayWidth - Pixels per day based on zoom level.
- * @param root0.dayWidth
  * @param props.zoom - Current zoom level (weeks, months, quarters).
- * @param root0.zoom
  */
 export function GanttTimeAxis({ startDate, totalDays, dayWidth, zoom }: GanttTimeAxisProps) {
   const divisions = computeDivisions(startDate, totalDays, zoom);

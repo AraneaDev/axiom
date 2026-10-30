@@ -20,29 +20,18 @@ type DragMode = 'move' | 'resize-left' | 'resize-right' | null;
 
 /**
  * Draggable and resizable bar representing a single issue on the Gantt chart.
+ * @param props - Component props
  * @param props.x - Pixel offset from the left edge.
- * @param root0
- * @param root0.x
  * @param props.width - Bar width in pixels.
- * @param root0.width
  * @param props.y - Pixel offset from the top.
- * @param root0.y
  * @param props.height - Bar height in pixels. Defaults to 28.
- * @param root0.height
  * @param props.color - CSS variable color string for the bar fill.
- * @param root0.color
  * @param props.label - Truncated text shown inside the bar.
- * @param root0.label
  * @param props.progress - Optional 0-100 progress for epics (filled portion).
- * @param root0.progress
  * @param props.onClick - Click handler.
- * @param root0.onClick
  * @param props.onResizeStart - Called with deltaX when left edge is dragged.
- * @param root0.onResizeStart
  * @param props.onResizeEnd - Called with deltaX when right edge is dragged.
- * @param root0.onResizeEnd
  * @param props.onMove - Called with deltaX when the full bar is dragged.
- * @param root0.onMove
  */
 export function GanttBar({
   x,

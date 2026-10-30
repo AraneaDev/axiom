@@ -65,7 +65,6 @@ export const formsApi = {
    * Create a new form.
    * @param projectId
    * @param data
-   * @param data.title
    * @param data.name
    * @param data.slug
    * @param data.description
@@ -154,7 +153,6 @@ export const formsApi = {
    * Reorder pages in a form.
    * @param projectId
    * @param formId
-   * @param positions
    * @param pageIds
    */
   reorderPages: (projectId: string, formId: string, pageIds: string[]) =>
@@ -210,7 +208,6 @@ export const formsApi = {
    * Reorder fields across a form (flat list with pageId per item).
    * @param projectId
    * @param formId
-   * @param positions
    * @param fieldIds
    */
   reorderFields: (projectId: string, formId: string, fieldIds: string[]) =>
