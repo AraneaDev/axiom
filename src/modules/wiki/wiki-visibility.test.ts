@@ -169,4 +169,67 @@ describe('Hidden pages in listings', () => {
       await cleanupTestContext(other);
     }
   });
+
+  it('refuses a new page under a parent in another space or one the author may not edit', async () => {
+    const other = await createTestContext(`wikivispar${Date.now()}`);
+    try {
+      const foreignSpace = await prisma.wikiSpace.create({
+        data: { teamId: other.teamId, name: 'FP', slug: 'fp' },
+      });
+      const foreignParent = await prisma.page.create({
+        data: { spaceId: foreignSpace.id, title: 'FP', slug: 'fp', body: 'x' },
+      });
+      const hiddenParent = await prisma.page.findFirstOrThrow({
+        where: { spaceId, slug: 'secret-root' },
+      });
+      const foreign = await authPost(`/api/wiki/spaces/${spaceId}/pages`, member.token, {
+        title: 'Child',
+        slug: 'child-of-foreign',
+        parentId: foreignParent.id,
+      });
+      const hidden = await authPost(`/api/wiki/spaces/${spaceId}/pages`, member.token, {
+        title: 'Child',
+        slug: 'child-of-hidden',
+        parentId: hiddenParent.id,
+      });
+      const reparent = await authPatch(`/api/wiki/spaces/${spaceId}/pages/parent`, member.token, {
+        parentId: foreignParent.id,
+      });
+      expect([foreign.status, hidden.status, reparent.status]).toEqual([400, 403, 400]);
+      expect(
+        await prisma.page.count({
+          where: { slug: { in: ['child-of-foreign', 'child-of-hidden'] } },
+        }),
+      ).toBe(0);
+    } finally {
+      await cleanupTestContext(other);
+    }
+  });
+
+  it("refuses MCP create_wiki_page from another space's template", async () => {
+    const other = await createTestContext(`wikivistpl${Date.now()}`);
+    try {
+      const foreignSpace = await prisma.wikiSpace.create({
+        data: { teamId: other.teamId, name: 'FT', slug: 'ft' },
+      });
+      const template = await prisma.pageTemplate.create({
+        data: { spaceId: foreignSpace.id, name: 'T', body: `${SECRET} template body` },
+      });
+      const server = createMcpServer(member.id);
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'tpl', version: '0.0.0' });
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const res = await mcpContext.run({ userId: member.id }, () =>
+        client.callTool({
+          name: 'create_wiki_page',
+          arguments: { spaceId, title: 'From tpl', slug: 'from-tpl', templateId: template.id },
+        }),
+      );
+      await client.close();
+      expect(res.isError).toBe(true);
+      expect(await prisma.page.count({ where: { spaceId, slug: 'from-tpl' } })).toBe(0);
+    } finally {
+      await cleanupTestContext(other);
+    }
+  });
 });

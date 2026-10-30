@@ -100,13 +100,18 @@ export function registerWikiTools(ctx: McpToolContext) {
       let pageBody = body ?? '';
       if (!body && templateId) {
         const template = await prisma.pageTemplate.findUnique({ where: { id: templateId } });
-        if (template) {
-          pageBody = await resolveWikiTemplate(template.body, {
-            teamId: space.teamId,
-            spaceId,
-            userId,
-          });
+        // Only this space's templates: another space's (or org's) body must not leak in
+        if (!template || template.spaceId !== spaceId) {
+          return {
+            content: [{ type: 'text' as const, text: 'Template not found in this space' }],
+            isError: true,
+          };
         }
+        pageBody = await resolveWikiTemplate(template.body, {
+          teamId: space.teamId,
+          spaceId,
+          userId,
+        });
       }
 
       const page = await wikiService.createPage(spaceId, userId, {

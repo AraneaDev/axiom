@@ -127,6 +127,32 @@ async function requireSpaceEdit(spaceId: string, userId: string): Promise<void> 
 }
 
 /**
+ * A page's parent must be a page in the same space that the author may edit: otherwise a
+ * page could be hung under another org's page, or under one hidden from the author.
+ * @param spaceId - The space the page lives in
+ * @param parentId - The proposed parent; null or undefined means top level
+ * @param userId - The author
+ * @throws {AppError} 400 for a parent outside the space, 403 for one the author can't edit
+ */
+async function assertParentWritable(
+  spaceId: string,
+  parentId: string | null | undefined,
+  userId: string,
+): Promise<void> {
+  if (!parentId) return;
+  const parent = await prisma.page.findUnique({
+    where: { id: parentId },
+    select: { spaceId: true },
+  });
+  if (!parent || parent.spaceId !== spaceId) {
+    throw new AppError(400, 'The parent page must be in the same space');
+  }
+  if (!(await canEditPage(userId, parentId))) {
+    throw new AppError(403, 'You do not have permission to edit the parent page');
+  }
+}
+
+/**
  * Create a new wiki page in a space, with an initial version record.
  * @param spaceId - The wiki space to create the page in
  * @param authorId - The user creating the page
@@ -151,6 +177,7 @@ export async function createPage(
   },
 ) {
   await requireSpaceEdit(spaceId, authorId);
+  await assertParentWritable(spaceId, data.parentId, authorId);
   await checkUnique('page', { spaceId, slug: data.slug }, 'Page slug already taken in this space');
   const body = normalizeMarkdown(data.body ?? '');
 
@@ -286,6 +313,8 @@ export async function updatePage(
   await requireSpaceEdit(spaceId, authorId);
   const editAllowed = await canEditPage(authorId, page.id);
   if (!editAllowed) throw new AppError(403, 'You do not have permission to edit this page');
+  if (data.parentId === page.id) throw new AppError(400, 'Cannot set page as its own parent');
+  await assertParentWritable(spaceId, data.parentId, authorId);
 
   const written = await writePageBody({
     pageId: page.id,
