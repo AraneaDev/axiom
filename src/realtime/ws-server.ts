@@ -79,13 +79,14 @@ function sendToSocket(ws: AuthenticatedSocket, message: SubscriptionMessage): vo
   ws.send(JSON.stringify(message));
 }
 
-function sendDenied(ws: AuthenticatedSocket, room: string): void {
-  sendToSocket(ws, { type: 'subscribe:denied', room });
+function sendDenied(ws: AuthenticatedSocket, rooms: string[]): void {
+  if (rooms.length > 0) sendToSocket(ws, { type: 'subscribe:denied', rooms });
 }
 
 /**
  * Queue an access check for each requested room. Rooms past the per-request cap, or that
- * would take the socket past its total cap, are refused straight away without a lookup.
+ * would take the socket past its total cap, are refused straight away without a lookup,
+ * all in one reply.
  * A check's result only counts if the room is still pending under the same ticket when it
  * finishes: an unsubscribe, a newer subscribe of the same room or the socket closing in the
  * meantime all discard it.
@@ -93,9 +94,11 @@ function sendDenied(ws: AuthenticatedSocket, room: string): void {
  * @param requested - The raw `rooms` array from the client
  */
 function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
+  const refused: string[] = [];
   requested.forEach((room, index) => {
-    if (typeof room !== 'string' || room.length > 200) {
-      if (typeof room === 'string') sendDenied(ws, room.slice(0, 200));
+    if (typeof room !== 'string') return;
+    if (room.length > 200) {
+      refused.push(room.slice(0, 200));
       return;
     }
     if (ws.rooms.has(room)) return;
@@ -104,7 +107,7 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
       index >= MAX_ROOMS_PER_REQUEST ||
       (isNew && ws.rooms.size + ws.pendingRooms.size >= MAX_ROOMS_PER_SOCKET)
     ) {
-      sendDenied(ws, room);
+      refused.push(room);
       return;
     }
 
@@ -118,7 +121,7 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
         if (ws.pendingRooms.get(room) !== ticket || ws.readyState !== WebSocket.OPEN) return;
         ws.pendingRooms.delete(room);
         if (allowed) ws.rooms.add(room);
-        else sendDenied(ws, room);
+        else sendDenied(ws, [room]);
       })
       .catch((err) => {
         // A failed check is not a refusal: report it as an error so the client keeps the
@@ -129,6 +132,7 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
         sendToSocket(ws, { type: 'subscribe:error', room });
       });
   });
+  sendDenied(ws, refused);
 }
 
 /**

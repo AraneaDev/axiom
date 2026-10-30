@@ -81,7 +81,7 @@ describe('useWebSocket', () => {
 
     first.onmessage?.({ data: JSON.stringify({ type: 'subscribe:error', room: 'project:flaky' }) });
     first.onmessage?.({
-      data: JSON.stringify({ type: 'subscribe:denied', room: 'project:forbidden' }),
+      data: JSON.stringify({ type: 'subscribe:denied', rooms: ['project:forbidden'] }),
     });
 
     // The connection drops; the reconnect resubscribes what the client still wants

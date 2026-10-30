@@ -25,7 +25,7 @@ export type RealtimeEvent =
  * Mirrored in the frontend's RealtimeEvent (frontend/src/hooks/useRealtimeInvalidation.ts).
  */
 export type SubscriptionMessage =
-  | { type: 'subscribe:denied'; room: string }
+  | { type: 'subscribe:denied'; rooms: string[] }
   | { type: 'subscribe:error'; room: string };
 
 /** Everything the server sends on the realtime socket. */

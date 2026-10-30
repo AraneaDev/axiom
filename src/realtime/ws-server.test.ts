@@ -89,7 +89,9 @@ function serverRooms(userId: string): Set<string> {
 }
 
 function deniedRooms(client: RealtimeTestClient): string[] {
-  return client.messages.filter((m) => m.type === 'subscribe:denied').map((m) => m.room as string);
+  return client.messages
+    .filter((m) => m.type === 'subscribe:denied')
+    .flatMap((m) => m.rooms as string[]);
 }
 
 /**
@@ -271,6 +273,8 @@ describe('Realtime room authorization', () => {
     await waitFor(() => deniedRooms(client).length === 11);
     await waitFor(() => serverRooms(member.id).size === 50);
     expect(deniedRooms(client).sort()).toEqual(rooms.slice(49, 60).sort());
+    // Everything refused up front goes out in one frame, however long the request
+    expect(client.messages.filter((m) => m.type === 'subscribe:denied')).toHaveLength(1);
 
     // The socket is full: nothing more fits
     client.send({ type: 'subscribe', rooms: rooms.slice(60, 62) });

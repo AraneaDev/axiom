@@ -73,8 +73,10 @@ function connect(): void {
   ws.onmessage = (ev) => {
     try {
       const event = JSON.parse(ev.data as string) as RealtimeEvent;
-      // The server refused the room: forget it so a reconnect doesn't ask again
-      if (event.type === 'subscribe:denied') subscribedRooms.delete(event.room);
+      // The server refused these rooms: forget them so a reconnect doesn't ask again
+      if (event.type === 'subscribe:denied') {
+        for (const room of event.rooms) subscribedRooms.delete(room);
+      }
       for (const cb of listeners) {
         cb(event);
       }

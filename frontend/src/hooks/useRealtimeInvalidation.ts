@@ -23,7 +23,7 @@ export type RealtimeEvent =
       status: string;
     }
   | { type: 'form:submission:created'; projectId: string; submissionId: string; formId: string }
-  | { type: 'subscribe:denied'; room: string }
+  | { type: 'subscribe:denied'; rooms: string[] }
   // The check failed (not refused): the room stays wanted and is asked for on reconnect
   | { type: 'subscribe:error'; room: string };
 
