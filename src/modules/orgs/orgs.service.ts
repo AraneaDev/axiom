@@ -1,10 +1,11 @@
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/errorHandler';
 import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { checkUnique } from '../../utils/check-unique';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+
+import { assertCanGrantOrgRole, assertCanManageOrgMember, assertNotLastOwner } from './org-roles';
 
 /**
  * Create a new organization, adding the creator as owner.
@@ -115,6 +116,7 @@ export async function listOrgMembers(orgId: string) {
  * @param orgId - The organization ID
  * @param userId - The user to add
  * @param role - The org role to assign (defaults to MEMBER)
+ * @param actorId
  * @returns The created org membership with user details
  * @throws {AppError} 409 if user is already a member
  */
@@ -122,7 +124,9 @@ export async function addOrgMember(
   orgId: string,
   userId: string,
   role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST' = 'MEMBER',
+  actorId?: string,
 ) {
+  if (actorId) await assertCanGrantOrgRole(orgId, actorId, role);
   await checkUnique('orgMembership', { userId, orgId }, 'User is already a member');
 
   return prisma.orgMembership.create({
@@ -136,6 +140,7 @@ export async function addOrgMember(
  * @param orgId - The organization ID
  * @param memberId - The user whose role to update
  * @param role - The new organization role
+ * @param actorId
  * @returns The updated org membership record
  * @throws {AppError} 404 if membership not found
  */
@@ -143,6 +148,7 @@ export async function updateOrgMemberRole(
   orgId: string,
   memberId: string,
   role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST',
+  actorId?: string,
 ) {
   const membership = await findOrThrow(
     prisma.orgMembership.findFirst({
@@ -150,6 +156,11 @@ export async function updateOrgMemberRole(
     }),
     ERR.MEMBERSHIP_NOT_FOUND,
   );
+  if (actorId) {
+    await assertCanManageOrgMember(orgId, actorId, membership.role);
+    await assertCanGrantOrgRole(orgId, actorId, role);
+  }
+  if (membership.role === 'OWNER' && role !== 'OWNER') await assertNotLastOwner(orgId);
 
   const updated = await prisma.orgMembership.update({
     where: { id: membership.id },
@@ -164,22 +175,19 @@ export async function updateOrgMemberRole(
  * Remove a member from an organization (cannot remove the last owner).
  * @param orgId - The organization ID
  * @param memberId - The user to remove
+ * @param actorId
  * @throws {AppError} 404 if membership not found
  * @throws {AppError} 400 if attempting to remove the last owner
  */
-export async function removeOrgMember(orgId: string, memberId: string) {
+export async function removeOrgMember(orgId: string, memberId: string, actorId?: string) {
   const membership = await findOrThrow(
     prisma.orgMembership.findFirst({
       where: { userId: memberId, orgId },
     }),
     ERR.MEMBERSHIP_NOT_FOUND,
   );
-  if (membership.role === 'OWNER') {
-    const ownerCount = await prisma.orgMembership.count({
-      where: { orgId, role: 'OWNER' },
-    });
-    if (ownerCount <= 1) throw new AppError(400, 'Cannot remove the last owner');
-  }
+  if (actorId) await assertCanManageOrgMember(orgId, actorId, membership.role);
+  if (membership.role === 'OWNER') await assertNotLastOwner(orgId);
   // Everything the org granted goes with the membership, in one transaction: team
   // memberships (project access), space permissions and page allow-list entries naming the
   // user, and issue watches (which would keep sending them notifications)
@@ -220,6 +228,7 @@ export async function createInviteLink(
     expiresInDays?: number;
   },
 ) {
+  await assertCanGrantOrgRole(orgId, createdBy, data.role ?? 'MEMBER');
   const code = (await import('crypto')).randomBytes(16).toString('hex');
   return prisma.inviteLink.create({
     data: {
@@ -249,12 +258,14 @@ export async function listInviteLinks(orgId: string) {
 
 /**
  * Delete an invite link.
+ * @param orgId
  * @param inviteId - The invite link ID
  * @throws {AppError} 404 if invite link not found
  */
-export async function deleteInviteLink(inviteId: string) {
+export async function deleteInviteLink(orgId: string, inviteId: string) {
+  // Scoped to the org in the URL: an admin of one org can't delete another org's links
   await findOrThrow(
-    prisma.inviteLink.findUnique({ where: { id: inviteId } }),
+    prisma.inviteLink.findFirst({ where: { id: inviteId, orgId } }),
     'Invite link not found',
   );
   await prisma.inviteLink.delete({ where: { id: inviteId } });

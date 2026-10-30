@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
-import { requireOrgPermission } from '../../middleware/rbac';
+import { requireOrgMember, requireOrgPermission } from '../../middleware/rbac';
 
 import * as orgsController from './orgs.controller';
 
@@ -11,12 +11,13 @@ router.use(authenticate);
 
 router.post('/', orgsController.create);
 router.get('/', orgsController.list);
-router.get('/:orgId', orgsController.get);
+// Org details and the member list (with emails) are for members only
+router.get('/:orgId', requireOrgMember(), orgsController.get);
 router.patch('/:orgId', requireOrgPermission('org:manage'), orgsController.update);
 router.delete('/:orgId', requireOrgPermission('org:manage'), orgsController.remove);
 
 // Members
-router.get('/:orgId/members', orgsController.listMembers);
+router.get('/:orgId/members', requireOrgMember(), orgsController.listMembers);
 router.post(
   '/:orgId/members',
   requireOrgPermission('team:manage_members'),

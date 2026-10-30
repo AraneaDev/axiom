@@ -1,8 +1,11 @@
+import type { OrgRole } from '@prisma/client';
+
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { assertCanGrantOrgRole } from '../orgs/org-roles';
 
 /**
  * Create an invitation for a user to join an org (and optionally a team).
@@ -28,6 +31,15 @@ export async function createInvitation(
     },
   });
   if (existing) throw new AppError(409, 'An invitation for this email is already pending');
+
+  // A team invite carries a team role; an org invite an org role no higher than the inviter's
+  if (data.teamId) {
+    if (data.role && !['ADMIN', 'MEMBER', 'VIEWER'].includes(data.role)) {
+      throw new AppError(400, 'A team invitation role must be ADMIN, MEMBER or VIEWER');
+    }
+  } else {
+    await assertCanGrantOrgRole(orgId, invitedBy, (data.role ?? 'MEMBER') as OrgRole);
+  }
 
   // If teamId provided, verify team belongs to org
   if (data.teamId) {

@@ -46,7 +46,7 @@ export const listMembers = asyncHandler(async (req: Request, res: Response) => {
 
 export const addMember = asyncHandler(async (req: Request, res: Response) => {
   const { userId, role } = validate(addOrgMemberSchema, req.body);
-  const member = await orgsService.addOrgMember(param(req, 'orgId'), userId, role);
+  const member = await orgsService.addOrgMember(param(req, 'orgId'), userId, role, req.userId!);
   res.status(201).json(member);
 });
 
@@ -56,12 +56,13 @@ export const updateMemberRole = asyncHandler(async (req: Request, res: Response)
     param(req, 'orgId'),
     param(req, 'memberId'),
     role,
+    req.userId!,
   );
   res.json(member);
 });
 
 export const removeMember = asyncHandler(async (req: Request, res: Response) => {
-  await orgsService.removeOrgMember(param(req, 'orgId'), param(req, 'memberId'));
+  await orgsService.removeOrgMember(param(req, 'orgId'), param(req, 'memberId'), req.userId!);
   res.status(204).send();
 });
 
@@ -78,6 +79,6 @@ export const listInvites = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const deleteInvite = asyncHandler(async (req: Request, res: Response) => {
-  await orgsService.deleteInviteLink(param(req, 'inviteId'));
+  await orgsService.deleteInviteLink(param(req, 'orgId'), param(req, 'inviteId'));
   res.status(204).send();
 });
