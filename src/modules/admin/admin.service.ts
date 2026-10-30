@@ -5,10 +5,11 @@ import _path from 'path';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { AppError } from '../../middleware/errorHandler';
-import { disconnectUser } from '../../realtime/access-revocation';
+import { disconnectUser, revokeLiveAccess } from '../../realtime/access-revocation';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
+import { assertNotLastOwnerTx } from '../orgs/org-roles';
 
 // ─── Admin Check ────────────────────────────────────────────
 
@@ -177,12 +178,21 @@ export async function getUser(userId: string) {
 export async function updateUser(userId: string, data: { role?: string; disabled?: boolean }) {
   await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
-  // Update org membership role if provided
+  // Update org membership role if provided. In every org where the user is the last OWNER,
+  // the change is refused: an org must keep an OWNER (checked under the OWNER row lock)
   if (data.role) {
-    await prisma.orgMembership.updateMany({
-      where: { userId },
-      data: { role: data.role as 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST' },
+    const role = data.role as 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST';
+    await prisma.$transaction(async (tx) => {
+      const memberships = await tx.orgMembership.findMany({ where: { userId } });
+      for (const m of memberships) {
+        if (m.role !== 'OWNER' || role === 'OWNER') continue;
+        await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${m.orgId} AND role = 'OWNER' FOR UPDATE`;
+        await assertNotLastOwnerTx(tx, m.orgId);
+      }
+      await tx.orgMembership.updateMany({ where: { userId }, data: { role } });
     });
+    // A lower role can lose access: re-check the user's live connections
+    void revokeLiveAccess({ userId });
   }
 
   return getUser(userId);
@@ -195,7 +205,15 @@ export async function updateUser(userId: string, data: { role?: string; disabled
 export async function deleteUser(userId: string) {
   await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
-  await prisma.user.delete({ where: { id: userId } });
+  // Deleting the last OWNER of an org would leave it unmanageable: transfer ownership first
+  await prisma.$transaction(async (tx) => {
+    const owned = await tx.orgMembership.findMany({ where: { userId, role: 'OWNER' } });
+    for (const m of owned) {
+      await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${m.orgId} AND role = 'OWNER' FOR UPDATE`;
+      await assertNotLastOwnerTx(tx, m.orgId);
+    }
+    await tx.user.delete({ where: { id: userId } });
+  });
   // Live sockets authenticated before the delete: close them
   disconnectUser(userId);
   return { deleted: true };

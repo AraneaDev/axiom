@@ -196,4 +196,22 @@ describe('Org access and roles', () => {
     await prisma.user.delete({ where: { id: user.id } });
     expect(membership.role).toBe('ADMIN');
   });
+
+  it('22: a platform admin cannot leave an org without an OWNER', async () => {
+    const platformAdmin = await createTestUser();
+    await prisma.user.update({ where: { id: platformAdmin.id }, data: { isAdmin: true } });
+    try {
+      const demote = await authPatch(`/api/admin/users/${ctx.owner.id}`, platformAdmin.token, {
+        role: 'MEMBER',
+      });
+      const remove = await authDel(`/api/admin/users/${ctx.owner.id}`, platformAdmin.token);
+      expect([demote.status, remove.status]).toEqual([400, 400]);
+      const owner = await prisma.orgMembership.findUniqueOrThrow({
+        where: { userId_orgId: { userId: ctx.owner.id, orgId: ctx.orgId } },
+      });
+      expect(owner.role).toBe('OWNER');
+    } finally {
+      await prisma.user.deleteMany({ where: { id: platformAdmin.id } });
+    }
+  });
 });

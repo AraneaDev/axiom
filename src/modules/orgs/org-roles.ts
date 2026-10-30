@@ -55,16 +55,6 @@ export async function assertCanManageOrgMember(
 }
 
 /**
- * An org must keep at least one OWNER.
- * @param orgId
- * @throws {AppError} 400 when the change would leave the org without one
- */
-export async function assertNotLastOwner(orgId: string): Promise<void> {
-  const owners = await prisma.orgMembership.count({ where: { orgId, role: 'OWNER' } });
-  if (owners <= 1) throw new AppError(400, 'An organization must keep at least one OWNER');
-}
-
-/**
  * Run a change to an org's owners with the OWNER rows locked, so two concurrent demotions
  * (or a demotion and a removal) can't each see two OWNERs and leave none. The callback
  * re-checks with assertNotLastOwnerTx inside the same transaction.
