@@ -13,6 +13,14 @@ The MCP server runs alongside the Axiom API using SSE (Server-Sent Events) trans
 
 **Base URL (local dev):** `http://localhost:3000/api/mcp`
 
+Each message must carry the `session` of an SSE stream opened by the same user (`400` without one, `403` for another user's).
+
+### Permissions
+
+Tools run as the authenticated user and apply the same checks as the REST API: project tools need membership of the project's team, wiki tools need org membership, the space permission and the page's restrictions, and `list_projects` needs team membership. Each tool also needs an action from the role matrix (`issue:view`, `issue:create`, `issue:edit`, `wiki:view`, `wiki:edit`), taken from the role in the team that owns the resource. A tool without a mapping is refused.
+
+When connecting with an API token (`Authorization: Token tk_...`), the token's scopes also apply: `issue:view` tools need `issues:read`, issue writes `issues:write`, `wiki:view` tools `wiki:read`, wiki writes `wiki:write`.
+
 ---
 
 ## Claude Desktop Setup

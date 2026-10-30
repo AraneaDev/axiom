@@ -55,6 +55,33 @@ Authorization: Bearer <access_token>
 
 Access tokens are short-lived JWTs. When a request returns `401`, use the refresh token to obtain a new access token via `POST /api/auth/refresh`.
 
+#### API tokens and scopes
+
+Personal API tokens (`POST /api/users/me/tokens`) use the `Token` scheme:
+
+```
+Authorization: Token tk_...
+```
+
+A token acts as its owner, limited to its scopes. A request its scopes don't cover returns `403` with code `SCOPE`.
+
+| Scope | Allows |
+|-------|--------|
+| `issues:read` | Read projects, issues, sprints, boards, milestones and their settings (`/api/projects`, `/api/issues`, `/api/approval-requests`, `/api/custom-fields`, `/api/links`, team roadmap and analytics) |
+| `issues:write` | Everything `issues:read` allows, plus creating and changing them |
+| `wiki:read` | Read wiki spaces and pages (`/api/wiki`) |
+| `wiki:write` | Everything `wiki:read` allows, plus creating and changing pages |
+
+Reading your profile, orgs, teams, notifications and search needs any read scope (a write scope includes reading). Attachments and MCP need a read scope to read and a write scope to write; the attachment's parent or the MCP tool is checked again. A token can never manage orgs, teams, members, invitations, tokens, your account or anything under `/api/admin`. Creating a token with any other scope returns `400`.
+
+### Permissions
+
+Every request is checked twice: access to the resource, then the role for the action.
+
+- **Access.** Projects and their issues, sprints, boards and settings need membership of the project's team (or org OWNER/ADMIN, or platform admin). Team-wide reads (the team, its members, activity, roadmap, analytics and project list) follow the same rule. Wiki spaces need org membership and, when the space has custom permissions, a grant at the required level; pages also honour their VIEW/EDIT restrictions. Ids in the URL or body must belong to the project or space in the URL (`404` or `400` otherwise).
+- **Role.** Writes follow the matrix in `src/utils/permissions.ts`: issue and project writes need `issue:edit` (or `issue:create`), wiki writes `wiki:edit`, by org role or by the role in the resource's team. VIEWERs and GUESTs can read but not write. Changing a project needs `team:manage_members`, deleting it `project:delete`.
+- **Orgs.** Org details and members are for members only. No one can grant a role above their own: only an OWNER makes, demotes or removes OWNERs, and an org always keeps one OWNER.
+
 ### Error Format
 
 All errors follow this structure:
