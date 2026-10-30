@@ -383,4 +383,37 @@ describe('MCP checks match REST', () => {
       await prisma.user.deleteMany({ where: { id: teamViewer.id } });
     }
   });
+
+  it('25: an explicit space grant works over MCP as it does over REST', async () => {
+    const granted = await addMemberToContext(tctx);
+    await prisma.orgMembership.update({
+      where: { userId_orgId: { userId: granted.id, orgId: tctx.orgId } },
+      data: { role: 'VIEWER' },
+    });
+    await prisma.teamMembership.deleteMany({ where: { userId: granted.id } });
+    const space = await prisma.wikiSpace.create({
+      data: {
+        teamId: tctx.teamId,
+        name: 'Granted',
+        slug: `granted-${Date.now()}`,
+        permissions: { create: { userId: granted.id, level: 'EDIT' } },
+      },
+    });
+    await prisma.page.create({
+      data: { spaceId: space.id, title: 'G', slug: 'g', body: 'before' },
+    });
+    const c = await connectAs(granted.id);
+    try {
+      const res = await callAs(granted.id, c, 'update_wiki_page', {
+        spaceId: space.id,
+        pageSlug: 'g',
+        body: 'after',
+      });
+      expect(res.failed).toBe(false);
+    } finally {
+      await c.close();
+      await prisma.wikiSpace.delete({ where: { id: space.id } });
+      await prisma.user.deleteMany({ where: { id: granted.id } });
+    }
+  });
 });

@@ -180,7 +180,8 @@ export async function assertMcpProjectPermission(
 
 /**
  * Wiki space tools: the REST space checks (org membership, then the space permission at the
- * given level), then the tool's action against the role in the space's own team.
+ * given level, which applies the role matrix on spaces without grants). The tool's action
+ * is still resolved for the mapping and token scope check.
  * @param toolName
  * @param spaceId
  * @param level - VIEW for reads, EDIT for writes
@@ -195,12 +196,10 @@ export async function assertMcpSpacePermission(
   const orgAccess = await checkWikiSpaceOrgAccess(spaceId, userId);
   if (orgAccess === 'not_found') throw new AppError(404, ERR.SPACE_NOT_FOUND);
   if (orgAccess === 'forbidden') throw new AppError(403, 'Forbidden');
+  // canAccessSpace is the REST rule: the space's own grants when it has any, otherwise the
+  // role matrix (team role first). Nothing more is added, so MCP and REST agree.
+  void action;
   if (!(await canAccessSpace(spaceId, userId, level))) throw new AppError(403, 'Forbidden');
-  const space = await prisma.wikiSpace.findUniqueOrThrow({
-    where: { id: spaceId },
-    select: { teamId: true },
-  });
-  await assertTeamRole(userId, space.teamId, action);
 }
 
 /**
