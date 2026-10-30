@@ -233,6 +233,11 @@ export async function deleteAttachment(id: string, userId: string) {
   if (attachment.uploaderId !== userId) {
     throw new AppError(403, 'Only the uploader can delete this attachment', 'FORBIDDEN');
   }
+  // The uploader must still be allowed to change the parent (removed from the team, or
+  // demoted to VIEWER, and they can't)
+  if (attachment.issueId || attachment.pageId) {
+    await assertAttachmentParentAccess(userId, attachment, 'edit');
+  }
 
   const storage = getStorage();
   await storage.delete(attachment.storageKey);

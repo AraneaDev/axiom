@@ -14,7 +14,7 @@ import {
   type TestContext,
   type TestUser,
 } from '../../test/factory';
-import { authGet, authPatch, authPost } from '../../test/helpers';
+import { authDel, authGet, authPatch, authPost } from '../../test/helpers';
 
 describe('Role enforcement on REST writes', () => {
   let ctx: TestContext;
@@ -207,5 +207,22 @@ describe('Role enforcement on REST writes', () => {
     const vote = await authPost(`${P}/votes/toggle`, viewer.token, {});
     const watch = await authPost(`${P}/watchers/toggle`, viewer.token, {});
     expect([vote.status, watch.status]).toEqual([200, 200]);
+  });
+
+  it('27: an uploader who lost edit access cannot delete the attachment', async () => {
+    const attachment = await prisma.attachment.create({
+      data: {
+        filename: 'v.txt',
+        originalName: 'v.txt',
+        mimeType: 'text/plain',
+        size: 1,
+        storageKey: `missing-${Date.now()}`,
+        uploaderId: viewer.id,
+        issueId,
+      },
+    });
+    const res = await authDel(`/api/attachments/${attachment.id}`, viewer.token);
+    expect(res.status).toBe(403);
+    expect(await prisma.attachment.count({ where: { id: attachment.id } })).toBe(1);
   });
 });
