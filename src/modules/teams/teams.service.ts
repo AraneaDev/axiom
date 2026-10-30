@@ -8,7 +8,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parsePagination, parseServicePagination, paginatedResponse } from '../../utils/pagination';
 import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
-import { viewablePagesWhere } from '../search/search-access';
+import { viewablePageIdFilter } from '../search/search-access';
 import { canAccessSpace } from '../wiki/space-permissions.service';
 
 /**
@@ -276,25 +276,42 @@ export async function removeTeamMember(teamId: string, memberId: string) {
 }
 
 /**
- * An activity filter limited to the team's issues and to the team's wiki pages the viewer
- * can open. Activity rows are keyed by resource id, so this resolves the ids first.
+ * Ids of the latest activity rows by these users on the team's own issues and on the
+ * team's pages the viewer can open. Activity rows are keyed by resource id, so the match
+ * runs in SQL (EXISTS joins) rather than through an id list, which a large team would push
+ * past the query's bind limit.
  * @param teamId - The team
+ * @param userIds - Whose activity
  * @param viewerId - Who is looking
+ * @param limit - How many rows
  */
-async function teamResourceActivityWhere(teamId: string, viewerId: string) {
-  const [issues, pages] = await Promise.all([
-    prisma.issue.findMany({ where: { project: { teamId } }, select: { id: true } }),
-    prisma.page.findMany({
-      where: { AND: [{ space: { teamId } }, await viewablePagesWhere(viewerId)] },
-      select: { id: true },
-    }),
-  ]);
-  return {
-    OR: [
-      { resourceType: 'issue', resourceId: { in: issues.map((i) => i.id) } },
-      { resourceType: 'wiki_page', resourceId: { in: pages.map((p) => p.id) } },
-    ],
-  };
+async function teamActivityIds(
+  teamId: string,
+  userIds: string[],
+  viewerId: string,
+  limit: number,
+): Promise<string[]> {
+  if (userIds.length === 0) return [];
+  const { spaceIds, hiddenPageIds } = await viewablePageIdFilter(viewerId);
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT a.id FROM activities a
+    WHERE a."userId" = ANY(${userIds})
+      AND (
+        (a."resourceType" = 'issue' AND EXISTS (
+          SELECT 1 FROM issues i JOIN projects p ON p.id = i."projectId"
+          WHERE i.id = a."resourceId" AND p."teamId" = ${teamId}
+        ))
+        OR (a."resourceType" = 'wiki_page' AND EXISTS (
+          SELECT 1 FROM pages pg JOIN wiki_spaces s ON s.id = pg."spaceId"
+          WHERE pg.id = a."resourceId" AND s."teamId" = ${teamId}
+            AND pg."spaceId" = ANY(${spaceIds})
+            AND NOT (pg.id = ANY(${hiddenPageIds}))
+        ))
+      )
+    ORDER BY a."createdAt" DESC
+    LIMIT ${limit}
+  `;
+  return rows.map((r) => r.id);
 }
 
 /**
@@ -317,7 +334,7 @@ export async function getTeamActivity(teamId: string, viewerId: string, rawLimit
 
   const activities = await prisma.activity.findMany({
     // Only activity on this team's own issues and pages: members also work elsewhere
-    where: { userId: { in: memberIds }, ...(await teamResourceActivityWhere(teamId, viewerId)) },
+    where: { id: { in: await teamActivityIds(teamId, memberIds, viewerId, limit) } },
     include: {
       user: { select: USER_WITH_AVATAR_SELECT },
     },
@@ -450,7 +467,7 @@ export async function getTeamMemberProfile(teamId: string, username: string, vie
     }),
     prisma.activity.findMany({
       // Only activity on this team's own issues and pages
-      where: { userId: user.id, ...(await teamResourceActivityWhere(teamId, viewerId)) },
+      where: { id: { in: await teamActivityIds(teamId, [user.id], viewerId, 10) } },
       include: {
         user: { select: USER_WITH_AVATAR_SELECT },
       },

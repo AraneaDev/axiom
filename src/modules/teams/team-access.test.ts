@@ -147,4 +147,25 @@ describe('Team access', () => {
     const ids = (res.body.data as Array<{ id: string }>).map((t) => t.id);
     expect(ids).toEqual([secondTeamId]);
   });
+
+  it('23: team activity works for a team with more issues than a query can bind', async () => {
+    const batch = 33_000;
+    await prisma.issue.createMany({
+      data: Array.from({ length: batch }, (_, i) => ({
+        projectId: ctx.projectId,
+        number: 10_000 + i,
+        title: `bulk ${i}`,
+        body: '',
+        creatorId: ctx.owner.id,
+      })),
+    });
+    try {
+      const res = await authGet(`/api/teams/${ctx.teamId}/activity`, teamViewer.token);
+      expect(res.status).toBe(200);
+    } finally {
+      await prisma.issue.deleteMany({
+        where: { projectId: ctx.projectId, number: { gte: 10_000 } },
+      });
+    }
+  }, 60_000);
 });
