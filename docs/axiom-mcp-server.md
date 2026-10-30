@@ -254,13 +254,16 @@ Create a new wiki page in a space.
 
 #### `update_wiki_page`
 
-Update an existing wiki page's title and/or body.
+Update an existing wiki page's title and/or body. The call goes through the same wiki service as the REST `PATCH`, so the body is normalised Markdown, a version is recorded, and issue links and the page tree stay in sync.
 
 |Parameter|Type|Required|Description|
 |-|-|-|-|
-|`pageId`|string|yes|Page ID|
+|`spaceId`|string|yes|Wiki space ID|
+|`pageSlug`|string|yes|Current page slug|
 |`title`|string|no|New title|
-|`body`|string|no|New body (markdown)|
+|`body`|string|no|New body (Markdown)|
+
+The response is the updated page plus `pendingMerge`. It is `true` when someone has the page open in the editor. In that case the change is already stored in `Page.body` and recorded as an `EXTERNAL` version, and the open session merges it with its own edits. The response then also carries `externalVersionId`, the version the session will merge. You do not have to retry or poll: when `pendingMerge` is `false`, nothing is waiting.
 
 #### `delete_wiki_page`
 

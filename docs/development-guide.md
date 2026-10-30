@@ -15,6 +15,8 @@ npm run docker:dev
 Starts PostgreSQL 16, Redis 7, a local mailserver, the Express API on port 3000, and the Vite frontend on port 7000. Both the `api` and `web` containers bind-mount their source directories, so changes on the host are picked up immediately.
 
 - Backend (Express + tsx watch): edits to any file under `src/` trigger an automatic restart.
+  - In the WSL dev stack, `tsx watch` in the api container can miss changes on the bind mount. After backend edits, restart it with `docker restart axiom-api-1`.
+  - After a dependency change, rebuild the dev images: `docker compose -f docker-compose.dev.yml build api worker`.
 - Frontend (Vite HMR): edits to any file under `frontend/src/` are reflected in the browser without a full reload.
 
 To tail all container logs:

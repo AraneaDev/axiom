@@ -1855,11 +1855,69 @@ Update a wiki page.
 ```json
 {
   "title": "Updated Title",
-  "content": "Updated content..."
+  "body": "Updated Markdown...",
+  "changeDescription": "Why it changed"
 }
 ```
 
-**Response 200:** Updated wiki page object.
+All fields are optional. `body` is always Markdown and is normalised before it is stored.
+
+**Response 200:** The updated wiki page object, plus:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pendingMerge` | boolean | `true` while the change waits for an open editor session to merge it |
+| `externalVersionId` | string | The version the session will merge. Only present when `pendingMerge` is `true` |
+
+While a change is pending, `Page.body` already holds the new text. The version it replaced is kept as the merge base, and the change is recorded in the history as kind `EXTERNAL`.
+
+### GET /api/wiki/spaces/:spaceId/pages/:pageSlug/pending-merge
+
+The three texts needed to merge a pending change. Requires edit permission on the page.
+
+**Response 200:** `null` when nothing is pending. Otherwise:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `base` | string | The Markdown both sides started from |
+| `ours` | string | The open session's text, or an ended session's unmerged draft |
+| `theirs` | string | The other side: the external change, or a draft |
+| `oursLabel` / `theirsLabel` | string | Display labels, for example `Yours` and the author's name |
+| `externalVersionId` | string | The pending change. Send it back when you apply the merge |
+| `authorName`, `at` | string | Who made the external change and when |
+| `draftAuthorName`, `draftAt` | string | Set when one side is an ended session's draft |
+
+### POST /api/wiki/spaces/:spaceId/pages/:pageSlug/merge
+
+Apply a merged body for the pending change. Requires edit permission on the page.
+
+**Request body:**
+
+```json
+{
+  "externalVersionId": "...",
+  "markdown": "The merged Markdown",
+  "ours": "The session text the merge was computed against"
+}
+```
+
+All three fields are required. The merged body becomes `Page.body`, is recorded as a `MERGE` version and replaces the content of the open session for everyone. If the session changed after you fetched `ours`, the server rebases the merge onto the session's current text.
+
+**Response 204:** No content.
+
+**Response 409:** The `error.code` tells the cases apart:
+
+| Code | Meaning |
+|------|---------|
+| `MERGE_STALE` | The change was merged already, or a newer one arrived. Fetch the pending merge again |
+| `MERGE_IN_PROGRESS` | Someone else is applying a merge |
+| `MERGE_REBASE_CONFLICT` | Edits made in the session after your fetch overlap the merge |
+
+### POST /api/wiki/spaces/:spaceId/pages/:pageSlug/collab/flush
+
+Save the live editing session of the page to the database now, so the stored body matches what the editor shows. Requires edit permission on the page.
+
+**Response 200:** `{ "flushed": true }` when a live session was saved, `{ "flushed": false }` when nobody has the page open.
 
 ### DELETE /api/wiki/spaces/:spaceId/pages/:pageSlug
 
@@ -1875,9 +1933,19 @@ Get a fully hydrated wiki page with comments and labels.
 
 ### GET /api/wiki/spaces/:spaceId/pages/:pageSlug/history
 
-Get revision history for a wiki page.
+Get revision history for a wiki page, newest first.
 
-**Response 200:** Array of revision objects.
+**Response 200:** Array of revision objects. Each has a `kind`:
+
+| Kind | Written by |
+|------|-----------|
+| `EDIT` | A save from the editor or a plain API update |
+| `EXTERNAL` | An API or MCP change that an open editor session has to merge |
+| `SESSION_DRAFT` | An editor session's text, saved before a merge so nothing is lost |
+| `MERGE` | The result of applying a merge |
+| `RESTORE` | Restoring an earlier version |
+
+The head of a page is `Page.body`, not the highest version number.
 
 ### GET /api/wiki/spaces/:spaceId/pages/:pageSlug/export
 
@@ -1887,7 +1955,7 @@ Export a wiki page in the specified format.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `format` | string | Export format: `html`, `pdf`, `docx`, `epub`, `latex`, `txt` |
+| `format` | string | Export format: `md`, `html`, `pdf`, `docx`, `epub`, `latex`, `plain` |
 
 **Response 200:** File download in the requested format.
 

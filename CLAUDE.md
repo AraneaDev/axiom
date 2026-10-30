@@ -87,6 +87,8 @@ These are enforced across the entire codebase. See [Design Patterns](docs/design
 
 **Production serving:** One container. Express serves the built SPA (`STATIC_DIR`, default `public`; the Dockerfile copies `frontend/dist` to `/app/public`) after all `/api` routes, with an index.html fallback, immutable caching on `/assets/*` and `no-cache` on `index.html`. No nginx. Development stays on Vite (HMR, :7000).
 
+**Wiki content:** `Page.body` and `PageVersion.body` are always Markdown, never Yjs XML. The collaborative editor converts through the shared editor core (`frontend/src/editor-core/`, bundled for the backend by `npm run build:editor-core`). Non-editor writes go through `writePageBody` (`src/modules/wiki/page-writes.ts`); when a session is live they become a pending change that the session merges per block (`page-merge.ts`).
+
 **Real-time:** WebSocket server with JWT auth. Events broadcast for issue, comment, board, wiki, notification, approval and form changes, plus `issue:links-updated` when a wiki page is linked to an issue. Frontend auto-invalidates React Query cache via `useRealtimeInvalidation`.
 
 **Automation:** Rules in `src/modules/automation/`. Conditions use query strings (`type = Bug AND priority > Medium`). 8 action types (set_status, set_assignee, add_label, add_comment, set_field, create_issue, send_email, webhook). Triggers: `issue:created`, `issue:status_changed`, `issue:assigned`, `label:added`. Actions support `{{expression}}` template variables. Trigger sites pass hydrated issues via `AUTOMATION_ISSUE_INCLUDE`.

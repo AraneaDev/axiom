@@ -405,6 +405,15 @@ Implements the Yjs sync protocol for real-time collaborative wiki editing:
 - On connect: server sends sync step 1 and current awareness state to the new client
 - Document updates are debounce-persisted to PostgreSQL via `scheduleSave`; on the last client disconnect, `forceSave` is called immediately
 - Rooms are destroyed and memory freed when the last client disconnects
+- Two application messages sit beside the Yjs ones. Type `20` carries the external-change state of the page (a pending change, or that it was merged and by whom), and type `21` carries the merge lock. Types 0 and 1 stay sync and awareness. `y-websocket` reserves 0–3, which is why these start at 20.
+
+### Markdown as the source of truth for wiki pages
+
+`Page.body` and `PageVersion.body` only ever contain Markdown, never Yjs state or editor XML. The Yjs document of a room is a working copy: it is built from `Page.body` when the room opens, and converted back to Markdown whenever it is saved.
+
+The conversion lives in one shared editor core, `frontend/src/editor-core/`: the TipTap schema and the Markdown rules. The browser imports it directly. The backend gets it as a CommonJS bundle (`dist-editor-core/editor-core.cjs`, built by `npm run build:editor-core`) through `src/lib/editor-core.ts`, so both sides read and write the same structure. The same core holds the block-level three-way merge.
+
+Every write that does not come from an editor session goes through `writePageBody` (`src/modules/wiki/page-writes.ts`). It stores the new body at once and records a version. If a collaboration room is live for the page, the write is also recorded in `PendingPageChange`, together with the body it replaced, and the room is told with a type `20` message. The open editor shows a notice, and the person editing merges per block (`page-merge.ts`) or, for overlapping blocks, in a side-by-side conflict view. Applying the merge writes a `MERGE` version and replaces the room content. Before that, the session's own text is saved as a `SESSION_DRAFT` version, so neither side is lost.
 
 ---
 
