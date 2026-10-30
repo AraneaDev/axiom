@@ -152,3 +152,21 @@ describe('editor core markdown round trip', () => {
     expect(yFragmentToMarkdown(fragment)).toBe('New text');
   });
 });
+
+describe('editor core DOM scope', () => {
+  it('leaves no global window or document behind outside a conversion', async () => {
+    await loadEditorCore();
+    const g = globalThis as Record<string, unknown>;
+    expect(typeof g.window).toBe('undefined');
+    expect(typeof g.document).toBe('undefined');
+
+    expect(normalizeMarkdown('# Title\n\n- a\n- [ ] t')).toBe('# Title\n\n- a\n\n- [ ] t');
+    const doc = new Y.Doc();
+    markdownToYFragment('Some **text**', doc.getXmlFragment('default'));
+    expect(yFragmentToMarkdown(doc.getXmlFragment('default'))).toBe('Some **text**');
+
+    expect(typeof g.window).toBe('undefined');
+    expect(typeof g.document).toBe('undefined');
+    expect(typeof g.DOMParser).toBe('undefined');
+  });
+});

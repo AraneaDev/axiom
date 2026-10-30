@@ -4,7 +4,8 @@
  * Parsing and serializing go through the same tiptap-markdown parser and serializer
  * the browser editor uses, driven by a headless TipTap editor (no view). It needs a
  * DOM (`DOMParser`, `document`): the browser and jsdom provide one, and the server
- * entry installs happy-dom globals before this module is used.
+ * entry sets a DOM scope (`setDomScope`) that provides happy-dom globals only while
+ * each conversion runs.
  *
  * Yjs conversion uses `@tiptap/y-tiptap`, the binding `@tiptap/extension-collaboration`
  * uses in the browser, so the server writes exactly the structure the editor reads.
@@ -22,7 +23,20 @@ interface MarkdownStorage {
   serializer: { serialize(doc: PMNode): string };
 }
 
+/** Runs a conversion with a DOM available. */
+export type DomScope = <T>(fn: () => T) => T;
+
 let editor: Editor | null = null;
+let domScope: DomScope = (fn) => fn();
+
+/**
+ * Set how conversions get a DOM. The default runs them as they are, for the browser
+ * and jsdom; the server bundle passes a scope that installs happy-dom per call.
+ * @param scope - Wraps every conversion.
+ */
+export function setDomScope(scope: DomScope): void {
+  domScope = scope;
+}
 
 function getEditor(): Editor {
   if (!editor) {
@@ -51,7 +65,7 @@ function docToMarkdown(doc: PMNode): string {
  * @returns The document as ProseMirror JSON.
  */
 export function markdownToProseMirrorJSON(md: string): JSONContent {
-  return markdownToDoc(md).toJSON() as JSONContent;
+  return domScope(() => markdownToDoc(md).toJSON() as JSONContent);
 }
 
 /**
@@ -60,7 +74,7 @@ export function markdownToProseMirrorJSON(md: string): JSONContent {
  * @returns The Markdown.
  */
 export function proseMirrorJSONToMarkdown(doc: JSONContent): string {
-  return docToMarkdown(getEditor().schema.nodeFromJSON(doc));
+  return domScope(() => docToMarkdown(getEditor().schema.nodeFromJSON(doc)));
 }
 
 /**
@@ -70,7 +84,9 @@ export function proseMirrorJSONToMarkdown(doc: JSONContent): string {
  * @param fragment - Target fragment, for example `doc.getXmlFragment('default')`.
  */
 export function markdownToYFragment(md: string, fragment: Y.XmlFragment): void {
-  prosemirrorJSONToYXmlFragment(getEditor().schema, markdownToDoc(md).toJSON(), fragment);
+  domScope(() =>
+    prosemirrorJSONToYXmlFragment(getEditor().schema, markdownToDoc(md).toJSON(), fragment),
+  );
 }
 
 /**
@@ -79,7 +95,9 @@ export function markdownToYFragment(md: string, fragment: Y.XmlFragment): void {
  * @returns The Markdown.
  */
 export function yFragmentToMarkdown(fragment: Y.XmlFragment): string {
-  return docToMarkdown(yXmlFragmentToProseMirrorRootNode(fragment, getEditor().schema));
+  return domScope(() =>
+    docToMarkdown(yXmlFragmentToProseMirrorRootNode(fragment, getEditor().schema)),
+  );
 }
 
 /**
@@ -89,5 +107,5 @@ export function yFragmentToMarkdown(fragment: Y.XmlFragment): string {
  * @returns The normalised Markdown.
  */
 export function normalizeMarkdown(md: string): string {
-  return docToMarkdown(markdownToDoc(md));
+  return domScope(() => docToMarkdown(markdownToDoc(md)));
 }
