@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { test, expect } from '@playwright/test';
 
 import { login, ORG } from './helpers';
@@ -39,24 +41,19 @@ test.describe('Wiki', () => {
     await expect(page.locator('.tiptap-editor, .ProseMirror')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('export wiki page triggers download', async ({ page }) => {
-    await page.goto(`${WIKI_URL}/docs/getting-started`);
-    // Look for an export or download button
-    const exportButton = page.getByRole('button', { name: /export|download/i });
-    // If an export button exists, clicking it should start a download
-    if (await exportButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      const downloadPromise = page.waitForEvent('download', { timeout: 10_000 });
-      await exportButton.click();
-      const download = await downloadPromise;
-      expect(download.suggestedFilename()).toBeTruthy();
-    } else {
-      // Some UIs put export behind a menu -- look for a more-actions menu
-      const menuButton = page.getByRole('button', { name: /more|actions|\.\.\./i });
-      if (await menuButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await menuButton.click();
-        const exportOption = page.getByRole('menuitem', { name: /export|download/i });
-        await expect(exportOption).toBeVisible();
-      }
-    }
+  test('export as Markdown downloads the real page content', async ({ page }) => {
+    await page.goto(`${WIKI_URL}/docs/handbook`);
+    await page.getByRole('button', { name: /export/i }).click();
+    const downloadPromise = page.waitForEvent('download', { timeout: 10_000 });
+    await page.getByRole('menuitem', { name: 'Markdown' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('handbook.md');
+
+    const path = await download.path();
+    const content = readFileSync(path, 'utf8');
+    expect(content).toContain('# Team handbook');
+    expect(content).toContain('## Working agreements');
+    expect(content).toContain('- Review before merge');
+    expect(content).not.toContain('<paragraph');
   });
 });

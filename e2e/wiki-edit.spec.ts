@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-import { login, ORG } from './helpers';
+import { login, ORG, wikiApi } from './helpers';
 
 const TEAM = 'core';
 const WIKI_URL = `/${ORG}/${TEAM}/wiki`;
@@ -77,5 +77,64 @@ test.describe('Wiki Editing', () => {
     ).toBeVisible({ timeout: 10_000 });
     // Editor toolbar should have formatting buttons (bold, italic, etc.)
     await expect(page.getByRole('button', { name: 'Bold' })).toBeVisible({ timeout: 10_000 });
+  });
+  test('a page with a heading, list, table and code renders as structure in the editor', async ({
+    page,
+    request,
+  }) => {
+    const api = await wikiApi(request);
+    const slug = `structure-${Date.now()}`;
+    await api.createPage(
+      slug,
+      'Structure',
+      [
+        '# Structure heading',
+        '',
+        '- first item',
+        '- second item',
+        '',
+        '| Name | Value |',
+        '| --- | --- |',
+        '| alpha | 1 |',
+        '',
+        '```ts',
+        'const answer = 42;',
+        '```',
+        '',
+      ].join('\n'),
+    );
+
+    await page.goto(`${WIKI_URL}/docs/${slug}/edit`);
+    const editor = page.locator('.ProseMirror').first();
+    await expect(editor.locator('h1')).toHaveText('Structure heading', { timeout: 15_000 });
+    await expect(editor.locator('ul li')).toHaveCount(2);
+    await expect(editor.locator('table')).toBeVisible();
+    await expect(editor.locator('table td, table th').first()).toBeVisible();
+    await expect(editor.locator('pre code')).toContainText('const answer = 42;');
+    // Rendered as structure, not as Markdown source
+    await expect(editor).not.toContainText('# ');
+    await expect(editor).not.toContainText('```');
+    await expect(editor).not.toContainText('| ---');
+  });
+
+  test('autosave stores Markdown, never editor XML', async ({ page, request }) => {
+    const api = await wikiApi(request);
+    const slug = `autosave-${Date.now()}`;
+    await api.createPage(slug, 'Autosave', '# Autosave\n\nStart.\n');
+
+    await page.goto(`${WIKI_URL}/docs/${slug}/edit`);
+    const editor = page.locator('.ProseMirror').first();
+    await expect(editor.locator('h1')).toHaveText('Autosave', { timeout: 15_000 });
+    await editor.getByText('Start.').click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' typed by the e2e autosave test');
+
+    // The collaboration server saves a few seconds after the last edit
+    await expect
+      .poll(async () => (await api.getPage(slug)).body, { timeout: 15_000, intervals: [1000] })
+      .toContain('typed by the e2e autosave test');
+    const { body } = await api.getPage(slug);
+    expect(body).toContain('# Autosave');
+    expect(body).not.toContain('<paragraph');
   });
 });

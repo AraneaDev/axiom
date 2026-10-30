@@ -1,4 +1,4 @@
-import { type Page } from '@playwright/test';
+import { type APIRequestContext, type Page } from '@playwright/test';
 
 export const DEMO_USERS = {
   admin: { login: 'admin', password: 'password123', display: 'Admin User' },
@@ -29,4 +29,44 @@ export async function logout(page: Page) {
 /** Links to individual issues (`.../issues/<number>`), excluding the "new issue" link. */
 export function issueLinks(page: Page) {
   return page.locator('a[href*="/issues/"]:not([href$="/issues/new"])');
+}
+
+/** A small authenticated API client for specs that set up or inspect wiki pages directly. */
+export async function wikiApi(request: APIRequestContext, user = DEMO_USERS.admin) {
+  const base = { 'X-Requested-With': 'XMLHttpRequest' };
+  const loginRes = await request.post('/api/auth/login', {
+    headers: base,
+    data: { login: user.login, password: user.password },
+  });
+  const { accessToken } = await loginRes.json();
+  const h = { ...base, Authorization: `Bearer ${accessToken}` };
+
+  const orgs = await (await request.get('/api/orgs', { headers: h })).json();
+  const teams = await (await request.get(`/api/teams/org/${orgs[0].id}`, { headers: h })).json();
+  const spaces = await (await request.get(`/api/wiki/team/${teams.data[0].id}/spaces`, { headers: h })).json();
+  const spaceId: string = spaces.find((s: { slug: string }) => s.slug === 'docs').id;
+  const pageUrl = (slug: string) => `/api/wiki/spaces/${spaceId}/pages/${slug}`;
+
+  return {
+    spaceId,
+    async createPage(slug: string, title: string, body: string) {
+      const res = await request.post(`/api/wiki/spaces/${spaceId}/pages`, {
+        headers: h,
+        data: { title, slug, body },
+      });
+      if (res.status() !== 201) throw new Error(`createPage failed: ${res.status()}`);
+      return res.json();
+    },
+    async getPage(slug: string) {
+      return (await request.get(pageUrl(slug), { headers: h })).json();
+    },
+    async patchPage(slug: string, data: Record<string, unknown>) {
+      const res = await request.patch(pageUrl(slug), { headers: h, data });
+      if (!res.ok()) throw new Error(`patchPage failed: ${res.status()}`);
+      return res.json();
+    },
+    async history(slug: string) {
+      return (await request.get(`${pageUrl(slug)}/history`, { headers: h })).json();
+    },
+  };
 }
