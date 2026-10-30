@@ -8,7 +8,6 @@ const VARIABLE_GROUPS = [
     variables: [
       { name: '{{currentUser.displayName}}', description: 'Your display name' },
       { name: '{{currentUser.username}}', description: 'Your username' },
-      { name: '{{currentUser.email}}', description: 'Your email' },
     ],
   },
   {

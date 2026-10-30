@@ -17,7 +17,8 @@ export async function resolveWikiTemplate(body: string, context: ResolveContext)
   const [user, space] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: context.userId },
-      select: { username: true, displayName: true, email: true },
+      // No email: a template's output is page content anyone with access reads
+      select: { username: true, displayName: true },
     }),
     prisma.wikiSpace.findUniqueOrThrow({
       where: { id: context.spaceId },

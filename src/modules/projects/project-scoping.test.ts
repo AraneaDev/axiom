@@ -7,7 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../config/database';
 import { cleanupTestContext, createTestContext, type TestContext } from '../../test/factory';
 import { authDel, authGet, authPatch, authPost } from '../../test/helpers';
+import { AUTOMATION_ISSUE_INCLUDE } from '../../utils/prisma-selects';
 import { evaluateRules } from '../automation/automation.service';
+import { resolveWikiTemplate } from '../wiki/wiki-template-resolver.service';
 
 describe('Project-scoped ids', () => {
   let a: TestContext;
@@ -301,5 +303,49 @@ describe('Project-scoped ids', () => {
       where: { issueId_fieldDefinitionId: { issueId: target.id, fieldDefinitionId: field.id } },
     });
     expect(value?.value).toBe('prod');
+  });
+
+  it('L1: templates never print emails, in automation or in wiki templates', async () => {
+    const target = await prisma.issue.findFirstOrThrow({
+      where: { projectId: b.projectId, number: 1 },
+    });
+    await prisma.issue.update({ where: { id: target.id }, data: { assigneeId: b.owner.id } });
+    const hydrated = await prisma.issue.findUniqueOrThrow({
+      where: { id: target.id },
+      include: AUTOMATION_ISSUE_INCLUDE,
+    });
+    const rule = await prisma.automationRule.create({
+      data: {
+        projectId: b.projectId,
+        name: 'leak emails',
+        trigger: 'issue:created',
+        actions: [
+          {
+            type: 'add_comment',
+            body: 'A[{{issue.assignee.email}}] C[{{issue.creator.email}}] X[{{actor.email}}]',
+          },
+        ],
+      },
+    });
+    await evaluateRules(b.projectId, 'issue:created', {
+      issue: hydrated,
+      actorId: b.owner.id,
+    } as never);
+    await prisma.automationRule.delete({ where: { id: rule.id } });
+    const comment = await prisma.comment.findFirstOrThrow({
+      where: { issueId: target.id, body: { startsWith: 'A[' } },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(comment.body).not.toContain('@');
+
+    const space = await prisma.wikiSpace.create({
+      data: { teamId: b.teamId, name: 'Tpl', slug: `tpl-${Date.now()}` },
+    });
+    const resolved = await resolveWikiTemplate('E[{{currentUser.email}}]', {
+      teamId: b.teamId,
+      spaceId: space.id,
+      userId: b.owner.id,
+    });
+    expect(resolved).not.toContain('@');
   });
 });

@@ -278,22 +278,40 @@ function matchesConditionsLegacy(
   return true;
 }
 
+/**
+ * Drop email from the user objects on an issue, whatever the caller hydrated.
+ * @param issue
+ */
+function withoutEmails<T extends Record<string, unknown>>(issue: T): T {
+  const copy: Record<string, unknown> = { ...issue };
+  for (const key of ['assignee', 'creator', 'reporter']) {
+    const user = copy[key];
+    if (user && typeof user === 'object') {
+      const { email: _email, ...rest } = user as Record<string, unknown>;
+      copy[key] = rest;
+    }
+  }
+  return copy as T;
+}
+
 async function buildTemplateContext(context: AutomationContext) {
   const { issue, actorId } = context;
+  // No emails in template output: comments and titles reach the whole team, and emails
+  // are for admins only. send_email takes its recipient as written, not from a template.
   const actor = await prisma.user.findUnique({
     where: { id: actorId },
-    select: { username: true, displayName: true, email: true },
+    select: { username: true, displayName: true },
   });
   return {
     issue: {
-      ...issue,
+      ...withoutEmails(issue),
       labels: (issue.labels as { name: string }[] | undefined)?.map((l) => l.name) ?? [],
     },
     trigger: context.from !== undefined ? 'issue:status_changed' : 'issue:created',
     from: context.from,
     to: context.to,
     label: context.label,
-    actor: actor ?? { username: 'system', displayName: 'System', email: '' },
+    actor: actor ?? { username: 'system', displayName: 'System' },
   };
 }
 

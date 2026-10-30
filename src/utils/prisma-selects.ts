@@ -74,10 +74,13 @@ export const ISSUE_WITH_COLUMN_INCLUDE = {
   column: true,
 } as const;
 
-/** Hydrated issue include for automation rule evaluation */
+/**
+ * Hydrated issue include for automation rule evaluation. No emails: templates can write
+ * into comments and titles the whole team reads, and emails are for admins only.
+ */
 export const AUTOMATION_ISSUE_INCLUDE = {
-  assignee: { select: { id: true, username: true, displayName: true, email: true } },
-  creator: { select: { id: true, username: true, displayName: true, email: true } },
+  assignee: { select: { id: true, username: true, displayName: true } },
+  creator: { select: { id: true, username: true, displayName: true } },
   labels: { select: { name: true } },
   sprint: { select: { id: true, name: true, goal: true } },
   column: { select: { id: true, name: true } },
