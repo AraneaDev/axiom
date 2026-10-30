@@ -8,6 +8,8 @@ export interface StorageBackend {
   exists(key: string): Promise<boolean>;
 }
 
+import { LocalStorageBackend } from './local';
+
 let instance: StorageBackend | null = null;
 
 /**
@@ -15,9 +17,8 @@ let instance: StorageBackend | null = null;
  */
 export function getStorage(): StorageBackend {
   if (!instance) {
-    // Lazy import to avoid circular deps
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { LocalStorageBackend } = require('./local') as typeof import('./local');
+    // local.ts only imports a type from here, so a static import makes no cycle; the
+    // require() it replaced failed to resolve under the test runner
     instance = new LocalStorageBackend();
   }
   return instance;
