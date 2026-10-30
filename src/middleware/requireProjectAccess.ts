@@ -7,6 +7,7 @@ import type { Action } from '../utils/permissions';
 
 import { AppError } from './errorHandler';
 import { checkTeamPermission } from './rbac';
+import { normalizeApiPath } from './token-scopes';
 
 export type ProjectAccess = 'ok' | 'not_found' | 'forbidden';
 
@@ -224,7 +225,11 @@ export function requireProjectWrite(action: Action = 'issue:edit') {
   return async (req: Request, _res: Response, next: NextFunction) => {
     if (SAFE_METHODS.has(req.method)) return next();
     // Watching and voting are personal actions, open to anyone who can read the issue
-    if (/\/issues\/\d+\/(watchers|votes)\/toggle$/.test(req.originalUrl.split('?')[0])) {
+    if (
+      /\/issues\/\d+\/(watchers|votes)\/toggle$/.test(
+        normalizeApiPath(req.originalUrl.split('?')[0]),
+      )
+    ) {
       return next();
     }
     try {

@@ -5,7 +5,7 @@ import { prisma } from '../config/database';
 import { env } from '../config/env';
 
 import { AppError } from './errorHandler';
-import { tokenAllows } from './token-scopes';
+import { normalizeApiPath, tokenAllows } from './token-scopes';
 
 export interface AuthPayload {
   userId: string;
@@ -62,7 +62,8 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       }
 
       // A token only reaches what its scopes cover (see token-scopes.ts)
-      const path = req.originalUrl.split('?')[0];
+      // Every spelling Express routes to the same handler meets the same rule
+      const path = normalizeApiPath(req.originalUrl.split('?')[0]);
       if (!tokenAllows(apiToken.scopes, req.method, path)) {
         throw new AppError(403, 'This API token does not have the scope for this request', 'SCOPE');
       }

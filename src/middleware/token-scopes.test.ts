@@ -231,4 +231,26 @@ describe('API token scopes', () => {
     expect(search.status).toBe(200);
     expect(JSON.stringify(search.body)).not.toContain(issue.title);
   });
+
+  it('N2: the same rules over HTTP for trailing-slash and upper-case spellings', async () => {
+    const results = {
+      deleteProject: (await withToken('issues:write', 'delete', `/api/projects/${ctx.projectId}/`))
+        .status,
+      spacePermissions: (
+        await withToken('wiki:write', 'put', `/api/wiki/spaces/${spaceId}/PERMISSIONS`, {
+          userId: ctx.owner.id,
+          level: 'ADMIN',
+        })
+      ).status,
+      activity: (await withToken('wiki:read', 'get', `/api/teams/${ctx.teamId}/activity/`)).status,
+      dashboard: (await withToken('wiki:read', 'get', '/api/users/me/dashboard/')).status,
+    };
+    expect(results).toEqual({
+      deleteProject: 403,
+      spacePermissions: 403,
+      activity: 403,
+      dashboard: 403,
+    });
+    expect(await prisma.project.count({ where: { id: ctx.projectId } })).toBe(1);
+  });
 });

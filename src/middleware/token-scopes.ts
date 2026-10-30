@@ -127,3 +127,22 @@ export function scopesAllowAction(scopes: readonly string[], action: Action): bo
   if (action === 'wiki:edit') return has(scopes, 'wiki', true);
   return false;
 }
+
+/**
+ * The path as Express routes it, for matching: Express 5 routing is case-insensitive and
+ * non-strict, so `/api/Projects/x/` reaches the same handler as `/api/projects/x`. Decode
+ * percent-escapes, lower-case, collapse repeated slashes and drop trailing ones, so every
+ * spelling meets the same rule. Use on the path without its query string.
+ * @param path - The raw request path
+ */
+export function normalizeApiPath(path: string): string {
+  let decoded = path;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    // Malformed escapes: match the raw path (Express would refuse it anyway)
+  }
+  const collapsed = decoded.toLowerCase().replace(/\/{2,}/g, '/');
+  const trimmed = collapsed.replace(/\/+$/, '');
+  return trimmed === '' ? '/' : trimmed;
+}
