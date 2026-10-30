@@ -8,6 +8,7 @@ import { removeOrgMember } from '../modules/orgs/orgs.service';
 import { restoreDescription } from '../modules/wiki/page-versions';
 import { writePageBody } from '../modules/wiki/page-writes';
 import { setRestrictions } from '../modules/wiki/wiki-permissions.service';
+import { movePage } from '../modules/wiki/wiki.service';
 import {
   appendParagraph,
   CollabTestClient,
@@ -227,6 +228,21 @@ describe('Collaboration server', () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+
+  it('26: closes a live session when its page moves to a space the user cannot open', async () => {
+    const editor = await connect('editor');
+    const team = await prisma.team.findFirstOrThrow({ where: { orgId } });
+    const closedSpace = await prisma.wikiSpace.create({
+      data: {
+        teamId: team.id,
+        name: 'Closed',
+        slug: `${SLUG}-closed-${Date.now()}`,
+        permissions: { create: { userId: users.owner, level: 'ADMIN' } },
+      },
+    });
+    await movePage(pageId, closedSpace.id);
+    expect(await editor.closeCode).toBe(4003);
   });
 
   it('closes a live session when a new page restriction hides the page', async () => {

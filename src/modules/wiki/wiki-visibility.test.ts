@@ -358,4 +358,39 @@ describe('Hidden pages in listings', () => {
     await client.close();
     expect(seen).toEqual([first.id, third.id]);
   });
+
+  it('20: no parent cycles, and a moved page takes its subtree along', async () => {
+    const top = await prisma.page.create({
+      data: { spaceId, title: 'Top', slug: `top-${Date.now()}`, body: '' },
+    });
+    const child = await prisma.page.create({
+      data: { spaceId, parentId: top.id, title: 'Child', slug: `child-${Date.now()}`, body: '' },
+    });
+    const viaPatch = await authPatch(
+      `/api/wiki/spaces/${spaceId}/pages/${top.slug}`,
+      member.token,
+      {
+        parentId: child.id,
+      },
+    );
+    const viaMove = await authPost(`/api/wiki/pages/${top.id}/move`, member.token, {
+      targetParentId: child.id,
+    });
+    expect([viaPatch.status, viaMove.status]).toEqual([400, 400]);
+
+    const target = await prisma.wikiSpace.create({
+      data: { teamId: ctx.teamId, name: 'Target', slug: `target-${Date.now()}` },
+    });
+    const moved = await authPost(`/api/wiki/pages/${top.id}/move`, member.token, {
+      targetSpaceId: target.id,
+    });
+    expect(moved.status).toBe(200);
+    const after = await prisma.page.findMany({
+      where: { id: { in: [top.id, child.id] } },
+      select: { id: true, spaceId: true, parentId: true },
+    });
+    expect(after.every((p) => p.spaceId === target.id)).toBe(true);
+    expect(after.find((p) => p.id === top.id)?.parentId).toBeNull();
+    expect(after.find((p) => p.id === child.id)?.parentId).toBe(top.id);
+  });
 });

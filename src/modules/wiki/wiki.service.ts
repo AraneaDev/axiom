@@ -4,6 +4,7 @@ import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
 import { normalizeMarkdown } from '../../lib/editor-core';
 import { AppError } from '../../middleware/errorHandler';
+import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { flushRoom } from '../../realtime/collaboration';
 import { checkUnique } from '../../utils/check-unique';
 import { ERR } from '../../utils/error-messages';
@@ -318,7 +319,7 @@ export async function updatePage(
   await requireSpaceEdit(spaceId, authorId);
   const editAllowed = await canEditPage(authorId, page.id);
   if (!editAllowed) throw new AppError(403, 'You do not have permission to edit this page');
-  if (data.parentId === page.id) throw new AppError(400, 'Cannot set page as its own parent');
+  await assertNoParentCycle(page.id, data.parentId);
   await assertParentWritable(spaceId, data.parentId, authorId);
 
   const written = await writePageBody({
@@ -688,28 +689,47 @@ export async function movePage(
   );
 
   const newSpaceId = targetSpaceId ?? page.spaceId;
+  const changesSpace = newSpaceId !== page.spaceId;
+  await assertNoParentCycle(pageId, targetParentId);
 
-  // Check slug uniqueness in target space if moving to a different space
-  if (newSpaceId !== page.spaceId) {
-    await checkUnique(
-      'page',
-      { spaceId: newSpaceId, slug: page.slug },
-      'Page slug already taken in target space',
-    );
+  // A page moves with its subtree: every slug in it must be free in the target space
+  const descendants = changesSpace ? await getDescendantIds(pageId) : [];
+  if (changesSpace) {
+    const subtree = await prisma.page.findMany({
+      where: { id: { in: [pageId, ...descendants] } },
+      select: { slug: true },
+    });
+    const taken = await prisma.page.count({
+      where: { spaceId: newSpaceId, slug: { in: subtree.map((p) => p.slug) } },
+    });
+    if (taken > 0) throw new AppError(409, 'Page slug already taken in target space');
   }
 
-  // Prevent circular parent
-  if (targetParentId === pageId) {
-    throw new AppError(400, 'Cannot set page as its own parent');
-  }
+  // In another space the old parent no longer applies: top level unless a parent is given
+  const parentId =
+    targetParentId !== undefined ? targetParentId : changesSpace ? null : page.parentId;
 
-  return prisma.page.update({
-    where: { id: pageId },
-    data: {
-      spaceId: newSpaceId,
-      parentId: targetParentId !== undefined ? targetParentId : page.parentId,
-    },
+  const moved = await prisma.$transaction(async (tx) => {
+    const updated = await tx.page.update({
+      where: { id: pageId },
+      data: { spaceId: newSpaceId, parentId },
+    });
+    if (descendants.length > 0) {
+      await tx.page.updateMany({
+        where: { id: { in: descendants } },
+        data: { spaceId: newSpaceId },
+      });
+    }
+    return updated;
   });
+
+  if (changesSpace) {
+    await cacheInvalidate(`wiki:tree:${page.spaceId}`);
+    await cacheInvalidate(`wiki:tree:${newSpaceId}`);
+    // Sessions on the moved pages checked access against the old space: check again
+    for (const id of [pageId, ...descendants]) void revokeLiveAccess({ pageId: id });
+  }
+  return moved;
 }
 
 /**
@@ -770,16 +790,38 @@ export async function copyPage(
 }
 
 async function getDescendantIds(pageId: string): Promise<string[]> {
-  const children = await prisma.page.findMany({
-    where: { parentId: pageId },
-    select: { id: true },
-  });
+  // Breadth-first with a visited set: a cycle left by older data can't recurse forever
+  const seen = new Set<string>([pageId]);
   const ids: string[] = [];
-  for (const child of children) {
-    ids.push(child.id);
-    ids.push(...(await getDescendantIds(child.id)));
+  let frontier = [pageId];
+  while (frontier.length > 0) {
+    const children = await prisma.page.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    });
+    frontier = [];
+    for (const child of children) {
+      if (seen.has(child.id)) continue;
+      seen.add(child.id);
+      ids.push(child.id);
+      frontier.push(child.id);
+    }
   }
   return ids;
+}
+
+/**
+ * A page can't become its own parent or the child of one of its descendants.
+ * @param pageId - The page being re-parented
+ * @param parentId - The proposed parent
+ * @throws {AppError} 400 for a cycle
+ */
+async function assertNoParentCycle(pageId: string, parentId: string | null | undefined) {
+  if (!parentId) return;
+  if (parentId === pageId) throw new AppError(400, 'Cannot set page as its own parent');
+  if ((await getDescendantIds(pageId)).includes(parentId)) {
+    throw new AppError(400, 'Cannot move a page under its own descendant');
+  }
 }
 
 /**
@@ -792,13 +834,7 @@ export async function reorderPage(pageId: string, parentId: string | null, posit
   const page = await prisma.page.findUnique({ where: { id: pageId }, include: { space: true } });
   if (!page) throw new AppError(404, ERR.PAGE_NOT_FOUND);
 
-  if (parentId) {
-    if (parentId === pageId) throw new AppError(400, 'Cannot make a page its own parent');
-    const descendants = await getDescendantIds(pageId);
-    if (descendants.includes(parentId)) {
-      throw new AppError(400, 'Cannot move a page under its own descendant');
-    }
-  }
+  await assertNoParentCycle(pageId, parentId);
 
   const oldParentId = page.parentId;
 
