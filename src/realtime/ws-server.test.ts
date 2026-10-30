@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest
 import WebSocket, { WebSocketServer } from 'ws';
 
 import { prisma } from '../config/database';
+import { setSpacePermission } from '../modules/wiki/space-permissions.service';
 import { tokenFor, waitFor } from '../test/collab-client';
 import {
   addMemberToContext,
@@ -390,5 +391,20 @@ describe('Realtime room authorization', () => {
       await prisma.wikiSpace.delete({ where: { id: space.id } });
       await prisma.user.deleteMany({ where: { id: leaver.id } });
     }
+  });
+
+  it('drops a held space room when new space permissions leave the user out', async () => {
+    const space2 = await prisma.wikiSpace.create({
+      data: { teamId: ctx.teamId, name: 'Closing Space', slug: 'closing-space' },
+    });
+    const client = await connect(member.id);
+    const room = `space:${space2.id}`;
+    client.send({ type: 'subscribe', rooms: [room] });
+    await waitFor(() => client.messages.some((m) => m.type === 'subscribed' && m.room === room));
+
+    // The first custom permission turns an open space into a restricted one
+    await setSpacePermission(space2.id, { userId: ctx.owner.id, level: 'ADMIN' });
+    await waitFor(() => deniedRooms(client).includes(room));
+    expect(serverRooms(member.id).has(room)).toBe(false);
   });
 });

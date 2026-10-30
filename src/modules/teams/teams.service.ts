@@ -214,10 +214,13 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
     'Team membership not found',
   );
 
-  return prisma.teamMembership.update({
+  const updated = await prisma.teamMembership.update({
     where: { id: membership.id },
     data: { role },
   });
+  // Space permissions can be granted per team role
+  await revokeLiveAccess(memberId);
+  return updated;
 }
 
 /**

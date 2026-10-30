@@ -151,10 +151,13 @@ export async function updateOrgMemberRole(
     ERR.MEMBERSHIP_NOT_FOUND,
   );
 
-  return prisma.orgMembership.update({
+  const updated = await prisma.orgMembership.update({
     where: { id: membership.id },
     data: { role },
   });
+  // A lower role can lose org-wide access (an OWNER or ADMIN sees every space and page)
+  await revokeLiveAccess(memberId);
+  return updated;
 }
 
 /**

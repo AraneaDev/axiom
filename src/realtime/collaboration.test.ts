@@ -7,6 +7,7 @@ import { yFragmentToMarkdown } from '../lib/editor-core';
 import { removeOrgMember } from '../modules/orgs/orgs.service';
 import { restoreDescription } from '../modules/wiki/page-versions';
 import { writePageBody } from '../modules/wiki/page-writes';
+import { setRestrictions } from '../modules/wiki/wiki-permissions.service';
 import {
   appendParagraph,
   CollabTestClient,
@@ -190,6 +191,12 @@ describe('Collaboration server', () => {
 
     await removeOrgMember(orgId, leaver.id);
     expect(await client.closeCode).toBe(4003);
+  });
+
+  it('closes a live session when a new page restriction hides the page', async () => {
+    const editor = await connect('editor');
+    await setRestrictions(pageId, 'VIEW', [users.owner]);
+    expect(await editor.closeCode).toBe(4003);
   });
 
   it('closes with 4003 for a user the page hides', async () => {

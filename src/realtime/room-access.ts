@@ -2,10 +2,9 @@
  * Authorization for realtime rooms. A socket may only join a room when the REST API
  * would let the same user read what that room broadcasts.
  *
- * Access is checked once, when the socket subscribes. A user who loses access later
- * (removed from a team, a space permission revoked) keeps the rooms they already hold
- * until they unsubscribe or reconnect. Re-checking live connections on membership
- * changes is deliberately out of scope.
+ * Access is checked when the socket subscribes, and again for held rooms whenever access
+ * is taken away (see access-revocation.ts): member removal, role changes, space permission
+ * and page restriction changes all re-check live connections.
  */
 import { prisma } from '../config/database';
 import { checkWikiSpaceOrgAccess } from '../middleware/rbac';

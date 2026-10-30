@@ -528,19 +528,20 @@ async function collabAccess(
 }
 
 /**
- * Re-check a user's open sessions after they lost access: close the ones they may no longer
- * view and make the ones they may no longer edit read-only.
+ * Re-check open sessions after access was taken away (one user's, or everyone's when userId
+ * is null): close the ones that may no longer view and make the ones that may no longer
+ * edit read-only.
  * @param userId
  */
-async function revalidateUserSessions(userId: string): Promise<void> {
+async function revalidateUserSessions(userId: string | null): Promise<void> {
   for (const room of rooms.values()) {
     const page = await prisma.page.findUnique({
       where: { id: room.pageId },
       select: { id: true, spaceId: true },
     });
     for (const client of room.clients.values()) {
-      if (client.userId !== userId) continue;
-      const access = page ? await collabAccess(userId, page) : { view: false, edit: false };
+      if (userId !== null && client.userId !== userId) continue;
+      const access = page ? await collabAccess(client.userId, page) : { view: false, edit: false };
       if (!access.view) client.ws.close(4003, 'Forbidden');
       else client.canEdit = access.edit;
     }

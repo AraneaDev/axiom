@@ -1,13 +1,14 @@
 /**
- * Live connections check access when they join, not afterwards. When a user loses access
- * (removed from an org or a team), the code that removed it calls `revokeLiveAccess`, and
- * each realtime layer re-checks what that user's open connections hold.
+ * Live connections check access when they join. When access is taken away (a member
+ * removed or demoted, a space permission or page restriction changed), the code that changed
+ * it calls `revokeLiveAccess`, and each realtime layer re-checks what open connections hold.
  *
  * Like room-registry, this module imports nothing at runtime: services call it without
  * importing the WebSocket servers, which register their hooks at load.
  */
 
-type AccessRevokedHook = (userId: string) => Promise<void>;
+/** Called with the user who lost access, or null when a change may affect anyone */
+type AccessRevokedHook = (userId: string | null) => Promise<void>;
 
 const hooks: AccessRevokedHook[] = [];
 
@@ -20,10 +21,11 @@ export function registerAccessRevokedHook(fn: AccessRevokedHook): void {
 }
 
 /**
- * Re-check every live connection of a user against the current permissions, dropping what
- * they may no longer see. Resolves once every layer has finished.
- * @param userId - The user who lost access
+ * Re-check live connections against the current permissions, dropping what they may no
+ * longer see. Resolves once every layer has finished.
+ * @param userId - The user who lost access; omit when a change may affect any user (a space
+ * permission or page restriction changed)
  */
-export async function revokeLiveAccess(userId: string): Promise<void> {
+export async function revokeLiveAccess(userId: string | null = null): Promise<void> {
   await Promise.all(hooks.map((fn) => fn(userId).catch(() => undefined)));
 }

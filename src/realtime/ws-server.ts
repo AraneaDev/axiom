@@ -142,21 +142,22 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
 }
 
 /**
- * Re-check the rooms a user's sockets hold, after they lost access somewhere. Rooms that no
+ * Re-check the rooms sockets hold after access was taken away: one user's sockets, or all
+ * of them when userId is null. Rooms that no
  * longer pass are dropped and reported as denied. The re-check queues behind any check
  * already running on the socket, so a grant decided on the old permissions can't land after
  * it.
- * @param userId - The user who lost access
+ * @param userId - The user who lost access, or null for everyone
  */
-async function revalidateUserRooms(userId: string): Promise<void> {
+async function revalidateUserRooms(userId: string | null): Promise<void> {
   const runs: Promise<void>[] = [];
   for (const ws of getClients()) {
-    if (ws.userId !== userId) continue;
+    if (userId !== null && ws.userId !== userId) continue;
     ws.checkQueue = ws.checkQueue
       .then(async () => {
         const lost: string[] = [];
         for (const room of [...ws.rooms]) {
-          if (!(await canJoinRoom(userId, room))) {
+          if (!(await canJoinRoom(ws.userId, room))) {
             ws.rooms.delete(room);
             lost.push(room);
           }
@@ -164,7 +165,7 @@ async function revalidateUserRooms(userId: string): Promise<void> {
         sendDenied(ws, lost);
       })
       .catch((err) => {
-        logger.error('Realtime room re-check failed', { userId }, err as Error);
+        logger.error('Realtime room re-check failed', { userId: ws.userId }, err as Error);
       });
     runs.push(ws.checkQueue);
   }

@@ -2,6 +2,7 @@ import { SpacePermissionLevel } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { ERR } from '../../utils/error-messages';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
@@ -113,7 +114,7 @@ export async function setSpacePermission(
   }
 
   if (data.userId) {
-    return prisma.spacePermission.upsert({
+    const permission = await prisma.spacePermission.upsert({
       where: { spaceId_userId: { spaceId, userId: data.userId } },
       create: { spaceId, userId: data.userId, level: data.level },
       update: { level: data.level },
@@ -123,9 +124,13 @@ export async function setSpacePermission(
         },
       },
     });
+    // Any permission can take access away: the first one closes an open space to everyone
+    // not listed, and a lower level ends editing
+    await revokeLiveAccess();
+    return permission;
   }
 
-  return prisma.spacePermission.upsert({
+  const permission = await prisma.spacePermission.upsert({
     where: { spaceId_teamRole: { spaceId, teamRole: data.teamRole! } },
     create: { spaceId, teamRole: data.teamRole!, level: data.level },
     update: { level: data.level },
@@ -135,6 +140,8 @@ export async function setSpacePermission(
       },
     },
   });
+  await revokeLiveAccess();
+  return permission;
 }
 
 /**
@@ -152,4 +159,6 @@ export async function removeSpacePermission(spaceId: string, permissionId: strin
   }
 
   await prisma.spacePermission.delete({ where: { id: permissionId } });
+  // Removing a grant can take access away from its user or team role
+  await revokeLiveAccess();
 }

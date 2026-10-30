@@ -2,6 +2,7 @@ import { RestrictionType } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { ERR } from '../../utils/error-messages';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
@@ -81,6 +82,8 @@ export async function setRestrictions(
       }),
     ),
   ]);
+  // A restriction hides or locks the page for everyone not listed
+  await revokeLiveAccess();
 }
 
 /**
@@ -109,6 +112,9 @@ export async function removeRestriction(restrictionId: string): Promise<void> {
   if (!restriction) throw new AppError(404, ERR.RESTRICTION_NOT_FOUND);
 
   await prisma.pageRestriction.delete({ where: { id: restrictionId } });
+  // Removing the last entry lifts the restriction, but removing one of several takes that
+  // user's access away
+  await revokeLiveAccess();
 }
 
 /**
