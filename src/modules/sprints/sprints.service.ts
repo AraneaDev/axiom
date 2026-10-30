@@ -227,10 +227,14 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
   }
 
   if (moveToSprintId) {
-    await findOrThrow(
+    const target = await findOrThrow(
       prisma.sprint.findUnique({ where: { id: moveToSprintId } }),
       'Target sprint not found',
     );
+    // Unfinished work can only move to a sprint of the same project
+    if (target.projectId !== sprint.projectId) {
+      throw new AppError(400, 'The target sprint does not belong to this project');
+    }
   }
 
   // Find incomplete issues (not in a "done" column)
@@ -282,14 +286,20 @@ export async function addIssuesToSprint(sprintId: string, issueIds: string[]) {
     ERR.SPRINT_NOT_FOUND,
   );
 
-  await prisma.issue.updateMany({
+  // Only the project's own issues: ids from elsewhere are ignored, history included
+  const ownIssues = await prisma.issue.findMany({
     where: { id: { in: issueIds }, projectId: sprint.projectId },
+    select: { id: true },
+  });
+  const ownIds = ownIssues.map((i) => i.id);
+  await prisma.issue.updateMany({
+    where: { id: { in: ownIds } },
     data: { sprintId },
   });
 
   // Record ADDED history events
   await prisma.sprintIssueHistory.createMany({
-    data: issueIds.map((issueId) => ({ sprintId, issueId, action: 'ADDED' as const })),
+    data: ownIds.map((issueId) => ({ sprintId, issueId, action: 'ADDED' as const })),
   });
 
   return getSprint(sprintId);

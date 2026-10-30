@@ -23,6 +23,8 @@ import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automatio
 import { createNotification } from '../notifications/notifications.service';
 import { validateTransition } from '../workflows/workflows.service';
 
+import { assertIssueRefsInProject } from './issue-references';
+
 // Re-export from sub-modules for backwards compatibility
 export { findIssueOrThrow } from './issue-utils';
 export { addComment, updateComment, deleteComment } from './issue-comments.service';
@@ -384,6 +386,8 @@ export async function updateIssue(
 
   const previousLabels =
     (issue as unknown as { labels?: { name: string }[] }).labels?.map((l) => l.name) ?? [];
+
+  await assertIssueRefsInProject(projectId, { columnId: data.columnId, sprintId: data.sprintId });
 
   // Validate workflow transition before updating column
   if (data.columnId !== undefined && data.columnId !== issue.columnId) {

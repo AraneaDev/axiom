@@ -1,7 +1,11 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
-import { requireProjectAccess } from '../../middleware/requireProjectAccess';
+import {
+  projectOf,
+  requireProjectAccess,
+  requireOwnedByProject,
+} from '../../middleware/requireProjectAccess';
 import * as wikiLinkController from '../wiki/wiki-issue-links.controller';
 
 import * as boardColumnsCtrl from './board-columns.controller';
@@ -17,6 +21,15 @@ router.use(authenticate);
 router.use('/:projectId/issues', requireProjectAccess);
 router.use('/:projectId/board', requireProjectAccess);
 router.use('/:projectId/time-report', requireProjectAccess);
+router.use('/:projectId/comments', requireProjectAccess);
+router.use(
+  '/:projectId/comments/:commentId',
+  requireOwnedByProject('commentId', projectOf.comment),
+);
+router.use(
+  '/:projectId/issues/:issueNumber/links/:linkId',
+  requireOwnedByProject('linkId', projectOf.issueLink),
+);
 
 // All routes are scoped to a project
 router.post('/:projectId/issues', issuesController.create);

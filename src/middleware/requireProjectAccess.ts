@@ -52,3 +52,114 @@ export async function requireProjectAccess(req: Request, _res: Response, next: N
     next(err);
   }
 }
+
+type ProjectResolver = (id: string) => Promise<string | null | undefined>;
+
+/**
+ * For routes nested under /:projectId: the record named by `paramName` must belong to that
+ * project. requireProjectAccess only checks the project in the URL, so without this a
+ * member of one project could reach another project's (or org's) records by id.
+ * Answers 404, as if the record did not exist in this project.
+ * @param paramName - The route param holding the record id
+ * @param resolve - Returns the project ids the record belongs to (one, or several for links)
+ * @returns Express middleware
+ */
+export function requireOwnedByProject(
+  paramName: string,
+  resolve: (id: string) => Promise<Array<string | null | undefined>>,
+) {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      const owners = await resolve(param(req, paramName));
+      if (!owners.includes(param(req, 'projectId'))) {
+        return next(new AppError(404, 'Not found in this project'));
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/**
+ * For routes that name a project-owned record without /:projectId: resolve the record's
+ * project, then apply the requireProjectAccess rule to it.
+ * @param paramName - The route param holding the record id
+ * @param resolve - Returns the record's project id, or null when it doesn't exist
+ * @param notFound - The 404 message
+ * @returns Express middleware
+ */
+export function requireProjectAccessVia(
+  paramName: string,
+  resolve: ProjectResolver,
+  notFound: string,
+) {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      const projectId = await resolve(param(req, paramName));
+      if (!projectId) return next(new AppError(404, notFound));
+      const access = await checkProjectAccess(req.userId!, projectId);
+      if (access === 'not_found') return next(new AppError(404, notFound));
+      if (access === 'forbidden') return next(new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN'));
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/** Resolvers from a record id to the project(s) it belongs to. */
+export const projectOf = {
+  sprint: async (id: string) => [
+    (await prisma.sprint.findUnique({ where: { id }, select: { projectId: true } }))?.projectId,
+  ],
+  issue: async (id: string) => [
+    (await prisma.issue.findUnique({ where: { id }, select: { projectId: true } }))?.projectId,
+  ],
+  comment: async (id: string) => [
+    (
+      await prisma.comment.findUnique({
+        where: { id },
+        select: { issue: { select: { projectId: true } } },
+      })
+    )?.issue.projectId,
+  ],
+  automationRule: async (id: string) => [
+    (await prisma.automationRule.findUnique({ where: { id }, select: { projectId: true } }))
+      ?.projectId,
+  ],
+  workflowRule: async (id: string) => [
+    (await prisma.workflowRule.findUnique({ where: { id }, select: { projectId: true } }))
+      ?.projectId,
+  ],
+  /**
+   * A link belongs to the projects of both its issues
+   * @param id
+   */
+  issueLink: async (id: string) => {
+    const link = await prisma.issueLink.findUnique({
+      where: { id },
+      select: { from: { select: { projectId: true } }, to: { select: { projectId: true } } },
+    });
+    return [link?.from.projectId, link?.to.projectId];
+  },
+  form: async (id: string) => [
+    (await prisma.form.findUnique({ where: { id }, select: { projectId: true } }))?.projectId,
+  ],
+  formPage: async (id: string) => [
+    (
+      await prisma.formPage.findUnique({
+        where: { id },
+        select: { form: { select: { projectId: true } } },
+      })
+    )?.form.projectId,
+  ],
+  formField: async (id: string) => [
+    (
+      await prisma.formField.findUnique({
+        where: { id },
+        select: { page: { select: { form: { select: { projectId: true } } } } },
+      })
+    )?.page.form.projectId,
+  ],
+};

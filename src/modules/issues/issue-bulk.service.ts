@@ -7,6 +7,8 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { invalidateIssueCache } from '../../utils/issue-cache';
 import { ISSUE_WITH_COLUMN_INCLUDE } from '../../utils/prisma-selects';
 
+import { assertIssueRefsInProject } from './issue-references';
+
 /**
  * Bulk update multiple issues at once with shared field values.
  * @param projectId - The project the issues belong to
@@ -40,6 +42,11 @@ export async function bulkUpdate(
     select: { id: true },
   });
   if (issues.length === 0) throw new AppError(404, 'No matching issues found');
+
+  await assertIssueRefsInProject(projectId, {
+    columnId: updates.status,
+    sprintId: updates.sprintId,
+  });
 
   const resolvedIds = issues.map((i) => i.id);
   const changedFields = Object.keys(updates).filter(

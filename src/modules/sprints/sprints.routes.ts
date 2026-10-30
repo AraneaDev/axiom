@@ -1,7 +1,11 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
-import { requireProjectAccess } from '../../middleware/requireProjectAccess';
+import {
+  projectOf,
+  requireProjectAccess,
+  requireOwnedByProject,
+} from '../../middleware/requireProjectAccess';
 import { hydrateBacklog } from '../issues/backlog-hydrate.controller';
 
 import * as sprintsController from './sprints.controller';
@@ -12,6 +16,12 @@ router.use(authenticate);
 router.use('/:projectId/sprints', requireProjectAccess);
 router.use('/:projectId/velocity', requireProjectAccess);
 router.use('/:projectId/backlog', requireProjectAccess);
+// A sprint id, and an issue id under it, must belong to the project in the URL
+router.use('/:projectId/sprints/:sprintId', requireOwnedByProject('sprintId', projectOf.sprint));
+router.use(
+  '/:projectId/sprints/:sprintId/issues/:issueId',
+  requireOwnedByProject('issueId', projectOf.issue),
+);
 
 // Sprint CRUD
 router.post('/:projectId/sprints', sprintsController.create);
