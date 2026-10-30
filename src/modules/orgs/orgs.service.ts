@@ -48,15 +48,23 @@ export async function createOrg(
 /**
  * Retrieve an organization by ID with teams and members.
  * @param orgId - The organization ID
+ * @param viewerId
  * @returns The organization with teams and member details
  * @throws {AppError} 404 if organization not found
  */
-export async function getOrg(orgId: string) {
-  return findOrThrow(
+export async function getOrg(orgId: string, viewerId?: string) {
+  const org = await findOrThrow(
     prisma.organization.findUnique({
       where: { id: orgId },
       include: {
-        teams: { select: { id: true, name: true, slug: true } },
+        teams: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            members: { select: { userId: true } },
+          },
+        },
         members: {
           include: {
             user: { select: { id: true, username: true, displayName: true, email: true } },
@@ -66,6 +74,17 @@ export async function getOrg(orgId: string) {
     }),
     ERR.ORGANIZATION_NOT_FOUND,
   );
+  if (!viewerId) return org;
+  // Emails are for org OWNERs and ADMINs; a GUEST only sees the teams they belong to
+  const role = org.members.find((m) => m.userId === viewerId)?.role;
+  const admin = role === 'OWNER' || role === 'ADMIN';
+  return {
+    ...org,
+    teams: org.teams
+      .filter((t) => role !== 'GUEST' || t.members.some((m) => m.userId === viewerId))
+      .map(({ members: _members, ...team }) => team),
+    members: org.members.map((m) => (admin ? m : { ...m, user: { ...m.user, email: undefined } })),
+  };
 }
 
 /**

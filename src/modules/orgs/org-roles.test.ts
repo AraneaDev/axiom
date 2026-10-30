@@ -136,4 +136,37 @@ describe('Org access and roles', () => {
       await prisma.user.deleteMany({ where: { id: second.id } });
     }
   });
+
+  it('19: org details hide emails from non-admins and other teams from GUESTs; team lists hide closed spaces', async () => {
+    const guest = await addMemberToContext(ctx);
+    await prisma.orgMembership.update({
+      where: { userId_orgId: { userId: guest.id, orgId: ctx.orgId } },
+      data: { role: 'GUEST' },
+    });
+    const hiddenTeam = await prisma.team.create({
+      data: { orgId: ctx.orgId, name: 'Hidden team', slug: `hidden-${Date.now()}` },
+    });
+    const closed = await prisma.wikiSpace.create({
+      data: {
+        teamId: ctx.teamId,
+        name: `ClosedSpace${Date.now()}`,
+        slug: `closed-${Date.now()}`,
+        permissions: { create: { userId: ctx.owner.id, level: 'ADMIN' } },
+      },
+    });
+    try {
+      const asMember = await authGet(`/api/orgs/${ctx.orgId}`, member.token);
+      expect(JSON.stringify(asMember.body)).not.toContain('@test.dev');
+      const asOwner = await authGet(`/api/orgs/${ctx.orgId}`, ctx.owner.token);
+      expect(JSON.stringify(asOwner.body)).toContain('@test.dev');
+
+      const asGuest = await authGet(`/api/orgs/${ctx.orgId}`, guest.token);
+      expect(JSON.stringify(asGuest.body)).not.toContain(hiddenTeam.id);
+
+      const teams = await authGet(`/api/teams/org/${ctx.orgId}`, member.token);
+      expect(JSON.stringify(teams.body)).not.toContain(closed.name);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: guest.id } });
+    }
+  });
 });

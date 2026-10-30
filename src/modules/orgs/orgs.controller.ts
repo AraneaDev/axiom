@@ -19,7 +19,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const get = asyncHandler(async (req: Request, res: Response) => {
-  const org = await orgsService.getOrg(param(req, 'orgId'));
+  const org = await orgsService.getOrg(param(req, 'orgId'), req.userId!);
   res.json(org);
 });
 

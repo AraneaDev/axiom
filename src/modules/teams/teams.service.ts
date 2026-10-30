@@ -9,6 +9,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { parsePagination, parseServicePagination, paginatedResponse } from '../../utils/pagination';
 import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 import { viewablePagesWhere } from '../search/search-access';
+import { canAccessSpace } from '../wiki/space-permissions.service';
 
 /**
  * Create a new team within an organization, adding the creator as admin.
@@ -120,6 +121,16 @@ export async function listOrgTeams(
     }),
     prisma.team.count({ where }),
   ]);
+
+  // Space names are only listed where the viewer may open the space
+  if (viewerId) {
+    for (const team of teams) {
+      const allowed = await Promise.all(
+        team.wikiSpaces.map((sp) => canAccessSpace(sp.id, viewerId, 'VIEW')),
+      );
+      team.wikiSpaces = team.wikiSpaces.filter((_, i) => allowed[i]);
+    }
+  }
 
   return paginatedResponse(teams, total, take, skip);
 }
