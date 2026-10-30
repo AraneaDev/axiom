@@ -1,10 +1,12 @@
 import { z } from 'zod';
 
+import { TOKEN_SCOPES } from '../../middleware/token-scopes';
+
 // ─── API Tokens ─────────────────────────────────────────────
 
 export const createApiTokenSchema = z.object({
   name: z.string().min(1).max(100),
-  scopes: z.array(z.string()).min(1),
+  scopes: z.array(z.enum(TOKEN_SCOPES)).min(1),
   expiresInDays: z.number().int().min(1).max(365).optional(),
 });
 

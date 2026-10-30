@@ -158,6 +158,7 @@ export default function ApiTokens() {
               value={scopes}
               onChange={(e) => setScopes(e.target.value)}
               placeholder="issues:read,wiki:write"
+              hint="Any of issues:read, issues:write, wiki:read, wiki:write. A write scope includes reading. Tokens can't manage orgs, teams, members or tokens."
             />
             <div className="flex gap-2">
               <Button

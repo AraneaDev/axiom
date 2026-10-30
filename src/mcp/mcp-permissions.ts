@@ -4,6 +4,7 @@ import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { checkTeamPermission, checkTeamRead, checkWikiSpaceOrgAccess } from '../middleware/rbac';
 import { checkProjectAccess } from '../middleware/requireProjectAccess';
+import { scopesAllowAction } from '../middleware/token-scopes';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
 import { ERR } from '../utils/error-messages';
@@ -51,6 +52,11 @@ function actionFor(toolName: string): Action {
     ? MCP_TOOL_PERMISSIONS[toolName]
     : undefined;
   if (!action) throw new AppError(403, `No permission mapping for MCP tool ${toolName}`);
+  // A call made with an API token is limited to the token's scopes
+  const scopes = mcpContext.getStore()?.scopes;
+  if (scopes && !scopesAllowAction(scopes, action)) {
+    throw new AppError(403, `This API token does not have the scope for ${toolName}`);
+  }
   return action;
 }
 

@@ -75,7 +75,7 @@ export async function handleMcpSse(req: Request, res: Response) {
     connections.delete(id);
   });
 
-  await mcpContext.run({ userId }, async () => {
+  await mcpContext.run({ userId, scopes: req.tokenScopes }, async () => {
     await server.connect(transport);
   });
 }
@@ -108,7 +108,7 @@ export async function handleMcpMessage(req: Request, res: Response) {
     return;
   }
 
-  await mcpContext.run({ userId }, async () => {
+  await mcpContext.run({ userId, scopes: req.tokenScopes }, async () => {
     await conn.transport.handlePostMessage(req, res);
   });
 }

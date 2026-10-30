@@ -5,6 +5,7 @@ import { prisma } from '../config/database';
 import { env } from '../config/env';
 
 import { AppError } from './errorHandler';
+import { tokenAllows } from './token-scopes';
 
 export interface AuthPayload {
   userId: string;
@@ -15,6 +16,8 @@ declare global {
   namespace Express {
     interface Request {
       userId?: string;
+      /** Set when the request authenticated with an API token: the token's scopes */
+      tokenScopes?: string[];
     }
   }
 }
@@ -58,7 +61,14 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
         throw new AppError(403, 'Account has been deactivated', 'ACCOUNT_DEACTIVATED');
       }
 
+      // A token only reaches what its scopes cover (see token-scopes.ts)
+      const path = req.originalUrl.split('?')[0];
+      if (!tokenAllows(apiToken.scopes, req.method, path)) {
+        throw new AppError(403, 'This API token does not have the scope for this request', 'SCOPE');
+      }
+
       req.userId = apiToken.userId;
+      req.tokenScopes = apiToken.scopes;
       return next();
     }
 
