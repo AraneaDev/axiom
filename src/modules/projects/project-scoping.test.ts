@@ -231,4 +231,75 @@ describe('Project-scoped ids', () => {
     const issue = await prisma.issue.findUniqueOrThrow({ where: { id: target.id } });
     expect(issue.assigneeId).not.toBe(a.owner.id);
   });
+
+  it('N1: set_field only writes plain content fields and custom fields', async () => {
+    const P = `/api/projects/${b.projectId}`;
+    const foreignColumn = await prisma.boardColumn.findFirstOrThrow({
+      where: { projectId: a.projectId },
+    });
+    const bad = [
+      { field: 'columnId', value: foreignColumn.id },
+      { field: 'projectId', value: a.projectId },
+      { field: 'assigneeId', value: a.owner.id },
+      { field: 'creatorId', value: a.owner.id },
+      { field: 'sprintId', value: 'x' },
+      { field: 'priority', value: 'NOT_A_PRIORITY' },
+    ];
+    const statuses: number[] = [];
+    for (const action of bad) {
+      const res = await authPost(`${P}/automation-rules`, b.owner.token, {
+        name: `bad ${action.field}`,
+        trigger: 'issue:created',
+        actions: [{ type: 'set_field', ...action }],
+      });
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual(bad.map(() => 400));
+
+    // A rule stored before the check is refused at run time too
+    const target = await prisma.issue.findFirstOrThrow({
+      where: { projectId: b.projectId, number: 1 },
+    });
+    const stale = await prisma.automationRule.create({
+      data: {
+        projectId: b.projectId,
+        name: 'stale set_field',
+        trigger: 'issue:created',
+        actions: [{ type: 'set_field', field: 'projectId', value: a.projectId }],
+      },
+    });
+    await evaluateRules(b.projectId, 'issue:created', {
+      issue: target,
+      actorId: b.owner.id,
+    } as never);
+    await prisma.automationRule.delete({ where: { id: stale.id } });
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: target.id } })).projectId).toBe(
+      b.projectId,
+    );
+
+    // Allowed: a content field and a custom field of the project
+    const field = await prisma.customFieldDefinition.create({
+      data: { projectId: b.projectId, name: `Env${Date.now()}`, type: 'TEXT' },
+    });
+    const ok = await authPost(`${P}/automation-rules`, b.owner.token, {
+      name: 'ok',
+      trigger: 'issue:created',
+      actions: [
+        { type: 'set_field', field: 'priority', value: 'HIGH' },
+        { type: 'set_field', field: `custom:${field.name}`, value: 'prod' },
+      ],
+    });
+    expect(ok.status).toBe(201);
+    await evaluateRules(b.projectId, 'issue:created', {
+      issue: target,
+      actorId: b.owner.id,
+    } as never);
+    await prisma.automationRule.delete({ where: { id: ok.body.id } });
+    const after = await prisma.issue.findUniqueOrThrow({ where: { id: target.id } });
+    expect(after.priority).toBe('HIGH');
+    const value = await prisma.customFieldValue.findUnique({
+      where: { issueId_fieldDefinitionId: { issueId: target.id, fieldDefinitionId: field.id } },
+    });
+    expect(value?.value).toBe('prod');
+  });
 });

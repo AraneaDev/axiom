@@ -13,6 +13,7 @@ import {
 } from '../issues/issue-references';
 import * as issuesService from '../issues/issues.service';
 
+import { applySetField, assertSettableField } from './set-field';
 import { executeWebhook } from './webhook';
 
 export type AutomationTrigger =
@@ -89,6 +90,9 @@ async function assertActionsInProject(projectId: string, actions: AutomationActi
     }
     if (action.type === 'set_assignee' && action.userId) {
       await assertAssignable(projectId, action.userId);
+    }
+    if (action.type === 'set_field') {
+      await assertSettableField(projectId, action.field, action.value);
     }
   }
 }
@@ -361,11 +365,9 @@ async function executeActions(
           break;
         case 'set_field':
           if (action.field && action.value !== undefined) {
-            const resolvedValue = resolveTemplate(action.value, templateCtx);
-            await prisma.issue.update({
-              where: { id: issue.id },
-              data: { [action.field]: resolvedValue },
-            });
+            // Allowlisted content fields and the project's custom fields only (set-field.ts)
+            const resolvedValue = resolveTemplate(String(action.value), templateCtx);
+            await applySetField(projectId, issue.id, action.field, resolvedValue);
           }
           break;
         case 'create_issue':

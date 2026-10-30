@@ -1772,7 +1772,7 @@ Create an automation rule.
 | `SET_STATUS` | Set the issue status | Status name |
 | `SET_PRIORITY` | Set the issue priority | Priority name |
 | `ADD_LABEL` | Add a label to the issue | Label name |
-| `set_field` | Set any issue field by name | JSON object: `{ "field": "storyPoints", "value": 3 }` |
+| `set_field` | Set a plain content field (`title`, `body`, `priority`, `type`, `storyPoints`, `timeEstimate`, `dueDate`, `startDate`) or one of the project's custom fields (`custom:<name>`). Ids, the column, the assignee and other relations are refused (use `set_status`, `set_assignee`) | JSON object: `{ "field": "storyPoints", "value": "3" }` |
 | `create_issue` | Create a new linked issue | JSON object with issue fields |
 | `send_email` | Send an email notification | JSON object: `{ "to": "user@example.com", "subject": "...", "body": "..." }` |
 | `webhook` | Send an HTTP POST to a URL | JSON object: `{ "url": "https://...", "headers": { ... } }` |

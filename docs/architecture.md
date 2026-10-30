@@ -215,7 +215,7 @@ Automation rules are stored as `AutomationRule` records and evaluated at trigger
 | `set_assignee` | Assign or unassign the issue |
 | `add_label` | Add a label by name |
 | `add_comment` | Post a comment (body supports `{{...}}` templates) |
-| `set_field` | Set a custom field value |
+| `set_field` | Set an allowlisted content field or a custom field (`custom:<name>`) |
 | `create_issue` | Create a linked child issue |
 | `send_email` | Send an email to a specified address |
 | `webhook` | POST a JSON payload to an external URL (SSRF-protected) |
