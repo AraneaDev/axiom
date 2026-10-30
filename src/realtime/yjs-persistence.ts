@@ -127,15 +127,31 @@ export async function loadPageIntoDoc(pageId: string, doc: Y.Doc): Promise<void>
 }
 
 /**
- * Record that the live room now holds the merged Markdown, which is also Page.body, with nothing
- * pending. Call before replacing the room's content, so no save mistakes the swap for an edit.
+ * The Page.body the live session last loaded, wrote or merged: what it last had in sync with the
+ * database. For a session that opened after a pending change, this is the body a newer external
+ * change replaced, so it is the base for merging that newer change into the session.
+ * @param pageId
+ */
+export function getKnownBody(pageId: string): string | undefined {
+  return knownBodies.get(pageId);
+}
+
+/**
+ * Record that the live room now holds the merged Markdown, which is also Page.body. Call before
+ * replacing the room's content, so no save mistakes the swap for an edit.
  * @param pageId
  * @param markdown
+ * @param externalVersionId - The pending change the room now descends from, when one stays
+ *   pending after the merge (an earlier session's draft still to merge); null when nothing is
  */
-export function markRoomMerged(pageId: string, markdown: string): void {
+export function markRoomMerged(
+  pageId: string,
+  markdown: string,
+  externalVersionId: string | null = null,
+): void {
   loadedSnapshots.set(pageId, markdown);
   knownBodies.set(pageId, markdown);
-  loadedExternalVersions.set(pageId, null);
+  loadedExternalVersions.set(pageId, externalVersionId);
 }
 
 /**
@@ -303,16 +319,21 @@ export async function forceSave(pageId: string, doc: Y.Doc): Promise<SaveOutcome
 /**
  * After the last session left: a pending change with no unmerged draft from a session opened
  * before it has nothing left to merge, so it is cleared and later edits go to Page.body again.
+ * Never rejects: a failure is logged and leaves the row, which the next session's load settles.
  * @param pageId
  */
 export async function settlePendingAfterSession(pageId: string): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    await lockPage(tx, pageId);
-    const pending = await tx.pendingPageChange.findUnique({ where: { pageId } });
-    if (pending && !pending.draftVersionId) {
-      await tx.pendingPageChange.delete({ where: { pageId } });
-    }
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      await lockPage(tx, pageId);
+      const pending = await tx.pendingPageChange.findUnique({ where: { pageId } });
+      if (pending && !pending.draftVersionId) {
+        await tx.pendingPageChange.delete({ where: { pageId } });
+      }
+    });
+  } catch (err) {
+    logger.error('Failed to settle the pending change after the session', { pageId }, err as Error);
+  }
 }
 
 /**

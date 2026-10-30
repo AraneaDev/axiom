@@ -365,11 +365,11 @@ async function pendingPayload(
 
 /**
  * Tell a live room that an external change is waiting for it. Registered as the write helper's
- * external-change hook.
+ * external-change hook; a merge that leaves an earlier session's draft pending calls it too.
  * @param pageId
  * @param pending
  */
-function notifyExternalChange(pageId: string, pending: PendingPageChange): void {
+export function notifyExternalChange(pageId: string, pending: PendingPageChange): void {
   const room = rooms.get(pageId);
   if (!room) return;
   void (async () => {
@@ -580,7 +580,16 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
   const onClose = () => {
     if (closed) return;
     closed = true;
-    if (member) void handleDisconnect(member.room, member.client);
+    if (member) {
+      const { room, client } = member;
+      handleDisconnect(room, client).catch((err: unknown) =>
+        logger.error(
+          'Failed to close collaboration session',
+          { pageId: room.pageId },
+          err as Error,
+        ),
+      );
+    }
   };
   ws.on('close', onClose);
   ws.on('error', onClose);

@@ -13,6 +13,7 @@ import {
   startCollabTestServer,
   waitFor,
 } from '../test/collab-client';
+import { logger } from '../utils/logger';
 
 import {
   flushRoom,
@@ -523,6 +524,35 @@ describe('Collaboration server', () => {
     } finally {
       vi.useRealTimers();
       releaseRoomForTest(pageId);
+    }
+  });
+
+  it('a failing settle after the last client leaves is logged, never an unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    const logged = vi.spyOn(logger, 'error');
+    try {
+      const client = await connect('editor');
+      // The closing save runs as usual; the settle after it is the next transaction, and fails
+      const original = prisma.$transaction.bind(prisma) as (...args: unknown[]) => unknown;
+      vi.spyOn(prisma, '$transaction')
+        .mockImplementationOnce(((...args: unknown[]) => original(...args)) as never)
+        .mockRejectedValueOnce(new Error('database went away'));
+      await client.close();
+      clients.splice(clients.indexOf(client), 1);
+      await waitFor(() => !isRoomLive(pageId));
+      await roomSettled(pageId);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(unhandled).toEqual([]);
+      expect(logged).toHaveBeenCalledWith(
+        'Failed to settle the pending change after the session',
+        { pageId },
+        expect.any(Error),
+      );
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+      vi.restoreAllMocks();
     }
   });
 });

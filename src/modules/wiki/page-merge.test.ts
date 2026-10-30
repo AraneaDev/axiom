@@ -6,6 +6,7 @@ import { prisma } from '../../config/database';
 import app from '../../index';
 import { normalizeMarkdown, yFragmentToMarkdown } from '../../lib/editor-core';
 import {
+  flushRoom,
   getOrCreateRoom,
   isRoomLive,
   isRoomLocked,
@@ -505,5 +506,71 @@ describe('Page merge', () => {
       // Page.body holds B's work on top of the agent's change now
       theirsLabel: 'Current page',
     });
+  });
+
+  it("a second agent change while a later session is open keeps the ended session's draft", async () => {
+    const { draft } = await endSessionWithUnmergedDraft();
+
+    // B opens after change 1 and saves edits on top of it
+    const b = await connect(otherId);
+    appendParagraph(b.doc, 'Line from B');
+    await waitFor(async () => (await roomMarkdown()).includes('Line from B'));
+    await flushRoom(pageId);
+    const beforeSecond = 'Intro\n\nMiddle changed\n\nEnd\n\nLine from B';
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
+      beforeSecond,
+    );
+
+    // Change 2 arrives while B is open; B keeps typing
+    const second = await externalWrite('Intro changed\n\nMiddle changed\n\nEnd\n\nLine from B');
+    appendParagraph(b.doc, 'More from B');
+    await waitFor(async () => (await roomMarkdown()).includes('More from B'));
+    await waitFor(() => b.changeMessages.some((m) => m.externalVersionId === second.version!.id));
+    const notice = b.changeMessages.find((m) => m.externalVersionId === second.version!.id)!;
+    expect(notice.draftAuthorName).toBeUndefined();
+
+    // The base is what change 2 replaced, not the body from before change 1
+    const merge = await getPendingMerge(pageId, otherId);
+    expect(merge).toMatchObject({
+      base: beforeSecond,
+      ours: `${beforeSecond}\n\nMore from B`,
+      theirs: 'Intro changed\n\nMiddle changed\n\nEnd\n\nLine from B',
+    });
+    expect(merge!.draftAuthorName).toBeUndefined();
+
+    const result = 'Intro changed\n\nMiddle changed\n\nEnd\n\nLine from B\n\nMore from B';
+    await applyMerge(pageId, otherId, {
+      externalVersionId: second.version!.id,
+      markdown: result,
+      ours: merge!.ours,
+    });
+    await waitFor(() => yFragmentToMarkdown(b.doc.getXmlFragment('default')) === result);
+
+    // A's draft is still waiting, now against the merged page, and the room is told so
+    const pending = await prisma.pendingPageChange.findUniqueOrThrow({
+      where: { pageId },
+      include: { externalVersion: true },
+    });
+    expect(pending.draftVersionId).toBe(draft.id);
+    expect(pending.externalVersion.kind).toBe('MERGE');
+    await waitFor(() => b.changeMessages.some((m) => m.draftAuthorName === 'Merge Editor'));
+
+    const next = await getPendingMerge(pageId, otherId);
+    expect(next).toMatchObject({
+      base: 'Intro\n\nMiddle\n\nEnd',
+      ours: result,
+      theirs: 'Intro\n\nMiddle\n\nEnd\n\nLine from A',
+      theirsLabel: "Merge Editor's session",
+      externalVersionId: pending.externalVersionId,
+      draftAuthorName: 'Merge Editor',
+    });
+    const final = `${result}\n\nLine from A`;
+    await applyMerge(pageId, otherId, {
+      externalVersionId: pending.externalVersionId,
+      markdown: final,
+      ours: next!.ours,
+    });
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(final);
+    expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
   });
 });

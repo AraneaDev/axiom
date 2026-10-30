@@ -10,10 +10,16 @@ import {
   flushRoom,
   getLiveRoom,
   lockRoom,
+  notifyExternalChange,
   replaceRoomContent,
   roomMarkdown,
 } from '../../realtime/collaboration';
-import { draftIsMergeSide, markRoomMerged } from '../../realtime/yjs-persistence';
+import {
+  draftIsMergeSide,
+  getKnownBody,
+  getLoadedExternalVersion,
+  markRoomMerged,
+} from '../../realtime/yjs-persistence';
 
 import { createPageVersion, lockPage } from './page-versions';
 import { finishPageWrite, SyncIssueLinks } from './page-writes';
@@ -60,10 +66,22 @@ async function nameOf(userId: string): Promise<string> {
 }
 
 /**
+ * Whether the page's live session opened after one pending change and a newer change has replaced
+ * it since: the session descends from neither the base nor the newest change.
+ * @param pageId
+ * @param externalVersionId - The pending row's current external version
+ */
+function sessionBehindNewerChange(pageId: string, externalVersionId: string): boolean {
+  const loaded = getLoadedExternalVersion(pageId);
+  return loaded !== null && loaded !== externalVersionId;
+}
+
+/**
  * The three texts to merge for a page with a pending external change, all normalised so the
  * merge sees no differences that are only formatting.
  *
- * - base: the body the external change replaced.
+ * - base: the body the external change replaced. For a live session that opened after an earlier
+ *   change, the body it last had in sync, which the newer change replaced.
  * - A live session opened before the change: ours = the session, theirs = Page.body.
  * - A live session opened after the change (it holds the change and its own edits) while a
  *   session open at the time of the change left an unmerged draft: ours = the live session,
@@ -106,6 +124,13 @@ export async function getPendingMerge(
   const room = getLiveRoom(pageId);
   // The same rule decides the room notice, so the notice never names a draft the merge ignores
   const draftIsSide = Boolean(draft) && draftIsMergeSide(pageId, pending, Boolean(room));
+  // A live session that opened after an earlier change and now faces a newer one last had in sync
+  // the body that newer change replaced. baseBody predates the earlier change, so it stays the
+  // base for the ended session's draft only.
+  const base =
+    room && sessionBehindNewerChange(pageId, pending.externalVersionId)
+      ? (getKnownBody(pageId) ?? pending.baseBody)
+      : pending.baseBody;
   // Page.body is the external change, unless a session that opened after it saved edits on top
   const editedSince = await prisma.pageVersion.count({
     where: {
@@ -145,7 +170,7 @@ export async function getPendingMerge(
   }
 
   return {
-    base: normalizeMarkdown(pending.baseBody),
+    base: normalizeMarkdown(base),
     ours: normalizeMarkdown(sides.ours),
     theirs: normalizeMarkdown(sides.theirs),
     oursLabel: sides.oursLabel,
@@ -159,7 +184,8 @@ export async function getPendingMerge(
 
 /**
  * Apply a merged body: it becomes Page.body, a MERGE version and, when a session is live, the
- * room's content for everyone. The pending change is cleared.
+ * room's content for everyone. The pending change is cleared, unless an earlier session's draft
+ * that was not a side of this merge still waits: then the change stays pending for that draft.
  * @param pageId - The page
  * @param userId - Who merged
  * @param input - The external version merged against and the merged Markdown
@@ -213,7 +239,7 @@ export async function applyMerge(
       }
     }
 
-    const page = await prisma.$transaction(async (tx) => {
+    const { page, remaining } = await prisma.$transaction(async (tx) => {
       await lockPage(tx, pageId);
       const current = await tx.pendingPageChange.findUnique({ where: { pageId } });
       if (!current || current.externalVersionId !== input.externalVersionId) {
@@ -221,15 +247,29 @@ export async function applyMerge(
       }
       const row = await tx.page.findUniqueOrThrow({ where: { id: pageId } });
       const updated = await tx.page.update({ where: { id: pageId }, data: { body: merged } });
-      await createPageVersion(tx, {
+      const version = await createPageVersion(tx, {
         pageId,
         title: row.title,
         body: merged,
         authorId: userId,
         kind: 'MERGE',
       });
+      // A live session that opened after an earlier change merged a newer one: the draft of the
+      // session that was open at the earlier change was not a side of this merge and still waits.
+      // Keep the row for it, now descending from this merge, so the room is offered the draft next.
+      if (
+        live &&
+        current.draftVersionId &&
+        sessionBehindNewerChange(pageId, current.externalVersionId)
+      ) {
+        const kept = await tx.pendingPageChange.update({
+          where: { pageId },
+          data: { externalVersionId: version.id },
+        });
+        return { page: updated, remaining: kept };
+      }
       await tx.pendingPageChange.delete({ where: { pageId } });
-      return updated;
+      return { page: updated, remaining: null };
     });
 
     // Right after the commit, with no await in between and the room still locked: record the
@@ -238,10 +278,11 @@ export async function applyMerge(
     // so no save can run between the commit and the swap.
     const room = getLiveRoom(pageId);
     if (room) {
-      markRoomMerged(pageId, merged);
+      markRoomMerged(pageId, merged, remaining?.externalVersionId ?? null);
       replaceRoomContent(room, merged);
     }
     announceMergeResolved(pageId, byName);
+    if (remaining) notifyExternalChange(pageId, remaining);
     await finishPageWrite(page, userId, merged, deps.syncIssueLinks);
   } finally {
     release();
