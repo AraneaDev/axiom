@@ -28,12 +28,13 @@ import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { loadEditorCore, markdownToYFragment, yFragmentToMarkdown } from '../lib/editor-core';
 import type { AuthPayload } from '../middleware/auth';
-import { registerExternalChangeHook, restoredVersionOf } from '../modules/wiki/page-writes';
+import { restoredVersionOf } from '../modules/wiki/page-versions';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
 import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 
+import { registerExternalChangeHook, setRoomLiveCheck } from './room-registry';
 import {
   loadPageIntoDoc,
   scheduleSave,
@@ -127,6 +128,7 @@ export type ExternalChangeMessage =
   | { state: 'resolved'; byName: string };
 
 const rooms = new Map<string, CollabRoom>();
+setRoomLiveCheck((pageId) => rooms.has(pageId));
 /** In-flight or settled room creation per page, so concurrent first connections share one room */
 const roomPromises = new Map<string, Promise<CollabRoom>>();
 /** Rooms that are saving after their last client left; a new room for the page waits for it */
@@ -681,9 +683,7 @@ export function createCollaborationServer(): {
   handleUpgrade: (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
 } {
   collabWss = new WebSocketServer({ noServer: true });
-  // page-writes imports this module (isRoomLive) and this module imports page-writes here: the
-  // cycle is safe because both sides only use the other's exports inside functions, at call time,
-  // never while the modules load
+  // The page write path learns about rooms through the registry, never by importing this module
   registerExternalChangeHook(notifyExternalChange);
   // A session save that finds Page.body changed under it records a pending change itself
   onPendingRecorded(notifyExternalChange);

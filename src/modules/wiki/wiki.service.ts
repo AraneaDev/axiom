@@ -13,8 +13,8 @@ import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects'
 import { logActivity } from '../activity/activity.service';
 
 import { applyMerge, getPendingMerge } from './page-merge';
-import { createPageVersion } from './page-versions';
-import { restoreDescription, writePageBody } from './page-writes';
+import { createPageVersion, restoreDescription } from './page-versions';
+import { writePageBody } from './page-writes';
 import { canAccessSpace } from './space-permissions.service';
 import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
 import { canViewPage, canEditPage } from './wiki-permissions.service';
@@ -103,6 +103,19 @@ export async function updateSpace(spaceId: string, data: { isArchived?: boolean 
 }
 
 /**
+ * Require EDIT access to a wiki space, the check the REST routes make in middleware. The page
+ * write functions make it themselves, so MCP and every other caller get it too.
+ * @param spaceId - The wiki space
+ * @param userId - The user writing
+ * @throws {AppError} 403 when the user may not edit the space
+ */
+async function requireSpaceEdit(spaceId: string, userId: string): Promise<void> {
+  if (!(await canAccessSpace(spaceId, userId, 'EDIT'))) {
+    throw new AppError(403, 'You do not have permission to edit this space');
+  }
+}
+
+/**
  * Create a new wiki page in a space, with an initial version record.
  * @param spaceId - The wiki space to create the page in
  * @param authorId - The user creating the page
@@ -113,7 +126,7 @@ export async function updateSpace(spaceId: string, data: { isArchived?: boolean 
  * @param data.parentId
  * @param data.isDraft
  * @returns The created page with version history
- * @throws {AppError} 409 if page slug already taken in this space
+ * @throws {AppError} 403 without EDIT access to the space, 409 if the slug is taken in the space
  */
 export async function createPage(
   spaceId: string,
@@ -126,6 +139,7 @@ export async function createPage(
     isDraft?: boolean;
   },
 ) {
+  await requireSpaceEdit(spaceId, authorId);
   await checkUnique('page', { spaceId, slug: data.slug }, 'Page slug already taken in this space');
   const body = normalizeMarkdown(data.body ?? '');
 
@@ -228,11 +242,11 @@ export async function getPage(spaceId: string, pageSlug: string, userId?: string
  * @param data.parentId
  * @param data.isDraft
  * @param data.changeDescription
- * @param opts - Version kind and write source; defaults to an API edit
- * @param opts.kind
+ * @param opts - Write source; defaults to the API. The version is an EDIT, or EXTERNAL when a live
+ *   or ended session has to merge it
  * @param opts.source
  * @returns The updated page with latest version and whether the body change awaits a merge
- * @throws {AppError} 404 if page not found
+ * @throws {AppError} 404 if page not found, 403 without EDIT access to the space or the page
  */
 export async function updatePage(
   spaceId: string,
@@ -245,7 +259,7 @@ export async function updatePage(
     isDraft?: boolean;
     changeDescription?: string;
   },
-  opts: { kind?: 'EDIT' | 'EXTERNAL'; source?: 'api' | 'mcp' } = {},
+  opts: { source?: 'api' | 'mcp' } = {},
 ) {
   const page = await findOrThrow(
     prisma.page.findUnique({
@@ -255,6 +269,7 @@ export async function updatePage(
     ERR.PAGE_NOT_FOUND,
   );
 
+  await requireSpaceEdit(spaceId, authorId);
   const editAllowed = await canEditPage(authorId, page.id);
   if (!editAllowed) throw new AppError(403, 'You do not have permission to edit this page');
 
@@ -266,7 +281,7 @@ export async function updatePage(
     parentId: data.parentId,
     isDraft: data.isDraft,
     changeDescription: data.changeDescription,
-    kind: opts.kind ?? 'EDIT',
+    kind: 'EDIT',
     source: opts.source ?? 'api',
   });
 

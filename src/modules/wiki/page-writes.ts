@@ -4,25 +4,10 @@ import { prisma } from '../../config/database';
 import { cacheInvalidate } from '../../config/redis';
 import { normalizeMarkdown } from '../../lib/editor-core';
 import { broadcastToRoom } from '../../realtime/broadcast';
-import { isRoomLive } from '../../realtime/collaboration';
+import { emitExternalChange, isRoomLive } from '../../realtime/room-registry';
 
 import { createPageVersion, lockPage } from './page-versions';
 import { extractIssueIdsFromContent, syncMentionLinks } from './wiki-issue-links.service';
-
-/**
- * The change description of a RESTORE version.
- * @param version - The version restored
- */
-export const restoreDescription = (version: number) => `Restored to version ${version}`;
-
-/**
- * The version a RESTORE version restored, read back from its change description.
- * @param changeDescription
- */
-export function restoredVersionOf(changeDescription: string | null): number | null {
-  const match = /^Restored to version (\d+)$/.exec(changeDescription ?? '');
-  return match ? Number(match[1]) : null;
-}
 
 export type PageWriteKind = 'EDIT' | 'EXTERNAL' | 'RESTORE';
 export type PageWriteSource = 'api' | 'mcp' | 'restore' | 'editor-session';
@@ -51,24 +36,6 @@ export interface WritePageBodyResult {
 /** Dependencies that tests may replace; production uses the live collaboration registry. */
 export interface PageWriteDeps {
   isRoomLive: (pageId: string) => boolean;
-}
-
-type ExternalChangeHook = (pageId: string, pending: PendingPageChange) => void;
-
-const externalChangeHooks: ExternalChangeHook[] = [];
-
-/** Test-only: forget every registered hook. */
-export function resetExternalChangeHooksForTest(): void {
-  externalChangeHooks.length = 0;
-}
-
-/**
- * Register a listener that is told when an external change is recorded for a page with a live
- * collaboration room. The collaboration layer registers here to notify the room.
- * @param fn - Called after the pending change is committed
- */
-export function registerExternalChangeHook(fn: ExternalChangeHook): void {
-  if (!externalChangeHooks.includes(fn)) externalChangeHooks.push(fn);
 }
 
 /** Replaceable issue-link sync (tests); production extracts the issue ids from the body. */
@@ -102,6 +69,18 @@ export async function finishPageWrite(
     spaceId: page.spaceId,
     pageId: page.id,
   });
+}
+
+/**
+ * The kind of the version a write creates. A body change that enters the pending flow (a live or
+ * ended session has to merge it) is EXTERNAL, whoever made it; any other edit is an EDIT, so
+ * EXTERNAL always means "waits for a merge". A restore stays a RESTORE either way.
+ * @param kind - The kind the caller asked for
+ * @param entersPendingFlow - Whether the write is recorded as a pending change
+ */
+function versionKind(kind: PageWriteKind, entersPendingFlow: boolean): PageWriteKind {
+  if (kind === 'RESTORE') return kind;
+  return entersPendingFlow ? 'EXTERNAL' : 'EDIT';
 }
 
 /**
@@ -158,8 +137,7 @@ export async function writePageBody(
         title: newTitle,
         body: newBody,
         authorId: input.authorId,
-        // A plain edit that a live session has to merge is an external change for that session
-        kind: deferrable && bodyChanged && input.kind === 'EDIT' ? 'EXTERNAL' : input.kind,
+        kind: versionKind(input.kind, deferrable && bodyChanged),
         changeDescription: input.changeDescription,
       });
     }
@@ -189,7 +167,7 @@ export async function writePageBody(
   await finishPageWrite(result.page, input.authorId, result.newBody);
 
   if (result.pending && result.notify) {
-    for (const hook of externalChangeHooks) hook(input.pageId, result.pending);
+    emitExternalChange(input.pageId, result.pending);
   }
 
   return {

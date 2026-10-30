@@ -4,6 +4,21 @@ import type { PageVersion, PageVersionKind } from '@prisma/client';
 const MAX_ATTEMPTS = 3;
 
 /**
+ * The change description of a RESTORE version.
+ * @param version - The version restored
+ */
+export const restoreDescription = (version: number) => `Restored to version ${version}`;
+
+/**
+ * The version a RESTORE version restored, read back from its change description.
+ * @param changeDescription
+ */
+export function restoredVersionOf(changeDescription: string | null): number | null {
+  const match = /^Restored to version (\d+)$/.exec(changeDescription ?? '');
+  return match ? Number(match[1]) : null;
+}
+
+/**
  * Lock a page row for the rest of the transaction so concurrent writers queue behind it.
  * Callers re-read the page after this call and base their checks on that fresh row.
  * @param tx - Interactive transaction client

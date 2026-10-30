@@ -4,7 +4,8 @@ import WebSocket from 'ws';
 
 import { prisma } from '../config/database';
 import { yFragmentToMarkdown } from '../lib/editor-core';
-import { restoreDescription, writePageBody } from '../modules/wiki/page-writes';
+import { restoreDescription } from '../modules/wiki/page-versions';
+import { writePageBody } from '../modules/wiki/page-writes';
 import {
   appendParagraph,
   CollabTestClient,

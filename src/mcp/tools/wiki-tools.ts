@@ -156,7 +156,7 @@ export function registerWikiTools(ctx: McpToolContext) {
           pageSlug,
           userId,
           { title, body },
-          { kind: 'EXTERNAL', source: 'mcp' },
+          { source: 'mcp' },
         );
         const note = updated.pendingMerge
           ? 'Saved, and the page is open in a live editing session: Page.body holds this change, and the session will merge it with its own edits (externalVersionId).\n'

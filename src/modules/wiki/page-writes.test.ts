@@ -3,12 +3,12 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
 import { prisma } from '../../config/database';
 import { normalizeMarkdown } from '../../lib/editor-core';
-
 import {
   registerExternalChangeHook,
   resetExternalChangeHooksForTest,
-  writePageBody,
-} from './page-writes';
+} from '../../realtime/room-registry';
+
+import { writePageBody } from './page-writes';
 import { createPage, restoreVersion } from './wiki.service';
 
 describe('writePageBody', () => {
@@ -80,10 +80,11 @@ describe('writePageBody', () => {
       deps,
     );
 
-  it('external write with no live room replaces body', async () => {
+  it('an MCP write with no session to merge it replaces the body as a plain EDIT', async () => {
     const result = await write('New body', notLive);
     expect(result.pendingMerge).toBe(false);
-    expect(result.version?.kind).toBe('EXTERNAL');
+    // EXTERNAL only marks a write that enters the pending flow
+    expect(result.version?.kind).toBe('EDIT');
     const page = await prisma.page.findUniqueOrThrow({ where: { id: pageId } });
     expect(page.body).toBe('New body');
     expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
