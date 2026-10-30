@@ -25,14 +25,19 @@ const fieldAccess = [
   requireProjectAccessVia('fieldId', fieldProject, 'Custom field not found'),
   requireProjectWriteVia('fieldId', fieldProject),
 ];
+// Changing a field definition is project configuration: team ADMINs and org OWNERs/ADMINs
+const fieldSettings = [
+  ...fieldAccess,
+  requireProjectWriteVia('fieldId', fieldProject, 'team:manage_members'),
+];
 const issueAccess = [
   requireProjectAccessVia('issueId', issueProject, ERR.ISSUE_NOT_FOUND),
   requireProjectWriteVia('issueId', issueProject),
 ];
 
 // Direct field definition routes (not project-scoped)
-router.patch('/custom-fields/:fieldId', ...fieldAccess, customFieldsCtrl.updateDefinition);
-router.delete('/custom-fields/:fieldId', ...fieldAccess, customFieldsCtrl.deleteDefinition);
+router.patch('/custom-fields/:fieldId', ...fieldSettings, customFieldsCtrl.updateDefinition);
+router.delete('/custom-fields/:fieldId', ...fieldSettings, customFieldsCtrl.deleteDefinition);
 
 // Issue custom field value routes
 router.put(

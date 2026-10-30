@@ -14,6 +14,8 @@ const router = Router();
 router.use(authenticate);
 // Writes follow the permission matrix: VIEWERs and GUESTs can read, not change
 router.use('/:projectId', requireProjectWrite());
+// Project settings: team ADMINs, org OWNERs/ADMINs and platform admins only
+router.use('/:projectId/forms', requireProjectWrite('team:manage_members'));
 
 // ─── Form CRUD ───────────────────────────────────────────────
 router.get('/:projectId/forms', requireProjectAccess, formsController.list);

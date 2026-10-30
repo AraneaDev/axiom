@@ -21,6 +21,8 @@ const router = Router();
 router.use(authenticate);
 // Writes follow the permission matrix: VIEWERs and GUESTs can read, not change
 router.use('/:projectId', requireProjectWrite());
+// Project settings: team ADMINs, org OWNERs/ADMINs and platform admins only
+router.use('/:projectId/board/columns', requireProjectWrite('team:manage_members'));
 
 router.use('/:projectId/issues', requireProjectAccess);
 router.use('/:projectId/board', requireProjectAccess);

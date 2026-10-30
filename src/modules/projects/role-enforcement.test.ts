@@ -142,4 +142,63 @@ describe('Role enforcement on REST writes', () => {
     });
     expect(wiki.status).toBe(200);
   });
+
+  it('reserves project settings to team ADMINs and org OWNERs/ADMINs', async () => {
+    const P = `/api/projects/${ctx.projectId}`;
+    const cols = await prisma.boardColumn.findMany({
+      where: { projectId: ctx.projectId },
+      orderBy: { position: 'asc' },
+      take: 2,
+    });
+    const field = await prisma.customFieldDefinition.create({
+      data: { projectId: ctx.projectId, name: `cf${Date.now()}`, type: 'TEXT' },
+    });
+    const stamp = Date.now();
+    const settings = [
+      [
+        'approval gate',
+        'post',
+        `${P}/approval-gates`,
+        { fromColumnId: cols[0].id, toColumnId: cols[1].id },
+      ],
+      [
+        'workflow rule',
+        'post',
+        `${P}/workflow-rules`,
+        { fromColumnId: cols[0].id, toColumnId: cols[1].id },
+      ],
+      [
+        'automation rule',
+        'post',
+        `${P}/automation-rules`,
+        { name: 'r', trigger: 'issue:created', actions: [] },
+      ],
+      ['custom field', 'post', `${P}/custom-fields`, { name: `x${stamp}`, type: 'TEXT' }],
+      ['custom field edit', 'patch', `/api/custom-fields/${field.id}`, { name: 'renamed' }],
+      ['board column', 'post', `${P}/board/columns`, { name: `S${stamp}` }],
+      ['form', 'post', `${P}/forms`, { name: 'F', slug: `f-${stamp}` }],
+      ['issue template', 'post', `${P}/issue-templates`, { name: `t${stamp}`, title: 't' }],
+    ] as const;
+    const allowed: string[] = [];
+    for (const [name, method, path, body] of settings) {
+      const res = await send(member.token, method, path, body);
+      if (res.status !== 403) allowed.push(`${name}: ${res.status}`);
+    }
+    expect(allowed).toEqual([]);
+
+    // A team ADMIN may
+    await prisma.teamMembership.update({
+      where: { userId_teamId: { userId: member.id, teamId: ctx.teamId } },
+      data: { role: 'ADMIN' },
+    });
+    try {
+      const res = await authPost(`${P}/board/columns`, member.token, { name: `A${stamp}` });
+      expect(res.status).toBe(201);
+    } finally {
+      await prisma.teamMembership.update({
+        where: { userId_teamId: { userId: member.id, teamId: ctx.teamId } },
+        data: { role: 'MEMBER' },
+      });
+    }
+  });
 });
