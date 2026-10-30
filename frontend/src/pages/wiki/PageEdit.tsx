@@ -83,14 +83,16 @@ export default function PageEdit() {
   const useCollab =
     collabEnabled && collab.isConnected && collab.isSynced && collab.ydoc && collab.provider;
 
-  // A pending external change: the merge endpoints answer 403 to users who may only view
+  // The page says whether this user may edit it; a 403 from the merge endpoints is the fallback
   const pendingChange = useCollab ? collab.pendingChange : null;
+  const pageAllowsEdit = isNew || existingPage?.canEdit !== false;
   const { forbidden: cannotMerge } = usePendingMerge(
     currentSpace?.id,
     pageSlug,
     pendingChange?.externalVersionId,
+    pageAllowsEdit,
   );
-  const canEdit = !cannotMerge;
+  const canEdit = pageAllowsEdit && !cannotMerge;
   const [showConflicts, setShowConflicts] = useState(false);
   const closeConflicts = () => setShowConflicts(false);
   // Once the change is merged (here or by someone else) the conflict view has nothing left to show
@@ -303,6 +305,7 @@ export default function PageEdit() {
           pendingChange={pendingChange}
           resolvedBy={collab.resolvedBy}
           canEdit={canEdit}
+          locked={collab.locked}
           onOpenConflicts={() => setShowConflicts(true)}
           onDismissResolved={collab.dismissResolved}
         />
@@ -362,12 +365,16 @@ export default function PageEdit() {
                   locked={collab.locked}
                   canEdit={canEdit}
                 />
-              ) : (
+              ) : canEdit ? (
                 <MarkdownEditor
                   value={body}
                   onChange={setBody}
                   placeholder="Write your content..."
                 />
+              ) : (
+                <Card className="min-h-[300px] p-4">
+                  <MarkdownRenderer content={body} />
+                </Card>
               )}
             </div>
             {showPreview && (

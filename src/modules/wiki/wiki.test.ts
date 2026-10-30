@@ -301,6 +301,7 @@ describe('Wiki API', () => {
       .set('Authorization', `Bearer ${secondToken}`);
     expect(res.status).toBe(200);
     expect(res.body.title).toBeDefined();
+    expect(res.body.canEdit).toBe(true);
   });
 
   let restrictionId: string;
@@ -347,6 +348,8 @@ describe('Wiki API', () => {
       .get(`/api/wiki/spaces/${spaceId}/pages/${rootPageSlug}`)
       .set('Authorization', `Bearer ${secondToken}`);
     expect(res.status).toBe(200);
+    // ...and tells them they may not edit it
+    expect(res.body.canEdit).toBe(false);
   });
 
   // 8g. Set VIEW restrictions (blocks both view and edit for non-listed users)

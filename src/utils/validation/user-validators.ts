@@ -49,6 +49,8 @@ export const restoreVersionSchema = z.object({
 export const applyMergeSchema = z.object({
   externalVersionId: z.string().min(1),
   markdown: z.string().max(500_000),
+  /** The live session text the merge was computed against */
+  ours: z.string().max(500_000).optional(),
 });
 
 // ─── Wiki Templates ─────────────────────────────────────────

@@ -103,18 +103,20 @@ export const wikiApi = {
   getPendingMerge: (spaceId: string, pageSlug: string) =>
     get<PendingMerge | null>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/pending-merge`),
   /**
-   * Apply merged Markdown for the pending external change. Rejected with 409 when the change was
-   * merged already or a newer one arrived.
+   * Apply merged Markdown for the pending external change. Rejected with 409 MERGE_STALE when the
+   * change was merged already or a newer one arrived, MERGE_IN_PROGRESS while someone else merges.
    * @param spaceId
    * @param pageSlug
    * @param data
    * @param data.externalVersionId - The external version the merge was computed against
    * @param data.markdown - The merged Markdown
+   * @param data.ours - The session text the merge was computed against; edits made after it are
+   *   rebased by the server, or rejected with 409 MERGE_REBASE_CONFLICT when they overlap
    */
   applyMerge: (
     spaceId: string,
     pageSlug: string,
-    data: { externalVersionId: string; markdown: string },
+    data: { externalVersionId: string; markdown: string; ours?: string },
   ) => post<void>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/merge`, data),
   /**
    * Delete a wiki page by slug.

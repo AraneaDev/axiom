@@ -3,7 +3,7 @@
  * the three texts for the browser's three-way merge, and applying the merged result.
  */
 import { prisma } from '../../config/database';
-import { normalizeMarkdown } from '../../lib/editor-core';
+import { mergeMarkdown, normalizeMarkdown } from '../../lib/editor-core';
 import { AppError } from '../../middleware/errorHandler';
 import {
   announceMergeResolved,
@@ -41,6 +41,11 @@ export interface PendingMerge {
 }
 
 const STALE_MERGE = 'This page changed again: reload the pending merge';
+
+/** 409 codes, so the browser can tell the cases apart */
+export const MERGE_STALE = 'MERGE_STALE';
+export const MERGE_IN_PROGRESS = 'MERGE_IN_PROGRESS';
+export const MERGE_REBASE_CONFLICT = 'MERGE_REBASE_CONFLICT';
 
 /**
  * Display name for a user id.
@@ -160,37 +165,59 @@ export async function getPendingMerge(
  * @param input - The external version merged against and the merged Markdown
  * @param input.externalVersionId
  * @param input.markdown
+ * @param input.ours - The live session text the browser merged against. When the session moved on
+ *   since (edits after the fetch), the merge is rebased onto the session's current text
  * @param deps - Replaceable dependencies (tests)
  * @param deps.syncIssueLinks
- * @throws {AppError} 409 when the change was merged already or a newer change arrived, or when
- *   another merge is running
+ * @throws {AppError} 409 MERGE_STALE when the change was merged already or a newer change
+ *   arrived, MERGE_IN_PROGRESS when another merge is running, MERGE_REBASE_CONFLICT when edits
+ *   made in the session after the browser's fetch overlap the merge
  */
 export async function applyMerge(
   pageId: string,
   userId: string,
-  input: { externalVersionId: string; markdown: string },
+  input: { externalVersionId: string; markdown: string; ours?: string },
   deps: { syncIssueLinks?: SyncIssueLinks } = {},
 ): Promise<void> {
-  const merged = normalizeMarkdown(input.markdown);
+  let merged = normalizeMarkdown(input.markdown);
 
   const pending = await prisma.pendingPageChange.findUnique({ where: { pageId } });
   if (!pending || pending.externalVersionId !== input.externalVersionId) {
-    throw new AppError(409, STALE_MERGE);
+    throw new AppError(409, STALE_MERGE, MERGE_STALE);
   }
 
   const byName = await nameOf(userId);
   const release = lockRoom(pageId, byName);
-  if (!release) throw new AppError(409, 'Someone else is merging this page');
+  if (!release) throw new AppError(409, 'Someone else is merging this page', MERGE_IN_PROGRESS);
 
   try {
     // The session's pre-merge state goes to history first (a draft, while the change is pending)
     await flushRoom(pageId);
 
+    // The room is locked, so its text is final: edits made after the browser fetched `ours` are
+    // carried over by rebasing the merge onto them, never overwritten
+    const live = getLiveRoom(pageId);
+    if (live && input.ours !== undefined) {
+      const fetched = normalizeMarkdown(input.ours);
+      const current = normalizeMarkdown(roomMarkdown(live));
+      if (current !== fetched) {
+        const rebased = mergeMarkdown(fetched, current, merged);
+        if (rebased.merged === null) {
+          throw new AppError(
+            409,
+            'The page changed while you were merging: review the changes again',
+            MERGE_REBASE_CONFLICT,
+          );
+        }
+        merged = normalizeMarkdown(rebased.merged);
+      }
+    }
+
     const page = await prisma.$transaction(async (tx) => {
       await lockPage(tx, pageId);
       const current = await tx.pendingPageChange.findUnique({ where: { pageId } });
       if (!current || current.externalVersionId !== input.externalVersionId) {
-        throw new AppError(409, STALE_MERGE);
+        throw new AppError(409, STALE_MERGE, MERGE_STALE);
       }
       const row = await tx.page.findUniqueOrThrow({ where: { id: pageId } });
       const updated = await tx.page.update({ where: { id: pageId }, data: { body: merged } });

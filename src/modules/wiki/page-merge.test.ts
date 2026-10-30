@@ -5,7 +5,12 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { prisma } from '../../config/database';
 import app from '../../index';
 import { normalizeMarkdown, yFragmentToMarkdown } from '../../lib/editor-core';
-import { getOrCreateRoom, isRoomLive, roomSettled } from '../../realtime/collaboration';
+import {
+  getOrCreateRoom,
+  isRoomLive,
+  isRoomLocked,
+  roomSettled,
+} from '../../realtime/collaboration';
 import {
   appendParagraph,
   CollabTestClient,
@@ -292,6 +297,47 @@ describe('Page merge', () => {
     await disconnect(client);
   });
 
+  it('an edit made in the session after the fetch survives the merge', async () => {
+    const client = await connect(editorId);
+    const written = await externalWrite('Intro\n\nMiddle changed\n\nEnd');
+    const fetched = await getPendingMerge(pageId, editorId);
+    // The browser merged against this snapshot; then someone keeps typing
+    appendParagraph(client.doc, 'Typed late');
+    await waitFor(async () => (await roomMarkdown()).includes('Typed late'));
+
+    await applyMerge(pageId, editorId, {
+      externalVersionId: written.version!.id,
+      markdown: 'Intro\n\nMiddle changed\n\nEnd',
+      ours: fetched!.ours,
+    });
+
+    const expected = 'Intro\n\nMiddle changed\n\nEnd\n\nTyped late';
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(expected);
+    expect(await roomMarkdown()).toBe(expected);
+    expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
+  });
+
+  it('a late session edit that overlaps the merge is a MERGE_REBASE_CONFLICT 409', async () => {
+    const client = await connect(editorId);
+    const written = await externalWrite('Intro\n\nMiddle changed\n\nEnd');
+    const fetched = await getPendingMerge(pageId, editorId);
+    // The late edit and the submitted merge both add a block at the end
+    appendParagraph(client.doc, 'Late tail');
+    await waitFor(async () => (await roomMarkdown()).includes('Late tail'));
+
+    const res = await api('post', '/merge').send({
+      externalVersionId: written.version!.id,
+      markdown: 'Intro\n\nMiddle changed\n\nEnd\n\nMerged tail',
+      ours: fetched!.ours,
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('MERGE_REBASE_CONFLICT');
+    // Nothing was applied: the change is still pending and the session keeps its text
+    expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(1);
+    expect(await roomMarkdown()).toBe('Intro\n\nMiddle\n\nEnd\n\nLate tail');
+    expect(isRoomLocked(pageId)).toBe(false);
+  });
+
   it('stale externalVersionId returns 409', async () => {
     await connect(editorId);
     const first = await externalWrite('Intro\n\nOne\n\nEnd');
@@ -302,6 +348,7 @@ describe('Page merge', () => {
       markdown: 'Whatever',
     });
     expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('MERGE_STALE');
     expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(1);
     expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
       'Intro\n\nTwo\n\nEnd',

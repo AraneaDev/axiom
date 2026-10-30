@@ -202,6 +202,8 @@ export interface Page {
   children?: PageTreeNode[];
   versions?: PageVersion[];
   restrictions?: PageRestriction[];
+  /** Whether the requesting user may edit the page (sent by getPage) */
+  canEdit?: boolean;
   createdAt: string;
   updatedAt: string;
 }

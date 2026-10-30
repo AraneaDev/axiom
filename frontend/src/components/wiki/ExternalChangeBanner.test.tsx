@@ -101,6 +101,7 @@ describe('ExternalChangeBanner', () => {
       expect(mockApplyMerge).toHaveBeenCalledWith('s1', 'page', {
         externalVersionId: 'ext-1',
         markdown: 'one\n\nOURS\n\nthree\n\nFOUR',
+        ours: 'one\n\nOURS\n\nthree\n\nfour',
       }),
     );
     expect(onOpenConflicts).not.toHaveBeenCalled();
@@ -155,6 +156,101 @@ describe('ExternalChangeBanner', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Merge now/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Review changes/ })).toBeInTheDocument();
+  });
+
+  it('counts name the side the change overlaps with', async () => {
+    mockGetPendingMerge.mockResolvedValue({
+      ...pendingMerge('one\n\nDRAFT\n\nthree\n\nfour', 'one\n\nTHEIRS\n\nthree\n\nFOUR'),
+      oursLabel: "Sam's session",
+    });
+    renderBanner();
+    expect(
+      await screen.findByText("1 change merges cleanly, 1 overlaps with Sam's session"),
+    ).toBeInTheDocument();
+  });
+
+  it('merge actions are disabled while the page is locked', async () => {
+    mockGetPendingMerge.mockResolvedValue(pendingMerge(base, 'ONE\n\ntwo\n\nthree\n\nfour'));
+    renderBanner({ locked: { byName: 'Sam' } });
+    await screen.findByText(/merges cleanly/);
+    expect(screen.getByRole('button', { name: /Merge now/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Review changes/ })).toBeDisabled();
+  });
+
+  it('a stale 409 shows This page changed again and reloads', async () => {
+    mockGetPendingMerge.mockResolvedValue(pendingMerge(base, 'ONE\n\ntwo\n\nthree\n\nfour'));
+    mockApplyMerge.mockRejectedValue(
+      Object.assign(new Error('stale'), { status: 409, code: 'MERGE_STALE' }),
+    );
+    renderBanner();
+    await screen.findByText(/merges cleanly/);
+    await userEvent.click(screen.getByRole('button', { name: /Merge now/ }));
+    expect(await screen.findByText('This page changed again')).toBeInTheDocument();
+    await waitFor(() => expect(mockGetPendingMerge).toHaveBeenCalledTimes(2));
+  });
+
+  it('a 409 because someone else is merging has its own toast', async () => {
+    mockGetPendingMerge.mockResolvedValue(pendingMerge(base, 'ONE\n\ntwo\n\nthree\n\nfour'));
+    mockApplyMerge.mockRejectedValue(
+      Object.assign(new Error('busy'), { status: 409, code: 'MERGE_IN_PROGRESS' }),
+    );
+    renderBanner();
+    await screen.findByText(/merges cleanly/);
+    await userEvent.click(screen.getByRole('button', { name: /Merge now/ }));
+    expect(await screen.findByText('Someone else is merging this page')).toBeInTheDocument();
+    expect(screen.queryByText('This page changed again')).not.toBeInTheDocument();
+  });
+
+  it('a rebase conflict refetches and retries Merge now once', async () => {
+    mockGetPendingMerge
+      .mockResolvedValueOnce(pendingMerge(base, 'ONE\n\ntwo\n\nthree\n\nfour'))
+      .mockResolvedValueOnce(
+        pendingMerge('one\n\ntwo\n\nthree\n\nfour\n\nlate', 'ONE\n\ntwo\n\nthree\n\nfour'),
+      );
+    mockApplyMerge
+      .mockRejectedValueOnce(
+        Object.assign(new Error('moved'), { status: 409, code: 'MERGE_REBASE_CONFLICT' }),
+      )
+      .mockResolvedValueOnce(undefined);
+    const { onOpenConflicts } = renderBanner();
+    await screen.findByText(/merges cleanly/);
+    await userEvent.click(screen.getByRole('button', { name: /Merge now/ }));
+    await waitFor(() => expect(mockApplyMerge).toHaveBeenCalledTimes(2));
+    expect(mockApplyMerge).toHaveBeenLastCalledWith('s1', 'page', {
+      externalVersionId: 'ext-1',
+      markdown: 'ONE\n\ntwo\n\nthree\n\nfour\n\nlate',
+      ours: 'one\n\ntwo\n\nthree\n\nfour\n\nlate',
+    });
+    expect(onOpenConflicts).not.toHaveBeenCalled();
+    expect(screen.queryByText('This page changed again')).not.toBeInTheDocument();
+  });
+
+  it('a rebase conflict that fails again reloads instead of retrying forever', async () => {
+    mockGetPendingMerge.mockResolvedValue(pendingMerge(base, 'ONE\n\ntwo\n\nthree\n\nfour'));
+    mockApplyMerge.mockRejectedValue(
+      Object.assign(new Error('moved'), { status: 409, code: 'MERGE_REBASE_CONFLICT' }),
+    );
+    renderBanner();
+    await screen.findByText(/merges cleanly/);
+    await userEvent.click(screen.getByRole('button', { name: /Merge now/ }));
+    expect(await screen.findByText('This page changed again')).toBeInTheDocument();
+    expect(mockApplyMerge).toHaveBeenCalledTimes(2);
+  });
+
+  it('a rebase conflict that now overlaps opens the conflict view', async () => {
+    mockGetPendingMerge
+      .mockResolvedValueOnce(pendingMerge(base, 'one\n\nTHEIRS\n\nthree\n\nfour'))
+      .mockResolvedValueOnce(
+        pendingMerge('one\n\nLATE\n\nthree\n\nfour', 'one\n\nTHEIRS\n\nthree\n\nfour'),
+      );
+    mockApplyMerge.mockRejectedValueOnce(
+      Object.assign(new Error('moved'), { status: 409, code: 'MERGE_REBASE_CONFLICT' }),
+    );
+    const { onOpenConflicts } = renderBanner();
+    await screen.findByText(/merges cleanly/);
+    await userEvent.click(screen.getByRole('button', { name: /Merge now/ }));
+    await waitFor(() => expect(onOpenConflicts).toHaveBeenCalled());
+    expect(mockApplyMerge).toHaveBeenCalledTimes(1);
   });
 
   it('renders nothing without a pending change or resolution', () => {

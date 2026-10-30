@@ -97,6 +97,7 @@ describe('ConflictView', () => {
       expect(mockApplyMerge).toHaveBeenCalledWith('s1', 'page', {
         externalVersionId: 'ext-1',
         markdown: 'one\n\nhand two\n\nthree\n\ntheirs four',
+        ours: merge.ours,
       }),
     );
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -141,7 +142,91 @@ describe('ConflictView', () => {
       expect(mockApplyMerge).toHaveBeenCalledWith('s1', 'page', {
         externalVersionId: 'ext-1',
         markdown: 'one\n\nours two\n\nthree\n\ntheirs four',
+        ours: 'one\n\nours two\n\nthree\n\nfour',
       }),
     );
+  });
+
+  it('choices survive a refetch with identical data', async () => {
+    mockApplyMerge.mockRejectedValue(
+      Object.assign(new Error('stale'), { status: 409, code: 'MERGE_STALE' }),
+    );
+    renderView();
+    await screen.findByRole('button', { name: /Conflict 1/ });
+    await userEvent.click(screen.getByRole('button', { name: 'Use Yours' }));
+    await selectConflict(2);
+    await userEvent.type(result(), 'hand four');
+    await userEvent.click(finishButton());
+    await waitFor(() => expect(mockGetPendingMerge).toHaveBeenCalledTimes(2));
+
+    const list = screen.getByRole('list', { name: 'Conflicts' });
+    await waitFor(() => expect(within(list).getAllByText('Resolved')).toHaveLength(2));
+    expect(result().value).toBe('hand four');
+    expect(finishButton()).toBeEnabled();
+  });
+
+  it('choices for unchanged conflicts carry over when the data changes', async () => {
+    mockApplyMerge.mockRejectedValue(
+      Object.assign(new Error('stale'), { status: 409, code: 'MERGE_STALE' }),
+    );
+    renderView();
+    await screen.findByRole('button', { name: /Conflict 1/ });
+    await userEvent.click(screen.getByRole('button', { name: 'Use Yours' }));
+    await selectConflict(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Use Yours' }));
+    // The agent changed block four again: conflict 2 is a different conflict now
+    mockGetPendingMerge.mockResolvedValue({
+      ...merge,
+      theirs: 'one\n\ntheirs two\n\nthree\n\ntheirs four again',
+    });
+    await userEvent.click(finishButton());
+
+    const list = screen.getByRole('list', { name: 'Conflicts' });
+    await waitFor(() => expect(within(list).getAllByText('Open')).toHaveLength(1));
+    expect(within(list).getAllByText('Resolved')).toHaveLength(1);
+    expect(finishButton()).toBeDisabled();
+    await selectConflict(2);
+    expect(screen.getByText('theirs four again')).toBeInTheDocument();
+    expect(result().value).toBe('');
+  });
+
+  it('an emptied result stays Open', async () => {
+    renderView();
+    await screen.findByRole('button', { name: /Conflict 1/ });
+    await userEvent.type(result(), 'x');
+    await userEvent.clear(result());
+    const list = screen.getByRole('list', { name: 'Conflicts' });
+    expect(within(list).queryByText('Resolved')).not.toBeInTheDocument();
+    expect(within(list).getAllByText('Open')).toHaveLength(2);
+  });
+
+  it('Remove passage resolves the conflict without the passage', async () => {
+    mockApplyMerge.mockResolvedValue(undefined);
+    renderView();
+    await screen.findByRole('button', { name: /Conflict 1/ });
+    await userEvent.click(screen.getByRole('button', { name: /Remove passage/ }));
+    await selectConflict(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Use Yours' }));
+    await userEvent.click(finishButton());
+    await waitFor(() =>
+      expect(mockApplyMerge).toHaveBeenCalledWith('s1', 'page', {
+        externalVersionId: 'ext-1',
+        markdown: 'one\n\nthree\n\nours four',
+        ours: merge.ours,
+      }),
+    );
+  });
+
+  it('a 409 because someone else is merging has its own toast', async () => {
+    mockApplyMerge.mockRejectedValue(
+      Object.assign(new Error('busy'), { status: 409, code: 'MERGE_IN_PROGRESS' }),
+    );
+    renderView();
+    await screen.findByRole('button', { name: /Conflict 1/ });
+    await userEvent.click(screen.getByRole('button', { name: 'Use Yours' }));
+    await selectConflict(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Use Yours' }));
+    await userEvent.click(finishButton());
+    expect(await screen.findByText('Someone else is merging this page')).toBeInTheDocument();
   });
 });

@@ -103,6 +103,18 @@ describe('writePageBody', () => {
     expect(notified).toContain(pageId);
   });
 
+  it('an API edit that a live session must merge is versioned as EXTERNAL', async () => {
+    const result = await write('API change', live, { kind: 'EDIT', source: 'api' });
+    expect(result.pendingMerge).toBe(true);
+    expect(result.version?.kind).toBe('EXTERNAL');
+  });
+
+  it('an API edit with no live session stays an EDIT', async () => {
+    const result = await write('Plain save', notLive, { kind: 'EDIT', source: 'api' });
+    expect(result.pendingMerge).toBe(false);
+    expect(result.version?.kind).toBe('EDIT');
+  });
+
   it('second external write keeps the original baseBody and updates externalVersionId', async () => {
     await write('First change', live);
     const second = await write('Second change', live);

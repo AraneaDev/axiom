@@ -158,7 +158,8 @@ export async function writePageBody(
         title: newTitle,
         body: newBody,
         authorId: input.authorId,
-        kind: input.kind,
+        // A plain edit that a live session has to merge is an external change for that session
+        kind: deferrable && bodyChanged && input.kind === 'EDIT' ? 'EXTERNAL' : input.kind,
         changeDescription: input.changeDescription,
       });
     }

@@ -8,10 +8,16 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import type { PendingChange } from '@/hooks/collab-messages';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
-import { pendingMergeKey, usePendingMerge } from '@/hooks/usePendingMerge';
+import {
+  computeMerge,
+  pendingMergeKey,
+  pendingMergeQueryKey,
+  usePendingMerge,
+} from '@/hooks/usePendingMerge';
+import type { PendingMerge } from '@/lib/types';
 import { cn, formatDate, formatRelative } from '@/lib/utils';
 
-import { countsText } from './merge-copy';
+import { countsText, errorInfo, MERGE_REBASE_CONFLICT, mergeConflictNotice } from './merge-copy';
 
 /** How long the "Merged by" note stays before it closes itself */
 const RESOLVED_NOTE_MS = 6000;
@@ -25,6 +31,8 @@ interface ExternalChangeBannerProps {
   resolvedBy: string | null;
   /** Whether the user may merge (viewers see the notice only) */
   canEdit: boolean;
+  /** Set while someone applies a merge: the merge actions wait for it */
+  locked?: { byName: string } | null;
   /** Open the conflict view */
   onOpenConflicts: () => void;
   /** Close the "Merged by" note */
@@ -56,6 +64,7 @@ function headline(change: PendingChange): string {
  * @param props.pendingChange
  * @param props.resolvedBy
  * @param props.canEdit
+ * @param props.locked
  * @param props.onOpenConflicts
  * @param props.onDismissResolved
  */
@@ -65,6 +74,7 @@ export function ExternalChangeBanner({
   pendingChange,
   resolvedBy,
   canEdit,
+  locked = null,
   onOpenConflicts,
   onDismissResolved,
 }: ExternalChangeBannerProps) {
@@ -77,25 +87,56 @@ export function ExternalChangeBanner({
     canEdit && !!pendingChange,
   );
 
-  const mergeMutation = useMutationWithToast(
-    (markdown: string) =>
-      wikiApi.applyMerge(spaceId, pageSlug, {
-        externalVersionId: pending!.externalVersionId,
-        markdown,
-      }),
-    {
-      successMessage: null,
-      errorMessage: null,
-      onError: (err) => {
-        if ((err as { status?: number }).status === 409) {
-          toast.info('This page changed again');
-          void queryClient.invalidateQueries({ queryKey: pendingMergeKey(spaceId, pageSlug) });
-        } else {
-          toast.error(err.message || 'Merge failed');
-        }
-      },
+  const post = (data: PendingMerge, markdown: string) =>
+    wikiApi.applyMerge(spaceId, pageSlug, {
+      externalVersionId: data.externalVersionId,
+      markdown,
+      ours: data.ours,
+    });
+
+  /**
+   * Post the clean merge. When the session moved on since the fetch and the server cannot rebase
+   * onto it, refetch and try once more; a merge that now overlaps goes to the conflict view.
+   * @param markdown
+   * @returns Whether the conflict view has to take over
+   */
+  async function mergeWithRetry(markdown: string): Promise<'merged' | 'conflicts'> {
+    try {
+      await post(pending!, markdown);
+      return 'merged';
+    } catch (err) {
+      if (errorInfo(err).code !== MERGE_REBASE_CONFLICT) throw err;
+    }
+    const fresh = await queryClient.fetchQuery({
+      queryKey: pendingMergeQueryKey(spaceId, pageSlug, pending!.externalVersionId),
+      queryFn: () => wikiApi.getPendingMerge(spaceId, pageSlug),
+      staleTime: 0,
+    });
+    if (!fresh) return 'merged';
+    const again = computeMerge(fresh);
+    if (again.merged === null) return 'conflicts';
+    await post(fresh, again.merged);
+    return 'merged';
+  }
+
+  const mergeMutation = useMutationWithToast(mergeWithRetry, {
+    successMessage: null,
+    errorMessage: null,
+    onSuccess: (outcome) => {
+      if (outcome === 'conflicts') onOpenConflicts();
     },
-  );
+    onError: (err) => {
+      const notice = mergeConflictNotice(err);
+      if (notice) {
+        toast.info(notice.text);
+        if (notice.reload) {
+          void queryClient.invalidateQueries({ queryKey: pendingMergeKey(spaceId, pageSlug) });
+        }
+      } else {
+        toast.error(err.message || 'Merge failed');
+      }
+    },
+  });
 
   useEffect(() => {
     if (!resolvedBy || pendingChange || !onDismissResolved) return;
@@ -144,7 +185,7 @@ export function ExternalChangeBanner({
         {canEdit && (
           <p className="text-xs text-text-secondary">
             {merge
-              ? countsText(merge.counts.clean, merge.counts.conflicts)
+              ? countsText(merge.counts.clean, merge.counts.conflicts, pending?.oursLabel)
               : query.isError
                 ? 'Could not load the changes'
                 : 'Comparing with your version...'}
@@ -156,14 +197,19 @@ export function ExternalChangeBanner({
       </div>
       {canEdit && (
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={onOpenConflicts} disabled={!merge}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onOpenConflicts}
+            disabled={!merge || !!locked}
+          >
             <Eye className="h-4 w-4" /> Review changes
           </Button>
           <Button
             variant="primary"
             size="sm"
             onClick={mergeNow}
-            disabled={!merge || mergeMutation.isPending}
+            disabled={!merge || !!locked || mergeMutation.isPending}
           >
             {mergeMutation.isPending ? (
               <Spinner className="h-4 w-4" />

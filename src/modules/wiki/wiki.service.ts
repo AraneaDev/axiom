@@ -15,6 +15,7 @@ import { logActivity } from '../activity/activity.service';
 import { applyMerge, getPendingMerge } from './page-merge';
 import { createPageVersion } from './page-versions';
 import { restoreDescription, writePageBody } from './page-writes';
+import { canAccessSpace } from './space-permissions.service';
 import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
 import { canViewPage, canEditPage } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
@@ -175,7 +176,7 @@ export async function createPage(
  * @param spaceId - The wiki space ID
  * @param pageSlug - The page slug within the space
  * @param userId - Optional user ID for permission checking
- * @returns The page with children and latest version with author
+ * @returns The page with children and latest version with author, plus canEdit when a user is given
  * @throws {AppError} 404 if page not found
  * @throws {AppError} 403 if user lacks view permission
  */
@@ -205,6 +206,12 @@ export async function getPage(spaceId: string, pageSlug: string, userId?: string
   if (userId) {
     const allowed = await canViewPage(userId, page.id);
     if (!allowed) throw new AppError(403, 'You do not have permission to view this page');
+    // The same rule as the collaboration socket: space EDIT access and the page's restrictions
+    const [spaceEdit, pageEdit] = await Promise.all([
+      canAccessSpace(page.spaceId, userId, 'EDIT'),
+      canEditPage(userId, page.id),
+    ]);
+    return { ...page, canEdit: spaceEdit && pageEdit };
   }
 
   return page;
@@ -340,13 +347,15 @@ export async function getPagePendingMerge(spaceId: string, pageSlug: string, use
  * @param data - The external version merged against and the merged Markdown
  * @param data.externalVersionId
  * @param data.markdown
- * @throws {AppError} 409 when the pending change is no longer the one merged against
+ * @param data.ours - The live session text the merge was computed against
+ * @throws {AppError} 409 when the pending change is no longer the one merged against, another
+ *   merge runs, or later session edits overlap the merge
  */
 export async function applyPageMerge(
   spaceId: string,
   pageSlug: string,
   userId: string,
-  data: { externalVersionId: string; markdown: string },
+  data: { externalVersionId: string; markdown: string; ours?: string },
 ) {
   await applyMerge(await editablePageId(spaceId, pageSlug, userId), userId, data);
 }

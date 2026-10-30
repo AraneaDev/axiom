@@ -20,6 +20,17 @@ interface EditorCoreBundle {
   markdownToYFragment(md: string, fragment: Y.XmlFragment): void;
   yFragmentToMarkdown(fragment: Y.XmlFragment): string;
   normalizeMarkdown(md: string): string;
+  mergeMarkdown(base: string, ours: string, theirs: string): MergeResult;
+}
+
+/** A block-level three-way merge result (see frontend/src/editor-core/merge.ts) */
+export interface MergeResult {
+  /** The merged Markdown, or null when there are conflicts */
+  merged: string | null;
+  hunks: Array<
+    | { kind: 'clean'; text: string }
+    | { kind: 'conflict'; id: string; base: string; ours: string; theirs: string }
+  >;
 }
 
 /** From `src/lib/` (tsx, vitest) and `dist/lib/` (compiled) alike. */
@@ -76,4 +87,15 @@ export function yFragmentToMarkdown(fragment: Y.XmlFragment): string {
  */
 export function normalizeMarkdown(md: string): string {
   return core().normalizeMarkdown(md);
+}
+
+/**
+ * Block-level three-way merge of normalised Markdown, the same merge the browser runs.
+ * @param base - Common ancestor.
+ * @param ours - One side.
+ * @param theirs - The other side.
+ * @returns The merged Markdown (null on conflicts) and the hunks.
+ */
+export function mergeMarkdown(base: string, ours: string, theirs: string): MergeResult {
+  return core().mergeMarkdown(base, ours, theirs);
 }
