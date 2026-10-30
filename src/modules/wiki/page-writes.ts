@@ -3,10 +3,10 @@ import type { Page, PageVersion, PendingPageChange } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { cacheInvalidate } from '../../config/redis';
 import { normalizeMarkdown } from '../../lib/editor-core';
-import { broadcastToRoom } from '../../realtime/broadcast';
 import { emitExternalChange, isRoomLive } from '../../realtime/room-registry';
 
 import { createPageVersion, lockPage } from './page-versions';
+import { broadcastWikiUpdated } from './wiki-broadcast';
 import { extractIssueIdsFromContent, syncMentionLinks } from './wiki-issue-links.service';
 
 export type PageWriteKind = 'EDIT' | 'EXTERNAL' | 'RESTORE';
@@ -64,11 +64,7 @@ export async function finishPageWrite(
 ): Promise<void> {
   await cacheInvalidate(`wiki:tree:${page.spaceId}`);
   if (writtenBody !== null) await syncIssueLinks(page.id, writtenBody, authorId);
-  broadcastToRoom(`space:${page.spaceId}`, {
-    type: 'wiki:updated',
-    spaceId: page.spaceId,
-    pageId: page.id,
-  });
+  await broadcastWikiUpdated(page.spaceId, page.id);
 }
 
 /**

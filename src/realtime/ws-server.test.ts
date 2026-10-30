@@ -10,6 +10,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 
 import { prisma } from '../config/database';
 import { setSpacePermission } from '../modules/wiki/space-permissions.service';
+import { deletePage, updatePage } from '../modules/wiki/wiki.service';
 import { tokenFor, waitFor } from '../test/collab-client';
 import {
   addMemberToContext,
@@ -406,5 +407,35 @@ describe('Realtime room authorization', () => {
     await setSpacePermission(space2.id, { userId: ctx.owner.id, level: 'ADMIN' });
     await waitFor(() => deniedRooms(client).includes(room));
     expect(serverRooms(member.id).has(room)).toBe(false);
+  });
+
+  it("keeps a VIEW-restricted page's id out of space events for members who can't view it", async () => {
+    const space3 = await prisma.wikiSpace.create({
+      data: { teamId: ctx.teamId, name: 'Events Space', slug: 'events-space' },
+    });
+    const open = await prisma.page.create({
+      data: { spaceId: space3.id, title: 'Open', slug: 'open', body: 'a' },
+    });
+    const secret = await prisma.page.create({
+      data: { spaceId: space3.id, title: 'Secret', slug: 'secret', body: 'a' },
+    });
+    await prisma.pageRestriction.create({
+      data: { pageId: secret.id, type: 'VIEW', userId: ctx.owner.id },
+    });
+    const client = await connect(member.id);
+    const room = `space:${space3.id}`;
+    client.send({ type: 'subscribe', rooms: [room] });
+    await waitFor(() => client.messages.some((m) => m.type === 'subscribed' && m.room === room));
+
+    await updatePage(space3.id, 'secret', ctx.owner.id, { body: 'b' });
+    await updatePage(space3.id, 'open', ctx.owner.id, { body: 'b' });
+    await deletePage(space3.id, 'secret', ctx.owner.id);
+    await waitFor(() => client.messages.filter((m) => m.type === 'wiki:updated').length === 3);
+
+    const events = client.messages.filter((m) => m.type === 'wiki:updated');
+    // The member still learns the space changed, so the tree refreshes
+    expect(events.every((m) => m.spaceId === space3.id)).toBe(true);
+    expect(JSON.stringify(client.messages)).not.toContain(secret.id);
+    expect(events.some((m) => m.pageId === open.id)).toBe(true);
   });
 });

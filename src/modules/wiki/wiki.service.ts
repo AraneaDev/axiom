@@ -4,7 +4,6 @@ import { prisma } from '../../config/database';
 import { cacheable, cacheInvalidate } from '../../config/redis';
 import { normalizeMarkdown } from '../../lib/editor-core';
 import { AppError } from '../../middleware/errorHandler';
-import { broadcastToRoom } from '../../realtime/broadcast';
 import { flushRoom } from '../../realtime/collaboration';
 import { checkUnique } from '../../utils/check-unique';
 import { ERR } from '../../utils/error-messages';
@@ -16,6 +15,7 @@ import { applyMerge, getPendingMerge } from './page-merge';
 import { createPageVersion, restoreDescription } from './page-versions';
 import { writePageBody } from './page-writes';
 import { canAccessSpace } from './space-permissions.service';
+import { broadcastWikiUpdated, isViewRestricted } from './wiki-broadcast';
 import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
 import { canViewPage, canEditPage } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
@@ -180,7 +180,7 @@ export async function createPage(
     await syncMentionLinks(page.id, issueIds, authorId);
   }
 
-  broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
+  await broadcastWikiUpdated(spaceId, page.id);
 
   return page;
 }
@@ -402,13 +402,15 @@ export async function deletePage(spaceId: string, pageSlug: string, userId?: str
     if (!editAllowed) throw new AppError(403, 'You do not have permission to delete this page');
   }
 
+  // Its restrictions are deleted with it: decide what the space may be told first
+  const restricted = await isViewRestricted(page.id);
   await prisma.page.delete({ where: { id: page.id } });
   await cacheInvalidate(`wiki:tree:${spaceId}`);
   if (userId) {
     await logActivity('wiki_page', page.id, 'deleted', userId, { title: page.title });
   }
 
-  broadcastToRoom(`space:${spaceId}`, { type: 'wiki:updated', spaceId, pageId: page.id });
+  await broadcastWikiUpdated(spaceId, page.id, restricted);
 }
 
 /**
@@ -784,11 +786,7 @@ export async function reorderPage(pageId: string, parentId: string | null, posit
   }
 
   await cacheInvalidate(`wiki:tree:${page.spaceId}`);
-  broadcastToRoom(`space:${page.spaceId}`, {
-    type: 'wiki:updated',
-    spaceId: page.spaceId,
-    pageId,
-  });
+  await broadcastWikiUpdated(page.spaceId, pageId);
 
   return { success: true };
 }
