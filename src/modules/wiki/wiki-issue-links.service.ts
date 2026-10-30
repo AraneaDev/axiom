@@ -112,9 +112,28 @@ export async function syncMentionLinks(pageId: string, issueIds: string[], userI
   const existingSet = new Set(existing.map((l) => l.issueId));
   const newSet = new Set(issueIds);
 
+  // The new set only holds issues this author can resolve. A link to an issue they can't
+  // see was made by someone who could, and this edit says nothing about it: keep it.
+  const dropped = existing.filter((l) => !newSet.has(l.issueId));
+  const removable = new Set(
+    dropped.length === 0
+      ? []
+      : (
+          await prisma.issue.findMany({
+            where: {
+              AND: [
+                { id: { in: dropped.map((l) => l.issueId) } },
+                await viewableIssuesWhere(userId),
+              ],
+            },
+            select: { id: true },
+          })
+        ).map((i) => i.id),
+  );
+
   const toAdd = issueIds.filter((id) => !existingSet.has(id));
-  const removedIssueIds = existing.filter((l) => !newSet.has(l.issueId)).map((l) => l.issueId);
-  const toRemove = existing.filter((l) => !newSet.has(l.issueId)).map((l) => l.id);
+  const removedIssueIds = dropped.filter((l) => removable.has(l.issueId)).map((l) => l.issueId);
+  const toRemove = dropped.filter((l) => removable.has(l.issueId)).map((l) => l.id);
 
   await prisma.$transaction([
     ...toAdd.map((issueId) =>

@@ -113,4 +113,26 @@ describe('Wiki-issue link access', () => {
     expect(rest.status).toBe(200);
     expect(JSON.stringify(rest.body)).not.toContain('hidden page');
   });
+
+  it("5: an editor who can't see a mentioned issue doesn't remove its link", async () => {
+    const ownProject = await prisma.project.findUniqueOrThrow({ where: { id: a.projectId } });
+    await prisma.page.create({
+      data: { spaceId, title: 'Mentions', slug: 'mentions', body: '' },
+    });
+    await updatePage(spaceId, 'mentions', member.id, {
+      body: `Tracking ${ownProject.prefix}-1 here`,
+    });
+    const page = await prisma.page.findFirstOrThrow({ where: { spaceId, slug: 'mentions' } });
+    expect(await prisma.wikiPageIssueLink.count({ where: { pageId: page.id } })).toBe(1);
+
+    // An org member off the team fixes a typo; the mention text is unchanged
+    await updatePage(spaceId, 'mentions', orgOnly.id, {
+      body: `Tracking ${ownProject.prefix}-1 here, fixed`,
+    });
+    expect(await prisma.wikiPageIssueLink.count({ where: { pageId: page.id } })).toBe(1);
+
+    // A viewer of the issue who removes the mention does remove the link
+    await updatePage(spaceId, 'mentions', member.id, { body: 'Nothing tracked' });
+    expect(await prisma.wikiPageIssueLink.count({ where: { pageId: page.id } })).toBe(0);
+  });
 });
