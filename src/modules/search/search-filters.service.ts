@@ -2,23 +2,18 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 
+import { viewableSpaces } from './search-access';
+
 // ─── Accessible Spaces (for search filter UI) ───────────────
 
 /**
- * Get all wiki spaces the user can access (via org membership).
- * @param orgIds - Organization IDs the user belongs to
+ * Wiki spaces the user may view, for the search filter: in their orgs and passing the
+ * space's own permissions.
+ * @param userId - The user
  * @returns List of spaces with id, name, and slug
  */
-export async function getAccessibleSpaces(orgIds: string[]) {
-  if (!orgIds.length) return [];
-  return prisma.wikiSpace.findMany({
-    where: {
-      isArchived: false,
-      team: { orgId: { in: orgIds } },
-    },
-    select: { id: true, name: true, slug: true },
-    orderBy: { name: 'asc' },
-  });
+export async function getAccessibleSpaces(userId: string) {
+  return viewableSpaces(userId, { includeArchived: false });
 }
 
 // ─── Saved Searches ─────────────────────────────────────────

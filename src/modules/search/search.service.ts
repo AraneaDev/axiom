@@ -1,23 +1,7 @@
-import { prisma } from '../../config/database';
 import { parseServicePagination } from '../../utils/pagination';
 
 import { searchIssues, searchWiki, parseStructuredQuery } from './search-queries.service';
 import type { SearchParams, SearchResultSection } from './search-queries.service';
-
-// ─── Helpers ────────────────────────────────────────────────
-
-/**
- * Get all organization IDs a user belongs to.
- * @param userId - The user ID
- * @returns Array of org IDs the user is a member of
- */
-export async function getUserOrgIds(userId: string): Promise<string[]> {
-  const memberships = await prisma.orgMembership.findMany({
-    where: { userId },
-    select: { orgId: true },
-  });
-  return memberships.map((m: { orgId: string }) => m.orgId);
-}
 
 // ─── Main Search ────────────────────────────────────────────
 

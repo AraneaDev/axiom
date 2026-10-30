@@ -10,6 +10,8 @@ import {
   USER_WITH_AVATAR_SELECT,
 } from '../../utils/prisma-selects';
 
+import { viewableIssuesWhere, viewablePagesWhere } from './search-access';
+
 // ─── Types ──────────────────────────────────────────────────
 
 export interface SearchParams {
@@ -24,7 +26,6 @@ export interface SearchParams {
   limit: number;
   offset: number;
   userId?: string;
-  orgIds?: string[];
 }
 
 interface StructuredQuery {
@@ -108,11 +109,10 @@ export async function searchIssues(
   rawQuery?: string,
 ) {
   const where: Prisma.IssueWhereInput = {};
-  const andClauses: Prisma.IssueWhereInput[] = [];
-
-  if (params.orgIds && params.orgIds.length > 0) {
-    where.project = { team: { orgId: { in: params.orgIds } } };
-  }
+  // Only issues the searcher could open. Without a searcher there is nothing to show: an
+  // empty filter would search every org.
+  if (!params.userId) return { type: 'issues', items: [], total: 0 };
+  const andClauses: Prisma.IssueWhereInput[] = [await viewableIssuesWhere(params.userId)];
 
   if (params.projectId) {
     where.projectId = params.projectId;
@@ -187,9 +187,7 @@ export async function searchIssues(
     }
   }
 
-  if (andClauses.length > 0) {
-    where.AND = andClauses;
-  }
+  where.AND = andClauses;
 
   const tsq = toTsQuery(freeText);
   const useFts = tsq.length > 0;
@@ -285,16 +283,14 @@ export async function searchWiki(
   }
 
   const tsq = toTsQuery(freeText);
-  const where: Prisma.PageWhereInput = {};
-
-  if (params.orgIds && params.orgIds.length > 0) {
-    where.space = { team: { orgId: { in: params.orgIds } } };
-  }
-
-  // Space filter
-  if (params.spaceId) {
-    where.spaceId = params.spaceId;
-  }
+  if (!params.userId) return { type: 'wiki', items: [], total: 0 };
+  // Only pages the searcher could open; a space filter narrows within that
+  const where: Prisma.PageWhereInput = {
+    AND: [
+      await viewablePagesWhere(params.userId),
+      ...(params.spaceId ? [{ spaceId: params.spaceId }] : []),
+    ],
+  };
 
   // Label filter
   if (params.label) {

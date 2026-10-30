@@ -21,14 +21,6 @@ const connections = new Map<string, { transport: SSEServerTransport; userId: str
 export function createMcpServer(userId: string) {
   const server = new McpServer({ name: 'axiom', version: '0.1.0' });
 
-  async function getUserOrgIds() {
-    const memberships = await prisma.orgMembership.findMany({
-      where: { userId },
-      select: { orgId: true },
-    });
-    return memberships.map((m) => m.orgId);
-  }
-
   async function getOrgIdFromProject(projectId: string) {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
@@ -48,7 +40,6 @@ export function createMcpServer(userId: string) {
   const ctx: McpToolContext = {
     server,
     userId,
-    getUserOrgIds,
     getOrgIdFromProject,
     getOrgIdFromPage,
   };

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
+import { viewableIssuesWhere, viewablePagesWhere } from '../../modules/search/search-access';
 
 import type { McpToolContext } from './types';
 
@@ -9,7 +10,7 @@ import type { McpToolContext } from './types';
  * @param ctx
  */
 export function registerSearchTools(ctx: McpToolContext) {
-  const { server, getUserOrgIds } = ctx;
+  const { server, userId } = ctx;
 
   server.tool(
     'search',
@@ -29,14 +30,14 @@ export function registerSearchTools(ctx: McpToolContext) {
     async ({ query, type, limit }) => {
       const results: unknown[] = [];
       if (type === 'issues' || type === 'all') {
-        const orgIds = await getUserOrgIds();
         const issues = await prisma.issue.findMany({
           where: {
             OR: [
               { title: { contains: query, mode: 'insensitive' } },
               { body: { contains: query, mode: 'insensitive' } },
             ],
-            project: { team: { orgId: { in: orgIds } } },
+            // Only issues the user could open, as REST search
+            AND: [await viewableIssuesWhere(userId)],
           },
           include: { project: { select: { prefix: true } } },
           take: limit,
@@ -53,14 +54,14 @@ export function registerSearchTools(ctx: McpToolContext) {
         );
       }
       if (type === 'wiki' || type === 'all') {
-        const orgIds = await getUserOrgIds();
         const pages = await prisma.page.findMany({
           where: {
             OR: [
               { title: { contains: query, mode: 'insensitive' } },
               { body: { contains: query, mode: 'insensitive' } },
             ],
-            space: { team: { orgId: { in: orgIds } } },
+            // Only pages the user could open: space access and page restrictions, as REST
+            AND: [await viewablePagesWhere(userId)],
           },
           include: { space: { select: { name: true, slug: true } } },
           take: limit,

@@ -7,14 +7,12 @@ import * as searchService from './search.service';
 
 export const search = asyncHandler(async (req: Request, res: Response) => {
   const params = validate(searchSchema, req.query);
-  const orgIds = await searchService.getUserOrgIds(req.userId!);
-  const results = await searchService.search({ ...params, userId: req.userId!, orgIds });
+  const results = await searchService.search({ ...params, userId: req.userId! });
   res.json(results);
 });
 
 export const getAccessibleSpaces = asyncHandler(async (req: Request, res: Response) => {
-  const orgIds = await searchService.getUserOrgIds(req.userId!);
-  const spaces = await searchService.getAccessibleSpaces(orgIds);
+  const spaces = await searchService.getAccessibleSpaces(req.userId!);
   res.json(spaces);
 });
 
