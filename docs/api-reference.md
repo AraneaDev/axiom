@@ -72,7 +72,7 @@ A token acts as its owner, limited to its scopes. A request its scopes don't cov
 | `wiki:read` | Read wiki spaces and pages (`/api/wiki`) |
 | `wiki:write` | Everything `wiki:read` allows, plus creating and changing pages |
 
-Reading your profile, orgs, teams, notifications and search needs any read scope (a write scope includes reading). Attachments and MCP need a read scope to read and a write scope to write; the attachment's parent or the MCP tool is checked again. A token can never manage orgs, teams, members, invitations, tokens, your account or anything under `/api/admin`. Creating a token with any other scope returns `400`.
+Reading your profile, orgs, teams and notifications needs any read scope (a write scope includes reading). Search returns only the areas the token covers. Team activity, member profiles and your dashboard count as issue data. An attachment needs the scope of its parent: `issues:*` for an issue's, `wiki:*` for a page's. A token can never manage orgs, teams, members, invitations, tokens, your account or anything under `/api/admin`, change space permissions or page restrictions, or create, change or delete projects. Creating a token with any other scope returns `400`.
 
 ### Permissions
 

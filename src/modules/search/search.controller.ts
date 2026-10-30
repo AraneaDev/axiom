@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 
+import { scopesCover } from '../../middleware/token-scopes';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { validate, searchSchema, savedSearchSchema } from '../../utils/validation';
 
@@ -8,7 +9,17 @@ import * as searchService from './search.service';
 export const search = asyncHandler(async (req: Request, res: Response) => {
   const params = validate(searchSchema, req.query);
   const results = await searchService.search({ ...params, userId: req.userId! });
-  res.json(results);
+  // An API token only searches the areas its scopes cover
+  const scopes = req.tokenScopes;
+  res.json(
+    scopes
+      ? results.filter((section) =>
+          section.type === 'issues'
+            ? scopesCover(scopes, 'issues', false)
+            : scopesCover(scopes, 'wiki', false),
+        )
+      : results,
+  );
 });
 
 export const getAccessibleSpaces = asyncHandler(async (req: Request, res: Response) => {

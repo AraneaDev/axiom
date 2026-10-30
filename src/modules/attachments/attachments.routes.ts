@@ -1,12 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 
-import { Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import multer, { FileFilterCallback } from 'multer';
 
+import { prisma } from '../../config/database';
 import { authenticate } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
+import { scopesCover } from '../../middleware/token-scopes';
 
 import * as controller from './attachments.controller';
 
@@ -59,12 +61,55 @@ const uploadRateLimit = rateLimit({
 
 router.use(authenticate);
 
-router.post('/', uploadRateLimit, upload.single('file'), controller.upload);
-router.get('/', controller.list);
-router.get('/:id/meta', controller.getMeta);
-router.get('/:id/preview', controller.preview);
-router.get('/:id/convert', controller.convertToMarkdown);
-router.get('/:id', controller.download);
-router.delete('/:id', controller.remove);
+/**
+ * For API tokens: an attachment belongs to an issue or a page, so the token needs the
+ * issues or wiki scope that covers it (read to read, write to upload or delete).
+ * Session requests pass. Runs after multer on upload so the body is parsed.
+ * @param req
+ * @param _res
+ * @param next
+ */
+async function requireParentScope(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const scopes = req.tokenScopes;
+    if (!scopes) return next();
+    const write = req.method !== 'GET' && req.method !== 'HEAD';
+    let parent: { issueId?: string | null; pageId?: string | null } = {};
+    if (req.params.id) {
+      parent =
+        (await prisma.attachment.findUnique({
+          where: { id: String(req.params.id) },
+          select: { issueId: true, pageId: true },
+        })) ?? {};
+    } else {
+      const source = (write ? req.body : req.query) as Record<string, unknown>;
+      parent = {
+        issueId: typeof source.issueId === 'string' ? source.issueId : undefined,
+        pageId: typeof source.pageId === 'string' ? source.pageId : undefined,
+      };
+    }
+    const ok =
+      (!parent.issueId || scopesCover(scopes, 'issues', write)) &&
+      (!parent.pageId || scopesCover(scopes, 'wiki', write));
+    if (!ok) {
+      // Refused after multer stored the upload: drop the temp file
+      if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {});
+      return next(
+        new AppError(403, 'This API token does not have the scope for this attachment', 'SCOPE'),
+      );
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+router.post('/', uploadRateLimit, upload.single('file'), requireParentScope, controller.upload);
+router.get('/', requireParentScope, controller.list);
+router.get('/:id/meta', requireParentScope, controller.getMeta);
+router.get('/:id/preview', requireParentScope, controller.preview);
+router.get('/:id/convert', requireParentScope, controller.convertToMarkdown);
+router.get('/:id', requireParentScope, controller.download);
+router.delete('/:id', requireParentScope, controller.remove);
 
 export default router;

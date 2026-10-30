@@ -21,13 +21,21 @@ describe('API token scopes', () => {
 
   const withToken = (
     scope: string,
-    method: 'get' | 'post' | 'patch',
+    method: 'get' | 'post' | 'patch' | 'put' | 'delete',
     path: string,
     body?: object,
   ) => {
     const agent = request(app);
     const base =
-      method === 'get' ? agent.get(path) : method === 'post' ? agent.post(path) : agent.patch(path);
+      method === 'get'
+        ? agent.get(path)
+        : method === 'post'
+          ? agent.post(path)
+          : method === 'put'
+            ? agent.put(path)
+            : method === 'delete'
+              ? agent.delete(path)
+              : agent.patch(path);
     const req = base
       .set('Authorization', `Token ${tokens[scope]}`)
       .set('X-Requested-With', 'XMLHttpRequest');
@@ -39,7 +47,7 @@ describe('API token scopes', () => {
     spaceId = (
       await prisma.wikiSpace.create({ data: { teamId: ctx.teamId, name: 'S', slug: 'scopes' } })
     ).id;
-    for (const scopes of [['issues:read'], ['issues:write'], ['wiki:read']]) {
+    for (const scopes of [['issues:read'], ['issues:write'], ['wiki:read'], ['wiki:write']]) {
       const res = await authPost('/api/users/me/tokens', ctx.owner.token, {
         name: scopes[0],
         scopes,
@@ -112,7 +120,115 @@ describe('API token scopes', () => {
       });
     const list = await run('list_issues', { projectId: ctx.projectId });
     const create = await run('create_issue', { projectId: ctx.projectId, title: 'via mcp' });
-    await client.close();
     expect([list, create]).toEqual(['ok', 'denied']);
+
+    // A wiki-only token's MCP search returns no issues, an issues token's does
+    const term = `scopedsearch${Date.now()}`;
+    await prisma.issue.create({
+      data: {
+        projectId: ctx.projectId,
+        number: 950,
+        title: term,
+        body: '',
+        creatorId: ctx.owner.id,
+      },
+    });
+    const searchAs = async (scopes: string[]) => {
+      const res = await mcpContext.run({ userId: ctx.owner.id, scopes }, () =>
+        client.callTool({ name: 'search', arguments: { query: term, type: 'all' } }),
+      );
+      const text = (res.content as Array<{ text: string }>)[0].text;
+      return (JSON.parse(text) as Array<{ type: string }>).map((r) => r.type);
+    };
+    const wikiTypes = await searchAs(['wiki:read']);
+    const issueTypes = await searchAs(['issues:read']);
+    await client.close();
+    expect(wikiTypes).toEqual([]);
+    expect(issueTypes).toEqual(['issue']);
+  });
+
+  it('8, 12, 13, 14: scopes follow the resource, and tokens never change access control', async () => {
+    const issue = await prisma.issue.create({
+      data: {
+        projectId: ctx.projectId,
+        number: 900,
+        title: `ScopeIssue${Date.now()}`,
+        body: '',
+        creatorId: ctx.owner.id,
+      },
+    });
+    const page = await prisma.page.create({
+      data: { spaceId, title: 'Scoped', slug: `scoped-${Date.now()}`, body: 'x' },
+    });
+    const issueAttachment = await prisma.attachment.create({
+      data: {
+        filename: 'a.txt',
+        originalName: 'a.txt',
+        mimeType: 'text/plain',
+        size: 1,
+        storageKey: `missing-${Date.now()}`,
+        uploaderId: ctx.owner.id,
+        issueId: issue.id,
+      },
+    });
+    const upload = await request(app)
+      .post('/api/attachments')
+      .set('Authorization', `Token ${tokens['wiki:write']}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .field('issueId', issue.id)
+      .attach('file', Buffer.from('x'), 'x.txt');
+    const results = {
+      wikiTokenUploadsToIssue: upload.status,
+      wikiTokenReadsIssueAttachment: (
+        await withToken('wiki:read', 'get', `/api/attachments/${issueAttachment.id}/meta`)
+      ).status,
+      wikiTokenListsIssueAttachments: (
+        await withToken('wiki:read', 'get', `/api/attachments?issueId=${issue.id}`)
+      ).status,
+      wikiTokenDashboard: (await withToken('wiki:read', 'get', '/api/users/me/dashboard')).status,
+      wikiTokenTeamActivity: (
+        await withToken('wiki:read', 'get', `/api/teams/${ctx.teamId}/activity`)
+      ).status,
+      spacePermissions: (
+        await withToken('wiki:write', 'put', `/api/wiki/spaces/${spaceId}/permissions`, {
+          userId: ctx.owner.id,
+          level: 'ADMIN',
+        })
+      ).status,
+      pageRestrictions: (
+        await withToken('wiki:write', 'put', `/api/wiki/pages/${page.id}/restrictions`, {
+          type: 'VIEW',
+          userIds: [ctx.owner.id],
+        })
+      ).status,
+      deleteProject: (await withToken('issues:write', 'delete', `/api/projects/${ctx.projectId}`))
+        .status,
+      createProject: (
+        await withToken('issues:write', 'post', `/api/projects/team/${ctx.teamId}`, {
+          name: 'Tok',
+          slug: `tok-${Date.now()}`,
+          prefix: 'TOK',
+        })
+      ).status,
+      teamsRoadmapWrite: (await withToken('issues:write', 'patch', '/api/teams/roadmap', {}))
+        .status,
+    };
+    expect(results).toEqual({
+      wikiTokenUploadsToIssue: 403,
+      wikiTokenReadsIssueAttachment: 403,
+      wikiTokenListsIssueAttachments: 403,
+      wikiTokenDashboard: 403,
+      wikiTokenTeamActivity: 403,
+      spacePermissions: 403,
+      pageRestrictions: 403,
+      deleteProject: 403,
+      createProject: 403,
+      teamsRoadmapWrite: 403,
+    });
+
+    // A wiki token's search has no issues in it
+    const search = await withToken('wiki:read', 'get', `/api/search?q=${issue.title}&type=all`);
+    expect(search.status).toBe(200);
+    expect(JSON.stringify(search.body)).not.toContain(issue.title);
   });
 });

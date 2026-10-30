@@ -7,9 +7,13 @@
  * - wiki:read    - read wiki spaces and pages
  * - wiki:write   - everything wiki:read allows, plus creating and changing pages
  *
- * Reading the user's own profile, orgs, teams, search, notifications and attachments needs
- * any read scope (write scopes include read). Managing orgs, teams, members, invitations,
- * tokens, the account and anything under /api/admin is never allowed with a token.
+ * Reading the user's own profile, orgs, teams and notifications needs any read scope (write
+ * scopes include read); search returns only the areas the token covers; attachments need
+ * the scope of their parent (issue or page). Team activity, member profiles and the
+ * dashboard are issue data. Managing orgs, teams, members, invitations,
+ * tokens, the account and anything under /api/admin is never allowed with a token, and
+ * neither is changing space permissions or page restrictions or creating, changing or
+ * deleting projects.
  */
 import type { Action } from '../utils/permissions';
 
@@ -17,6 +21,30 @@ export const TOKEN_SCOPES = ['issues:read', 'issues:write', 'wiki:read', 'wiki:w
 export type TokenScope = (typeof TOKEN_SCOPES)[number];
 
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/** Writes a token may never make, whatever its scopes */
+const ACCESS_CONTROL = [
+  /^\/api\/wiki\/spaces\/[^/]+\/permissions(\/|$)/,
+  /^\/api\/wiki\/pages\/[^/]+\/restrictions$/,
+  /^\/api\/wiki\/restrictions\//,
+  /^\/api\/projects\/team\/[^/]+$/,
+  /^\/api\/projects\/[^/]+$/,
+];
+
+/**
+ * Whether the scopes cover reading (or writing) one area. For routes whose area depends
+ * on the record, such as attachments (an issue's or a page's).
+ * @param scopes - The token's scopes
+ * @param area - issues or wiki
+ * @param write - Whether the request writes
+ */
+export function scopesCover(
+  scopes: readonly string[],
+  area: 'issues' | 'wiki',
+  write: boolean,
+): boolean {
+  return has(scopes, area, write);
+}
 
 function has(scopes: readonly string[], area: 'issues' | 'wiki', write: boolean): boolean {
   return write
@@ -36,7 +64,10 @@ function areaOf(path: string): 'issues' | 'wiki' | 'any' | 'none' {
     path.startsWith('/api/approval-requests') ||
     path.startsWith('/api/custom-fields') ||
     path.startsWith('/api/links') ||
-    (path.startsWith('/api/teams/') && /\/(roadmap|analytics)/.test(path))
+    // Team views made of issue data: roadmap, analytics, activity and member profiles
+    /^\/api\/teams\/[^/]+\/(roadmap\/timeline|analytics|activity)$/.test(path) ||
+    /^\/api\/teams\/[^/]+\/members\/profile\/[^/]+$/.test(path) ||
+    path === '/api/users/me/dashboard'
   ) {
     return 'issues';
   }
@@ -65,6 +96,9 @@ export function tokenAllows(scopes: readonly string[], method: string, path: str
   // Tokens never manage tokens, the account or admin settings
   if (path.startsWith('/api/admin')) return false;
   if (path.startsWith('/api/users/me') && write) return false;
+  // Nor change access control or delete what holds data: space permissions, page
+  // restrictions, creating, changing or deleting projects
+  if (write && ACCESS_CONTROL.some((re) => re.test(path))) return false;
   const area = areaOf(path);
   if (area === 'issues' || area === 'wiki') return has(scopes, area, write);
   if (area === 'any') {

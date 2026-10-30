@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { prisma } from '../../config/database';
 import { ERR } from '../../utils/error-messages';
-import { assertMcpPermission, assertMcpTeamRead } from '../mcp-permissions';
+import { assertMcpPermission, assertMcpTeamRead, assertMcpToolAllowed } from '../mcp-permissions';
 
 import type { McpToolContext } from './types';
 
@@ -21,6 +21,7 @@ export function registerOrgTools(ctx: McpToolContext) {
       limit: z.number().optional().default(20).describe('Max results to return'),
     },
     async ({ cursor, limit }) => {
+      assertMcpToolAllowed('list_orgs');
       const take = Math.min(limit, 100);
       const memberships = await prisma.orgMembership.findMany({
         where: { userId },

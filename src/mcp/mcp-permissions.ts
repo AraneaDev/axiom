@@ -4,7 +4,7 @@ import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { checkTeamPermission, checkTeamRead, checkWikiSpaceOrgAccess } from '../middleware/rbac';
 import { checkProjectAccess } from '../middleware/requireProjectAccess';
-import { scopesAllowAction } from '../middleware/token-scopes';
+import { scopesAllowAction, scopesCover } from '../middleware/token-scopes';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
 import { ERR } from '../utils/error-messages';
@@ -47,13 +47,34 @@ export const MCP_TOOL_PERMISSIONS: Record<string, Action> = {
  * through.
  * @param toolName
  */
+/** Tools any read scope may call: they list what the user belongs to, or filter by scope */
+const ANY_READ_TOOLS = new Set(['list_orgs', 'list_teams', 'search']);
+
+/**
+ * The scope gate for tools that don't otherwise call a permission assertion (list_orgs,
+ * search): resolves the tool's mapping and checks the token's scopes.
+ * @param toolName
+ */
+export function assertMcpToolAllowed(toolName: string): void {
+  actionFor(toolName);
+}
+
 function actionFor(toolName: string): Action {
   const action = Object.hasOwn(MCP_TOOL_PERMISSIONS, toolName)
     ? MCP_TOOL_PERMISSIONS[toolName]
     : undefined;
   if (!action) throw new AppError(403, `No permission mapping for MCP tool ${toolName}`);
-  // A call made with an API token is limited to the token's scopes
+  // A call made with an API token is limited to the token's scopes. Discovery tools (orgs,
+  // teams, search) need any read scope; search then filters its own results by scope.
   const scopes = mcpContext.getStore()?.scopes;
+  const anyRead =
+    !!scopes && (scopesCover(scopes, 'issues', false) || scopesCover(scopes, 'wiki', false));
+  if (ANY_READ_TOOLS.has(toolName)) {
+    if (scopes && !anyRead) {
+      throw new AppError(403, `This API token does not have the scope for ${toolName}`);
+    }
+    return action;
+  }
   if (scopes && !scopesAllowAction(scopes, action)) {
     throw new AppError(403, `This API token does not have the scope for ${toolName}`);
   }

@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
+import { scopesCover } from '../../middleware/token-scopes';
 import { viewableIssuesWhere, viewablePagesWhere } from '../../modules/search/search-access';
+import { mcpContext } from '../context';
+import { assertMcpToolAllowed } from '../mcp-permissions';
 
 import type { McpToolContext } from './types';
 
@@ -28,8 +31,13 @@ export function registerSearchTools(ctx: McpToolContext) {
       limit: z.number().default(10),
     },
     async ({ query, type, limit }) => {
+      assertMcpToolAllowed('search');
       const results: unknown[] = [];
-      if (type === 'issues' || type === 'all') {
+      // A call made with an API token only searches the areas its scopes cover
+      const scopes = mcpContext.getStore()?.scopes;
+      const issuesAllowed = !scopes || scopesCover(scopes, 'issues', false);
+      const wikiAllowed = !scopes || scopesCover(scopes, 'wiki', false);
+      if (issuesAllowed && (type === 'issues' || type === 'all')) {
         const issues = await prisma.issue.findMany({
           where: {
             OR: [
@@ -53,7 +61,7 @@ export function registerSearchTools(ctx: McpToolContext) {
           })),
         );
       }
-      if (type === 'wiki' || type === 'all') {
+      if (wikiAllowed && (type === 'wiki' || type === 'all')) {
         const pages = await prisma.page.findMany({
           where: {
             OR: [
