@@ -116,6 +116,21 @@ describe('Wiki-issue link access', () => {
 
   it("5: an editor who can't see a mentioned issue doesn't remove its link", async () => {
     const ownProject = await prisma.project.findUniqueOrThrow({ where: { id: a.projectId } });
+    // A space both can edit: the org member off the team through an explicit grant
+    const shared = await prisma.wikiSpace.create({
+      data: {
+        teamId: a.teamId,
+        name: 'Shared',
+        slug: `shared-${Date.now()}`,
+        permissions: {
+          create: [
+            { userId: member.id, level: 'EDIT' },
+            { userId: orgOnly.id, level: 'EDIT' },
+          ],
+        },
+      },
+    });
+    const spaceId = shared.id;
     await prisma.page.create({
       data: { spaceId, title: 'Mentions', slug: 'mentions', body: '' },
     });

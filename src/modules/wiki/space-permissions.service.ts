@@ -38,13 +38,16 @@ async function roleAllowsSpaceLevel(
     }),
   ]);
   if (!orgMembership) return false;
-  return hasPermission(orgMembership.role, teamMembership?.role ?? null, LEVEL_ACTION[level]);
+  // A team's wiki follows the team, like its projects: without a role on the team only org
+  // OWNERs and ADMINs get in (platform admins pass earlier). With a role, the team role wins.
+  if (!teamMembership) return orgMembership.role === 'OWNER' || orgMembership.role === 'ADMIN';
+  return hasPermission(orgMembership.role, teamMembership.role, LEVEL_ACTION[level]);
 }
 
 /**
  * Check whether a user can access a space at the required permission level.
- * If no custom permissions exist on the space, the role matrix decides (org role or the
- * role in the space's team).
+ * If no custom permissions exist on the space, it follows its team: team members by their
+ * team role (org OWNERs and ADMINs keep full rights), nobody else.
  * If custom permissions exist, checks both direct user permission and team role permission,
  * taking the highest granted level.
  * @param spaceId - The space to check access for

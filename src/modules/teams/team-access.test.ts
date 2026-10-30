@@ -182,4 +182,24 @@ describe('Team access', () => {
     });
     expect([project.status, space.status]).toEqual([403, 403]);
   });
+
+  it('N5: open team wiki spaces follow the team, so org members off the team get no access', async () => {
+    const space = await prisma.wikiSpace.create({
+      data: { teamId: ctx.teamId, name: 'Team wiki', slug: `team-wiki-${Date.now()}` },
+    });
+    await prisma.page.create({ data: { spaceId: space.id, title: 'P', slug: 'p', body: 'x' } });
+    const read = await authGet(`/api/wiki/spaces/${space.id}/tree`, orgOnly.token);
+    const write = await authPost(`/api/wiki/spaces/${space.id}/pages`, orgOnly.token, {
+      title: 'Off team',
+      slug: `off-${Date.now()}`,
+    });
+    expect([read.status, write.status]).toEqual([403, 403]);
+    // A team VIEWER reads, a team MEMBER writes
+    expect((await authGet(`/api/wiki/spaces/${space.id}/tree`, teamViewer.token)).status).toBe(200);
+    const byMember = await authPost(`/api/wiki/spaces/${space.id}/pages`, teamMember.token, {
+      title: 'On team',
+      slug: `on-${Date.now()}`,
+    });
+    expect(byMember.status).toBe(201);
+  });
 });
