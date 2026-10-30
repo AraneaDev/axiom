@@ -263,7 +263,9 @@ Update an existing wiki page's title and/or body. The call goes through the same
 |`title`|string|no|New title|
 |`body`|string|no|New body (Markdown)|
 
-The response is the updated page plus `pendingMerge`. It is `true` when someone has the page open in the editor. In that case the change is already stored in `Page.body` and recorded as an `EXTERNAL` version, and the open session merges it with its own edits. The response then also carries `externalVersionId`, the version the session will merge. You do not have to retry or poll: when `pendingMerge` is `false`, nothing is waiting.
+The caller needs edit access to the page and `EDIT` access to the wiki space, the same checks as the REST `PATCH`.
+
+The response is the updated page plus `pendingMerge`. It is `true` when a change waits for an editor to merge it: someone has the page open in the editor, or an earlier editing session ended with unmerged edits (its draft is offered for merging the next time the page is opened). In both cases the change is already stored in `Page.body` and recorded as an `EXTERNAL` version, and the response also carries `externalVersionId`, the version the merge will use. A write that nobody has to merge is a plain `EDIT` version. You do not have to retry or poll: when `pendingMerge` is `false`, nothing is waiting.
 
 #### `delete_wiki_page`
 

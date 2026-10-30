@@ -1844,7 +1844,11 @@ Create a wiki page.
 
 Get a wiki page by slug.
 
-**Response 200:** Full wiki page object.
+**Response 200:** Full wiki page object, plus:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `canEdit` | boolean | Whether the caller may edit the page: `EDIT` access to the space and no page restriction that blocks them. The editor opens read-only when it is `false` |
 
 ### PATCH /api/wiki/spaces/:spaceId/pages/:pageSlug
 
@@ -1860,16 +1864,16 @@ Update a wiki page.
 }
 ```
 
-All fields are optional. `body` is always Markdown and is normalised before it is stored.
+All fields are optional. `body` is always Markdown and is normalised before it is stored. Requires `EDIT` access to the space and edit permission on the page.
 
 **Response 200:** The updated wiki page object, plus:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `pendingMerge` | boolean | `true` while the change waits for an open editor session to merge it |
-| `externalVersionId` | string | The version the session will merge. Only present when `pendingMerge` is `true` |
+| `pendingMerge` | boolean | `true` while a change waits for an editor to merge it: the page is open in the editor, or an ended session left unmerged edits |
+| `externalVersionId` | string | The version the merge will use. Only present when `pendingMerge` is `true` |
 
-While a change is pending, `Page.body` already holds the new text. The version it replaced is kept as the merge base, and the change is recorded in the history as kind `EXTERNAL`.
+While a change is pending, `Page.body` already holds the new text. The version it replaced is kept as the merge base, and the change is recorded in the history as kind `EXTERNAL`. A body change that nobody has to merge is recorded as `EDIT`.
 
 ### GET /api/wiki/spaces/:spaceId/pages/:pageSlug/pending-merge
 
@@ -1917,6 +1921,16 @@ All three fields are required. The merged body becomes `Page.body`, is recorded 
 
 Save the live editing session of the page to the database now, so the stored body matches what the editor shows. Requires edit permission on the page.
 
+**Request body (optional):**
+
+```json
+{
+  "changeDescription": "Why it changed"
+}
+```
+
+`changeDescription` (at most 500 characters) is stored on the version the save creates. When the session has nothing new to save, a version of the unchanged page carries it, so the description is never dropped.
+
 **Response 200:** `{ "flushed": true }` when a live session was saved, `{ "flushed": false }` when nobody has the page open.
 
 ### DELETE /api/wiki/spaces/:spaceId/pages/:pageSlug
@@ -1940,7 +1954,7 @@ Get revision history for a wiki page, newest first.
 | Kind | Written by |
 |------|-----------|
 | `EDIT` | A save from the editor or a plain API update |
-| `EXTERNAL` | An API or MCP change that an open editor session has to merge |
+| `EXTERNAL` | An API, MCP or other non-editor change that an editor session has to merge (a live one, or an ended one's unmerged draft) |
 | `SESSION_DRAFT` | An editor session's text, saved before a merge so nothing is lost |
 | `MERGE` | The result of applying a merge |
 | `RESTORE` | Restoring an earlier version |
