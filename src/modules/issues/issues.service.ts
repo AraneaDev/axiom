@@ -26,6 +26,7 @@ import {
   assertAssignable,
   assertColumnTransition,
   assertIssueRefsInProject,
+  assertNotGatedEntry,
 } from './issue-references';
 
 // Re-export from sub-modules for backwards compatibility
@@ -78,6 +79,7 @@ export async function createIssue(
   const defaultColumn = await prisma.boardColumn.findFirst({
     where: { projectId, isDefault: true },
   });
+  await assertNotGatedEntry(projectId, defaultColumn?.id);
 
   // Get next issue number and create, with retry on unique constraint violation (race condition)
   let retries = 3;

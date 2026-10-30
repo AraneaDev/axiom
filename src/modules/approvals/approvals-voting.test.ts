@@ -230,4 +230,41 @@ describe('Approval voting', () => {
     expect(created.status).toBe(201);
     void noColumn;
   });
+
+  it('L2: new issues can never land in a gated column', async () => {
+    const cols = await prisma.boardColumn.findMany({
+      where: { projectId: ctx.projectId },
+      orderBy: { position: 'asc' },
+    });
+    const first = cols[0];
+    const P = `/api/projects/${ctx.projectId}`;
+    const t = ctx.owner.token;
+
+    // A gate into the default (first) column is refused
+    const gate = await authPost(`${P}/approval-gates`, t, {
+      fromColumnId: cols[1].id,
+      toColumnId: first.id,
+    });
+    expect(gate.status).toBe(400);
+
+    // Moving a gated column to first place is refused
+    const reorder = await authPatch(`${P}/board/columns/reorder`, t, {
+      positions: cols.map((c) =>
+        c.id === toColumnId ? { id: c.id, position: -1 } : { id: c.id, position: c.position },
+      ),
+    });
+    expect(reorder.status).toBe(400);
+
+    // Defensive: a gate that got there anyway makes issue creation refuse, naming the gate
+    const sneaky = await prisma.approvalGate.create({
+      data: { projectId: ctx.projectId, fromColumnId: cols[2].id, toColumnId: first.id },
+    });
+    try {
+      const created = await authPost(`${P}/issues`, t, { title: 'into a gate' });
+      expect(created.status).toBe(409);
+      expect(JSON.stringify(created.body)).toContain(first.name);
+    } finally {
+      await prisma.approvalGate.delete({ where: { id: sneaky.id } });
+    }
+  });
 });

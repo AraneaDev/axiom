@@ -105,6 +105,25 @@ export async function reorderColumns(
 ) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
+  // The new first column becomes where new issues land when none is marked default: it may
+  // not be one an approval gate guards
+  const current = await prisma.boardColumn.findMany({
+    where: { projectId },
+    select: { id: true, position: true },
+  });
+  const next = new Map(current.map((c) => [c.id, c.position]));
+  for (const { id, position } of positions) if (next.has(id)) next.set(id, position);
+  const firstId = [...next.entries()].sort((x, y) => x[1] - y[1])[0]?.[0];
+  if (firstId) {
+    const gate = await prisma.approvalGate.findFirst({
+      where: { projectId, toColumnId: firstId, enabled: true },
+      select: { id: true },
+    });
+    if (gate) {
+      throw new AppError(400, 'A column an approval gate guards cannot be the first column');
+    }
+  }
+
   await prisma.$transaction(
     positions.map(({ id, position }) =>
       prisma.boardColumn.updateMany({

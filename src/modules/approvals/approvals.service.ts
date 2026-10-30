@@ -9,6 +9,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
+import { entryColumnIds } from '../issues/issue-references';
 import { createNotification } from '../notifications/notifications.service';
 
 import type { updateGateSchema, createGateSchema, castVoteSchema } from './approvals.validation';
@@ -58,6 +59,11 @@ export async function createGate(projectId: string, data: z.output<typeof create
 
   if (columns.length !== 2) {
     throw new AppError(400, 'One or both columns do not belong to this project');
+  }
+
+  // New issues land in the entry column: a gate there would let them in without approval
+  if ((await entryColumnIds(projectId)).includes(data.toColumnId)) {
+    throw new AppError(400, 'An approval gate cannot guard the column new issues land in');
   }
 
   // Check for duplicate

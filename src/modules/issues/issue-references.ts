@@ -81,3 +81,42 @@ export async function assertColumnTransition(
     throw new AppError(409, 'This move needs approval: request it through the approval gate');
   }
 }
+
+/**
+ * The column new issues land in: the default column, or the first one when none is marked.
+ * A gate may never guard it, or issues would enter a gated column without approval.
+ * @param projectId
+ * @returns The entry column ids (default and first, which are usually the same)
+ */
+export async function entryColumnIds(projectId: string): Promise<string[]> {
+  const [byDefault, first] = await Promise.all([
+    prisma.boardColumn.findFirst({ where: { projectId, isDefault: true }, select: { id: true } }),
+    prisma.boardColumn.findFirst({
+      where: { projectId },
+      orderBy: { position: 'asc' },
+      select: { id: true },
+    }),
+  ]);
+  return [...new Set([byDefault?.id, first?.id].filter((id): id is string => !!id))];
+}
+
+/**
+ * Defensive check for issue creation: refuse when an enabled gate guards the column a new
+ * issue would land in (gate creation and column reordering already prevent this).
+ * @param projectId
+ * @param columnId - The column the new issue would land in
+ * @throws {AppError} 409 naming the gated column
+ */
+export async function assertNotGatedEntry(projectId: string, columnId: string | undefined) {
+  if (!columnId) return;
+  const gate = await prisma.approvalGate.findFirst({
+    where: { projectId, toColumnId: columnId, enabled: true },
+    select: { toColumn: { select: { name: true } } },
+  });
+  if (gate) {
+    throw new AppError(
+      409,
+      `New issues land in "${gate.toColumn.name}", which an approval gate guards: change the gate or the default column`,
+    );
+  }
+}
