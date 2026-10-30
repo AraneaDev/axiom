@@ -6,17 +6,28 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 import { env } from '../config/env';
 import type { AuthPayload } from '../middleware/auth';
+import { logger } from '../utils/logger';
 
 import { createCollaborationServer } from './collaboration';
 import type { ClientMessage } from './events';
+import { canJoinRoom, MAX_ROOMS_PER_REQUEST, MAX_ROOMS_PER_SOCKET } from './room-access';
 
 const HEARTBEAT_INTERVAL = 30_000;
+/** Client messages are small JSON commands; refuse anything larger. */
+const MAX_PAYLOAD = 64 * 1024;
 
 interface AuthenticatedSocket extends WebSocket {
   userId: string;
+  /** Rooms the socket was granted and receives broadcasts for */
   rooms: Set<string>;
+  /** Rooms awaiting their access check, each with the ticket of its latest request */
+  pendingRooms: Map<string, number>;
+  /** Tail of the socket's check queue: checks run one at a time, in arrival order */
+  checkQueue: Promise<void>;
   isAlive: boolean;
 }
+
+let nextTicket = 0;
 
 let wss: WebSocketServer | null = null;
 
@@ -63,12 +74,64 @@ function extractUserId(req: IncomingMessage): string | null {
   }
 }
 
+function sendDenied(ws: AuthenticatedSocket, room: unknown): void {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'subscribe:denied', room }));
+}
+
+/**
+ * Queue an access check for each requested room. Rooms past the per-request cap, or that
+ * would take the socket past its total cap, are refused straight away without a lookup.
+ * A check's result only counts if the room is still pending under the same ticket when it
+ * finishes: an unsubscribe, a newer subscribe of the same room or the socket closing in the
+ * meantime all discard it.
+ * @param ws - The subscribing socket
+ * @param requested - The raw `rooms` array from the client
+ */
+function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
+  requested.forEach((room, index) => {
+    if (typeof room !== 'string' || room.length > 200) {
+      sendDenied(ws, typeof room === 'string' ? room.slice(0, 200) : null);
+      return;
+    }
+    if (ws.rooms.has(room)) return;
+    const isNew = !ws.pendingRooms.has(room);
+    if (
+      index >= MAX_ROOMS_PER_REQUEST ||
+      (isNew && ws.rooms.size + ws.pendingRooms.size >= MAX_ROOMS_PER_SOCKET)
+    ) {
+      sendDenied(ws, room);
+      return;
+    }
+
+    const ticket = ++nextTicket;
+    ws.pendingRooms.set(room, ticket);
+    ws.checkQueue = ws.checkQueue
+      .then(async () => {
+        // Unsubscribed or superseded while queued: skip the lookup altogether
+        if (ws.pendingRooms.get(room) !== ticket) return;
+        const allowed = await canJoinRoom(ws.userId, room);
+        if (ws.pendingRooms.get(room) !== ticket || ws.readyState !== WebSocket.OPEN) return;
+        ws.pendingRooms.delete(room);
+        if (allowed) ws.rooms.add(room);
+        else sendDenied(ws, room);
+      })
+      .catch((err) => {
+        // A failed check refuses the room and must not stall the rest of the queue
+        logger.error('Realtime room check failed', { room }, err as Error);
+        if (ws.pendingRooms.get(room) !== ticket) return;
+        ws.pendingRooms.delete(room);
+        sendDenied(ws, room);
+      });
+  });
+}
+
 /**
  * Attach a WebSocket server to an existing HTTP server.
  * @param server
  */
 export function createWebSocketServer(server: HttpServer): WebSocketServer {
-  wss = new WebSocketServer({ noServer: true });
+  wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD });
 
   // Create collaboration WebSocket server for wiki real-time editing
   const collab = createCollaborationServer();
@@ -100,6 +163,8 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
       const authSocket = ws as AuthenticatedSocket;
       authSocket.userId = userId;
       authSocket.rooms = new Set();
+      authSocket.pendingRooms = new Map();
+      authSocket.checkQueue = Promise.resolve();
       authSocket.isAlive = true;
 
       wss!.emit('connection', authSocket, req);
@@ -119,14 +184,13 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
         const msg = JSON.parse(data.toString()) as ClientMessage;
 
         if (msg.type === 'subscribe' && Array.isArray(msg.rooms)) {
-          for (const room of msg.rooms) {
-            if (typeof room === 'string' && room.length < 200) {
-              ws.rooms.add(room);
-            }
-          }
+          handleSubscribe(ws, msg.rooms);
         } else if (msg.type === 'unsubscribe' && Array.isArray(msg.rooms)) {
           for (const room of msg.rooms) {
+            if (typeof room !== 'string') continue;
             ws.rooms.delete(room);
+            // Drops a check in flight: its result no longer matches a pending ticket
+            ws.pendingRooms.delete(room);
           }
         }
       } catch {
@@ -136,6 +200,7 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
 
     ws.on('close', () => {
       ws.rooms.clear();
+      ws.pendingRooms.clear();
     });
   });
 

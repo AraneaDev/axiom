@@ -8,6 +8,29 @@ import { Action, hasPermission, hasOrgPermission } from '../utils/permissions';
 import { AppError } from './errorHandler';
 
 /**
+ * Check that a user is a member of the org that owns a wiki space. This is the first of
+ * the two checks the space routes make; space permissions (`canAccessSpace`) come second.
+ * @param spaceId - The space to check
+ * @param userId - The user to check
+ * @returns 'ok', 'not_found' when the space doesn't exist, or 'forbidden'
+ */
+export async function checkWikiSpaceOrgAccess(
+  spaceId: string,
+  userId: string,
+): Promise<'ok' | 'not_found' | 'forbidden'> {
+  const space = await prisma.wikiSpace.findUnique({
+    where: { id: spaceId },
+    select: { team: { select: { orgId: true } } },
+  });
+  if (!space) return 'not_found';
+
+  const orgMembership = await prisma.orgMembership.findUnique({
+    where: { userId_orgId: { userId, orgId: space.team.orgId } },
+  });
+  return orgMembership ? 'ok' : 'forbidden';
+}
+
+/**
  * Verify the authenticated user is a member of the org that owns the wiki space.
  * Expects :spaceId in route params.
  * @returns Express middleware that checks org membership for the space's org
@@ -22,16 +45,9 @@ export function requireWikiSpaceAccess() {
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
 
-      const space = await prisma.wikiSpace.findUnique({
-        where: { id: spaceId },
-        select: { team: { select: { orgId: true } } },
-      });
-      if (!space) throw new AppError(404, 'Wiki space not found');
-
-      const orgMembership = await prisma.orgMembership.findUnique({
-        where: { userId_orgId: { userId, orgId: space.team.orgId } },
-      });
-      if (!orgMembership) {
+      const access = await checkWikiSpaceOrgAccess(spaceId, userId);
+      if (access === 'not_found') throw new AppError(404, 'Wiki space not found');
+      if (access === 'forbidden') {
         throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
       }
 

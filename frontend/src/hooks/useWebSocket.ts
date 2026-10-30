@@ -73,6 +73,8 @@ function connect(): void {
   ws.onmessage = (ev) => {
     try {
       const event = JSON.parse(ev.data as string) as RealtimeEvent;
+      // The server refused the room: forget it so a reconnect doesn't ask again
+      if (event.type === 'subscribe:denied') subscribedRooms.delete(event.room);
       for (const cb of listeners) {
         cb(event);
       }
@@ -115,11 +117,16 @@ function disconnect(): void {
   subscribedRooms.clear();
 
   if (ws) {
-    ws.onclose = null;
-    ws.onerror = null;
-    // Only close if actually open; avoids "closed before established" warning in dev
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.close();
+    const sock = ws;
+    sock.onopen = null;
+    sock.onmessage = null;
+    sock.onclose = null;
+    sock.onerror = null;
+    if (sock.readyState === WebSocket.OPEN) {
+      sock.close();
+    } else if (sock.readyState === WebSocket.CONNECTING) {
+      // Closing before the handshake logs a browser warning: close it once it opens
+      sock.onopen = () => sock.close();
     }
     ws = null;
   }
@@ -176,32 +183,15 @@ export function useWebSocket(): {
   state: ConnectionState;
 } {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const mountedRef = useRef(false);
   const connectionState = useSyncExternalStore(subscribeToState, getStateSnapshot);
 
+  // Connect while authenticated; disconnect on logout and on unmount. StrictMode's
+  // mount, unmount, remount in dev runs this as connect, disconnect, connect.
   useEffect(() => {
-    if (!isAuthenticated) {
-      disconnect();
-      return;
-    }
-
-    if (!mountedRef.current) {
-      mountedRef.current = true;
-      connect();
-    }
-
-    return () => {
-      // Only disconnect if truly unmounting (not just re-render)
-      // The singleton persists across component re-renders
-    };
+    if (!isAuthenticated) return;
+    connect();
+    return () => disconnect();
   }, [isAuthenticated]);
-
-  // Disconnect on full unmount (e.g. logout)
-  useEffect(() => {
-    return () => {
-      disconnect();
-    };
-  }, []);
 
   return {
     subscribe,

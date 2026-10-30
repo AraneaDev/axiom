@@ -10,6 +10,7 @@ import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useModalState } from '@/hooks/useModalState';
+import { useRealtimeRoom } from '@/hooks/useRealtimeInvalidation';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import type { PageTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -59,6 +60,8 @@ export default function WikiLayout() {
     enabled: !!currentTeam?.id,
   });
   const currentSpace = spaces?.find((s) => s.slug === spaceSlug);
+  // Join the space's realtime room once the space has loaded
+  useRealtimeRoom(currentSpace ? `space:${currentSpace.id}` : null);
 
   const { data: tree, isLoading: treeLoading } = useQuery({
     queryKey: ['pageTree', currentSpace?.id],

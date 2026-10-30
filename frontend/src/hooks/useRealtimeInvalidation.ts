@@ -1,8 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'react-router';
+import { useCallback, useEffect } from 'react';
 
-import { useWebSocket, useRealtimeListener } from './useWebSocket';
+import { subscribe, unsubscribe, useWebSocket, useRealtimeListener } from './useWebSocket';
 
 /**
  * Realtime event types (mirrors backend src/realtime/events.ts).
@@ -23,62 +22,35 @@ export type RealtimeEvent =
       issueId: string;
       status: string;
     }
-  | { type: 'form:submission:created'; projectId: string; submissionId: string; formId: string };
+  | { type: 'form:submission:created'; projectId: string; submissionId: string; formId: string }
+  | { type: 'subscribe:denied'; room: string };
 
 /**
- * Hook that auto-subscribes to relevant rooms based on current route context
- * and maps incoming realtime events to React Query cache invalidations.
+ * Join a realtime room while mounted. Pass `null` while the id behind the room is still
+ * loading; the hook subscribes once a room name is given and moves to the new room when it
+ * changes. Room names use ids, as the server broadcasts and authorizes them:
+ * `project:<projectId>`, `space:<spaceId>`, `issue:<issueId>`.
+ * @param room - The room to join, or null to join nothing yet
+ */
+export function useRealtimeRoom(room: string | null | undefined): void {
+  useEffect(() => {
+    if (!room) return;
+    subscribe([room]);
+    return () => unsubscribe([room]);
+  }, [room]);
+}
+
+/**
+ * Hook that maps incoming realtime events to React Query cache invalidations.
+ * Rooms are joined by the layouts that know their ids (see `useRealtimeRoom`); the
+ * personal `user:<id>` room is joined by the server on connect.
  *
  * Call once in the authenticated app shell.
  */
 export function useRealtimeInvalidation(): void {
   const queryClient = useQueryClient();
-  const { subscribe, unsubscribe } = useWebSocket();
-  const params = useParams<{
-    org?: string;
-    team?: string;
-    project?: string;
-    space?: string;
-    num?: string;
-  }>();
-
-  const prevRoomsRef = useRef<string[]>([]);
-
-  // Compute rooms to subscribe to based on current route params
-  useEffect(() => {
-    const rooms: string[] = [];
-
-    // If on a project page, subscribe to project-level events
-    // We use the project slug as room identifier since we don't have IDs on the frontend route
-    if (params.project) {
-      rooms.push(`project:${params.org}/${params.team}/${params.project}`);
-    }
-
-    // If on a wiki page, subscribe to space-level events
-    if (params.space) {
-      rooms.push(`space:${params.org}/${params.team}/${params.space}`);
-    }
-
-    // Unsubscribe from old rooms
-    const oldRooms = prevRoomsRef.current.filter((r) => !rooms.includes(r));
-    if (oldRooms.length > 0) {
-      unsubscribe(oldRooms);
-    }
-
-    // Subscribe to new rooms
-    const newRooms = rooms.filter((r) => !prevRoomsRef.current.includes(r));
-    if (newRooms.length > 0) {
-      subscribe(newRooms);
-    }
-
-    prevRoomsRef.current = rooms;
-
-    return () => {
-      if (rooms.length > 0) {
-        unsubscribe(rooms);
-      }
-    };
-  }, [params.org, params.team, params.project, params.space, subscribe, unsubscribe]);
+  // Owns the shared connection: connects after login, disconnects on logout
+  useWebSocket();
 
   // Map events to query invalidations
   const handleEvent = useCallback(
