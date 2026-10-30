@@ -62,6 +62,7 @@ vi.mock('@/hooks/useCollaboration', () => ({
     pendingChange: collab.pendingChange,
     resolvedBy: null,
     locked: null,
+    readOnly: false,
     dismissResolved: () => {},
   }),
 }));

@@ -114,17 +114,18 @@ describe('useCollaboration state messages', () => {
     expect(result.current.isConnected).toBe(true);
   });
 
-  it('15: a lost-edit notice is dropped on reconnect and when access comes back', () => {
+  it('15, N6: lost edit access is a read-only state, not a merge lock, and clears on reconnect', () => {
     const { result } = renderHook(() => useCollaboration({ pageId: 'p1' }));
     const provider = providers[0];
     deliver(provider, 22, { canEdit: false });
-    expect(result.current.locked).toEqual({ byName: '' });
+    expect(result.current.readOnly).toBe(true);
+    expect(result.current.locked).toBeNull();
 
     act(() => provider.emit('status', { status: 'connected' }));
-    expect(result.current.locked).toBeNull();
+    expect(result.current.readOnly).toBe(false);
 
     deliver(provider, 22, { canEdit: false });
     deliver(provider, 22, { canEdit: true });
-    expect(result.current.locked).toBeNull();
+    expect(result.current.readOnly).toBe(false);
   });
 });

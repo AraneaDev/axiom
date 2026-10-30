@@ -45,6 +45,8 @@ interface UseCollaborationReturn {
   resolvedBy: string | null;
   /** Set while a merge swaps the content: the editor must be read-only */
   locked: { byName: string } | null;
+  /** The server says this user may not edit right now */
+  readOnly: boolean;
   /** Clear the "Merged by" note */
   dismissResolved: () => void;
 }
@@ -130,7 +132,7 @@ export function useCollaboration({
     newProvider.messageHandlers[MESSAGE_ACCESS] = (_encoder, decoder) => {
       const message = parseAccess(readJsonPayload(decoder));
       if (!message) return;
-      // Same as a lock: read-only before any further keystroke
+      // Read-only before any further keystroke
       flushSync(() => setReadOnly(!message.canEdit));
     };
 
@@ -213,9 +215,10 @@ export function useCollaboration({
     fragmentName,
     pendingChange,
     resolvedBy,
-    // A lock (merge in progress) or lost edit access both make the editor read-only; the
-    // latter has no name to show
-    locked: locked ?? (readOnly ? { byName: '' } : null),
+    // A merge in progress (with the merger's name)
+    locked,
+    // This user may not edit right now: a permission change, or view-only access
+    readOnly,
     dismissResolved,
   };
 }

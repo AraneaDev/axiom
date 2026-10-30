@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Paperclip } from 'lucide-react';
+import { Eye, Paperclip } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -92,7 +92,9 @@ export default function PageEdit() {
     pendingChange?.externalVersionId,
     pageAllowsEdit,
   );
-  const canEdit = pageAllowsEdit && !cannotMerge;
+  // The live session can also take editing away (a permission change mid-session)
+  const sessionReadOnly = useCollab ? collab.readOnly : false;
+  const canEdit = pageAllowsEdit && !cannotMerge && !sessionReadOnly;
   const [showConflicts, setShowConflicts] = useState(false);
   const closeConflicts = () => setShowConflicts(false);
   // Once the change is merged (here or by someone else) the conflict view has nothing left to show
@@ -326,6 +328,16 @@ export default function PageEdit() {
           locked={collab.locked}
           onClose={closeConflicts}
         />
+      )}
+
+      {!isNew && !canEdit && (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-md border border-border bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary"
+        >
+          <Eye className="h-4 w-4" />
+          You can view this page but not edit it.
+        </div>
       )}
 
       <div className="space-y-4">
