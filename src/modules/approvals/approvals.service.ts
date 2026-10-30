@@ -2,6 +2,7 @@ import type { z } from 'zod';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { checkProjectAction } from '../../middleware/requireProjectAccess';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
@@ -416,6 +417,14 @@ export async function castVote(
   // stored have none: any member who reached this route (project access) may vote on those.
   if (request.approverIds.length > 0 && !request.approverIds.includes(userId)) {
     throw new AppError(403, 'You are not an approver on this request');
+  }
+  // A request from before approvers were stored names nobody: only someone who could move
+  // the issue themselves (issue:edit by role) may approve it
+  if (
+    request.approverIds.length === 0 &&
+    (await checkProjectAction(userId, request.issue.projectId, 'issue:edit')) !== 'ok'
+  ) {
+    throw new AppError(403, 'Insufficient permissions: issue:edit');
   }
   if (!request.approvalGate.allowSelfApproval && request.requestedById === userId) {
     throw new AppError(403, 'This gate does not allow approving your own request');

@@ -166,4 +166,28 @@ describe('Approval voting', () => {
       toColumnId,
     );
   });
+
+  it('10: a legacy request without approvers needs issue:edit to vote', async () => {
+    const viewer = await addMemberToContext(ctx);
+    await prisma.teamMembership.update({
+      where: { userId_teamId: { userId: viewer.id, teamId: ctx.teamId } },
+      data: { role: 'VIEWER' },
+    });
+    try {
+      const legacy = await prisma.approvalRequest.create({
+        data: {
+          issueId,
+          approvalGateId: gateId,
+          targetColumnId: toColumnId,
+          requestedById: ctx.owner.id,
+        },
+      });
+      const res = await authPost(`/api/approval-requests/${legacy.id}/vote`, viewer.token, {
+        decision: 'APPROVED',
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: viewer.id } });
+    }
+  });
 });
