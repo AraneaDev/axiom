@@ -23,6 +23,7 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
   const teams = await teamsService.listOrgTeams(
     param(req, 'orgId'),
     req.query as Record<string, string>,
+    req.userId!,
   );
   res.json(teams);
 });
@@ -74,7 +75,7 @@ export const removeMember = asyncHandler(async (req: Request, res: Response) => 
 });
 
 export const getActivity = asyncHandler(async (req: Request, res: Response) => {
-  const activity = await teamsService.getTeamActivity(param(req, 'teamId'));
+  const activity = await teamsService.getTeamActivity(param(req, 'teamId'), req.userId!);
   res.json(activity);
 });
 
@@ -82,6 +83,7 @@ export const getMemberProfile = asyncHandler(async (req: Request, res: Response)
   const profile = await teamsService.getTeamMemberProfile(
     param(req, 'teamId'),
     param(req, 'username'),
+    req.userId!,
   );
   res.json(profile);
 });

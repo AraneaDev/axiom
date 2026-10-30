@@ -3,8 +3,10 @@ import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/database';
 import { ERR } from '../utils/error-messages';
 import { param } from '../utils/params';
+import type { Action } from '../utils/permissions';
 
 import { AppError } from './errorHandler';
+import { checkTeamPermission } from './rbac';
 
 export type ProjectAccess = 'ok' | 'not_found' | 'forbidden';
 
@@ -163,3 +165,32 @@ export const projectOf = {
     )?.page.form.projectId,
   ],
 };
+
+/**
+ * Project actions beyond reading, such as changing settings or deleting the project: the
+ * user's org role or their role in the project's team must allow `action`. Platform admins
+ * pass. Use after requireProjectAccess.
+ * @param action - The permission action, e.g. 'project:delete'
+ * @returns Express middleware
+ */
+export function requireProjectAction(action: Action) {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      const userId = req.userId!;
+      const projectId = param(req, 'projectId');
+      const [user, project] = await Promise.all([
+        prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } }),
+        prisma.project.findUnique({ where: { id: projectId }, select: { teamId: true } }),
+      ]);
+      if (!project) return next(new AppError(404, ERR.PROJECT_NOT_FOUND));
+      if (user?.isAdmin) return next();
+      const access = await checkTeamPermission(userId, project.teamId, action);
+      if (access !== 'ok') {
+        return next(new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN'));
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}

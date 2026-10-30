@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth';
 import {
   requireOrgMember,
   requireOrgPermission,
+  requireTeamMember,
   requireTeamPermission,
 } from '../../middleware/rbac';
 
@@ -18,9 +19,8 @@ router.post('/org/:orgId', requireOrgPermission('team:create'), teamsController.
 router.get('/org/:orgId', requireOrgMember(), teamsController.list);
 
 // Team-specific routes
-// Reading a team needs what reading its work needs: org membership and issue:view by org
-// or team role
-const teamRead = requireTeamPermission('issue:view');
+// Reading a team needs team membership (or org OWNER/ADMIN), as its projects do
+const teamRead = requireTeamMember();
 router.get('/:teamId', teamRead, teamsController.get);
 router.patch('/:teamId', requireTeamPermission('team:manage_members'), teamsController.update);
 router.delete('/:teamId', requireTeamPermission('team:delete'), teamsController.remove);

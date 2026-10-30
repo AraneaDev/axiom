@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
-import { requireOrgPermission, requireTeamPermission } from '../../middleware/rbac';
+import { requireOrgPermission, requireTeamMember } from '../../middleware/rbac';
 
 import * as analyticsController from './analytics.controller';
 
@@ -16,11 +16,7 @@ router.get(
   analyticsController.getOrgAnalytics,
 );
 
-// Team-level analytics -- any team member can view
-router.get(
-  '/teams/:teamId/analytics',
-  requireTeamPermission('issue:view'),
-  analyticsController.getTeamAnalytics,
-);
+// Team-level analytics -- team members (and org OWNER/ADMIN) can view
+router.get('/teams/:teamId/analytics', requireTeamMember(), analyticsController.getTeamAnalytics);
 
 export default router;

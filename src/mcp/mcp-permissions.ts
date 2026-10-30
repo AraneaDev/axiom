@@ -2,7 +2,7 @@ import type { SpacePermissionLevel } from '@prisma/client';
 
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
-import { checkTeamPermission, checkWikiSpaceOrgAccess } from '../middleware/rbac';
+import { checkTeamPermission, checkTeamRead, checkWikiSpaceOrgAccess } from '../middleware/rbac';
 import { checkProjectAccess } from '../middleware/requireProjectAccess';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
@@ -110,6 +110,22 @@ export async function assertMcpPermission(toolName: string, orgId: string): Prom
  */
 export async function assertMcpTeamPermission(toolName: string, teamId: string): Promise<void> {
   await assertTeamRole(currentUserId(), teamId, actionFor(toolName));
+}
+
+/**
+ * Team-wide reads (list_projects): team membership, org OWNER/ADMIN or platform admin, as
+ * the REST team routes; then the tool's action against the role.
+ * @param toolName
+ * @param teamId
+ */
+export async function assertMcpTeamRead(toolName: string, teamId: string): Promise<void> {
+  const userId = currentUserId();
+  const action = actionFor(toolName);
+  const access = await checkTeamRead(userId, teamId);
+  if (access === 'not_found') throw new AppError(404, ERR.TEAM_NOT_FOUND);
+  if (access === 'forbidden') throw new AppError(403, 'Forbidden');
+  if (await isSystemAdmin(userId)) return;
+  await assertTeamRole(userId, teamId, action);
 }
 
 /**

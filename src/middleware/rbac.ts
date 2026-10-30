@@ -292,6 +292,49 @@ export async function checkTeamPermission(
 }
 
 /**
+ * Team-wide reads (the team, its members, activity, roadmap, analytics, project list):
+ * team members, org OWNERs and ADMINs, and platform admins. The same rule as
+ * checkProjectAccess, so a team's overview never shows more than its projects would.
+ * @param userId - The reader
+ * @param teamId - The team
+ * @returns 'ok', 'not_found' or 'forbidden'
+ */
+export async function checkTeamRead(
+  userId: string,
+  teamId: string,
+): Promise<'ok' | 'not_found' | 'forbidden'> {
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { orgId: true } });
+  if (!team) return 'not_found';
+  const [user, orgMembership, teamMembership] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } }),
+    prisma.orgMembership.findUnique({ where: { userId_orgId: { userId, orgId: team.orgId } } }),
+    prisma.teamMembership.findUnique({ where: { userId_teamId: { userId, teamId } } }),
+  ]);
+  if (user?.isAdmin || teamMembership) return 'ok';
+  if (orgMembership?.role === 'OWNER' || orgMembership?.role === 'ADMIN') return 'ok';
+  return 'forbidden';
+}
+
+/**
+ * Require checkTeamRead for :teamId.
+ * @returns Express middleware
+ */
+export function requireTeamMember() {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      const userId = req.userId;
+      if (!userId) throw new AppError(401, 'Authentication required');
+      const access = await checkTeamRead(userId, param(req, 'teamId'));
+      if (access === 'not_found') throw new AppError(404, ERR.TEAM_NOT_FOUND);
+      if (access === 'forbidden') throw new AppError(403, 'You are not a member of this team');
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/**
  * Require team-level permission. Expects :teamId in route params.
  * Also checks org-level permissions as a fallback (org admins/owners bypass team checks).
  * @param action - The permission action to check

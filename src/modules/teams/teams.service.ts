@@ -8,6 +8,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parsePagination, parseServicePagination, paginatedResponse } from '../../utils/pagination';
 import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
+import { viewablePagesWhere } from '../search/search-access';
 
 /**
  * Create a new team within an organization, adding the creator as admin.
@@ -82,11 +83,26 @@ export async function getTeam(teamId: string) {
  * @param query - Pagination query params (limit, offset)
  * @param query.limit
  * @param query.offset
+ * @param viewerId
  * @returns Paginated list of teams with counts and wiki spaces
  */
-export async function listOrgTeams(orgId: string, query: { limit?: string; offset?: string } = {}) {
+export async function listOrgTeams(
+  orgId: string,
+  query: { limit?: string; offset?: string } = {},
+  viewerId?: string,
+) {
   const { take, skip } = parsePagination(query, { limit: 50 });
-  const where = { orgId };
+  // A GUEST only sees the teams they were added to
+  const viewerRole = viewerId
+    ? (
+        await prisma.orgMembership.findUnique({
+          where: { userId_orgId: { userId: viewerId, orgId } },
+          select: { role: true },
+        })
+      )?.role
+    : undefined;
+  const where =
+    viewerRole === 'GUEST' ? { orgId, members: { some: { userId: viewerId } } } : { orgId };
 
   const [teams, total] = await Promise.all([
     prisma.team.findMany({
@@ -249,12 +265,35 @@ export async function removeTeamMember(teamId: string, memberId: string) {
 }
 
 /**
+ * An activity filter limited to the team's issues and to the team's wiki pages the viewer
+ * can open. Activity rows are keyed by resource id, so this resolves the ids first.
+ * @param teamId - The team
+ * @param viewerId - Who is looking
+ */
+async function teamResourceActivityWhere(teamId: string, viewerId: string) {
+  const [issues, pages] = await Promise.all([
+    prisma.issue.findMany({ where: { project: { teamId } }, select: { id: true } }),
+    prisma.page.findMany({
+      where: { AND: [{ space: { teamId } }, await viewablePagesWhere(viewerId)] },
+      select: { id: true },
+    }),
+  ]);
+  return {
+    OR: [
+      { resourceType: 'issue', resourceId: { in: issues.map((i) => i.id) } },
+      { resourceType: 'wiki_page', resourceId: { in: pages.map((p) => p.id) } },
+    ],
+  };
+}
+
+/**
  * Get recent activity across a team's projects.
  * @param teamId - The team ID
+ * @param viewerId
  * @param rawLimit - Max results (default 20)
  * @returns List of recent activity entries with user info
  */
-export async function getTeamActivity(teamId: string, rawLimit = 20) {
+export async function getTeamActivity(teamId: string, viewerId: string, rawLimit = 20) {
   const limit = parseServicePagination({ limit: rawLimit }, 20).take;
   // Get all member user IDs for this team
   const members = await prisma.teamMembership.findMany({
@@ -266,7 +305,8 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
   if (memberIds.length === 0) return [];
 
   const activities = await prisma.activity.findMany({
-    where: { userId: { in: memberIds } },
+    // Only activity on this team's own issues and pages: members also work elsewhere
+    where: { userId: { in: memberIds }, ...(await teamResourceActivityWhere(teamId, viewerId)) },
     include: {
       user: { select: USER_WITH_AVATAR_SELECT },
     },
@@ -352,10 +392,11 @@ export async function getTeamActivity(teamId: string, rawLimit = 20) {
  * Get a member's profile with stats scoped to a team.
  * @param teamId - The team ID
  * @param username - The member's username
+ * @param viewerId
  * @returns Profile info with assigned issues count and recent activity
  * @throws {AppError} 404 if user not found or not a team member
  */
-export async function getTeamMemberProfile(teamId: string, username: string) {
+export async function getTeamMemberProfile(teamId: string, username: string, viewerId: string) {
   const user = await findOrThrow(
     prisma.user.findUnique({
       where: { username },
@@ -397,7 +438,8 @@ export async function getTeamMemberProfile(teamId: string, username: string) {
       },
     }),
     prisma.activity.findMany({
-      where: { userId: user.id },
+      // Only activity on this team's own issues and pages
+      where: { userId: user.id, ...(await teamResourceActivityWhere(teamId, viewerId)) },
       include: {
         user: { select: USER_WITH_AVATAR_SELECT },
       },

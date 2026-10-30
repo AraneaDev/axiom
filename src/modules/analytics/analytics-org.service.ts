@@ -3,16 +3,33 @@ import { prisma } from '../../config/database';
 import { classifyColumn, resolvePeriodStart, type Period } from './analytics-helpers';
 
 /**
+ * Teams a viewer may see in org analytics.
+ * @param orgId
+ * @param userId
+ */
+async function readableTeamsWhere(orgId: string, userId: string) {
+  const [user, membership] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } }),
+    prisma.orgMembership.findUnique({ where: { userId_orgId: { userId, orgId } } }),
+  ]);
+  if (user?.isAdmin || membership?.role === 'OWNER' || membership?.role === 'ADMIN') return {};
+  return { members: { some: { userId } } };
+}
+
+/**
  *
  * @param orgId
  * @param period
+ * @param viewerId
  */
-export async function getOrgAnalytics(orgId: string, period: Period) {
+export async function getOrgAnalytics(orgId: string, period: Period, viewerId?: string) {
   const periodStart = resolvePeriodStart(period);
 
-  // Get all teams and projects in the org
+  // Teams the viewer can read: all of them for org OWNERs/ADMINs and platform admins,
+  // otherwise only their own (team-wide reads need team membership)
+  const teamScope = viewerId ? await readableTeamsWhere(orgId, viewerId) : {};
   const teams = await prisma.team.findMany({
-    where: { orgId },
+    where: { orgId, ...teamScope },
     include: {
       members: { include: { user: { select: { id: true, displayName: true } } } },
       projects: {
