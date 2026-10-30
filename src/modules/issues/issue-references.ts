@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { validateTransition } from '../workflows/workflows.service';
 
 /**
  * An issue can only point at a board column or sprint of its own project. Connecting by id
@@ -52,4 +53,30 @@ export async function assertAssignable(
     select: { id: true },
   });
   if (!member) throw new AppError(400, 'The assignee must be a member of the project team');
+}
+
+/**
+ * Every status change goes through here: the workflow rules must allow the move, and a
+ * move an enabled approval gate covers is refused. Gated moves only happen when an
+ * approval request is approved (castVote moves the issue itself).
+ * @param projectId - The issue's project
+ * @param fromColumnId - The issue's current column
+ * @param toColumnId - The target column
+ * @throws {AppError} 400 when workflow rules forbid it, 409 when an approval gate covers it
+ */
+export async function assertColumnTransition(
+  projectId: string,
+  fromColumnId: string | null,
+  toColumnId: string,
+): Promise<void> {
+  if (fromColumnId === toColumnId) return;
+  await validateTransition(projectId, fromColumnId, toColumnId);
+  if (!fromColumnId) return;
+  const gate = await prisma.approvalGate.findFirst({
+    where: { projectId, fromColumnId, toColumnId, enabled: true },
+    select: { id: true },
+  });
+  if (gate) {
+    throw new AppError(409, 'This move needs approval: request it through the approval gate');
+  }
 }

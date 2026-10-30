@@ -7,7 +7,11 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { invalidateIssueCache } from '../../utils/issue-cache';
 import { ISSUE_WITH_COLUMN_INCLUDE } from '../../utils/prisma-selects';
 
-import { assertAssignable, assertIssueRefsInProject } from './issue-references';
+import {
+  assertAssignable,
+  assertColumnTransition,
+  assertIssueRefsInProject,
+} from './issue-references';
 
 /**
  * Bulk update multiple issues at once with shared field values.
@@ -39,7 +43,7 @@ export async function bulkUpdate(
 
   const issues = await prisma.issue.findMany({
     where: { id: { in: issueIds }, projectId },
-    select: { id: true },
+    select: { id: true, columnId: true },
   });
   if (issues.length === 0) throw new AppError(404, 'No matching issues found');
 
@@ -48,6 +52,12 @@ export async function bulkUpdate(
     sprintId: updates.sprintId,
   });
   await assertAssignable(projectId, updates.assigneeId);
+  // A bulk status change follows the same workflow rules and approval gates as one issue
+  if (updates.status !== undefined) {
+    for (const issue of issues) {
+      await assertColumnTransition(projectId, issue.columnId, updates.status);
+    }
+  }
 
   const resolvedIds = issues.map((i) => i.id);
   const changedFields = Object.keys(updates).filter(

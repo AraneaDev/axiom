@@ -12,7 +12,8 @@ import {
   type TestContext,
   type TestUser,
 } from '../../test/factory';
-import { authPost } from '../../test/helpers';
+import { authPatch, authPost } from '../../test/helpers';
+import { evaluateRules } from '../automation/automation.service';
 
 describe('Approval voting', () => {
   let ctx: TestContext;
@@ -107,5 +108,65 @@ describe('Approval voting', () => {
       decision: 'APPROVED',
     });
     expect(res.status).toBe(403);
+  });
+
+  it('refuses every direct move into a gated column; an approval still moves it', async () => {
+    const fromColumnId = (await prisma.approvalGate.findUniqueOrThrow({ where: { id: gateId } }))
+      .fromColumnId;
+    const gated = await prisma.issue.create({
+      data: {
+        projectId: ctx.projectId,
+        number: 2,
+        title: 'Must be approved',
+        body: '',
+        creatorId: ctx.owner.id,
+        columnId: fromColumnId,
+      },
+    });
+    const P = `/api/projects/${ctx.projectId}`;
+    const t = approver.token;
+    const update = await authPatch(`${P}/issues/2`, t, { columnId: toColumnId });
+    const move = await authPatch(`${P}/issues/2/move`, t, { columnId: toColumnId, position: 0 });
+    const bulk = await authPatch(`${P}/issues/bulk`, t, {
+      issueIds: [gated.id],
+      updates: { status: toColumnId },
+    });
+    expect([update.status, move.status, bulk.status]).toEqual([409, 409, 409]);
+
+    // Automation set_status can't skip the gate either
+    const rule = await prisma.automationRule.create({
+      data: {
+        projectId: ctx.projectId,
+        name: 'skip the gate',
+        trigger: 'issue:created',
+        actions: [{ type: 'set_status', columnId: toColumnId }],
+      },
+    });
+    await evaluateRules(
+      ctx.projectId,
+      'issue:updated' as never,
+      {
+        issue: { ...gated, projectId: ctx.projectId },
+      } as never,
+    );
+    await prisma.automationRule.delete({ where: { id: rule.id } });
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: gated.id } })).columnId).toBe(
+      fromColumnId,
+    );
+
+    // The approval path moves it
+    const created = await authPost(
+      `/api/issues/${gated.id}/approval-requests/${toColumnId}`,
+      ctx.owner.token,
+      { approverIds: [approver.id] },
+    );
+    expect(created.status).toBe(201);
+    const vote = await authPost(`/api/approval-requests/${created.body.id}/vote`, t, {
+      decision: 'APPROVED',
+    });
+    expect(vote.status).toBeLessThan(300);
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: gated.id } })).columnId).toBe(
+      toColumnId,
+    );
   });
 });

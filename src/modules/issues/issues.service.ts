@@ -21,9 +21,12 @@ import {
 import { logActivity } from '../activity/activity.service';
 import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
 import { createNotification } from '../notifications/notifications.service';
-import { validateTransition } from '../workflows/workflows.service';
 
-import { assertAssignable, assertIssueRefsInProject } from './issue-references';
+import {
+  assertAssignable,
+  assertColumnTransition,
+  assertIssueRefsInProject,
+} from './issue-references';
 
 // Re-export from sub-modules for backwards compatibility
 export { findIssueOrThrow } from './issue-utils';
@@ -393,7 +396,7 @@ export async function updateIssue(
 
   // Validate workflow transition before updating column
   if (data.columnId !== undefined && data.columnId !== issue.columnId) {
-    await validateTransition(projectId, issue.columnId, data.columnId);
+    await assertColumnTransition(projectId, issue.columnId, data.columnId);
   }
 
   const updateData: Prisma.IssueUpdateInput = {};

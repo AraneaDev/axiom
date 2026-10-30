@@ -6,6 +6,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
+import { assertColumnTransition, assertIssueRefsInProject } from '../issues/issue-references';
 import * as issuesService from '../issues/issues.service';
 
 import { executeWebhook } from './webhook';
@@ -283,6 +284,14 @@ async function executeActions(
       switch (action.type) {
         case 'set_status':
           if (action.columnId) {
+            // The same checks as a manual move: the project's own column, workflow rules and
+            // approval gates. A refused move is logged and skipped like any failed action.
+            await assertIssueRefsInProject(projectId, { columnId: action.columnId });
+            const current = await prisma.issue.findUnique({
+              where: { id: issue.id },
+              select: { columnId: true },
+            });
+            await assertColumnTransition(projectId, current?.columnId ?? null, action.columnId);
             await prisma.issue.update({
               where: { id: issue.id },
               data: { columnId: action.columnId },
