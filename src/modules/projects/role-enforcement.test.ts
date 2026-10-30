@@ -201,4 +201,11 @@ describe('Role enforcement on REST writes', () => {
       });
     }
   });
+
+  it('16: a VIEWER can still vote on and watch an issue: both are personal', async () => {
+    const P = `/api/projects/${ctx.projectId}/issues/1`;
+    const vote = await authPost(`${P}/votes/toggle`, viewer.token, {});
+    const watch = await authPost(`${P}/watchers/toggle`, viewer.token, {});
+    expect([vote.status, watch.status]).toEqual([200, 200]);
+  });
 });

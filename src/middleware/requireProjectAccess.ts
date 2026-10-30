@@ -223,8 +223,10 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 export function requireProjectWrite(action: Action = 'issue:edit') {
   return async (req: Request, _res: Response, next: NextFunction) => {
     if (SAFE_METHODS.has(req.method)) return next();
-    // Watching an issue is a personal subscription, not a change to the project
-    if (/\/issues\/\d+\/watchers\/toggle$/.test(req.originalUrl.split('?')[0])) return next();
+    // Watching and voting are personal actions, open to anyone who can read the issue
+    if (/\/issues\/\d+\/(watchers|votes)\/toggle$/.test(req.originalUrl.split('?')[0])) {
+      return next();
+    }
     try {
       // Several project routers share /api/projects and each mounts this guard: decide once
       const key = `${param(req, 'projectId')}:${action}`;
