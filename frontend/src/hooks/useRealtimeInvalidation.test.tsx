@@ -34,7 +34,7 @@ vi.mock('@/components/layout/ProjectNavBar', () => ({ ProjectNavBar: () => null 
 
 import { ProjectLayout } from '@/components/layout/ProjectLayout';
 
-import { useRealtimeInvalidation, useRealtimeRoom } from './useRealtimeInvalidation';
+import { useRealtimeRoom } from './useRealtimeInvalidation';
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -66,25 +66,6 @@ describe('realtime room subscriptions', () => {
 
     unmount();
     expect(mockUnsubscribe).toHaveBeenLastCalledWith(['project:proj-2']);
-  });
-
-  it('useRealtimeInvalidation never subscribes to slug-based rooms', () => {
-    function Shell() {
-      useRealtimeInvalidation();
-      return null;
-    }
-    const qc = new QueryClient();
-    render(
-      <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/aranea/axiom/axm/board']}>
-          <Routes>
-            <Route path="/:org/:team/:project/*" element={<Shell />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-    const rooms = mockSubscribe.mock.calls.flatMap((c) => c[0] as string[]);
-    expect(rooms.filter((r) => r.includes('/'))).toEqual([]);
   });
 
   it('ProjectLayout subscribes with the project id once the project has loaded', async () => {

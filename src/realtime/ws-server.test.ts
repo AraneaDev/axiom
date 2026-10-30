@@ -304,4 +304,51 @@ describe('Realtime room authorization', () => {
     await flush(client);
     expect(deniedRooms(client)).toEqual([]);
   });
+
+  it('denies a space room to an org member the space permissions leave out', async () => {
+    const restricted = await prisma.wikiSpace.create({
+      data: {
+        teamId: ctx.teamId,
+        name: 'Restricted Space',
+        slug: 'restricted-space',
+        permissions: { create: { userId: ctx.owner.id, level: 'ADMIN' } },
+      },
+    });
+    const client = await connect(member.id);
+    const room = `space:${restricted.id}`;
+    client.send({ type: 'subscribe', rooms: [room] });
+    await waitFor(() => deniedRooms(client).includes(room));
+    expect(serverRooms(member.id).has(room)).toBe(false);
+  });
+
+  it('denies a project room to an org member who is not on the project team', async () => {
+    const orgOnly = await createTestUser();
+    await prisma.orgMembership.create({
+      data: { orgId: ctx.orgId, userId: orgOnly.id, role: 'MEMBER' },
+    });
+    try {
+      const client = await connect(orgOnly.id);
+      const room = `project:${ctx.projectId}`;
+      client.send({ type: 'subscribe', rooms: [room] });
+      await waitFor(() => deniedRooms(client).includes(room));
+      expect(serverRooms(orgOnly.id).has(room)).toBe(false);
+    } finally {
+      await Promise.all(clients.splice(0).map((c) => c.close()));
+      await prisma.user.deleteMany({ where: { id: orgOnly.id } });
+    }
+  });
+
+  it('adds no room to a socket that closed while its check was running', async () => {
+    const client = await connect(member.id);
+    const socket = [...getClients()].find((c) => c.userId === member.id)! as unknown as {
+      rooms: Set<string>;
+      checkQueue: Promise<void>;
+    };
+    const room = `project:${ctx.projectId}`;
+    client.send({ type: 'subscribe', rooms: [room] });
+    await client.close();
+    await waitFor(() => getClients().size === 0);
+    await socket.checkQueue;
+    expect(socket.rooms.has(room)).toBe(false);
+  });
 });
