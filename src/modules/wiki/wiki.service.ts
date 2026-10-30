@@ -292,10 +292,17 @@ export async function updatePage(
  * @param spaceId - The wiki space ID
  * @param pageSlug - The page slug within the space
  * @param userId - The user asking for the flush
+ * @param changeDescription - Attached to the version the save creates; with nothing to save, a
+ *   version of the unchanged page carries it
  * @returns Whether a live room was saved
  * @throws {AppError} 404 if page not found, 403 if the user may not edit it
  */
-export async function flushPageSession(spaceId: string, pageSlug: string, userId: string) {
+export async function flushPageSession(
+  spaceId: string,
+  pageSlug: string,
+  userId: string,
+  changeDescription?: string,
+) {
   const page = await findOrThrow(
     prisma.page.findUnique({ where: { spaceId_slug: { spaceId, slug: pageSlug } } }),
     ERR.PAGE_NOT_FOUND,
@@ -303,7 +310,7 @@ export async function flushPageSession(spaceId: string, pageSlug: string, userId
   if (!(await canEditPage(userId, page.id))) {
     throw new AppError(403, 'You do not have permission to edit this page');
   }
-  return { flushed: await flushRoom(page.id) };
+  return { flushed: await flushRoom(page.id, { authorId: userId, changeDescription }) };
 }
 
 /**

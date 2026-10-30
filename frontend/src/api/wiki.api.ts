@@ -91,9 +91,13 @@ export const wikiApi = {
    * Save the live collaboration session of a page so the stored body matches the editor.
    * @param spaceId
    * @param pageSlug
+   * @param changeDescription - Stored on the version the save creates
    */
-  flushCollab: (spaceId: string, pageSlug: string) =>
-    post<{ flushed: boolean }>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/collab/flush`, {}),
+  flushCollab: (spaceId: string, pageSlug: string, changeDescription?: string) =>
+    post<{ flushed: boolean }>(
+      `/wiki/spaces/${spaceId}/pages/${pageSlug}/collab/flush`,
+      changeDescription ? { changeDescription } : {},
+    ),
   /**
    * The three texts to merge for a page with a pending external change, or null when nothing is
    * pending.

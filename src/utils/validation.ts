@@ -50,6 +50,7 @@ export {
   createWikiSpaceSchema,
   createPageSchema,
   updatePageSchema,
+  flushPageSessionSchema,
   createPageTemplateSchema,
   createPageCommentSchema,
   addPageLabelSchema,

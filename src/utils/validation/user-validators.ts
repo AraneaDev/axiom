@@ -42,6 +42,10 @@ export const updatePageSchema = createPageSchema
   })
   .partial();
 
+export const flushPageSessionSchema = z.object({
+  changeDescription: z.string().max(500).optional(),
+});
+
 export const restoreVersionSchema = z.object({
   version: z.number().int().min(1),
 });

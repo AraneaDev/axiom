@@ -573,4 +573,49 @@ describe('Page merge', () => {
     expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(final);
     expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
   });
+
+  describe('saving a live session with a change description', () => {
+    const flush = (body: Record<string, unknown>) =>
+      request(app)
+        .post(`/api/wiki/spaces/${spaceId}/pages/merge-page/collab/flush`)
+        .set('Authorization', `Bearer ${tokenFor(editorId)}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send(body);
+    const newest = () =>
+      prisma.pageVersion.findFirstOrThrow({ where: { pageId }, orderBy: { version: 'desc' } });
+
+    it('puts the description on the version the save creates', async () => {
+      const client = await connect(editorId);
+      appendParagraph(client.doc, 'Saved with a note');
+      await waitFor(async () => (await roomMarkdown()).includes('Saved with a note'));
+
+      const res = await flush({ changeDescription: 'Explain the change' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ flushed: true });
+      const version = await newest();
+      expect(version.body).toContain('Saved with a note');
+      expect(version).toMatchObject({ kind: 'EDIT', changeDescription: 'Explain the change' });
+    });
+
+    it('keeps the description on a version of the unchanged page when nothing changed', async () => {
+      await connect(editorId);
+      const before = await prisma.pageVersion.count({ where: { pageId } });
+
+      expect((await flush({ changeDescription: 'Reviewed, no changes' })).status).toBe(200);
+      expect(await prisma.pageVersion.count({ where: { pageId } })).toBe(before + 1);
+      expect(await newest()).toMatchObject({
+        kind: 'EDIT',
+        body: 'Intro\n\nMiddle\n\nEnd',
+        authorId: editorId,
+        changeDescription: 'Reviewed, no changes',
+      });
+    });
+
+    it('creates nothing without a description when nothing changed', async () => {
+      await connect(editorId);
+      const before = await prisma.pageVersion.count({ where: { pageId } });
+      expect((await flush({})).status).toBe(200);
+      expect(await prisma.pageVersion.count({ where: { pageId } })).toBe(before);
+    });
+  });
 });

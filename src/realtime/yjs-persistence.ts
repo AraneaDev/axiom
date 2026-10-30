@@ -40,6 +40,17 @@ const saveChains = new Map<string, Promise<SaveOutcome>>();
 
 export type SaveOutcome = 'saved' | 'skipped' | 'failed';
 
+/** An explicit save (Save in the editor) rather than an autosave */
+export interface SaveOptions {
+  /** Who saves: credited when no edit in the session named an author */
+  authorId?: string;
+  /**
+   * Attached to the version the save creates. When the session has nothing new to save, a
+   * version of the unchanged page carries it, so the description is never dropped.
+   */
+  changeDescription?: string;
+}
+
 type PendingRecordedListener = (pageId: string, pending: PendingPageChange) => void;
 let pendingRecordedListener: PendingRecordedListener | null = null;
 
@@ -161,12 +172,19 @@ export function markRoomMerged(
  * from the pending change (its edits build on Page.body). A room opened before the pending
  * change must not overwrite it: its state is kept as a SESSION_DRAFT version, and when that room
  * opened with nothing pending, the draft is recorded on the pending row as the unmerged work.
+ * An explicit save's change description goes on the version it creates.
  * @param pageId
  * @param doc
+ * @param opts - An explicit save's author and change description
  */
-async function persistDoc(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
-  const authorId = lastAuthors.get(pageId);
+async function persistDoc(
+  pageId: string,
+  doc: Y.Doc,
+  opts: SaveOptions = {},
+): Promise<SaveOutcome> {
+  const authorId = lastAuthors.get(pageId) ?? opts.authorId;
   if (!authorId) return 'skipped';
+  const { changeDescription } = opts;
 
   try {
     const saved = await prisma.$transaction(async (tx) => {
@@ -189,6 +207,7 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
           body,
           authorId,
           kind: 'SESSION_DRAFT',
+          changeDescription,
         });
         if (loadedFrom === null) {
           await tx.pendingPageChange.update({
@@ -201,6 +220,19 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
 
       // Skip if content hasn't changed, or is still exactly what was loaded into the doc
       const snapshot = loadedSnapshots.get(pageId);
+      if (changeDescription && page.body === body) {
+        // Nothing new to write, but the save carries a description: keep it on a version of the
+        // page as it stands
+        await createPageVersion(tx, {
+          pageId: page.id,
+          title: page.title,
+          body,
+          authorId: opts.authorId ?? authorId,
+          kind: 'EDIT',
+          changeDescription,
+        });
+        return { body, recorded: null, wroteBody: true };
+      }
       // The page already holds exactly the session's state: nothing to write, but it is now known
       if (page.body === body) return { body, recorded: null, wroteBody: true };
       if (snapshot === body) return null;
@@ -221,6 +253,7 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
             body,
             authorId,
             kind: 'SESSION_DRAFT',
+            changeDescription,
           });
           const recorded = pending
             ? null // a row this session descends from: keep it and its draft as they are
@@ -244,6 +277,7 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
         body,
         authorId,
         kind: 'EDIT',
+        changeDescription,
       });
       return { body, recorded: null, wroteBody: true };
     });
@@ -267,10 +301,11 @@ async function persistDoc(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
  * Run a save after any save already in progress for the page.
  * @param pageId
  * @param doc
+ * @param opts - An explicit save's author and change description
  */
-function queueSave(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
+function queueSave(pageId: string, doc: Y.Doc, opts: SaveOptions = {}): Promise<SaveOutcome> {
   const previous = saveChains.get(pageId) ?? Promise.resolve<SaveOutcome>('skipped');
-  const next = previous.then(() => persistDoc(pageId, doc));
+  const next = previous.then(() => persistDoc(pageId, doc, opts));
   saveChains.set(pageId, next);
   void next.then(() => {
     if (saveChains.get(pageId) === next) saveChains.delete(pageId);
@@ -310,10 +345,15 @@ export function cancelScheduledSave(pageId: string): void {
  * is already running.
  * @param pageId
  * @param doc
+ * @param opts - An explicit save's author and change description
  */
-export async function forceSave(pageId: string, doc: Y.Doc): Promise<SaveOutcome> {
+export async function forceSave(
+  pageId: string,
+  doc: Y.Doc,
+  opts: SaveOptions = {},
+): Promise<SaveOutcome> {
   cancelScheduledSave(pageId);
-  return queueSave(pageId, doc);
+  return queueSave(pageId, doc, opts);
 }
 
 /**

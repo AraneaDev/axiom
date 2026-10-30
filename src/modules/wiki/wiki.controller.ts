@@ -7,6 +7,7 @@ import {
   createWikiSpaceSchema,
   createPageSchema,
   updatePageSchema,
+  flushPageSessionSchema,
   movePageSchema,
   reorderPageSchema,
   copyPageSchema,
@@ -62,10 +63,12 @@ export const updatePage = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const flushPageSession = asyncHandler(async (req: Request, res: Response) => {
+  const data = validate(flushPageSessionSchema, req.body ?? {});
   const result = await wikiService.flushPageSession(
     param(req, 'spaceId'),
     param(req, 'pageSlug'),
     req.userId!,
+    data.changeDescription?.trim() || undefined,
   );
   res.json(result);
 });

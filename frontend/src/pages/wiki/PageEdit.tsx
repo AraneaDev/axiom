@@ -203,10 +203,15 @@ export default function PageEdit() {
         });
       } else {
         // In a collaborative session the server holds the body: save the live document first,
-        // then send only the metadata so a stale local copy can never overwrite it.
+        // with the change description on the version it creates, then send only the metadata so
+        // a stale local copy can never overwrite it.
+        const description = changeDescription.trim();
+        let flushed = false;
         if (useCollab) {
           try {
-            await wikiApi.flushCollab(currentSpace.id, pageSlug!);
+            flushed = (
+              await wikiApi.flushCollab(currentSpace.id, pageSlug!, description || undefined)
+            ).flushed;
           } catch (err) {
             // The room may have just closed (and saved itself): the metadata save still goes ahead
             console.warn('Collab flush failed', err);
@@ -216,7 +221,8 @@ export default function PageEdit() {
           title,
           ...(useCollab ? {} : { body }),
           ...(parentId ? { parentId } : { parentId: null }),
-          ...(changeDescription.trim() ? { changeDescription: changeDescription.trim() } : {}),
+          // The flush already stored the description; without a live room the PATCH carries it
+          ...(description && !flushed ? { changeDescription: description } : {}),
         });
       }
     },

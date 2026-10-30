@@ -44,6 +44,7 @@ import {
   draftIsMergeSide,
   onPendingRecorded,
   settlePendingAfterSession,
+  type SaveOptions,
 } from './yjs-persistence';
 
 // y-protocols and lib0 are loaded with a plain CommonJS require, never import(): their
@@ -813,12 +814,13 @@ export function announceMergeResolved(pageId: string, byName: string): void {
  * Save the live room's document now, if there is one. Used before a REST save so the page
  * holds what the editor shows.
  * @param pageId
+ * @param opts - Who saves, and the change description for the version the save creates
  * @returns True when a live room was saved
  */
-export async function flushRoom(pageId: string): Promise<boolean> {
+export async function flushRoom(pageId: string, opts: SaveOptions = {}): Promise<boolean> {
   const room = rooms.get(pageId);
   if (!room) return false;
-  await forceSave(pageId, room.doc);
+  await forceSave(pageId, room.doc, opts);
   return true;
 }
 
