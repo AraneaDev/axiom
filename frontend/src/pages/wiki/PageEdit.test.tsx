@@ -142,6 +142,22 @@ describe('PageEdit', () => {
     expect(mockGetPendingMerge).not.toHaveBeenCalled();
   });
 
+  it('a viewer gets no Save button and a read-only title', async () => {
+    mockGetPage.mockResolvedValue(page({ canEdit: false }));
+    renderEdit();
+    await screen.findByTestId('collab-editor');
+    expect(screen.queryByRole('button', { name: /^Save$/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Title/)).toHaveAttribute('readonly');
+  });
+
+  it('an editor keeps the Save button and an editable title', async () => {
+    mockGetPage.mockResolvedValue(page({ canEdit: true }));
+    renderEdit();
+    await screen.findByTestId('collab-editor');
+    expect(screen.getByRole('button', { name: /^Save$/ })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Title/)).not.toHaveAttribute('readonly');
+  });
+
   it('a viewer sees the page read-only before the session connects', async () => {
     mockGetPage.mockResolvedValue(page({ canEdit: false }));
     collab = { isConnected: false, isSynced: false, pendingChange: null };

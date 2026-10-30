@@ -29,13 +29,19 @@ const merge = {
   at: '2026-10-29T10:00:00.000Z',
 };
 
-function renderView() {
+function renderView(locked: { byName: string } | null = null) {
   const onClose = vi.fn();
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
       <ToastProvider>
-        <ConflictView spaceId="s1" pageSlug="page" externalVersionId="ext-1" onClose={onClose} />
+        <ConflictView
+          spaceId="s1"
+          pageSlug="page"
+          externalVersionId="ext-1"
+          onClose={onClose}
+          locked={locked}
+        />
       </ToastProvider>
     </QueryClientProvider>,
   );
@@ -215,6 +221,15 @@ describe('ConflictView', () => {
         ours: merge.ours,
       }),
     );
+  });
+
+  it('Finish merge is disabled while the page is locked', async () => {
+    renderView({ byName: 'Sam' });
+    await screen.findByRole('button', { name: /Conflict 1/ });
+    await userEvent.click(screen.getByRole('button', { name: 'Use Yours' }));
+    await selectConflict(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Use Yours' }));
+    expect(finishButton()).toBeDisabled();
   });
 
   it('a 409 because someone else is merging has its own toast', async () => {

@@ -176,7 +176,7 @@ export async function getPendingMerge(
 export async function applyMerge(
   pageId: string,
   userId: string,
-  input: { externalVersionId: string; markdown: string; ours?: string },
+  input: { externalVersionId: string; markdown: string; ours: string },
   deps: { syncIssueLinks?: SyncIssueLinks } = {},
 ): Promise<void> {
   let merged = normalizeMarkdown(input.markdown);
@@ -197,7 +197,7 @@ export async function applyMerge(
     // The room is locked, so its text is final: edits made after the browser fetched `ours` are
     // carried over by rebasing the merge onto them, never overwritten
     const live = getLiveRoom(pageId);
-    if (live && input.ours !== undefined) {
+    if (live) {
       const fetched = normalizeMarkdown(input.ours);
       const current = normalizeMarkdown(roomMarkdown(live));
       if (current !== fetched) {

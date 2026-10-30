@@ -116,7 +116,7 @@ export const wikiApi = {
   applyMerge: (
     spaceId: string,
     pageSlug: string,
-    data: { externalVersionId: string; markdown: string; ours?: string },
+    data: { externalVersionId: string; markdown: string; ours: string },
   ) => post<void>(`/wiki/spaces/${spaceId}/pages/${pageSlug}/merge`, data),
   /**
    * Delete a wiki page by slug.

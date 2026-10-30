@@ -20,6 +20,8 @@ interface PageEditHeaderProps {
   onSave: () => void;
   isSaving: boolean;
   canSave: boolean;
+  /** Hide Save for users who may only view the page */
+  readOnly?: boolean;
   isConnected: boolean;
   presenceUsers: PresenceUser[];
 }
@@ -41,6 +43,7 @@ interface PageEditHeaderProps {
  * @param root0.onSave
  * @param root0.isSaving
  * @param root0.canSave
+ * @param root0.readOnly
  * @param root0.isConnected
  * @param root0.presenceUsers
  */
@@ -59,6 +62,7 @@ export function PageEditHeader({
   onSave,
   isSaving,
   canSave,
+  readOnly = false,
   isConnected,
   presenceUsers,
 }: PageEditHeaderProps) {
@@ -114,15 +118,17 @@ export function PageEditHeader({
         <Button variant="secondary" onClick={onCancel}>
           <X className="h-4 w-4" /> Cancel
         </Button>
-        <Button onClick={onSave} disabled={isSaving || !canSave}>
-          {isSaving ? (
-            <Spinner size="sm" />
-          ) : (
-            <>
-              <Save className="h-4 w-4" /> Save
-            </>
-          )}
-        </Button>
+        {!readOnly && (
+          <Button onClick={onSave} disabled={isSaving || !canSave}>
+            {isSaving ? (
+              <Spinner size="sm" />
+            ) : (
+              <>
+                <Save className="h-4 w-4" /> Save
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </div>
   );

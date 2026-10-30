@@ -273,7 +273,8 @@ export default function PageEdit() {
         onCancel={() => navigate(-1)}
         onSave={() => saveMutation.mutate()}
         isSaving={saveMutation.isPending}
-        canSave={!!title.trim()}
+        canSave={!!title.trim() && canEdit}
+        readOnly={!canEdit}
         isConnected={collab.isConnected}
         presenceUsers={collab.presenceUsers}
       />
@@ -316,6 +317,7 @@ export default function PageEdit() {
           spaceId={currentSpace.id}
           pageSlug={pageSlug}
           externalVersionId={pendingChange.externalVersionId}
+          locked={collab.locked}
           onClose={closeConflicts}
         />
       )}
@@ -327,6 +329,7 @@ export default function PageEdit() {
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
           placeholder="Page title"
+          readOnly={!canEdit}
           required
         />
         {isNew && (

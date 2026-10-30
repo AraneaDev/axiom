@@ -231,6 +231,7 @@ describe('Page merge', () => {
     await applyMerge(pageId, editorId, {
       externalVersionId: written.version!.id,
       markdown: 'Intro\n\nMiddle changed\n\nEnd\n\n\n\nMerged *tail*',
+      ours: await roomMarkdown(),
     });
 
     const merged = 'Intro\n\nMiddle changed\n\nEnd\n\nMerged *tail*';
@@ -271,6 +272,7 @@ describe('Page merge', () => {
     await applyMerge(pageId, editorId, {
       externalVersionId: written.version!.id,
       markdown: 'Intro\n\nMiddle changed\n\nEnd\n\nUnsaved',
+      ours: await roomMarkdown(),
     });
 
     const kinds = (
@@ -290,7 +292,7 @@ describe('Page merge', () => {
     await applyMerge(
       pageId,
       editorId,
-      { externalVersionId: written.version!.id, markdown: 'Merged' },
+      { externalVersionId: written.version!.id, markdown: 'Merged', ours: await roomMarkdown() },
       { syncIssueLinks: async (id, body) => void calls.push(`${id}:${body}`) },
     );
     expect(calls).toEqual([`${pageId}:Merged`]);
@@ -346,6 +348,7 @@ describe('Page merge', () => {
     const res = await api('post', '/merge').send({
       externalVersionId: first.version!.id,
       markdown: 'Whatever',
+      ours: 'Intro\n\nMiddle\n\nEnd',
     });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('MERGE_STALE');
@@ -360,6 +363,7 @@ describe('Page merge', () => {
     const none = await api('post', '/merge').send({
       externalVersionId: first.version!.id,
       markdown: 'Whatever',
+      ours: 'Intro\n\nMiddle\n\nEnd',
     });
     expect(none.status).toBe(409);
   });
@@ -376,11 +380,26 @@ describe('Page merge', () => {
     const applied = await api('post', '/merge').send({
       externalVersionId: written.version!.id,
       markdown: 'Done',
+      ours: got.body.ours,
     });
     expect(applied.status).toBe(204);
     const after = await api('get', '/pending-merge');
     expect(after.status).toBe(200);
     expect(after.body).toBeNull();
+  });
+
+  it('a merge request without ours is rejected with 400', async () => {
+    await connect(editorId);
+    const written = await externalWrite('Intro\n\nMiddle changed\n\nEnd');
+    const res = await api('post', '/merge').send({
+      externalVersionId: written.version!.id,
+      markdown: 'Overwrite',
+    });
+    expect(res.status).toBe(400);
+    expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(1);
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(
+      'Intro\n\nMiddle changed\n\nEnd',
+    );
   });
 
   /** A's session edits, an agent writes, A's session ends: A's work is kept as a draft */
@@ -424,7 +443,11 @@ describe('Page merge', () => {
     });
 
     const result = 'Intro\n\nMiddle changed\n\nEnd\n\nLine from A';
-    await applyMerge(pageId, ownerId, { externalVersionId: written.version!.id, markdown: result });
+    await applyMerge(pageId, ownerId, {
+      externalVersionId: written.version!.id,
+      markdown: result,
+      ours: merge!.ours,
+    });
     expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(result);
     await waitFor(() => yFragmentToMarkdown(next.doc.getXmlFragment('default')) === result);
     expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
@@ -449,7 +472,11 @@ describe('Page merge', () => {
 
     // What a block merge of those three produces: the agent's change, A's line and B's line
     const result = 'Intro\n\nMiddle changed\n\nEnd\n\nLine from A\n\nLine from B';
-    await applyMerge(pageId, otherId, { externalVersionId: written.version!.id, markdown: result });
+    await applyMerge(pageId, otherId, {
+      externalVersionId: written.version!.id,
+      markdown: result,
+      ours: merge!.ours,
+    });
     expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(result);
     await waitFor(() => yFragmentToMarkdown(b.doc.getXmlFragment('default')) === result);
   });

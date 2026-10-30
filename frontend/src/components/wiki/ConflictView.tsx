@@ -59,6 +59,8 @@ interface ConflictViewProps {
   externalVersionId: string;
   /** Close the view (after finishing, cancelling, or when nothing is left to merge) */
   onClose: () => void;
+  /** Set while someone applies a merge: Finish merge waits for it */
+  locked?: { byName: string } | null;
 }
 
 /**
@@ -127,6 +129,7 @@ interface ResolverProps extends ConflictViewProps {
  * @param props.merge
  * @param props.choices
  * @param props.onChoose
+ * @param props.locked
  */
 function Resolver({
   spaceId,
@@ -136,6 +139,7 @@ function Resolver({
   merge,
   choices,
   onChoose,
+  locked = null,
 }: ResolverProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -203,7 +207,7 @@ function Resolver({
           variant="primary"
           size="sm"
           onClick={() => finish.mutate()}
-          disabled={!allResolved || finish.isPending}
+          disabled={!allResolved || !!locked || finish.isPending}
         >
           {finish.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />} Finish
           merge
@@ -317,6 +321,7 @@ function Resolver({
  * @param props.pageSlug
  * @param props.externalVersionId
  * @param props.onClose
+ * @param props.locked
  */
 export function ConflictView(props: ConflictViewProps) {
   const { spaceId, pageSlug, externalVersionId, onClose } = props;

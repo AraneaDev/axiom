@@ -355,7 +355,7 @@ export async function applyPageMerge(
   spaceId: string,
   pageSlug: string,
   userId: string,
-  data: { externalVersionId: string; markdown: string; ours?: string },
+  data: { externalVersionId: string; markdown: string; ours: string },
 ) {
   await applyMerge(await editablePageId(spaceId, pageSlug, userId), userId, data);
 }
