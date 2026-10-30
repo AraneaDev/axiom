@@ -19,7 +19,8 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
 const MAX_RECONNECT_DELAY = 30_000;
 const listeners = new Set<EventCallback>();
-const subscribedRooms = new Set<string>();
+/** Rooms the app wants, with how many mounted subscribers want each one */
+const subscribedRooms = new Map<string, number>();
 const stateListeners = new Set<() => void>();
 
 function notifyStateListeners(): void {
@@ -66,7 +67,7 @@ function connect(): void {
 
     // Re-subscribe to any rooms we had before reconnect
     if (subscribedRooms.size > 0) {
-      sendJson({ type: 'subscribe', rooms: Array.from(subscribedRooms) });
+      sendJson({ type: 'subscribe', rooms: Array.from(subscribedRooms.keys()) });
     }
   };
 
@@ -137,22 +138,39 @@ function disconnect(): void {
 }
 
 /**
- * Subscribe to rooms. Sends subscribe message immediately if connected,
- * otherwise queues for reconnect.
+ * Subscribe to rooms. Rooms are reference-counted: the server is asked to join a room
+ * when its first subscriber arrives. Sends immediately if connected; otherwise the room
+ * is sent when the connection opens.
  * @param rooms
  */
 export function subscribe(rooms: string[]): void {
-  for (const r of rooms) subscribedRooms.add(r);
-  sendJson({ type: 'subscribe', rooms });
+  const added: string[] = [];
+  for (const r of rooms) {
+    const count = subscribedRooms.get(r) ?? 0;
+    subscribedRooms.set(r, count + 1);
+    if (count === 0) added.push(r);
+  }
+  if (added.length > 0) sendJson({ type: 'subscribe', rooms: added });
 }
 
 /**
- * Unsubscribe from rooms.
+ * Unsubscribe from rooms. The server is asked to leave a room only when its last
+ * subscriber goes, so one component unmounting doesn't cut off another.
  * @param rooms
  */
 export function unsubscribe(rooms: string[]): void {
-  for (const r of rooms) subscribedRooms.delete(r);
-  sendJson({ type: 'unsubscribe', rooms });
+  const removed: string[] = [];
+  for (const r of rooms) {
+    const count = subscribedRooms.get(r);
+    if (count === undefined) continue;
+    if (count > 1) {
+      subscribedRooms.set(r, count - 1);
+    } else {
+      subscribedRooms.delete(r);
+      removed.push(r);
+    }
+  }
+  if (removed.length > 0) sendJson({ type: 'unsubscribe', rooms: removed });
 }
 
 /**

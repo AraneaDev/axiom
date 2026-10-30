@@ -41,7 +41,7 @@ class FakeSocket {
   }
 }
 
-import { subscribe, useWebSocket } from './useWebSocket';
+import { subscribe, unsubscribe, useWebSocket } from './useWebSocket';
 
 describe('useWebSocket', () => {
   beforeEach(() => {
@@ -93,6 +93,24 @@ describe('useWebSocket', () => {
     expect(second).not.toBe(first);
     second.open();
     expect(second.sent).toEqual([JSON.stringify({ type: 'subscribe', rooms: ['project:flaky'] })]);
+    unmount();
+  });
+
+  it('keeps a shared room until its last subscriber leaves', () => {
+    configure({ reactStrictMode: false });
+    const { unmount } = renderHook(() => useWebSocket());
+    const sock = FakeSocket.instances.at(-1)!;
+    sock.open();
+
+    subscribe(['project:shared']);
+    subscribe(['project:shared']);
+    unsubscribe(['project:shared']);
+    expect(sock.sent).toEqual([JSON.stringify({ type: 'subscribe', rooms: ['project:shared'] })]);
+
+    unsubscribe(['project:shared']);
+    expect(sock.sent.at(-1)).toBe(
+      JSON.stringify({ type: 'unsubscribe', rooms: ['project:shared'] }),
+    );
     unmount();
   });
 });
