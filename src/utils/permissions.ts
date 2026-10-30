@@ -113,20 +113,22 @@ export function hasTeamPermission(role: TeamRole, action: Action): boolean {
 }
 
 /**
- * Check if a user has permission, considering both org and team roles.
- * Org OWNER/ADMIN always has access. Otherwise, check team role.
- * @param orgRole
- * @param teamRole
- * @param action
+ * Check a permission on a team's resources (projects, issues, sprints, boards, the team's
+ * wiki spaces). The team role wins: a user with a role on the team gets what that role
+ * allows, and org OWNERs and ADMINs keep their full rights on top. A user with no role on
+ * the team falls back to their org role.
+ * @param orgRole - The user's role in the org that owns the team
+ * @param teamRole - The user's role in the team, or null when not a member
+ * @param action - The permission action
  */
 export function hasPermission(
   orgRole: OrgRole,
   teamRole: TeamRole | null,
   action: Action,
 ): boolean {
-  // Org-level permission always wins
-  if (hasOrgPermission(orgRole, action)) return true;
-  // Fall back to team-level permission
-  if (teamRole && hasTeamPermission(teamRole, action)) return true;
-  return false;
+  if (teamRole) {
+    if (hasTeamPermission(teamRole, action)) return true;
+    return (orgRole === 'OWNER' || orgRole === 'ADMIN') && hasOrgPermission(orgRole, action);
+  }
+  return hasOrgPermission(orgRole, action);
 }

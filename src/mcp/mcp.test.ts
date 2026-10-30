@@ -363,4 +363,24 @@ describe('MCP checks match REST', () => {
     expect(res.failed).toBe(true);
     expect(res.text).not.toContain('locked body');
   });
+
+  it('denies MCP writes to an org MEMBER whose team role is VIEWER', async () => {
+    const teamViewer = await addMemberToContext(tctx);
+    await prisma.teamMembership.update({
+      where: { userId_teamId: { userId: teamViewer.id, teamId: tctx.teamId } },
+      data: { role: 'VIEWER' },
+    });
+    const c = await connectAs(teamViewer.id);
+    try {
+      const create = await callAs(teamViewer.id, c, 'create_issue', {
+        projectId: tctx.projectId,
+        title: 'by a team viewer',
+      });
+      const read = await callAs(teamViewer.id, c, 'list_issues', { projectId: tctx.projectId });
+      expect([create.failed, read.failed]).toEqual([true, false]);
+    } finally {
+      await c.close();
+      await prisma.user.deleteMany({ where: { id: teamViewer.id } });
+    }
+  });
 });

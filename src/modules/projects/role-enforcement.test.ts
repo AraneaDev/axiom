@@ -20,6 +20,7 @@ describe('Role enforcement on REST writes', () => {
   let ctx: TestContext;
   let viewer: TestUser;
   let member: TestUser;
+  let teamViewer: TestUser;
   let spaceId: string;
   let issueId: string;
   let columnId: string;
@@ -36,6 +37,12 @@ describe('Role enforcement on REST writes', () => {
       data: { role: 'VIEWER' },
     });
     member = await addMemberToContext(ctx);
+    // The usual team VIEWER: invited to the team, so an org MEMBER
+    teamViewer = await addMemberToContext(ctx);
+    await prisma.teamMembership.update({
+      where: { userId_teamId: { userId: teamViewer.id, teamId: ctx.teamId } },
+      data: { role: 'VIEWER' },
+    });
     spaceId = (
       await prisma.wikiSpace.create({ data: { teamId: ctx.teamId, name: 'R', slug: 'roles' } })
     ).id;
@@ -57,7 +64,7 @@ describe('Role enforcement on REST writes', () => {
 
   afterAll(async () => {
     await cleanupTestContext(ctx);
-    await prisma.user.deleteMany({ where: { id: { in: [viewer.id, member.id] } } });
+    await prisma.user.deleteMany({ where: { id: { in: [viewer.id, member.id, teamViewer.id] } } });
   });
 
   const writes = () => {
@@ -114,6 +121,15 @@ describe('Role enforcement on REST writes', () => {
     expect((await authGet(`/api/projects/${ctx.projectId}/issues/1`, viewer.token)).status).toBe(
       200,
     );
+  });
+
+  it('refuses every write to an org MEMBER whose team role is VIEWER: the team role wins', async () => {
+    const allowed: string[] = [];
+    for (const [name, method, path, body] of writes()) {
+      const res = await send(teamViewer.token, method, path, body);
+      if (res.status !== 403) allowed.push(`${name}: ${res.status}`);
+    }
+    expect(allowed).toEqual([]);
   });
 
   it('lets a MEMBER write', async () => {
