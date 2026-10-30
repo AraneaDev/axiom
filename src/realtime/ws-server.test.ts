@@ -291,4 +291,15 @@ describe('Realtime room authorization', () => {
     expect(deniedRooms(client)).toEqual([]);
     expect(serverRooms(member.id).has(FAILING_ROOM)).toBe(false);
   });
+
+  it('does not refuse a room that is still pending when it is asked for again past the cap', async () => {
+    const client = await connect(member.id);
+    const room = `project:${ctx.projectId}`;
+    client.send({ type: 'subscribe', rooms: [room] });
+    // The same room again, at index 50 of a second request
+    client.send({ type: 'subscribe', rooms: Array.from({ length: 51 }, () => room) });
+    await waitFor(() => serverRooms(member.id).has(room));
+    await flush(client);
+    expect(deniedRooms(client)).toEqual([]);
+  });
 });

@@ -88,8 +88,8 @@ function sendDenied(ws: AuthenticatedSocket, rooms: string[]): void {
  * would take the socket past its total cap, are refused straight away without a lookup,
  * all in one reply.
  * A check's result only counts if the room is still pending under the same ticket when it
- * finishes: an unsubscribe, a newer subscribe of the same room or the socket closing in the
- * meantime all discard it.
+ * finishes: an unsubscribe, or the socket closing, in the meantime discards it. An
+ * unsubscribe followed by a new subscribe queues a fresh check under a new ticket.
  * @param ws - The subscribing socket
  * @param requested - The raw `rooms` array from the client
  */
@@ -101,11 +101,12 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
       refused.push(room.slice(0, 200));
       return;
     }
-    if (ws.rooms.has(room)) return;
-    const isNew = !ws.pendingRooms.has(room);
+    // Already granted, or its check is already queued and will answer: nothing to do, and
+    // no cap applies, since refusing it now would contradict the pending check
+    if (ws.rooms.has(room) || ws.pendingRooms.has(room)) return;
     if (
       index >= MAX_ROOMS_PER_REQUEST ||
-      (isNew && ws.rooms.size + ws.pendingRooms.size >= MAX_ROOMS_PER_SOCKET)
+      ws.rooms.size + ws.pendingRooms.size >= MAX_ROOMS_PER_SOCKET
     ) {
       refused.push(room);
       return;
@@ -115,7 +116,7 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
     ws.pendingRooms.set(room, ticket);
     ws.checkQueue = ws.checkQueue
       .then(async () => {
-        // Unsubscribed or superseded while queued: skip the lookup altogether
+        // Unsubscribed while queued: skip the lookup altogether
         if (ws.pendingRooms.get(room) !== ticket) return;
         const allowed = await canJoinRoom(ws.userId, room);
         if (ws.pendingRooms.get(room) !== ticket || ws.readyState !== WebSocket.OPEN) return;
