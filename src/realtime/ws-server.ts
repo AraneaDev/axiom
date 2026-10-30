@@ -9,7 +9,7 @@ import type { AuthPayload } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
 import { createCollaborationServer } from './collaboration';
-import type { ClientMessage } from './events';
+import type { ClientMessage, SubscriptionMessage } from './events';
 import { canJoinRoom, MAX_ROOMS_PER_REQUEST, MAX_ROOMS_PER_SOCKET } from './room-access';
 
 const HEARTBEAT_INTERVAL = 30_000;
@@ -74,9 +74,13 @@ function extractUserId(req: IncomingMessage): string | null {
   }
 }
 
-function sendDenied(ws: AuthenticatedSocket, room: unknown): void {
+function sendToSocket(ws: AuthenticatedSocket, message: SubscriptionMessage): void {
   if (ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({ type: 'subscribe:denied', room }));
+  ws.send(JSON.stringify(message));
+}
+
+function sendDenied(ws: AuthenticatedSocket, room: string): void {
+  sendToSocket(ws, { type: 'subscribe:denied', room });
 }
 
 /**
@@ -91,7 +95,7 @@ function sendDenied(ws: AuthenticatedSocket, room: unknown): void {
 function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
   requested.forEach((room, index) => {
     if (typeof room !== 'string' || room.length > 200) {
-      sendDenied(ws, typeof room === 'string' ? room.slice(0, 200) : null);
+      if (typeof room === 'string') sendDenied(ws, room.slice(0, 200));
       return;
     }
     if (ws.rooms.has(room)) return;
