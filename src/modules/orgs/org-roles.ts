@@ -6,6 +6,11 @@ import { AppError } from '../../middleware/errorHandler';
 /** Org roles from most to least powerful. */
 const RANK: Record<OrgRole, number> = { OWNER: 5, ADMIN: 4, MEMBER: 3, VIEWER: 2, GUEST: 1 };
 
+async function isPlatformAdmin(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  return user?.isAdmin === true;
+}
+
 async function actorRole(orgId: string, actorId: string): Promise<OrgRole | null> {
   const membership = await prisma.orgMembership.findUnique({
     where: { userId_orgId: { userId: actorId, orgId } },
@@ -27,6 +32,8 @@ export async function assertCanGrantOrgRole(
   actorId: string,
   role: OrgRole,
 ): Promise<void> {
+  // Platform admins can grant any role, OWNER included, so ownership can be transferred
+  if (await isPlatformAdmin(actorId)) return;
   const actor = await actorRole(orgId, actorId);
   if (!actor || RANK[role] > RANK[actor]) {
     throw new AppError(
@@ -49,6 +56,7 @@ export async function assertCanManageOrgMember(
   targetRole: OrgRole,
 ): Promise<void> {
   if (targetRole !== 'OWNER') return;
+  if (await isPlatformAdmin(actorId)) return;
   if ((await actorRole(orgId, actorId)) !== 'OWNER') {
     throw new AppError(403, 'Only an OWNER can change or remove an OWNER');
   }
@@ -82,7 +90,12 @@ export async function assertNotLastOwnerTx(
   orgId: string,
 ): Promise<void> {
   const owners = await tx.orgMembership.count({ where: { orgId, role: 'OWNER' } });
-  if (owners <= 1) throw new AppError(400, 'An organization must keep at least one OWNER');
+  if (owners <= 1) {
+    throw new AppError(
+      400,
+      'An organization must keep at least one OWNER: transfer ownership first (make another member OWNER)',
+    );
+  }
 }
 
 /**

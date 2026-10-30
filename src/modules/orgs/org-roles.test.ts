@@ -214,4 +214,30 @@ describe('Org access and roles', () => {
       await prisma.user.deleteMany({ where: { id: platformAdmin.id } });
     }
   });
+
+  it('N7: a platform admin can transfer ownership; deleting the last OWNER says how', async () => {
+    const platformAdmin = await createTestUser();
+    await prisma.user.update({ where: { id: platformAdmin.id }, data: { isAdmin: true } });
+    const solo = await createTestContext(`orgsolo${Date.now()}`);
+    const heir = await addMemberToContext(solo);
+    try {
+      const blocked = await authDel(`/api/admin/users/${solo.owner.id}`, platformAdmin.token);
+      expect(blocked.status).toBe(400);
+      expect(JSON.stringify(blocked.body)).toMatch(/transfer ownership/i);
+
+      const promote = await authPatch(
+        `/api/orgs/${solo.orgId}/members/${heir.id}`,
+        platformAdmin.token,
+        {
+          role: 'OWNER',
+        },
+      );
+      expect(promote.status).toBe(200);
+      const deleted = await authDel(`/api/admin/users/${solo.owner.id}`, platformAdmin.token);
+      expect(deleted.status).toBeLessThan(300);
+    } finally {
+      await cleanupTestContext(solo);
+      await prisma.user.deleteMany({ where: { id: { in: [platformAdmin.id, heir.id] } } });
+    }
+  });
 });

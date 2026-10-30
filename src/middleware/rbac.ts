@@ -216,10 +216,13 @@ export function requireOrgMember() {
     try {
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-      const membership = await prisma.orgMembership.findUnique({
-        where: { userId_orgId: { userId, orgId: param(req, 'orgId') } },
-      });
-      if (!membership) {
+      const [user, membership] = await Promise.all([
+        prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } }),
+        prisma.orgMembership.findUnique({
+          where: { userId_orgId: { userId, orgId: param(req, 'orgId') } },
+        }),
+      ]);
+      if (!membership && !user?.isAdmin) {
         throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
       }
       next();
@@ -242,6 +245,13 @@ export function requireOrgPermission(action: Action) {
       const orgId = param(req, 'orgId');
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
+
+      // Platform admins keep full rights, so they can manage any org (transfer ownership)
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { isAdmin: true },
+      });
+      if (user?.isAdmin) return next();
 
       const membership = await prisma.orgMembership.findUnique({
         where: { userId_orgId: { userId, orgId } },
