@@ -260,6 +260,7 @@ export async function createApprovalRequestWithTarget(
       approvalGateId: gate.id,
       targetColumnId,
       requestedById,
+      approverIds,
     },
     include: REQUEST_INCLUDE,
   });
@@ -409,6 +410,15 @@ export async function castVote(
 
   if (request.status !== 'PENDING') {
     throw new AppError(400, 'This approval request is no longer pending');
+  }
+
+  // Only the approvers named on the request may vote. Requests made before approvers were
+  // stored have none: any member who reached this route (project access) may vote on those.
+  if (request.approverIds.length > 0 && !request.approverIds.includes(userId)) {
+    throw new AppError(403, 'You are not an approver on this request');
+  }
+  if (!request.approvalGate.allowSelfApproval && request.requestedById === userId) {
+    throw new AppError(403, 'This gate does not allow approving your own request');
   }
 
   // Check no duplicate vote

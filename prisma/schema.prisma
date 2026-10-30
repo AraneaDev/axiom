@@ -960,6 +960,8 @@ model ApprovalRequest {
   approvalGateId String
   targetColumnId String
   requestedById  String
+  /// The users asked to approve; only they can vote
+  approverIds    String[]              @default([])
   status         ApprovalRequestStatus @default(PENDING)
   createdAt      DateTime              @default(now())
   resolvedAt     DateTime?
