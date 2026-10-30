@@ -12,6 +12,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logAudit } from '../audit/audit.service';
+import { redeemableInviteRole } from '../orgs/org-roles';
 
 const SALT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '4h';
@@ -57,6 +58,7 @@ export async function register(data: {
     id: string;
     orgId: string;
     role: string;
+    createdBy: string;
     expiresAt: Date | null;
     uses: number;
     maxUses: number;
@@ -107,8 +109,10 @@ export async function register(data: {
 
   // If invite was used, add user to the org and increment usage
   if (invite) {
+    // Never more than the link's creator holds now (see redeemableInviteRole)
+    const role = await redeemableInviteRole(invite.orgId, invite.createdBy, invite.role as OrgRole);
     await prisma.orgMembership.create({
-      data: { userId: user.id, orgId: invite.orgId, role: invite.role as OrgRole },
+      data: { userId: user.id, orgId: invite.orgId, role },
     });
     await prisma.inviteLink.update({
       where: { id: invite.id },

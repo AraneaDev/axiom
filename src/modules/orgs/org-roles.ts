@@ -94,3 +94,21 @@ export async function assertNotLastOwnerTx(
   const owners = await tx.orgMembership.count({ where: { orgId, role: 'OWNER' } });
   if (owners <= 1) throw new AppError(400, 'An organization must keep at least one OWNER');
 }
+
+/**
+ * The role an invite link grants when it is redeemed: never more than its creator holds now.
+ * Links minted before roles were capped (an ADMIN's OWNER link), or whose creator has since
+ * been demoted or left, grant the creator's current role (MEMBER if they left).
+ * @param orgId
+ * @param createdBy - The link's creator
+ * @param role - The role on the link
+ */
+export async function redeemableInviteRole(
+  orgId: string,
+  createdBy: string,
+  role: OrgRole,
+): Promise<OrgRole> {
+  const creator = await actorRole(orgId, createdBy);
+  const ceiling: OrgRole = creator ?? 'MEMBER';
+  return RANK[role] > RANK[ceiling] ? ceiling : role;
+}

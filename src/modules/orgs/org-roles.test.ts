@@ -2,9 +2,11 @@
  * Org reads need membership; roles can only be granted up to the actor's own; OWNERs are
  * managed only by OWNERs; an org always keeps an OWNER; invite ids are scoped to the org.
  */
+import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../../config/database';
+import app from '../../index';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -168,5 +170,30 @@ describe('Org access and roles', () => {
     } finally {
       await prisma.user.deleteMany({ where: { id: guest.id } });
     }
+  });
+
+  it('21: an OWNER invite link minted by a non-OWNER does not make OWNERs', async () => {
+    const code = `legacy${Date.now()}`;
+    await prisma.inviteLink.create({
+      data: { code, orgId: ctx.orgId, createdBy: admin.id, role: 'OWNER', maxUses: 5 },
+    });
+    const username = `legacy-${Date.now()}`;
+    const res = await request(app)
+      .post('/api/auth/register')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({
+        email: `${username}@test.dev`,
+        username,
+        displayName: 'Legacy',
+        password: 'testpassword123',
+        inviteCode: code,
+      });
+    expect(res.status).toBeLessThan(300);
+    const user = await prisma.user.findUniqueOrThrow({ where: { username } });
+    const membership = await prisma.orgMembership.findUniqueOrThrow({
+      where: { userId_orgId: { userId: user.id, orgId: ctx.orgId } },
+    });
+    await prisma.user.delete({ where: { id: user.id } });
+    expect(membership.role).toBe('ADMIN');
   });
 });
