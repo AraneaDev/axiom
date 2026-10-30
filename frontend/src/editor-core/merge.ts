@@ -16,6 +16,27 @@ const FENCE_RE = /^\s*(`{3,}|~{3,})/;
 
 const isItem = (b: string) => ITEM_RE.test(b);
 const isRow = (b: string) => b.startsWith('|');
+/**
+ * Whether a block is a table's first block: its header row with the delimiter row below it.
+ * @param b - A block.
+ */
+const isTableStart = (b: string) => isRow(b) && DELIM_RE.test(b.split('\n')[1] ?? '');
+
+/**
+ * Whether two blocks go on consecutive lines: items of one tight list, or rows of one
+ * table. A block ending in "\n" is an item of a loose list. A table header after a
+ * row starts another table, which needs the blank line.
+ * @param prev - The text before, its last top-level line for a joined text.
+ * @param prevText - The whole text before.
+ * @param next - The text after.
+ */
+function joinsTightly(prev: string, prevText: string, next: string): boolean {
+  return (
+    prevText.endsWith('\n') ||
+    (isItem(prev) && isItem(next)) ||
+    (isRow(prev) && isRow(next) && !isTableStart(next))
+  );
+}
 
 /**
  * Splits Markdown into top-level blocks. List items and table rows are their own
@@ -31,6 +52,7 @@ export function splitBlocks(md: string): string[] {
   const blocks: string[] = [];
   let cur: string[] = [];
   let fence: string | null = null;
+  let html = false;
   let pendingBlank = false;
 
   const flush = () => {
@@ -48,6 +70,12 @@ export function splitBlocks(md: string): string[] {
     }
     if (line.trim() === '') {
       pendingBlank = cur.length > 0;
+      html = false;
+      continue;
+    }
+    if (html) {
+      // An HTML block runs to the next blank line, list markers and rows included
+      cur.push(line);
       continue;
     }
     const indented = /^\s/.test(line);
@@ -71,6 +99,7 @@ export function splitBlocks(md: string): string[] {
       if (startsNew) flush();
     }
     cur.push(line);
+    if (cur.length === 1 && line.startsWith('<')) html = true;
     const f = FENCE_RE.exec(line);
     if (f && !line.trim().slice(f[1].length).includes(f[1][0])) fence = f[1];
   }
@@ -85,8 +114,7 @@ export function splitBlocks(md: string): string[] {
  */
 function joinText(a: string, b: string): string {
   const lastTop = [...a.split('\n')].reverse().find((l) => l.trim() !== '' && !/^\s/.test(l)) ?? '';
-  const tight = a.endsWith('\n') || (isItem(lastTop) && isItem(b)) || (isRow(lastTop) && isRow(b));
-  return a + (tight ? '\n' : '\n\n') + b;
+  return a + (joinsTightly(lastTop, a, b) ? '\n' : '\n\n') + b;
 }
 
 function joinTexts(texts: string[]): string {
@@ -98,8 +126,7 @@ function joinBlocks(blocks: string[]): string {
   blocks.forEach((b, i) => {
     if (i > 0) {
       const prev = blocks[i - 1];
-      const tight = prev.endsWith('\n') || (isItem(prev) && isItem(b)) || (isRow(prev) && isRow(b));
-      out += tight ? '\n' : '\n\n';
+      out += joinsTightly(prev, prev, b) ? '\n' : '\n\n';
     }
     out += b;
   });

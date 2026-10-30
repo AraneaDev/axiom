@@ -279,3 +279,69 @@ describe('editor core converter', () => {
     });
   });
 });
+
+describe('mixed and adjacent lists', () => {
+  const stable = (md: string) => {
+    const once = normalizeMarkdown(md);
+    expect(normalizeMarkdown(once)).toBe(once);
+    return once;
+  };
+  const listTypes = (md: string) =>
+    (markdownToProseMirrorJSON(md).content ?? []).map((n) => `${n.type}:${n.content?.length}`);
+
+  it.each([
+    ['bullet then task, tight', '- a\n- [ ] t', '- a\n\n- [ ] t', ['bulletList:1', 'taskList:1']],
+    ['bullet then task, loose', '- a\n\n- [ ] t', '- a\n\n- [ ] t', ['bulletList:1', 'taskList:1']],
+    ['task then bullet, tight', '- [ ] t\n- a', '- [ ] t\n\n- a', ['taskList:1', 'bulletList:1']],
+    ['task then bullet, loose', '- [ ] t\n\n- a', '- [ ] t\n\n- a', ['taskList:1', 'bulletList:1']],
+    [
+      'two bullets then two tasks',
+      '- First\n- Second\n\n- [ ] Open task\n- [x] Done\n',
+      '- First\n- Second\n\n- [ ] Open task\n\n- [x] Done',
+      ['bulletList:2', 'taskList:2'],
+    ],
+    [
+      'bullet, task, bullet',
+      '- a\n- [ ] t\n- b',
+      '- a\n\n- [ ] t\n\n- b',
+      ['bulletList:1', 'taskList:1', 'bulletList:1'],
+    ],
+  ])('splits a mixed list (%s) into runs without adding items', (_name, md, expected, types) => {
+    expect(listTypes(md)).toEqual(types);
+    expect(stable(md)).toBe(expected);
+    expect(listTypes(normalizeMarkdown(normalizeMarkdown(md)))).toEqual(types);
+  });
+
+  it('keeps the editor-made bullet list followed by a task list', () => {
+    const p = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+    const md = proseMirrorJSONToMarkdown({
+      type: 'doc',
+      content: [
+        { type: 'bulletList', content: [{ type: 'listItem', content: [p('a')] }] },
+        {
+          type: 'taskList',
+          content: [{ type: 'taskItem', attrs: { checked: false }, content: [p('t')] }],
+        },
+      ],
+    });
+    expect(md).toBe('- a\n\n- [ ] t');
+    expect(stable(md)).toBe(md);
+  });
+
+  it('splits a mixed list inside a callout', () => {
+    expect(stable('> [!NOTE]\n> - a\n> - [ ] t')).toBe('> [!NOTE]\n> - a\n>\n> - [ ] t');
+  });
+
+  it.each([
+    ['- a\n\n* b', '- a\n\n* b'],
+    ['* star\n- a\n- b', '- star\n\n* a\n* b'],
+    ['+ plus\n\n* star', '- plus\n\n* star'],
+    ['1. a\n\n1) b', '1. a\n\n1) b'],
+  ])('keeps adjacent lists with different markers apart: %j', (md, expected) => {
+    expect(stable(md)).toBe(expected);
+  });
+
+  it('writes a hard break in a heading as a space', () => {
+    expect(stable('a  \nhard\n---')).toBe('## a hard');
+  });
+});

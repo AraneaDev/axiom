@@ -13,6 +13,7 @@ import { Markdown } from 'tiptap-markdown';
 import { CalloutNode } from './nodes/callout';
 import { CodeNode } from './nodes/code';
 import { CollapsibleNode } from './nodes/collapsible';
+import { HardBreakNode } from './nodes/hard-break';
 import { IssueEmbedNode } from './nodes/issue-embed';
 import { IssueReferenceNode } from './nodes/issue-reference';
 import {
@@ -65,7 +66,9 @@ export function getSchemaExtensions(opts: SchemaExtensionOptions = {}): AnyExten
       bulletList: false,
       orderedList: false,
       code: false,
+      hardBreak: false,
     }),
+    HardBreakNode,
     ListItemNode,
     BulletListNode,
     OrderedListNode,

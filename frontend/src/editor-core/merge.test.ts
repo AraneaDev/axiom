@@ -92,7 +92,7 @@ describe('splitBlocks', () => {
   });
 });
 
-describe('fix round 1', () => {
+describe('merge input handling and per-block conflicts', () => {
   it('normalises CRLF input', () => {
     const r = mergeMarkdown('a\r\n\r\nb', 'a\n\nB', 'A\r\n\r\nb');
     expect(r.merged).toBe('A\n\nB');
@@ -146,5 +146,26 @@ describe('countMergeChanges', () => {
     const base = 'one\n\ntwo';
     const { hunks } = mergeMarkdown(base, 'one\n\nmine', base);
     expect(countMergeChanges(base, 'one\n\nmine', base, hunks)).toEqual({ clean: 0, conflicts: 0 });
+  });
+});
+
+describe('block boundaries', () => {
+  const twoTables = '| A | B |\n| --- | --- |\n| 1 | 2 |\n\n| C | D |\n| --- | --- |\n| 3 | 4 |';
+
+  it('keeps two adjacent tables apart in an identity merge', () => {
+    expect(mergeMarkdown(twoTables, twoTables, twoTables).merged).toBe(twoTables);
+  });
+
+  it('merges a table the agent added right under an existing table', () => {
+    const base = 'Intro\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\nOutro';
+    const theirs = base.replace('Outro', '| C | D |\n| --- | --- |\n| 3 | 4 |\n\nOutro');
+    const ours = base.replace('Intro', 'Intro, edited');
+    expect(mergeMarkdown(base, ours, theirs).merged).toBe(theirs.replace('Intro', 'Intro, edited'));
+  });
+
+  it('treats an HTML block as one block up to the next blank line', () => {
+    const md = '<div>raw</div>\n- a\n- b\n\ntext';
+    expect(splitBlocks(md)).toEqual(['<div>raw</div>\n- a\n- b', 'text']);
+    expect(mergeMarkdown(md, md, md).merged).toBe(md);
   });
 });

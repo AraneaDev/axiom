@@ -126,14 +126,21 @@ export const ListItemNode = ListItem.extend({
   },
 });
 
-/** Bullet list: tiptap-markdown's serializer, written loose when tight is unsafe. */
+/**
+ * Bullet list: tiptap-markdown's serializer, written loose when tight is unsafe. Two
+ * bullet lists in a row alternate their marker (`-`, then `*`), the way ordered lists
+ * alternate `.` and `)`: with the same marker they parse back as one list.
+ */
 export const BulletListNode = BulletList.extend({
   addStorage() {
     return {
       ...this.parent?.(),
       markdown: {
-        serialize(this: { editor: any }, state: any, node: PMNode) {
-          const marker = this.editor.storage.markdown.options.bulletListMarker || '-';
+        serialize(this: { editor: any }, state: any, node: PMNode, parent: PMNode, index: number) {
+          const base = this.editor.storage.markdown.options.bulletListMarker || '-';
+          const other = base === '*' ? '-' : '*';
+          const marker = adjacentListIndex(node, parent, index) % 2 ? other : base;
+          separateFromPreviousList(state, node);
           state.renderList(effectiveList(node), '  ', () => `${marker} `);
         },
         parse: {
@@ -144,6 +151,23 @@ export const BulletListNode = BulletList.extend({
   },
 });
 
+/**
+ * prosemirror-markdown puts two blank lines between two lists of one type, which
+ * CommonMark reads as one list again. The markers already tell the lists apart, so
+ * one blank line is enough.
+ * @param state - Serializer state.
+ * @param node - The list about to be written.
+ */
+function separateFromPreviousList(state: any, node: PMNode): void {
+  if (state.closed && state.closed.type === node.type) state.flushClose(2);
+}
+
+/**
+ * How many lists of the same type come right before this one in its parent.
+ * @param node - The list.
+ * @param parent - Its parent.
+ * @param index - Its index in the parent.
+ */
 function adjacentListIndex(node: PMNode, parent: PMNode, index: number): number {
   let i = 0;
   for (; index - i > 0; i++) {
@@ -163,6 +187,7 @@ export const OrderedListNode = OrderedList.extend({
           const maxW = String(start + node.childCount - 1).length;
           const space = state.repeat(' ', maxW + 2);
           const separator = adjacentListIndex(node, parent, index) % 2 ? ') ' : '. ';
+          separateFromPreviousList(state, node);
           state.renderList(effectiveList(node), space, (i: number) => {
             const nStr = String(start + i);
             return state.repeat(' ', maxW - nStr.length) + nStr + separator;
@@ -235,6 +260,132 @@ function markBareTaskMarkers(state: any): void {
 }
 
 /**
+ * Whether a source line is blank, inside a blockquote (callout) too.
+ * @param line - A source line, or undefined past the end.
+ */
+function isBlankLine(line: string | undefined): boolean {
+  return line === undefined || /^[\s>]*$/.test(line);
+}
+
+/**
+ * Whether any line in `[from, to)` is blank.
+ * @param lines - Source lines.
+ * @param from - First line.
+ * @param to - Line after the last.
+ */
+function hasBlankLine(lines: string[], from: number, to: number): boolean {
+  for (let n = from; n < to; n++) if (isBlankLine(lines[n])) return true;
+  return false;
+}
+
+interface ListScan {
+  open: number;
+  close: number;
+  items: number[];
+}
+
+/**
+ * Whether a run of items, written as a list of its own, is tight: no blank line
+ * between two of its items and none between two blocks of one item. markdown-it
+ * decides tightness for the whole list, so a loose mixed list hides nothing.
+ * @param tokens - The token stream.
+ * @param lines - Source lines.
+ * @param run - Indices of the run's `list_item_open` tokens.
+ */
+function runIsTight(tokens: any[], lines: string[], run: number[]): boolean {
+  for (let k = 0; k < run.length; k++) {
+    const item = tokens[run[k]];
+    if (k > 0 && item.map && isBlankLine(lines[item.map[0] - 1])) return false;
+    const children: any[] = [];
+    for (let i = run[k] + 1; tokens[i] && tokens[i].level > item.level; i++) {
+      const t = tokens[i];
+      if (t.level === item.level + 1 && t.nesting >= 0 && t.map) children.push(t);
+    }
+    for (let c = 1; c < children.length; c++) {
+      if (hasBlankLine(lines, children[c - 1].map[1], children[c].map[0])) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * markdown-it core rule: split a bullet list that mixes task items and plain items
+ * into one list per run, as the editor holds them (a task list and a bullet list are
+ * different nodes). Without the split ProseMirror forced the plain items out of the
+ * task list and added an empty task item each time the page was normalised. Each run
+ * is tight when its own items are, so `- a\n- b\n\n- [ ] t` keeps `a`/`b` tight.
+ * Runs after `markBareTaskMarkers` and markdown-it-task-lists.
+ * @param state - markdown-it core state.
+ */
+function splitMixedTaskLists(state: any): void {
+  const tokens: any[] = state.tokens;
+  const lines: string[] = state.src.split('\n');
+  const stack: ListScan[] = [];
+  const lists: ListScan[] = [];
+  tokens.forEach((token, i) => {
+    if (token.type === 'bullet_list_open' || token.type === 'ordered_list_open') {
+      stack.push({ open: i, close: -1, items: [] });
+    } else if (token.type === 'bullet_list_close' || token.type === 'ordered_list_close') {
+      const list = stack.pop();
+      if (list && token.type === 'bullet_list_close') lists.push({ ...list, close: i });
+    } else if (token.type === 'list_item_open' && stack.length) {
+      const top = stack[stack.length - 1];
+      if (tokens[top.open].level + 1 === token.level) top.items.push(i);
+    }
+  });
+
+  const isTask = (i: number) =>
+    tokens[i].attrGet(TASK_BOX_ATTR) !== null ||
+    (tokens[i].attrGet('class') ?? '').split(/\s+/).includes('task-list-item');
+  const inserts: { at: number; tokens: any[] }[] = [];
+
+  for (const list of lists) {
+    const runs: number[][] = [];
+    list.items.forEach((item, k) => {
+      if (k > 0 && isTask(item) === isTask(list.items[k - 1])) runs[runs.length - 1].push(item);
+      else runs.push([item]);
+    });
+    if (runs.length < 2) continue;
+    const open = tokens[list.open];
+    const close = tokens[list.close];
+    const listLoose = !runIsTight(tokens, lines, list.items);
+    runs.forEach((run, r) => {
+      const task = isTask(run[0]);
+      const runOpen = r === 0 ? open : new state.Token('bullet_list_open', 'ul', 1);
+      runOpen.level = open.level;
+      runOpen.markup = open.markup;
+      runOpen.block = true;
+      runOpen.attrs = task ? [['class', 'contains-task-list']] : null;
+      if (r > 0) {
+        const runClose = new state.Token('bullet_list_close', 'ul', -1);
+        runClose.level = close.level;
+        runClose.markup = close.markup;
+        runClose.block = true;
+        inserts.push({ at: run[0], tokens: [runClose, runOpen] });
+      }
+      if (!listLoose || !runIsTight(tokens, lines, run)) return;
+      // Hide the run's paragraphs, as markdown-it does for a tight list
+      for (const itemIndex of run) {
+        const itemLevel = tokens[itemIndex].level;
+        for (let i = itemIndex + 1; tokens[i] && tokens[i].level > itemLevel; i++) {
+          const t = tokens[i];
+          if (
+            t.level === itemLevel + 1 &&
+            (t.type === 'paragraph_open' || t.type === 'paragraph_close')
+          ) {
+            t.hidden = true;
+          }
+        }
+      }
+    });
+  }
+
+  inserts
+    .sort((a, b) => b.at - a.at)
+    .forEach(({ at, tokens: added }) => tokens.splice(at, 0, ...added));
+}
+
+/**
  * Parse fix: a list item whose content starts with a block (code block, heading,
  * quote, callout, list, rule, embed) gets an empty first paragraph, as the schema
  * requires (`paragraph block*`). Without it ProseMirror moved the block out of the
@@ -249,6 +400,7 @@ export const ListItemFirstBlock = Extension.create({
         parse: {
           setup(markdownit: any) {
             markdownit.core.ruler.push('bare_task_marker', markBareTaskMarkers);
+            markdownit.core.ruler.push('split_mixed_task_lists', splitMixedTaskLists);
           },
           updateDOM(element: HTMLElement) {
             // markdown-it marks a tight list by leaving out its items' own <p>. The
