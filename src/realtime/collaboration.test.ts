@@ -210,6 +210,17 @@ describe('Collaboration server', () => {
     });
   });
 
+  it('9: closes the matching sessions when the re-check cannot load the page', async () => {
+    const editor = await connect('editor');
+    vi.spyOn(prisma.page, 'findUnique').mockRejectedValueOnce(new Error('database went away'));
+    try {
+      await revokeLiveAccess({ userId: users.editor });
+      expect(await editor.closeCode).toBe(4003);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it('closes a live session when a new page restriction hides the page', async () => {
     const editor = await connect('editor');
     await setRestrictions(pageId, 'VIEW', [users.owner]);

@@ -21,6 +21,7 @@ import {
   TestUser,
 } from '../test/factory';
 import { authDel, authGet, authPost } from '../test/helpers';
+import { logger } from '../utils/logger';
 
 import { revokeLiveAccess } from './access-revocation';
 import { broadcastToRoom, broadcastToUser } from './broadcast';
@@ -529,6 +530,30 @@ describe('Realtime room authorization', () => {
       checkControl.hanging.clear();
       await Promise.all(clients.splice(0).map((c) => c.close()));
       await prisma.wikiSpace.deleteMany({ where: { id: { in: [spaceA.id, spaceB.id] } } });
+    }
+  });
+
+  it('17: a re-check that throws does not stall the socket’s later checks', async () => {
+    const client = await connect(member.id);
+    const room = `project:${ctx.projectId}`;
+    client.send({ type: 'subscribe', rooms: [room] });
+    await waitFor(() => client.messages.some((m) => m.type === 'subscribed' && m.room === room));
+    checkControl.failing.add(room);
+    const info = vi.spyOn(logger, 'info').mockImplementation((msg: string) => {
+      if (msg.includes('dropped')) throw new Error('logger broke');
+    });
+    try {
+      await revokeLiveAccess({ userId: member.id });
+      checkControl.failing.delete(room);
+      client.send({ type: 'subscribe', rooms: [room] });
+      await waitFor(
+        () =>
+          client.messages.filter((m) => m.type === 'subscribed' && m.room === room).length === 2,
+      );
+    } finally {
+      checkControl.failing.clear();
+      info.mockRestore();
+      await Promise.all(clients.splice(0).map((c) => c.close()));
     }
   });
 });

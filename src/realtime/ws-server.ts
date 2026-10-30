@@ -169,30 +169,39 @@ async function revalidateRooms(scope: RevocationScope): Promise<void> {
       if (!ws.rooms.has(room)) continue;
       targets = [room];
     }
-    ws.checkQueue = ws.checkQueue.then(async () => {
-      const lost: string[] = [];
-      for (const room of targets) {
-        if (!ws.rooms.has(room)) continue;
-        let allowed = false;
-        try {
-          allowed = await canJoinRoom(ws.userId, room);
-        } catch (err) {
-          // Fail closed: a check that can't run doesn't keep the room
-          logger.error('Realtime room re-check failed', { userId: ws.userId, room }, err as Error);
+    ws.checkQueue = ws.checkQueue
+      .then(async () => {
+        const lost: string[] = [];
+        for (const room of targets) {
+          if (!ws.rooms.has(room)) continue;
+          let allowed = false;
+          try {
+            allowed = await canJoinRoom(ws.userId, room);
+          } catch (err) {
+            // Fail closed: a check that can't run doesn't keep the room
+            logger.error(
+              'Realtime room re-check failed',
+              { userId: ws.userId, room },
+              err as Error,
+            );
+          }
+          if (!allowed) {
+            ws.rooms.delete(room);
+            lost.push(room);
+          }
         }
-        if (!allowed) {
-          ws.rooms.delete(room);
-          lost.push(room);
+        if (lost.length > 0) {
+          logger.info('Realtime rooms dropped after an access change', {
+            userId: ws.userId,
+            rooms: lost.length,
+          });
+          sendDenied(ws, lost);
         }
-      }
-      if (lost.length > 0) {
-        logger.info('Realtime rooms dropped after an access change', {
-          userId: ws.userId,
-          rooms: lost.length,
-        });
-        sendDenied(ws, lost);
-      }
-    });
+      })
+      .catch((err) => {
+        // Keep the socket's queue alive: a rejected tail would skip every later check
+        logger.error('Realtime room re-check failed', { userId: ws.userId }, err as Error);
+      });
     runs.push(ws.checkQueue);
   }
   await Promise.all(runs);

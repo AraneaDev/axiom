@@ -543,11 +543,25 @@ async function collabAccess(
 async function revalidateSessions(scope: RevocationScope): Promise<void> {
   for (const room of rooms.values()) {
     if ('pageId' in scope && room.pageId !== scope.pageId) continue;
-    const page = await prisma.page.findUnique({
-      where: { id: room.pageId },
-      select: { id: true, spaceId: true },
-    });
-    if ('spaceId' in scope && page?.spaceId !== scope.spaceId) continue;
+    let page: { id: string; spaceId: string } | null = null;
+    try {
+      page = await prisma.page.findUnique({
+        where: { id: room.pageId },
+        select: { id: true, spaceId: true },
+      });
+    } catch (err) {
+      // Fail closed: without the page there is nothing to check access against, so the
+      // matching sessions are treated as having lost it, and the next room still runs
+      logger.error(
+        'Collaboration re-check could not load the page',
+        { pageId: room.pageId },
+        err as Error,
+      );
+      page = null;
+    }
+    // A space-scoped change can only be matched once the page is known; an unknown page in
+    // a space scope is closed too (fail closed)
+    if ('spaceId' in scope && page && page.spaceId !== scope.spaceId) continue;
     for (const client of room.clients.values()) {
       if ('userId' in scope && client.userId !== scope.userId) continue;
       await applyAccess(room, client, page);
