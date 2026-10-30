@@ -111,4 +111,25 @@ describe('Cross-org access on id routes', () => {
       (await prisma.approvalRequest.findUniqueOrThrow({ where: { id: ids.request } })).status,
     ).toBe('PENDING');
   });
+
+  it("P: refuses to resolve a template against another org's space or project", async () => {
+    const space = await prisma.wikiSpace.findFirstOrThrow({ where: { teamId: a.teamId } });
+    const results = await Promise.all([
+      authPost('/api/wiki/resolve-template', stranger.token, {
+        body: '{{space.name}}',
+        context: { spaceId: space.id, teamId: a.teamId },
+      }),
+      authPost('/api/wiki/resolve-template', a.owner.token, {
+        body: '{{project.name}}',
+        context: { spaceId: space.id, teamId: a.teamId, projectId: 'cnope' },
+      }),
+    ]);
+    expect(results.map((r) => r.status)).toEqual([403, 404]);
+    expect(JSON.stringify(results[0].body)).not.toContain('X');
+    const ok = await authPost('/api/wiki/resolve-template', a.owner.token, {
+      body: '{{space.name}}',
+      context: { spaceId: space.id, teamId: a.teamId, projectId: a.projectId },
+    });
+    expect(ok.status).toBe(200);
+  });
 });
