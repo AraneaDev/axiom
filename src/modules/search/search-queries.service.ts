@@ -10,7 +10,12 @@ import {
   USER_WITH_AVATAR_SELECT,
 } from '../../utils/prisma-selects';
 
-import { viewableIssuesWhere, viewablePagesWhere } from './search-access';
+import {
+  viewableIssuesWhere,
+  viewablePageIdFilter,
+  viewablePagesWhere,
+  viewableProjectIds,
+} from './search-access';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -110,9 +115,11 @@ export async function searchIssues(
 ) {
   const where: Prisma.IssueWhereInput = {};
   // Only issues the searcher could open. Without a searcher there is nothing to show: an
-  // empty filter would search every org.
+  // empty filter would search every org. The access clause is kept apart from the search
+  // filters, so "no text and no filters" can still be told apart.
   if (!params.userId) return { type: 'issues', items: [], total: 0 };
-  const andClauses: Prisma.IssueWhereInput[] = [await viewableIssuesWhere(params.userId)];
+  const accessClause = await viewableIssuesWhere(params.userId);
+  const andClauses: Prisma.IssueWhereInput[] = [];
 
   if (params.projectId) {
     where.projectId = params.projectId;
@@ -187,7 +194,7 @@ export async function searchIssues(
     }
   }
 
-  where.AND = andClauses;
+  where.AND = [accessClause, ...andClauses];
 
   const tsq = toTsQuery(freeText);
   const useFts = tsq.length > 0;
@@ -195,6 +202,9 @@ export async function searchIssues(
   // If we have free text, use PostgreSQL full-text search via $queryRaw for ranking
   if (useFts) {
     try {
+      // Rank only what the searcher can open: a global top-N filtered afterwards can leave
+      // nothing of theirs
+      const projectIds = await viewableProjectIds(params.userId);
       const rawIssues = await prisma.$queryRaw<
         Array<{
           id: string;
@@ -208,6 +218,7 @@ export async function searchIssues(
         FROM issues
         WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
           @@ to_tsquery('english', ${tsq})
+          ${projectIds === null ? Prisma.empty : Prisma.sql`AND "projectId" = ANY(${projectIds})`}
         ORDER BY rank DESC
         LIMIT ${params.limit + 50}
       `;
@@ -309,6 +320,8 @@ export async function searchWiki(
 
   if (tsq) {
     try {
+      // Rank only pages the searcher can open (see the issue search)
+      const { spaceIds, hiddenPageIds } = await viewablePageIdFilter(params.userId);
       const rawPages = await prisma.$queryRaw<
         Array<{
           id: string;
@@ -326,6 +339,8 @@ export async function searchWiki(
         FROM pages
         WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
           @@ to_tsquery('english', ${tsq})
+          AND "spaceId" = ANY(${spaceIds})
+          AND NOT (id = ANY(${hiddenPageIds}))
         ORDER BY rank DESC
         LIMIT ${params.limit + 20}
       `;

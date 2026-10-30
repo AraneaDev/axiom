@@ -61,3 +61,43 @@ export async function viewablePagesWhere(userId: string): Promise<Prisma.PageWhe
     ],
   };
 }
+
+/**
+ * The same issue rule as viewableIssuesWhere, as plain ids for raw SQL: the project ids the
+ * user can open, or null for "all" (platform admins).
+ * @param userId - The searcher
+ */
+export async function viewableProjectIds(userId: string): Promise<string[] | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  if (user?.isAdmin) return null;
+  const projects = await prisma.project.findMany({
+    where: { team: { members: { some: { userId } } } },
+    select: { id: true },
+  });
+  return projects.map((p) => p.id);
+}
+
+/**
+ * The same page rule as viewablePagesWhere, as plain ids for raw SQL: the spaces the user
+ * can view, and the pages in them a VIEW restriction hides from the user.
+ * @param userId - The searcher
+ */
+export async function viewablePageIdFilter(
+  userId: string,
+): Promise<{ spaceIds: string[]; hiddenPageIds: string[] }> {
+  const spaceIds = (await viewableSpaces(userId, { includeArchived: true })).map((s) => s.id);
+  const privileged = await prisma.orgMembership.findMany({
+    where: { userId, role: { in: ['OWNER', 'ADMIN'] } },
+    select: { orgId: true },
+  });
+  const hidden = await prisma.page.findMany({
+    where: {
+      spaceId: { in: spaceIds },
+      restrictions: { some: { type: 'VIEW' } },
+      NOT: { restrictions: { some: { type: 'VIEW', userId } } },
+      space: { team: { orgId: { notIn: privileged.map((m) => m.orgId) } } },
+    },
+    select: { id: true },
+  });
+  return { spaceIds, hiddenPageIds: hidden.map((p) => p.id) };
+}

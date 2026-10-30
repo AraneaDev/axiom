@@ -121,4 +121,60 @@ describe('Search access', () => {
     expect(res.status).toBe(200);
     expect(res.body.map((s: { id: string }) => s.id)).not.toContain(lockedSpaceId);
   });
+
+  it('F: finds the searcher’s matches even when other orgs have many better-ranked ones', async () => {
+    const other = await createTestContext(`srchflood${Date.now()}`);
+    const TERM = `kestrel${Date.now()}`;
+    try {
+      await prisma.issue.createMany({
+        data: Array.from({ length: 80 }, (_, i) => ({
+          projectId: other.projectId,
+          number: i + 1,
+          title: `${TERM} ${TERM} ${TERM}`,
+          body: `${TERM} ${TERM}`,
+          creatorId: other.owner.id,
+        })),
+      });
+      const space = await prisma.wikiSpace.create({
+        data: { teamId: other.teamId, name: 'Flood', slug: 'flood' },
+      });
+      await prisma.page.createMany({
+        data: Array.from({ length: 80 }, (_, i) => ({
+          spaceId: space.id,
+          title: `${TERM} ${TERM} ${TERM}`,
+          slug: `flood-${i}`,
+          body: `${TERM} ${TERM}`,
+        })),
+      });
+      await prisma.issue.create({
+        data: {
+          projectId: ctx.projectId,
+          number: 50,
+          title: `Mine ${TERM}`,
+          body: '',
+          creatorId: ctx.owner.id,
+        },
+      });
+      const ownSpace = await prisma.wikiSpace.findFirstOrThrow({ where: { slug: 'search-open' } });
+      await prisma.page.create({
+        data: { spaceId: ownSpace.id, title: `My page ${TERM}`, slug: 'mine', body: TERM },
+      });
+      const res = await authGet(`/api/search?q=${TERM}&type=all`, member.token);
+      const text = JSON.stringify(res.body);
+      expect(text).toContain(`Mine ${TERM}`);
+      expect(text).toContain(`My page ${TERM}`);
+    } finally {
+      await cleanupTestContext(other);
+    }
+  });
+
+  it('F: an empty query with no filters returns nothing', async () => {
+    // Punctuation only: no free text and no structured filter
+    const res = await authGet('/api/search?q=%21%21%21&type=issues', member.token);
+    expect(res.status).toBe(200);
+    const issues = (res.body as Array<{ type: string; items: unknown[] }>).find(
+      (s) => s.type === 'issues',
+    );
+    expect(issues?.items ?? []).toEqual([]);
+  });
 });
