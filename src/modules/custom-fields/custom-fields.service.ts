@@ -2,6 +2,8 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 
+import { assertCustomFieldValue } from './custom-field-values';
+
 // ─── Field Definitions ──────────────────────────────────────
 
 /**
@@ -141,6 +143,7 @@ export async function setFieldValue(issueId: string, fieldDefinitionId: string, 
   if (issue?.projectId !== definition.projectId) {
     throw new AppError(400, 'The custom field does not belong to the project of this issue');
   }
+  await assertCustomFieldValue(definition, value);
 
   return prisma.customFieldValue.upsert({
     where: {

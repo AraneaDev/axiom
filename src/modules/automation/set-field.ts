@@ -7,6 +7,7 @@
  */
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { assertCustomFieldValue } from '../custom-fields/custom-field-values';
 
 const PRIORITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
 const TYPES = ['TASK', 'BUG', 'STORY', 'EPIC'] as const;
@@ -70,7 +71,10 @@ export async function assertSettableField(
     throw new AppError(400, 'set_field needs a field name and a string value');
   }
   if (field.startsWith(CUSTOM_PREFIX)) {
-    await customDefinition(projectId, field.slice(CUSTOM_PREFIX.length));
+    const definition = await customDefinition(projectId, field.slice(CUSTOM_PREFIX.length));
+    if (!isTemplate(value)) {
+      await assertCustomFieldValue({ type: definition.type, projectId }, value);
+    }
     return;
   }
   const parse = Object.hasOwn(CONTENT_FIELDS, field) ? CONTENT_FIELDS[field] : undefined;
@@ -92,7 +96,7 @@ export async function assertSettableField(
 async function customDefinition(projectId: string, name: string) {
   const definition = await prisma.customFieldDefinition.findFirst({
     where: { projectId, name },
-    select: { id: true },
+    select: { id: true, type: true },
   });
   if (!definition) throw new AppError(400, `No custom field "${name}" in this project`);
   return definition;
@@ -115,6 +119,8 @@ export async function applySetField(
 ): Promise<void> {
   if (field.startsWith(CUSTOM_PREFIX)) {
     const definition = await customDefinition(projectId, field.slice(CUSTOM_PREFIX.length));
+    // The same value rules as the REST route (a USER field names a project reader)
+    await assertCustomFieldValue({ type: definition.type, projectId }, value);
     await prisma.customFieldValue.upsert({
       where: { issueId_fieldDefinitionId: { issueId, fieldDefinitionId: definition.id } },
       create: { issueId, fieldDefinitionId: definition.id, value },

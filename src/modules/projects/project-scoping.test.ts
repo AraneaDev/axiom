@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../../config/database';
 import { cleanupTestContext, createTestContext, type TestContext } from '../../test/factory';
-import { authDel, authGet, authPatch, authPost } from '../../test/helpers';
+import { authDel, authGet, authPatch, authPost, authPut } from '../../test/helpers';
 import { AUTOMATION_ISSUE_INCLUDE } from '../../utils/prisma-selects';
 import { evaluateRules } from '../automation/automation.service';
 import { resolveWikiTemplate } from '../wiki/wiki-template-resolver.service';
@@ -347,5 +347,48 @@ describe('Project-scoped ids', () => {
       userId: b.owner.id,
     });
     expect(resolved).not.toContain('@');
+  });
+
+  it('L4: a USER custom field only takes someone who can read the project', async () => {
+    const field = await prisma.customFieldDefinition.create({
+      data: { projectId: b.projectId, name: `Owner${Date.now()}`, type: 'USER' },
+    });
+    const target = await prisma.issue.findFirstOrThrow({
+      where: { projectId: b.projectId, number: 1 },
+    });
+    const stranger = await authPut(
+      `/api/issues/${target.id}/custom-fields/${field.id}`,
+      b.owner.token,
+      {
+        value: a.owner.id,
+      },
+    );
+    const teammate = await authPut(
+      `/api/issues/${target.id}/custom-fields/${field.id}`,
+      b.owner.token,
+      {
+        value: b.owner.id,
+      },
+    );
+    expect([stranger.status, teammate.status]).toEqual([400, 200]);
+
+    // Automation custom:<name> follows the same rule
+    const rule = await prisma.automationRule.create({
+      data: {
+        projectId: b.projectId,
+        name: 'user field',
+        trigger: 'issue:created',
+        actions: [{ type: 'set_field', field: `custom:${field.name}`, value: a.owner.id }],
+      },
+    });
+    await evaluateRules(b.projectId, 'issue:created', {
+      issue: target,
+      actorId: b.owner.id,
+    } as never);
+    await prisma.automationRule.delete({ where: { id: rule.id } });
+    const value = await prisma.customFieldValue.findUnique({
+      where: { issueId_fieldDefinitionId: { issueId: target.id, fieldDefinitionId: field.id } },
+    });
+    expect(value?.value).toBe(b.owner.id);
   });
 });
