@@ -23,7 +23,9 @@ export type RealtimeEvent =
       status: string;
     }
   | { type: 'form:submission:created'; projectId: string; submissionId: string; formId: string }
-  | { type: 'subscribe:denied'; room: string };
+  | { type: 'subscribe:denied'; room: string }
+  // The check failed (not refused): the room stays wanted and is asked for on reconnect
+  | { type: 'subscribe:error'; room: string };
 
 /**
  * Join a realtime room while mounted. Pass `null` while the id behind the room is still

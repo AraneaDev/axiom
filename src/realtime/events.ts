@@ -24,7 +24,9 @@ export type RealtimeEvent =
  * Replies the server sends about a socket's own subscriptions. Not broadcast to rooms.
  * Mirrored in the frontend's RealtimeEvent (frontend/src/hooks/useRealtimeInvalidation.ts).
  */
-export type SubscriptionMessage = { type: 'subscribe:denied'; room: string };
+export type SubscriptionMessage =
+  | { type: 'subscribe:denied'; room: string }
+  | { type: 'subscribe:error'; room: string };
 
 /** Everything the server sends on the realtime socket. */
 export type ServerMessage = RealtimeEvent | SubscriptionMessage;

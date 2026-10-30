@@ -71,4 +71,28 @@ describe('useWebSocket', () => {
     unmount();
     expect(FakeSocket.instances.every((s) => s.readyState === FakeSocket.CLOSED)).toBe(true);
   });
+
+  it('keeps a room after a check error and asks again on reconnect, but drops a denied one', () => {
+    configure({ reactStrictMode: false });
+    const { unmount } = renderHook(() => useWebSocket());
+    subscribe(['project:flaky', 'project:forbidden']);
+    const first = FakeSocket.instances.at(-1)!;
+    first.open();
+
+    first.onmessage?.({ data: JSON.stringify({ type: 'subscribe:error', room: 'project:flaky' }) });
+    first.onmessage?.({
+      data: JSON.stringify({ type: 'subscribe:denied', room: 'project:forbidden' }),
+    });
+
+    // The connection drops; the reconnect resubscribes what the client still wants
+    vi.useFakeTimers();
+    first.close();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    const second = FakeSocket.instances.at(-1)!;
+    expect(second).not.toBe(first);
+    second.open();
+    expect(second.sent).toEqual([JSON.stringify({ type: 'subscribe', rooms: ['project:flaky'] })]);
+    unmount();
+  });
 });

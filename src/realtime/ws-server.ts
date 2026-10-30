@@ -121,11 +121,12 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
         else sendDenied(ws, room);
       })
       .catch((err) => {
-        // A failed check refuses the room and must not stall the rest of the queue
+        // A failed check is not a refusal: report it as an error so the client keeps the
+        // room and asks again on reconnect. It must not stall the rest of the queue either.
         logger.error('Realtime room check failed', { room }, err as Error);
         if (ws.pendingRooms.get(room) !== ticket) return;
         ws.pendingRooms.delete(room);
-        sendDenied(ws, room);
+        sendToSocket(ws, { type: 'subscribe:error', room });
       });
   });
 }

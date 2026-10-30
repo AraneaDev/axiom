@@ -5,7 +5,7 @@
 import { createServer, Server } from 'http';
 import { AddressInfo } from 'net';
 
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import WebSocket, { WebSocketServer } from 'ws';
 
 import { prisma } from '../config/database';
@@ -22,6 +22,20 @@ import { authPost } from '../test/helpers';
 
 import { broadcastToRoom, broadcastToUser } from './broadcast';
 import { createWebSocketServer, getClients } from './ws-server';
+
+/** A room whose access check fails the way a database outage would. */
+const FAILING_ROOM = 'project:cexplodes0000000000000000';
+
+vi.mock('./room-access', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./room-access')>();
+  return {
+    ...actual,
+    canJoinRoom: (userId: string, room: string) =>
+      room === FAILING_ROOM
+        ? Promise.reject(new Error('database unavailable'))
+        : actual.canJoinRoom(userId, room),
+  };
+});
 
 interface RealtimeTestClient {
   ws: WebSocket;
@@ -262,5 +276,15 @@ describe('Realtime room authorization', () => {
     client.send({ type: 'subscribe', rooms: rooms.slice(60, 62) });
     await waitFor(() => deniedRooms(client).length === 13);
     expect(serverRooms(member.id).size).toBe(50);
+  });
+
+  it('reports a failed check as an error, not a denial', async () => {
+    const client = await connect(member.id);
+    client.send({ type: 'subscribe', rooms: [FAILING_ROOM] });
+    await waitFor(() =>
+      client.messages.some((m) => m.type === 'subscribe:error' && m.room === FAILING_ROOM),
+    );
+    expect(deniedRooms(client)).toEqual([]);
+    expect(serverRooms(member.id).has(FAILING_ROOM)).toBe(false);
   });
 });
