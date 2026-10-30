@@ -32,7 +32,7 @@ export function registerIntegrationTools(ctx: McpToolContext) {
         const orgId = await ctx.getOrgIdFromPage(pageId);
         if (!orgId) return { content: [{ type: 'text' as const, text: ERR.PAGE_NOT_FOUND }] };
         await assertMcpPagePermission('list_wiki_issue_links', pageId, 'view');
-        const links = await wikiIssueLinksService.getLinksForPage(pageId);
+        const links = await wikiIssueLinksService.getLinksForPage(pageId, userId);
         return { content: [{ type: 'text' as const, text: JSON.stringify(links, null, 2) }] };
       }
 
@@ -44,7 +44,7 @@ export function registerIntegrationTools(ctx: McpToolContext) {
       if (!issue) return { content: [{ type: 'text' as const, text: ERR.ISSUE_NOT_FOUND }] };
       // Reading an issue's links needs what reading the issue needs
       await assertMcpProjectPermission('get_issue', issue.projectId);
-      const links = await wikiIssueLinksService.getLinksForIssue(issueId!);
+      const links = await wikiIssueLinksService.getLinksForIssue(issueId!, userId);
       return { content: [{ type: 'text' as const, text: JSON.stringify(links, null, 2) }] };
     },
   );

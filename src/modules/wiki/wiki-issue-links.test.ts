@@ -252,7 +252,7 @@ describe('Wiki Issue Links Service', () => {
     await addEmbedLink(pageId, issueId, userId);
     await syncMentionLinks(pageId, [issueId2], userId);
 
-    const links = await getLinksForPage(pageId);
+    const links = await getLinksForPage(pageId, userId);
     expect(links).toHaveLength(2);
     for (const link of links) {
       expect(link.issue).toBeDefined();
@@ -267,7 +267,7 @@ describe('Wiki Issue Links Service', () => {
     await prisma.wikiPageIssueLink.deleteMany({ where: { pageId } });
     await addEmbedLink(pageId, issueId, userId);
 
-    const links = await getLinksForIssue(issueId);
+    const links = await getLinksForIssue(issueId, userId);
     expect(links).toHaveLength(1);
     expect(links[0].page).toBeDefined();
     expect(links[0].page.title).toBe('Wiki Issue Links Test Page');

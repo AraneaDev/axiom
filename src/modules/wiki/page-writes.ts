@@ -42,7 +42,7 @@ export interface PageWriteDeps {
 export type SyncIssueLinks = (pageId: string, body: string, authorId: string) => Promise<void>;
 
 const defaultSyncIssueLinks: SyncIssueLinks = async (pageId, body, authorId) => {
-  const issueIds = await extractIssueIdsFromContent(body);
+  const issueIds = await extractIssueIdsFromContent(body, pageId, authorId);
   await syncMentionLinks(pageId, issueIds, authorId);
 };
 

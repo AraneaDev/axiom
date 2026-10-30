@@ -5,17 +5,25 @@ import {
   SPACE_URL_SELECT,
   USER_WITH_AVATAR_SELECT,
 } from '../../utils/prisma-selects';
+import { viewableIssuesWhere, viewablePagesWhere } from '../search/search-access';
 
 // Matches issue keys like AXM-123
 const ISSUE_KEY_RE = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
 
 /**
- * Extract valid issue IDs from page content by matching issue key patterns
- * and resolving them against the database.
+ * Extract the ids of issues a page body mentions by key (AXM-123). A key only resolves to
+ * an issue in the page's own org that the author can open: prefixes are only unique per
+ * team, and a mention must not link (and so show) issues from elsewhere.
  * @param content - The page body content to scan for issue keys
+ * @param pageId - The page being written
+ * @param authorId - Who wrote it
  * @returns Array of resolved issue IDs
  */
-export async function extractIssueIdsFromContent(content: string): Promise<string[]> {
+export async function extractIssueIdsFromContent(
+  content: string,
+  pageId: string,
+  authorId: string,
+): Promise<string[]> {
   const keys = new Set<string>();
   let match;
   while ((match = ISSUE_KEY_RE.exec(content)) !== null) {
@@ -23,13 +31,25 @@ export async function extractIssueIdsFromContent(content: string): Promise<strin
   }
   if (keys.size === 0) return [];
 
+  const page = await prisma.page.findUnique({
+    where: { id: pageId },
+    select: { space: { select: { team: { select: { orgId: true } } } } },
+  });
+  if (!page) return [];
+
   const conditions = [...keys].map((key) => {
     const [prefix, numStr] = key.split('-');
     return { project: { prefix }, number: parseInt(numStr, 10) };
   });
 
   const issues = await prisma.issue.findMany({
-    where: { OR: conditions },
+    where: {
+      OR: conditions,
+      AND: [
+        { project: { team: { orgId: page.space.team.orgId } } },
+        await viewableIssuesWhere(authorId),
+      ],
+    },
     select: { id: true },
   });
 
@@ -116,10 +136,12 @@ export async function syncMentionLinks(pageId: string, issueIds: string[], userI
 /**
  *
  * @param pageId
+ * @param viewerId - Who is looking
  */
-export async function getLinksForPage(pageId: string) {
+export async function getLinksForPage(pageId: string, viewerId: string) {
+  // Only issues the viewer could open: a link would otherwise show any issue's details
   return prisma.wikiPageIssueLink.findMany({
-    where: { pageId },
+    where: { pageId, issue: await viewableIssuesWhere(viewerId) },
     include: {
       issue: {
         select: {
@@ -154,10 +176,12 @@ export async function findIssueByNumber(projectId: string, issueNumber: number) 
 /**
  *
  * @param issueId
+ * @param viewerId - Who is looking
  */
-export async function getLinksForIssue(issueId: string) {
+export async function getLinksForIssue(issueId: string, viewerId: string) {
+  // Only pages the viewer could open: closed spaces and restricted pages stay hidden
   return prisma.wikiPageIssueLink.findMany({
-    where: { issueId },
+    where: { issueId, page: await viewablePagesWhere(viewerId) },
     include: {
       page: {
         select: {

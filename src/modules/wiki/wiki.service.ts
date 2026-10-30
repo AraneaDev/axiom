@@ -219,7 +219,7 @@ export async function createPage(
   await logActivity('wiki_page', page.id, 'created', authorId, { title: data.title });
 
   if (body) {
-    const issueIds = await extractIssueIdsFromContent(body);
+    const issueIds = await extractIssueIdsFromContent(body, page.id, authorId);
     await syncMentionLinks(page.id, issueIds, authorId);
   }
 
