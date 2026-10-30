@@ -35,7 +35,7 @@ import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.servi
 import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 
-import { registerAccessRevokedHook } from './access-revocation';
+import { registerAccessRevokedHook, registerDisconnectHook } from './access-revocation';
 import { registerExternalChangeHook, setRoomLiveCheck } from './room-registry';
 import {
   loadPageIntoDoc,
@@ -548,6 +548,14 @@ async function revalidateUserSessions(userId: string | null): Promise<void> {
   }
 }
 
+registerDisconnectHook((userId) => {
+  for (const room of rooms.values()) {
+    for (const client of room.clients.values()) {
+      if (client.userId === userId) client.ws.close(4001, 'Account deactivated');
+    }
+  }
+});
+
 registerAccessRevokedHook((userId) =>
   revalidateUserSessions(userId).catch((err: unknown) =>
     logger.error('Collaboration access re-check failed', { userId }, err as Error),
@@ -656,6 +664,15 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
 
   const auth = extractAuth(req);
   if (!auth) {
+    ws.close(4001, 'Unauthorized');
+    return;
+  }
+  // A deactivated account is refused even while its token is still valid
+  const account = await prisma.user.findUnique({
+    where: { id: auth.userId },
+    select: { deactivatedAt: true },
+  });
+  if (!account || account.deactivatedAt) {
     ws.close(4001, 'Unauthorized');
     return;
   }

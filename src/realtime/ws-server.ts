@@ -1,14 +1,16 @@
 import { Server as HttpServer, IncomingMessage } from 'http';
+import { Duplex } from 'stream';
 import { URL } from 'url';
 
 import jwt from 'jsonwebtoken';
 import { WebSocketServer, WebSocket } from 'ws';
 
+import { prisma } from '../config/database';
 import { env } from '../config/env';
 import type { AuthPayload } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
-import { registerAccessRevokedHook } from './access-revocation';
+import { registerAccessRevokedHook, registerDisconnectHook } from './access-revocation';
 import { createCollaborationServer } from './collaboration';
 import type { ClientMessage, SubscriptionMessage } from './events';
 import { canJoinRoom, MAX_ROOMS_PER_REQUEST, MAX_ROOMS_PER_SOCKET } from './room-access';
@@ -173,6 +175,11 @@ async function revalidateUserRooms(userId: string | null): Promise<void> {
 }
 
 registerAccessRevokedHook(revalidateUserRooms);
+registerDisconnectHook((userId) => {
+  for (const ws of getClients()) {
+    if (ws.userId === userId) ws.close(4001, 'Account deactivated');
+  }
+});
 
 /**
  * Attach a WebSocket server to an existing HTTP server.
@@ -206,6 +213,25 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
       socket.destroy();
       return;
     }
+    void acceptUpgrade(req, socket, head, userId);
+  });
+
+  // Like authenticate on the REST side: a deactivated (or deleted) account is refused even
+  // while its token is still valid
+  async function acceptUpgrade(
+    req: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+    userId: string,
+  ): Promise<void> {
+    const user = await prisma.user
+      .findUnique({ where: { id: userId }, select: { deactivatedAt: true } })
+      .catch(() => null);
+    if (!user || user.deactivatedAt) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
 
     wss!.handleUpgrade(req, socket, head, (ws) => {
       const authSocket = ws as AuthenticatedSocket;
@@ -217,7 +243,7 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
 
       wss!.emit('connection', authSocket, req);
     });
-  });
+  }
 
   wss.on('connection', (ws: AuthenticatedSocket) => {
     // Auto-subscribe to personal room

@@ -59,10 +59,11 @@ export async function updateProfile(
 /**
  * Search users by username or display name (case-insensitive).
  * @param query - The search string to match against username or display name
+ * @param searcherId - Who is searching
  * @param limit - Maximum number of results to return (defaults to 10)
  * @returns List of matching users with basic profile info
  */
-export async function searchUsers(query: string, limit = 10) {
+export async function searchUsers(query: string, searcherId: string, limit = 10) {
   const { take } = parseServicePagination({ limit });
   return prisma.user.findMany({
     where: {
@@ -70,6 +71,8 @@ export async function searchUsers(query: string, limit = 10) {
         { username: { contains: query, mode: 'insensitive' } },
         { displayName: { contains: query, mode: 'insensitive' } },
       ],
+      // Only people the searcher shares an org with: no directory of every user
+      orgMemberships: { some: { org: { members: { some: { userId: searcherId } } } } },
     },
     select: USER_WITH_AVATAR_SELECT,
     take,

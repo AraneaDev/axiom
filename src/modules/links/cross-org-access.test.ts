@@ -3,9 +3,11 @@
  * and custom fields must apply the same access rules as the resources they belong to.
  * The attacker is a user of a different org.
  */
+import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../../config/database';
+import app from '../../index';
 import {
   cleanupTestContext,
   createTestContext,
@@ -131,5 +133,32 @@ describe('Cross-org access on id routes', () => {
       context: { spaceId: space.id, teamId: a.teamId, projectId: a.projectId },
     });
     expect(ok.status).toBe(200);
+  });
+
+  it('Z: user search only finds people the searcher shares an org with', async () => {
+    const owner = await prisma.user.findUniqueOrThrow({ where: { id: a.owner.id } });
+    const asStranger = await authGet(`/api/users/search?q=${owner.username}`, stranger.token);
+    expect(asStranger.status).toBe(200);
+    expect(JSON.stringify(asStranger.body)).not.toContain(owner.id);
+    const asOwner = await authGet(`/api/users/search?q=${owner.username}`, a.owner.token);
+    expect(JSON.stringify(asOwner.body)).toContain(owner.id);
+  });
+
+  it('Z: refuses an attachment whose comment belongs to another issue', async () => {
+    const issue2 = await prisma.issue.create({
+      data: { projectId: a.projectId, number: 2, title: 'Other', body: '', creatorId: a.owner.id },
+    });
+    const comment = await prisma.comment.create({
+      data: { issueId: issue2.id, authorId: a.owner.id, body: 'c' },
+    });
+    const res = await request(app)
+      .post('/api/attachments')
+      .set('Authorization', `Bearer ${a.owner.token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .field('issueId', ids.issue)
+      .field('commentId', comment.id)
+      .attach('file', Buffer.from('hello'), 'hello.txt');
+    expect(res.status).toBe(400);
+    expect(await prisma.attachment.count({ where: { commentId: comment.id } })).toBe(0);
   });
 });

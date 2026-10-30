@@ -443,4 +443,31 @@ describe('Realtime room authorization', () => {
     expect(JSON.stringify(client.messages)).not.toContain(secret.id);
     expect(events.some((m) => m.pageId === open.id)).toBe(true);
   });
+
+  it('Z: closes a deactivated user’s sockets and refuses new ones', async () => {
+    const victim = await addMemberToContext(ctx);
+    const admin = await createTestUser();
+    await prisma.user.update({ where: { id: admin.id }, data: { isAdmin: true } });
+    try {
+      const client = await connect(victim.id);
+      const closed = new Promise<number>((resolve) =>
+        client.ws.once('close', (code) => resolve(code)),
+      );
+      const res = await authPost(`/api/admin/users/${victim.id}/deactivate`, admin.token);
+      expect(res.status).toBeLessThan(300);
+      expect(await closed).toBe(4001);
+
+      const again = new WebSocket(`${baseUrl}/ws?token=${tokenFor(victim.id)}`);
+      const outcome = await new Promise<string>((resolve) => {
+        again.once('open', () => resolve('open'));
+        again.once('error', () => resolve('refused'));
+        again.once('unexpected-response', () => resolve('refused'));
+      });
+      again.terminate();
+      expect(outcome).toBe('refused');
+    } finally {
+      await Promise.all(clients.splice(0).map((c) => c.close()));
+      await prisma.user.deleteMany({ where: { id: { in: [victim.id, admin.id] } } });
+    }
+  });
 });

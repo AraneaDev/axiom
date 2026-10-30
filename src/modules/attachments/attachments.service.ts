@@ -61,6 +61,16 @@ export async function uploadAttachment(
   // Attaching writes to the parent: refuse before storing anything, and drop the upload
   try {
     await assertAttachmentParentAccess(uploaderId, opts, 'edit');
+    // A comment attachment must name the comment's own issue
+    if (opts.commentId) {
+      const comment = await prisma.comment.findUnique({
+        where: { id: opts.commentId },
+        select: { issueId: true },
+      });
+      if (!comment || !opts.issueId || comment.issueId !== opts.issueId) {
+        throw new AppError(400, 'The comment does not belong to this issue', 'BAD_REQUEST');
+      }
+    }
   } catch (err) {
     if (file.path) await fs.unlink(file.path).catch(() => {});
     throw err;

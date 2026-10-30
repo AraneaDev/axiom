@@ -5,6 +5,7 @@ import _path from 'path';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { AppError } from '../../middleware/errorHandler';
+import { disconnectUser } from '../../realtime/access-revocation';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
@@ -195,6 +196,8 @@ export async function deleteUser(userId: string) {
   await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   await prisma.user.delete({ where: { id: userId } });
+  // Live sockets authenticated before the delete: close them
+  disconnectUser(userId);
   return { deleted: true };
 }
 
@@ -213,6 +216,8 @@ export async function deactivateUser(userId: string) {
     prisma.user.update({ where: { id: userId }, data: { deactivatedAt: new Date() } }),
     prisma.refreshToken.deleteMany({ where: { userId } }),
   ]);
+  // Access tokens stay valid until they expire, and open sockets never re-authenticate
+  disconnectUser(userId);
   return { success: true };
 }
 

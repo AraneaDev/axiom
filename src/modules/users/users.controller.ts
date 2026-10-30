@@ -8,7 +8,7 @@ import * as usersService from './users.service';
 
 export const searchUsersHandler = asyncHandler(async (req: Request, res: Response) => {
   const q = (req.query.q as string) || '';
-  const users = await usersService.searchUsers(q);
+  const users = await usersService.searchUsers(q, req.userId!);
   res.json(users);
 });
 
