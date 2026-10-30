@@ -82,4 +82,40 @@ describe('Public form access', () => {
     }
     expect(statuses).toEqual([201, 201, 429]);
   });
+
+  it('4: stops answering secret guesses after repeated failures', async () => {
+    // The earlier test already spent one wrong secret on this form
+    let guesses = 0;
+    let status = 200;
+    while (status !== 429 && guesses < 30) {
+      status = (await pub('get', `/f/${gatedSlug}`).set('X-Form-Secret', `guess-${guesses}`))
+        .status;
+      guesses++;
+    }
+    expect(status).toBe(429);
+    expect(guesses).toBeLessThanOrEqual(20);
+    // Even the right secret waits out the lockout
+    expect((await pub('get', `/f/${gatedSlug}`).set('X-Form-Secret', 'open-sesame')).status).toBe(
+      429,
+    );
+  });
+
+  it('11: concurrent submissions can not exceed rateLimitPerHour', async () => {
+    const slug = `burst-${Date.now()}`;
+    await prisma.form.create({
+      data: {
+        projectId: ctx.projectId,
+        name: 'Burst',
+        slug,
+        createdById: ctx.owner.id,
+        status: 'PUBLISHED',
+        rateLimitPerHour: 2,
+      },
+    });
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, i) => pub('post', `/f/${slug}/submit`).send({ data: { i } })),
+    );
+    const accepted = results.filter((r) => r.status === 201).length;
+    expect(accepted).toBe(2);
+  });
 });

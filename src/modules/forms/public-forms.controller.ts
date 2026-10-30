@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 
+import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 import { validate } from '../../utils/validation';
@@ -19,7 +20,9 @@ export const getPublicForm = asyncHandler(async (req: Request, res: Response) =>
       try {
         await formsService.assertFormSecret(form, secret);
         authorized = true;
-      } catch {
+      } catch (err) {
+        // A lockout is reported as such; a wrong secret just keeps the form locked
+        if (err instanceof AppError && err.statusCode === 429) throw err;
         authorized = false;
       }
     }
