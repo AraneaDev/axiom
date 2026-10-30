@@ -6,7 +6,11 @@ import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
-import { assertColumnTransition, assertIssueRefsInProject } from '../issues/issue-references';
+import {
+  assertAssignable,
+  assertColumnTransition,
+  assertIssueRefsInProject,
+} from '../issues/issue-references';
 import * as issuesService from '../issues/issues.service';
 
 import { executeWebhook } from './webhook';
@@ -72,12 +76,31 @@ interface CreateRuleData {
 }
 
 /**
+ * Actions may only point at this project's own columns and at assignees on its team: an
+ * automation must not do what a member couldn't do by hand.
+ * @param projectId
+ * @param actions
+ * @throws {AppError} 400 for a foreign column or a non-member assignee
+ */
+async function assertActionsInProject(projectId: string, actions: AutomationAction[] | undefined) {
+  for (const action of actions ?? []) {
+    if (action.type === 'set_status' && action.columnId) {
+      await assertIssueRefsInProject(projectId, { columnId: action.columnId });
+    }
+    if (action.type === 'set_assignee' && action.userId) {
+      await assertAssignable(projectId, action.userId);
+    }
+  }
+}
+
+/**
  * Create an automation rule for a project.
  * @param projectId
  * @param data
  */
 export async function createRule(projectId: string, data: CreateRuleData) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
+  await assertActionsInProject(projectId, data.actions);
 
   if (data.condition) {
     try {
@@ -117,10 +140,11 @@ export async function listRules(projectId: string) {
  * @param data
  */
 export async function updateRule(ruleId: string, data: Partial<CreateRuleData>) {
-  await findOrThrow(
+  const existing = await findOrThrow(
     prisma.automationRule.findUnique({ where: { id: ruleId } }),
     'Automation rule not found',
   );
+  await assertActionsInProject(existing.projectId, data.actions);
 
   if (data.condition) {
     try {
@@ -300,6 +324,8 @@ async function executeActions(
           break;
         case 'set_assignee':
           if (action.userId) {
+            // Checked again here: the assignee may have left the team since the rule was saved
+            await assertAssignable(projectId, action.userId);
             await prisma.issue.update({
               where: { id: issue.id },
               data: { assigneeId: action.userId },

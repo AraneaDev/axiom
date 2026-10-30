@@ -142,13 +142,10 @@ describe('Approval voting', () => {
         actions: [{ type: 'set_status', columnId: toColumnId }],
       },
     });
-    await evaluateRules(
-      ctx.projectId,
-      'issue:updated' as never,
-      {
-        issue: { ...gated, projectId: ctx.projectId },
-      } as never,
-    );
+    await evaluateRules(ctx.projectId, 'issue:created', {
+      issue: { ...gated, projectId: ctx.projectId },
+      actorId: ctx.owner.id,
+    } as never);
     await prisma.automationRule.delete({ where: { id: rule.id } });
     expect((await prisma.issue.findUniqueOrThrow({ where: { id: gated.id } })).columnId).toBe(
       fromColumnId,

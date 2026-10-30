@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../config/database';
 import { cleanupTestContext, createTestContext, type TestContext } from '../../test/factory';
 import { authDel, authGet, authPatch, authPost } from '../../test/helpers';
+import { evaluateRules } from '../automation/automation.service';
 
 describe('Project-scoped ids', () => {
   let a: TestContext;
@@ -191,5 +192,43 @@ describe('Project-scoped ids', () => {
     ).toBe(0);
     // A team member, or no one, is fine
     expect((await authPatch(`${P}/issues/1`, t, { assigneeId: b.owner.id })).status).toBe(200);
+  });
+
+  it('7: automation rules may not set a foreign column or a non-member assignee', async () => {
+    const P = `/api/projects/${b.projectId}`;
+    const foreignColumn = await prisma.boardColumn.findFirstOrThrow({
+      where: { projectId: a.projectId },
+    });
+    const badStatus = await authPost(`${P}/automation-rules`, b.owner.token, {
+      name: 'foreign column',
+      trigger: 'issue:created',
+      actions: [{ type: 'set_status', columnId: foreignColumn.id }],
+    });
+    const badAssignee = await authPost(`${P}/automation-rules`, b.owner.token, {
+      name: 'stranger',
+      trigger: 'issue:created',
+      actions: [{ type: 'set_assignee', userId: a.owner.id }],
+    });
+    expect([badStatus.status, badAssignee.status]).toEqual([400, 400]);
+
+    // A rule saved before (or whose assignee left the team) is checked again when it runs
+    const rule = await prisma.automationRule.create({
+      data: {
+        projectId: b.projectId,
+        name: 'stale',
+        trigger: 'issue:created',
+        actions: [{ type: 'set_assignee', userId: a.owner.id }],
+      },
+    });
+    const target = await prisma.issue.findFirstOrThrow({
+      where: { projectId: b.projectId, number: 1 },
+    });
+    await evaluateRules(b.projectId, 'issue:created', {
+      issue: target,
+      actorId: b.owner.id,
+    } as never);
+    await prisma.automationRule.delete({ where: { id: rule.id } });
+    const issue = await prisma.issue.findUniqueOrThrow({ where: { id: target.id } });
+    expect(issue.assigneeId).not.toBe(a.owner.id);
   });
 });
