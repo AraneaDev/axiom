@@ -156,4 +156,19 @@ describe('Project-scoped ids', () => {
     expect(JSON.stringify(link.body)).not.toContain('A1');
     expect(await prisma.issue.count({ where: { sprintId: ids.sprint } })).toBe(0);
   });
+
+  it("refuses to move an issue onto another project's board column", async () => {
+    const foreignColumn = await prisma.boardColumn.findFirstOrThrow({
+      where: { projectId: a.projectId },
+    });
+    const res = await authPatch(`/api/projects/${b.projectId}/issues/1/move`, b.owner.token, {
+      columnId: foreignColumn.id,
+      position: 0,
+    });
+    expect(res.status).toBe(400);
+    const issue = await prisma.issue.findFirstOrThrow({
+      where: { projectId: b.projectId, number: 1 },
+    });
+    expect(issue.columnId).not.toBe(foreignColumn.id);
+  });
 });

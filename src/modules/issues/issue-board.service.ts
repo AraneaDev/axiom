@@ -10,6 +10,8 @@ import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
 import { validateTransition } from '../workflows/workflows.service';
 
+import { assertIssueRefsInProject } from './issue-references';
+
 /**
  * Get the kanban board for a project, returning columns with their issues.
  * @param projectId - The project to get the board for
@@ -68,7 +70,8 @@ export async function moveIssue(
     ERR.ISSUE_NOT_FOUND,
   );
 
-  // Validate workflow transition
+  // The column must be on this project's board, then the workflow must allow the move
+  await assertIssueRefsInProject(projectId, { columnId });
   await validateTransition(projectId, issue.columnId, columnId);
 
   const updated = await prisma.issue.update({
