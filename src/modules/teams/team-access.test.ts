@@ -149,16 +149,13 @@ describe('Team access', () => {
   });
 
   it('23: team activity works for a team with more issues than a query can bind', async () => {
-    const batch = 33_000;
-    await prisma.issue.createMany({
-      data: Array.from({ length: batch }, (_, i) => ({
-        projectId: ctx.projectId,
-        number: 10_000 + i,
-        title: `bulk ${i}`,
-        body: '',
-        creatorId: ctx.owner.id,
-      })),
-    });
+    // One INSERT ... SELECT: past the 32,767 bind-parameter limit of an IN list
+    await prisma.$executeRaw`
+      INSERT INTO issues (id, "projectId", number, title, body, "creatorId", "updatedAt")
+      SELECT 'bulk-' || g || '-' || ${ctx.projectId}, ${ctx.projectId}, 10000 + g, 'bulk ' || g, '',
+             ${ctx.owner.id}, now()
+      FROM generate_series(1, 33000) AS g
+    `;
     try {
       const res = await authGet(`/api/teams/${ctx.teamId}/activity`, teamViewer.token);
       expect(res.status).toBe(200);
