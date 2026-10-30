@@ -8,6 +8,7 @@ import { env } from '../config/env';
 import type { AuthPayload } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
+import { registerAccessRevokedHook } from './access-revocation';
 import { createCollaborationServer } from './collaboration';
 import type { ClientMessage, SubscriptionMessage } from './events';
 import { canJoinRoom, MAX_ROOMS_PER_REQUEST, MAX_ROOMS_PER_SOCKET } from './room-access';
@@ -139,6 +140,38 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
   });
   sendDenied(ws, refused);
 }
+
+/**
+ * Re-check the rooms a user's sockets hold, after they lost access somewhere. Rooms that no
+ * longer pass are dropped and reported as denied. The re-check queues behind any check
+ * already running on the socket, so a grant decided on the old permissions can't land after
+ * it.
+ * @param userId - The user who lost access
+ */
+async function revalidateUserRooms(userId: string): Promise<void> {
+  const runs: Promise<void>[] = [];
+  for (const ws of getClients()) {
+    if (ws.userId !== userId) continue;
+    ws.checkQueue = ws.checkQueue
+      .then(async () => {
+        const lost: string[] = [];
+        for (const room of [...ws.rooms]) {
+          if (!(await canJoinRoom(userId, room))) {
+            ws.rooms.delete(room);
+            lost.push(room);
+          }
+        }
+        sendDenied(ws, lost);
+      })
+      .catch((err) => {
+        logger.error('Realtime room re-check failed', { userId }, err as Error);
+      });
+    runs.push(ws.checkQueue);
+  }
+  await Promise.all(runs);
+}
+
+registerAccessRevokedHook(revalidateUserRooms);
 
 /**
  * Attach a WebSocket server to an existing HTTP server.

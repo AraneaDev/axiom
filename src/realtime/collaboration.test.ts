@@ -4,6 +4,7 @@ import WebSocket from 'ws';
 
 import { prisma } from '../config/database';
 import { yFragmentToMarkdown } from '../lib/editor-core';
+import { removeOrgMember } from '../modules/orgs/orgs.service';
 import { restoreDescription } from '../modules/wiki/page-versions';
 import { writePageBody } from '../modules/wiki/page-writes';
 import {
@@ -165,6 +166,30 @@ describe('Collaboration server', () => {
     await member.close();
     await waitFor(() => !isRoomLive(openPage.id));
     await roomSettled(openPage.id);
+  });
+
+  it('closes the live session of a user removed from the org', async () => {
+    const leaver = await prisma.user.create({
+      data: {
+        email: `${SLUG}-leaver@axiom.dev`,
+        username: `${SLUG}-leaver`,
+        displayName: 'Leaver',
+        passwordHash: 'x',
+      },
+    });
+    const team = await prisma.team.findFirstOrThrow({ where: { orgId } });
+    await prisma.orgMembership.create({ data: { orgId, userId: leaver.id, role: 'MEMBER' } });
+    await prisma.teamMembership.create({
+      data: { teamId: team.id, userId: leaver.id, role: 'MEMBER' },
+    });
+    await prisma.spacePermission.create({ data: { spaceId, userId: leaver.id, level: 'EDIT' } });
+
+    const client = connectCollabClient(server, pageId, leaver.id);
+    clients.push(client);
+    await client.synced;
+
+    await removeOrgMember(orgId, leaver.id);
+    expect(await client.closeCode).toBe(4003);
   });
 
   it('closes with 4003 for a user the page hides', async () => {

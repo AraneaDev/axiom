@@ -35,6 +35,7 @@ import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.servi
 import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 
+import { registerAccessRevokedHook } from './access-revocation';
 import { registerExternalChangeHook, setRoomLiveCheck } from './room-registry';
 import {
   loadPageIntoDoc,
@@ -499,6 +500,60 @@ async function handleMessage(
 }
 
 /**
+ * What a user may do in a page's live session: the same checks as the REST routes. Org
+ * membership first (space and page checks pass for anyone when nothing is restricted, so it
+ * is what keeps other orgs out), then space access, then the page's restrictions.
+ * @param userId
+ * @param page
+ * @param page.id
+ * @param page.spaceId
+ */
+async function collabAccess(
+  userId: string,
+  page: { id: string; spaceId: string },
+): Promise<{ view: boolean; edit: boolean }> {
+  if ((await checkWikiSpaceOrgAccess(page.spaceId, userId)) !== 'ok') {
+    return { view: false, edit: false };
+  }
+  const [spaceView, pageView] = await Promise.all([
+    canAccessSpace(page.spaceId, userId, 'VIEW'),
+    canViewPage(userId, page.id),
+  ]);
+  if (!spaceView || !pageView) return { view: false, edit: false };
+  const [spaceEdit, pageEdit] = await Promise.all([
+    canAccessSpace(page.spaceId, userId, 'EDIT'),
+    canEditPage(userId, page.id),
+  ]);
+  return { view: true, edit: spaceEdit && pageEdit };
+}
+
+/**
+ * Re-check a user's open sessions after they lost access: close the ones they may no longer
+ * view and make the ones they may no longer edit read-only.
+ * @param userId
+ */
+async function revalidateUserSessions(userId: string): Promise<void> {
+  for (const room of rooms.values()) {
+    const page = await prisma.page.findUnique({
+      where: { id: room.pageId },
+      select: { id: true, spaceId: true },
+    });
+    for (const client of room.clients.values()) {
+      if (client.userId !== userId) continue;
+      const access = page ? await collabAccess(userId, page) : { view: false, edit: false };
+      if (!access.view) client.ws.close(4003, 'Forbidden');
+      else client.canEdit = access.edit;
+    }
+  }
+}
+
+registerAccessRevokedHook((userId) =>
+  revalidateUserSessions(userId).catch((err: unknown) =>
+    logger.error('Collaboration access re-check failed', { userId }, err as Error),
+  ),
+);
+
+/**
  * Handle a client disconnecting from a room.
  * @param room
  * @param client
@@ -625,26 +680,12 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
     return;
   }
 
-  // The same checks as the REST routes: org membership, space access, then the page's
-  // restrictions. The last two pass for anyone when nothing is restricted, so the org
-  // check is what keeps users of other orgs out.
-  if ((await checkWikiSpaceOrgAccess(page.spaceId, auth.userId)) !== 'ok') {
+  const access = await collabAccess(auth.userId, page);
+  if (!access.view) {
     ws.close(4003, 'Forbidden');
     return;
   }
-  const [spaceView, pageView] = await Promise.all([
-    canAccessSpace(page.spaceId, auth.userId, 'VIEW'),
-    canViewPage(auth.userId, pageId),
-  ]);
-  if (!spaceView || !pageView) {
-    ws.close(4003, 'Forbidden');
-    return;
-  }
-  const [spaceEdit, pageEdit, displayName] = await Promise.all([
-    canAccessSpace(page.spaceId, auth.userId, 'EDIT'),
-    canEditPage(auth.userId, pageId),
-    displayNameOf(auth.userId),
-  ]);
+  const displayName = await displayNameOf(auth.userId);
   if (closed) return;
 
   const room = await getOrCreateRoom(pageId);
@@ -654,7 +695,7 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
     userId: auth.userId,
     displayName,
     clientId: room.doc.clientID + room.clients.size + 1,
-    canEdit: spaceEdit && pageEdit,
+    canEdit: access.edit,
   };
 
   room.clients.set(ws, client);

@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { checkUnique } from '../../utils/check-unique';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
@@ -176,7 +177,23 @@ export async function removeOrgMember(orgId: string, memberId: string) {
     });
     if (ownerCount <= 1) throw new AppError(400, 'Cannot remove the last owner');
   }
-  await prisma.orgMembership.delete({ where: { id: membership.id } });
+  // Everything the org granted goes with the membership, in one transaction: team
+  // memberships (project access), space permissions and page allow-list entries naming the
+  // user, and issue watches (which would keep sending them notifications)
+  const inOrgTeams = { team: { orgId } };
+  await prisma.$transaction([
+    prisma.teamMembership.deleteMany({ where: { userId: memberId, ...inOrgTeams } }),
+    prisma.spacePermission.deleteMany({ where: { userId: memberId, space: inOrgTeams } }),
+    prisma.pageRestriction.deleteMany({
+      where: { userId: memberId, page: { space: inOrgTeams } },
+    }),
+    prisma.issueWatcher.deleteMany({
+      where: { userId: memberId, issue: { project: inOrgTeams } },
+    }),
+    prisma.orgMembership.delete({ where: { id: membership.id } }),
+  ]);
+  // Open sockets checked access when they joined: re-check them now
+  await revokeLiveAccess(memberId);
 }
 
 // ─── Invite Links ─────────────────────────────────────────────

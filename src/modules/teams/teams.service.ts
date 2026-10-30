@@ -2,6 +2,7 @@ import { TeamRole } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { checkUnique } from '../../utils/check-unique';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
@@ -232,7 +233,16 @@ export async function removeTeamMember(teamId: string, memberId: string) {
     }),
     'Team membership not found',
   );
-  await prisma.teamMembership.delete({ where: { id: membership.id } });
+  // Issue watches in the team's projects would keep notifying someone who can no longer
+  // open those issues
+  await prisma.$transaction([
+    prisma.issueWatcher.deleteMany({
+      where: { userId: memberId, issue: { project: { teamId } } },
+    }),
+    prisma.teamMembership.delete({ where: { id: membership.id } }),
+  ]);
+  // Open sockets checked access when they joined: re-check them now
+  await revokeLiveAccess(memberId);
 }
 
 /**

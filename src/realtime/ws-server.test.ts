@@ -18,7 +18,7 @@ import {
   TestContext,
   TestUser,
 } from '../test/factory';
-import { authPost } from '../test/helpers';
+import { authDel, authGet, authPost } from '../test/helpers';
 
 import { broadcastToRoom, broadcastToUser } from './broadcast';
 import { createWebSocketServer, getClients } from './ws-server';
@@ -350,5 +350,45 @@ describe('Realtime room authorization', () => {
     await waitFor(() => getClients().size === 0);
     await socket.checkQueue;
     expect(socket.rooms.has(room)).toBe(false);
+  });
+
+  it('cuts a removed org member off from REST, new subscriptions and rooms already held', async () => {
+    const leaver = await addMemberToContext(ctx);
+    const space = await prisma.wikiSpace.create({
+      data: {
+        teamId: ctx.teamId,
+        name: 'Leaver Space',
+        slug: 'leaver-space',
+        permissions: { create: { userId: leaver.id, level: 'EDIT' } },
+      },
+    });
+    try {
+      const room = `project:${ctx.projectId}`;
+      const held = await connect(leaver.id);
+      held.send({ type: 'subscribe', rooms: [room] });
+      await waitFor(() => held.messages.some((m) => m.type === 'subscribed' && m.room === room));
+      expect((await authGet(`/api/projects/${ctx.projectId}`, leaver.token)).status).toBe(200);
+
+      const res = await authDel(`/api/orgs/${ctx.orgId}/members/${leaver.id}`, ctx.owner.token);
+      expect(res.status).toBeLessThan(300);
+
+      // Nothing the org granted survives: team membership and the space permission are gone
+      expect(await prisma.teamMembership.count({ where: { userId: leaver.id } })).toBe(0);
+      expect(await prisma.spacePermission.count({ where: { userId: leaver.id } })).toBe(0);
+      expect((await authGet(`/api/projects/${ctx.projectId}`, leaver.token)).status).toBe(403);
+
+      // The socket that held the room no longer gets its events
+      await waitFor(() => !serverRooms(leaver.id).has(room));
+      broadcastToRoom(room, { type: 'issue:updated', projectId: ctx.projectId, issueId });
+      const fresh = await connect(leaver.id);
+      fresh.send({ type: 'subscribe', rooms: [room] });
+      await waitFor(() => deniedRooms(fresh).includes(room));
+      expect(serverRooms(leaver.id).has(room)).toBe(false);
+      expect(held.messages.some((m) => m.type === 'issue:updated')).toBe(false);
+    } finally {
+      await Promise.all(clients.splice(0).map((c) => c.close()));
+      await prisma.wikiSpace.delete({ where: { id: space.id } });
+      await prisma.user.deleteMany({ where: { id: leaver.id } });
+    }
   });
 });
