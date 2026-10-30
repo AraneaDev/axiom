@@ -99,19 +99,33 @@ export async function handleMcpSse(req: Request, res: Response) {
 }
 
 /**
- *
+ * Route a JSON-RPC message to the caller's own SSE session.
  * @param req
  * @param res
  */
 export async function handleMcpMessage(req: Request, res: Response) {
-  const sessionId = req.query.session as string;
-  const conn = sessionId ? connections.get(sessionId) : connections.values().next().value;
+  const userId = (req as Request & { userId?: string }).userId;
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  // A message must name its session, and only the session's owner may post to it: tools
+  // act as the user the server was built for
+  const sessionId = typeof req.query.session === 'string' ? req.query.session : '';
+  if (!sessionId) {
+    res.status(400).json({ error: 'Missing session' });
+    return;
+  }
+  const conn = connections.get(sessionId);
   if (!conn) {
     res.status(400).json({ error: 'No active SSE connection' });
     return;
   }
+  if (conn.userId !== userId) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
 
-  const userId = (req as Request & { userId?: string }).userId ?? conn.userId;
   await mcpContext.run({ userId }, async () => {
     await conn.transport.handlePostMessage(req, res);
   });
