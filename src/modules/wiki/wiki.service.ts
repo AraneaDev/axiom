@@ -673,6 +673,7 @@ export {
  * @param pageId - The page to move
  * @param targetSpaceId - Optional target wiki space ID (defaults to current space)
  * @param targetParentId - Optional new parent page ID, or null to make root-level
+ * @param actorId
  * @returns The updated page record
  * @throws {AppError} 404 if page not found
  * @throws {AppError} 409 if page slug already taken in target space
@@ -682,6 +683,7 @@ export async function movePage(
   pageId: string,
   targetSpaceId?: string,
   targetParentId?: string | null,
+  actorId?: string,
 ) {
   const page = await findOrThrow(
     prisma.page.findUnique({ where: { id: pageId } }),
@@ -694,6 +696,18 @@ export async function movePage(
 
   // A page moves with its subtree: every slug in it must be free in the target space
   const descendants = changesSpace ? await getDescendantIds(pageId) : [];
+  // ... and the mover must be able to edit every page in it: a page they can't see or edit
+  // must not be carried somewhere else by someone else
+  if (changesSpace && actorId && descendants.length > 0) {
+    const editable = await Promise.all(descendants.map((id) => canEditPage(actorId, id)));
+    const blocked = editable.filter((ok) => !ok).length;
+    if (blocked > 0) {
+      throw new AppError(
+        403,
+        `You can't move this page: ${blocked} page${blocked === 1 ? '' : 's'} under it ${blocked === 1 ? 'is' : 'are'} hidden from you or not editable by you`,
+      );
+    }
+  }
   if (changesSpace) {
     const subtree = await prisma.page.findMany({
       where: { id: { in: [pageId, ...descendants] } },

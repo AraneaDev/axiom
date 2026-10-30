@@ -393,4 +393,51 @@ describe('Hidden pages in listings', () => {
     expect(after.find((p) => p.id === top.id)?.parentId).toBeNull();
     expect(after.find((p) => p.id === child.id)?.parentId).toBe(top.id);
   });
+
+  it('N4: a cross-space move needs edit access to the whole subtree and stays in the org', async () => {
+    const stamp = Date.now();
+    const root = await prisma.page.create({
+      data: { spaceId, title: 'Root', slug: `n4-root-${stamp}`, body: '' },
+    });
+    const hiddenChild = await prisma.page.create({
+      data: { spaceId, parentId: root.id, title: 'Hidden', slug: `n4-hidden-${stamp}`, body: '' },
+    });
+    await prisma.pageRestriction.create({
+      data: { pageId: hiddenChild.id, type: 'VIEW', userId: ctx.owner.id },
+    });
+    const target = await prisma.wikiSpace.create({
+      data: { teamId: ctx.teamId, name: 'N4', slug: `n4-${stamp}` },
+    });
+    const res = await authPost(`/api/wiki/pages/${root.id}/move`, member.token, {
+      targetSpaceId: target.id,
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.stringify(res.body)).toContain('1 page');
+    expect((await prisma.page.findUniqueOrThrow({ where: { id: hiddenChild.id } })).spaceId).toBe(
+      spaceId,
+    );
+
+    // Another org the member also belongs to (and can edit in): still refused
+    const other = await createTestContext(`n4other${stamp}`);
+    try {
+      await prisma.orgMembership.create({
+        data: { orgId: other.orgId, userId: member.id, role: 'MEMBER' },
+      });
+      await prisma.teamMembership.create({
+        data: { teamId: other.teamId, userId: member.id, role: 'MEMBER' },
+      });
+      const foreign = await prisma.wikiSpace.create({
+        data: { teamId: other.teamId, name: 'F', slug: `n4f-${stamp}` },
+      });
+      const open = await prisma.page.create({
+        data: { spaceId, title: 'Open', slug: `n4-open-${stamp}`, body: '' },
+      });
+      const cross = await authPost(`/api/wiki/pages/${open.id}/move`, member.token, {
+        targetSpaceId: foreign.id,
+      });
+      expect(cross.status).toBe(403);
+    } finally {
+      await cleanupTestContext(other);
+    }
+  });
 });

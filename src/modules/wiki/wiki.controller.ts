@@ -173,6 +173,21 @@ async function assertDestinationWritable(
   parentId: string | null | undefined,
 ): Promise<void> {
   const spaceId = targetSpaceId ?? sourceSpaceId;
+  // Pages never leave their org, even for someone who belongs to both
+  if (spaceId !== sourceSpaceId) {
+    const [source, target] = await Promise.all(
+      [sourceSpaceId, spaceId].map((id) =>
+        prisma.wikiSpace.findUnique({
+          where: { id },
+          select: { team: { select: { orgId: true } } },
+        }),
+      ),
+    );
+    if (!target) throw new AppError(404, ERR.SPACE_NOT_FOUND);
+    if (source?.team.orgId !== target.team.orgId) {
+      throw new AppError(403, 'Pages can only move to spaces in the same organization');
+    }
+  }
   const orgAccess = await checkWikiSpaceOrgAccess(spaceId, userId);
   if (orgAccess === 'not_found') throw new AppError(404, ERR.SPACE_NOT_FOUND);
   if (orgAccess === 'forbidden' || !(await canAccessSpace(spaceId, userId, 'EDIT'))) {
@@ -205,7 +220,12 @@ export const movePage = asyncHandler(async (req: Request, res: Response) => {
     data.targetSpaceId,
     data.targetParentId,
   );
-  const page = await wikiService.movePage(pageId, data.targetSpaceId, data.targetParentId);
+  const page = await wikiService.movePage(
+    pageId,
+    data.targetSpaceId,
+    data.targetParentId,
+    req.userId!,
+  );
   res.json(page);
 });
 
