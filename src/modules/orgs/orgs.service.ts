@@ -5,7 +5,12 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
-import { assertCanGrantOrgRole, assertCanManageOrgMember, assertNotLastOwner } from './org-roles';
+import {
+  assertCanGrantOrgRole,
+  assertCanManageOrgMember,
+  assertNotLastOwnerTx,
+  withOwnersLocked,
+} from './org-roles';
 
 /**
  * Create a new organization, adding the creator as owner.
@@ -160,11 +165,12 @@ export async function updateOrgMemberRole(
     await assertCanManageOrgMember(orgId, actorId, membership.role);
     await assertCanGrantOrgRole(orgId, actorId, role);
   }
-  if (membership.role === 'OWNER' && role !== 'OWNER') await assertNotLastOwner(orgId);
-
-  const updated = await prisma.orgMembership.update({
-    where: { id: membership.id },
-    data: { role },
+  // Re-read and check under the OWNER lock: a concurrent demotion could otherwise leave
+  // the org with no OWNER
+  const updated = await withOwnersLocked(orgId, async (tx) => {
+    const current = await tx.orgMembership.findUniqueOrThrow({ where: { id: membership.id } });
+    if (current.role === 'OWNER' && role !== 'OWNER') await assertNotLastOwnerTx(tx, orgId);
+    return tx.orgMembership.update({ where: { id: membership.id }, data: { role } });
   });
   // A lower role can lose org-wide access (an OWNER or ADMIN sees every space and page)
   void revokeLiveAccess({ userId: memberId });
@@ -187,23 +193,25 @@ export async function removeOrgMember(orgId: string, memberId: string, actorId?:
     ERR.MEMBERSHIP_NOT_FOUND,
   );
   if (actorId) await assertCanManageOrgMember(orgId, actorId, membership.role);
-  if (membership.role === 'OWNER') await assertNotLastOwner(orgId);
   // Everything the org granted goes with the membership, in one transaction: team
   // memberships (project access), space permissions and page allow-list entries naming the
-  // user, issue watches (which would keep sending them notifications) and page stars
+  // user, issue watches (which would keep sending them notifications) and page stars. The
+  // last-OWNER check runs under the OWNER lock in the same transaction.
   const inOrgTeams = { team: { orgId } };
-  await prisma.$transaction([
-    prisma.teamMembership.deleteMany({ where: { userId: memberId, ...inOrgTeams } }),
-    prisma.spacePermission.deleteMany({ where: { userId: memberId, space: inOrgTeams } }),
-    prisma.pageRestriction.deleteMany({
+  await withOwnersLocked(orgId, async (tx) => {
+    const current = await tx.orgMembership.findUniqueOrThrow({ where: { id: membership.id } });
+    if (current.role === 'OWNER') await assertNotLastOwnerTx(tx, orgId);
+    await tx.teamMembership.deleteMany({ where: { userId: memberId, ...inOrgTeams } });
+    await tx.spacePermission.deleteMany({ where: { userId: memberId, space: inOrgTeams } });
+    await tx.pageRestriction.deleteMany({
       where: { userId: memberId, page: { space: inOrgTeams } },
-    }),
-    prisma.issueWatcher.deleteMany({
+    });
+    await tx.issueWatcher.deleteMany({
       where: { userId: memberId, issue: { project: inOrgTeams } },
-    }),
-    prisma.starredPage.deleteMany({ where: { userId: memberId, page: { space: inOrgTeams } } }),
-    prisma.orgMembership.delete({ where: { id: membership.id } }),
-  ]);
+    });
+    await tx.starredPage.deleteMany({ where: { userId: memberId, page: { space: inOrgTeams } } });
+    await tx.orgMembership.delete({ where: { id: membership.id } });
+  });
   // Open sockets checked access when they joined: re-check them (not awaited)
   void revokeLiveAccess({ userId: memberId });
 }

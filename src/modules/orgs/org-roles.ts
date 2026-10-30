@@ -1,4 +1,4 @@
-import type { OrgRole } from '@prisma/client';
+import type { OrgRole, Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
@@ -61,5 +61,36 @@ export async function assertCanManageOrgMember(
  */
 export async function assertNotLastOwner(orgId: string): Promise<void> {
   const owners = await prisma.orgMembership.count({ where: { orgId, role: 'OWNER' } });
+  if (owners <= 1) throw new AppError(400, 'An organization must keep at least one OWNER');
+}
+
+/**
+ * Run a change to an org's owners with the OWNER rows locked, so two concurrent demotions
+ * (or a demotion and a removal) can't each see two OWNERs and leave none. The callback
+ * re-checks with assertNotLastOwnerTx inside the same transaction.
+ * @param orgId
+ * @param fn - The change, given the transaction client
+ */
+export async function withOwnersLocked<T>(
+  orgId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${orgId} AND role = 'OWNER' FOR UPDATE`;
+    return fn(tx);
+  });
+}
+
+/**
+ * The last-OWNER check inside a withOwnersLocked transaction.
+ * @param tx
+ * @param orgId
+ * @throws {AppError} 400 when the change would leave the org without an OWNER
+ */
+export async function assertNotLastOwnerTx(
+  tx: Prisma.TransactionClient,
+  orgId: string,
+): Promise<void> {
+  const owners = await tx.orgMembership.count({ where: { orgId, role: 'OWNER' } });
   if (owners <= 1) throw new AppError(400, 'An organization must keep at least one OWNER');
 }

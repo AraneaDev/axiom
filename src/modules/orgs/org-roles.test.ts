@@ -102,4 +102,38 @@ describe('Org access and roles', () => {
     const ok = await authPost(`/api/orgs/${ctx.orgId}/invites`, admin.token, { role: 'MEMBER' });
     expect(ok.status).toBe(201);
   });
+
+  it('3: two OWNERs demoting each other at once still leave one OWNER', async () => {
+    const second = await addMemberToContext(ctx);
+    await prisma.orgMembership.update({
+      where: { userId_orgId: { userId: second.id, orgId: ctx.orgId } },
+      data: { role: 'OWNER' },
+    });
+    try {
+      for (let round = 0; round < 5; round++) {
+        await prisma.orgMembership.updateMany({
+          where: { orgId: ctx.orgId, userId: { in: [ctx.owner.id, second.id] } },
+          data: { role: 'OWNER' },
+        });
+        const results = await Promise.all([
+          authPatch(`/api/orgs/${ctx.orgId}/members/${second.id}`, ctx.owner.token, {
+            role: 'ADMIN',
+          }),
+          authPatch(`/api/orgs/${ctx.orgId}/members/${ctx.owner.id}`, second.token, {
+            role: 'ADMIN',
+          }),
+        ]);
+        const owners = await prisma.orgMembership.count({
+          where: { orgId: ctx.orgId, role: 'OWNER' },
+        });
+        expect(owners, `round ${round}: ${results.map((r) => r.status)}`).toBeGreaterThanOrEqual(1);
+      }
+    } finally {
+      await prisma.orgMembership.updateMany({
+        where: { orgId: ctx.orgId, userId: ctx.owner.id },
+        data: { role: 'OWNER' },
+      });
+      await prisma.user.deleteMany({ where: { id: second.id } });
+    }
+  });
 });
