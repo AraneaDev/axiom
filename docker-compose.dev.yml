@@ -16,6 +16,9 @@ x-app-dev: &app-dev
     SMTP_PORT: 25
     SMTP_FROM: "Axiom <noreply@mail.axiom.local>"
     FRONTEND_URL: http://localhost:7000
+    # Trust the hops inside the Docker network (the Vite proxy, and cloudflared with the
+    # tunnel profile), so req.ip is the visitor's address and per-IP limits work
+    TRUST_PROXY: "loopback, linklocal, uniquelocal"
   volumes: &app-dev-volumes
     - ./src:/app/src
     - ./prisma:/app/prisma

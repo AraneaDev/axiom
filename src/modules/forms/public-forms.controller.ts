@@ -5,6 +5,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 import { validate } from '../../utils/validation';
 
+import { clientKey } from './client-ip';
 import * as formsService from './forms.service';
 import { submitFormSchema, verifyFormSchema } from './forms.validation';
 
@@ -12,7 +13,7 @@ import { submitFormSchema, verifyFormSchema } from './forms.validation';
  * The sender's IP, as the per-IP form limits key it
  * @param req
  */
-const clientIp = (req: Request) => req.ip || req.socket.remoteAddress || 'unknown';
+const clientIp = (req: Request) => clientKey(req.ip || req.socket.remoteAddress || 'unknown');
 
 export const getPublicForm = asyncHandler(async (req: Request, res: Response) => {
   const form = await formsService.getPublicForm(param(req, 'formSlug'));

@@ -27,6 +27,7 @@ import authRoutes from './modules/auth/auth.routes';
 import automationRoutes from './modules/automation/automation.routes';
 import customFieldsDirectRoutes from './modules/custom-fields/custom-fields-direct.routes';
 import customFieldsRoutes from './modules/custom-fields/custom-fields.routes';
+import { parseTrustProxy } from './modules/forms/client-ip';
 import formRoutes from './modules/forms/forms.routes';
 import publicFormRoutes from './modules/forms/public-forms.routes';
 import healthRoutes from './modules/health/health.routes';
@@ -76,10 +77,10 @@ try {
 
 const app = express();
 
-// Trust proxy when behind reverse proxy (Apache/nginx)
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
+// Trust proxy hops as TRUST_PROXY says (default: one hop in production), so req.ip is the
+// client's address behind a reverse proxy or tunnel. See src/modules/forms/client-ip.ts
+const trustProxy = parseTrustProxy(process.env.TRUST_PROXY, process.env.NODE_ENV);
+if (trustProxy !== undefined) app.set('trust proxy', trustProxy);
 
 // Global middleware
 app.use(

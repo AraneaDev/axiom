@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // ─── Form CRUD ──────────────────────────────────────────────
 
-export const createFormSchema = z.object({
+const formFields = {
   name: z.string().min(1).max(200),
   slug: z
     .string()
@@ -10,15 +10,29 @@ export const createFormSchema = z.object({
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes only'),
   description: z.string().max(2000).optional(),
-  authMode: z.enum(['PUBLIC', 'TOKEN_GATED']).default('PUBLIC'),
-  sharedSecret: z.string().min(4).max(100).optional(),
-  spamProtection: z.enum(['NONE', 'CAPTCHA', 'RATE_LIMIT']).default('NONE'),
+  authMode: z.enum(['PUBLIC', 'TOKEN_GATED']),
+  /** Refused by the service: access codes are generated (see form-secret.ts) */
+  sharedSecret: z.string().max(500).optional(),
+  spamProtection: z.enum(['NONE', 'CAPTCHA', 'RATE_LIMIT']),
   rateLimitPerHour: z.number().int().min(1).max(10000).optional(),
   successMessage: z.string().max(2000).optional(),
   redirectUrl: z.string().url().max(2000).optional(),
+};
+
+export const createFormSchema = z.object({
+  ...formFields,
+  authMode: formFields.authMode.default('PUBLIC'),
+  spamProtection: formFields.spamProtection.default('NONE'),
 });
 
-export const updateFormSchema = createFormSchema.partial();
+/**
+ * Built from the fields without their defaults: a partial update must not reset authMode
+ * to PUBLIC (un-gating a gated form) or spamProtection to NONE when they are left out.
+ */
+export const updateFormSchema = z.object(formFields).partial().extend({
+  /** Generate a new access code for a gated form (returned once) */
+  regenerateSecret: z.boolean().optional(),
+});
 
 // ─── Pages ──────────────────────────────────────────────────
 

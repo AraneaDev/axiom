@@ -2,13 +2,14 @@
  * Token-gated forms reveal their structure and accept submissions only with the secret,
  * and rateLimitPerHour caps submissions per IP.
  */
-import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
 import { cleanupTestContext, createTestContext, type TestContext } from '../../test/factory';
+
+import { hashAccessCode } from './form-secret';
 
 describe('Public form access', () => {
   let ctx: TestContext;
@@ -28,7 +29,7 @@ describe('Public form access', () => {
         createdById: ctx.owner.id,
         status: 'PUBLISHED',
         authMode: 'TOKEN_GATED',
-        sharedSecret: await bcrypt.hash('open-sesame', 4),
+        sharedSecret: hashAccessCode('open-sesame'),
       },
     });
     const page = await prisma.formPage.create({

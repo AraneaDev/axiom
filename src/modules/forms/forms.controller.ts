@@ -4,6 +4,8 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
 import { validate } from '../../utils/validation';
 
+import { clientKey } from './client-ip';
+import { withoutSecret } from './form-secret';
 import * as formsService from './forms.service';
 import {
   createFormSchema,
@@ -22,12 +24,12 @@ import {
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
   const forms = await formsService.listForms(param(req, 'projectId'));
-  res.json(forms);
+  res.json(forms.map(withoutSecret));
 });
 
 export const get = asyncHandler(async (req: Request, res: Response) => {
   const form = await formsService.getForm(param(req, 'formId'), param(req, 'projectId'));
-  res.json(form);
+  res.json(withoutSecret(form));
 });
 
 export const create = asyncHandler(async (req: Request, res: Response) => {
@@ -49,7 +51,7 @@ export const remove = asyncHandler(async (req: Request, res: Response) => {
 
 export const publish = asyncHandler(async (req: Request, res: Response) => {
   const form = await formsService.publishForm(param(req, 'formId'), param(req, 'projectId'));
-  res.json(form);
+  res.json(withoutSecret(form));
 });
 
 // ─── Page CRUD ──────────────────────────────────────────────
@@ -134,7 +136,7 @@ export const verifyAccess = asyncHandler(async (req: Request, res: Response) => 
   const result = await formsService.verifyFormAccess(
     param(req, 'slug'),
     secret,
-    req.ip || req.socket.remoteAddress || 'unknown',
+    clientKey(req.ip || req.socket.remoteAddress || 'unknown'),
   );
   res.json(result);
 });
