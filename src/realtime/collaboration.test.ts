@@ -59,7 +59,14 @@ describe('Collaboration server', () => {
       data: {
         name: 'Collab Test Org',
         slug: `${SLUG}-org`,
-        members: { create: { userId: users.owner, role: 'OWNER' } },
+        // Team members are org members too, as the app guarantees
+        members: {
+          create: [
+            { userId: users.owner, role: 'OWNER' },
+            { userId: users.editor, role: 'MEMBER' },
+            { userId: users.viewer, role: 'MEMBER' },
+          ],
+        },
       },
     });
     orgId = org.id;
@@ -132,6 +139,32 @@ describe('Collaboration server', () => {
     const client = connectCollabClient(server, pageId, users.outsider);
     clients.push(client);
     expect(await client.closeCode).toBe(4003);
+  });
+
+  it('closes with 4003 for a user from another org on an unrestricted space', async () => {
+    // No custom space permissions and no page restrictions: only org membership keeps a
+    // stranger out, as on the REST routes
+    const openSpace = await prisma.wikiSpace.create({
+      data: {
+        teamId: (await prisma.team.findFirstOrThrow({ where: { orgId } })).id,
+        name: 'Open',
+        slug: `${SLUG}-open`,
+      },
+    });
+    const openPage = await prisma.page.create({
+      data: { spaceId: openSpace.id, title: 'Open page', slug: 'open-page', body: 'open' },
+    });
+    const stranger = connectCollabClient(server, openPage.id, users.outsider);
+    clients.push(stranger);
+    expect(await stranger.closeCode).toBe(4003);
+
+    const member = connectCollabClient(server, openPage.id, users.editor);
+    clients.push(member);
+    await member.synced;
+    expect(member.ws.readyState).toBe(WebSocket.OPEN);
+    await member.close();
+    await waitFor(() => !isRoomLive(openPage.id));
+    await roomSettled(openPage.id);
   });
 
   it('closes with 4003 for a user the page hides', async () => {

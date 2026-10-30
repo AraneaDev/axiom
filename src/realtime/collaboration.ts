@@ -28,6 +28,7 @@ import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { loadEditorCore, markdownToYFragment, yFragmentToMarkdown } from '../lib/editor-core';
 import type { AuthPayload } from '../middleware/auth';
+import { checkWikiSpaceOrgAccess } from '../middleware/rbac';
 import { restoredVersionOf } from '../modules/wiki/page-versions';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
@@ -624,7 +625,13 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
     return;
   }
 
-  // The same checks as the REST routes: space access first, then the page's restrictions
+  // The same checks as the REST routes: org membership, space access, then the page's
+  // restrictions. The last two pass for anyone when nothing is restricted, so the org
+  // check is what keeps users of other orgs out.
+  if ((await checkWikiSpaceOrgAccess(page.spaceId, auth.userId)) !== 'ok') {
+    ws.close(4003, 'Forbidden');
+    return;
+  }
   const [spaceView, pageView] = await Promise.all([
     canAccessSpace(page.spaceId, auth.userId, 'VIEW'),
     canViewPage(auth.userId, pageId),
