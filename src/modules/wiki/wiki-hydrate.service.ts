@@ -15,7 +15,8 @@ import { getPage, getPageHistory } from './wiki.service';
  */
 export async function hydrateWikiPage(spaceId: string, pageSlug: string, userId: string) {
   // Primary lookup -- must succeed or 404
-  const page = await getPage(spaceId, pageSlug);
+  // With the user: the page's view restriction is checked and hidden children left out
+  const page = await getPage(spaceId, pageSlug, userId);
 
   // page already includes children, so no need to fetch separately
   const pageId = page.id;

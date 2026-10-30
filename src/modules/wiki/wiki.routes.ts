@@ -5,6 +5,7 @@ import {
   requireTeamPermission,
   requireWikiSpaceAccess,
   requireWikiPageAccess,
+  requireWikiPageBySlug,
   requireWikiCommentAccess,
   requireWikiTemplateAccess,
   requireWikiRestrictionAccess,
@@ -86,66 +87,77 @@ router.get(
   '/spaces/:spaceId/pages/:pageSlug',
   requireWikiSpaceAccess(),
   requireSpacePermission('VIEW'),
+  requireWikiPageBySlug('view'),
   wikiController.getPage,
 );
 router.patch(
   '/spaces/:spaceId/pages/:pageSlug',
   requireWikiSpaceAccess(),
   requireSpacePermission('EDIT'),
+  requireWikiPageBySlug('edit'),
   wikiController.updatePage,
 );
 router.post(
   '/spaces/:spaceId/pages/:pageSlug/collab/flush',
   requireWikiSpaceAccess(),
   requireSpacePermission('EDIT'),
+  requireWikiPageBySlug('edit'),
   wikiController.flushPageSession,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/pending-merge',
   requireWikiSpaceAccess(),
   requireSpacePermission('EDIT'),
+  requireWikiPageBySlug('edit'),
   wikiController.getPendingMerge,
 );
 router.post(
   '/spaces/:spaceId/pages/:pageSlug/merge',
   requireWikiSpaceAccess(),
   requireSpacePermission('EDIT'),
+  requireWikiPageBySlug('edit'),
   wikiController.applyMerge,
 );
 router.delete(
   '/spaces/:spaceId/pages/:pageSlug',
   requireWikiSpaceAccess(),
   requireSpacePermission('EDIT'),
+  requireWikiPageBySlug('edit'),
   wikiController.deletePage,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/hydrate',
   requireWikiSpaceAccess(),
   requireSpacePermission('VIEW'),
+  requireWikiPageBySlug('view'),
   hydrateController.hydrateWikiPage,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/history',
   requireWikiSpaceAccess(),
   requireSpacePermission('VIEW'),
+  requireWikiPageBySlug('view'),
   wikiController.pageHistory,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/export',
   requireWikiSpaceAccess(),
   requireSpacePermission('VIEW'),
+  requireWikiPageBySlug('view'),
   wikiController.exportPage,
 );
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/diff',
   requireWikiSpaceAccess(),
   requireSpacePermission('VIEW'),
+  requireWikiPageBySlug('view'),
   wikiController.diffVersions,
 );
 router.post(
   '/spaces/:spaceId/pages/:pageSlug/restore',
   requireWikiSpaceAccess(),
   requireSpacePermission('EDIT'),
+  requireWikiPageBySlug('edit'),
   wikiController.restoreVersion,
 );
 
@@ -168,12 +180,16 @@ router.get(
 router.get('/templates/:templateId', requireWikiTemplateAccess(), templatesController.getTemplate);
 router.delete(
   '/templates/:templateId',
-  requireWikiTemplateAccess(),
+  requireWikiTemplateAccess('EDIT'),
   templatesController.deleteTemplate,
 );
 
 // Page comments (require org membership via page lookup)
-router.post('/pages/:pageId/comments', requireWikiPageAccess(), commentsController.addPageComment);
+router.post(
+  '/pages/:pageId/comments',
+  requireWikiPageAccess('view'),
+  commentsController.addPageComment,
+);
 router.get('/pages/:pageId/comments', requireWikiPageAccess(), commentsController.listPageComments);
 router.patch('/comments/:commentId', requireWikiCommentAccess(), commentsController.patchComment);
 router.delete(
@@ -189,10 +205,10 @@ router.post(
 
 // Page labels (require org membership via page lookup)
 router.get('/pages/:pageId/labels', requireWikiPageAccess(), labelsController.listPageLabels);
-router.post('/pages/:pageId/labels', requireWikiPageAccess(), labelsController.addPageLabel);
+router.post('/pages/:pageId/labels', requireWikiPageAccess('edit'), labelsController.addPageLabel);
 router.delete(
   '/pages/:pageId/labels/:label',
-  requireWikiPageAccess(),
+  requireWikiPageAccess('edit'),
   labelsController.removePageLabel,
 );
 router.get(
@@ -204,7 +220,11 @@ router.get(
 
 // Page restrictions (require org membership via page lookup)
 router.get('/pages/:pageId/restrictions', requireWikiPageAccess(), permController.getRestrictions);
-router.put('/pages/:pageId/restrictions', requireWikiPageAccess(), permController.setRestrictions);
+router.put(
+  '/pages/:pageId/restrictions',
+  requireWikiPageAccess('edit'),
+  permController.setRestrictions,
+);
 router.delete(
   '/restrictions/:restrictionId',
   requireWikiRestrictionAccess(),
@@ -212,9 +232,9 @@ router.delete(
 );
 
 // Move / Copy / Reorder (require org membership via page lookup)
-router.post('/pages/:pageId/move', requireWikiPageAccess(), wikiController.movePage);
-router.post('/pages/:pageId/copy', requireWikiPageAccess(), wikiController.copyPage);
-router.patch('/pages/:pageId/reorder', requireWikiPageAccess(), wikiController.reorderPage);
+router.post('/pages/:pageId/move', requireWikiPageAccess('edit'), wikiController.movePage);
+router.post('/pages/:pageId/copy', requireWikiPageAccess('view'), wikiController.copyPage);
+router.patch('/pages/:pageId/reorder', requireWikiPageAccess('edit'), wikiController.reorderPage);
 
 // Starred pages
 router.get('/starred', starsController.getStarredPages);
@@ -231,10 +251,10 @@ router.get(
   requireWikiPageAccess(),
   linkController.listLinkedIssues,
 );
-router.post('/pages/:pageId/linked-issues', requireWikiPageAccess(), linkController.addLink);
+router.post('/pages/:pageId/linked-issues', requireWikiPageAccess('edit'), linkController.addLink);
 router.delete(
   '/pages/:pageId/linked-issues/:issueId',
-  requireWikiPageAccess(),
+  requireWikiPageAccess('edit'),
   linkController.removeLink,
 );
 

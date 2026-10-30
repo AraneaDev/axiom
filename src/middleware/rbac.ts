@@ -1,6 +1,9 @@
+import type { SpacePermissionLevel } from '@prisma/client';
 import { Request, Response, NextFunction } from 'express';
 
 import { prisma } from '../config/database';
+import { canAccessSpace } from '../modules/wiki/space-permissions.service';
+import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
 import { ERR } from '../utils/error-messages';
 import { param } from '../utils/params';
 import { Action, hasPermission, hasOrgPermission } from '../utils/permissions';
@@ -59,33 +62,45 @@ export function requireWikiSpaceAccess() {
 }
 
 /**
- * Verify the authenticated user is a member of the org that owns the wiki page.
- * Expects :pageId in route params.
- * @returns Express middleware that checks org membership for the page's org
- * @throws {AppError} 401 if not authenticated
- * @throws {AppError} 404 if wiki page not found
- * @throws {AppError} 403 if user is not an org member
+ * The checks every page route needs, in REST order: the page exists, the user is in its
+ * org, their space permission reaches the level, and the page's own restrictions let them
+ * view (or edit) it. canAccessSpace and canViewPage pass for anyone when nothing is
+ * restricted, so the org check must come first.
+ * @param userId - The user
+ * @param pageId - The page
+ * @param mode - 'view' for reads, 'edit' for writes
+ * @throws {AppError} 404 when the page doesn't exist, 403 otherwise
  */
-export function requireWikiPageAccess() {
+export async function assertPageAccess(
+  userId: string,
+  pageId: string,
+  mode: 'view' | 'edit',
+): Promise<void> {
+  const page = await prisma.page.findUnique({ where: { id: pageId }, select: { spaceId: true } });
+  if (!page) throw new AppError(404, 'Wiki page not found');
+  const orgAccess = await checkWikiSpaceOrgAccess(page.spaceId, userId);
+  if (orgAccess !== 'ok') {
+    throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
+  }
+  if (!(await canAccessSpace(page.spaceId, userId, mode === 'edit' ? 'EDIT' : 'VIEW'))) {
+    throw new AppError(403, 'You do not have access to this space');
+  }
+  const allowed =
+    mode === 'edit' ? await canEditPage(userId, pageId) : await canViewPage(userId, pageId);
+  if (!allowed) throw new AppError(403, 'You do not have access to this page');
+}
+
+/**
+ * Page routes addressed by id. Expects :pageId in route params.
+ * @param mode - 'view' (default) for reads, 'edit' for writes
+ * @returns Express middleware running assertPageAccess
+ */
+export function requireWikiPageAccess(mode: 'view' | 'edit' = 'view') {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
-      const pageId = param(req, 'pageId');
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-
-      const page = await prisma.page.findUnique({
-        where: { id: pageId },
-        select: { space: { select: { team: { select: { orgId: true } } } } },
-      });
-      if (!page) throw new AppError(404, 'Wiki page not found');
-
-      const orgMembership = await prisma.orgMembership.findUnique({
-        where: { userId_orgId: { userId, orgId: page.space.team.orgId } },
-      });
-      if (!orgMembership) {
-        throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
-      }
-
+      await assertPageAccess(userId, param(req, 'pageId'), mode);
       next();
     } catch (err) {
       next(err);
@@ -94,33 +109,44 @@ export function requireWikiPageAccess() {
 }
 
 /**
- * Verify the authenticated user is a member of the org that owns the wiki comment.
- * Expects :commentId in route params.
- * @returns Express middleware that checks org membership for the comment's org
- * @throws {AppError} 401 if not authenticated
- * @throws {AppError} 404 if comment not found
- * @throws {AppError} 403 if user is not an org member
+ * Page routes addressed by space and slug, after the space checks. Expects :spaceId and
+ * :pageSlug. A missing page passes through so the handler answers 404 as before.
+ * @param mode - 'view' for reads, 'edit' for writes
+ * @returns Express middleware checking the page's own restrictions
+ */
+export function requireWikiPageBySlug(mode: 'view' | 'edit') {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      const userId = req.userId;
+      if (!userId) throw new AppError(401, 'Authentication required');
+      const page = await prisma.page.findUnique({
+        where: { spaceId_slug: { spaceId: param(req, 'spaceId'), slug: param(req, 'pageSlug') } },
+        select: { id: true },
+      });
+      if (!page) return next();
+      await assertPageAccess(userId, page.id, mode);
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/**
+ * Comment routes: the user needs view access to the comment's page. Expects :commentId.
+ * @returns Express middleware
  */
 export function requireWikiCommentAccess() {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
-      const commentId = param(req, 'commentId');
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-
       const comment = await prisma.pageComment.findUnique({
-        where: { id: commentId },
-        select: { page: { select: { space: { select: { team: { select: { orgId: true } } } } } } },
+        where: { id: param(req, 'commentId') },
+        select: { pageId: true },
       });
       if (!comment) throw new AppError(404, ERR.COMMENT_NOT_FOUND);
-
-      const orgMembership = await prisma.orgMembership.findUnique({
-        where: { userId_orgId: { userId, orgId: comment.page.space.team.orgId } },
-      });
-      if (!orgMembership) {
-        throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
-      }
-
+      await assertPageAccess(userId, comment.pageId, 'view');
       next();
     } catch (err) {
       next(err);
@@ -129,33 +155,27 @@ export function requireWikiCommentAccess() {
 }
 
 /**
- * Verify the authenticated user is a member of the org that owns the wiki template.
- * Expects :templateId in route params.
- * @returns Express middleware that checks org membership for the template's org
- * @throws {AppError} 401 if not authenticated
- * @throws {AppError} 404 if template not found
- * @throws {AppError} 403 if user is not an org member
+ * Template routes: org membership and the space permission at the given level.
+ * Expects :templateId.
+ * @param level - VIEW (default) for reads, EDIT for changes
+ * @returns Express middleware
  */
-export function requireWikiTemplateAccess() {
+export function requireWikiTemplateAccess(level: SpacePermissionLevel = 'VIEW') {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
-      const templateId = param(req, 'templateId');
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-
       const template = await prisma.pageTemplate.findUnique({
-        where: { id: templateId },
-        select: { space: { select: { team: { select: { orgId: true } } } } },
+        where: { id: param(req, 'templateId') },
+        select: { spaceId: true },
       });
       if (!template) throw new AppError(404, ERR.TEMPLATE_NOT_FOUND);
-
-      const orgMembership = await prisma.orgMembership.findUnique({
-        where: { userId_orgId: { userId, orgId: template.space.team.orgId } },
-      });
-      if (!orgMembership) {
+      if ((await checkWikiSpaceOrgAccess(template.spaceId, userId)) !== 'ok') {
         throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
       }
-
+      if (!(await canAccessSpace(template.spaceId, userId, level))) {
+        throw new AppError(403, 'You do not have access to this space');
+      }
       next();
     } catch (err) {
       next(err);
@@ -164,33 +184,21 @@ export function requireWikiTemplateAccess() {
 }
 
 /**
- * Verify the authenticated user is a member of the org that owns the wiki restriction.
- * Expects :restrictionId in route params.
- * @returns Express middleware that checks org membership for the restriction's org
- * @throws {AppError} 401 if not authenticated
- * @throws {AppError} 404 if restriction not found
- * @throws {AppError} 403 if user is not an org member
+ * Removing a page restriction needs edit access to the page, as setting them does.
+ * Expects :restrictionId.
+ * @returns Express middleware
  */
 export function requireWikiRestrictionAccess() {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
-      const restrictionId = param(req, 'restrictionId');
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-
       const restriction = await prisma.pageRestriction.findUnique({
-        where: { id: restrictionId },
-        select: { page: { select: { space: { select: { team: { select: { orgId: true } } } } } } },
+        where: { id: param(req, 'restrictionId') },
+        select: { pageId: true },
       });
       if (!restriction) throw new AppError(404, ERR.RESTRICTION_NOT_FOUND);
-
-      const orgMembership = await prisma.orgMembership.findUnique({
-        where: { userId_orgId: { userId, orgId: restriction.page.space.team.orgId } },
-      });
-      if (!orgMembership) {
-        throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
-      }
-
+      await assertPageAccess(userId, restriction.pageId, 'edit');
       next();
     } catch (err) {
       next(err);

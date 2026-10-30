@@ -17,7 +17,7 @@ import { writePageBody } from './page-writes';
 import { canAccessSpace } from './space-permissions.service';
 import { broadcastWikiUpdated, isViewRestricted } from './wiki-broadcast';
 import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
-import { canViewPage, canEditPage } from './wiki-permissions.service';
+import { canViewPage, canEditPage, hiddenPageIds } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
 
 /**
@@ -49,11 +49,12 @@ export async function createSpace(
 /**
  * Retrieve a wiki space by ID, including root pages and their children.
  * @param spaceId - The wiki space ID
+ * @param userId
  * @returns The wiki space with nested page tree
  * @throws {AppError} 404 if wiki space not found
  */
-export async function getSpace(spaceId: string) {
-  return findOrThrow(
+export async function getSpace(spaceId: string, userId?: string) {
+  const space = await findOrThrow(
     prisma.wikiSpace.findUnique({
       where: { id: spaceId },
       include: {
@@ -66,6 +67,16 @@ export async function getSpace(spaceId: string) {
     }),
     'Wiki space not found',
   );
+  if (!userId) return space;
+  // Leave out pages a VIEW restriction hides from this user
+  const hidden = await hiddenPageIds(userId, spaceId);
+  if (hidden.size === 0) return space;
+  return {
+    ...space,
+    pages: space.pages
+      .filter((p) => !hidden.has(p.id))
+      .map((p) => ({ ...p, children: p.children.filter((c) => !hidden.has(c.id)) })),
+  };
 }
 
 /**
@@ -221,11 +232,14 @@ export async function getPage(spaceId: string, pageSlug: string, userId?: string
     const allowed = await canViewPage(userId, page.id);
     if (!allowed) throw new AppError(403, 'You do not have permission to view this page');
     // The same rule as the collaboration socket: space EDIT access and the page's restrictions
-    const [spaceEdit, pageEdit] = await Promise.all([
+    const [spaceEdit, pageEdit, hidden] = await Promise.all([
       canAccessSpace(page.spaceId, userId, 'EDIT'),
       canEditPage(userId, page.id),
+      hiddenPageIds(userId, page.spaceId),
     ]);
-    return { ...page, canEdit: spaceEdit && pageEdit };
+    // Child links leave out pages a VIEW restriction hides from this user
+    const children = page.children.filter((c) => !hidden.has(c.id));
+    return { ...page, children, canEdit: spaceEdit && pageEdit };
   }
 
   return page;

@@ -58,6 +58,50 @@ export async function canEditPage(userId: string, pageId: string): Promise<boole
 }
 
 /**
+ * Pages in a space that a VIEW restriction hides from the user, for listings (tree, space,
+ * children). Same rule as canViewPage: listed users and org owners/admins see everything.
+ * @param userId - The user
+ * @param spaceId - The space
+ * @returns Ids of the pages to leave out
+ */
+export async function hiddenPageIds(userId: string, spaceId: string): Promise<Set<string>> {
+  const restrictions = await prisma.pageRestriction.findMany({
+    where: { type: RestrictionType.VIEW, page: { spaceId } },
+    select: { pageId: true, userId: true },
+  });
+  if (restrictions.length === 0) return new Set();
+
+  const space = await prisma.wikiSpace.findUnique({
+    where: { id: spaceId },
+    select: { team: { select: { orgId: true } } },
+  });
+  if (space) {
+    const membership = await prisma.orgMembership.findUnique({
+      where: { userId_orgId: { userId, orgId: space.team.orgId } },
+    });
+    if (membership?.role === 'OWNER' || membership?.role === 'ADMIN') return new Set();
+  }
+
+  const allowed = new Set(restrictions.filter((r) => r.userId === userId).map((r) => r.pageId));
+  return new Set(restrictions.map((r) => r.pageId).filter((id) => !allowed.has(id)));
+}
+
+/**
+ * Drop hidden pages, and everything under them, from a page tree.
+ * @param nodes - Tree nodes with id and children
+ * @param hidden - Ids from hiddenPageIds
+ */
+export function pruneHiddenPages<T extends { id: string; children: T[] }>(
+  nodes: T[],
+  hidden: Set<string>,
+): T[] {
+  if (hidden.size === 0) return nodes;
+  return nodes
+    .filter((n) => !hidden.has(n.id))
+    .map((n) => ({ ...n, children: pruneHiddenPages(n.children, hidden) }));
+}
+
+/**
  * Set restrictions on a page for a specific type.
  * Replaces all existing restrictions of that type with the provided user IDs.
  * @param pageId - The page to set restrictions on

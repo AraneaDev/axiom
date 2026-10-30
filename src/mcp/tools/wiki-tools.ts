@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
-import { canViewPage } from '../../modules/wiki/wiki-permissions.service';
+import { canViewPage, hiddenPageIds } from '../../modules/wiki/wiki-permissions.service';
 import { resolveWikiTemplate } from '../../modules/wiki/wiki-template-resolver.service';
 import * as wikiService from '../../modules/wiki/wiki.service';
 import { ERR } from '../../utils/error-messages';
@@ -127,11 +127,15 @@ export function registerWikiTools(ctx: McpToolContext) {
       const space = await prisma.wikiSpace.findUnique({ where: { id: spaceId } });
       if (!space) return { content: [{ type: 'text' as const, text: ERR.SPACE_NOT_FOUND }] };
       await assertMcpSpacePermission('get_page_tree', spaceId, 'VIEW');
-      const pages = await prisma.page.findMany({
-        where: { spaceId },
-        select: { id: true, title: true, slug: true, parentId: true, position: true },
-        orderBy: { position: 'asc' },
-      });
+      const hidden = await hiddenPageIds(userId, spaceId);
+      // Leave out pages a VIEW restriction hides, with everything under them, as REST does
+      const pages = (
+        await prisma.page.findMany({
+          where: { spaceId },
+          select: { id: true, title: true, slug: true, parentId: true, position: true },
+          orderBy: { position: 'asc' },
+        })
+      ).filter((p) => !hidden.has(p.id));
       const map = new Map<string | null, typeof pages>();
       for (const page of pages) {
         const key = page.parentId ?? null;
