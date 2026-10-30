@@ -160,6 +160,8 @@ describe('Realtime room authorization', () => {
     const room = `project:${ctx.projectId}`;
     client.send({ type: 'subscribe', rooms: [room] });
     await waitFor(() => serverRooms(member.id).has(room));
+    // The client is told when it's in
+    await waitFor(() => client.messages.some((m) => m.type === 'subscribed' && m.room === room));
 
     broadcastToRoom(room, { type: 'issue:updated', projectId: ctx.projectId, issueId });
     await waitFor(() => client.messages.some((m) => m.type === 'issue:updated'));

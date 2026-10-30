@@ -121,8 +121,12 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
         const allowed = await canJoinRoom(ws.userId, room);
         if (ws.pendingRooms.get(room) !== ticket || ws.readyState !== WebSocket.OPEN) return;
         ws.pendingRooms.delete(room);
-        if (allowed) ws.rooms.add(room);
-        else sendDenied(ws, [room]);
+        if (allowed) {
+          ws.rooms.add(room);
+          sendToSocket(ws, { type: 'subscribed', room });
+        } else {
+          sendDenied(ws, [room]);
+        }
       })
       .catch((err) => {
         // A failed check is not a refusal: report it as an error so the client keeps the

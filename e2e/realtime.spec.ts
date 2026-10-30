@@ -5,16 +5,21 @@ import { DEMO_USERS, ORG, issuesApi, login } from './helpers';
 const BOARD_URL = `/${ORG}/core/platform/board`;
 
 /**
- * Resolves once the page's realtime socket has sent a subscribe for the room. Must be
- * called before the navigation that opens the socket.
+ * Resolves once the server has confirmed the page's realtime socket joined the room (its
+ * `subscribed` reply). Must be called before the navigation that opens the socket.
  */
-function subscribeSent(page: Page, room: string): Promise<void> {
+function subscribed(page: Page, room: string): Promise<void> {
   return new Promise((resolve) => {
     page.on('websocket', (ws) => {
       if (!new URL(ws.url()).pathname.endsWith('/ws')) return;
-      ws.on('framesent', (frame) => {
-        const payload = typeof frame.payload === 'string' ? frame.payload : '';
-        if (payload.includes('"subscribe"') && payload.includes(`"${room}"`)) resolve();
+      ws.on('framereceived', (frame) => {
+        if (typeof frame.payload !== 'string') return;
+        try {
+          const msg = JSON.parse(frame.payload) as { type?: string; room?: string };
+          if (msg.type === 'subscribed' && msg.room === room) resolve();
+        } catch {
+          // Not JSON: not ours
+        }
       });
     });
   });
@@ -35,13 +40,13 @@ test.describe('Realtime board updates', () => {
       await login(pageA, DEMO_USERS.admin);
       await login(pageB, DEMO_USERS.sarah);
 
-      const subscribedA = subscribeSent(pageA, room);
-      const subscribedB = subscribeSent(pageB, room);
+      const subscribedA = subscribed(pageA, room);
+      const subscribedB = subscribed(pageB, room);
       await pageA.goto(BOARD_URL);
       await pageB.goto(BOARD_URL);
       await expect(pageA.getByText('Backlog').first()).toBeVisible();
       await expect(pageB.getByText('Backlog').first()).toBeVisible();
-      // Both boards joined the project room by id, not by slug
+      // Both boards joined the project room by id, and the server confirmed it
       await Promise.all([subscribedA, subscribedB]);
 
       // Track full reloads: the update has to arrive over the socket, not a navigation
