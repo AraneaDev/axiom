@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { assertPageAccess } from '../../middleware/rbac';
 import { SPACE_URL_SELECT, USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { toggleAssociation } from '../../utils/toggle-association';
 
@@ -58,9 +59,23 @@ export async function getStarredPages(userId: string) {
     orderBy: { createdAt: 'desc' },
   });
 
-  return stars.map((s) => ({
-    id: s.id,
-    starredAt: s.createdAt,
-    page: s.page,
-  }));
+  // A star outlives access (a restriction, a closed space): only list pages the user can
+  // still open
+  const visible = await Promise.all(
+    stars.map(async (s) => {
+      try {
+        await assertPageAccess(userId, s.page.id, 'view');
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  );
+  return stars
+    .filter((_, i) => visible[i])
+    .map((s) => ({
+      id: s.id,
+      starredAt: s.createdAt,
+      page: s.page,
+    }));
 }

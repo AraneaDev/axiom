@@ -2,6 +2,8 @@ import { prisma } from '../../config/database';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
+import { hiddenPageIds } from './wiki-permissions.service';
+
 /**
  * List all labels for a wiki page.
  * @param pageId - The page to list labels for
@@ -61,10 +63,11 @@ export async function listLabels(pageId: string) {
  * Search for pages in a wiki space by label.
  * @param spaceId - The wiki space to search in
  * @param label - The label to filter pages by
+ * @param userId - The searcher
  * @returns List of matching pages with id, title, and slug
  */
-export async function searchPagesByLabel(spaceId: string, label: string) {
-  return prisma.page.findMany({
+export async function searchPagesByLabel(spaceId: string, label: string, userId: string) {
+  const pages = await prisma.page.findMany({
     where: {
       spaceId,
       pageLabels: { some: { label } },
@@ -72,4 +75,7 @@ export async function searchPagesByLabel(spaceId: string, label: string) {
     select: { id: true, title: true, slug: true },
     orderBy: { title: 'asc' },
   });
+  // Leave out pages a VIEW restriction hides from this user
+  const hidden = await hiddenPageIds(userId, spaceId);
+  return pages.filter((p) => !hidden.has(p.id));
 }

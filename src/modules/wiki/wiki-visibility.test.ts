@@ -232,4 +232,36 @@ describe('Hidden pages in listings', () => {
       await cleanupTestContext(other);
     }
   });
+
+  it('E, Z: label search, space lists and starred pages leave out what the user cannot view', async () => {
+    const hidden = await prisma.page.findFirstOrThrow({ where: { spaceId, slug: 'secret-root' } });
+    await prisma.pageLabel.create({ data: { pageId: hidden.id, label: 'vislabel' } });
+    await prisma.starredPage.create({ data: { userId: member.id, pageId: hidden.id } });
+    const locked = await prisma.wikiSpace.create({
+      data: {
+        teamId: ctx.teamId,
+        name: `${SECRET} locked space`,
+        slug: 'vis-locked-list',
+        permissions: { create: { userId: ctx.owner.id, level: 'ADMIN' } },
+      },
+    });
+
+    const labels = await authGet(`/api/wiki/spaces/${spaceId}/labels?label=vislabel`, member.token);
+    const spaces = await authGet(`/api/wiki/team/${ctx.teamId}/spaces`, member.token);
+    const starred = await authGet('/api/wiki/starred', member.token);
+    for (const res of [labels, spaces, starred]) {
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toContain(SECRET);
+    }
+
+    const server = createMcpServer(member.id);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'spaces', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const mcp = await mcpContext.run({ userId: member.id }, () =>
+      client.callTool({ name: 'list_wiki_spaces', arguments: { teamId: ctx.teamId } }),
+    );
+    await client.close();
+    expect(JSON.stringify(mcp.content)).not.toContain(locked.id);
+  });
 });

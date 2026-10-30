@@ -371,12 +371,17 @@ describe('Realtime room authorization', () => {
       await waitFor(() => held.messages.some((m) => m.type === 'subscribed' && m.room === room));
       expect((await authGet(`/api/projects/${ctx.projectId}`, leaver.token)).status).toBe(200);
 
+      const starPage = await prisma.page.create({
+        data: { spaceId: space.id, title: 'Starred', slug: 'starred', body: 'x' },
+      });
+      await prisma.starredPage.create({ data: { userId: leaver.id, pageId: starPage.id } });
       const res = await authDel(`/api/orgs/${ctx.orgId}/members/${leaver.id}`, ctx.owner.token);
       expect(res.status).toBeLessThan(300);
 
       // Nothing the org granted survives: team membership and the space permission are gone
       expect(await prisma.teamMembership.count({ where: { userId: leaver.id } })).toBe(0);
       expect(await prisma.spacePermission.count({ where: { userId: leaver.id } })).toBe(0);
+      expect(await prisma.starredPage.count({ where: { userId: leaver.id } })).toBe(0);
       expect((await authGet(`/api/projects/${ctx.projectId}`, leaver.token)).status).toBe(403);
 
       // The socket that held the room no longer gets its events

@@ -29,6 +29,6 @@ export const searchByLabel = asyncHandler(async (req: Request, res: Response) =>
   if (!label) {
     throw new AppError(400, 'label query parameter required');
   }
-  const pages = await svc.searchPagesByLabel(param(req, 'spaceId'), label);
+  const pages = await svc.searchPagesByLabel(param(req, 'spaceId'), label, req.userId!);
   res.json(pages);
 });

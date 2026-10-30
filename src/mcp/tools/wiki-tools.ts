@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
+import { canAccessSpace } from '../../modules/wiki/space-permissions.service';
 import { canViewPage, hiddenPageIds } from '../../modules/wiki/wiki-permissions.service';
 import { resolveWikiTemplate } from '../../modules/wiki/wiki-template-resolver.service';
 import * as wikiService from '../../modules/wiki/wiki.service';
@@ -40,8 +41,11 @@ export function registerWikiTools(ctx: McpToolContext) {
         take: take + 1,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
-      const hasMore = spaces.length > take;
-      const page = hasMore ? spaces.slice(0, take) : spaces;
+      // Spaces whose own permissions leave the user out are not listed
+      const allowed = await Promise.all(spaces.map((sp) => canAccessSpace(sp.id, userId, 'VIEW')));
+      const visible = spaces.filter((_, i) => allowed[i]);
+      const hasMore = visible.length > take;
+      const page = hasMore ? visible.slice(0, take) : visible;
       const result: Record<string, unknown> = { data: page };
       if (hasMore) result.next_cursor = page[page.length - 1].id;
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };

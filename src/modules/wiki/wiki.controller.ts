@@ -37,7 +37,7 @@ export const getSpace = asyncHandler(async (req: Request, res: Response) => {
 
 export const listSpaces = asyncHandler(async (req: Request, res: Response) => {
   const includeArchived = req.query.includeArchived === 'true';
-  const spaces = await wikiService.listSpaces(param(req, 'teamId'), includeArchived);
+  const spaces = await wikiService.listSpaces(param(req, 'teamId'), includeArchived, req.userId!);
   res.json(spaces);
 });
 

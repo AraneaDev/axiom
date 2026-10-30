@@ -83,14 +83,19 @@ export async function getSpace(spaceId: string, userId?: string) {
  * List all wiki spaces for a team with page counts.
  * @param teamId - The team to list wiki spaces for
  * @param includeArchived - Whether to include archived spaces (default: false)
+ * @param userId
  * @returns List of wiki spaces with page counts
  */
-export async function listSpaces(teamId: string, includeArchived = false) {
-  return prisma.wikiSpace.findMany({
+export async function listSpaces(teamId: string, includeArchived = false, userId?: string) {
+  const spaces = await prisma.wikiSpace.findMany({
     where: { teamId, ...(includeArchived ? {} : { isArchived: false }) },
     include: { _count: { select: { pages: true } } },
     orderBy: { name: 'asc' },
   });
+  if (!userId) return spaces;
+  // Spaces whose own permissions leave the user out are not listed
+  const allowed = await Promise.all(spaces.map((sp) => canAccessSpace(sp.id, userId, 'VIEW')));
+  return spaces.filter((_, i) => allowed[i]);
 }
 
 /**

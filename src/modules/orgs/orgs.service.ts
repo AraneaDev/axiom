@@ -190,7 +190,7 @@ export async function removeOrgMember(orgId: string, memberId: string, actorId?:
   if (membership.role === 'OWNER') await assertNotLastOwner(orgId);
   // Everything the org granted goes with the membership, in one transaction: team
   // memberships (project access), space permissions and page allow-list entries naming the
-  // user, and issue watches (which would keep sending them notifications)
+  // user, issue watches (which would keep sending them notifications) and page stars
   const inOrgTeams = { team: { orgId } };
   await prisma.$transaction([
     prisma.teamMembership.deleteMany({ where: { userId: memberId, ...inOrgTeams } }),
@@ -201,6 +201,7 @@ export async function removeOrgMember(orgId: string, memberId: string, actorId?:
     prisma.issueWatcher.deleteMany({
       where: { userId: memberId, issue: { project: inOrgTeams } },
     }),
+    prisma.starredPage.deleteMany({ where: { userId: memberId, page: { space: inOrgTeams } } }),
     prisma.orgMembership.delete({ where: { id: membership.id } }),
   ]);
   // Open sockets checked access when they joined: re-check them now
