@@ -11,11 +11,37 @@ export const getPublicForm = asyncHandler(async (req: Request, res: Response) =>
   const form = await formsService.getPublicForm(param(req, 'formSlug'));
   // Strip sensitive fields
   const { sharedSecret: _secret, ...publicForm } = form as typeof form & { sharedSecret?: string };
+  if (form.authMode === 'TOKEN_GATED') {
+    // Without the secret (X-Form-Secret header) a gated form shows only enough to ask for it
+    const secret = req.get('X-Form-Secret');
+    let authorized = false;
+    if (secret) {
+      try {
+        await formsService.assertFormSecret(form, secret);
+        authorized = true;
+      } catch {
+        authorized = false;
+      }
+    }
+    if (!authorized) {
+      res.json({
+        id: form.id,
+        name: form.name,
+        slug: form.slug,
+        authMode: form.authMode,
+        locked: true,
+      });
+      return;
+    }
+  }
   res.json({ ...publicForm, authMode: form.authMode });
 });
 
 export const submitForm = asyncHandler(async (req: Request, res: Response) => {
-  const { data, submitterEmail, submitterName, honeypot } = validate(submitFormSchema, req.body);
+  const { data, submitterEmail, submitterName, honeypot, secret } = validate(
+    submitFormSchema,
+    req.body,
+  );
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const submission = await formsService.submitForm(
     param(req, 'formSlug'),
@@ -24,6 +50,7 @@ export const submitForm = asyncHandler(async (req: Request, res: Response) => {
     submitterName,
     ip,
     honeypot,
+    secret,
   );
   res.status(201).json({ id: submission.id, status: submission.status });
 });

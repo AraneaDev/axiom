@@ -88,6 +88,8 @@ export const submitFormSchema = z.object({
   submitterName: z.string().max(200).optional(),
   captchaToken: z.string().optional(),
   honeypot: z.string().optional(),
+  /** The shared secret of a token-gated form */
+  secret: z.string().max(500).optional(),
 });
 
 export const verifyFormSchema = z.object({

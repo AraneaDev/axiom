@@ -1,4 +1,4 @@
-import { get, post, patch, del } from './client';
+import { api, get, post, patch, del } from './client';
 
 export interface FormField {
   id: string;
@@ -219,20 +219,28 @@ export const formsApi = {
   // ─── Public ──────────────────────────────────────────────────
 
   /**
-   * Fetch a published form by its slug (no auth).
+   * Fetch a published form by its slug (no auth). A token-gated form comes back with
+   * `locked: true` and no pages until the right secret is sent.
    * @param slug
+   * @param secret - The shared secret of a token-gated form
    */
-  getPublic: (slug: string) => get<Form>(`/f/${slug}`),
+  getPublic: (slug: string, secret?: string) =>
+    api<Form & { locked?: boolean }>(`/f/${slug}`, {
+      headers: secret ? { 'X-Form-Secret': secret } : {},
+    }),
 
   /**
    * Submit a response to a public form (no auth).
    * @param slug
    * @param data
-   * @param data.responses
+   * @param data.data - The field responses
    * @param data.honeypot
+   * @param data.secret - The shared secret of a token-gated form
    */
-  submit: (slug: string, data: { responses: Record<string, unknown>; honeypot?: string }) =>
-    post<{ submissionId: string }>(`/f/${slug}/submit`, data),
+  submit: (
+    slug: string,
+    data: { data: Record<string, unknown>; honeypot?: string; secret?: string },
+  ) => post<{ id: string; status: string }>(`/f/${slug}/submit`, data),
 
   /**
    * Verify access to a password-protected form.

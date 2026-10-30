@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 
 import { formsApi } from '@/api/forms.api';
+import { Button } from '@/components/ui/Button';
 import { FormWizard } from '@/components/ui/FormWizard';
+import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
 
 /**
@@ -16,14 +18,17 @@ export default function PublicForm() {
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // A token-gated form needs its shared secret to show its fields and to accept answers
+  const [secret, setSecret] = useState<string | undefined>(undefined);
+  const [secretInput, setSecretInput] = useState('');
 
   const {
     data: form,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['public-form', formSlug],
-    queryFn: () => formsApi.getPublic(formSlug!),
+    queryKey: ['public-form', formSlug, secret],
+    queryFn: () => formsApi.getPublic(formSlug!, secret),
     enabled: !!formSlug,
   });
 
@@ -32,7 +37,7 @@ export default function PublicForm() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      await formsApi.submit(formSlug, { responses: data.responses, honeypot: data.honeypot });
+      await formsApi.submit(formSlug, { data: data.responses, honeypot: data.honeypot, secret });
       setSubmitted(true);
     } catch (err) {
       setSubmitError(
@@ -54,6 +59,34 @@ export default function PublicForm() {
             This form may have been removed or the link is invalid.
           </p>
         </div>
+      </div>
+    );
+  }
+
+  if (form.locked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-secondary px-4">
+        <form
+          className="max-w-sm w-full space-y-4 bg-surface border border-border rounded-xl p-6"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setSecret(secretInput);
+          }}
+        >
+          <h1 className="text-[17px] font-semibold text-text">{form.name}</h1>
+          <p className="text-[13px] text-text-muted">This form needs an access code.</p>
+          <Input
+            type="password"
+            label="Access code"
+            value={secretInput}
+            onChange={(e) => setSecretInput(e.target.value)}
+            error={secret !== undefined ? 'That access code is not valid' : undefined}
+          />
+          <Button type="submit" disabled={!secretInput}>
+            <KeyRound size={14} />
+            Open form
+          </Button>
+        </form>
       </div>
     );
   }

@@ -33,3 +33,14 @@ export const searchLimiter = rateLimit({
   message: errorMessage('Too many search requests, please try again later'),
   skip,
 });
+
+/**
+ * Public form submissions and secret checks: 20 req/min per IP across all forms, on top of
+ * each form's own rateLimitPerHour. Keeps guessing a gated form's secret slow.
+ */
+export const publicFormLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  message: errorMessage('Too many form submissions, please try again later'),
+  skip,
+});

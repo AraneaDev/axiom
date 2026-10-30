@@ -537,6 +537,7 @@ export async function reorderFields(formId: string, fieldIds: string[]) {
  * @param submitterName
  * @param submitterIp
  * @param honeypot
+ * @param secret
  */
 export async function submitForm(
   slug: string,
@@ -545,8 +546,25 @@ export async function submitForm(
   submitterName: string | undefined,
   submitterIp: string,
   honeypot?: string,
+  secret?: string,
 ) {
   const form = await getPublicForm(slug);
+  // A gated form takes submissions only with its secret, not just its slug
+  await assertFormSecret(form, secret);
+
+  // rateLimitPerHour caps submissions per IP to this form in the last hour
+  if (form.rateLimitPerHour) {
+    const recent = await prisma.formSubmission.count({
+      where: {
+        formId: form.id,
+        submitterIp,
+        createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+      },
+    });
+    if (recent >= form.rateLimitPerHour) {
+      throw new AppError(429, 'Too many submissions for this form, try again later');
+    }
+  }
 
   // Honeypot spam detection
   const isSpam = Boolean(honeypot && honeypot.length > 0);
@@ -586,13 +604,26 @@ export async function verifyFormAccess(slug: string, secret?: string) {
   const form = await prisma.form.findUnique({ where: { slug } });
   if (!form) throw new AppError(404, ERR.FORM_NOT_FOUND);
   if (form.status !== 'PUBLISHED') throw new AppError(404, ERR.FORM_NOT_FOUND);
-
-  if (form.authMode === 'TOKEN_GATED') {
-    if (!secret) throw new AppError(401, 'Access token required');
-    if (!form.sharedSecret) throw new AppError(500, 'Form is misconfigured');
-    const valid = await bcrypt.compare(secret, form.sharedSecret);
-    if (!valid) throw new AppError(401, 'Invalid access token');
-  }
-
+  await assertFormSecret(form, secret);
   return { authorized: true, authMode: form.authMode };
+}
+
+/**
+ * Check a gated form's shared secret; public forms pass.
+ * @param form - The form's authMode and stored secret hash
+ * @param form.authMode
+ * @param form.sharedSecret
+ * @param secret - The secret the submitter gave
+ * @throws {AppError} 401 when the secret is missing or wrong
+ */
+export async function assertFormSecret(
+  form: { authMode: string; sharedSecret: string | null },
+  secret?: string,
+): Promise<void> {
+  if (form.authMode !== 'TOKEN_GATED') return;
+  if (!secret) throw new AppError(401, 'Access token required');
+  if (!form.sharedSecret) throw new AppError(500, 'Form is misconfigured');
+  if (!(await bcrypt.compare(secret, form.sharedSecret))) {
+    throw new AppError(401, 'Invalid access token');
+  }
 }
