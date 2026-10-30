@@ -27,6 +27,7 @@ import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 
 import { buildEditorExtensions } from './editor-extensions';
+import { editorMarkdown } from './editor-markdown';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
 
 interface MarkdownEditorProps {
@@ -102,9 +103,8 @@ export function MarkdownEditor({
     extensions: buildEditorExtensions({ placeholder, projectId, instanceId }),
     content: value || '',
     onUpdate: ({ editor: e }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tiptap-markdown storage type not exported
-      const md = (e.storage as any).markdown.getMarkdown();
-      onChange(md);
+      const md = editorMarkdown(e);
+      if (md !== null) onChange(md);
     },
     editorProps: {
       attributes: {
@@ -118,9 +118,9 @@ export function MarkdownEditor({
   // Sync external value changes (e.g. loading existing content)
   useEffect(() => {
     if (editor && value !== undefined) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tiptap-markdown storage type not exported
-      const currentMd = (editor.storage as any).markdown.getMarkdown();
-      if (currentMd !== value) {
+      const currentMd = editorMarkdown(editor);
+      // A destroyed editor (TipTap empties its storage on destroy) has nothing to sync
+      if (currentMd !== null && currentMd !== value) {
         editor.commands.setContent(value || '');
       }
     }

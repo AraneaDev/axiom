@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils';
 
 import { CollaborationCursorExtension } from './CollaborationCursorExtension';
 import { buildEditorExtensions } from './editor-extensions';
+import { editorMarkdown } from './editor-markdown';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
 
 interface CollaborativeEditorProps {
@@ -134,11 +135,10 @@ export function CollaborativeEditor({
     ],
     onUpdate: ({ editor: e }) => {
       if (onChange) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tiptap-markdown storage type not exported
-        const md = (e.storage as any).markdown.getMarkdown();
+        const md = editorMarkdown(e);
         // The initial Yjs sync fires an update while the editor is created during
         // render; defer so the parent's state update does not run inside that render.
-        queueMicrotask(() => onChange(md));
+        if (md !== null) queueMicrotask(() => onChange(md));
       }
     },
     editorProps: {
