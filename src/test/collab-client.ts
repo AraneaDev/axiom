@@ -58,6 +58,8 @@ export interface CollabTestClient {
   changeMessages: Array<Record<string, unknown>>;
   /** Parsed JSON payloads of message type 21 (lock state) */
   lockMessages: Array<{ locked: boolean; byName: string | null }>;
+  /** Parsed JSON payloads of message type 22 (the client's own edit access) */
+  accessMessages: Array<{ canEdit: boolean }>;
   closeCode: Promise<number>;
   /** Resolves once the client has applied the server's document state */
   synced: Promise<void>;
@@ -80,6 +82,7 @@ export function connectCollabClient(
   const doc = new Y.Doc();
   const changeMessages: Array<Record<string, unknown>> = [];
   const lockMessages: Array<{ locked: boolean; byName: string | null }> = [];
+  const accessMessages: Array<{ canEdit: boolean }> = [];
   let resolveSynced!: () => void;
   const synced = new Promise<void>((r) => (resolveSynced = r));
   const closeCode = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)));
@@ -104,6 +107,8 @@ export function connectCollabClient(
       changeMessages.push(JSON.parse(decoding.readVarString(decoder)));
     } else if (type === 21) {
       lockMessages.push(JSON.parse(decoding.readVarString(decoder)));
+    } else if (type === 22) {
+      accessMessages.push(JSON.parse(decoding.readVarString(decoder)));
     }
   });
 
@@ -120,6 +125,7 @@ export function connectCollabClient(
     doc,
     changeMessages,
     lockMessages,
+    accessMessages,
     closeCode,
     synced,
     close: async () => {

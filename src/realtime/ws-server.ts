@@ -10,7 +10,11 @@ import { env } from '../config/env';
 import type { AuthPayload } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
-import { registerAccessRevokedHook, registerDisconnectHook } from './access-revocation';
+import {
+  registerAccessRevokedHook,
+  registerDisconnectHook,
+  type RevocationScope,
+} from './access-revocation';
 import { createCollaborationServer } from './collaboration';
 import type { ClientMessage, SubscriptionMessage } from './events';
 import { canJoinRoom, MAX_ROOMS_PER_REQUEST, MAX_ROOMS_PER_SOCKET } from './room-access';
@@ -144,37 +148,57 @@ function handleSubscribe(ws: AuthenticatedSocket, requested: unknown[]): void {
 }
 
 /**
- * Re-check the rooms sockets hold after access was taken away: one user's sockets, or all
- * of them when userId is null. Rooms that no
- * longer pass are dropped and reported as denied. The re-check queues behind any check
- * already running on the socket, so a grant decided on the old permissions can't land after
- * it.
- * @param userId - The user who lost access, or null for everyone
+ * Re-check held rooms after access was taken away. A user scope re-checks all of that user's
+ * rooms; a space scope only the `space:<id>` room on every socket holding it; a page scope
+ * nothing here (pages have no realtime room; their space events carry no restricted ids).
+ * A check that throws counts as lost access. Dropped rooms are reported to the client as
+ * subscribe:denied, and the count is logged. Each re-check queues behind any check already
+ * running on the socket, so a grant decided on the old permissions can't land after it.
+ * @param scope - What the change can affect
  */
-async function revalidateUserRooms(userId: string | null): Promise<void> {
+async function revalidateRooms(scope: RevocationScope): Promise<void> {
+  if ('pageId' in scope) return;
   const runs: Promise<void>[] = [];
   for (const ws of getClients()) {
-    if (userId !== null && ws.userId !== userId) continue;
-    ws.checkQueue = ws.checkQueue
-      .then(async () => {
-        const lost: string[] = [];
-        for (const room of [...ws.rooms]) {
-          if (!(await canJoinRoom(ws.userId, room))) {
-            ws.rooms.delete(room);
-            lost.push(room);
-          }
+    let targets: string[];
+    if ('userId' in scope) {
+      if (ws.userId !== scope.userId) continue;
+      targets = [...ws.rooms];
+    } else {
+      const room = `space:${scope.spaceId}`;
+      if (!ws.rooms.has(room)) continue;
+      targets = [room];
+    }
+    ws.checkQueue = ws.checkQueue.then(async () => {
+      const lost: string[] = [];
+      for (const room of targets) {
+        if (!ws.rooms.has(room)) continue;
+        let allowed = false;
+        try {
+          allowed = await canJoinRoom(ws.userId, room);
+        } catch (err) {
+          // Fail closed: a check that can't run doesn't keep the room
+          logger.error('Realtime room re-check failed', { userId: ws.userId, room }, err as Error);
         }
+        if (!allowed) {
+          ws.rooms.delete(room);
+          lost.push(room);
+        }
+      }
+      if (lost.length > 0) {
+        logger.info('Realtime rooms dropped after an access change', {
+          userId: ws.userId,
+          rooms: lost.length,
+        });
         sendDenied(ws, lost);
-      })
-      .catch((err) => {
-        logger.error('Realtime room re-check failed', { userId: ws.userId }, err as Error);
-      });
+      }
+    });
     runs.push(ws.checkQueue);
   }
   await Promise.all(runs);
 }
 
-registerAccessRevokedHook(revalidateUserRooms);
+registerAccessRevokedHook(revalidateRooms);
 registerDisconnectHook((userId) => {
   for (const ws of getClients()) {
     if (ws.userId === userId) ws.close(4001, 'Account deactivated');

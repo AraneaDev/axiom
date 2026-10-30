@@ -22,20 +22,35 @@ import {
 } from '../test/factory';
 import { authDel, authGet, authPost } from '../test/helpers';
 
+import { revokeLiveAccess } from './access-revocation';
 import { broadcastToRoom, broadcastToUser } from './broadcast';
 import { createWebSocketServer, getClients } from './ws-server';
 
 /** A room whose access check fails the way a database outage would. */
 const FAILING_ROOM = 'project:cexplodes0000000000000000';
 
+/** Rooms whose next checks throw, hang, and how often each room was checked */
+const checkControl = vi.hoisted(() => ({
+  failing: new Set<string>(),
+  hanging: new Set<string>(),
+  release: [] as Array<() => void>,
+  calls: new Map<string, number>(),
+}));
+
 vi.mock('./room-access', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./room-access')>();
   return {
     ...actual,
-    canJoinRoom: (userId: string, room: string) =>
-      room === FAILING_ROOM
-        ? Promise.reject(new Error('database unavailable'))
-        : actual.canJoinRoom(userId, room),
+    canJoinRoom: (userId: string, room: string) => {
+      checkControl.calls.set(room, (checkControl.calls.get(room) ?? 0) + 1);
+      if (room === FAILING_ROOM || checkControl.failing.has(room)) {
+        return Promise.reject(new Error('database unavailable'));
+      }
+      if (checkControl.hanging.has(room)) {
+        return new Promise<boolean>((resolve) => checkControl.release.push(() => resolve(false)));
+      }
+      return actual.canJoinRoom(userId, room);
+    },
   };
 });
 
@@ -468,6 +483,52 @@ describe('Realtime room authorization', () => {
     } finally {
       await Promise.all(clients.splice(0).map((c) => c.close()));
       await prisma.user.deleteMany({ where: { id: { in: [victim.id, admin.id] } } });
+    }
+  });
+
+  it('A: re-checks only the rooms a change can affect, off the request path, failing closed', async () => {
+    const spaceA = await prisma.wikiSpace.create({
+      data: { teamId: ctx.teamId, name: 'Scope A', slug: 'scope-a' },
+    });
+    const spaceB = await prisma.wikiSpace.create({
+      data: { teamId: ctx.teamId, name: 'Scope B', slug: 'scope-b' },
+    });
+    const roomA = `space:${spaceA.id}`;
+    const roomB = `space:${spaceB.id}`;
+    const projectRoom = `project:${ctx.projectId}`;
+    try {
+      const client = await connect(member.id);
+      client.send({ type: 'subscribe', rooms: [roomA, roomB, projectRoom] });
+      await waitFor(() => [roomA, roomB, projectRoom].every((r) => serverRooms(member.id).has(r)));
+
+      // A permission change on space A re-checks room A only
+      const before = new Map(checkControl.calls);
+      await setSpacePermission(spaceA.id, { userId: ctx.owner.id, level: 'ADMIN' });
+      await waitFor(() => deniedRooms(client).includes(roomA));
+      expect(checkControl.calls.get(roomB)).toBe(before.get(roomB));
+      expect(checkControl.calls.get(projectRoom)).toBe(before.get(projectRoom));
+
+      // The request doesn't wait for the re-check: a hanging check can't hold it up
+      checkControl.hanging.add(roomB);
+      const started = Date.now();
+      await setSpacePermission(spaceB.id, { userId: ctx.owner.id, level: 'ADMIN' });
+      expect(Date.now() - started).toBeLessThan(2_000);
+      checkControl.hanging.delete(roomB);
+      // Let the held-up check finish (it drops room B) so the socket's queue moves on
+      await waitFor(() => checkControl.release.length > 0);
+      for (const release of checkControl.release.splice(0)) release();
+      await waitFor(() => deniedRooms(client).includes(roomB));
+
+      // A check that throws counts as lost access
+      checkControl.failing.add(projectRoom);
+      await revokeLiveAccess({ userId: member.id });
+      await waitFor(() => deniedRooms(client).includes(projectRoom));
+      expect(serverRooms(member.id).has(projectRoom)).toBe(false);
+    } finally {
+      checkControl.failing.clear();
+      checkControl.hanging.clear();
+      await Promise.all(clients.splice(0).map((c) => c.close()));
+      await prisma.wikiSpace.deleteMany({ where: { id: { in: [spaceA.id, spaceB.id] } } });
     }
   });
 });

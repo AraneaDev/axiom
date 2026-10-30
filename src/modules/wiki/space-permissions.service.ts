@@ -157,8 +157,8 @@ export async function setSpacePermission(
       },
     });
     // Any permission can take access away: the first one closes an open space to everyone
-    // not listed, and a lower level ends editing
-    await revokeLiveAccess();
+    // not listed, and a lower level ends editing (re-check not awaited)
+    void revokeLiveAccess({ spaceId });
     return permission;
   }
 
@@ -172,7 +172,7 @@ export async function setSpacePermission(
       },
     },
   });
-  await revokeLiveAccess();
+  void revokeLiveAccess({ spaceId });
   return permission;
 }
 
@@ -191,6 +191,6 @@ export async function removeSpacePermission(spaceId: string, permissionId: strin
   }
 
   await prisma.spacePermission.delete({ where: { id: permissionId } });
-  // Removing a grant can take access away from its user or team role
-  await revokeLiveAccess();
+  // Removing a grant can take access away from its user or team role (not awaited)
+  void revokeLiveAccess({ spaceId });
 }

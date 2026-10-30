@@ -18,6 +18,7 @@ import {
 } from '../test/collab-client';
 import { logger } from '../utils/logger';
 
+import { revokeLiveAccess } from './access-revocation';
 import {
   flushRoom,
   getOrCreateRoom,
@@ -191,6 +192,22 @@ describe('Collaboration server', () => {
 
     await removeOrgMember(orgId, leaver.id);
     expect(await client.closeCode).toBe(4003);
+  });
+
+  it('tells an editor demoted to read-only, and drops their updates', async () => {
+    const editor = await connect('editor');
+    // Lower the editor's grant on the space from EDIT to VIEW
+    await prisma.spacePermission.updateMany({
+      where: { spaceId, userId: users.editor },
+      data: { level: 'VIEW' },
+    });
+    await revokeLiveAccess({ spaceId });
+    await waitFor(() => editor.accessMessages.some((m) => m.canEdit === false));
+    expect(editor.ws.readyState).toBe(WebSocket.OPEN);
+    await prisma.spacePermission.updateMany({
+      where: { spaceId, userId: users.editor },
+      data: { level: 'EDIT' },
+    });
   });
 
   it('closes a live session when a new page restriction hides the page', async () => {

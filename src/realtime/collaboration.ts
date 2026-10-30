@@ -35,7 +35,11 @@ import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.servi
 import { ERR } from '../utils/error-messages';
 import { logger } from '../utils/logger';
 
-import { registerAccessRevokedHook, registerDisconnectHook } from './access-revocation';
+import {
+  registerAccessRevokedHook,
+  registerDisconnectHook,
+  type RevocationScope,
+} from './access-revocation';
 import { registerExternalChangeHook, setRoomLiveCheck } from './room-registry';
 import {
   loadPageIntoDoc,
@@ -83,6 +87,8 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 const MESSAGE_EXTERNAL_CHANGE = 20;
 const MESSAGE_LOCK = 21;
+/** The client's own edit access changed: { canEdit } */
+const MESSAGE_ACCESS = 22;
 
 /**
  * Safety net only: the merge releases its lock when it finishes. A lock nobody releases (a merge
@@ -528,23 +534,52 @@ async function collabAccess(
 }
 
 /**
- * Re-check open sessions after access was taken away (one user's, or everyone's when userId
- * is null): close the ones that may no longer view and make the ones that may no longer
- * edit read-only.
- * @param userId
+ * Re-check open sessions after access was taken away, limited to what the change can affect:
+ * one user's sessions, the sessions on one space's pages, or the sessions on one page.
+ * Sessions that may no longer view are closed (4003); editors who may no longer edit are
+ * made read-only and told (type 22). A check that throws counts as lost access.
+ * @param scope - What the change can affect
  */
-async function revalidateUserSessions(userId: string | null): Promise<void> {
+async function revalidateSessions(scope: RevocationScope): Promise<void> {
   for (const room of rooms.values()) {
+    if ('pageId' in scope && room.pageId !== scope.pageId) continue;
     const page = await prisma.page.findUnique({
       where: { id: room.pageId },
       select: { id: true, spaceId: true },
     });
+    if ('spaceId' in scope && page?.spaceId !== scope.spaceId) continue;
     for (const client of room.clients.values()) {
-      if (userId !== null && client.userId !== userId) continue;
-      const access = page ? await collabAccess(client.userId, page) : { view: false, edit: false };
-      if (!access.view) client.ws.close(4003, 'Forbidden');
-      else client.canEdit = access.edit;
+      if ('userId' in scope && client.userId !== scope.userId) continue;
+      await applyAccess(room, client, page);
     }
+  }
+}
+
+/**
+ * Bring one client in line with its current access.
+ * @param room
+ * @param client
+ * @param page - The room's page, or null when it is gone
+ */
+async function applyAccess(
+  room: CollabRoom,
+  client: CollabClient,
+  page: { id: string; spaceId: string } | null,
+): Promise<void> {
+  let access = { view: false, edit: false };
+  try {
+    if (page) access = await collabAccess(client.userId, page);
+  } catch (err) {
+    // Fail closed: a check that can't run doesn't keep the session
+    logger.error('Collaboration access check failed', { pageId: room.pageId }, err as Error);
+  }
+  if (!access.view) {
+    client.ws.close(4003, 'Forbidden');
+    return;
+  }
+  if (client.canEdit !== access.edit) {
+    client.canEdit = access.edit;
+    sendJson(room, MESSAGE_ACCESS, { canEdit: access.edit }, client.ws);
   }
 }
 
@@ -556,9 +591,9 @@ registerDisconnectHook((userId) => {
   }
 });
 
-registerAccessRevokedHook((userId) =>
-  revalidateUserSessions(userId).catch((err: unknown) =>
-    logger.error('Collaboration access re-check failed', { userId }, err as Error),
+registerAccessRevokedHook((scope) =>
+  revalidateSessions(scope).catch((err: unknown) =>
+    logger.error('Collaboration access re-check failed', { scope }, err as Error),
   ),
 );
 
@@ -718,11 +753,16 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
 
   room.clients.set(ws, client);
   member = { room, client };
+  // Access was checked before the awaits above: a permission change in between would have
+  // missed this client, so check again now that it is in the room
+  await applyAccess(room, client, page);
   if (closed) {
     // Left while the room was loading: run the normal teardown so the room does not linger
     await handleDisconnect(room, client);
     return;
   }
+  // Closed by the re-check: the close handler tears the client down
+  if (ws.readyState !== WebSocket.OPEN) return;
 
   // Send sync step 1 to the new client (server initiates sync)
   await sendSyncStep1(room, ws);

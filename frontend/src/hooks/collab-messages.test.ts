@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { parseExternalChange, parseLock, readJsonPayload } from './collab-messages';
+import { parseAccess, parseExternalChange, parseLock, readJsonPayload } from './collab-messages';
 
 /**
  * Encode a varUint type followed by a varString, as the server's encodeJsonMessage does
@@ -65,5 +65,13 @@ describe('collab messages', () => {
     expect(parseExternalChange({ state: 'pending' })).toBeNull();
     expect(parseLock({ locked: true, byName: 'Tim' })).toEqual({ locked: true, byName: 'Tim' });
     expect(parseLock({})).toBeNull();
+  });
+});
+
+describe('parseAccess', () => {
+  it('accepts { canEdit } and rejects anything else', () => {
+    expect(parseAccess({ canEdit: false })).toEqual({ canEdit: false });
+    expect(parseAccess({ canEdit: 'no' })).toBeNull();
+    expect(parseAccess(null)).toBeNull();
   });
 });

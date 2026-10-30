@@ -9,8 +9,10 @@ import type { PresenceUser } from '@/components/wiki/PresenceIndicators';
 import { useAuthStore } from '@/stores/auth.store';
 
 import {
+  MESSAGE_ACCESS,
   MESSAGE_EXTERNAL_CHANGE,
   MESSAGE_LOCK,
+  parseAccess,
   parseExternalChange,
   parseLock,
   readJsonPayload,
@@ -69,6 +71,8 @@ export function useCollaboration({
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [resolvedBy, setResolvedBy] = useState<string | null>(null);
   const [locked, setLocked] = useState<{ byName: string } | null>(null);
+  // Set when the server says this user may no longer edit (a permission change mid-session)
+  const [readOnly, setReadOnly] = useState(false);
   const dismissResolved = useCallback(() => setResolvedBy(null), []);
 
   const fragmentName = 'default';
@@ -122,6 +126,12 @@ export function useCollaboration({
       if (!message) return;
       // Render now, not on the next tick, so the editor is read-only before any further keystroke
       flushSync(() => setLocked(message.locked ? { byName: message.byName } : null));
+    };
+    newProvider.messageHandlers[MESSAGE_ACCESS] = (_encoder, decoder) => {
+      const message = parseAccess(readJsonPayload(decoder));
+      if (!message) return;
+      // Same as a lock: read-only before any further keystroke
+      flushSync(() => setReadOnly(!message.canEdit));
     };
 
     return { ydoc: newYdoc, provider: newProvider };
@@ -201,7 +211,9 @@ export function useCollaboration({
     fragmentName,
     pendingChange,
     resolvedBy,
-    locked,
+    // A lock (merge in progress) or lost edit access both make the editor read-only; the
+    // latter has no name to show
+    locked: locked ?? (readOnly ? { byName: '' } : null),
     dismissResolved,
   };
 }

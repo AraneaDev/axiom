@@ -7,27 +7,33 @@
  * importing the WebSocket servers, which register their hooks at load.
  */
 
-/** Called with the user who lost access, or null when a change may affect anyone */
-type AccessRevokedHook = (userId: string | null) => Promise<void>;
+/**
+ * What a change can affect: one user's access (removed, demoted), one space's (its
+ * permissions changed) or one page's (its restrictions changed). Each layer re-checks only
+ * the connections that match.
+ */
+export type RevocationScope = { userId: string } | { spaceId: string } | { pageId: string };
+
+type AccessRevokedHook = (scope: RevocationScope) => Promise<void>;
 
 const hooks: AccessRevokedHook[] = [];
 
 /**
- * Register a re-check to run when a user loses access.
- * @param fn - Re-checks the user's live connections; must not throw
+ * Register a re-check to run when access is taken away.
+ * @param fn - Re-checks matching live connections; treats a failed check as lost access
  */
 export function registerAccessRevokedHook(fn: AccessRevokedHook): void {
   if (!hooks.includes(fn)) hooks.push(fn);
 }
 
 /**
- * Re-check live connections against the current permissions, dropping what they may no
- * longer see. Resolves once every layer has finished.
- * @param userId - The user who lost access; omit when a change may affect any user (a space
- * permission or page restriction changed)
+ * Re-check the live connections a change can affect, dropping what they may no longer see.
+ * Callers don't await it: the change is already committed, and the re-check must not hold
+ * up (or fail) the request. The returned promise settles when every layer has finished.
+ * @param scope - The user, space or page whose access changed
  */
-export async function revokeLiveAccess(userId: string | null = null): Promise<void> {
-  await Promise.all(hooks.map((fn) => fn(userId).catch(() => undefined)));
+export function revokeLiveAccess(scope: RevocationScope): Promise<void> {
+  return Promise.all(hooks.map((fn) => fn(scope).catch(() => undefined))).then(() => undefined);
 }
 
 type DisconnectHook = (userId: string) => void;

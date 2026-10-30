@@ -1,11 +1,14 @@
 /**
  * The collaboration server's JSON state messages (see src/realtime/collaboration.ts):
- * type 20 external-change state and type 21 lock state, each a varUint message type followed by a
+ * type 20 external-change state, type 21 lock state and type 22 this client's edit access, each a
+ * varUint message type followed by a
  * varString of JSON. y-websocket hands the handler a decoder positioned after the type.
  */
 
 export const MESSAGE_EXTERNAL_CHANGE = 20;
 export const MESSAGE_LOCK = 21;
+/** The server changed this client's own edit access: { canEdit } */
+export const MESSAGE_ACCESS = 22;
 
 /** An external change (agent, API, restore) waiting to be merged into the live session */
 export interface PendingChange {
@@ -108,4 +111,14 @@ export function parseLock(value: unknown): LockMessage | null {
   const v = value as Record<string, unknown>;
   if (typeof v.locked !== 'boolean') return null;
   return { locked: v.locked, byName: typeof v.byName === 'string' ? v.byName : '' };
+}
+
+/**
+ * Validate a type-22 payload.
+ * @param value - Parsed JSON
+ */
+export function parseAccess(value: unknown): { canEdit: boolean } | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  return typeof v.canEdit === 'boolean' ? { canEdit: v.canEdit } : null;
 }

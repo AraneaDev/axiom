@@ -167,7 +167,7 @@ export async function updateOrgMemberRole(
     data: { role },
   });
   // A lower role can lose org-wide access (an OWNER or ADMIN sees every space and page)
-  await revokeLiveAccess(memberId);
+  void revokeLiveAccess({ userId: memberId });
   return updated;
 }
 
@@ -204,8 +204,8 @@ export async function removeOrgMember(orgId: string, memberId: string, actorId?:
     prisma.starredPage.deleteMany({ where: { userId: memberId, page: { space: inOrgTeams } } }),
     prisma.orgMembership.delete({ where: { id: membership.id } }),
   ]);
-  // Open sockets checked access when they joined: re-check them now
-  await revokeLiveAccess(memberId);
+  // Open sockets checked access when they joined: re-check them (not awaited)
+  void revokeLiveAccess({ userId: memberId });
 }
 
 // ─── Invite Links ─────────────────────────────────────────────

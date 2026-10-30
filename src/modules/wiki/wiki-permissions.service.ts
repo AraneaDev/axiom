@@ -126,8 +126,8 @@ export async function setRestrictions(
       }),
     ),
   ]);
-  // A restriction hides or locks the page for everyone not listed
-  await revokeLiveAccess();
+  // A restriction hides or locks the page for everyone not listed (re-check not awaited)
+  void revokeLiveAccess({ pageId });
 }
 
 /**
@@ -157,8 +157,8 @@ export async function removeRestriction(restrictionId: string): Promise<void> {
 
   await prisma.pageRestriction.delete({ where: { id: restrictionId } });
   // Removing the last entry lifts the restriction, but removing one of several takes that
-  // user's access away
-  await revokeLiveAccess();
+  // user's access away (re-check not awaited)
+  void revokeLiveAccess({ pageId: restriction.pageId });
 }
 
 /**

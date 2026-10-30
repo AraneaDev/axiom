@@ -235,7 +235,7 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
     data: { role },
   });
   // Space permissions can be granted per team role
-  await revokeLiveAccess(memberId);
+  void revokeLiveAccess({ userId: memberId });
   return updated;
 }
 
@@ -260,8 +260,8 @@ export async function removeTeamMember(teamId: string, memberId: string) {
     }),
     prisma.teamMembership.delete({ where: { id: membership.id } }),
   ]);
-  // Open sockets checked access when they joined: re-check them now
-  await revokeLiveAccess(memberId);
+  // Open sockets checked access when they joined: re-check them (not awaited)
+  void revokeLiveAccess({ userId: memberId });
 }
 
 /**
