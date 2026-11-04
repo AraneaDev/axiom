@@ -19,6 +19,13 @@ import { listActions } from './registry';
 const TOKEN_BLOCKED_WRITE_AREAS = new Set(['admin', 'orgs', 'teams', 'projects']);
 
 /**
+ * Actions on a route that only exists in the registry, so tokenAllows has no rule to compare with
+ * and answers "forbidden" for an unknown path. Each with the reason:
+ * - item.read, POST /api/read: new in the agent layer, area search with a scope per item (R4)
+ */
+const NO_LEGACY_ROUTE = new Set(['item.read']);
+
+/**
  * Every actions file below a directory, tests excluded by their suffix.
  * @param root - The directory to search
  */
@@ -117,7 +124,13 @@ function ruleViolations(def: ActionDef): string[] {
     violations.push(`${def.name}: a write in area ${def.area} needs uiOnly or tokenBlocked (R9)`);
   }
 
-  if (def.rest && !def.uiOnly && !def.tokenBlocked && alwaysBlocked(def.rest)) {
+  if (
+    def.rest &&
+    !def.uiOnly &&
+    !def.tokenBlocked &&
+    !NO_LEGACY_ROUTE.has(def.name) &&
+    alwaysBlocked(def.rest)
+  ) {
     violations.push(
       `${def.name}: tokenAllows refuses ${def.rest.method} ${def.rest.path} to every token, ` +
         'so it needs uiOnly or tokenBlocked (R7, R9)',
@@ -225,7 +238,7 @@ describe('registry rules', () => {
     // Read when the tests run: the actions files load in beforeAll
     const tableRows = () =>
       listActions()
-        .filter((def) => def.rest)
+        .filter((def) => def.rest && !NO_LEGACY_ROUTE.has(def.name))
         .flatMap((def) => TOKEN_SCOPES.map((scope) => ({ def, scope })));
 
     it('has rows to compare', () => {

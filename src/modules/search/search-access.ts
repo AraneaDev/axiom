@@ -10,13 +10,21 @@ import { prisma } from '../../config/database';
 import { canAccessSpace } from '../wiki/space-permissions.service';
 
 /**
+ * Prisma filter for projects the user can open.
+ * @param userId - The searcher
+ */
+export async function viewableProjectsWhere(userId: string): Promise<Prisma.ProjectWhereInput> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  if (user?.isAdmin) return {};
+  return { team: { members: { some: { userId } } } };
+}
+
+/**
  * Prisma filter for issues the user can open.
  * @param userId - The searcher
  */
 export async function viewableIssuesWhere(userId: string): Promise<Prisma.IssueWhereInput> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
-  if (user?.isAdmin) return {};
-  return { project: { team: { members: { some: { userId } } } } };
+  return { project: await viewableProjectsWhere(userId) };
 }
 
 /**

@@ -11,7 +11,7 @@ import { getAction } from './registry';
  * none, so a context filled in wrongly is refused instead of treated as a session.
  * @param ctx - Who runs the action
  */
-function isToken(ctx: ActionContext): boolean {
+export function isToken(ctx: ActionContext): boolean {
   return ctx.channel !== 'ui' || ctx.apiTokenId !== undefined || ctx.scopes !== undefined;
 }
 

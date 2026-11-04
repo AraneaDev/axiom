@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { pageBySlugAccess, projectAction } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
+import { MAX_KEY_LENGTH, parseKey, resolveKey } from '../../actions/keys';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { validate } from '../../utils/validation/common-validators';
@@ -27,11 +28,17 @@ const issueRef = z.strictObject({
   issueNumber: z.number().int().positive(),
 });
 const pageRef = z.strictObject({ spaceId: z.string().min(1), pageSlug: z.string().min(1) });
-/** Where a new file goes; without a target it is staged. */
-const uploadTarget = z.object({ target: z.union([issueRef, pageRef]).optional() });
+const keyValue = z.string().min(1).max(MAX_KEY_LENGTH);
+const issueKeyRef = z.strictObject({ issueKey: keyValue });
+const pageKeyRef = z.strictObject({ pageKey: keyValue });
+/** Where a new file goes, by ids or by key; without a target it is staged. */
+const uploadTarget = z.object({
+  target: z.union([issueRef, pageRef, issueKeyRef, pageKeyRef]).optional(),
+});
 
 type IssueRef = z.infer<typeof issueRef>;
 type PageRef = z.infer<typeof pageRef>;
+type UploadTargetInput = NonNullable<z.infer<typeof uploadTarget>['target']>;
 
 const writeIssueRef = projectAction<IssueRef>('issue:edit', (ref) => ref.projectId);
 const writePageRef = pageBySlugAccess<PageRef>(
@@ -69,6 +76,25 @@ async function readAttachment(ctx: ActionContext, { id }: { id: string }): Promi
 }
 
 /**
+ * The ids a target names. A key the user can't see answers 404 as resolveKey does, also where the
+ * id form answers 403: a key doesn't tell what exists.
+ * @param target - The target, by ids or by key
+ * @param userId - Who asks
+ * @throws {AppError} 400 when a key names the other kind of item, and what resolveKey throws
+ */
+async function targetIds(target: UploadTargetInput, userId: string): Promise<IssueRef | PageRef> {
+  if ('projectId' in target || 'spaceId' in target) return target;
+  const [key, kind] = 'issueKey' in target ? [target.issueKey, 'issue'] : [target.pageKey, 'page'];
+  if (parseKey(key).kind !== kind) {
+    throw new AppError(400, `This key does not name ${kind === 'issue' ? 'an issue' : 'a page'}`);
+  }
+  const resolved = await resolveKey(key, userId);
+  return resolved.kind === 'issue'
+    ? { projectId: resolved.projectId, issueNumber: resolved.issueNumber }
+    : { spaceId: resolved.spaceId, pageSlug: resolved.pageSlug };
+}
+
+/**
  * Attach a new file to a target: the parent's scope, then edit access to it. Without a target
  * there is no parent to check; the file is the user's own until a body write binds it.
  * @param ctx - Who runs the action
@@ -80,13 +106,11 @@ async function writeTarget(
   { target }: z.infer<typeof uploadTarget>,
 ): Promise<void> {
   if (!target) return;
-  if ('projectId' in target) {
-    attachmentsService.assertParentAreaScope(ctx.scopes, 'issues', true);
-    await writeIssueRef(ctx, target);
-  } else {
-    attachmentsService.assertParentAreaScope(ctx.scopes, 'wiki', true);
-    await writePageRef(ctx, target);
-  }
+  const issue = 'projectId' in target || 'issueKey' in target;
+  attachmentsService.assertParentAreaScope(ctx.scopes, issue ? 'issues' : 'wiki', true);
+  const ids = await targetIds(target, ctx.userId);
+  if ('projectId' in ids) await writeIssueRef(ctx, ids);
+  else await writePageRef(ctx, ids);
 }
 
 /**
@@ -162,7 +186,10 @@ const attachmentActions = [
     rest: { method: 'POST', path: `${BASE}/upload-url` },
     authorize: writeTarget,
     handler: async (ctx, input) =>
-      uploadIntents.createUploadUrl({ userId: ctx.userId, apiTokenId: ctx.apiTokenId }, input),
+      uploadIntents.createUploadUrl(
+        { userId: ctx.userId, apiTokenId: ctx.apiTokenId },
+        { ...input, target: input.target && (await targetIds(input.target, ctx.userId)) },
+      ),
   }),
   defineAction({
     name: 'attachment.fromUrl',
@@ -178,7 +205,11 @@ const attachmentActions = [
     output: record,
     rest: { method: 'POST', path: `${BASE}/from-url` },
     authorize: writeTarget,
-    handler: async (ctx, input) => uploadIntents.attachFromUrl(ctx.userId, input),
+    handler: async (ctx, input) =>
+      uploadIntents.attachFromUrl(ctx.userId, {
+        ...input,
+        target: input.target && (await targetIds(input.target, ctx.userId)),
+      }),
   }),
   defineAction({
     name: 'attachment.list',

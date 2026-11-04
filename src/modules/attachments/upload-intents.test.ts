@@ -449,9 +449,11 @@ describe('upload intents', () => {
       expect((await createUrl({ ...file, target: noPage })).status).toBe(404);
     });
 
-    it('takes one kind of target, and not the keys Task 10 adds', async () => {
+    it('takes one kind of target', async () => {
       const both = { ...issueTarget(), spaceId, pageSlug };
-      for (const target of [{}, both, { issueKey: 'A-1' }, { projectId: ctx.projectId }]) {
+      const idAndKey = { ...issueTarget(), issueKey: 'A-1' };
+      const bothKeys = { issueKey: 'A-1', pageKey: 'a/b/c/d' };
+      for (const target of [{}, both, idAndKey, bothKeys, { projectId: ctx.projectId }]) {
         expect((await createUrl({ ...file, target })).status).toBe(400);
       }
     });

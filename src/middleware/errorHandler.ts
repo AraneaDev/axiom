@@ -9,6 +9,8 @@ export class AppError extends Error {
     public statusCode: number,
     message: string,
     public code?: string,
+    /** What a caller can act on beyond the message, such as the candidates of an ambiguous key */
+    public details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'AppError';
@@ -34,7 +36,7 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
       logger.error('application error', { ...requestContext, statusCode: err.statusCode }, err);
     }
     return res.status(err.statusCode).json({
-      error: { message: err.message, code: err.code },
+      error: { message: err.message, code: err.code, details: err.details },
     });
   }
 

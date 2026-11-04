@@ -75,7 +75,7 @@ Each area has an `<area>:read` and an `<area>:write` scope. Write includes read 
 | `boards` | `/api/projects/:id/board` |
 | `wiki` | `/api/wiki` |
 | `files` | `/api/attachments`, together with the scope of the parent (below) |
-| `search` | `/api/search`, reads only |
+| `search` | `/api/search` and `POST /api/read`, reads only |
 | `orgs` | `/api/orgs`, reads only |
 | `teams` | `/api/teams`, reads only |
 | `projects` | `/api/projects/:id` and `/api/projects/team/:teamId`, reads only |
@@ -145,6 +145,54 @@ Paginated responses include metadata:
   "totalPages": 6
 }
 ```
+
+---
+
+## Read by key
+
+### POST /api/read
+
+Read issues and pages by key in one call, with whatever belongs to them. Needs `search:read`. With a token, each issue also needs `issues:read` and each page `wiki:read`; otherwise that item answers `403` with code `SCOPE`, whether it exists or not.
+
+**Request body:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `keys` | string[] | 1 to 50 keys, each at most 512 characters. A key given twice is answered once |
+| `include` | string[] | Optional. What to add to each item, below. An include for the other kind of item is passed over, so one call can hold both |
+| `fields` | string[] | Optional. Narrow the base item to these fields; `id` and `key` always come along. A field of the other kind is passed over |
+
+**Key forms:** `AXM-42`, `org/team/AXM-42`, `org/team/space/page-slug`, and the path or full URL of an issue (`/:org/:team/:project/issues/:num`) or page (`/:org/:team/wiki/:space/:page`). Only the path of a URL counts: the host is ignored and nothing is fetched.
+
+**Response 200:** `{ items }`, one per key in the order given. Each is `{ key, kind: 'issue' | 'page', data }` or `{ key, error: { status, code, message, details? } }`.
+
+| Error | When |
+|-------|------|
+| `400 INVALID_KEY` | The key has none of the forms above |
+| `403 SCOPE` | The token doesn't cover this kind of item |
+| `404 NOT_FOUND` | Nothing there, or nothing you can see: the two answer the same |
+| `409 AMBIGUOUS_KEY` | A bare `AXM-42` whose prefix is used by projects you can see in more than one team. `details.candidates` lists the full keys. Projects you can't see don't count |
+
+**Issue `data`:** `id`, `key`, `fullKey`, `url`, `number`, `title`, `body`, `type`, `priority`, `status` (the column name), `assignee`, `creator`, `labels`, `sprint`, `parent`, `project`, `storyPoints`, `dueDate`, `startDate`, `timeEstimate`, `timeSpent`, `createdAt`, `updatedAt`.
+
+**Page `data`:** `id`, `key`, `url`, `slug`, `title`, `body`, `isDraft`, `parentId`, `space`, `version`, `lastEditedBy`, `createdAt`, `updatedAt`.
+
+People appear as `{ id, displayName }`. Each include is `{ items, limit, truncated }`, with `truncated: true` when the limit cut rows off:
+
+| Include | Items | Limit |
+|---------|-------|-------|
+| `comments` (both) | The newest, oldest first | 100 |
+| `links` (issue) | `{ id, type, direction, issue }`, only where you can open the other issue | 100 |
+| `webLinks` (issue) | `{ id, url, title, createdBy, createdAt }` | 50 |
+| `attachments` (both) | `{ id, name, mimeType, size, url, uploader, createdAt }`. Needs `files:read` | 50 |
+| `history` (both) | Issue: activity, newest first. Page: versions without their bodies, newest first | 50 |
+| `worklogs` (issue) | `{ id, minutes, description, loggedAt, user }`, newest first | 100 |
+| `children` (both) | Child issues or pages you can open | 100 |
+| `pages` (issue) | Linked pages, then pages whose body mentions the key, in the issue's org and only those you can view; each with `linkTypes`. Needs `wiki:read` | 20 |
+| `labels` (page) | Label names | 100 |
+| `linkedIssues` (page) | `{ issue, linkTypes }`, only issues you can open. Needs `issues:read` | 50 |
+
+An include the token's scopes don't cover is left out, and named in `data.omittedIncludes`.
 
 ---
 
@@ -2478,11 +2526,11 @@ Get a signed URL for one upload, for a client that can't send multipart or doesn
 | `filename` | string | The name to store the file under |
 | `mimeType` | string | One of the allowed types; the upload must be sent with this type |
 | `size` | integer | The most the upload may hold, at most 25 MB |
-| `target` | object | Optional. `{ projectId, issueNumber }` or `{ spaceId, pageSlug }`. Without one the file is staged |
+| `target` | object | Optional. `{ projectId, issueNumber }`, `{ spaceId, pageSlug }`, `{ issueKey }` or `{ pageKey }` (see [Read by key](#post-apiread)). Without one the file is staged |
 
 **Response 201:** `{ uploadUrl, uploadId, expiresAt, attachmentUrl }`
 
-A staged file is visible to its uploader only. It joins an issue or page when you reference `attachmentUrl` in an issue, comment or page body after uploading, and it is removed after 24 hours if you don't. You can hold 100 staged files at once; past that, new ones get `429`.
+A key you can't see answers `404`, where the id form answers `403`; `issueKey` or `pageKey` holding a key of the other kind answers `400`. A staged file is visible to its uploader only. It joins an issue or page when you reference `attachmentUrl` in an issue, comment or page body after uploading, and it is removed after 24 hours if you don't. You can hold 100 staged files at once; past that, new ones get `429`.
 
 ### PUT /api/uploads/:uploadId?sig=...
 

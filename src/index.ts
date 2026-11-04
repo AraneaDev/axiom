@@ -37,6 +37,7 @@ import healthRoutes from './modules/health/health.routes';
 import intakeRoutes from './modules/intake/intake.routes';
 import invitationsRoutes from './modules/invitations/invitations.routes';
 import issueTemplatesRoutes from './modules/issue-templates/issue-templates.routes';
+import './actions/read.actions';
 import './modules/attachments/attachments.actions';
 import './modules/issues/issues.actions';
 import './modules/wiki/wiki.actions';
