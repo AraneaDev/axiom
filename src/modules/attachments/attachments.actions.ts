@@ -149,7 +149,7 @@ const attachmentActions = [
       'file is staged: reference attachmentUrl in an issue, comment or page body after uploading.',
     target: uploadTarget,
     input: uploadTarget.extend({
-      filename: z.string().min(1).max(255),
+      filename: z.string().min(1).max(attachmentsService.MAX_FILENAME_LENGTH),
       mimeType: z.string().min(1).max(255),
       size: z.number().int().positive(),
     }),
@@ -173,7 +173,7 @@ const attachmentActions = [
     target: uploadTarget,
     input: uploadTarget.extend({
       url: z.string().min(1).max(2048),
-      filename: z.string().min(1).max(255).optional(),
+      filename: z.string().min(1).max(attachmentsService.MAX_FILENAME_LENGTH).optional(),
     }),
     output: record,
     rest: { method: 'POST', path: `${BASE}/from-url` },

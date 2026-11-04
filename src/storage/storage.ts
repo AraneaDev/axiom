@@ -4,8 +4,8 @@
 export interface StorageBackend {
   put(key: string, data: Buffer, contentType: string): Promise<void>;
   /**
-   * Store a file from disk without reading it into memory. The file at tempPath may be gone
-   * afterwards.
+   * Store a file from the temp upload directory without reading it into memory, and refuse any
+   * other path. The file at tempPath may be gone afterwards.
    */
   putFile(key: string, tempPath: string, contentType: string): Promise<void>;
   get(key: string): Promise<Buffer>;

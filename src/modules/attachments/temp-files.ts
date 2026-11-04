@@ -4,20 +4,21 @@ import path from 'path';
 import type { Readable } from 'stream';
 
 import type { AppError } from '../../middleware/errorHandler';
+import { isTempUploadPath, TEMP_UPLOAD_DIR } from '../../storage/temp-dir';
 
-const UPLOAD_DIR = '/tmp/uploads';
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+fs.mkdirSync(TEMP_UPLOAD_DIR, { recursive: true });
 
 /** A path for a new temp file. Nothing a client sent is part of it. */
 export function newTempPath(): string {
-  return path.join(UPLOAD_DIR, crypto.randomUUID());
+  return path.join(TEMP_UPLOAD_DIR, crypto.randomUUID());
 }
 
 /**
- * Remove a temp file, if it is still there.
+ * Remove a temp file, if it is still there. A path outside the temp directory is left alone.
  * @param tempPath - Its path
  */
 export async function removeTempFile(tempPath: string): Promise<void> {
+  if (!isTempUploadPath(tempPath)) return;
   await fs.promises.unlink(tempPath).catch(() => {});
 }
 

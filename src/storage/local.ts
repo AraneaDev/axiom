@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import type { StorageBackend } from './storage';
+import { isTempUploadPath } from './temp-dir';
 
 const DEFAULT_BASE_PATH = '.data/uploads';
 
@@ -23,6 +24,9 @@ export class LocalStorageBackend implements StorageBackend {
   }
 
   async putFile(key: string, tempPath: string, _contentType: string): Promise<void> {
+    if (!isTempUploadPath(tempPath)) {
+      throw new Error('putFile only takes a file from the temp upload directory');
+    }
     const filePath = this.resolve(key);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     try {

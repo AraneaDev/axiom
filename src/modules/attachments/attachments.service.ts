@@ -12,6 +12,7 @@ import { assertPageAccess } from '../../middleware/rbac';
 import { checkProjectAccess, checkProjectAction } from '../../middleware/requireProjectAccess';
 import { scopesCover } from '../../middleware/token-scopes';
 import { getStorage } from '../../storage/storage';
+import { isTempUploadPath } from '../../storage/temp-dir';
 import { ERR } from '../../utils/error-messages';
 import { PROJECT_TEAM_ORG_INCLUDE, SPACE_TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
@@ -22,6 +23,9 @@ const execFileAsync = promisify(execFile);
 
 /** The most an attachment can hold, whichever way it arrives. */
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+/** The longest file name an attachment can have, whichever way it arrives. */
+export const MAX_FILENAME_LENGTH = 255;
 
 const ALLOWED_MIME_PATTERNS = [
   /^image\//,
@@ -204,6 +208,9 @@ export async function uploadAttachment(
   },
 ) {
   try {
+    if (!isTempUploadPath(file.path)) {
+      throw new Error('uploadAttachment only takes a file from the temp upload directory');
+    }
     // Attaching writes to the parent: refuse before storing anything
     await assertAttachmentParentAccess(uploaderId, opts, 'edit');
     // A comment attachment must name the comment's own issue

@@ -97,7 +97,7 @@ async function assertActionsInProject(projectId: string, actions: AutomationActi
     }
     if (action.type === 'webhook' && action.method !== undefined) {
       if (!isWebhookMethod(action.method)) {
-        throw new AppError(400, `Webhook method ${action.method} is not allowed`);
+        throw new AppError(400, 'Webhook method is not allowed');
       }
     }
   }

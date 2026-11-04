@@ -4,6 +4,7 @@ import type { AddressInfo } from 'net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { cleanupTestContext, createTestContext } from '../../test/factory';
+import { authPost } from '../../test/helpers';
 
 import { createRule, updateRule } from './automation.service';
 import { assertPublicUrl, executeWebhook, type PublicRequestDeps } from './webhook';
@@ -14,11 +15,13 @@ describe('executeWebhook', () => {
   let other: http.Server;
   let otherBase: string;
   const seen: Array<{ url?: string; method?: string; secret?: string; body: string }> = [];
+  let lastHeaders: http.IncomingHttpHeaders = {};
 
   const record = (req: http.IncomingMessage, onEnd: () => void) => {
     let body = '';
     req.on('data', (chunk: Buffer) => (body += chunk.toString()));
     req.on('end', () => {
+      lastHeaders = req.headers;
       seen.push({
         url: req.url,
         method: req.method,
@@ -146,6 +149,35 @@ describe('executeWebhook', () => {
     },
   );
 
+  it.each([[5], [null], [{}], [['GET']]])('fails cleanly on the method %j', async (method) => {
+    seen.length = 0;
+    await expect(
+      executeWebhook(`${base}/end`, {}, method as never, undefined, deps),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(seen).toEqual([]);
+  });
+
+  it('drops headers that are for the client to decide', async () => {
+    seen.length = 0;
+    await executeWebhook(
+      `${base}/end`,
+      { a: 1 },
+      'DELETE',
+      {
+        'Transfer-Encoding': 'chunked',
+        connection: 'upgrade',
+        HOST: 'internal.example',
+        'content-length': '1',
+        'X-Secret': 'kept',
+      },
+      deps,
+    );
+    expect(seen[0]).toMatchObject({ secret: 'kept', body: '{"a":1}' });
+    expect(lastHeaders['transfer-encoding']).toBeUndefined();
+    expect(lastHeaders['content-length']).toBe('7');
+    expect(lastHeaders.host).not.toBe('internal.example');
+  });
+
   it('accepts a method in any case', async () => {
     await send('/end', 'post');
     expect(seen[0]).toMatchObject({ method: 'POST' });
@@ -162,6 +194,14 @@ describe('executeWebhook', () => {
       statusCode: 400,
     });
     await expect(createRule(ctx.projectId, rule(''))).rejects.toMatchObject({ statusCode: 400 });
+    for (const method of [5, null, {}, ['GET']]) {
+      const res = await authPost(
+        `/api/projects/${ctx.projectId}/automation-rules`,
+        ctx.owner.token,
+        rule(method as never),
+      );
+      expect({ method, status: res.status }).toEqual({ method, status: 400 });
+    }
     const saved = await createRule(ctx.projectId, rule('POST'));
     await expect(updateRule(saved.id, rule('TRACE'))).rejects.toMatchObject({ statusCode: 400 });
     await cleanupTestContext(ctx);

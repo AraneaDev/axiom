@@ -16,6 +16,7 @@ import {
   bareMimeType,
   isAllowedMimeType,
   MAX_ATTACHMENT_BYTES,
+  MAX_FILENAME_LENGTH,
   mimeTypeRefusal,
 } from './attachments.service';
 import {
@@ -32,7 +33,9 @@ import {
 } from './upload-intents.service';
 
 function fileFilter(_req: Express.Request, file: Express.Multer.File, cb: FileFilterCallback) {
-  if (isAllowedMimeType(file.mimetype)) {
+  if (file.originalname.length > MAX_FILENAME_LENGTH) {
+    cb(new AppError(400, 'The file name is too long', 'BAD_UPLOAD'));
+  } else if (isAllowedMimeType(file.mimetype)) {
     cb(null, true);
   } else {
     cb(mimeTypeRefusal(file.mimetype));
@@ -149,7 +152,14 @@ const BODY_READ_TIMEOUT_MS = 120_000;
 
 /** Signed uploads one user can have running at once. */
 export const MAX_CONCURRENT_SIGNED_PUTS_PER_USER = 4;
-const signedPutSlots = createUserSlots(MAX_CONCURRENT_SIGNED_PUTS_PER_USER);
+/** And all users together: each can put 25 MB on the temp disk, so at most 800 MB in all. */
+export const MAX_CONCURRENT_SIGNED_PUTS = 32;
+/** Seconds a refused client should wait: about what one upload takes. */
+const SIGNED_PUT_RETRY_AFTER = '30';
+const signedPutSlots = createUserSlots(
+  MAX_CONCURRENT_SIGNED_PUTS_PER_USER,
+  MAX_CONCURRENT_SIGNED_PUTS,
+);
 
 /**
  * Receive the raw body of a signed upload in a temp file, without inflating it: the limit is on
@@ -214,14 +224,20 @@ signedUploadRouter.put('/api/uploads/:uploadId', signedUploadLimiter, async (req
     const sent = req.headers['content-type'];
     if (sent && bareMimeType(sent) !== intent.mimeType) throw mimeTypeRefusal(bareMimeType(sent));
 
-    await signedPutSlots.run(
-      intent.userId,
-      new AppError(429, 'Too many uploads running, please try again later', 'RATE_LIMITED'),
-      async () => {
+    const busy = new AppError(
+      429,
+      'Too many uploads running, please try again later',
+      'RATE_LIMITED',
+    );
+    await signedPutSlots
+      .run(intent.userId, busy, async () => {
         await assertUploadStillAllowed(intent);
         const file = await receiveSignedBody(req, res, intent.maxBytes);
         res.status(201).json(await storeSignedUpload(intent, file));
-      },
-    );
+      })
+      .catch((err: unknown) => {
+        if (err === busy) res.setHeader('Retry-After', SIGNED_PUT_RETRY_AFTER);
+        throw err;
+      });
   });
 });

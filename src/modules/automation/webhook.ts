@@ -250,11 +250,30 @@ const WEBHOOK_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'
 /**
  * Whether a webhook can use this method. An HTTP client sends whatever it gets, TRACE included,
  * and reads an empty method as GET.
- * @param method - The method, in any case
+ * @param method - The method, in any case; rules are stored as JSON, so it can be anything
  */
-export function isWebhookMethod(method: string): boolean {
-  return WEBHOOK_METHODS.has(method.toUpperCase());
+export function isWebhookMethod(method: unknown): method is string {
+  return typeof method === 'string' && WEBHOOK_METHODS.has(method.toUpperCase());
 }
+
+/**
+ * Headers an HTTP client decides for itself. Hop-by-hop ones describe this one connection: set by
+ * hand, a Transfer-Encoding beside the explicit Content-Length makes a request a server refuses,
+ * and Host would address another site at the checked address.
+ */
+const CLIENT_HEADERS = new Set([
+  'connection',
+  'content-length',
+  'host',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'proxy-connection',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+]);
 
 /**
  * Send an automation's webhook. The response is not read: only that it was delivered counts.
@@ -273,7 +292,7 @@ export async function executeWebhook(
   deps: Partial<PublicRequestDeps> = {},
 ) {
   if (!isWebhookMethod(method)) {
-    throw new AppError(400, `Webhook method ${method} is not allowed`);
+    throw new AppError(400, 'Webhook method is not allowed');
   }
   const upperMethod = method.toUpperCase();
   // A GET or HEAD has no body. The length is explicit: without it, HTTP clients drop a DELETE's
@@ -284,7 +303,9 @@ export async function executeWebhook(
       method: upperMethod,
       headers: {
         'Content-Type': 'application/json',
-        ...headers,
+        ...Object.fromEntries(
+          Object.entries(headers ?? {}).filter(([name]) => !CLIENT_HEADERS.has(name.toLowerCase())),
+        ),
         ...(body === undefined ? {} : { 'Content-Length': String(Buffer.byteLength(body)) }),
       },
       body,

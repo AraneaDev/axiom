@@ -2452,7 +2452,7 @@ Upload a file. Request must use `multipart/form-data`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `file` | file | The file to upload |
+| `file` | file | The file to upload, with a name of at most 255 characters |
 | `issueId`, `pageId` | string | The parent. Without one the file is staged, like one from `upload-url` |
 
 **Response 201:**
@@ -2488,7 +2488,7 @@ A staged file is visible to its uploader only. It joins an issue or page when yo
 
 Store the file: the request body is its raw content. This route takes no `Authorization` or `X-Requested-With` header, because the signature is the credential. Edit access to the target is checked again here, as are the scopes of the token that asked for the URL.
 
-**Response 201:** The attachment. **403:** the same answer for a wrong signature, an unknown id and a URL that expired or was used. **408:** the body took more than 2 minutes. **429:** you have 4 uploads running, or too many staged files. **413:** larger than `size`. **415:** another type than `mimeType`, or a compressed body. A refused upload leaves the URL usable until it expires.
+**Response 201:** The attachment. **403:** the same answer for a wrong signature, an unknown id and a URL that expired or was used. **408:** the body took more than 2 minutes. **429:** you have 4 uploads running, 32 are running over all users (with `Retry-After`), or you have too many staged files. **413:** larger than `size`. **415:** another type than `mimeType`, or a compressed body. A refused upload leaves the URL usable until it expires.
 
 ### POST /api/attachments/from-url
 

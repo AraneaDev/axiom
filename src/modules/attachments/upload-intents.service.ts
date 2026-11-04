@@ -20,6 +20,7 @@ import {
   bareMimeType,
   isAllowedMimeType,
   MAX_ATTACHMENT_BYTES,
+  MAX_FILENAME_LENGTH,
   mimeTypeRefusal,
   uploadAttachment,
 } from './attachments.service';
@@ -270,7 +271,9 @@ export async function storeSignedUpload(intent: UsableIntent, file: TempFile) {
  */
 function filenameFromUrl(url: string): string {
   try {
-    return cleanFilename(decodeURIComponent(new URL(url).pathname.split('/').pop() ?? ''));
+    const last = decodeURIComponent(new URL(url).pathname.split('/').pop() ?? '');
+    // The end of the name, which holds its extension
+    return cleanFilename(last).slice(-MAX_FILENAME_LENGTH);
   } catch {
     return 'download';
   }

@@ -21,9 +21,12 @@ import { createTestUser, type TestUser } from '../../test/factory';
 import { authPost } from '../../test/helpers';
 import { listenForRawRequests } from '../../test/raw-request';
 
-import { MAX_CONCURRENT_SIGNED_PUTS_PER_USER } from './attachments.routes';
-import { MAX_STAGED_PER_USER } from './attachments.service';
-import { newTempPath, receiveToTempFile } from './temp-files';
+import {
+  MAX_CONCURRENT_SIGNED_PUTS,
+  MAX_CONCURRENT_SIGNED_PUTS_PER_USER,
+} from './attachments.routes';
+import { MAX_STAGED_PER_USER, uploadAttachment } from './attachments.service';
+import { newTempPath, receiveToTempFile, removeTempFile } from './temp-files';
 
 process.env.STORAGE_PATH = path.join(os.tmpdir(), `axiom-temp-test-${process.pid}`);
 
@@ -304,20 +307,112 @@ describe('requests that do not finish', () => {
     await prisma.user.deleteMany({ where: { id: { in: users.map((held) => held.id) } } });
   }, 60_000);
 
-  it('stores a multipart file of exactly 25 MB, and a long name is no trouble', async () => {
+  it('stores a multipart file of exactly 25 MB', async () => {
     const before = tempFiles();
     const res = await request(app)
       .post('/api/attachments')
       .set('Authorization', `Bearer ${user.token}`)
       .set('X-Requested-With', 'XMLHttpRequest')
       .attach('file', Buffer.alloc(25 * 1024 * 1024, 1), {
-        filename: `${'n'.repeat(300)}.txt`,
+        filename: 'n.txt',
         contentType: 'text/plain',
       });
     expect(res.status).toBe(201);
     expect(res.body.size).toBe(25 * 1024 * 1024);
     expect(tempFiles()).toEqual(before);
   }, 30_000);
+
+  it('caps a multipart file name at 255 characters', async () => {
+    const before = tempFiles();
+    const named = (filename: string) =>
+      request(app)
+        .post('/api/attachments')
+        .set('Authorization', `Bearer ${user.token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .attach('file', Buffer.from('x'), { filename, contentType: 'text/plain' });
+    const atCap = await named(`${'n'.repeat(251)}.txt`);
+    expect(atCap.status).toBe(201);
+    expect(atCap.body.originalName).toHaveLength(255);
+    const over = await named(`${'n'.repeat(252)}.txt`);
+    expect(over.status).toBe(400);
+    expect(over.body.error.code).toBe('BAD_UPLOAD');
+    expect(tempFiles()).toEqual(before);
+  });
+
+  it('caps the signed uploads running over all users, with Retry-After', async () => {
+    const perUser = MAX_CONCURRENT_SIGNED_PUTS_PER_USER;
+    const users = await Promise.all(
+      Array.from({ length: Math.ceil(MAX_CONCURRENT_SIGNED_PUTS / perUser) + 1 }, () =>
+        createTestUser(),
+      ),
+    );
+    const urlFor = async (holder: TestUser) => {
+      const res = await authPost('/api/attachments/upload-url', holder.token, {
+        filename: 'a.txt',
+        mimeType: 'text/plain',
+        size: 1024,
+      });
+      expect(res.status).toBe(201);
+      return res.body.uploadUrl as string;
+    };
+    const urls: string[] = [];
+    for (const holder of users.slice(0, -1)) {
+      for (let i = 0; i < perUser; i++) urls.push(await urlFor(holder));
+    }
+    const lastUrl = await urlFor(users[users.length - 1]);
+    const before = tempFiles();
+    const held = await Promise.all(
+      urls.map((url) =>
+        connect(
+          `PUT ${url} HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\n` +
+            'Content-Length: 1024\r\n\r\nx',
+        ),
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(tempFiles().length).toBe(before.length + MAX_CONCURRENT_SIGNED_PUTS),
+    );
+
+    const put = () => request(app).put(lastUrl).set('Content-Type', 'text/plain').send('x');
+    const refused = await put();
+    expect(refused.status).toBe(429);
+    expect(refused.headers['retry-after']).toBe('30');
+
+    for (const socket of held) socket.destroy();
+    await vi.waitFor(() => expect(tempFiles()).toEqual(before));
+    await vi.waitFor(async () => expect((await put()).status).toBe(201));
+    await prisma.user.deleteMany({ where: { id: { in: users.map((holder) => holder.id) } } });
+  }, 30_000);
+
+  it('moves and deletes nothing outside the temp directory', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-outside-'));
+    const outside = path.join(dir, 'keep.txt');
+    fs.writeFileSync(outside, 'keep');
+    const sneaky = path.join(TEMP_DIR, '..', path.basename(dir), 'keep.txt');
+    const nested = path.join(TEMP_DIR, 'sub', 'keep.txt');
+    const storage = new LocalStorageBackend();
+
+    await expect(storage.putFile('stolen.txt', outside, 'text/plain')).rejects.toThrow('temp');
+    await expect(storage.putFile('stolen.txt', sneaky, 'text/plain')).rejects.toThrow('temp');
+    await expect(storage.putFile('stolen.txt', nested, 'text/plain')).rejects.toThrow('temp');
+    await expect(storage.exists('stolen.txt')).resolves.toBe(false);
+
+    await removeTempFile(outside);
+    await removeTempFile(sneaky);
+    expect(fs.existsSync(outside)).toBe(true);
+
+    const rows = await prisma.attachment.count();
+    await expect(
+      uploadAttachment(
+        { originalname: 'a.txt', mimetype: 'text/plain', size: 4, path: outside },
+        user.id,
+        {},
+      ),
+    ).rejects.toThrow('temp');
+    expect(fs.existsSync(outside)).toBe(true);
+    expect(await prisma.attachment.count()).toBe(rows);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 
   it('moves a file into storage, or copies it across filesystems', async () => {
     const storage = new LocalStorageBackend();
