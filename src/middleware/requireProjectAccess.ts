@@ -126,6 +126,14 @@ export const projectOf = {
       })
     )?.issue.projectId,
   ],
+  issueWebLink: async (id: string) => [
+    (
+      await prisma.issueWebLink.findUnique({
+        where: { id },
+        select: { issue: { select: { projectId: true } } },
+      })
+    )?.issue.projectId,
+  ],
   automationRule: async (id: string) => [
     (await prisma.automationRule.findUnique({ where: { id }, select: { projectId: true } }))
       ?.projectId,

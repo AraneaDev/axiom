@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 
 import { IssueLinkedPagesCard } from './IssueLinkedPagesCard';
 import { IssueLinkedSection } from './IssueLinkedSection';
+import { IssueWebLinksCard } from './IssueWebLinksCard';
 
 interface IssueDetailMetaPanelProps {
   issue: Issue;
@@ -115,6 +116,9 @@ export function IssueDetailMetaPanel({
 
       {/* Linked pages */}
       <IssueLinkedPagesCard projectId={projectId} issueId={issue.id} issueNumber={issue.number} />
+
+      {/* External links */}
+      <IssueWebLinksCard projectId={projectId} issueNumber={issue.number} />
 
       {/* Linked Issues */}
       <IssueLinkedSection

@@ -45,6 +45,7 @@ model User {
   starredPages            StarredPage[]            @relation("UserStarredPages")
   pageViews               PageView[]               @relation("UserPageViews")
   issueVotes              IssueVote[]
+  issueWebLinks           IssueWebLink[]
   notificationPreferences NotificationPreference[]
   watchedIssues           IssueWatcher[]
   sentInvitations         Invitation[]
@@ -334,6 +335,7 @@ model Issue {
   attachments       Attachment[]
   votes             IssueVote[]
   watchers          IssueWatcher[]
+  webLinks          IssueWebLink[]
   timeEntries       TimeEntry[]
   sprintHistory     SprintIssueHistory[]
   wikiIssueLinks    WikiPageIssueLink[]
@@ -852,6 +854,20 @@ model IssueVote {
 
   @@unique([issueId, userId])
   @@map("issue_votes")
+}
+
+model IssueWebLink {
+  id          String   @id @default(cuid())
+  issueId     String
+  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  url         String
+  title       String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([issueId])
+  @@map("issue_web_links")
 }
 
 // ─── Milestones ─────────────────────────────────────────────

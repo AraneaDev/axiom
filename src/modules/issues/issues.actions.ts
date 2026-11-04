@@ -12,6 +12,7 @@ import {
   createCommentSchema,
   createIssueSchema,
   issueListQuerySchema,
+  issueWebLinkSchema,
   logWorkSchema,
   strictInt,
   updateIssueSchema,
@@ -21,6 +22,7 @@ import * as wikiLinkService from '../wiki/wiki-issue-links.service';
 import * as linksService from './issue-links.service';
 import * as votesService from './issue-votes.service';
 import * as watchersService from './issue-watchers.service';
+import * as webLinksService from './issue-web-links.service';
 import * as hydrateService from './issues-hydrate.service';
 import * as issuesService from './issues.service';
 
@@ -493,10 +495,63 @@ const personalActions = [
   }),
 ];
 
+const webLinkTarget = projectTarget.extend({ linkId: z.string() });
+
+const webLinkActions = [
+  defineAction({
+    name: 'issueWebLink.list',
+    area: 'issues',
+    kind: 'read',
+    summary: 'The external links on an issue',
+    target: projectTarget,
+    input: issueInput,
+    output: z.array(record),
+    rest: { method: 'GET', path: `${ISSUE}/web-links` },
+    authorize: read,
+    handler: async (_ctx, { projectId, issueNumber }) =>
+      webLinksService.listWebLinks(projectId, issueNumber),
+  }),
+  defineAction({
+    name: 'issueWebLink.add',
+    area: 'issues',
+    kind: 'write',
+    summary: 'Add an external http(s) link to an issue',
+    target: projectTarget,
+    input: issueInput.extend(issueWebLinkSchema.shape),
+    output: record,
+    rest: { method: 'POST', path: `${ISSUE}/web-links` },
+    authorize: write,
+    handler: async (ctx, { projectId, issueNumber, url, title }) =>
+      webLinksService.addWebLink(projectId, issueNumber, ctx.userId, { url, title }),
+  }),
+  defineAction({
+    name: 'issueWebLink.delete',
+    area: 'issues',
+    kind: 'write',
+    summary: 'Remove an external link from an issue',
+    target: webLinkTarget,
+    input: webLinkTarget.extend({ issueNumber: strictInt }),
+    output: nothing,
+    rest: { method: 'DELETE', path: `${ISSUE}/web-links/:linkId` },
+    authorize: ownedByProject(
+      projectOf.issueWebLink,
+      (input: z.infer<typeof webLinkTarget>) => ({
+        projectId: input.projectId,
+        recordId: input.linkId,
+      }),
+      'issue:edit',
+    ),
+    handler: async (_ctx, { projectId, issueNumber, linkId }) => {
+      await webLinksService.deleteWebLink(projectId, issueNumber, linkId);
+    },
+  }),
+];
+
 registerActions([
   ...issueActions,
   ...commentActions,
   ...worklogActions,
   ...linkActions,
   ...personalActions,
+  ...webLinkActions,
 ]);

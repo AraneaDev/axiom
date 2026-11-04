@@ -30,6 +30,17 @@ export const logWorkSchema = z.object({
   description: z.string().max(500).optional(),
 });
 
+// ─── Web links ───────────────────────────────────────────────
+
+export const issueWebLinkSchema = z.object({
+  url: z
+    .string()
+    .max(2000)
+    .url()
+    .refine((value) => /^https?:\/\//i.test(value), 'must be an http or https URL'),
+  title: z.string().trim().min(1).max(200).optional(),
+});
+
 // ─── Bulk Operations ────────────────────────────────────────
 
 export const bulkUpdateIssuesSchema = z.object({

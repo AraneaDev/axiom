@@ -23,6 +23,7 @@ export const TRUNCATION_ORDER = [
   'starred_pages',
   'issue_votes',
   'issue_watchers',
+  'issue_web_links',
   'comment_reactions',
   'page_labels',
   'page_restrictions',
