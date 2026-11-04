@@ -33,7 +33,7 @@ Detailed docs live in `/docs/`. Read these before making changes in their domain
 | [Design Patterns](docs/design-patterns.md) | Non-negotiable rules, all shared UI components, custom hooks, backend module pattern, building checklists |
 | [Development Guide](docs/development-guide.md) | Dev commands, testing, linting, commit message format |
 | [API Reference](docs/api-reference.md) | REST endpoint summary (auth, issues, sprints, wiki, search) |
-| [MCP Server](docs/axiom-mcp-server.md) | 24 MCP tools, Claude Desktop/Code setup, discovery chains, query language, example workflows |
+| [MCP Server](docs/axiom-mcp-server.md) | The five tools, keys, includes, batches, uploads, scopes, limits, Claude Code and Codex setup |
 | [Getting Started](docs/getting-started.md) | New developer onboarding, prerequisites, installation |
 
 ---
@@ -72,6 +72,15 @@ These are enforced across the entire codebase. See [Design Patterns](docs/design
 ## Architecture (Summary)
 
 **Backend:** `src/modules/{feature}/` with `*.routes.ts` > `*.controller.ts` > `*.service.ts`. Controllers handle req/res; services contain business logic with Prisma. Routes mounted under `/api/*`.
+
+**Action registry:** Every operation is a `defineAction` in a `src/modules/{feature}/{feature}.actions.ts` (or `src/actions/`), registered with `registerActions` and imported in `src/index.ts` above the mount (forgetting the import silently leaves the route legacy). REST routes, `/api/act`, `/api/read`, the MCP server (`src/mcp/`, five tools, API tokens only, Streamable HTTP at `/api/mcp`) and OpenAPI (`/api/docs`) all come from it. Rules a new action follows:
+- Handlers call services, never raw Prisma for writes. Controllers and routers of a migrated route are deleted.
+- Area and kind give the token scope (`<area>:read` or `<area>:write`). An action `tokenAllows` always blocked (admin, tokens, account, space permissions, page restrictions, project create/update/delete, org and team writes) is `uiOnly` or `tokenBlocked: true`.
+- Authorization runs before full input validation. Declare `target` (only the ids authorize needs) whenever the input has more than the path params, and build `input` from it with `target.extend({...})` so both read the same ids.
+- Ids use `strictInt` from `common-validators.ts`. No top-level input is `z.unknown()` or `z.any()`; a repeatable query value uses `queryValue`. Writes read body and path params, GET and HEAD read query and path params only.
+- Output keeps the old REST shape, as a loose object naming the key fields.
+- `registry-rules.test.ts` and `parity.test.ts` enforce these, and `frontend-calls.test.ts` ties every frontend call to a registry action or a tracked legacy route. Keep them green.
+- `act` takes a `key` for an issue, page, space or project (`src/actions/keys.ts`): unseen and missing answer alike (`404`).
 
 **Query Engine:** `src/lib/query-engine/` -- shared lexer/parser/AST pipeline powering issue search, automation conditions, and template variables. Two backends: AST-to-Prisma compiler (search) and AST-to-Boolean evaluator (automation). Extend by adding fields to `issueFieldRegistry` in `fields/issue-fields.ts`. Tests: `cd src/lib/query-engine && npx vitest run --config vitest.config.ts` (no DB needed).
 

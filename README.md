@@ -13,7 +13,7 @@ A self-hosted Jira and Confluence replacement built for agents. You get issue tr
 - Full-text search across issues and wiki pages
 - Role-based access control (RBAC) with org/team hierarchy
 - Outbound webhooks as an automation action
-- MCP server with 24 tools for AI agent integration
+- MCP server with five tools for AI agent integration
 - Dark mode with full design token system
 - GitHub integration (planned)
 
@@ -28,7 +28,7 @@ A self-hosted Jira and Confluence replacement built for agents. You get issue tr
 | Editor | TipTap (ProseMirror) with markdown, mentions, issue references |
 | Real-time | WebSocket, Yjs CRDT |
 | Testing | Vitest (unit/integration), Playwright (E2E) |
-| AI | MCP server with 24 tools |
+| AI | MCP server with five tools |
 | Production | One container: Express serves the built SPA and the API |
 
 ---
@@ -74,7 +74,7 @@ All backend tests run against a real PostgreSQL instance -- no mocked databases.
 src/
   modules/          # 31 feature modules (controller -> service -> routes)
   middleware/       # Auth, RBAC, CSRF, error handling
-  mcp/              # MCP server (24 tools)
+  mcp/              # MCP server (five tools)
   utils/            # Shared utilities (pandoc, validation, mentions)
 frontend/src/
   pages/            # Route components (lazy loaded)
@@ -98,7 +98,7 @@ Rate limiting: 300 req/min global, 15 req/min on auth endpoints.
 
 Authentication uses JWT access + refresh tokens with automatic refresh on 401. CSRF protection via `X-Requested-With` header on all mutating requests. Structured request logging with pino and per-request correlation IDs (`X-Request-Id`).
 
-The MCP server exposes 24 tools for AI agent integration, covering organizations, issues, sprints, wiki, and search.
+The MCP server has five tools (search, read, describe, act, upload) that cover the whole API.
 
 ---
 

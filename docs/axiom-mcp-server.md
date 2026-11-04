@@ -1,446 +1,179 @@
-# Axiom MCP Server
+# Axiom MCP server
 
-Axiom exposes a Model Context Protocol (MCP) server that lets Claude interact with your projects, issues, sprints, and wiki directly, without opening the browser.
+Axiom has an MCP server so your agents work in the same projects you do. It has five tools. They cover everything the REST API does, so an agent finishes a ticket in one or two calls instead of ten.
 
 ## Connection
 
-The MCP server runs alongside the Axiom API using SSE (Server-Sent Events) transport. All MCP endpoints require authentication.
+The server speaks Streamable HTTP, stateless, at `POST /api/mcp`. `GET` and `DELETE` answer `405`. Legacy SSE and the 24 separate tools of the earlier server are gone.
 
-|Endpoint|Method|Purpose|
-|-|-|-|
-|`/api/mcp`|GET|Open SSE stream (connect here)|
-|`/api/mcp/messages`|POST|Send tool calls|
+| What            | Value                                                              |
+| --------------- | ------------------------------------------------------------------ |
+| URL (local dev) | `http://localhost:3000/api/mcp`                                    |
+| Transport       | `http` (Streamable HTTP)                                           |
+| Header          | `Authorization: Token tk_...`                                      |
+| Body            | One JSON-RPC message per request, `Content-Type: application/json` |
 
-**Base URL (local dev):** `http://localhost:3000/api/mcp`
+The endpoint takes API tokens only. A session or JWT gets `401 TOKEN_REQUIRED`. That is on purpose: every write an agent makes is recorded with the name of its token as `via`, so your history shows what you did and what an agent did.
 
-Each message must carry the `session` of an SSE stream opened by the same user (`400` without one, `403` for another user's).
+A browser request must come from an allowed origin (`CORS_ORIGIN` or `FRONTEND_URL`, else localhost only); an agent sends no `Origin` and is unaffected.
 
-### Permissions
+### Create a token
 
-Tools run as the authenticated user and apply the same checks as the REST API: project tools need membership of the project's team, wiki tools need org membership, the space permission and the page's restrictions, and `list_projects` needs team membership. Each tool also needs an action from the role matrix (`issue:view`, `issue:create`, `issue:edit`, `wiki:view`, `wiki:edit`), taken from the role in the team that owns the resource. A tool without a mapping is refused.
+In Axiom open Settings, API tokens, and create one. Name it after the agent (`claude-code`, `codex`), since that name becomes `via`. Give it the scopes it needs, below. Over REST: `POST /api/users/me/tokens` with `{ "name": "claude-code", "scopes": ["issues:write", "search:read"] }`. The token is shown once.
 
-When connecting with an API token (`Authorization: Token tk_...`), the token's scopes also apply: `issue:view` tools need `issues:read`, issue writes `issues:write`, `wiki:view` tools `wiki:read`, wiki writes `wiki:write`.
+## Setup
 
----
-
-## Claude Desktop Setup
-
-Add the following to your `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "axiom": {
-      "type": "sse",
-      "url": "http://localhost:3000/api/mcp",
-      "headers": {
-        "Authorization": "Bearer <your-access-token>"
-      }
-    }
-  }
-}
-```
-
-Restart Claude Desktop. You should see "axiom" appear in the MCP servers panel.
-
----
-
-## Claude Code Setup
-
-Run from your terminal:
+### Claude Code
 
 ```bash
-claude mcp add axiom --transport sse http://localhost:3000/api/mcp \
-  --header "Authorization: Bearer <your-access-token>"
+claude mcp add --transport http axiom http://localhost:3000/api/mcp \
+  --header "Authorization: Token tk_..."
 ```
 
-Or add to your project's `.claude/settings.json`:
+Or in `.mcp.json` at the project root:
 
 ```json
 {
   "mcpServers": {
     "axiom": {
-      "type": "sse",
+      "type": "http",
       "url": "http://localhost:3000/api/mcp",
-      "headers": {
-        "Authorization": "Bearer <your-access-token>"
-      }
+      "headers": { "Authorization": "Token ${AXIOM_TOKEN}" }
     }
   }
 }
 ```
 
-Obtain an access token by calling `POST /api/auth/login` with your Axiom credentials.
+### Codex
 
----
+Codex sends `--bearer-token-env-var` as `Bearer ...`, which Axiom does not accept for API tokens. Put the whole header value in an environment variable and map it in `~/.codex/config.toml`:
 
-## Available Tools (24)
-
-### Organization (3 tools)
-
-#### `list_orgs`
-
-List organizations the current user belongs to. No parameters required.
-
-#### `list_teams`
-
-List teams in an organization.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`orgId`|string|yes|Organization ID|
-
-#### `list_projects`
-
-List projects in a team.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`teamId`|string|yes|Team ID|
-
----
-
-### Issues & Sprints (12 tools)
-
-#### `list_issues`
-
-List issues in a project with optional filters.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`projectId`|string|yes|Project ID|
-|`type`|`TASK\|BUG\|STORY\|EPIC`|no|Filter by type|
-|`priority`|`CRITICAL\|HIGH\|MEDIUM\|LOW`|no|Filter by priority|
-|`assigneeId`|string|no|Filter by assignee user ID|
-|`limit`|number|no|Max results (default: 20)|
-|`query`|string|no|Structured query string for filtering issues. Supports hybrid syntax: simple mode (`type:bug priority:high assignee:@me`) and complex mode (`type = Bug AND (priority > Medium OR storyPoints > 5)`). When provided, takes precedence over individual filter params.|
-
-Example: `list_issues(projectId, query: "type:bug priority:high assignee:@me")`
-
-#### `get_issue`
-
-Get full details of a single issue including comments.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`projectId`|string|yes|Project ID|
-|`issueNumber`|number|yes|Issue number (e.g. 42)|
-
-#### `create_issue`
-
-Create a new issue in a project.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`projectId`|string|yes|Project ID|
-|`title`|string|yes|Issue title|
-|`body`|string|no|Markdown body|
-|`type`|`TASK\|BUG\|STORY\|EPIC`|no|Default: `TASK`|
-|`priority`|`CRITICAL\|HIGH\|MEDIUM\|LOW`|no|Default: `MEDIUM`|
-|`assigneeId`|string|no|User ID to assign|
-
-#### `update_issue`
-
-Update an existing issue's status, priority, assignee, labels, story points, or sprint.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`projectId`|string|yes|Project ID|
-|`issueNumber`|number|yes|Issue number|
-|`columnId`|string|no|Board column ID (moves status)|
-|`priority`|`CRITICAL\|HIGH\|MEDIUM\|LOW`|no|New priority|
-|`assigneeId`|string|no|New assignee user ID|
-|`storyPoints`|number|no|Story point estimate|
-|`sprintId`|string|no|Move to sprint|
-
-#### `delete_issue`
-
-Permanently delete an issue from a project.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`projectId`|string|yes|Project ID|
-|`issueNumber`|number|yes|Issue number|
-
-#### `add_comment`
-
-Add a comment to an issue.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`projectId`|string|yes|Project ID|
-|`issueNumber`|number|yes|Issue number|
-|`body`|string|yes|Comment text (markdown)|
-
-#### `list_sprints`
-
-List sprints for a project.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`projectId`|string|yes|Project ID|
-|`status`|`PLANNING\|ACTIVE\|COMPLETED`|no|Filter by status|
-
-#### `get_sprint`
-
-Get a sprint with all its issues.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`sprintId`|string|yes|Sprint ID|
-
-#### `create_sprint`
-
-Create a new sprint in PLANNING status.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`projectId`|string|yes|Project ID|
-|`name`|string|yes|Sprint name|
-|`startDate`|string|no|ISO date string|
-|`endDate`|string|no|ISO date string|
-
-#### `start_sprint`
-
-Start a sprint (PLANNING -> ACTIVE). Only one active sprint per project is allowed.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`sprintId`|string|yes|Sprint ID|
-
-#### `complete_sprint`
-
-Complete an active sprint. Incomplete issues can be moved to another sprint or backlog.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`sprintId`|string|yes|Sprint ID|
-|`incompleteIssueDestination`|`backlog\|next_sprint`|no|Where to move incomplete issues|
-
-#### `add_issues_to_sprint`
-
-Add one or more issues to a sprint.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`sprintId`|string|yes|Sprint ID|
-|`issueIds`|string\[]|yes|Array of issue IDs|
-
----
-
-### Wiki (6 tools)
-
-#### `list_wiki_spaces`
-
-List all wiki spaces for a team.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`teamId`|string|yes|Team ID|
-
-#### `get_wiki_page`
-
-Get a wiki page by its space and slug.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`spaceId`|string|yes|Wiki space ID|
-|`pageSlug`|string|yes|Page URL slug|
-
-#### `create_wiki_page`
-
-Create a new wiki page in a space.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`spaceId`|string|yes|Wiki space ID|
-|`title`|string|yes|Page title|
-|`slug`|string|yes|URL-friendly slug (e.g. `getting-started`)|
-|`body`|string|no|Markdown content|
-|`parentId`|string|no|Parent page ID for nesting|
-|`templateId`|string|no|Create page from a template with auto-resolved variables. Template variables like `{{currentUser.displayName}}`, `{{team.name}}`, `{{now()}}` are resolved using the requesting user's context. If both `body` and `templateId` are provided, `body` wins.|
-
-#### `update_wiki_page`
-
-Update an existing wiki page's title and/or body. The call goes through the same wiki service as the REST `PATCH`, so the body is normalised Markdown, a version is recorded, and issue links and the page tree stay in sync.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`spaceId`|string|yes|Wiki space ID|
-|`pageSlug`|string|yes|Current page slug|
-|`title`|string|no|New title|
-|`body`|string|no|New body (Markdown)|
-
-The caller needs edit access to the page and `EDIT` access to the wiki space, the same checks as the REST `PATCH`.
-
-The response is the updated page plus `pendingMerge`. It is `true` when a change waits for an editor to merge it: someone has the page open in the editor, or an earlier editing session ended with unmerged edits (its draft is offered for merging the next time the page is opened). In both cases the change is already stored in `Page.body` and recorded as an `EXTERNAL` version, and the response also carries `externalVersionId`, the version the merge will use. A write that nobody has to merge is a plain `EDIT` version. You do not have to retry or poll: when `pendingMerge` is `false`, nothing is waiting.
-
-#### `delete_wiki_page`
-
-Permanently delete a wiki page from a space.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`pageId`|string|yes|Page ID|
-
-#### `get_page_tree`
-
-Get the full nested page tree for a wiki space.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`spaceId`|string|yes|Wiki space ID|
-
----
-
-### Search (1 tool)
-
-#### `search`
-
-Search across issues and wiki pages by keyword.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`query`|string|yes|Search keyword(s)|
-|`type`|`issues\|wiki\|all`|no|Scope (default: `all`)|
-|`limit`|number|no|Max results (default: 10)|
-
----
-
-### Cross-Product Integration (2 tools)
-
-#### `list_wiki_issue_links`
-
-List all wiki pages linked to a specific issue, or all issues linked to a specific wiki page.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`issueId`|string|conditional|Issue ID (provide this or `pageId`)|
-|`pageId`|string|conditional|Wiki page ID (provide this or `issueId`)|
-
-Example: `list_wiki_issue_links(issueId: "abc-123")`
-
-#### `link_wiki_to_issue`
-
-Create a bidirectional link between a wiki page and an issue for traceability.
-
-|Parameter|Type|Required|Description|
-|-|-|-|-|
-|`pageId`|string|yes|Wiki page ID|
-|`issueId`|string|yes|Issue ID|
-
-Example: `link_wiki_to_issue(pageId: "page-1", issueId: "issue-1")`
-
----
-
-## Query Language
-
-The `query` parameter on `list_issues` accepts a hybrid syntax that covers both quick shorthand and expressive boolean expressions.
-
-**Simple mode** -- space-separated `field:value` pairs, implicitly ANDed:
-
-```
-type:bug
-priority:high,critical
-assignee:@me
-status:in-progress
+```bash
+export AXIOM_AUTH="Token tk_..."
 ```
 
-**Complex mode** -- explicit operators and grouping:
-
-```
-type = Bug AND (priority > Medium OR storyPoints > 5)
-created > now(-7d) AND status != Done
-assignee = @me AND sprint = active
+```toml
+[mcp_servers.axiom]
+url = "http://localhost:3000/api/mcp"
+env_http_headers = { Authorization = "AXIOM_AUTH" }
 ```
 
-Simple and complex syntax can be combined in the same string. For full operator and field reference see [api-reference.md](api-reference.md#query-language-reference).
+## The five tools
 
-**Example MCP calls:**
+| Tool       | Does                                                                                                                                                                                                                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search`   | Free text plus filters (`type:bug`, `status:done`, `assignee:name`) over issues and pages you can open. A page titled exactly the query comes first. Arguments: `query`, `type` (`issues`, `wiki`, `all`), `limit` (1 to 100). Results carry the key to pass to `read` |
+| `read`     | Open issues and pages by key, with what belongs to them                                                                                                                                                                                                                |
+| `describe` | Without `action`: the names and summaries of what your token allows, optionally for one `area`. With `action`: its input and output as JSON Schema                                                                                                                     |
+| `act`      | Run an action, or a batch of up to 25                                                                                                                                                                                                                                  |
+| `upload`   | Add a file                                                                                                                                                                                                                                                             |
 
-```
-list_issues(projectId, query: "type:bug priority:high,critical assignee:@me")
-list_issues(projectId, query: "created > now(-7d) AND status != Done")
-```
+### Keys
 
----
+`read` and `act` take keys, so an agent never needs an internal id.
 
-## Discovery Chain
+| Key                        | Names                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `AXM-42`                   | An issue. If projects you can see in several teams share the prefix, `409 AMBIGUOUS_KEY` lists the full keys |
+| `org/team/AXM-42`          | An issue, exactly                                                                                            |
+| `org/team/space/page-slug` | A page                                                                                                       |
+| a URL or site path         | The issue or page it shows. Only the path counts and nothing is fetched                                      |
+| `org/team/space`           | A space, for `act` actions that work in a space such as `page.create`                                        |
+| `AXM` or `org/team/AXM`    | A project, for `act` actions that work in a project such as `issue.create` and `sprint.create`               |
 
-Most tools require IDs (`projectId`, `teamId`, etc.). Use this chain to find them:
+Something you can't see answers exactly like something that doesn't exist (`404 NOT_FOUND`), and a key the action can't take answers `400 KEY_NOT_ACCEPTED`. A key that disagrees with ids in `input` answers `400 KEY_CONFLICT`.
 
-```
-list_orgs()                  -> get orgId
-list_teams(orgId)            -> get teamId
-list_projects(teamId)        -> get projectId
-list_issues(projectId)       -> work with issues
+### read
 
-list_teams(orgId)            -> get teamId
-list_wiki_spaces(teamId)     -> get spaceId
-get_page_tree(spaceId)       -> navigate pages
-```
-
----
-
-## Example Workflows
-
-### Triage open bugs
-
-```
-1. list_orgs() -> find your org
-2. list_teams(orgId) -> find the target team
-3. list_projects(teamId) -> find the project
-4. list_issues(projectId, type: "BUG") -> list all bugs
-5. get_issue(projectId, issueNumber) -> inspect each one
-6. update_issue(projectId, issueNumber, priority: "HIGH") -> reprioritize
-7. add_comment(projectId, issueNumber, body: "...") -> leave triage notes
+```json
+{
+  "keys": ["AXM-42", "acme/core/docs/design"],
+  "include": ["comments", "links", "attachments", "pages"]
+}
 ```
 
-### Sprint planning
+Up to 50 keys per call. Each key answers for itself: `{ key, kind, data }` or `{ key, error }`. `include` adds, per item:
 
-```
-1. list_projects(teamId) -> find project
-2. list_sprints(projectId, status: "PLANNING") -> find upcoming sprint
-3. list_issues(projectId) -> find backlog issues
-4. add_issues_to_sprint(sprintId, issueIds) -> populate sprint
-5. start_sprint(sprintId) -> kick off the sprint
-```
+- Issue: `comments`, `links`, `webLinks`, `attachments`, `history`, `worklogs`, `children`, `pages` (linked pages and pages whose body mentions the key).
+- Page: `children`, `attachments`, `history`, `labels`, `linkedIssues`, `comments`.
 
-### Write and publish a runbook
+Each include is `{ items, limit, truncated }`. `fields` narrows the base item and `commentBodies: false` leaves comment bodies out. A call returns at most 10 MB; items past it answer `413 RESPONSE_TOO_LARGE`. Per item you need `issues:read` or `wiki:read` on top of `search:read`. See the [API reference](api-reference.md#post-apiread) for every field.
 
-```
-1. list_teams(orgId) -> find the Infra team
-2. list_wiki_spaces(teamId) -> find the Runbooks space
-3. get_page_tree(spaceId) -> see existing pages
-4. create_wiki_page(spaceId, title, slug, body) -> publish the doc
+### act
+
+One action:
+
+```json
+{ "action": "issue.update", "key": "AXM-42", "input": { "status": "Done" } }
 ```
 
-### Bulk issue creation from a spec
+`status` is a column name, so an agent never looks up a column id. Input is strict: an unknown field is a `400`, not silently ignored. Use `describe` to see the exact input.
 
-```
-1. search(query: "v2 spec", type: "wiki") -> find the spec page
-2. get_wiki_page(spaceId, pageSlug) -> read requirements
-3. list_projects(teamId) -> find target project
-4. create_issue(...) x N -> create one issue per requirement
-```
+A batch runs in order and stops at the first failure:
 
-### Create a wiki page from a template
-
-```
-1. list_wiki_spaces(teamId) -> get spaceId
-2. create_wiki_page(spaceId, title: "Sprint Retro", slug: "sprint-retro-26", templateId: "...") -> page created with resolved variables (currentUser, team, now() etc.)
-```
-
-### Investigate and triage
-
-```
-search("login timeout error") -> get_issue(AXM-45) -> list_wiki_issue_links(issueId) -> get_wiki_page(related runbook)
+```json
+{
+  "batch": [
+    { "action": "issue.update", "key": "AXM-42", "input": { "status": "Done" } },
+    { "action": "comment.add", "key": "AXM-42", "input": { "body": "Shipped in the PR" } },
+    { "action": "worklog.add", "key": "AXM-42", "input": { "minutes": 30 } },
+    {
+      "action": "issueWebLink.add",
+      "key": "AXM-42",
+      "input": { "url": "https://github.com/acme/axiom/pull/7" }
+    }
+  ]
+}
 ```
 
----
+The answer is `{ results, completed }`, one result per item: `{ ok: true, result }`, `{ ok: false, error }` or `{ ok: false, skipped: true }`. If any item failed the tool answers with `isError: true`, though what already ran stays done. A batch is no transaction. Each item is authorized on its own.
 
-## Known Limitations
+### upload
 
-* **Creator attribution**: Issues, comments, wiki pages, and other resources created via MCP are attributed to the authenticated user whose token is used to connect.
-* **Single SSE connection**: The server supports one active SSE connection at a time. Reconnecting replaces the previous session.
+Two ways, both ending with a file that is staged or attached:
 
+1. **From a URL.** `{ "url": "https://example.com/shot.png", "target": "AXM-42" }` fetches a public HTTPS URL.
+2. **From disk.** `{ "filename": "shot.png", "mimeType": "image/png", "size": 4096 }` answers a signed `uploadUrl`, an `attachmentUrl` and the exact line to run:
+
+```bash
+curl -X PUT -H 'Content-Type: image/png' --data-binary @shot.png 'http://localhost:3000/api/uploads/...?sig=...'
+```
+
+The `Content-Type` must be the `mimeType` you gave. The URL works once, for 10 minutes, and takes no other credential.
+
+`target` is a key (`AXM-42`, `org/team/space/page-slug`) or an object such as `{ pageKey }`. Without one the file is staged and visible to you only. It joins an issue or page when a body references `attachmentUrl`, for example `![shot](/api/attachments/...)` in a `page.create` body. Staged files are removed after 24 hours. Put a screenshot in a wiki page in two tool calls: `upload`, then `act` with `page.create` and a `key` of the space.
+
+The URL in the answer is built from `FRONTEND_URL` when it is set, so set it when you reach Axiom through a tunnel or proxy, and set `TRUST_PROXY` to match.
+
+## Scopes
+
+A token has one `<area>:read` and one `<area>:write` scope per area, and write includes read within its area. `describe` lists only what your token allows.
+
+| Tool or action | Needs                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `search`       | `search:read`, and `issues:read` or `wiki:read` for each section it should show                               |
+| `read`         | `search:read`, plus `issues:read` or `wiki:read` per item. Some includes need `files:read`                    |
+| `act`          | The scope of the action's area, for example `issues:write` for `issue.update`, `wiki:write` for `page.create` |
+| `upload`       | `files:write` and the scope of the target's area                                                              |
+
+The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals` and `admin`. A token can never manage orgs, teams, members, tokens or your account, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
+
+## Limits
+
+| What         | Limit                                                                        |
+| ------------ | ---------------------------------------------------------------------------- |
+| `read`       | 300 keys per minute per user, over REST and MCP; 10 MB per call              |
+| `act`        | 300 items per minute per user (a batch counts each item), 25 items per batch |
+| `search`     | 30 per minute per user                                                       |
+| Files        | 25 MB each; 100 staged at once; 4 signed uploads running per user            |
+| Public forms | Wrong access codes lock out the sending IP after 20 tries for 15 minutes     |
+
+Past a rate limit the answer is `429 RATE_LIMITED`.
+
+## Errors
+
+A failed call answers `isError: true` with `{ status, code, message }`, the same status and code as REST. An unknown tool is `404 UNKNOWN_TOOL`.
+
+## Audit
+
+Every write through `act` and `upload`, and every refused write, leaves an audit row with the action, its targets, the outcome and `via`. Activity on issues and pages shows `via` too.

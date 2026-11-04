@@ -126,14 +126,28 @@ Controllers receive `req`/`res` and call service functions. Services never touch
 | `/api/notifications` | notifications |
 | `/api/saved-filters` | saved-filters |
 | `/api/admin` | admin, audit |
-| `/api/mcp` | Model Context Protocol SSE endpoint (authenticated) |
+| `/api/act`, `/api/read` | The action registry by name, and read by key |
+| `/api/mcp` | Model Context Protocol, Streamable HTTP, API tokens only |
+| `/api/docs`, `/api/openapi.json` | API documentation generated from the registry |
+
+### Action registry
+
+Each operation is one `defineAction` with a name, an area and kind (`read` or `write`), a Zod input and output, an optional REST binding, `authorize` and a `handler` that calls a service. `executeAction` runs: unknown, `uiOnly`, raw, scope, parse `target` (the ids authorize needs), `authorize`, parse the full input, handler, then one audit row per write. Three adapters share it:
+
+- **REST.** `mountActions` mounts bindings under `/api/*` before the legacy routers. Paths, status codes and response shapes are the same as the controllers it replaced.
+- **`/api/act` and `/api/read`.** An action by name, or a batch, and read by key.
+- **MCP.** The five tools of `src/mcp/agent-tools.ts`, authenticated by API token so each write carries its token's name as `via`.
+
+OpenAPI and `describe` are generated from the same definitions, so documentation can't drift from behavior. `src/actions/parity.test.ts` and `registry-rules.test.ts` fail when a route, an input type or a scope rule drifts.
 
 ### Supporting Infrastructure
 
 - `src/realtime/` — WebSocket server, Yjs collaboration
 - `src/storage/` — File storage abstraction
 - `src/email/` — BullMQ-backed email queue (started only when `SMTP_HOST` is set)
-- `src/mcp/` — Model Context Protocol server (loaded dynamically to handle missing SDK gracefully)
+- `src/actions/` — The action registry: `defineAction`, `registerActions`, `executeAction`, the REST adapter, `act` batches, keys and `item.read`. Modules declare their actions in `*.actions.ts`
+- `src/mcp/` — The MCP server: five tools (`search`, `read`, `describe`, `act`, `upload`) over the registry, stateless Streamable HTTP
+- `src/lib/openapi/` — OpenAPI and the `/api/docs` page, generated from the registry
 - `src/lib/` — Shared cross-cutting libraries (query engine, etc.)
 - `src/utils/` — Logger, Pandoc export, param helpers, validation
 - `src/config/` — `database.ts` (Prisma), `redis.ts` (ioredis), `env.ts` (typed env vars)

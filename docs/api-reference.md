@@ -20,12 +20,12 @@ X-Requested-With: XMLHttpRequest
 
 ### Rate Limiting
 
-| Scope | Limit |
-|-------|-------|
-| Global | 300 requests per minute |
-| Auth endpoints (`/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`) | 15 requests per minute |
-| Attachment uploads | 10 uploads per minute |
-| Signed uploads (`PUT /api/uploads/:uploadId`) | 30 requests per minute |
+| Scope                                                                         | Limit                   |
+| ----------------------------------------------------------------------------- | ----------------------- |
+| Global                                                                        | 300 requests per minute |
+| Auth endpoints (`/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`) | 15 requests per minute  |
+| Attachment uploads                                                            | 10 uploads per minute   |
+| Signed uploads (`PUT /api/uploads/:uploadId`)                                 | 30 requests per minute  |
 
 Rate limit headers returned on every response:
 
@@ -68,22 +68,22 @@ A token acts as its owner, limited to its scopes. A request its scopes don't cov
 
 Each area has an `<area>:read` and an `<area>:write` scope. Write includes read within its own area only.
 
-| Area | Covers |
-|------|--------|
-| `issues` | Issues, comments, labels, milestones, templates, workflows, custom fields, links, team roadmap, activity and analytics (`/api/issues`, `/api/custom-fields`, `/api/links`, the rest of `/api/projects/:id/*`) |
-| `sprints` | `/api/projects/:id/sprints`, `velocity`, `backlog` |
-| `boards` | `/api/projects/:id/board` |
-| `wiki` | `/api/wiki` |
-| `files` | `/api/attachments`, together with the scope of the parent (below) |
-| `search` | `/api/search` and `POST /api/read`, reads only |
-| `orgs` | `/api/orgs`, reads only |
-| `teams` | `/api/teams`, reads only |
-| `projects` | `/api/projects/:id` and `/api/projects/team/:teamId`, reads only |
-| `dashboards` | Your dashboard (`issues:read` opens it too) |
-| `forms` | `/api/projects/:id/forms`, `intake` |
-| `automation` | `/api/projects/:id/automation-rules` |
-| `approvals` | `/api/projects/:id/approval-gates`, `/api/approval-requests` |
-| `admin` | Reserved, `/api/admin` stays closed to tokens |
+| Area         | Covers                                                                                                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `issues`     | Issues, comments, labels, milestones, templates, workflows, custom fields, links, team roadmap, activity and analytics (`/api/issues`, `/api/custom-fields`, `/api/links`, the rest of `/api/projects/:id/*`) |
+| `sprints`    | `/api/projects/:id/sprints`, `velocity`, `backlog`                                                                                                                                                            |
+| `boards`     | `/api/projects/:id/board`                                                                                                                                                                                     |
+| `wiki`       | `/api/wiki`                                                                                                                                                                                                   |
+| `files`      | `/api/attachments`, together with the scope of the parent (below)                                                                                                                                             |
+| `search`     | `/api/search` and `POST /api/read`, reads only                                                                                                                                                                |
+| `orgs`       | `/api/orgs`, reads only                                                                                                                                                                                       |
+| `teams`      | `/api/teams`, reads only                                                                                                                                                                                      |
+| `projects`   | `/api/projects/:id` and `/api/projects/team/:teamId`, reads only                                                                                                                                              |
+| `dashboards` | Your dashboard (`issues:read` opens it too)                                                                                                                                                                   |
+| `forms`      | `/api/projects/:id/forms`, `intake`                                                                                                                                                                           |
+| `automation` | `/api/projects/:id/automation-rules`                                                                                                                                                                          |
+| `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
+| `admin`      | Reserved, `/api/admin` stays closed to tokens                                                                                                                                                                 |
 
 Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. A token can never manage orgs, teams, members, invitations, tokens, your account or anything under `/api/admin`, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. Creating a token with any other scope name returns `400`.
 
@@ -114,25 +114,25 @@ All errors follow this structure:
 
 Common HTTP status codes:
 
-| Code | Meaning |
-|------|---------|
-| 400 | Bad request — invalid input |
-| 401 | Unauthorized — missing or expired token |
-| 403 | Forbidden — insufficient permissions |
-| 404 | Not found |
-| 409 | Conflict — duplicate resource |
-| 422 | Unprocessable entity — validation failure |
-| 429 | Rate limit exceeded |
-| 500 | Internal server error |
+| Code | Meaning                                   |
+| ---- | ----------------------------------------- |
+| 400  | Bad request — invalid input               |
+| 401  | Unauthorized — missing or expired token   |
+| 403  | Forbidden — insufficient permissions      |
+| 404  | Not found                                 |
+| 409  | Conflict — duplicate resource             |
+| 422  | Unprocessable entity — validation failure |
+| 429  | Rate limit exceeded                       |
+| 500  | Internal server error                     |
 
 ### Pagination
 
 List endpoints that support pagination accept the following query parameters:
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `page` | integer | Page number (1-based, default: 1) |
-| `limit` | integer | Items per page (default varies, max 100) |
+| Parameter | Type    | Description                              |
+| --------- | ------- | ---------------------------------------- |
+| `page`    | integer | Page number (1-based, default: 1)        |
+| `limit`   | integer | Items per page (default varies, max 100) |
 
 Paginated responses include metadata:
 
@@ -148,6 +148,30 @@ Paginated responses include metadata:
 
 ---
 
+## Actions
+
+Every operation is an action in one registry. The REST routes, the MCP `act` tool and `/api/act` run the same code, so scopes, access checks and audit rows are the same. The full list of routes, with inputs and outputs, is at `/api/docs` (interactive) and `/api/openapi.json`.
+
+### POST /api/act
+
+Run one action, or a batch of up to 25 in order. Takes a session or an API token.
+
+**Request body:** `{ action, key?, input? }` or `{ batch: [{ action, key?, input? }, ...] }`, never both.
+
+`key` names the issue, page, space or project the action works in (`AXM-42`, `org/team/space/page-slug`, `org/team/space`, `AXM`), so you can leave the id fields out of `input`. See the [MCP server guide](axiom-mcp-server.md#keys) for the key forms and their errors. `issue.update` also takes `status` as a column name.
+
+**Response 200:** the action's result, or for a batch `{ results, completed }` with one `{ ok: true, result }`, `{ ok: false, error: { status, code, message } }` or `{ ok: false, skipped: true }` per item. A batch stops at the first failure and what ran stays done.
+
+**Limits:** 300 items per minute per user, a batch counting each item (`429 RATE_LIMITED`). Input is strict: an unknown field is a `400`.
+
+An action that needs a raw request (multipart upload, file download, CSV export) is not available through `act`.
+
+### Uploads
+
+`upload` over MCP is `POST /api/attachments/upload-url` and `POST /api/attachments/from-url` under the hood; see [Attachments](#attachments) for the signed `PUT /api/uploads/:uploadId` and its limits.
+
+---
+
 ## Read by key
 
 ### POST /api/read
@@ -156,12 +180,12 @@ Read issues and pages by key in one call, with whatever belongs to them. Needs `
 
 **Request body:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `keys` | string[] | 1 to 50 keys, each at most 512 characters. Spellings of one key (`AXM-042`, a URL with a query) are answered once, under the first |
-| `include` | string[] | Optional. What to add to each item, below. An include for the other kind of item is passed over, so one call can hold both |
-| `fields` | string[] | Optional. Narrow the base item to these fields; `id` and `key` always come along. A field of the other kind is passed over |
-| `commentBodies` | boolean | Optional. `false` leaves the bodies of comments out |
+| Field           | Type     | Description                                                                                                                        |
+| --------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `keys`          | string[] | 1 to 50 keys, each at most 512 characters. Spellings of one key (`AXM-042`, a URL with a query) are answered once, under the first |
+| `include`       | string[] | Optional. What to add to each item, below. An include for the other kind of item is passed over, so one call can hold both         |
+| `fields`        | string[] | Optional. Narrow the base item to these fields; `id` and `key` always come along. A field of the other kind is passed over         |
+| `commentBodies` | boolean  | Optional. `false` leaves the bodies of comments out                                                                                |
 
 **Key forms:** `AXM-42`, `org/team/AXM-42`, `org/team/space/page-slug`, and the path or full URL of an issue (`/:org/:team/:project/issues/:num`) or page (`/:org/:team/wiki/:space/:page`). Only the path of a URL counts: the host is ignored and nothing is fetched.
 
@@ -169,13 +193,13 @@ Read issues and pages by key in one call, with whatever belongs to them. Needs `
 
 **Response 200:** `{ items, byteLimit, truncated }`, with one item per key in the order given. Each is `{ key, kind: 'issue' | 'page', data }` or `{ key, error: { status, code, message, details? } }`.
 
-| Error | When |
-|-------|------|
-| `400 INVALID_KEY` | The key has none of the forms above |
-| `403 SCOPE` | The token doesn't cover this kind of item |
-| `404 NOT_FOUND` | Nothing there, or nothing you can see: the two answer the same |
-| `413 RESPONSE_TOO_LARGE` | The call reached its 10 MB limit |
-| `409 AMBIGUOUS_KEY` | A bare `AXM-42` whose prefix is used by projects you can see in more than one team. `details.candidates` lists the full keys. Projects you can't see don't count |
+| Error                    | When                                                                                                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400 INVALID_KEY`        | The key has none of the forms above                                                                                                                              |
+| `403 SCOPE`              | The token doesn't cover this kind of item                                                                                                                        |
+| `404 NOT_FOUND`          | Nothing there, or nothing you can see: the two answer the same                                                                                                   |
+| `413 RESPONSE_TOO_LARGE` | The call reached its 10 MB limit                                                                                                                                 |
+| `409 AMBIGUOUS_KEY`      | A bare `AXM-42` whose prefix is used by projects you can see in more than one team. `details.candidates` lists the full keys. Projects you can't see don't count |
 
 **Issue `data`:** `id`, `key`, `fullKey`, `url`, `number`, `title`, `body`, `type`, `priority`, `status` (the column name), `assignee`, `creator`, `labels`, `sprint`, `parent`, `project`, `storyPoints`, `dueDate`, `startDate`, `timeEstimate`, `timeSpent`, `createdAt`, `updatedAt`.
 
@@ -183,18 +207,18 @@ Read issues and pages by key in one call, with whatever belongs to them. Needs `
 
 People appear as `{ id, displayName }`. Each include is `{ items, limit, truncated }`, with `truncated: true` when the limit cut rows off:
 
-| Include | Items | Limit |
-|---------|-------|-------|
-| `comments` (both) | The newest, oldest first | 100 |
-| `links` (issue) | `{ id, type, direction, issue }`, only where you can open the other issue | 100 |
-| `webLinks` (issue) | `{ id, url, title, createdBy, createdAt }` | 50 |
-| `attachments` (both) | `{ id, name, mimeType, size, url, uploader, createdAt }`. Needs `files:read` | 50 |
-| `history` (both) | Issue: activity, newest first, with file names only under `files:read`. Page: versions without their bodies, newest first | 50 |
-| `worklogs` (issue) | `{ id, minutes, description, loggedAt, user }`, newest first | 100 |
-| `children` (both) | Child issues or pages you can open | 100 |
-| `pages` (issue) | Linked pages and pages whose body mentions the key, in the issue's org and only those you can view; each with `linkTypes`. A mention counts when its author could open the issue when writing. Needs `wiki:read` | 20 |
-| `labels` (page) | Label names | 100 |
-| `linkedIssues` (page) | `{ issue, linkTypes }`, only issues you can open. Needs `issues:read` | 50 |
+| Include               | Items                                                                                                                                                                                                            | Limit |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `comments` (both)     | The newest, oldest first                                                                                                                                                                                         | 100   |
+| `links` (issue)       | `{ id, type, direction, issue }`, only where you can open the other issue                                                                                                                                        | 100   |
+| `webLinks` (issue)    | `{ id, url, title, createdBy, createdAt }`                                                                                                                                                                       | 50    |
+| `attachments` (both)  | `{ id, name, mimeType, size, url, uploader, createdAt }`. Needs `files:read`                                                                                                                                     | 50    |
+| `history` (both)      | Issue: activity, newest first, with file names only under `files:read`. Page: versions without their bodies, newest first                                                                                        | 50    |
+| `worklogs` (issue)    | `{ id, minutes, description, loggedAt, user }`, newest first                                                                                                                                                     | 100   |
+| `children` (both)     | Child issues or pages you can open                                                                                                                                                                               | 100   |
+| `pages` (issue)       | Linked pages and pages whose body mentions the key, in the issue's org and only those you can view; each with `linkTypes`. A mention counts when its author could open the issue when writing. Needs `wiki:read` | 20    |
+| `labels` (page)       | Label names                                                                                                                                                                                                      | 100   |
+| `linkedIssues` (page) | `{ issue, linkTypes }`, only issues you can open. Needs `issues:read`                                                                                                                                            | 50    |
 
 An include the token's scopes don't cover is left out, and named in `data.omittedIncludes`.
 
@@ -426,17 +450,15 @@ Search for users by username or email.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `q` | string | Search query |
+| Parameter | Type   | Description  |
+| --------- | ------ | ------------ |
+| `q`       | string | Search query |
 
 **Response 200:**
 
 ```json
 {
-  "users": [
-    { "id": "usr_01HZ...", "username": "tim", "avatarUrl": null }
-  ]
+  "users": [{ "id": "usr_01HZ...", "username": "tim", "avatarUrl": null }]
 }
 ```
 
@@ -574,9 +596,7 @@ List organizations the current user belongs to.
 
 ```json
 {
-  "orgs": [
-    { "id": "org_01HZ...", "name": "Aranea.Dev", "slug": "aranea-dev" }
-  ]
+  "orgs": [{ "id": "org_01HZ...", "name": "Aranea.Dev", "slug": "aranea-dev" }]
 }
 ```
 
@@ -996,19 +1016,19 @@ List issues in a project.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `status` | string | Filter by status (`TODO`, `IN_PROGRESS`, `DONE`, etc.) |
-| `priority` | string | Filter by priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) |
-| `assigneeId` | string | Filter by assignee user ID |
-| `labelName` | string | Filter by label name |
-| `milestoneId` | string | Filter by milestone |
-| `sprintId` | string | Filter by sprint |
-| `q` | string | Structured query string (see [Query Language Reference](#query-language-reference)). Supports simple mode (`type:bug priority:high`) and complex mode (`type = Bug AND priority IN (High, Critical)`). When provided, replaces all individual filter params. |
-| `page` | integer | Page number |
-| `limit` | integer | Items per page |
-| `sort` | string | Sort field (`createdAt`, `priority`, `number`) |
-| `order` | string | Sort direction: `asc` or `desc` |
+| Parameter     | Type    | Description                                                                                                                                                                                                                                                  |
+| ------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `status`      | string  | Filter by status (`TODO`, `IN_PROGRESS`, `DONE`, etc.)                                                                                                                                                                                                       |
+| `priority`    | string  | Filter by priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)                                                                                                                                                                                                     |
+| `assigneeId`  | string  | Filter by assignee user ID                                                                                                                                                                                                                                   |
+| `labelName`   | string  | Filter by label name                                                                                                                                                                                                                                         |
+| `milestoneId` | string  | Filter by milestone                                                                                                                                                                                                                                          |
+| `sprintId`    | string  | Filter by sprint                                                                                                                                                                                                                                             |
+| `q`           | string  | Structured query string (see [Query Language Reference](#query-language-reference)). Supports simple mode (`type:bug priority:high`) and complex mode (`type = Bug AND priority IN (High, Critical)`). When provided, replaces all individual filter params. |
+| `page`        | integer | Page number                                                                                                                                                                                                                                                  |
+| `limit`       | integer | Items per page                                                                                                                                                                                                                                               |
+| `sort`        | string  | Sort field (`createdAt`, `priority`, `number`)                                                                                                                                                                                                               |
+| `order`       | string  | Sort direction: `asc` or `desc`                                                                                                                                                                                                                              |
 
 **Response 200:** Paginated issue list.
 
@@ -1547,9 +1567,7 @@ List all labels in a project.
 
 ```json
 {
-  "labels": [
-    { "name": "bug", "color": "#d73a4a", "description": "Something is not working" }
-  ]
+  "labels": [{ "name": "bug", "color": "#d73a4a", "description": "Something is not working" }]
 }
 ```
 
@@ -1822,28 +1840,28 @@ Create an automation rule.
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Display name for the rule |
-| `trigger` | string | Event that fires the rule |
-| `triggerValue` | string | Value associated with the trigger (e.g. label name) |
-| `condition` | string | Optional query string condition evaluated before running the action (e.g. `"type = Bug AND priority IN (High, Critical)"`). Validated on creation. |
-| `conditions` | array | **Deprecated.** Legacy JSON condition format. Use `condition` instead. |
-| `action` | string | Action type to execute (see action types below) |
-| `actionValue` | string | Value for the action (depends on action type) |
+| Field          | Type   | Description                                                                                                                                        |
+| -------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | string | Display name for the rule                                                                                                                          |
+| `trigger`      | string | Event that fires the rule                                                                                                                          |
+| `triggerValue` | string | Value associated with the trigger (e.g. label name)                                                                                                |
+| `condition`    | string | Optional query string condition evaluated before running the action (e.g. `"type = Bug AND priority IN (High, Critical)"`). Validated on creation. |
+| `conditions`   | array  | **Deprecated.** Legacy JSON condition format. Use `condition` instead.                                                                             |
+| `action`       | string | Action type to execute (see action types below)                                                                                                    |
+| `actionValue`  | string | Value for the action (depends on action type)                                                                                                      |
 
 **Action types:**
 
-| Action | Description | `actionValue` |
-|--------|-------------|---------------|
-| `ASSIGN_USER` | Assign the issue to a user | User ID |
-| `SET_STATUS` | Set the issue status | Status name |
-| `SET_PRIORITY` | Set the issue priority | Priority name |
-| `ADD_LABEL` | Add a label to the issue | Label name |
-| `set_field` | Set a plain content field (`title`, `body`, `priority`, `type`, `storyPoints`, `timeEstimate`, `dueDate`, `startDate`) or one of the project's custom fields (`custom:<name>`). Ids, the column, the assignee and other relations are refused (use `set_status`, `set_assignee`) | JSON object: `{ "field": "storyPoints", "value": "3" }` |
-| `create_issue` | Create a new linked issue | JSON object with issue fields |
-| `send_email` | Send an email notification | JSON object: `{ "to": "user@example.com", "subject": "...", "body": "..." }` |
-| `webhook` | Send an HTTP POST to a URL | JSON object: `{ "url": "https://...", "headers": { ... } }` |
+| Action         | Description                                                                                                                                                                                                                                                                      | `actionValue`                                                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ASSIGN_USER`  | Assign the issue to a user                                                                                                                                                                                                                                                       | User ID                                                                      |
+| `SET_STATUS`   | Set the issue status                                                                                                                                                                                                                                                             | Status name                                                                  |
+| `SET_PRIORITY` | Set the issue priority                                                                                                                                                                                                                                                           | Priority name                                                                |
+| `ADD_LABEL`    | Add a label to the issue                                                                                                                                                                                                                                                         | Label name                                                                   |
+| `set_field`    | Set a plain content field (`title`, `body`, `priority`, `type`, `storyPoints`, `timeEstimate`, `dueDate`, `startDate`) or one of the project's custom fields (`custom:<name>`). Ids, the column, the assignee and other relations are refused (use `set_status`, `set_assignee`) | JSON object: `{ "field": "storyPoints", "value": "3" }`                      |
+| `create_issue` | Create a new linked issue                                                                                                                                                                                                                                                        | JSON object with issue fields                                                |
+| `send_email`   | Send an email notification                                                                                                                                                                                                                                                       | JSON object: `{ "to": "user@example.com", "subject": "...", "body": "..." }` |
+| `webhook`      | Send an HTTP POST to a URL                                                                                                                                                                                                                                                       | JSON object: `{ "url": "https://...", "headers": { ... } }`                  |
 
 **Response 201:** Automation rule object.
 
@@ -1942,8 +1960,8 @@ Get a wiki page by slug.
 
 **Response 200:** Full wiki page object, plus:
 
-| Field | Type | Description |
-|-------|------|-------------|
+| Field     | Type    | Description                                                                                                                                              |
+| --------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `canEdit` | boolean | Whether the caller may edit the page: `EDIT` access to the space and no page restriction that blocks them. The editor opens read-only when it is `false` |
 
 ### PATCH /api/wiki/spaces/:spaceId/pages/:pageSlug
@@ -1964,10 +1982,10 @@ All fields are optional. `body` is always Markdown and is normalised before it i
 
 **Response 200:** The updated wiki page object, plus:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `pendingMerge` | boolean | `true` while a change waits for an editor to merge it: the page is open in the editor, or an ended session left unmerged edits |
-| `externalVersionId` | string | The version the merge will use. Only present when `pendingMerge` is `true` |
+| Field               | Type    | Description                                                                                                                    |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `pendingMerge`      | boolean | `true` while a change waits for an editor to merge it: the page is open in the editor, or an ended session left unmerged edits |
+| `externalVersionId` | string  | The version the merge will use. Only present when `pendingMerge` is `true`                                                     |
 
 While a change is pending, `Page.body` already holds the new text. The version it replaced is kept as the merge base, and the change is recorded in the history as kind `EXTERNAL`. A body change that nobody has to merge is recorded as `EDIT`.
 
@@ -1977,15 +1995,15 @@ The three texts needed to merge a pending change. Requires edit permission on th
 
 **Response 200:** `null` when nothing is pending. Otherwise:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `base` | string | The Markdown both sides started from |
-| `ours` | string | The open session's text, or an ended session's unmerged draft |
-| `theirs` | string | The other side: the external change, or a draft |
-| `oursLabel` / `theirsLabel` | string | Display labels, for example `Yours` and the author's name |
-| `externalVersionId` | string | The pending change. Send it back when you apply the merge |
-| `authorName`, `at` | string | Who made the external change and when |
-| `draftAuthorName`, `draftAt` | string | Set when one side is an ended session's draft |
+| Field                        | Type   | Description                                                   |
+| ---------------------------- | ------ | ------------------------------------------------------------- |
+| `base`                       | string | The Markdown both sides started from                          |
+| `ours`                       | string | The open session's text, or an ended session's unmerged draft |
+| `theirs`                     | string | The other side: the external change, or a draft               |
+| `oursLabel` / `theirsLabel`  | string | Display labels, for example `Yours` and the author's name     |
+| `externalVersionId`          | string | The pending change. Send it back when you apply the merge     |
+| `authorName`, `at`           | string | Who made the external change and when                         |
+| `draftAuthorName`, `draftAt` | string | Set when one side is an ended session's draft                 |
 
 ### POST /api/wiki/spaces/:spaceId/pages/:pageSlug/merge
 
@@ -2007,11 +2025,11 @@ All three fields are required. The merged body becomes `Page.body`, is recorded 
 
 **Response 409:** The `error.code` tells the cases apart:
 
-| Code | Meaning |
-|------|---------|
-| `MERGE_STALE` | The change was merged already, or a newer one arrived. Fetch the pending merge again |
-| `MERGE_IN_PROGRESS` | Someone else is applying a merge |
-| `MERGE_REBASE_CONFLICT` | Edits made in the session after your fetch overlap the merge |
+| Code                    | Meaning                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| `MERGE_STALE`           | The change was merged already, or a newer one arrived. Fetch the pending merge again |
+| `MERGE_IN_PROGRESS`     | Someone else is applying a merge                                                     |
+| `MERGE_REBASE_CONFLICT` | Edits made in the session after your fetch overlap the merge                         |
 
 ### POST /api/wiki/spaces/:spaceId/pages/:pageSlug/collab/flush
 
@@ -2047,13 +2065,13 @@ Get revision history for a wiki page, newest first.
 
 **Response 200:** Array of revision objects. Each has a `kind`:
 
-| Kind | Written by |
-|------|-----------|
-| `EDIT` | A save from the editor or a plain API update |
-| `EXTERNAL` | An API, MCP or other non-editor change that an editor session has to merge (a live one, or an ended one's unmerged draft) |
-| `SESSION_DRAFT` | An editor session's text, saved before a merge so nothing is lost |
-| `MERGE` | The result of applying a merge |
-| `RESTORE` | Restoring an earlier version |
+| Kind            | Written by                                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `EDIT`          | A save from the editor or a plain API update                                                                              |
+| `EXTERNAL`      | An API, MCP or other non-editor change that an editor session has to merge (a live one, or an ended one's unmerged draft) |
+| `SESSION_DRAFT` | An editor session's text, saved before a merge so nothing is lost                                                         |
+| `MERGE`         | The result of applying a merge                                                                                            |
+| `RESTORE`       | Restoring an earlier version                                                                                              |
 
 The head of a page is `Page.body`, not the highest version number.
 
@@ -2063,9 +2081,9 @@ Export a wiki page in the specified format.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `format` | string | Export format: `md`, `html`, `pdf`, `docx`, `epub`, `latex`, `plain` |
+| Parameter | Type   | Description                                                          |
+| --------- | ------ | -------------------------------------------------------------------- |
+| `format`  | string | Export format: `md`, `html`, `pdf`, `docx`, `epub`, `latex`, `plain` |
 
 **Response 200:** File download in the requested format.
 
@@ -2119,11 +2137,11 @@ Resolve template variables in a wiki template body. All `{{expression}}` placeho
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `body` | string | Template body containing `{{expression}}` placeholders |
-| `context.teamId` | string | Team ID used for resolving team-scoped variables |
-| `context.spaceId` | string | Wiki space ID |
+| Field               | Type   | Description                                                |
+| ------------------- | ------ | ---------------------------------------------------------- |
+| `body`              | string | Template body containing `{{expression}}` placeholders     |
+| `context.teamId`    | string | Team ID used for resolving team-scoped variables           |
+| `context.spaceId`   | string | Wiki space ID                                              |
 | `context.projectId` | string | Optional project ID for resolving project-scoped variables |
 
 **Response 200:**
@@ -2252,13 +2270,13 @@ Full-text search across issues and wiki pages.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `q` | string | Search query (required) |
-| `type` | string | Filter by type: `issue`, `wiki` |
-| `orgId` | string | Limit to an organization |
-| `teamId` | string | Limit to a team |
-| `projectId` | string | Limit to a project |
+| Parameter   | Type   | Description                     |
+| ----------- | ------ | ------------------------------- |
+| `q`         | string | Search query (required)         |
+| `type`      | string | Filter by type: `issue`, `wiki` |
+| `orgId`     | string | Limit to an organization        |
+| `teamId`    | string | Limit to a team                 |
+| `projectId` | string | Limit to a project              |
 
 **Response 200:**
 
@@ -2419,49 +2437,49 @@ status != Done AND assignee = currentUser() AND created >= now(-7d)
 
 ### Field Reference
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `type` | string | Issue type name (e.g. `Bug`, `Feature`, `Task`) |
-| `status` | string | Status name (e.g. `Todo`, `In Progress`, `Done`) |
-| `priority` | string | `Low`, `Medium`, `High`, `Critical` |
-| `assignee` | string | Username, user ID, or `@me` / `currentUser()` |
-| `creator` | string | Username or user ID |
-| `label` | string | Label name |
-| `sprint` | string | Sprint name or `currentSprint()` |
-| `project` | string | Project ID or slug |
-| `storyPoints` | number | Story point estimate |
-| `created` | date | Creation timestamp |
-| `updated` | date | Last-updated timestamp |
-| `dueDate` | date | Due date |
-| `number` | number | Issue number within the project |
-| `title` | string | Issue title (use `~` for contains) |
+| Field         | Type   | Notes                                            |
+| ------------- | ------ | ------------------------------------------------ |
+| `type`        | string | Issue type name (e.g. `Bug`, `Feature`, `Task`)  |
+| `status`      | string | Status name (e.g. `Todo`, `In Progress`, `Done`) |
+| `priority`    | string | `Low`, `Medium`, `High`, `Critical`              |
+| `assignee`    | string | Username, user ID, or `@me` / `currentUser()`    |
+| `creator`     | string | Username or user ID                              |
+| `label`       | string | Label name                                       |
+| `sprint`      | string | Sprint name or `currentSprint()`                 |
+| `project`     | string | Project ID or slug                               |
+| `storyPoints` | number | Story point estimate                             |
+| `created`     | date   | Creation timestamp                               |
+| `updated`     | date   | Last-updated timestamp                           |
+| `dueDate`     | date   | Due date                                         |
+| `number`      | number | Issue number within the project                  |
+| `title`       | string | Issue title (use `~` for contains)               |
 
 ### Operator Reference
 
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `=` | Equal | `priority = High` |
-| `!=` | Not equal | `status != Done` |
-| `>` | Greater than | `storyPoints > 3` |
-| `<` | Less than | `storyPoints < 8` |
-| `>=` | Greater than or equal | `created >= now(-7d)` |
-| `<=` | Less than or equal | `dueDate <= now()` |
-| `~` | Contains (substring) | `title ~ "login"` |
-| `IN` | Matches any value in list | `priority IN (High, Critical)` |
+| Operator | Description                | Example                           |
+| -------- | -------------------------- | --------------------------------- |
+| `=`      | Equal                      | `priority = High`                 |
+| `!=`     | Not equal                  | `status != Done`                  |
+| `>`      | Greater than               | `storyPoints > 3`                 |
+| `<`      | Less than                  | `storyPoints < 8`                 |
+| `>=`     | Greater than or equal      | `created >= now(-7d)`             |
+| `<=`     | Less than or equal         | `dueDate <= now()`                |
+| `~`      | Contains (substring)       | `title ~ "login"`                 |
+| `IN`     | Matches any value in list  | `priority IN (High, Critical)`    |
 | `NOT IN` | Matches none of the values | `status NOT IN (Done, Cancelled)` |
 
 Operators are case-insensitive (`IN`, `in`, and `In` are all valid).
 
 ### Function Reference
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `currentUser()` | Resolves to the authenticated user. Alias: `@me` | `assignee = currentUser()` |
-| `currentSprint()` | Resolves to the active sprint in the project | `sprint = currentSprint()` |
-| `now()` | Current timestamp, with optional offset | `created >= now(-7d)` |
-| `startOfDay()` | Midnight of the current day | `created >= startOfDay()` |
-| `startOfWeek()` | Midnight of the first day of the current week | `updated >= startOfWeek()` |
-| `empty()` | Matches null / unset fields | `assignee = empty()` |
+| Function          | Description                                      | Example                    |
+| ----------------- | ------------------------------------------------ | -------------------------- |
+| `currentUser()`   | Resolves to the authenticated user. Alias: `@me` | `assignee = currentUser()` |
+| `currentSprint()` | Resolves to the active sprint in the project     | `sprint = currentSprint()` |
+| `now()`           | Current timestamp, with optional offset          | `created >= now(-7d)`      |
+| `startOfDay()`    | Midnight of the current day                      | `created >= startOfDay()`  |
+| `startOfWeek()`   | Midnight of the first day of the current week    | `updated >= startOfWeek()` |
+| `empty()`         | Matches null / unset fields                      | `assignee = empty()`       |
 
 **`now()` offset syntax:** `now(-Nd)` subtracts N days; `now(+Nd)` adds N days. Unit `d` (days) is the only supported unit.
 
@@ -2502,9 +2520,9 @@ Upload a file. Request must use `multipart/form-data`.
 
 **Form fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `file` | file | The file to upload, with a name of at most 255 characters |
+| Field               | Type   | Description                                                            |
+| ------------------- | ------ | ---------------------------------------------------------------------- |
+| `file`              | file   | The file to upload, with a name of at most 255 characters              |
 | `issueId`, `pageId` | string | The parent. Without one the file is staged, like one from `upload-url` |
 
 **Response 201:**
@@ -2525,12 +2543,12 @@ Get a signed URL for one upload, for a client that can't send multipart or doesn
 
 **Request body:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `filename` | string | The name to store the file under |
-| `mimeType` | string | One of the allowed types; the upload must be sent with this type |
-| `size` | integer | The most the upload may hold, at most 25 MB |
-| `target` | object | Optional. `{ projectId, issueNumber }`, `{ spaceId, pageSlug }`, `{ issueKey }` or `{ pageKey }` (see [Read by key](#post-apiread)). Without one the file is staged |
+| Field      | Type    | Description                                                                                                                                                         |
+| ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filename` | string  | The name to store the file under                                                                                                                                    |
+| `mimeType` | string  | One of the allowed types; the upload must be sent with this type                                                                                                    |
+| `size`     | integer | The most the upload may hold, at most 25 MB                                                                                                                         |
+| `target`   | object  | Optional. `{ projectId, issueNumber }`, `{ spaceId, pageSlug }`, `{ issueKey }` or `{ pageKey }` (see [Read by key](#post-apiread)). Without one the file is staged |
 
 **Response 201:** `{ uploadUrl, uploadId, expiresAt, attachmentUrl }`
 
@@ -2741,15 +2759,15 @@ List audit log entries.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `userId` | string | Filter by acting user |
-| `action` | string | Filter by action type (e.g., `issue.update`) |
-| `resourceType` | string | Filter by resource type (e.g., `Issue`) |
-| `from` | string | ISO date: start of range |
-| `to` | string | ISO date: end of range |
-| `page` | integer | Page number |
-| `limit` | integer | Items per page |
+| Parameter      | Type    | Description                                  |
+| -------------- | ------- | -------------------------------------------- |
+| `userId`       | string  | Filter by acting user                        |
+| `action`       | string  | Filter by action type (e.g., `issue.update`) |
+| `resourceType` | string  | Filter by resource type (e.g., `Issue`)      |
+| `from`         | string  | ISO date: start of range                     |
+| `to`           | string  | ISO date: end of range                       |
+| `page`         | integer | Page number                                  |
+| `limit`        | integer | Items per page                               |
 
 **Response 200:**
 
