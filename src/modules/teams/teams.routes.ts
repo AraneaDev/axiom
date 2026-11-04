@@ -2,7 +2,6 @@ import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import {
-  requireOrgMember,
   requireOrgPermission,
   requireTeamMember,
   requireTeamPermission,
@@ -16,12 +15,10 @@ router.use(authenticate);
 
 // Org-scoped team routes
 router.post('/org/:orgId', requireOrgPermission('team:create'), teamsController.create);
-router.get('/org/:orgId', requireOrgMember(), teamsController.list);
 
-// Team-specific routes
-// Reading a team needs team membership (or org OWNER/ADMIN), as its projects do
+// Team-specific routes. Reading a team and listing an org's teams run through the registry.
+// Reading the rest needs team membership (or org OWNER/ADMIN), as its projects do
 const teamRead = requireTeamMember();
-router.get('/:teamId', teamRead, teamsController.get);
 router.patch('/:teamId', requireTeamPermission('team:manage_members'), teamsController.update);
 router.delete('/:teamId', requireTeamPermission('team:delete'), teamsController.remove);
 

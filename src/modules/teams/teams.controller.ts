@@ -14,20 +14,6 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
   res.status(201).json(team);
 });
 
-export const get = asyncHandler(async (req: Request, res: Response) => {
-  const team = await teamsService.getTeam(param(req, 'teamId'));
-  res.json(team);
-});
-
-export const list = asyncHandler(async (req: Request, res: Response) => {
-  const teams = await teamsService.listOrgTeams(
-    param(req, 'orgId'),
-    req.query as Record<string, string>,
-    req.userId!,
-  );
-  res.json(teams);
-});
-
 export const update = asyncHandler(async (req: Request, res: Response) => {
   const { name, description } = req.body;
   if (name !== undefined && typeof name !== 'string') {

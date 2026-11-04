@@ -18,16 +18,6 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
   res.status(201).json(org);
 });
 
-export const get = asyncHandler(async (req: Request, res: Response) => {
-  const org = await orgsService.getOrg(param(req, 'orgId'), req.userId!);
-  res.json(org);
-});
-
-export const list = asyncHandler(async (req: Request, res: Response) => {
-  const orgs = await orgsService.listUserOrgs(req.userId!);
-  res.json(orgs);
-});
-
 export const update = asyncHandler(async (req: Request, res: Response) => {
   const data = validate(updateOrgSchema, req.body);
   const org = await orgsService.updateOrg(param(req, 'orgId'), data);

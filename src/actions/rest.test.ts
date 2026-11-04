@@ -132,7 +132,7 @@ registerActions([
   reader('rest.legacyRefuses', 'issues', '/api/admin/rest-test'),
   reader('rest.legacyAllows', 'issues', '/api/wiki/rest-test'),
   // A path a legacy router owns: its router.use(authenticate) and requireTeamMember must not run
-  reader('rest.shadowsLegacy', 'issues', '/api/teams/:teamId'),
+  reader('rest.shadowsLegacy', 'issues', '/api/teams/:teamId/members'),
   // /api/admin/rest-guard%2Fx routes to the legacy admin router, and normalizes to this
   defineAction({
     name: 'rest.guard',
@@ -314,7 +314,9 @@ describe('REST adapter', () => {
 
     it('runs ahead of legacy routers, so their middleware never sees a migrated path', async () => {
       // The legacy route answers 404 for a team that doesn't exist
-      const res = await request(app).get('/api/teams/no-such-team').set('Authorization', jwtHeader);
+      const res = await request(app)
+        .get('/api/teams/no-such-team/members')
+        .set('Authorization', jwtHeader);
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ action: 'rest.shadowsLegacy' });
     });

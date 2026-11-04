@@ -10,9 +10,7 @@ const router = Router();
 router.use(authenticate);
 
 router.post('/', orgsController.create);
-router.get('/', orgsController.list);
-// Org details and the member list (with emails) are for members only
-router.get('/:orgId', requireOrgMember(), orgsController.get);
+// Reading orgs (list, get) runs through the registry. The member list has emails: members only
 router.patch('/:orgId', requireOrgPermission('org:manage'), orgsController.update);
 router.delete('/:orgId', requireOrgPermission('org:manage'), orgsController.remove);
 

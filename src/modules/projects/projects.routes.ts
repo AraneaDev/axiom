@@ -18,8 +18,7 @@ router.post(
   requireTeamPermission('project:create'),
   projectsController.create,
 );
-router.get('/team/:teamId', requireTeamMember(), projectsController.list);
-router.get('/:projectId', requireProjectAccess, projectsController.get);
+// Reading a project and a team's project list run through the registry
 router.get('/:projectId/analytics', requireProjectAccess, projectsController.analytics);
 router.patch(
   '/:projectId',

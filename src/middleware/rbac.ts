@@ -223,6 +223,19 @@ export function requireWikiRestrictionAccess() {
 }
 
 /**
+ * Whether a user belongs to an org: a membership, or platform admin.
+ * @param userId - The user
+ * @param orgId - The org
+ */
+export async function checkOrgMember(userId: string, orgId: string): Promise<boolean> {
+  const [user, membership] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } }),
+    prisma.orgMembership.findUnique({ where: { userId_orgId: { userId, orgId } } }),
+  ]);
+  return !!membership || !!user?.isAdmin;
+}
+
+/**
  * Require membership of the org in :orgId, in any role. For reads that every member may
  * make, such as listing the org's teams.
  * @returns Express middleware
@@ -232,13 +245,7 @@ export function requireOrgMember() {
     try {
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-      const [user, membership] = await Promise.all([
-        prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } }),
-        prisma.orgMembership.findUnique({
-          where: { userId_orgId: { userId, orgId: param(req, 'orgId') } },
-        }),
-      ]);
-      if (!membership && !user?.isAdmin) {
+      if (!(await checkOrgMember(userId, param(req, 'orgId')))) {
         throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
       }
       next();

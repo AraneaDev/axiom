@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import {
   assertPageAccess,
   assertPageAccessBySlug,
+  checkOrgMember,
   checkTeamPermission,
   checkTeamRead,
   checkWikiSpaceOrgAccess,
@@ -178,5 +179,17 @@ export function ownedByProject<T>(
     if (action) await assertProjectRole(ctx.userId, projectId, action);
     const owners = await resolver(recordId);
     if (!owners.includes(projectId)) throw new AppError(404, 'Not found in this project');
+  };
+}
+
+/**
+ * Org-wide reads: requireOrgMember.
+ * @param pick - Finds the org id in the input
+ */
+export function orgMember<T>(pick: (input: T) => string): Authorizer<T> {
+  return async (ctx, input) => {
+    if (!(await checkOrgMember(ctx.userId, pick(input)))) {
+      throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
+    }
   };
 }
