@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { orgMember, teamRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
+import { firstQueryText, queryCount } from '../../utils/validation';
 
 import * as teamsService from './teams.service';
 
@@ -20,15 +21,14 @@ registerActions([
     kind: 'read',
     summary: 'List the teams of an organization, paged; a GUEST sees only their own teams',
     target: orgTarget,
-    // Any query value passes, as it did before: a repeated ?limit= is read as its first number
-    input: orgTarget.extend({ limit: z.unknown(), offset: z.unknown() }),
+    input: orgTarget.extend({ limit: queryCount, offset: queryCount }),
     output: z.looseObject({ data: z.array(record), total: z.number() }),
     rest: { method: 'GET', path: '/api/teams/org/:orgId' },
     authorize: orgMember<z.infer<typeof orgTarget>>((input) => input.orgId),
     handler: async (ctx, { orgId, limit, offset }) =>
       teamsService.listOrgTeams(
         orgId,
-        { limit: limit as string | undefined, offset: offset as string | undefined },
+        { limit: firstQueryText(limit), offset: firstQueryText(offset) },
         ctx.userId,
       ),
   }),

@@ -236,3 +236,19 @@ export const createMilestoneSchema = z.object({
 export const updateMilestoneSchema = createMilestoneSchema.partial().extend({
   status: z.enum(['OPEN', 'CLOSED']).optional(),
 });
+
+/**
+ * A paging or count value in a query: text, a repeated value, or a whole number from an MCP
+ * caller. Handlers narrow it with `firstQueryText`.
+ */
+export const queryCount = z.union([z.string(), z.array(z.string()), z.number().int()]).optional();
+
+/**
+ * The text of a query value: a number as its digits, a repeated value as its first.
+ * So 0 and "0" read alike.
+ * @param value - A parsed queryValue or queryCount
+ */
+export function firstQueryText(value: string | string[] | number | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return typeof value === 'number' ? String(value) : value;
+}

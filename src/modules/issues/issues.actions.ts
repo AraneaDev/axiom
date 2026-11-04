@@ -314,13 +314,13 @@ const commentActions = [
     kind: 'write',
     summary: 'Edit your own comment',
     target: commentTarget,
-    // Kept as the controller had it: any other body is a 400 'body is required'
-    input: commentTarget.extend({ body: z.unknown() }),
+    // Kept as the controller had it: anything but a string reads as missing, a 400 'body is required'
+    input: commentTarget.extend({ body: z.string().optional().catch(undefined) }),
     output: record,
     rest: { method: 'PATCH', path: `${PROJECT}/comments/:commentId` },
     authorize: ownsComment,
     handler: async (ctx, { commentId, body }) => {
-      if (!body || typeof body !== 'string') throw new AppError(400, 'body is required');
+      if (!body) throw new AppError(400, 'body is required');
       return issuesService.updateComment(commentId, ctx.userId, body);
     },
   }),

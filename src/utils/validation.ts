@@ -32,6 +32,8 @@ export {
   updateIssueTemplateSchema,
   createMilestoneSchema,
   updateMilestoneSchema,
+  queryCount,
+  firstQueryText,
 } from './validation/common-validators';
 
 export {

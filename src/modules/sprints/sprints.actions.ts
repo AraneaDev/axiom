@@ -8,6 +8,8 @@ import {
   addSprintIssuesSchema,
   completeSprintSchema,
   createSprintSchema,
+  firstQueryText,
+  queryCount,
   updateSprintSchema,
 } from '../../utils/validation';
 import { hydrateBacklog } from '../issues/backlog-hydrate.service';
@@ -72,13 +74,15 @@ const sprintActions = [
     kind: 'read',
     summary: 'List the sprints of a project, optionally by status',
     target: projectTarget,
-    // Any query value passes, as it did before: a repeated ?status= reaches the service unchanged
-    input: projectTarget.extend({ status: z.unknown() }),
+    // An empty ?status= means no filter, as it did
+    input: projectTarget.extend({
+      status: z.union([z.literal(''), z.enum(['PLANNING', 'ACTIVE', 'COMPLETED'])]).optional(),
+    }),
     output: z.array(loose),
     rest: { method: 'GET', path: `${PROJECT}/sprints` },
     authorize: readProject,
     handler: async (_ctx, { projectId, status }) =>
-      sprintsService.listSprints(projectId, { status: status as string | undefined }),
+      sprintsService.listSprints(projectId, { status: status || undefined }),
   }),
   defineAction({
     name: 'sprint.get',
@@ -184,13 +188,14 @@ const sprintActions = [
     kind: 'read',
     summary: 'Velocity of the last sprints of a project',
     target: projectTarget,
-    // Any query value passes, as it did before: a repeated ?count= is read as its first number
-    input: projectTarget.extend({ count: z.unknown() }),
+    input: projectTarget.extend({ count: queryCount }),
     output: z.array(loose),
     rest: { method: 'GET', path: `${PROJECT}/velocity` },
     authorize: readProject,
-    handler: async (_ctx, { projectId, count }) =>
-      sprintsService.getVelocity(projectId, count ? parseInt(count as string, 10) : undefined),
+    handler: async (_ctx, { projectId, count }) => {
+      const text = firstQueryText(count);
+      return sprintsService.getVelocity(projectId, text ? parseInt(text, 10) : undefined);
+    },
   }),
   defineAction({
     name: 'sprint.backlogHydrate',

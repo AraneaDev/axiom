@@ -135,6 +135,12 @@ function ruleViolations(def: ActionDef): string[] {
     }
   }
 
+  for (const [field, schema] of Object.entries(inputFields ?? {})) {
+    if (isUntyped(schema)) {
+      violations.push(`${def.name}: input.${field} is z.unknown() or z.any(); type it (R16)`);
+    }
+  }
+
   if (def.target) {
     const targetFields = fieldsOf(def.target);
     if (!targetFields || !inputFields) {
@@ -149,6 +155,23 @@ function ruleViolations(def: ActionDef): string[] {
   }
 
   return violations;
+}
+
+/**
+ * Whether a field accepts any JSON, however it is wrapped in optional, nullable or default.
+ * @param schema - The field's schema
+ */
+function isUntyped(schema: z.ZodType): boolean {
+  let current: z.ZodType = schema;
+  for (;;) {
+    const type = current._zod.def.type;
+    if (type === 'unknown' || type === 'any') return true;
+    if (type === 'optional' || type === 'nullable' || type === 'default') {
+      current = (current as z.ZodOptional).unwrap() as z.ZodType;
+    } else {
+      return false;
+    }
+  }
 }
 
 const output = z.looseObject({});
@@ -177,17 +200,18 @@ describe('registry rules', () => {
   });
 
   describe('token reach', () => {
-    // Differences from tokenAllows that are intended. Anything else fails the table below.
-    // - uiOnly and tokenBlocked actions: refused to every token, where tokenAllows may have
-    //   let a scope through (plan 3 adds approval)
-    // - R1: attachment actions need the parent's area scope as well, so they are stricter
-    const intended = (def: ActionDef): boolean =>
-      !!def.uiOnly || !!def.tokenBlocked || def.name.startsWith('attachment.');
+    // Every binding is compared with what tokenAllows gave its route, for each single scope.
+    // Intended differences keep their rows, with a weaker comparison:
+    // - uiOnly and tokenBlocked: refused to every token, whatever tokenAllows let through
+    // - R1: attachment actions need the parent's area scope as well, so they may reach less,
+    //   never more
+    const isRefused = (def: ActionDef): boolean => !!def.uiOnly || !!def.tokenBlocked;
+    const isAttachment = (def: ActionDef): boolean => def.name.startsWith('attachment.');
 
     // Read when the tests run: the actions files load in beforeAll
     const tableRows = () =>
       listActions()
-        .filter((def) => def.rest && !intended(def))
+        .filter((def) => def.rest)
         .flatMap((def) => TOKEN_SCOPES.map((scope) => ({ def, scope })));
 
     it('has rows to compare', () => {
@@ -195,15 +219,48 @@ describe('registry rules', () => {
     });
 
     it('gives each single scope the reach tokenAllows gave the route', () => {
-      const rows = tableRows();
-      const differences = rows.flatMap(({ def, scope }) => {
+      const differences = tableRows().flatMap(({ def, scope }) => {
         const { method, path: pattern } = def.rest!;
         const concrete = pattern.replace(/:[A-Za-z]+/g, 'x');
         const before = tokenAllows([scope], method, concrete);
-        const after = scopeAllows([scope], def.area, def.kind);
-        return before === after ? [] : [`${def.name} with ${scope}: was ${before}, is ${after}`];
+        // What the registry lets this scope do: nothing for a refused action
+        const after = !isRefused(def) && scopeAllows([scope], def.area, def.kind);
+        const fine = isRefused(def)
+          ? !after
+          : isAttachment(def)
+            ? !after || before
+            : before === after;
+        return fine ? [] : [`${def.name} with ${scope}: was ${before}, is ${after}`];
       });
       expect(differences).toEqual([]);
+    });
+  });
+
+  describe('R16: typed inputs', () => {
+    it.each([
+      ['z.unknown()', z.unknown()],
+      ['z.any()', z.any()],
+      ['an optional z.unknown()', z.unknown().optional()],
+    ])('fails on a field that is %s', (_label, schema) => {
+      const action = defineAction({
+        ...throwaway,
+        name: 'throwaway.untyped',
+        area: 'issues',
+        kind: 'read',
+        input: z.object({ filter: schema }),
+      });
+      expect(ruleViolations(action)).toEqual([expect.stringContaining('R16')]);
+    });
+
+    it('passes on a typed field', () => {
+      const action = defineAction({
+        ...throwaway,
+        name: 'throwaway.typed',
+        area: 'issues',
+        kind: 'read',
+        input: z.object({ filter: z.string().optional() }),
+      });
+      expect(ruleViolations(action)).toEqual([]);
     });
   });
 

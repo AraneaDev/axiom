@@ -134,7 +134,8 @@ export function mountActions(router: Router, defs: ActionDef[]): void {
       const bodyError = takesBody && !plain ? 'Request body must be a JSON object' : undefined;
       const input: unknown = {
         ...query,
-        ...(plain && !binding.emptyBody ? body : {}),
+        // A read has no body (R17)
+        ...(plain && !binding.emptyBody && binding.method !== 'GET' ? body : {}),
         ...req.params,
       };
       sendResult(res, binding, await executeAction(def.name, input, ctx, bodyError));

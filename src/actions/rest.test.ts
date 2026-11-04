@@ -99,6 +99,17 @@ registerActions([
     authorize: noAuthorize,
     handler: async () => ({ deleted: 1 }),
   }),
+  defineAction({
+    name: 'rest.echoRead',
+    area: 'issues',
+    kind: 'read',
+    summary: 'Hands back its input',
+    input: z.looseObject({}),
+    output,
+    rest: { method: 'GET', path: '/api/rest-test/echo/:id' },
+    authorize: noAuthorize,
+    handler: async (_ctx, input) => input,
+  }),
   reader('rest.bulk', 'issues', '/api/rest-test/x/bulk'),
   reader('rest.byId', 'issues', '/api/rest-test/x/:id'),
   defineAction({
@@ -263,6 +274,14 @@ describe('REST adapter', () => {
         .set('Authorization', jwtHeader);
       expect(queried.status).toBe(400);
       expect(queried.body.error.message).toContain('from');
+    });
+
+    it('reads only the query and the params on a GET, never a body (R17)', async () => {
+      const res = await request(app)
+        .get('/api/rest-test/echo/7?from=query')
+        .set('Authorization', jwtHeader)
+        .send({ from: 'body', extra: 1 });
+      expect(res.body).toEqual({ id: '7', from: 'query' });
     });
 
     it('answers invalid input through the error handler', async () => {
