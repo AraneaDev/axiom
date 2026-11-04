@@ -84,7 +84,7 @@ export function actionContextFromRequest(req: Request): ActionContext {
  */
 function sendResult(res: Response, binding: RestBinding, result: unknown): void {
   if (binding.raw) return;
-  if (binding.method === 'DELETE' && result === undefined) {
+  if (result === undefined && (binding.method === 'DELETE' || binding.status === 204)) {
     res.status(204).end();
     return;
   }

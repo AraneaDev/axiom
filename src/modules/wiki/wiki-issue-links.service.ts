@@ -1,5 +1,8 @@
 import { prisma } from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
+import { checkProjectAccess } from '../../middleware/requireProjectAccess';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { ERR } from '../../utils/error-messages';
 import {
   PROJECT_URL_SELECT,
   SPACE_URL_SELECT,
@@ -213,4 +216,30 @@ export async function getLinksForIssue(issueId: string, viewerId: string) {
     },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+/**
+ * Link an issue to a page for a user. The issue must be one the user can open, because the link
+ * shows its details on the page.
+ * @param pageId - The page
+ * @param issueId - The issue
+ * @param linkType - EMBED or MENTION
+ * @param userId - Who links it
+ * @throws {AppError} 404 when the issue does not exist, 403 when the user cannot open it
+ */
+export async function addLinkForUser(
+  pageId: string,
+  issueId: string,
+  linkType: 'EMBED' | 'MENTION',
+  userId: string,
+) {
+  const issue = await prisma.issue.findUnique({
+    where: { id: issueId },
+    select: { projectId: true },
+  });
+  if (!issue) throw new AppError(404, ERR.ISSUE_NOT_FOUND);
+  if ((await checkProjectAccess(userId, issue.projectId)) !== 'ok') {
+    throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
+  }
+  return addLink(pageId, issueId, linkType, userId);
 }

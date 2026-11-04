@@ -38,6 +38,7 @@ import intakeRoutes from './modules/intake/intake.routes';
 import invitationsRoutes from './modules/invitations/invitations.routes';
 import issueTemplatesRoutes from './modules/issue-templates/issue-templates.routes';
 import './modules/issues/issues.actions';
+import './modules/wiki/wiki.actions';
 import issuesRoutes from './modules/issues/issues.routes';
 import labelsRoutes from './modules/labels/labels.routes';
 import linksRoutes from './modules/links/links.routes';

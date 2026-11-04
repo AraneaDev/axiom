@@ -9,7 +9,9 @@ import { authenticate } from '../middleware/auth';
 import { AppError, errorHandler } from '../middleware/errorHandler';
 import {
   requireTeamMember,
+  requireTeamPermission,
   requireWikiPageAccess,
+  requireWikiPageBySlug,
   requireWikiSpaceAccess,
 } from '../middleware/rbac';
 import {
@@ -33,9 +35,11 @@ import { validate } from '../utils/validation/common-validators';
 import {
   ownedByProject,
   pageAccess,
+  pageBySlugAccess,
   projectAction,
   projectRead,
   spaceAccess,
+  teamPermission,
   teamRead,
 } from './authorize';
 import { defineAction, type ActionContext } from './define';
@@ -854,6 +858,23 @@ describe('authorizers', () => {
       check: teamRead(byTeam) as Check,
       input: { teamId: id() },
     });
+    const slugCase = (mode: 'view' | 'edit', slug: string) => (): ReturnType<Case['build']> => ({
+      method: mode === 'view' ? 'get' : 'post',
+      path: `/slug/${spaceId}/${slug}`,
+      check: pageBySlugAccess(
+        mode === 'view' ? 'VIEW' : 'EDIT',
+        mode,
+        (i: { spaceId: string; pageSlug: string }) => i.spaceId,
+        (i: { spaceId: string; pageSlug: string }) => i.pageSlug,
+      ) as Check,
+      input: { spaceId, pageSlug: slug },
+    });
+    const teamPermissionCase = (id: () => string) => () => ({
+      method: 'get' as const,
+      path: `/teamperm/${id()}`,
+      check: teamPermission('wiki:view', byTeam) as Check,
+      input: { teamId: id() },
+    });
     const ownedCase =
       (write: boolean, projectId: () => string, recordId: () => string) =>
       (): ReturnType<Case['build']> => ({
@@ -904,6 +925,28 @@ describe('authorizers', () => {
         build: teamCase(() => t.teamId),
       },
       { label: 'teamRead, no such team', expected: allMissing, build: teamCase(missing) },
+      { label: 'pageBySlugAccess view', expected: onSpace, build: slugCase('view', 'open') },
+      { label: 'pageBySlugAccess edit', expected: onSpaceEdit, build: slugCase('edit', 'open') },
+      {
+        label: 'pageBySlugAccess view, restricted page',
+        expected: [403, 403, 403, 403, 200, 403, 403, 403],
+        build: slugCase('view', 'closed'),
+      },
+      {
+        label: 'pageBySlugAccess view, no such page passes for those who reach the space',
+        expected: onSpace,
+        build: slugCase('view', 'nothing-here'),
+      },
+      {
+        label: 'teamPermission wiki:view',
+        expected: [403, 200, 403, 200, 200, 200, 200, 200],
+        build: teamPermissionCase(() => t.teamId),
+      },
+      {
+        label: 'teamPermission, no such team',
+        expected: allMissing,
+        build: teamPermissionCase(missing),
+      },
       {
         label: 'ownedByProject',
         expected: onProject,
@@ -981,6 +1024,23 @@ describe('authorizers', () => {
       app.get('/page/:pageId', authenticate, requireWikiPageAccess('view'), ok);
       app.post('/page/:pageId', authenticate, requireWikiPageAccess('edit'), ok);
       app.get('/team/:teamId', authenticate, requireTeamMember(), ok);
+      app.get('/teamperm/:teamId', authenticate, requireTeamPermission('wiki:view'), ok);
+      app.get(
+        '/slug/:spaceId/:pageSlug',
+        authenticate,
+        requireWikiSpaceAccess(),
+        requireSpacePermission('VIEW'),
+        requireWikiPageBySlug('view'),
+        ok,
+      );
+      app.post(
+        '/slug/:spaceId/:pageSlug',
+        authenticate,
+        requireWikiSpaceAccess(),
+        requireSpacePermission('EDIT'),
+        requireWikiPageBySlug('edit'),
+        ok,
+      );
       app.use(errorHandler);
 
       const inOrg = async (role: 'VIEWER' | 'GUEST' | 'ADMIN') => {

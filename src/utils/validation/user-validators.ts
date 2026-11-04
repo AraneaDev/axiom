@@ -48,6 +48,9 @@ export const updatePageSchema = createPageSchema
   .extend({
     body: z.string().max(500_000).optional(),
     isDraft: z.boolean().optional(),
+    // null moves the page to the top level, and leaving the field out keeps the parent. The
+    // create schema turns null into undefined, which an update must not do
+    parentId: z.string().nullable().optional(),
   });
 
 export const flushPageSessionSchema = z.object({

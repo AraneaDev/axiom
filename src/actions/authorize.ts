@@ -1,7 +1,13 @@
 import type { SpacePermissionLevel } from '@prisma/client';
 
+import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
-import { assertPageAccess, checkTeamRead, checkWikiSpaceOrgAccess } from '../middleware/rbac';
+import {
+  assertPageAccess,
+  checkTeamPermission,
+  checkTeamRead,
+  checkWikiSpaceOrgAccess,
+} from '../middleware/rbac';
 import { checkProjectAccess, checkProjectAction } from '../middleware/requireProjectAccess';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { ERR } from '../utils/error-messages';
@@ -99,6 +105,50 @@ export function spaceAccess<T>(
  */
 export function pageAccess<T>(mode: 'view' | 'edit', pick: (input: T) => string): Authorizer<T> {
   return (ctx, input) => assertPageAccess(ctx.userId, pick(input), mode);
+}
+
+/**
+ * Reach a page addressed by space and slug: the space checks, then the page's own restrictions.
+ * A page that does not exist passes, so the handler answers 404 as the route did
+ * (requireWikiPageBySlug).
+ * @param level - The minimum level on the space
+ * @param mode - 'view' for reads, 'edit' for writes
+ * @param pickSpace - Finds the space id in the input
+ * @param pickSlug - Finds the page slug in the input
+ */
+export function pageBySlugAccess<T>(
+  level: SpacePermissionLevel,
+  mode: 'view' | 'edit',
+  pickSpace: (input: T) => string,
+  pickSlug: (input: T) => string,
+): Authorizer<T> {
+  const space = spaceAccess(level, pickSpace);
+  return async (ctx, input) => {
+    await space(ctx, input);
+    const page = await prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId: pickSpace(input), slug: pickSlug(input) } },
+      select: { id: true },
+    });
+    if (page) await assertPageAccess(ctx.userId, page.id, mode);
+  };
+}
+
+/**
+ * Act within a team: requireTeamPermission, with its status and code for each refusal.
+ * @param action - The permission action
+ * @param pick - Finds the team id in the input
+ */
+export function teamPermission<T>(action: Action, pick: (input: T) => string): Authorizer<T> {
+  return async (ctx, input) => {
+    const access = await checkTeamPermission(ctx.userId, pick(input), action);
+    if (access === 'not_found') throw new AppError(404, ERR.TEAM_NOT_FOUND);
+    if (access === 'not_org_member') {
+      throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
+    }
+    if (access === 'forbidden') {
+      throw new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN');
+    }
+  };
 }
 
 /**
