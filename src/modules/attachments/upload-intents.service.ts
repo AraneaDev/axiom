@@ -29,6 +29,7 @@ import {
   type RemoteFetchDeps,
   withFetchSlot,
 } from './remote-file';
+import { removeTempFile, type TempFile } from './temp-files';
 
 /** How long a signed upload URL works. */
 const UPLOAD_URL_TTL_MS = 10 * 60 * 1000;
@@ -230,25 +231,33 @@ export async function assertUploadStillAllowed(intent: UsableIntent): Promise<vo
  * Store the body of a signed upload. The URL is used up here, atomically, so of two requests
  * racing with one URL only one gets through; a request refused earlier leaves the URL usable.
  * @param intent - The intent, from findUsableIntent
- * @param data - The body
+ * @param file - The body, in a temp file; gone afterwards, whatever the outcome
  * @returns The attachment, on its parent or staged
  * @throws {AppError} 403 when the URL was used or expired in the meantime
  */
-export async function storeSignedUpload(intent: UsableIntent, data: Buffer) {
+export async function storeSignedUpload(intent: UsableIntent, file: TempFile) {
   const now = new Date();
-  const claimed = await prisma.uploadIntent.updateMany({
-    where: { id: intent.id, usedAt: null, expiresAt: { gt: now } },
-    data: { usedAt: now },
-  });
-  if (claimed.count !== 1) throw uploadUrlRefusal();
+  const claimed = await prisma.uploadIntent
+    .updateMany({
+      where: { id: intent.id, usedAt: null, expiresAt: { gt: now } },
+      data: { usedAt: now },
+    })
+    .catch(async (err: unknown) => {
+      await removeTempFile(file.path);
+      throw err;
+    });
+  if (claimed.count !== 1) {
+    await removeTempFile(file.path);
+    throw uploadUrlRefusal();
+  }
 
   const parent = storedParent(intent);
   return uploadAttachment(
     {
       originalname: intent.filename,
       mimetype: intent.mimeType,
-      size: data.length,
-      buffer: data,
+      size: file.size,
+      path: file.path,
     },
     intent.userId,
     { ...parent, id: intent.attachmentId, staged: !parent.issueId && !parent.pageId },
@@ -282,18 +291,19 @@ export async function attachFromUrl(
   input: { url: string; target?: UploadTarget; filename?: string },
   deps: Partial<RemoteFetchDeps> = {},
 ) {
-  await assertFetchWithinLimit(userId);
   const parent = input.target ? await resolveUploadTarget(input.target) : null;
   if (!parent) await assertStagedQuota(userId);
   const filename = input.filename ? cleanFilename(input.filename) : undefined;
-  return withFetchSlot(async () => {
-    const { data, mimeType } = await fetchRemoteFile(input.url, deps);
+  return withFetchSlot(userId, async () => {
+    // In here: a call refused for its slot does not count against the limit
+    await assertFetchWithinLimit(userId);
+    const fetched = await fetchRemoteFile(input.url, deps);
     return uploadAttachment(
       {
         originalname: filename ?? filenameFromUrl(input.url),
-        mimetype: mimeType,
-        size: data.length,
-        buffer: data,
+        mimetype: fetched.mimeType,
+        size: fetched.size,
+        path: fetched.path,
       },
       userId,
       { ...(parent ?? {}), staged: !parent },

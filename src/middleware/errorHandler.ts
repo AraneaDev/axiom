@@ -48,10 +48,11 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     });
   }
 
-  // A malformed percent-escape in a path param, which the router refuses with its own status
-  if (err instanceof URIError) {
-    const status = (err as URIError & { status?: number }).status ?? 400;
-    return res.status(status).json({
+  // A malformed percent-escape in a path param, which the router marks with a status. A URIError
+  // from a handler has none, and is a bug like any other.
+  const routerStatus = (err as URIError & { status?: number }).status;
+  if (err instanceof URIError && typeof routerStatus === 'number') {
+    return res.status(routerStatus).json({
       error: { message: 'The URL is not valid', code: 'BAD_REQUEST' },
     });
   }

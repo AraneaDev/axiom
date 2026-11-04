@@ -7,6 +7,8 @@ import { prisma } from '../../config/database';
 // Mock the storage module before importing app
 const mockStorage = {
   put: vi.fn().mockResolvedValue(undefined),
+  // Uploads store from disk now; for this mock that is the same as put
+  putFile: vi.fn(async (...args: unknown[]) => mockStorage.put(...args)),
   get: vi.fn().mockResolvedValue(Buffer.from('Hello, this is a test file.')),
   delete: vi.fn().mockResolvedValue(undefined),
   exists: vi.fn().mockResolvedValue(true),

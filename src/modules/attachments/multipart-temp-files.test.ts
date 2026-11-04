@@ -3,22 +3,27 @@
  * the cap on staged files. In a file of its own for the multipart rate limit of 10 per minute.
  */
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import { createServer, type Server } from 'http';
 import net, { type AddressInfo } from 'net';
 import os from 'os';
 import path from 'path';
+import { PassThrough } from 'stream';
 
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
+import { AppError } from '../../middleware/errorHandler';
+import { LocalStorageBackend } from '../../storage/local';
 import { createTestUser, type TestUser } from '../../test/factory';
 import { authPost } from '../../test/helpers';
 import { listenForRawRequests } from '../../test/raw-request';
 
-import { readLimitedBody } from './attachments.routes';
+import { MAX_CONCURRENT_SIGNED_PUTS_PER_USER } from './attachments.routes';
 import { MAX_STAGED_PER_USER } from './attachments.service';
+import { newTempPath, receiveToTempFile } from './temp-files';
 
 process.env.STORAGE_PATH = path.join(os.tmpdir(), `axiom-temp-test-${process.pid}`);
 
@@ -164,11 +169,20 @@ describe('requests that do not finish', () => {
     expect(res.status).toBe(201);
   });
 
-  it('gives up on a body that takes too long', async () => {
+  it('gives up on a body that takes too long, and removes what it had', async () => {
+    const before = tempFiles();
+    const refusal = (statusCode: number) => new AppError(statusCode, 'refused');
     const reader = createServer((req, res) => {
-      readLimitedBody(req as never, 100, 50).then(
+      receiveToTempFile(req, {
+        limit: 100,
+        timeoutMs: 50,
+        tooLarge: refusal(413),
+        empty: refusal(400),
+        interrupted: refusal(400),
+        timedOut: refusal(408),
+      }).then(
         () => res.writeHead(200).end(),
-        (err: { statusCode: number }) => res.writeHead(err.statusCode).end(),
+        (err: AppError) => res.writeHead(err.statusCode).end(),
       );
     });
     await new Promise<void>((resolve) => reader.listen(0, '127.0.0.1', resolve));
@@ -176,9 +190,154 @@ describe('requests that do not finish', () => {
     socket.write('PUT / HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\nx');
     const head = await responseHead(socket);
     expect(head).toContain('408');
+    expect(tempFiles()).toEqual(before);
     socket.destroy();
     reader.closeAllConnections();
     reader.close();
+  });
+
+  it('answers at once when the client left before its body was read', async () => {
+    const source = new PassThrough();
+    source.destroy();
+    const started = Date.now();
+    await expect(
+      receiveToTempFile(source, {
+        limit: 100,
+        timeoutMs: 60_000,
+        tooLarge: new AppError(413, 'x'),
+        empty: new AppError(400, 'x'),
+        interrupted: new AppError(400, 'gone'),
+        timedOut: new AppError(408, 'x'),
+      }),
+    ).rejects.toMatchObject({ message: 'gone' });
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('removes the temp file of a signed upload the client aborts', async () => {
+    const before = tempFiles();
+    const url = await signedUrl(1024 * 1024);
+    const socket = await connect(
+      `PUT ${url} HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\n` +
+        `Content-Length: ${1024 * 1024}\r\n\r\npartial`,
+    );
+    await vi.waitFor(() => expect(tempFiles().length).toBeGreaterThan(before.length));
+    socket.destroy();
+    await vi.waitFor(() => {
+      expect(tempFiles()).toEqual(before);
+      expect(openTempStreams()).toEqual([]);
+    });
+  });
+
+  it('caps the signed uploads a user has running', async () => {
+    const urls = await Promise.all(
+      Array.from({ length: MAX_CONCURRENT_SIGNED_PUTS_PER_USER + 1 }, () => signedUrl(1024)),
+    );
+    const before = tempFiles();
+    const held = await Promise.all(
+      urls
+        .slice(1)
+        .map((url) =>
+          connect(
+            `PUT ${url} HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\n` +
+              'Content-Length: 1024\r\n\r\nx',
+          ),
+        ),
+    );
+    await vi.waitFor(() => expect(tempFiles().length).toBe(before.length + held.length));
+
+    const put = () => request(app).put(urls[0]).set('Content-Type', 'text/plain').send('x');
+    const refused = await put();
+    expect(refused.status).toBe(429);
+    expect(refused.body.error.code).toBe('RATE_LIMITED');
+
+    for (const socket of held) socket.destroy();
+    await vi.waitFor(() => expect(tempFiles()).toEqual(before));
+    // Neither the refusal nor the aborts used anything up
+    await vi.waitFor(async () => expect((await put()).status).toBe(201));
+  });
+
+  it('keeps memory flat with many large bodies held open', async () => {
+    const USERS = 5;
+    const BODY = Buffer.alloc(10 * 1024 * 1024, 65);
+    const users = await Promise.all(Array.from({ length: USERS }, () => createTestUser()));
+    const urls: string[] = [];
+    for (const held of users) {
+      for (let i = 0; i < MAX_CONCURRENT_SIGNED_PUTS_PER_USER; i++) {
+        const res = await authPost('/api/attachments/upload-url', held.token, {
+          filename: 'big.txt',
+          mimeType: 'text/plain',
+          size: 25 * 1024 * 1024,
+        });
+        expect(res.status).toBe(201);
+        urls.push(res.body.uploadUrl as string);
+      }
+    }
+    const before = tempFiles();
+    const startMemory = process.memoryUsage();
+    const sockets = await Promise.all(
+      urls.map(async (url) => {
+        const socket = await connect(
+          `PUT ${url} HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\n` +
+            `Content-Length: ${25 * 1024 * 1024}\r\n\r\n`,
+        );
+        socket.write(BODY);
+        return socket;
+      }),
+    );
+    const onDisk = () =>
+      tempFiles()
+        .filter((name) => !before.includes(name))
+        .reduce((sum, name) => sum + fs.statSync(path.join(TEMP_DIR, name)).size, 0);
+    // All of it has arrived, and it is on disk
+    await vi.waitFor(() => expect(onDisk()).toBe(urls.length * BODY.length), {
+      timeout: 30_000,
+      interval: 100,
+    });
+    const endMemory = process.memoryUsage();
+    // 200 MB is held open. In memory it would all show up in arrayBuffers, and the stream chunks
+    // on their way through are all that may. The client's one shared buffer is counted before.
+    const grown = endMemory.arrayBuffers - startMemory.arrayBuffers;
+    expect(grown).toBeLessThan(64 * 1024 * 1024);
+
+    for (const socket of sockets) socket.destroy();
+    await vi.waitFor(() => expect(tempFiles()).toEqual(before), { timeout: 10_000 });
+    await prisma.user.deleteMany({ where: { id: { in: users.map((held) => held.id) } } });
+  }, 60_000);
+
+  it('stores a multipart file of exactly 25 MB, and a long name is no trouble', async () => {
+    const before = tempFiles();
+    const res = await request(app)
+      .post('/api/attachments')
+      .set('Authorization', `Bearer ${user.token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .attach('file', Buffer.alloc(25 * 1024 * 1024, 1), {
+        filename: `${'n'.repeat(300)}.txt`,
+        contentType: 'text/plain',
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.size).toBe(25 * 1024 * 1024);
+    expect(tempFiles()).toEqual(before);
+  }, 30_000);
+
+  it('moves a file into storage, or copies it across filesystems', async () => {
+    const storage = new LocalStorageBackend();
+    const write = () => {
+      const tempPath = newTempPath();
+      fs.writeFileSync(tempPath, 'on disk');
+      return tempPath;
+    };
+    const moved = write();
+    await storage.putFile('putfile/moved.txt', moved, 'text/plain');
+    expect(fs.existsSync(moved)).toBe(false);
+    expect((await storage.get('putfile/moved.txt')).toString()).toBe('on disk');
+
+    const copied = write();
+    const crossDevice = Object.assign(new Error('EXDEV'), { code: 'EXDEV' });
+    const rename = vi.spyOn(fsPromises, 'rename').mockRejectedValueOnce(crossDevice);
+    await storage.putFile('putfile/copied.txt', copied, 'text/plain');
+    rename.mockRestore();
+    expect(fs.existsSync(copied)).toBe(false);
+    expect((await storage.get('putfile/copied.txt')).toString()).toBe('on disk');
   });
 
   it('caps the staged files of a user, on every way in', async () => {

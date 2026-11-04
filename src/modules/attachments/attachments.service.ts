@@ -16,6 +16,8 @@ import { ERR } from '../../utils/error-messages';
 import { PROJECT_TEAM_ORG_INCLUDE, SPACE_TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
+import { removeTempFile } from './temp-files';
+
 const execFileAsync = promisify(execFile);
 
 /** The most an attachment can hold, whichever way it arrives. */
@@ -163,18 +165,18 @@ function buildStorageKey(originalName: string): string {
     path
       .extname(originalName)
       .slice(1)
-      .replace(/[^a-zA-Z0-9]/g, '') || 'bin';
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .slice(0, 16) || 'bin';
   const id = createId();
   return `attachments/${year}/${month}/${id}.${ext}`;
 }
 
-/** A file to store: from multer on disk (`path`), or in memory (`buffer`). */
+/** A file on disk to store: from multer, a signed upload or a fetch. */
 export interface IncomingFile {
   originalname: string;
   mimetype: string;
   size: number;
-  path?: string;
-  buffer?: Buffer;
+  path: string;
 }
 
 /**
@@ -219,8 +221,7 @@ export async function uploadAttachment(
 
     const storageKey = buildStorageKey(file.originalname);
     const storage = getStorage();
-    const fileData = file.path ? await fs.readFile(file.path) : (file.buffer ?? Buffer.alloc(0));
-    await storage.put(storageKey, fileData, file.mimetype);
+    await storage.putFile(storageKey, file.path, file.mimetype);
 
     let attachment;
     try {
@@ -253,7 +254,7 @@ export async function uploadAttachment(
 
     return attachment;
   } finally {
-    if (file.path) await fs.unlink(file.path).catch(() => {});
+    await removeTempFile(file.path);
   }
 }
 

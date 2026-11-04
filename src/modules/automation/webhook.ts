@@ -152,10 +152,23 @@ const openPinned: PublicRequestDeps['open'] = (url, { method, headers, body, sig
       .end(body);
   });
 
+/** The statuses the Fetch standard follows; any other 3xx is an answer like any other. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/** What describes a body, so it goes when the body does: the Fetch list, plus the length. */
+const BODY_HEADERS = new Set([
+  'content-encoding',
+  'content-language',
+  'content-location',
+  'content-type',
+  'content-length',
+]);
+
 /**
- * The request a redirect leads to, by the rules browsers and fetch follow: 307 and 308 repeat it,
- * the others turn it into a GET. Another origin doesn't get the caller's headers, which can hold
- * a secret for the first one.
+ * The request a redirect leads to, by the Fetch standard's HTTP-redirect fetch: a 301 or 302 turns
+ * a POST into a GET, a 303 does so for anything but a GET or HEAD, and otherwise the request is
+ * repeated. Another origin doesn't get the caller's other headers: Fetch drops Authorization, and
+ * any of these can hold a secret for the first origin.
  * @param request - The request that was redirected
  * @param status - The redirect's status
  * @param sameOrigin - Whether the redirect stays on the origin
@@ -165,15 +178,17 @@ function redirectedRequest(
   status: number,
   sameOrigin: boolean,
 ): PublicRequest {
-  const repeat = status === 307 || status === 308;
-  const headers = Object.entries(request.headers ?? {}).filter(([name]) => {
-    const isContentType = name.toLowerCase() === 'content-type';
-    return isContentType ? repeat : sameOrigin;
-  });
+  const method = (request.method ?? 'GET').toUpperCase();
+  const becomesGet =
+    ((status === 301 || status === 302) && method === 'POST') ||
+    (status === 303 && method !== 'GET' && method !== 'HEAD');
+  const headers = Object.entries(request.headers ?? {}).filter(([name]) =>
+    BODY_HEADERS.has(name.toLowerCase()) ? !becomesGet : sameOrigin,
+  );
   return {
     ...request,
-    method: repeat ? request.method : 'GET',
-    body: repeat ? request.body : undefined,
+    method: becomesGet ? 'GET' : request.method,
+    body: becomesGet ? undefined : request.body,
     headers: Object.fromEntries(headers),
   };
 }
@@ -211,7 +226,7 @@ export async function openPublicUrl(
     }
     const status = res.statusCode ?? 0;
     const location = res.headers.location;
-    if (status < 300 || status >= 400 || !location) return res;
+    if (!REDIRECT_STATUSES.has(status) || !location) return res;
     res.destroy();
 
     let next: URL;
@@ -230,6 +245,17 @@ export async function openPublicUrl(
   throw new AppError(400, `${label} URL redirected too many times`);
 }
 
+const WEBHOOK_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']);
+
+/**
+ * Whether a webhook can use this method. An HTTP client sends whatever it gets, TRACE included,
+ * and reads an empty method as GET.
+ * @param method - The method, in any case
+ */
+export function isWebhookMethod(method: string): boolean {
+  return WEBHOOK_METHODS.has(method.toUpperCase());
+}
+
 /**
  * Send an automation's webhook. The response is not read: only that it was delivered counts.
  * @param url - The URL
@@ -237,6 +263,7 @@ export async function openPublicUrl(
  * @param method - The HTTP method
  * @param headers - Extra headers
  * @param deps - Replaceable dependencies (tests)
+ * @throws {AppError} 400 for a method that isn't allowed, and as openPublicUrl
  */
 export async function executeWebhook(
   url: string,
@@ -245,13 +272,22 @@ export async function executeWebhook(
   headers?: Record<string, string>,
   deps: Partial<PublicRequestDeps> = {},
 ) {
+  if (!isWebhookMethod(method)) {
+    throw new AppError(400, `Webhook method ${method} is not allowed`);
+  }
+  const upperMethod = method.toUpperCase();
+  // A GET or HEAD has no body. The length is explicit: without it, HTTP clients drop a DELETE's
+  const body = upperMethod === 'GET' || upperMethod === 'HEAD' ? undefined : JSON.stringify(data);
   const res = await openPublicUrl(
     url,
     {
-      method,
-      headers: { 'Content-Type': 'application/json', ...headers },
-      // A GET or HEAD has no body
-      body: /^(get|head)$/i.test(method) ? undefined : JSON.stringify(data),
+      method: upperMethod,
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+        ...(body === undefined ? {} : { 'Content-Length': String(Buffer.byteLength(body)) }),
+      },
+      body,
       signal: AbortSignal.timeout(10000),
     },
     'Webhook',

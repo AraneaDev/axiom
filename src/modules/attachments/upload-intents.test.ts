@@ -31,6 +31,7 @@ import {
   fetchRemoteFile,
   FROM_URL_LIMIT,
   MAX_CONCURRENT_FETCHES,
+  MAX_CONCURRENT_FETCHES_PER_USER,
   type RemoteFetchDeps,
 } from './remote-file';
 import {
@@ -348,6 +349,11 @@ describe('upload intents', () => {
       const res = await put(uploadUrl);
       expect(res.status).toBe(201);
       expect(res.body.mimeType).toBe('text/plain');
+    });
+
+    it('takes the longest name it allows, with a long extension', async () => {
+      const { uploadUrl } = await ownerUrl({ filename: `a.${'x'.repeat(253)}` });
+      expect((await put(uploadUrl)).status).toBe(201);
     });
 
     it('keeps only the base name of the filename', async () => {
@@ -860,8 +866,10 @@ describe('upload intents', () => {
 
       it('returns the bytes and the bare type, following a redirect', async () => {
         const result = await fetchPath('/to-file');
-        expect(result.data.toString()).toBe('png bytes');
+        expect(fs.readFileSync(result.path, 'utf8')).toBe('png bytes');
         expect(result.mimeType).toBe('image/png');
+        expect(result.size).toBe(9);
+        fs.unlinkSync(result.path);
         expect(hits).toEqual(['/to-file', '/file.png']);
       });
 
@@ -886,37 +894,50 @@ describe('upload intents', () => {
 
       it('caps the size, by the header and while reading', async () => {
         await expect(fetchPath('/huge-declared')).rejects.toMatchObject({ statusCode: 413 });
+        const before = filesIn(MULTER_TEMP_DIR);
         await expect(fetchPath('/huge-stream')).rejects.toMatchObject({ statusCode: 413 });
+        expect(filesIn(MULTER_TEMP_DIR)).toEqual(before);
       }, 30000);
 
       it('times out on a server that stops sending', async () => {
+        const before = filesIn(MULTER_TEMP_DIR);
         await expect(fetchPath('/hang', { timeoutMs: 200 })).rejects.toMatchObject({
           statusCode: 502,
         });
+        expect(filesIn(MULTER_TEMP_DIR)).toEqual(before);
       });
 
       it('refuses an empty file, as a signed upload does', async () => {
+        const before = filesIn(MULTER_TEMP_DIR);
         await expect(fetchPath('/empty')).rejects.toMatchObject({ statusCode: 400 });
+        expect(filesIn(MULTER_TEMP_DIR)).toEqual(before);
       });
 
-      it('caps the fetches running at once', async () => {
-        const user = await createTestUser();
-        const hanging = Array.from({ length: MAX_CONCURRENT_FETCHES }, () =>
-          attachFromUrl(user.id, { url: `${base}/hang` }, { ...deps, timeoutMs: 500 }).catch(
+      it('caps the fetches running at once, per user and in total', async () => {
+        const users = [await createTestUser(), await createTestUser(), await createTestUser()];
+        const hang = (userId: string) =>
+          attachFromUrl(userId, { url: `${base}/hang` }, { ...deps, timeoutMs: 500 }).catch(
             (err: unknown) => err,
-          ),
-        );
-        await vi.waitFor(() =>
-          expect(hits.filter((hit) => hit === '/hang').length).toBeGreaterThan(0),
-        );
-        await expect(
-          attachFromUrl(user.id, { url: `${base}/file.png` }, deps),
-        ).rejects.toMatchObject({ statusCode: 429 });
-        await Promise.all(hanging);
-        // The slots come back
-        const after = await attachFromUrl(user.id, { url: `${base}/file.png` }, deps);
+          );
+        const quick = (userId: string) => attachFromUrl(userId, { url: `${base}/file.png` }, deps);
+        hits = [];
+        const running = [
+          ...Array.from({ length: MAX_CONCURRENT_FETCHES_PER_USER }, () => hang(users[0].id)),
+        ];
+        await vi.waitFor(() => expect(hits.length).toBe(MAX_CONCURRENT_FETCHES_PER_USER));
+        // One user can't hold every slot, and being refused costs nothing: more refusals than
+        // the limit allows calls, and the user's next call still works
+        for (let i = 0; i <= FROM_URL_LIMIT.max; i++) {
+          await expect(quick(users[0].id)).rejects.toMatchObject({ statusCode: 429 });
+        }
+        running.push(hang(users[1].id), hang(users[1].id));
+        await vi.waitFor(() => expect(hits.length).toBe(MAX_CONCURRENT_FETCHES));
+        await expect(quick(users[2].id)).rejects.toMatchObject({ statusCode: 429 });
+
+        await Promise.all(running);
+        const after = await quick(users[0].id);
         expect(after.mimeType).toBe('image/png');
-        await prisma.user.delete({ where: { id: user.id } });
+        await prisma.user.deleteMany({ where: { id: { in: users.map((user) => user.id) } } });
       });
 
       it('refuses an answer that is not a success', async () => {

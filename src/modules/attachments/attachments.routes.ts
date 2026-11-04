@@ -19,15 +19,17 @@ import {
   mimeTypeRefusal,
 } from './attachments.service';
 import {
+  createUserSlots,
+  newTempPath,
+  receiveToTempFile,
+  removeTempFile,
+  type TempFile,
+} from './temp-files';
+import {
   assertUploadStillAllowed,
   findUsableIntent,
   storeSignedUpload,
 } from './upload-intents.service';
-
-const UPLOAD_DIR = '/tmp/uploads';
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
 
 function fileFilter(_req: Express.Request, file: Express.Multer.File, cb: FileFilterCallback) {
   if (isAllowedMimeType(file.mimetype)) {
@@ -47,18 +49,15 @@ const tempFiles = new WeakMap<object, { path: string; out: fs.WriteStream }>();
  */
 const tempStorage: multer.StorageEngine = {
   _handleFile(req, file, cb) {
-    const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const safeName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const filename = `${unique}-${safeName}`;
-    const tempPath = path.join(UPLOAD_DIR, filename);
+    const tempPath = newTempPath();
     const out = fs.createWriteStream(tempPath);
     tempFiles.set(req, { path: tempPath, out });
     pipeline(file.stream, out, (err) => {
       if (err) cb(err);
       else {
         cb(null, {
-          destination: UPLOAD_DIR,
-          filename,
+          destination: path.dirname(tempPath),
+          filename: path.basename(tempPath),
           path: tempPath,
           size: out.bytesWritten,
         });
@@ -72,7 +71,8 @@ const tempStorage: multer.StorageEngine = {
 
 const upload = multer({
   storage: tempStorage,
-  limits: { fileSize: MAX_ATTACHMENT_BYTES },
+  // Busboy stops at this size, not past it, and a file of exactly the maximum is allowed
+  limits: { fileSize: MAX_ATTACHMENT_BYTES + 1 },
   fileFilter,
 });
 
@@ -80,7 +80,7 @@ const upload = multer({
  * Remove what a refused multipart request left in the temp directory.
  * @param req - The request
  */
-async function removeTempFile(req: Request): Promise<void> {
+async function removeMultipartTemp(req: Request): Promise<void> {
   const temp = tempFiles.get(req);
   if (!temp) return;
   // Closed first: a stream still opening would create the file again after the unlink
@@ -90,7 +90,7 @@ async function removeTempFile(req: Request): Promise<void> {
       temp.out.destroy();
     });
   }
-  await fs.promises.unlink(temp.path).catch(() => {});
+  await removeTempFile(temp.path);
 }
 
 const uploadRateLimit = rateLimit({
@@ -139,7 +139,7 @@ export async function receiveMultipart(req: Request, res: Response): Promise<voi
   await runMiddleware(uploadRateLimit, req, res);
   // Multer also calls back like this when the client aborts: it listens for that itself
   await runMiddleware(upload.single('file'), req, res).catch(async (err: unknown) => {
-    await removeTempFile(req);
+    await removeMultipartTemp(req);
     throw multipartRefusal(err);
   });
 }
@@ -147,82 +147,43 @@ export async function receiveMultipart(req: Request, res: Response): Promise<voi
 /** How long a signed upload may take to send its body, however steadily it keeps sending. */
 const BODY_READ_TIMEOUT_MS = 120_000;
 
-/**
- * Read a request body into memory, refusing as soon as it can't succeed: past the limit, or past
- * the deadline. A parser would wait for the end of the body first, which a chunked body doesn't
- * have to reach.
- * @param req - The request
- * @param limit - The most it may hold
- * @param timeoutMs - How long it may take
- * @throws {AppError} 413 past the limit, 408 past the deadline, 400 when the client goes away
- */
-export function readLimitedBody(req: Request, limit: number, timeoutMs: number): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let total = 0;
-
-    const stop = () => {
-      clearTimeout(timer);
-      req.off('data', onData);
-      req.off('end', onEnd);
-      req.off('error', onGone);
-      req.off('close', onGone);
-    };
-    const refuse = (err: AppError) => {
-      stop();
-      req.pause();
-      reject(err);
-    };
-    const onData = (chunk: Buffer) => {
-      total += chunk.length;
-      if (total > limit) {
-        refuse(
-          new AppError(413, 'The file is larger than this upload URL allows', 'FILE_TOO_LARGE'),
-        );
-      } else {
-        chunks.push(chunk);
-      }
-    };
-    const onEnd = () => {
-      stop();
-      resolve(Buffer.concat(chunks));
-    };
-    const onGone = () => refuse(new AppError(400, 'The upload was interrupted', 'BAD_UPLOAD'));
-    const timer = setTimeout(
-      () => refuse(new AppError(408, 'The upload took too long', 'UPLOAD_TIMEOUT')),
-      timeoutMs,
-    );
-
-    req.on('data', onData);
-    req.once('end', onEnd);
-    req.once('error', onGone);
-    req.once('close', onGone);
-  });
-}
+/** Signed uploads one user can have running at once. */
+export const MAX_CONCURRENT_SIGNED_PUTS_PER_USER = 4;
+const signedPutSlots = createUserSlots(MAX_CONCURRENT_SIGNED_PUTS_PER_USER);
 
 /**
- * Read the raw body of a signed upload, without inflating it: the limit is on what gets stored.
+ * Receive the raw body of a signed upload in a temp file, without inflating it: the limit is on
+ * what gets stored.
  * @param req - The request
  * @param res - The response
  * @param limit - The most it may hold
- * @throws {AppError} 413 past the limit, 415 when it is compressed, 400 when it is empty, 408
+ * @throws {AppError} 413 past the limit, 415 when it is compressed, 400 when it is empty or the
+ * client goes away, 408 past the deadline
  */
-async function readRawBody(req: Request, res: Response, limit: number): Promise<Buffer> {
+async function receiveSignedBody(req: Request, res: Response, limit: number): Promise<TempFile> {
+  const tooLarge = new AppError(
+    413,
+    'The file is larger than this upload URL allows',
+    'FILE_TOO_LARGE',
+  );
   // Unread, so Node discards the rest once the answer is out
-  if (Number(req.headers['content-length']) > limit) {
-    throw new AppError(413, 'The file is larger than this upload URL allows', 'FILE_TOO_LARGE');
-  }
+  if (Number(req.headers['content-length']) > limit) throw tooLarge;
   const encoding = req.headers['content-encoding'];
   if (encoding && encoding.toLowerCase() !== 'identity') {
     throw new AppError(415, 'Compressed uploads are not supported');
   }
-  const body = await readLimitedBody(req, limit, BODY_READ_TIMEOUT_MS).catch((err: unknown) => {
+  return receiveToTempFile(req, {
+    limit,
+    timeoutMs: BODY_READ_TIMEOUT_MS,
+    tooLarge,
+    empty: new AppError(400, 'No file provided', 'MISSING_FILE'),
+    interrupted: new AppError(400, 'The upload was interrupted', 'BAD_UPLOAD'),
+    timedOut: new AppError(408, 'The upload took too long', 'UPLOAD_TIMEOUT'),
+  }).catch((err: unknown) => {
     // The rest of this body is never read, so the connection can't serve another request
     res.setHeader('Connection', 'close');
     throw err;
   });
-  if (body.length === 0) throw new AppError(400, 'No file provided', 'MISSING_FILE');
-  return body;
 }
 
 /**
@@ -230,7 +191,7 @@ async function readRawBody(req: Request, res: Response, limit: number): Promise<
  * the signature is the credential and there is no session a forged request could ride on. It is
  * one exact method and path, so every other request meets those as usual.
  *
- * The signature comes first and the body last, so that nobody can make the server buffer 25 MB
+ * The signature comes first and the body last, so that nobody can make the server write anything
  * without holding a valid URL. It answers for itself what authenticate and the audit middleware
  * would do for a request further down.
  */
@@ -253,8 +214,14 @@ signedUploadRouter.put('/api/uploads/:uploadId', signedUploadLimiter, async (req
     const sent = req.headers['content-type'];
     if (sent && bareMimeType(sent) !== intent.mimeType) throw mimeTypeRefusal(bareMimeType(sent));
 
-    await assertUploadStillAllowed(intent);
-    const data = await readRawBody(req, res, intent.maxBytes);
-    res.status(201).json(await storeSignedUpload(intent, data));
+    await signedPutSlots.run(
+      intent.userId,
+      new AppError(429, 'Too many uploads running, please try again later', 'RATE_LIMITED'),
+      async () => {
+        await assertUploadStillAllowed(intent);
+        const file = await receiveSignedBody(req, res, intent.maxBytes);
+        res.status(201).json(await storeSignedUpload(intent, file));
+      },
+    );
   });
 });

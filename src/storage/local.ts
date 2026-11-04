@@ -22,6 +22,24 @@ export class LocalStorageBackend implements StorageBackend {
     await fs.writeFile(filePath, data);
   }
 
+  async putFile(key: string, tempPath: string, _contentType: string): Promise<void> {
+    const filePath = this.resolve(key);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    try {
+      await fs.rename(tempPath, filePath);
+    } catch (err) {
+      // The temp directory and the uploads volume are usually different filesystems
+      if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err;
+      try {
+        await fs.copyFile(tempPath, filePath);
+      } catch (copyErr) {
+        await fs.unlink(filePath).catch(() => {});
+        throw copyErr;
+      }
+      await fs.unlink(tempPath).catch(() => {});
+    }
+  }
+
   async get(key: string): Promise<Buffer> {
     const filePath = this.resolve(key);
     return fs.readFile(filePath);

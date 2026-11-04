@@ -14,7 +14,7 @@ import {
 import * as issuesService from '../issues/issues.service';
 
 import { applySetField, assertSettableField } from './set-field';
-import { executeWebhook } from './webhook';
+import { executeWebhook, isWebhookMethod } from './webhook';
 
 export type AutomationTrigger =
   | 'issue:created'
@@ -81,7 +81,8 @@ interface CreateRuleData {
  * automation must not do what a member couldn't do by hand.
  * @param projectId
  * @param actions
- * @throws {AppError} 400 for a foreign column or a non-member assignee
+ * @throws {AppError} 400 for a foreign column, a non-member assignee or a webhook method that
+ * isn't allowed
  */
 async function assertActionsInProject(projectId: string, actions: AutomationAction[] | undefined) {
   for (const action of actions ?? []) {
@@ -93,6 +94,11 @@ async function assertActionsInProject(projectId: string, actions: AutomationActi
     }
     if (action.type === 'set_field') {
       await assertSettableField(projectId, action.field, action.value);
+    }
+    if (action.type === 'webhook' && action.method !== undefined) {
+      if (!isWebhookMethod(action.method)) {
+        throw new AppError(400, `Webhook method ${action.method} is not allowed`);
+      }
     }
   }
 }

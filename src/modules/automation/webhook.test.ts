@@ -3,6 +3,9 @@ import type { AddressInfo } from 'net';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { cleanupTestContext, createTestContext } from '../../test/factory';
+
+import { createRule, updateRule } from './automation.service';
 import { assertPublicUrl, executeWebhook, type PublicRequestDeps } from './webhook';
 
 describe('executeWebhook', () => {
@@ -53,7 +56,10 @@ describe('executeWebhook', () => {
           '/to-metadata': [307, 'https://169.254.169.254/latest/meta-data'],
           '/to-http': [302, 'http://example.com/x'],
           '/loop': [302, '/loop'],
-          '/see-other': [302, '/end'],
+          '/moved': [301, '/end'],
+          '/found': [302, '/end'],
+          '/see-other': [303, '/end'],
+          '/not-a-redirect': [300, '/end'],
           '/keep': [307, '/end'],
           '/elsewhere': [307, `${otherBase}/end`],
         };
@@ -101,11 +107,64 @@ describe('executeWebhook', () => {
     expect(seen).toEqual([{ url: '/end', method: 'POST', secret: 's3', body: '{"a":1}' }]);
   });
 
-  it('repeats the request on a 307 and turns it into a GET on a 302', async () => {
-    await send('/keep');
-    expect(seen[1]).toEqual({ url: '/end', method: 'POST', secret: 's3', body: '{"a":1}' });
-    await send('/see-other');
-    expect(seen[1]).toEqual({ url: '/end', method: 'GET', secret: 's3', body: '' });
+  // The rules of HTTP-redirect fetch in the Fetch standard
+  it.each([
+    ['/moved', 'POST', 'GET', ''],
+    ['/found', 'POST', 'GET', ''],
+    ['/moved', 'PUT', 'PUT', '{"a":1}'],
+    ['/found', 'PUT', 'PUT', '{"a":1}'],
+    ['/moved', 'HEAD', 'HEAD', ''],
+    ['/found', 'DELETE', 'DELETE', '{"a":1}'],
+    ['/see-other', 'POST', 'GET', ''],
+    ['/see-other', 'PUT', 'GET', ''],
+    ['/see-other', 'DELETE', 'GET', ''],
+    ['/see-other', 'HEAD', 'HEAD', ''],
+    ['/see-other', 'GET', 'GET', ''],
+    ['/keep', 'POST', 'POST', '{"a":1}'],
+  ])('on %s a %s arrives as %s', async (path, sent, arrives, body) => {
+    await send(path, sent);
+    expect(seen[1]).toMatchObject({ url: '/end', method: arrives, secret: 's3', body });
+  });
+
+  it('does not follow a 3xx that is not a redirect status', async () => {
+    await send('/not-a-redirect');
+    expect(seen.map((hit) => hit.url)).toEqual(['/not-a-redirect']);
+  });
+
+  it('delivers a body with every method that has one', async () => {
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      await send('/end', method);
+      expect(seen[0]).toMatchObject({ method, body: '{"a":1}' });
+    }
+  });
+
+  it.each(['TRACE', 'CONNECT', 'OPTIONS', '', 'PO ST'])(
+    'refuses the method "%s"',
+    async (method) => {
+      await expect(send('/end', method)).rejects.toMatchObject({ statusCode: 400 });
+      expect(seen).toEqual([]);
+    },
+  );
+
+  it('accepts a method in any case', async () => {
+    await send('/end', 'post');
+    expect(seen[0]).toMatchObject({ method: 'POST' });
+  });
+
+  it('checks the method when a rule is saved', async () => {
+    const ctx = await createTestContext(`webhook${Date.now()}`);
+    const rule = (method: string) => ({
+      name: 'r',
+      trigger: 'issue:created' as const,
+      actions: [{ type: 'webhook' as const, url: 'https://example.com/x', method }],
+    });
+    await expect(createRule(ctx.projectId, rule('TRACE'))).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    await expect(createRule(ctx.projectId, rule(''))).rejects.toMatchObject({ statusCode: 400 });
+    const saved = await createRule(ctx.projectId, rule('POST'));
+    await expect(updateRule(saved.id, rule('TRACE'))).rejects.toMatchObject({ statusCode: 400 });
+    await cleanupTestContext(ctx);
   });
 
   it('does not send its headers to another origin', async () => {
