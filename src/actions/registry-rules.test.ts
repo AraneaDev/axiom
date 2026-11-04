@@ -5,6 +5,7 @@ import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { jsonSchema } from '../lib/openapi/json-schema';
 import {
   normalizeApiPath,
   scopeAllows,
@@ -449,6 +450,35 @@ describe('registry rules', () => {
         input: z.object({ projectId: z.string() }).transform((value) => value),
       });
       expect(ruleViolations(action)).toEqual([expect.stringContaining('compare')]);
+    });
+  });
+
+  describe('OpenAPI: every schema can be published', () => {
+    it('converts the input and output of every action to JSON Schema', () => {
+      const failures = listActions().flatMap((action) => {
+        const store = { schemas: {} };
+        const attempts: Array<[string, () => unknown]> = [
+          ['input', () => jsonSchema(action.input, 'input', `${action.name}.input`, store)],
+          // A void output is documented as an empty body, not as a schema
+          ...(action.output._zod.def.type === 'void'
+            ? []
+            : ([
+                [
+                  'output',
+                  () => jsonSchema(action.output, 'output', `${action.name}.output`, store),
+                ],
+              ] as Array<[string, () => unknown]>)),
+        ];
+        return attempts.flatMap(([side, convert]) => {
+          try {
+            convert();
+            return [];
+          } catch (err) {
+            return [`${action.name} ${side}: ${(err as Error).message}`];
+          }
+        });
+      });
+      expect(failures).toEqual([]);
     });
   });
 

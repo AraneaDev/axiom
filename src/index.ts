@@ -136,6 +136,10 @@ app.use('/api', publicFormRoutes);
 // Health check (public, no auth required)
 app.use('/api/health', healthRoutes);
 
+// OpenAPI spec + Scalar docs UI (public, no auth required). Ahead of the routers below: several
+// of them run router.use(authenticate) on all of /api, which would answer these with a 401.
+app.use('/api', openApiRouter);
+
 // Site settings (public GET, admin PUT — must be before catch-all auth routes)
 app.use('/api/site-settings', siteSettingsRoutes);
 
@@ -193,9 +197,6 @@ app.use('/api/projects', formRoutes);
 app.use('/api/projects', intakeRoutes);
 app.use('/api/projects', roadmapRoutes);
 app.use('/api', teamRoadmapRoutes);
-
-// OpenAPI spec + Scalar docs UI
-app.use('/api', openApiRouter);
 
 // Unknown /api routes get a JSON 404, never the SPA index.html
 app.use('/api', (_req, res) => {
