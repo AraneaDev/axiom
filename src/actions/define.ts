@@ -35,6 +35,8 @@ export interface RestBinding {
   raw?: boolean;
   /** The route takes no body (a toggle): whatever the request carries is ignored. */
   emptyBody?: boolean;
+  /** The body may be left out altogether; one that is sent is read and validated as usual. */
+  optionalBody?: boolean;
 }
 
 /** What authorize receives: the target when the action declares one, else the full input. */

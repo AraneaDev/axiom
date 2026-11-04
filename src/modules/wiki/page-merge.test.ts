@@ -584,6 +584,15 @@ describe('Page merge', () => {
     const newest = () =>
       prisma.pageVersion.findFirstOrThrow({ where: { pageId }, orderBy: { version: 'desc' } });
 
+    it('takes no body at all, as the old route did, and still reads one that is sent', async () => {
+      const none = await request(app)
+        .post(`/api/wiki/spaces/${spaceId}/pages/merge-page/collab/flush`)
+        .set('Authorization', `Bearer ${tokenFor(editorId)}`)
+        .set('X-Requested-With', 'XMLHttpRequest');
+      expect(none.status).toBe(200);
+      expect((await flush({ changeDescription: 'x'.repeat(501) })).status).toBe(400);
+    });
+
     it('puts the description on the version the save creates', async () => {
       const client = await connect(editorId);
       appendParagraph(client.doc, 'Saved with a note');

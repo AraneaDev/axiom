@@ -135,7 +135,9 @@ export function mountActions(router: Router, defs: ActionDef[]): void {
       const plain = typeof body === 'object' && body !== null && !Array.isArray(body);
       // The old controllers validated the body, so none or an array was a 400; it comes after
       // authorize, so a refused caller keeps its 403/404
-      const bodyError = takesBody && !plain ? 'Request body must be a JSON object' : undefined;
+      const leftOut = binding.optionalBody && body === undefined;
+      const bodyError =
+        takesBody && !plain && !leftOut ? 'Request body must be a JSON object' : undefined;
       const input: unknown = {
         ...query,
         // A read has no body (R17)

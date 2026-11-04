@@ -349,7 +349,7 @@ const pageActions = [
     target: slugTarget,
     input: slugTarget.extend(flushPageSessionSchema.shape),
     output: z.looseObject({ flushed: z.boolean() }),
-    rest: { method: 'POST', path: `${PAGE}/collab/flush`, status: 200 },
+    rest: { method: 'POST', path: `${PAGE}/collab/flush`, status: 200, optionalBody: true },
     authorize: editBySlug,
     handler: async (ctx, { spaceId, pageSlug, changeDescription }) =>
       wikiService.flushPageSession(
