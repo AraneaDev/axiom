@@ -19,6 +19,15 @@ import * as issuesController from './issues.controller';
 const router = Router();
 
 router.use(authenticate);
+// Watching and voting are personal, open to anyone who can read the issue. These routes come
+// ahead of the role check below, so that Express decides what is exempt and no spelling of
+// another path can pass for one of them.
+router.post('/:projectId/issues/:issueNumber/votes/toggle', requireProjectAccess, votesCtrl.toggle);
+router.post(
+  '/:projectId/issues/:issueNumber/watchers/toggle',
+  requireProjectAccess,
+  watchersCtrl.toggleWatch,
+);
 // Writes follow the permission matrix: VIEWERs and GUESTs can read, not change
 router.use('/:projectId', requireProjectWrite());
 // Project settings: team ADMINs, org OWNERs/ADMINs and platform admins only
@@ -77,11 +86,9 @@ router.post('/:projectId/issues/:issueNumber/links', linksCtrl.addLink);
 router.delete('/:projectId/issues/:issueNumber/links/:linkId', linksCtrl.deleteLink);
 
 // Issue votes
-router.post('/:projectId/issues/:issueNumber/votes/toggle', votesCtrl.toggle);
 router.get('/:projectId/issues/:issueNumber/votes', votesCtrl.getVotes);
 
 // Issue watchers
-router.post('/:projectId/issues/:issueNumber/watchers/toggle', watchersCtrl.toggleWatch);
 router.get('/:projectId/issues/:issueNumber/watchers', watchersCtrl.getWatchers);
 
 // Board move

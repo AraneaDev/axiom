@@ -23,6 +23,33 @@ const variants = (path: string): string[] => {
 const allows = (scopes: string[], method: string, raw: string) =>
   tokenAllows(scopes, method, normalizeApiPath(raw));
 
+describe('normalizeApiPath', () => {
+  it.each([
+    ['/api/projects/a%2Fb', '/api/projects/a%2fb'],
+    ['/api/projects/a%2fb', '/api/projects/a%2fb'],
+    ['/api/projects/a%5Cb', '/api/projects/a%5cb'],
+    ['/api/projects/a%2F', '/api/projects/a%2f'],
+  ])('keeps an encoded slash or backslash inside its segment: %s', (raw, normal) => {
+    expect(normalizeApiPath(raw)).toBe(normal);
+  });
+
+  it('still decodes everything else', () => {
+    expect(normalizeApiPath('/api/%70rojects/a%20b')).toBe('/api/projects/a b');
+    expect(normalizeApiPath('/api/projects/a%252Fb')).toBe('/api/projects/a%2fb');
+  });
+
+  it('reads a project id with an encoded slash as a project, not as a subpath', () => {
+    expect(allows(['issues:write'], 'PATCH', '/api/projects/a%2Fb')).toBe(false);
+    expect(allows(['issues:write'], 'DELETE', '/api/projects/a%5Cb')).toBe(false);
+    expect(allows(['issues:write'], 'PATCH', '/api/projects/a/b')).toBe(true);
+  });
+
+  it('keeps legitimate escaped ids reachable', () => {
+    expect(allows(['wiki:read'], 'GET', '/api/wiki/pages/a%20b')).toBe(true);
+    expect(allows(['issues:write'], 'PATCH', '/api/projects/p%31/issues/1')).toBe(true);
+  });
+});
+
 describe('token path rules across spellings', () => {
   const blocked: Array<[string, string, string[]]> = [
     ['DELETE', '/api/projects/abc', ['issues:write']],

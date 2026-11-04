@@ -17,13 +17,13 @@ export function param(req: Request, name: string): string {
 
 /**
  * Extract a route param as an integer.
- * Throws 400 if missing or not a valid number.
+ * Throws 400 if missing or anything but digits: parseInt alone reads `5abc` as 5, and
+ * `1%2Fvotes%2Ftoggle`, which Express routes as this one param, as 1.
  * @param req
  * @param name
  */
 export function paramInt(req: Request, name: string): number {
   const val = param(req, name);
-  const num = parseInt(val, 10);
-  if (Number.isNaN(num)) throw new AppError(400, `Parameter '${name}' must be a number`);
-  return num;
+  if (!/^\d+$/.test(val)) throw new AppError(400, `Parameter '${name}' must be a number`);
+  return parseInt(val, 10);
 }

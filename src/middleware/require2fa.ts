@@ -7,17 +7,21 @@ import { getSiteSettings } from '../modules/site-settings/site-settings.service'
 
 import type { AuthPayload } from './auth';
 
-/** Routes exempt from 2FA enforcement (users need these to set up 2FA or manage session). */
+/**
+ * Routes exempt from 2FA enforcement (users need these to set up 2FA or manage session).
+ * Relative to the /api mount, as `req.path` is. Matched exactly, so another spelling of one of
+ * these meets the check.
+ */
 const EXEMPT_PATHS = new Set([
-  '/api/auth/2fa/enable',
-  '/api/auth/2fa/verify',
-  '/api/auth/2fa/disable',
-  '/api/auth/logout',
-  '/api/auth/refresh',
-  '/api/auth/me',
-  '/api/auth/login',
-  '/api/auth/register',
-  '/api/site-settings',
+  '/auth/2fa/enable',
+  '/auth/2fa/verify',
+  '/auth/2fa/disable',
+  '/auth/logout',
+  '/auth/refresh',
+  '/auth/me',
+  '/auth/login',
+  '/auth/register',
+  '/site-settings',
 ]);
 
 /**
