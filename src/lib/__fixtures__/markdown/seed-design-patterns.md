@@ -19,60 +19,54 @@ This document is the definitive guide for building new features in Axiom. It cov
 Use these semantic tokens everywhere. They adapt automatically for dark mode.
 
 ### Text
-
-| Token                 | Purpose                  |
-| --------------------- | ------------------------ |
-| `text-text`           | Primary text             |
-| `text-text-secondary` | Supporting text          |
-| `text-text-tertiary`  | Disabled / placeholder   |
-| `text-text-inverse`   | Text on dark backgrounds |
+| Token | Purpose |
+|---|---|
+| `text-text` | Primary text |
+| `text-text-secondary` | Supporting text |
+| `text-text-tertiary` | Disabled / placeholder |
+| `text-text-inverse` | Text on dark backgrounds |
 
 ### Surfaces
-
-| Token                  | Purpose                                        |
-| ---------------------- | ---------------------------------------------- |
-| `bg-surface`           | Main background (cards, pages)                 |
-| `bg-surface-secondary` | Subtle contrast (table headers, hover)         |
-| `bg-surface-tertiary`  | Stronger contrast (code blocks, active states) |
-| `bg-surface-elevated`  | Elevated panels (modals, dropdowns)            |
+| Token | Purpose |
+|---|---|
+| `bg-surface` | Main background (cards, pages) |
+| `bg-surface-secondary` | Subtle contrast (table headers, hover) |
+| `bg-surface-tertiary` | Stronger contrast (code blocks, active states) |
+| `bg-surface-elevated` | Elevated panels (modals, dropdowns) |
 
 ### Borders
-
-| Token                 | Purpose                                |
-| --------------------- | -------------------------------------- |
-| `border-border`       | Standard borders                       |
+| Token | Purpose |
+|---|---|
+| `border-border` | Standard borders |
 | `border-border-light` | Subtle separators (table row dividers) |
-| `border-border-focus` | Focus ring borders                     |
+| `border-border-focus` | Focus ring borders |
 
 ### Semantic Colors
-
-| Token                         | Purpose                     |
-| ----------------------------- | --------------------------- |
-| `text-primary` / `bg-primary` | Brand / primary actions     |
-| `bg-primary-light`            | Light primary background    |
-| `text-danger` / `bg-danger`   | Errors, destructive actions |
-| `bg-danger-light`             | Light danger background     |
-| `text-warning` / `bg-warning` | Warnings, caution           |
-| `text-success` / `bg-success` | Success, positive           |
+| Token | Purpose |
+|---|---|
+| `text-primary` / `bg-primary` | Brand / primary actions |
+| `bg-primary-light` | Light primary background |
+| `text-danger` / `bg-danger` | Errors, destructive actions |
+| `bg-danger-light` | Light danger background |
+| `text-warning` / `bg-warning` | Warnings, caution |
+| `text-success` / `bg-success` | Success, positive |
 
 ### Sizing Standards
-
-| Element              | Standard                                                                         |
-| -------------------- | -------------------------------------------------------------------------------- |
-| Card border radius   | `rounded-lg`                                                                     |
-| Button border radius | `rounded-md`                                                                     |
-| Modal border radius  | `rounded-xl`                                                                     |
-| Avatars, pills       | `rounded-full`                                                                   |
-| Transition duration  | `duration-150` (interactions)                                                    |
-| Focus ring           | `focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1` |
-| Data row hover       | `hover:bg-surface-secondary transition-colors` (for dense lists, tables)         |
-| Card hover           | `hover:border-primary/50 hover:shadow-sm transition-all` (for navigation tiles)  |
-| Card container       | `rounded-lg border border-border bg-surface overflow-hidden`                     |
+| Element | Standard |
+|---|---|
+| Card border radius | `rounded-lg` |
+| Button border radius | `rounded-md` |
+| Modal border radius | `rounded-xl` |
+| Avatars, pills | `rounded-full` |
+| Transition duration | `duration-150` (interactions) |
+| Focus ring | `focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1` |
+| Data row hover | `hover:bg-surface-secondary transition-colors` (for dense lists, tables) |
+| Card hover | `hover:border-primary/50 hover:shadow-sm transition-all` (for navigation tiles) |
+| Card container | `rounded-lg border border-border bg-surface overflow-hidden` |
 
 ### Hover Pattern: Cards vs Rows
 
 Use **card hover** for navigation tiles (dashboards, team overview -- few items, prominent):
-
 ```tsx
 <Link className="group rounded-lg border border-border bg-surface p-4 hover:border-primary/50 hover:shadow-sm transition-all">
   ...
@@ -81,7 +75,6 @@ Use **card hover** for navigation tiles (dashboards, team overview -- few items,
 ```
 
 Use **row hover** for dense data lists (issue list, wiki page list -- many items, scannable):
-
 ```tsx
 <div className="rounded-lg border border-border bg-surface divide-y divide-border">
   <Link className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors">
@@ -101,17 +94,13 @@ All live in `frontend/src/components/ui/`. Every component uses `forwardRef`, `c
 ### Form Inputs
 
 **Button** -- all clickable actions
-
 ```tsx
-<Button variant="primary" size="md">
-  {' '}
-  // primary, secondary, danger, ghost, outline
-  <Plus className="h-4 w-4" /> Create // sizes: xs, sm, md, lg
+<Button variant="primary" size="md">       // primary, secondary, danger, ghost, outline
+  <Plus className="h-4 w-4" /> Create      // sizes: xs, sm, md, lg
 </Button>
 ```
 
 **Input** -- text inputs with label, hint, and error support
-
 ```tsx
 <Input label="Email" placeholder="you@example.com" error="Required" hint="We won't share it" />
 ```
@@ -119,77 +108,56 @@ All live in `frontend/src/components/ui/`. Every component uses `forwardRef`, `c
 **Textarea** -- multi-line text with same label/hint/error API as Input
 
 **Checkbox** -- labeled checkbox
-
 ```tsx
 <Checkbox label="Accept terms" checked={agreed} onChange={setAgreed} />
 ```
 
 **Toggle** -- on/off switch
-
 ```tsx
 <Toggle label="Enable notifications" checked={enabled} onChange={setEnabled} />
 ```
 
 **Select** (from Dropdown) -- form dropdown
-
 ```tsx
-<Select
-  label="Priority"
-  value={priority}
-  onChange={setPriority}
-  options={[
-    { value: 'HIGH', label: 'High' },
-    { value: 'LOW', label: 'Low' },
-  ]}
-/>
+<Select label="Priority" value={priority} onChange={setPriority}
+  options={[{ value: 'HIGH', label: 'High' }, { value: 'LOW', label: 'Low' }]} />
 ```
 
 ### Display
 
 **Avatar** -- user avatars with fallback initials
-
 ```tsx
-<Avatar name="Jane Doe" src={user.avatarUrl} size="sm" /> // xs, sm, md, lg
+<Avatar name="Jane Doe" src={user.avatarUrl} size="sm" />  // xs, sm, md, lg
 ```
 
 **Badge** -- status chips and labels
-
 ```tsx
-<Badge variant="success" size="sm">
-  Active
-</Badge> // default, primary, danger, warning, success, outline
+<Badge variant="success" size="sm">Active</Badge>  // default, primary, danger, warning, success, outline
 ```
 
 **Progress** -- progress bars
-
 ```tsx
 <Progress value={75} size="sm" variant="primary" />
 ```
 
 **Spinner / PageLoader** -- loading indicators
-
 ```tsx
 <Spinner className="h-4 w-4" />  // inline
 <PageLoader />                    // full page
 ```
 
 **Skeleton / TableSkeleton / ListSkeleton** -- loading placeholders
-
 ```tsx
 <Skeleton className="h-8 w-full" />
 <TableSkeleton rows={5} cols={4} />
 ```
 
 **Tooltip** -- hover hints
-
 ```tsx
-<Tooltip content="Delete this item">
-  <Button variant="ghost">...</Button>
-</Tooltip>
+<Tooltip content="Delete this item"><Button variant="ghost">...</Button></Tooltip>
 ```
 
 **IssueTypeIcon** -- renders issue type icons (TASK, BUG, STORY, EPIC)
-
 ```tsx
 <IssueTypeIcon type="BUG" className="h-4 w-4" />
 ```
@@ -197,118 +165,68 @@ All live in `frontend/src/components/ui/`. Every component uses `forwardRef`, `c
 ### Overlays
 
 **Modal** -- overlay dialogs via createPortal
-
 ```tsx
 <Modal open={isOpen} onClose={() => setOpen(false)} title="Edit Item" size="md">
   <form>...</form>
   <ModalFooter>
-    <Button variant="secondary">
-      <X /> Cancel
-    </Button>
-    <Button>
-      <Save /> Save
-    </Button>
+    <Button variant="secondary"><X /> Cancel</Button>
+    <Button><Save /> Save</Button>
   </ModalFooter>
 </Modal>
 ```
 
 **ConfirmDialog** -- destructive action confirmation
-
 ```tsx
-<ConfirmDialog
-  open={!!target}
-  onClose={() => setTarget(null)}
+<ConfirmDialog open={!!target} onClose={() => setTarget(null)}
   onConfirm={() => deleteMutation.mutate(target.id)}
-  title="Delete Item"
-  description="This cannot be undone."
-  confirmLabel="Delete"
-  loading={deleteMutation.isPending}
-/>
+  title="Delete Item" description="This cannot be undone."
+  confirmLabel="Delete" loading={deleteMutation.isPending} />
 ```
 
 **Dropdown / DropdownItem** -- contextual menus
-
 ```tsx
-<Dropdown
-  trigger={
-    <Button variant="ghost">
-      <MoreVertical />
-    </Button>
-  }
->
-  <DropdownItem onClick={handleEdit}>
-    <Pencil /> Edit
-  </DropdownItem>
-  <DropdownItem onClick={handleDelete}>
-    <Trash2 /> Delete
-  </DropdownItem>
+<Dropdown trigger={<Button variant="ghost"><MoreVertical /></Button>}>
+  <DropdownItem onClick={handleEdit}><Pencil /> Edit</DropdownItem>
+  <DropdownItem onClick={handleDelete}><Trash2 /> Delete</DropdownItem>
 </Dropdown>
 ```
 
 ### Navigation & Layout
 
 **Tabs** -- tab bar navigation
-
 ```tsx
-<Tabs
-  tabs={[{ key: 'overview', label: 'Overview', icon: <Eye /> }]}
-  activeKey={tab}
-  onChange={setTab}
-/>
+<Tabs tabs={[{ key: 'overview', label: 'Overview', icon: <Eye /> }]}
+  activeKey={tab} onChange={setTab} />
 ```
 
 **Pagination** -- offset-based page navigation
-
 ```tsx
-<Pagination
-  total={200}
-  limit={25}
-  offset={page * 25}
-  onPageChange={(offset) => setPage(Math.floor(offset / 25))}
-/>
+<Pagination total={200} limit={25} offset={page * 25}
+  onPageChange={(offset) => setPage(Math.floor(offset / 25))} />
 ```
 
 **EmptyState** -- zero-data placeholders
-
 ```tsx
-<EmptyState
-  icon={<Inbox />}
-  title="No items yet"
+<EmptyState icon={<Inbox />} title="No items yet"
   description="Create your first item to get started."
-  action={
-    <Button>
-      <Plus /> Create
-    </Button>
-  }
-/>
+  action={<Button><Plus /> Create</Button>} />
 ```
 
 ### Data Tables
 
 **Table / Thead / Tbody / TrHead / Tr / Th / Td / TableContainer**
-
 ```tsx
-<TableContainer>
-  {' '}
-  {/* rounded-lg border border-border bg-surface overflow-hidden */}
-  <Table>
-    {' '}
-    {/* w-full text-sm */}
+<TableContainer>         {/* rounded-lg border border-border bg-surface overflow-hidden */}
+  <Table>                {/* w-full text-sm */}
     <Thead>
-      <TrHead>
-        {' '}
-        {/* border-b bg-surface-secondary */}
-        <Th>Name</Th> {/* px-4 py-3 text-xs font-medium uppercase tracking-wide */}
+      <TrHead>           {/* border-b bg-surface-secondary */}
+        <Th>Name</Th>    {/* px-4 py-3 text-xs font-medium uppercase tracking-wide */}
         <Th className="text-right">Actions</Th>
       </TrHead>
     </Thead>
-    <Tbody>
-      {' '}
-      {/* divide-y divide-border-light */}
-      <Tr>
-        {' '}
-        {/* hover:bg-surface-secondary transition-colors */}
-        <Td>Item</Td> {/* px-4 py-3 */}
+    <Tbody>              {/* divide-y divide-border-light */}
+      <Tr>               {/* hover:bg-surface-secondary transition-colors */}
+        <Td>Item</Td>    {/* px-4 py-3 */}
         <Td className="text-right">...</Td>
       </Tr>
     </Tbody>
@@ -321,13 +239,11 @@ Use raw `<table>` elements only for specialized displays (wide, dense, specializ
 ### Editor Components
 
 **MarkdownRenderer** -- renders markdown with syntax highlighting and mermaid diagrams
-
 ```tsx
 <MarkdownRenderer content={markdownString} />
 ```
 
 **MarkdownEditor** -- TipTap WYSIWYG editor with toolbar
-
 ```tsx
 <MarkdownEditor value={body} onChange={setBody} compact />
 ```
@@ -335,41 +251,43 @@ Use raw `<table>` elements only for specialized displays (wide, dense, specializ
 ### Query Bar
 
 **QueryBar** -- structured filter input for issue lists
-
 ```tsx
 import { QueryBar } from '@/components/issues/QueryBar';
 
-<QueryBar value={queryString} onChange={setQueryString} error={parseError} />;
+<QueryBar
+  value={queryString}
+  onChange={setQueryString}
+  error={parseError}
+/>
 ```
 
 Located at `frontend/src/components/issues/QueryBar.tsx`.
 
 Props:
 
-| Prop       | Type                  | Purpose                                          |
-| ---------- | --------------------- | ------------------------------------------------ |
-| `value`    | `string`              | Current query string                             |
-| `onChange` | `(v: string) => void` | Called on every keystroke                        |
-| `error`    | `string \| undefined` | Parse/compile error shown inline below the input |
+| Prop | Type | Purpose |
+|------|------|---------|
+| `value` | `string` | Current query string |
+| `onChange` | `(v: string) => void` | Called on every keystroke |
+| `error` | `string \| undefined` | Parse/compile error shown inline below the input |
 
 Used in `IssueListFilters` alongside a query/filter mode toggle. When the user switches to query mode the `QueryBar` replaces the individual filter dropdowns. When `error` is set the input border turns danger and the message appears below.
 
 ### Template Variable Panel
 
 **TemplateVariablePanel** -- collapsible reference panel for wiki template editors
-
 ```tsx
 import { TemplateVariablePanel } from '@/components/wiki/TemplateVariablePanel';
 
-<TemplateVariablePanel onInsert={(variable) => editor.insertText(variable)} />;
+<TemplateVariablePanel onInsert={(variable) => editor.insertText(variable)} />
 ```
 
 Located at `frontend/src/components/wiki/TemplateVariablePanel.tsx`.
 
 Props:
 
-| Prop       | Type                         | Purpose                                                                   |
-| ---------- | ---------------------------- | ------------------------------------------------------------------------- |
+| Prop | Type | Purpose |
+|------|------|---------|
 | `onInsert` | `(variable: string) => void` | Called with the full `{{...}}` expression when the user clicks a variable |
 
 The panel renders collapsible groups (one per context category: Page, User, Team, Space). Clicking any variable calls `onInsert` with the ready-to-paste expression. Groups are collapsed by default and expand on click.
@@ -377,7 +295,6 @@ The panel renders collapsible groups (one per context category: Page, User, Team
 ### Notifications
 
 **Toast / useToast** -- transient notifications (4s auto-dismiss)
-
 ```tsx
 const toast = useToast();
 toast.success('Item created');
@@ -389,26 +306,25 @@ toast.info('Processing...');
 
 ## Custom Hooks
 
-| Hook                                                  | Purpose                           | Example                                                                                        |
-| ----------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `useDebounce(value, delay?)`                          | Debounce a value (default 300ms)  | `const q = useDebounce(search)`                                                                |
-| `usePaginatedQuery({ queryKey, queryFn, pageSize? })` | Pagination + React Query          | Returns `{ data, page, setPage, totalPages, isLoading }`                                       |
-| `useMutationWithToast(fn, opts?)`                     | Mutation + toast + invalidation   | `useMutationWithToast(api.delete, { successMessage: 'Deleted', invalidateKeys: [['items']] })` |
-| `useGlobalKeyboard()`                                 | Global keyboard shortcuts         | Cmd+K search, ? help, / focus                                                                  |
-| `useDarkMode()`                                       | Dark mode toggle                  | Returns `{ isDark, toggle }`                                                                   |
-| `useWebSocket()`                                      | Singleton WebSocket connection    | Auto-reconnect with backoff                                                                    |
-| `useIssueListFilters(issues)`                         | Multi-filter/sort for issue lists | Returns filtered issues + filter state                                                         |
+| Hook | Purpose | Example |
+|---|---|---|
+| `useDebounce(value, delay?)` | Debounce a value (default 300ms) | `const q = useDebounce(search)` |
+| `usePaginatedQuery({ queryKey, queryFn, pageSize? })` | Pagination + React Query | Returns `{ data, page, setPage, totalPages, isLoading }` |
+| `useMutationWithToast(fn, opts?)` | Mutation + toast + invalidation | `useMutationWithToast(api.delete, { successMessage: 'Deleted', invalidateKeys: [['items']] })` |
+| `useGlobalKeyboard()` | Global keyboard shortcuts | Cmd+K search, ? help, / focus |
+| `useDarkMode()` | Dark mode toggle | Returns `{ isDark, toggle }` |
+| `useWebSocket()` | Singleton WebSocket connection | Auto-reconnect with backoff |
+| `useIssueListFilters(issues)` | Multi-filter/sort for issue lists | Returns filtered issues + filter state |
 
 ---
 
 ## Data Fetching Patterns
 
 ### Server State: TanStack Query
-
 ```tsx
 // Fetch data
 const { data, isLoading } = useQuery({
-  queryKey: ['issues', projectId, page], // always arrays, match resource hierarchy
+  queryKey: ['issues', projectId, page],         // always arrays, match resource hierarchy
   queryFn: () => issuesApi.list(projectId, { limit: 25, offset: page * 25 }),
 });
 
@@ -420,7 +336,6 @@ const mutation = useMutation({
 ```
 
 ### Client State: Zustand
-
 ```tsx
 // Only for UI state -- never for server data
 const { sidebarOpen, toggleSidebar } = useUIStore();
@@ -428,7 +343,6 @@ const { user, isAuthenticated } = useAuthStore();
 ```
 
 ### API Client
-
 ```tsx
 import { get, post, patch, del } from '@/api/client';
 
@@ -448,7 +362,6 @@ export const itemsApi = {
 Every feature module follows the same 3-file structure:
 
 ### Routes (`module.routes.ts`)
-
 ```typescript
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
@@ -463,7 +376,6 @@ export default router;
 ```
 
 ### Controller (`module.controller.ts`)
-
 ```typescript
 import { Request, Response, NextFunction } from 'express';
 import * as service from './module.service';
@@ -472,14 +384,11 @@ export async function list(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await service.list(req.params.projectId, req.query);
     res.json(result);
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 }
 ```
 
 ### Service (`module.service.ts`)
-
 ```typescript
 import { prisma } from '../../db';
 import { AppError } from '../../middleware/errorHandler';
@@ -496,17 +405,15 @@ export async function list(projectId: string, opts?: { limit?: number; offset?: 
 ```
 
 ### Error Handling
-
 ```typescript
 throw new AppError(404, 'Item not found');
 throw new AppError(403, 'Not authorized', 'INSUFFICIENT_PERMISSIONS');
 ```
 
 ### Pagination Utility
-
 ```typescript
 import { parseServicePagination } from '../../utils/pagination';
-const { take, skip } = parseServicePagination(opts); // defaults: take=25, skip=0, max take=100
+const { take, skip } = parseServicePagination(opts);  // defaults: take=25, skip=0, max take=100
 ```
 
 ---
@@ -522,11 +429,11 @@ The field registry is a plain object that defines every filterable/sortable fiel
 export type FieldDefinition = {
   type: 'enum' | 'string' | 'number' | 'date' | 'relation' | 'user';
   column: string;
-  values?: string[]; // enum only: allowed values
+  values?: string[];          // enum only: allowed values
   ordinal?: Record<string, number>; // enum only: sort order map
-  join?: string; // relation: Prisma include key
-  many?: boolean; // relation: true for one-to-many
-  aliasField?: string; // alternate name accepted in queries
+  join?: string;              // relation: Prisma include key
+  many?: boolean;             // relation: true for one-to-many
+  aliasField?: string;        // alternate name accepted in queries
 };
 
 export type FieldRegistry = Record<string, FieldDefinition>;
@@ -540,7 +447,7 @@ import { compileQuery } from './compiler';
 import { evaluateQuery } from './evaluator';
 
 const compiled = compileQuery(ast, issueFieldRegistry);
-const results = evaluateQuery(issues, compiled);
+const results  = evaluateQuery(issues, compiled);
 ```
 
 ### Extensibility

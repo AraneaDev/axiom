@@ -6,6 +6,9 @@ import { builtinFunctions } from './functions';
 const MIN_INT = -2147483648;
 const MAX_INT = 2147483647;
 
+/** How deep parentheses and NOT may nest. Past some depth Prisma refuses a where clause outright. */
+const MAX_DEPTH = 20;
+
 /**
  * A query that parses and names real fields, but holds a value its field can't be compared with.
  * Callers answer this as a bad query. It must never reach the database as a failed query.
@@ -47,7 +50,7 @@ function columnValue(
   if (fieldDef.type === 'date') {
     const date = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null;
     const year = date?.getUTCFullYear();
-    if (!date || year === undefined || Number.isNaN(year) || year < 0 || year > 9999) {
+    if (!date || year === undefined || Number.isNaN(year) || year < 1 || year > 9999) {
       throw new QueryValueError(`'${field}' takes a date, such as "2026-01-31"`);
     }
     return date;
@@ -55,13 +58,29 @@ function columnValue(
   return String(value);
 }
 
+/**
+ * A field of the registry. Only its own names: `constructor` is no field.
+ * @param field - The field as written
+ * @param registry - The fields
+ * @throws {Error} For an unknown field
+ */
+function lookupField(field: string, registry: FieldRegistry): FieldDefinition {
+  const name = field.toLowerCase();
+  if (!Object.hasOwn(registry, name)) {
+    const available = Object.keys(registry).join(', ');
+    throw new Error(`Unknown field '${field}'. Available fields: ${available}`);
+  }
+  return registry[name];
+}
+
 function resolveValue(value: Value, context: QueryContext): unknown {
   if (value.type === 'null') return null;
   if (value.type === 'string') return value.value;
   if (value.type === 'number') return value.value;
   if (value.type === 'function') {
-    const fn = builtinFunctions[value.name.toLowerCase()];
-    if (!fn) throw new Error(`Unknown function: ${value.name}`);
+    const name = value.name.toLowerCase();
+    if (!Object.hasOwn(builtinFunctions, name)) throw new Error(`Unknown function: ${value.name}`);
+    const fn = builtinFunctions[name];
     return fn(value.args, context);
   }
   return null;
@@ -114,11 +133,7 @@ function compileComparison(
   registry: FieldRegistry,
   context: QueryContext,
 ): Record<string, unknown> {
-  const fieldDef = registry[field.toLowerCase()];
-  if (!fieldDef) {
-    const available = Object.keys(registry).join(', ');
-    throw new Error(`Unknown field '${field}'. Available fields: ${available}`);
-  }
+  const fieldDef = lookupField(field, registry);
 
   const resolved = resolveValue(value, context);
 
@@ -203,11 +218,7 @@ function compileIn(
   registry: FieldRegistry,
   context: QueryContext,
 ): Record<string, unknown> {
-  const fieldDef = registry[field.toLowerCase()];
-  if (!fieldDef) {
-    const available = Object.keys(registry).join(', ');
-    throw new Error(`Unknown field '${field}'. Available fields: ${available}`);
-  }
+  const fieldDef = lookupField(field, registry);
 
   const column = fieldDef.column;
   const resolved = values.map((v) => resolveValue(v, context));
@@ -239,16 +250,31 @@ function compileIn(
 }
 
 /**
- * Compiles an AST Expression to a Prisma where clause object.
- * @param ast
- * @param registry
- * @param context
+ * The operands of a chain of one operator, in order. `a OR b OR c` parses as a nest, whose depth
+ * says nothing about how complex the query is.
+ * @param ast - The chain
+ * @param type - Its operator
  */
-export function compileToPrisma(
+function chainOperands(ast: Expression, type: 'and' | 'or'): Expression[] {
+  const operands: Expression[] = [];
+  const pending: Expression[] = [ast];
+  while (pending.length > 0) {
+    const node = pending.pop() as Expression;
+    if (node.type === type) pending.push(node.right, node.left);
+    else operands.push(node);
+  }
+  return operands;
+}
+
+function compileAt(
   ast: Expression,
   registry: FieldRegistry,
   context: QueryContext,
+  depth: number,
 ): Record<string, unknown> {
+  if (depth > MAX_DEPTH) {
+    throw new QueryValueError(`A query can nest at most ${MAX_DEPTH} levels deep`);
+  }
   switch (ast.type) {
     case 'comparison':
       return compileComparison(ast.field, ast.operator, ast.value, registry, context);
@@ -258,22 +284,20 @@ export function compileToPrisma(
 
     case 'and':
       return {
-        AND: [
-          compileToPrisma(ast.left, registry, context),
-          compileToPrisma(ast.right, registry, context),
-        ],
+        AND: chainOperands(ast, 'and').map((operand) =>
+          compileAt(operand, registry, context, depth + 1),
+        ),
       };
 
     case 'or':
       return {
-        OR: [
-          compileToPrisma(ast.left, registry, context),
-          compileToPrisma(ast.right, registry, context),
-        ],
+        OR: chainOperands(ast, 'or').map((operand) =>
+          compileAt(operand, registry, context, depth + 1),
+        ),
       };
 
     case 'not':
-      return { NOT: compileToPrisma(ast.operand, registry, context) };
+      return { NOT: compileAt(ast.operand, registry, context, depth + 1) };
 
     case 'freetext':
       return {};
@@ -283,4 +307,19 @@ export function compileToPrisma(
       throw new Error(`Unhandled expression type: ${JSON.stringify(_exhaustive)}`);
     }
   }
+}
+
+/**
+ * Compiles an AST Expression to a Prisma where clause object.
+ * @param ast
+ * @param registry
+ * @param context
+ * @throws {QueryValueError} For a value its field can't take, or nesting past MAX_DEPTH
+ */
+export function compileToPrisma(
+  ast: Expression,
+  registry: FieldRegistry,
+  context: QueryContext,
+): Record<string, unknown> {
+  return compileAt(ast, registry, context, 0);
 }

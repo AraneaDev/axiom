@@ -1,6 +1,6 @@
 import { prisma } from '../../config/database';
 import { emailQueue } from '../../email/queue';
-import { evaluate, parse, resolveTemplate } from '../../lib/query-engine';
+import { assertKnownFields, evaluate, parse, resolveTemplate } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
@@ -114,7 +114,7 @@ export async function createRule(projectId: string, data: CreateRuleData) {
 
   if (data.condition) {
     try {
-      parse(data.condition);
+      assertKnownFields(parse(data.condition), issueFieldRegistry);
     } catch (e: unknown) {
       throw new AppError(400, `Invalid condition: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -158,7 +158,7 @@ export async function updateRule(ruleId: string, data: Partial<CreateRuleData>) 
 
   if (data.condition) {
     try {
-      parse(data.condition);
+      assertKnownFields(parse(data.condition), issueFieldRegistry);
     } catch (e: unknown) {
       throw new AppError(400, `Invalid condition: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -228,7 +228,14 @@ export async function evaluateRules(
   });
 
   for (const rule of rules) {
-    if (!matchesCondition(rule, context)) continue;
+    // A condition that can't be evaluated stops its own rule, not the rest of this event's
+    let matches = false;
+    try {
+      matches = matchesCondition(rule, context);
+    } catch (err) {
+      logger.warn('automation rule condition failed', { ruleId: rule.id }, err as Error);
+    }
+    if (!matches) continue;
 
     const actions = rule.actions as unknown as AutomationAction[];
     await executeActions(projectId, actions, context);

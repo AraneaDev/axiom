@@ -128,7 +128,7 @@ export async function searchIssues(
 
   // Try query engine for structured queries
   let usedQueryEngine = false;
-  if (rawQuery && /[=><!]|(?:^|\s)(?:AND|OR|NOT|IN)(?:\s|$)|\w+:/.test(rawQuery)) {
+  if (rawQuery && /[=><!~]|(?:^|\s)(?:AND|OR|NOT|IN)(?:\s|$)|\w+:/.test(rawQuery)) {
     try {
       const ast = parse(rawQuery);
       const engineWhere = compileToPrisma(ast, issueFieldRegistry, {
@@ -198,7 +198,8 @@ export async function searchIssues(
 
   where.AND = [accessClause, ...andClauses];
 
-  const tsq = toTsQuery(freeText);
+  // The engine read the whole query, so none of it is text to find as well
+  const tsq = usedQueryEngine ? '' : toTsQuery(freeText);
   const useFts = tsq.length > 0;
 
   // If we have free text, use PostgreSQL full-text search via $queryRaw for ranking

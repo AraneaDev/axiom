@@ -179,12 +179,12 @@ docker compose logs -f
 
 ## 9. Troubleshooting
 
-| Problem                       | Diagnostic Step                                                         |
-| ----------------------------- | ----------------------------------------------------------------------- |
-| API not responding            | `curl http://localhost:3000/api/health`                                 |
-| Site not loading externally   | `curl https://staging.example.com/api/health`                           |
+| Problem | Diagnostic Step |
+|---------|----------------|
+| API not responding | `curl http://localhost:3000/api/health` |
+| Site not loading externally | `curl https://staging.example.com/api/health` |
 | WebSocket connection failures | Verify `mod_proxy_wstunnel` is enabled: `apachectl -M \| grep wstunnel` |
-| Upload returns 413            | Increase Apache `LimitRequestBody`                                      |
-| Container won't start         | `docker compose logs <service>` to inspect startup errors               |
-| SSL certificate expired       | `certbot renew && systemctl reload apache2`                             |
-| Database connection refused   | `docker compose ps db` -- ensure the container is healthy               |
+| Upload returns 413 | Increase Apache `LimitRequestBody` |
+| Container won't start | `docker compose logs <service>` to inspect startup errors |
+| SSL certificate expired | `certbot renew && systemctl reload apache2` |
+| Database connection refused | `docker compose ps db` -- ensure the container is healthy |

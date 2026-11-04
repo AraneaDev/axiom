@@ -1,0 +1,2 @@
+# Byte-exact inputs of the editor round-trip tests: formatting them changes what they test
+src/lib/__fixtures__/

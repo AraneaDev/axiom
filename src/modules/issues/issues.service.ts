@@ -228,7 +228,7 @@ export async function getIssue(projectId: string, issueNumber: number) {
  * @param q
  */
 function isStructuredQuery(q: string): boolean {
-  return /[=><!]|(?:^|\s)(?:AND|OR|NOT|IN)(?:\s|$)|\w+:/.test(q);
+  return /[=><!~]|(?:^|\s)(?:AND|OR|NOT|IN)(?:\s|$)|\w+:/.test(q);
 }
 
 /**
@@ -281,7 +281,19 @@ export async function listIssues(
     ERR.PROJECT_NOT_FOUND,
   );
 
-  const cacheKey = `issues:${projectId}:${filters?.offset ?? 0}:${filters?.q || ''}:${filters?.type || ''}:${filters?.priority || ''}:${filters?.assigneeId || ''}:${filters?.columnId || ''}:${filters?.sprintId || ''}:${filters?.label || ''}`;
+  // Everything that shapes the answer. Nothing in it varies by viewer: the caller was authorized on
+  // the project. JSON, so that text in one filter can't pass for another
+  const cacheKey = `issues:${projectId}:${JSON.stringify([
+    filters?.limit ?? null,
+    filters?.offset ?? 0,
+    filters?.q || '',
+    filters?.type || '',
+    filters?.priority || '',
+    filters?.assigneeId || '',
+    filters?.columnId || '',
+    filters?.sprintId || '',
+    filters?.label || '',
+  ])}`;
   return cacheable(cacheKey, ISSUE_LIST_TTL, async () => {
     const { take, skip } = parseServicePagination(filters, 50);
     const where: Prisma.IssueWhereInput = { projectId };
@@ -326,7 +338,8 @@ export async function listIssues(
           labels: true,
           column: { select: { id: true, name: true } },
         },
-        orderBy: [{ column: { position: 'asc' } }, { position: 'asc' }],
+        // The id keeps pages stable among issues at one position
+        orderBy: [{ column: { position: 'asc' } }, { position: 'asc' }, { id: 'asc' }],
         take,
         skip,
       }),

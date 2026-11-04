@@ -22,9 +22,9 @@ This release fixes <span data-issue-key="AXM-7" class="issue-ref">AXM-7</span> a
 - [x] Update the changelog
 
 | Service | Port |
-| ------- | ---- |
-| api     | 3000 |
-| web     | 7000 |
+| --- | --- |
+| api | 3000 |
+| web | 7000 |
 
 ```bash
 npm run docker:dev

@@ -106,6 +106,8 @@ describe('compiler', () => {
     ['number ~ "1"', "can't be used"],
     ['created > "not a date"', 'date'],
     ['created ~ "2026"', "can't be used"],
+    ['created > "0000-01-01"', 'date'],
+    ['created > "+010000-01-01"', 'date'],
     ['type = NOPE', 'one of'],
     ['type ~ "BU"', "can't be used"],
     ['type IN (NOPE)', 'one of'],
@@ -144,6 +146,34 @@ describe('compiler', () => {
     expect(compile('created > "2026-01-31"')).toEqual({
       createdAt: { gt: new Date('2026-01-31') },
     });
+  });
+
+  it('knows no field or function from the prototype', () => {
+    for (const query of ['constructor = 1', '__proto__ = 1', 'constructor IN (1)']) {
+      const compile = () => compileToPrisma(parse(query), issueFieldRegistry, ctx);
+      expect(compile).toThrow('Unknown field');
+    }
+    const fn = () => compileToPrisma(parse('title = constructor()'), issueFieldRegistry, ctx);
+    expect(fn).toThrow('Unknown function');
+  });
+
+  it('flattens a chain, so its length is no depth', () => {
+    const compile = (query: string) => compileToPrisma(parse(query), issueFieldRegistry, ctx);
+    expect(compile('number = 1 OR number = 2 OR number = 3')).toEqual({
+      OR: [{ number: 1 }, { number: 2 }, { number: 3 }],
+    });
+    expect(compile('number = 1 AND (number = 2 AND number = 3)')).toEqual({
+      AND: [{ number: 1 }, { number: 2 }, { number: 3 }],
+    });
+    const long = Array.from({ length: 200 }, (_, i) => `number = ${i}`).join(' OR ');
+    expect((compile(long).OR as unknown[]).length).toBe(200);
+  });
+
+  it('refuses nesting past the cap', () => {
+    const compile = (query: string) => compileToPrisma(parse(query), issueFieldRegistry, ctx);
+    const nested = (levels: number) => `${'NOT ('.repeat(levels)}number = 1${')'.repeat(levels)}`;
+    expect(() => compile(nested(100))).toThrow(QueryValueError);
+    expect(() => compile(nested(5))).not.toThrow();
   });
 
   it('compiles IN on a relation through its join', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import type { QueryContext } from '../ast';
-import { evaluate } from '../evaluator';
+import { assertKnownFields, evaluate } from '../evaluator';
 import { issueFieldRegistry } from '../fields/issue-fields';
 import { parse } from '../parser';
 
@@ -101,5 +101,33 @@ describe('evaluator', () => {
 
   it('evaluates simple mode query', () => {
     expect(evaluate(parse('type:bug priority:high'), issue, issueFieldRegistry, ctx)).toBe(true);
+  });
+
+  it('reads IN on a label as = does, in either case', () => {
+    const issue = { labels: [{ name: 'l1' }, { name: 'L2' }] };
+    const run = (query: string) => evaluate(parse(query), issue, issueFieldRegistry, {});
+    expect(run('label = "l1"')).toBe(true);
+    expect(run('label IN ("l1")')).toBe(true);
+    expect(run('label IN ("l2", "x")')).toBe(true);
+    expect(run('label IN ("x")')).toBe(false);
+    expect(run('label NOT IN ("l1")')).toBe(false);
+    expect(run('label NOT IN ("x")')).toBe(true);
+    expect(evaluate(parse('label IN ("x")'), {}, issueFieldRegistry, {})).toBe(false);
+  });
+
+  it('knows no field or function from the prototype', () => {
+    for (const query of ['constructor = 1', '__proto__ = 1', 'toString IN (1)']) {
+      expect(() => evaluate(parse(query), {}, issueFieldRegistry, {})).toThrow('Unknown field');
+    }
+    expect(() => evaluate(parse('title = constructor()'), {}, issueFieldRegistry, {})).toThrow(
+      'Unknown function',
+    );
+  });
+
+  it('finds the unknown fields of a condition', () => {
+    const check = (query: string) => assertKnownFields(parse(query), issueFieldRegistry);
+    expect(() => check('type = Bug AND (NOT priority IN (High) OR label = "x")')).not.toThrow();
+    expect(() => check('type = Bug AND (NOT nonsense = 1)')).toThrow('nonsense');
+    expect(() => check('__proto__ IN (1)')).toThrow('__proto__');
   });
 });

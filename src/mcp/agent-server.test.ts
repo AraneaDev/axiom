@@ -1608,7 +1608,13 @@ describe('MCP server', () => {
     });
 
     it('never answers 500 on a query, across fields, operators and values', async () => {
-      const fields = Object.keys(issueFieldRegistry);
+      const fields = [
+        ...Object.keys(issueFieldRegistry),
+        'constructor',
+        '__proto__',
+        'toString',
+        'hasOwnProperty',
+      ];
       const operators = ['=', '!=', '>', '<', '>=', '<=', '~'];
       const values = [
         '2147483648',
@@ -1619,6 +1625,11 @@ describe('MCP server', () => {
         'null',
         'now()',
         '"2026-01-01"',
+        '"0000-01-01"',
+        '"9999-12-31"',
+        '"10000-01-01"',
+        'constructor()',
+        '__proto__()',
       ];
       const queries = fields.flatMap((field) => [
         ...operators.flatMap((op) => values.map((value) => `${field} ${op} ${value}`)),
@@ -1647,6 +1658,137 @@ describe('MCP server', () => {
       }
       expect(failures).toEqual([]);
     }, 120_000);
+
+    it('takes long chains of OR and AND, and refuses nesting past the cap', async () => {
+      const c = await asUser(ctx.owner);
+      const list = (q: string) =>
+        callTool(c, 'act', { action: 'issue.list', input: { projectId: ctx.projectId, q } });
+      const terms = (op: string, n: number) =>
+        Array.from({ length: n }, (_, i) => `number=${i + 1}`).join(` ${op} `);
+      for (const q of [
+        `${terms('OR', 70)}`,
+        `${terms('AND', 70)}`,
+        `(${terms('AND', 30)}) OR (${terms('OR', 30)})`,
+      ]) {
+        const answer = await list(q);
+        expect(answer.isError, q.slice(0, 40)).toBe(false);
+      }
+      const deep = `${'NOT ('.repeat(100)}number = 1${')'.repeat(100)}`;
+      expectRefused(await list(deep), 400, 'INVALID_QUERY');
+      expectRefused(
+        await callTool(c, 'search', { query: deep, type: 'issues' }),
+        400,
+        'INVALID_QUERY',
+      );
+      expectRefused(
+        await callTool(c, 'act', {
+          action: 'issue.hydrateList',
+          input: { projectId: ctx.projectId, q: deep },
+        }),
+        400,
+        'INVALID_QUERY',
+      );
+    });
+
+    it('surfaces a failed issue list on hydrate, as issue.list does', async () => {
+      const issues = await import('../modules/issues/issues.service');
+      vi.spyOn(issues, 'listIssues').mockRejectedValue(new Error('failed in the database'));
+      const res = await request(app)
+        .get(`/api/projects/${ctx.projectId}/issues/hydrate`)
+        .set('Authorization', `Bearer ${ctx.owner.token}`);
+      expect(res.status).toBe(500);
+      expect(res.body.error.message).toBe('Internal server error');
+    });
+
+    it('keeps limit, offset and every filter in the list cache key', async () => {
+      const mark = `cachekey${Date.now()}`;
+      for (let i = 0; i < 6; i++) await createIssue(`${mark} ${i}`);
+      const c = await asUser(ctx.owner);
+      const list = (input: object) =>
+        callTool(c, 'act', {
+          action: 'issue.list',
+          input: { projectId: ctx.projectId, q: mark, ...input },
+        });
+      expect((await list({ limit: 1 })).data.issues).toHaveLength(1);
+      expect((await list({ limit: 5 })).data.issues).toHaveLength(5);
+      const [first] = (await list({ limit: 1, offset: 0 })).data.issues;
+      const [second] = (await list({ limit: 1, offset: 1 })).data.issues;
+      expect(first.id).not.toBe(second.id);
+
+      // Text with the separator of a joined key can't pass for another filter
+      await createIssue(`${mark}:BUG`);
+      const plain = await list({ q: `${mark}:BUG`, limit: 5 });
+      const filtered = await list({ q: mark, type: 'BUG', limit: 5 });
+      expect(plain.data.total).not.toBe(filtered.data.total);
+    });
+
+    it('reads a lone title ~ "x" as a query on list and search', async () => {
+      const mark = `tilde${Date.now()}`;
+      await createIssue(`Word ${mark} word`);
+      const c = await asUser(ctx.owner);
+      const q = `title ~ "${mark}"`;
+      const list = await callTool(c, 'act', {
+        action: 'issue.list',
+        input: { projectId: ctx.projectId, q },
+      });
+      expect(list.data.issues.map((i: { title: string }) => i.title)).toEqual([
+        `Word ${mark} word`,
+      ]);
+      const search = await callTool(c, 'search', { query: q, type: 'issues' });
+      expect(search.data[0].items).toHaveLength(1);
+    });
+
+    it('refuses a rule on an unknown field, and an old one stops only itself', async () => {
+      const header = { Authorization: `Bearer ${ctx.owner.token}`, ...CSRF };
+      for (const condition of ['constructor = 1', '__proto__ = 1', 'nonsense = 1']) {
+        const res = await request(app)
+          .post(`/api/projects/${ctx.projectId}/automation-rules`)
+          .set(header)
+          .send({
+            name: 'Bad',
+            trigger: 'issue:created',
+            condition,
+            actions: [{ type: 'add_label', name: 'bad' }],
+          });
+        expect(res.status, condition).toBe(400);
+      }
+      const label = `ran-${Date.now()}`;
+      // Written before validation knew better
+      const broken = await prisma.automationRule.create({
+        data: {
+          projectId: ctx.projectId,
+          name: 'Old broken',
+          trigger: 'issue:created',
+          condition: 'constructor = 1',
+          actions: [{ type: 'add_label', name: 'never' }],
+        },
+      });
+      const working = await prisma.automationRule.create({
+        data: {
+          projectId: ctx.projectId,
+          name: 'After it',
+          trigger: 'issue:created',
+          condition: 'type = Bug',
+          actions: [{ type: 'add_label', name: label }],
+        },
+      });
+      try {
+        const created = await authPost(`/api/projects/${ctx.projectId}/issues`, ctx.owner.token, {
+          title: 'Automated',
+          type: 'BUG',
+        });
+        expect(created.status).toBe(201);
+        await vi.waitFor(async () => {
+          const issue = await prisma.issue.findUniqueOrThrow({
+            where: { id: created.body.id },
+            include: { labels: true },
+          });
+          expect(issue.labels.map((l) => l.name)).toEqual([label]);
+        });
+      } finally {
+        await prisma.automationRule.deleteMany({ where: { id: { in: [broken.id, working.id] } } });
+      }
+    });
 
     it('keeps a query to the project issue.list was authorized on', async () => {
       const other = await createTestContext(`mcpother${Date.now()}`);

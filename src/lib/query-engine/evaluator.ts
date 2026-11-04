@@ -2,13 +2,26 @@ import type { Expression, Value, FieldDefinition, FieldRegistry, QueryContext } 
 import { PRIORITY_ORDINALS } from './fields/issue-fields';
 import { builtinFunctions } from './functions';
 
+/**
+ * A field of the registry. Only its own names: `constructor` is no field.
+ * @param field - The field as written
+ * @param registry - The fields
+ * @throws {Error} For an unknown field
+ */
+function lookupField(field: string, registry: FieldRegistry): FieldDefinition {
+  const name = field.toLowerCase();
+  if (!Object.hasOwn(registry, name)) throw new Error(`Unknown field '${field}'`);
+  return registry[name];
+}
+
 function resolveValue(value: Value, context: QueryContext): unknown {
   if (value.type === 'null') return null;
   if (value.type === 'string') return value.value;
   if (value.type === 'number') return value.value;
   if (value.type === 'function') {
-    const fn = builtinFunctions[value.name.toLowerCase()];
-    if (!fn) throw new Error(`Unknown function: ${value.name}`);
+    const name = value.name.toLowerCase();
+    if (!Object.hasOwn(builtinFunctions, name)) throw new Error(`Unknown function: ${value.name}`);
+    const fn = builtinFunctions[name];
     return fn(value.args, context);
   }
   return null;
@@ -115,8 +128,7 @@ function evaluateComparison(
   registry: FieldRegistry,
   context: QueryContext,
 ): boolean {
-  const fieldDef = registry[field.toLowerCase()];
-  if (!fieldDef) throw new Error(`Unknown field '${field}'`);
+  const fieldDef = lookupField(field, registry);
 
   const resolved = resolveValue(value, context);
 
@@ -169,10 +181,25 @@ function evaluateIn(
   registry: FieldRegistry,
   context: QueryContext,
 ): boolean {
-  const fieldDef = registry[field.toLowerCase()];
-  if (!fieldDef) throw new Error(`Unknown field '${field}'`);
+  const fieldDef = lookupField(field, registry);
 
   const resolvedValues = values.map((v) => resolveValue(v, context));
+
+  // Many-relation (e.g. labels): any of its rows, as = reads it
+  if (fieldDef.type === 'relation' && fieldDef.many) {
+    const rows = getByPath(obj, fieldDef.join!);
+    const parts = fieldDef.column.split('.');
+    const subField = parts.length > 1 ? parts[parts.length - 1] : 'name';
+    const wanted = resolvedValues.map((rv) => (rv != null ? String(rv).toUpperCase() : ''));
+    const found =
+      Array.isArray(rows) &&
+      rows.some((row: Record<string, unknown>) => {
+        const name = row[subField];
+        return name != null && wanted.includes(String(name).toUpperCase());
+      });
+    return negated ? !found : found;
+  }
+
   const actual = getFieldValue(obj, fieldDef);
   const actualStr = actual != null ? String(actual).toUpperCase() : '';
 
@@ -182,6 +209,23 @@ function evaluateIn(
   });
 
   return negated ? !matches : matches;
+}
+
+/**
+ * Refuse a condition that names a field the registry doesn't have: it parses, and could only fail
+ * later, when its rule is evaluated.
+ * @param ast - The parsed condition
+ * @param registry - The fields
+ * @throws {Error} For an unknown field
+ */
+export function assertKnownFields(ast: Expression, registry: FieldRegistry): void {
+  const pending: Expression[] = [ast];
+  while (pending.length > 0) {
+    const node = pending.pop() as Expression;
+    if (node.type === 'comparison' || node.type === 'in') lookupField(node.field, registry);
+    else if (node.type === 'and' || node.type === 'or') pending.push(node.left, node.right);
+    else if (node.type === 'not') pending.push(node.operand);
+  }
 }
 
 /**
