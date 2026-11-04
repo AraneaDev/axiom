@@ -147,6 +147,29 @@ describe('Auth API', () => {
     });
   });
 
+  describe('POST /api/auth/logout', () => {
+    it('revokes the refresh token, so it can no longer mint access tokens', async () => {
+      const loginRes = await request(app)
+        .post('/api/auth/login')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ login: testUser.email, password: testUser.password });
+      const { accessToken, refreshToken } = loginRes.body;
+
+      const logout = await request(app)
+        .post('/api/auth/logout')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ refreshToken });
+      expect(logout.status).toBe(204);
+
+      const refresh = await request(app)
+        .post('/api/auth/refresh')
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ refreshToken });
+      expect(refresh.status).toBe(401);
+    });
+  });
+
   // ── Authenticated routes ─────────────────────────────────────
 
   describe('Authenticated routes', () => {

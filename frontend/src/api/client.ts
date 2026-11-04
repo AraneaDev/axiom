@@ -46,6 +46,13 @@ export function getAccessToken() {
   return accessToken;
 }
 
+/**
+ *
+ */
+export function getRefreshToken() {
+  return refreshToken;
+}
+
 async function refreshAccessToken(): Promise<void> {
   if (!refreshToken) throw new ApiError(401, 'No refresh token');
 

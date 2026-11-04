@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { authApi } from '@/api/auth.api';
-import { setTokens, clearTokens, getAccessToken } from '@/api/client';
+import { setTokens, clearTokens, getAccessToken, getRefreshToken } from '@/api/client';
 import { usersApi } from '@/api/users.api';
 import type { User } from '@/lib/types';
 
@@ -21,7 +21,7 @@ interface AuthState {
     password: string,
     twoFactorCode?: string,
   ) => Promise<{ twoFactorRequired?: boolean }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loadUser: () => Promise<void>;
 }
 
@@ -55,7 +55,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  logout: () => {
+  logout: async () => {
+    // The server forgets the refresh token first, so a copy of it can't mint access tokens. A
+    // failure here must not keep anyone signed in.
+    const sent = getRefreshToken();
+    if (sent) await authApi.logout(sent).catch(() => {});
+    // An expired access token makes the call above refresh first, which rotates the token it sent
+    const rotated = getRefreshToken();
+    if (rotated && rotated !== sent) await authApi.logout(rotated).catch(() => {});
     clearTokens();
     set({ user: null, isAuthenticated: false });
   },

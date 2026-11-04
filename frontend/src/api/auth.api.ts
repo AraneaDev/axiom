@@ -32,6 +32,12 @@ export const authApi = {
   refresh: (refreshToken: string) =>
     post<{ accessToken: string; refreshToken: string }>('/auth/refresh', { refreshToken }),
 
+  /**
+   * Revoke a refresh token on the server, signing out.
+   * @param refreshToken
+   */
+  logout: (refreshToken: string) => post<void>('/auth/logout', { refreshToken }),
+
   /** Begin 2FA setup; returns the TOTP secret and otpauth URL for QR display. */
   enable2FA: () => post<{ secret: string; otpauthUrl: string }>('/auth/2fa/enable', {}),
 
