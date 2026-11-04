@@ -2,13 +2,23 @@
  * item.read and the key forms, over REST against the real database.
  */
 import crypto from 'crypto';
+import { readFileSync } from 'fs';
+import path from 'path';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Client } from 'pg';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as Y from 'yjs';
 
 import { prisma } from '../config/database';
 import { checkProjectAccess } from '../middleware/requireProjectAccess';
 import { logActivity } from '../modules/activity/activity.service';
-import { createPage } from '../modules/wiki/wiki.service';
+import { copyPage, createPage, updatePage } from '../modules/wiki/wiki.service';
+import {
+  forceSave,
+  loadPageIntoDoc,
+  setLastAuthor,
+  clearAuthor,
+} from '../realtime/yjs-persistence';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -17,10 +27,11 @@ import {
   type TestContext,
   type TestUser,
 } from '../test/factory';
-import { authPost } from '../test/helpers';
+import { authGet, authPost } from '../test/helpers';
 
 import { executeAction } from './execute';
 import { MAX_KEY_LENGTH, resolveKey } from './keys';
+import { READ_LIMIT, RESPONSE_BYTE_LIMIT } from './read.service';
 
 /** Keys that may never appear anywhere in a response */
 const FORBIDDEN_KEY = /email|storagekey|tokenhash|passwordhash|sharedsecret|^secret$/i;
@@ -37,6 +48,20 @@ function forbiddenKeys(value: unknown, path = '$'): string[] {
     ...(FORBIDDEN_KEY.test(key) ? [`${path}.${key}`] : []),
     ...forbiddenKeys(v, `${path}.${key}`),
   ]);
+}
+
+/**
+ * How many statements a piece of work sends to the database.
+ * @param work - The work
+ */
+async function countStatements(work: () => Promise<unknown>): Promise<number> {
+  const spy = vi.spyOn(Client.prototype, 'query');
+  try {
+    await work();
+    return spy.mock.calls.length;
+  } finally {
+    spy.mockRestore();
+  }
 }
 
 const ALL_ISSUE_INCLUDES = [
@@ -57,6 +82,10 @@ const ALL_PAGE_INCLUDES = [
   'linkedIssues',
   'comments',
 ];
+
+/** What a call may cost in statements: pinned from a measured run, with little room. */
+const STATEMENTS_50_KEYS = 1900;
+const STATEMENTS_ONE_KEY_30_SPACES = 190;
 
 describe('item.read', () => {
   let ctx: TestContext;
@@ -200,7 +229,7 @@ describe('item.read', () => {
         projectId: other.projectId,
         number: 1,
         title: 'Foreign secret',
-        body: '',
+        body: 'Foreign body text',
         creatorId: other.owner.id,
       },
     });
@@ -259,18 +288,17 @@ describe('item.read', () => {
       },
     });
 
-    // No mention row, as after a save from the collaborative editor
     await prisma.page.create({
       data: {
         spaceId,
-        title: 'Saved by the editor',
+        title: 'Child',
         slug: 'collab',
         body: `Text ${issueKey}, done`,
         parentId: mainPage.id,
       },
     });
     await prisma.page.create({
-      data: { spaceId, title: 'Nearby number', slug: 'nearby', body: `Only ${prefix}-420` },
+      data: { spaceId, title: 'No row', slug: 'nearby', body: 'Nothing' },
     });
 
     hiddenPageSlug = 'hidden';
@@ -341,9 +369,11 @@ describe('item.read', () => {
       expect.objectContaining({ minutes: 15, description: 'Work' }),
     ]);
     expect(data.children.items).toEqual([expect.objectContaining({ key: `${prefix}-44` })]);
-    expect(data.pages.items.map((p: { slug: string }) => p.slug).sort()).toEqual([
-      'collab',
-      'main',
+    expect(data.pages.items).toEqual([
+      expect.objectContaining({
+        slug: 'main',
+        linkTypes: expect.arrayContaining(['EMBED', 'MENTION']),
+      }),
     ]);
     for (const name of ALL_ISSUE_INCLUDES) {
       expect(data[name]).toMatchObject({ truncated: false, limit: expect.any(Number) });
@@ -577,43 +607,152 @@ describe('item.read', () => {
   });
 
   describe('mentions', () => {
+    const rowCount = (pageId: string, issue: string) =>
+      prisma.wikiPageIssueLink.count({ where: { pageId, issueId: issue, linkType: 'MENTION' } });
+    const slugsFor = async (key: string) => {
+      const res = await readAs(ctx.owner, { keys: [key], include: ['pages'] });
+      return res.body.items[0].data.pages.items.map((p: { slug: string }) => p.slug);
+    };
+
     it('does not let AXM-4 match a page that only mentions AXM-42 or AXM-420', async () => {
-      const res = await readAs(member, { keys: [`${prefix}-4`], include: ['pages'] });
-      expect(res.body.items[0].data.pages.items).toEqual([]);
+      await createPage(spaceId, ctx.owner.id, {
+        title: 'Near',
+        slug: 'near-numbers',
+        body: `Only ${prefix}-42 and ${prefix}-420`,
+      });
+      expect(await slugsFor(`${prefix}-4`)).toEqual([]);
+      expect(await slugsFor(issueKey)).toContain('near-numbers');
     });
 
     it('finds a mention only in the issue org', async () => {
       const space = await prisma.wikiSpace.create({
         data: { teamId: other.teamId, name: 'Other', slug: 'read-other' },
       });
-      await prisma.orgMembership.create({
-        data: { orgId: other.orgId, userId: member.id, role: 'ADMIN' },
+      await createPage(space.id, other.owner.id, {
+        title: 'Elsewhere',
+        slug: 'elsewhere',
+        body: `See ${issueKey}`,
       });
-      await prisma.page.create({
-        data: { spaceId: space.id, title: 'Elsewhere', slug: 'elsewhere', body: `See ${issueKey}` },
+      expect(await slugsFor(issueKey)).not.toContain('elsewhere');
+    });
+
+    it('follows a save from the collaborative editor, and /wiki-links shows it', async () => {
+      const issue = await makeIssue(90);
+      const page = await prisma.page.create({
+        data: { spaceId, title: 'Collab', slug: 'collab-save', body: 'Start' },
       });
-      const res = await readAs(member, { keys: [issueKey], include: ['pages'] });
-      await prisma.orgMembership.delete({
-        where: { userId_orgId: { userId: member.id, orgId: other.orgId } },
+      const save = async (text: string) => {
+        const doc = new Y.Doc();
+        await loadPageIntoDoc(page.id, doc);
+        const fragment = doc.getXmlFragment('default');
+        doc.transact(() => {
+          fragment.delete(0, fragment.length);
+          const paragraph = new Y.XmlElement('paragraph');
+          paragraph.insert(0, [new Y.XmlText(text)]);
+          fragment.insert(0, [paragraph]);
+        });
+        setLastAuthor(page.id, ctx.owner.id);
+        expect(await forceSave(page.id, doc)).toBe('saved');
+        clearAuthor(page.id);
+        doc.destroy();
+      };
+      const wikiLinks = () =>
+        authGet(`/api/projects/${ctx.projectId}/issues/90/wiki-links`, member.token);
+
+      await save(`Now about ${prefix}-90`);
+      expect(await rowCount(page.id, issue.id)).toBe(1);
+      expect(await slugsFor(`${prefix}-90`)).toEqual(['collab-save']);
+      expect((await wikiLinks()).body).toEqual([
+        expect.objectContaining({ page: expect.objectContaining({ slug: 'collab-save' }) }),
+      ]);
+
+      await save('No longer');
+      expect(await rowCount(page.id, issue.id)).toBe(0);
+      expect((await wikiLinks()).body).toEqual([]);
+    });
+
+    it('gives a copied page its mentions', async () => {
+      const issue = await makeIssue(91);
+      const source = await createPage(spaceId, ctx.owner.id, {
+        title: 'Source',
+        slug: 'copy-source',
+        body: `About ${prefix}-91`,
       });
-      expect(JSON.stringify(res.body)).not.toContain('Elsewhere');
+      const copy = await copyPage(source.id, ctx.owner.id);
+      expect(await rowCount(copy.id, issue.id)).toBe(1);
+    });
+
+    it('removes a row when the key is gone, also for an author who cannot see the issue', async () => {
+      const issue = await makeIssue(92);
+      await prisma.wikiSpace.update({
+        where: { id: spaceId },
+        data: { permissions: { create: { userId: orgAdmin.id, level: 'EDIT' } } },
+      });
+      await createPage(spaceId, ctx.owner.id, {
+        title: 'Stale',
+        slug: 'stale-row',
+        body: `About ${prefix}-92`,
+      });
+      const page = await prisma.page.findFirstOrThrow({ where: { spaceId, slug: 'stale-row' } });
+
+      // Org admin off the team: can't resolve the key, but the text still names it
+      await updatePage(spaceId, 'stale-row', orgAdmin.id, { body: `About ${prefix}-92, typo` });
+      expect(await rowCount(page.id, issue.id)).toBe(1);
+      await updatePage(spaceId, 'stale-row', orgAdmin.id, { body: 'Gone' });
+      expect(await rowCount(page.id, issue.id)).toBe(0);
+      await prisma.spacePermission.deleteMany({ where: { spaceId } });
+    });
+
+    it('backfills rows from the Markdown by the rule of the live extraction', async () => {
+      const backfill = readFileSync(
+        path.resolve(
+          __dirname,
+          '../../prisma/migrations/20261104150100_backfill_page_mentions/migration.sql',
+        ),
+        'utf8',
+      );
+      const issue = await makeIssue(93);
+      const withVersion = async (slug: string, body: string, authorId: string, inSpace = spaceId) =>
+        prisma.page.create({
+          data: {
+            spaceId: inSpace,
+            title: slug,
+            slug,
+            body,
+            versions: { create: { version: 1, title: slug, body, authorId } },
+          },
+        });
+      const mentioned = await withVersion('bf-yes', `See ${prefix}-93, ${prefix}-93.`, member.id);
+      const nearby = await withVersion('bf-near', `See ${prefix}-930`, member.id);
+      const offTeam = await withVersion('bf-off', `See ${prefix}-93`, orgAdmin.id);
+      const foreignSpace = await prisma.wikiSpace.create({
+        data: { teamId: other.teamId, name: 'BF', slug: 'read-bf' },
+      });
+      const otherOrg = await withVersion(
+        'bf-org',
+        `See ${prefix}-93`,
+        other.owner.id,
+        foreignSpace.id,
+      );
+      const huge = await withVersion('bf-huge', `See ${prefix}-99999999999999`, member.id);
+
+      await prisma.$executeRawUnsafe(backfill);
+      await prisma.$executeRawUnsafe(backfill);
+
+      expect(await rowCount(mentioned.id, issue.id)).toBe(1);
+      expect(await rowCount(nearby.id, issue.id)).toBe(0);
+      expect(await rowCount(offTeam.id, issue.id)).toBe(0);
+      expect(await rowCount(otherOrg.id, issue.id)).toBe(0);
+      expect(await prisma.wikiPageIssueLink.count({ where: { pageId: huge.id } })).toBe(0);
     });
 
     it('stops at 20 pages and says so', async () => {
       const issue = await makeIssue(80);
       const key = `${prefix}-80`;
-      await prisma.page.createMany({
-        data: Array.from({ length: 12 }, (_, i) => ({
-          spaceId,
-          title: `Body ${i}`,
-          slug: `body-${i}`,
-          body: `Mentions ${key}`,
-        })),
-      });
       const rowPages = await Promise.all(
-        Array.from({ length: 12 }, (_, i) =>
+        Array.from({ length: 24 }, (_, i) =>
           prisma.page.create({
-            data: { spaceId, title: `Row ${i}`, slug: `row-${i}`, body: 'Linked only' },
+            data: { spaceId, title: `Row ${i}`, slug: `row-${i}`, body: 'Linked' },
           }),
         ),
       );
@@ -632,12 +771,368 @@ describe('item.read', () => {
       expect(pages).toMatchObject({ limit: 20, truncated: true });
       expect(pages.items).toHaveLength(20);
       expect(new Set(pages.items.map((p: { id: string }) => p.id)).size).toBe(20);
-      await prisma.page.deleteMany({
-        where: {
-          spaceId,
-          OR: [{ slug: { startsWith: 'body-' } }, { slug: { startsWith: 'row-' } }],
+      await prisma.page.deleteMany({ where: { spaceId, slug: { startsWith: 'row-' } } });
+    });
+  });
+
+  describe('links of an issue, outside item.read', () => {
+    const routes = () => [
+      `/api/projects/${ctx.projectId}/issues/42/links`,
+      `/api/projects/${ctx.projectId}/issues/42/hydrate`,
+    ];
+    const linksOf = (body: { links?: unknown[] } | unknown[]) =>
+      (Array.isArray(body) ? body : body.links) as Array<Record<string, Record<string, unknown>>>;
+
+    it('hides a link into another org on /links and /hydrate', async () => {
+      for (const route of routes()) {
+        const res = await authGet(route, member.token);
+        expect(res.status).toBe(200);
+        const text = JSON.stringify(res.body);
+        expect(text).not.toContain('Foreign secret');
+        expect(text).not.toContain('Foreign body text');
+        expect(linksOf(res.body)).toHaveLength(1);
+      }
+    });
+
+    it('gives who can open both ends what the UI renders, and no body', async () => {
+      await prisma.teamMembership.create({
+        data: { teamId: other.teamId, userId: member.id, role: 'MEMBER' },
+      });
+      for (const route of routes()) {
+        const res = await authGet(route, member.token);
+        const links = linksOf(res.body);
+        expect(links).toHaveLength(2);
+        const foreign = links.find((link) => link.to.title === 'Foreign secret');
+        expect(foreign).toMatchObject({
+          fromKey: issueKey,
+          toKey: `${other.projectPrefix}-1`,
+          fromId: issueId,
+          type: 'RELATES_TO',
+        });
+        expect(Object.keys(foreign!.to).sort()).toEqual(['id', 'number', 'project', 'title']);
+        expect(foreign!.to.project).toMatchObject({
+          slug: expect.any(String),
+          prefix: expect.any(String),
+        });
+        expect(JSON.stringify(res.body)).not.toContain('Foreign body text');
+      }
+      await prisma.teamMembership.delete({
+        where: { userId_teamId: { userId: member.id, teamId: other.teamId } },
+      });
+    });
+  });
+
+  describe('cost', () => {
+    let bulkUser: TestUser;
+    let keys: string[];
+
+    beforeAll(async () => {
+      bulkUser = await addMemberToContext(ctx);
+      extraUsers.push(bulkUser.id);
+      await prisma.issue.createMany({
+        data: Array.from({ length: 50 }, (_, i) => ({
+          projectId: ctx.projectId,
+          number: 1000 + i,
+          title: `Bulk ${i}`,
+          body: 'Bulk',
+          creatorId: ctx.owner.id,
+        })),
+      });
+      keys = Array.from({ length: 50 }, (_, i) => `${prefix}-${1000 + i}`);
+
+      // Something in every include, because an empty one costs fewer statements
+      const bulk = await prisma.issue.findMany({
+        where: { projectId: ctx.projectId, number: { gte: 1000, lt: 1050 } },
+        select: { id: true, number: true },
+      });
+      const page = await prisma.page.findFirstOrThrow({ where: { spaceId, slug: 'main' } });
+      const each = <T>(row: (issue: { id: string; number: number }) => T) => bulk.map(row);
+      await prisma.comment.createMany({
+        data: each(({ id }) => ({ issueId: id, authorId: member.id, body: 'C' })),
+      });
+      await prisma.issueLink.createMany({
+        data: each(({ id }) => ({ fromId: id, toId: issueId, type: 'RELATES_TO' as const })),
+      });
+      await prisma.issueWebLink.createMany({
+        data: each(({ id }) => ({ issueId: id, url: 'https://a.example', createdById: member.id })),
+      });
+      await prisma.attachment.createMany({
+        data: each(({ id }) => ({
+          filename: 'f',
+          originalName: 'f',
+          mimeType: 'text/plain',
+          size: 1,
+          storageKey: 'k',
+          uploaderId: member.id,
+          issueId: id,
+        })),
+      });
+      await prisma.activity.createMany({
+        data: each(({ id }) => ({
+          resourceType: 'issue',
+          resourceId: id,
+          action: 'updated',
+          userId: member.id,
+        })),
+      });
+      await prisma.timeEntry.createMany({
+        data: each(({ id }) => ({ issueId: id, userId: member.id, minutes: 1 })),
+      });
+      await prisma.wikiPageIssueLink.createMany({
+        data: each(({ id }) => ({
+          pageId: page.id,
+          issueId: id,
+          linkType: 'EMBED' as const,
+          createdById: member.id,
+        })),
+      });
+      await prisma.issue.createMany({
+        data: each(({ id, number }) => ({
+          projectId: ctx.projectId,
+          number: number + 2000,
+          title: 'Child',
+          body: '',
+          creatorId: member.id,
+          parentId: id,
+        })),
+      });
+    });
+
+    it('stays within its statement budget for 50 keys with every include', async () => {
+      let status = 0;
+      const statements = await countStatements(async () => {
+        status = (await readAs(bulkUser, { keys, include: ALL_ISSUE_INCLUDES })).status;
+      });
+      expect(status).toBe(200);
+      expect(statements).toBeGreaterThan(0);
+      expect(statements).toBeLessThanOrEqual(STATEMENTS_50_KEYS);
+    });
+
+    it('builds the page filter once per call, however many spaces and keys', async () => {
+      const spaces = await Promise.all(
+        Array.from({ length: 30 }, (_, i) =>
+          prisma.wikiSpace.create({
+            data: { teamId: ctx.teamId, name: `S${i}`, slug: `read-cost-${i}` },
+          }),
+        ),
+      );
+      const reader = await addMemberToContext(ctx);
+      extraUsers.push(reader.id);
+      const one = await countStatements(() =>
+        readAs(reader, { keys: [`${prefix}-1000`], include: ['pages'] }),
+      );
+      const two = await countStatements(() =>
+        readAs(reader, { keys: [`${prefix}-1000`, `${prefix}-1001`], include: ['pages'] }),
+      );
+      await prisma.wikiSpace.deleteMany({ where: { id: { in: spaces.map((space) => space.id) } } });
+      expect(one).toBeLessThanOrEqual(STATEMENTS_ONE_KEY_30_SPACES);
+      // A second key adds its own lookups and no second filter
+      expect(two - one).toBeLessThanOrEqual(30);
+    });
+
+    it('runs the same statements for what a stranger cannot see and what does not exist', async () => {
+      const hiddenPage = mainPageKey;
+      const missingPage = `${ctx.orgSlug}/${ctx.teamSlug}/${spaceSlug}/no-such-page`;
+      const noOrgPage = 'no-org/no-team/no-space/no-page';
+      const statements = async (key: string) =>
+        countStatements(() => readAs(stranger, { keys: [key] }));
+      const pages = [
+        await statements(hiddenPage),
+        await statements(missingPage),
+        await statements(noOrgPage),
+      ];
+      expect(new Set(pages).size).toBe(1);
+      expect(await statements(issueKey)).toBe(await statements('NOPREFIX-1'));
+      const fullForms = [
+        await statements(`${ctx.orgSlug}/${ctx.teamSlug}/${issueKey}`),
+        await statements(`${ctx.orgSlug}/${ctx.teamSlug}/NOPREFIX-1`),
+        await statements(`no-org/no-team/${issueKey}`),
+      ];
+      expect(new Set(fullForms).size).toBe(1);
+    });
+
+    it('answers spellings of one key once', async () => {
+      const project = await prisma.project.findUniqueOrThrow({ where: { id: ctx.projectId } });
+      const url = `/${ctx.orgSlug}/${ctx.teamSlug}/${project.slug}/issues/1000`;
+      const res = await readAs(bulkUser, {
+        keys: [
+          `${prefix}-1000`,
+          `${prefix}-01000`,
+          `${url}?1`,
+          `${url}?2`,
+          `https://a.example${url}#x`,
+          `/${ctx.orgSlug}/${ctx.teamSlug}/${project.slug}/issues/01000`,
+        ],
+      });
+      expect(res.body.items.map((i: { key: string }) => i.key)).toEqual([
+        `${prefix}-1000`,
+        `${url}?1`,
+      ]);
+    });
+
+    it('stops at the byte budget, answers the rest 413 and says so', async () => {
+      const big = 'x'.repeat(3 * 1024 * 1024);
+      await prisma.issue.createMany({
+        data: Array.from({ length: 5 }, (_, i) => ({
+          projectId: ctx.projectId,
+          number: 2000 + i,
+          title: `Big ${i}`,
+          body: big,
+          creatorId: ctx.owner.id,
+        })),
+      });
+      const bigKeys = Array.from({ length: 5 }, (_, i) => `${prefix}-${2000 + i}`);
+      const res = await readAs(bulkUser, { keys: bigKeys });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ byteLimit: RESPONSE_BYTE_LIMIT, truncated: true });
+      const statuses = res.body.items.map((i: { data?: object; error?: { status: number } }) =>
+        i.data ? 'ok' : i.error?.status,
+      );
+      expect(statuses).toEqual(['ok', 'ok', 'ok', 413, 413]);
+      expect(res.body.items[3].error.code).toBe('RESPONSE_TOO_LARGE');
+      expect(Buffer.byteLength(JSON.stringify(res.body))).toBeLessThanOrEqual(
+        RESPONSE_BYTE_LIMIT + 10_000,
+      );
+
+      // Past the budget nothing more is loaded
+      const five = await countStatements(() => readAs(bulkUser, { keys: bigKeys }));
+      const four = await countStatements(() => readAs(bulkUser, { keys: bigKeys.slice(0, 4) }));
+      expect(five).toBe(four);
+
+      // What the caller narrows doesn't count
+      const narrow = await readAs(bulkUser, { keys: bigKeys, fields: ['title'] });
+      expect(narrow.body.truncated).toBe(false);
+      await prisma.issue.deleteMany({
+        where: { projectId: ctx.projectId, number: { gte: 2000, lt: 2005 } },
+      });
+    });
+
+    it('leaves comment bodies out on request', async () => {
+      const res = await readAs(member, {
+        keys: [issueKey, mainPageKey],
+        include: ['comments'],
+        commentBodies: false,
+      });
+      for (const item of res.body.items) {
+        expect(item.data.comments.items).toHaveLength(1);
+        expect(item.data.comments.items[0]).not.toHaveProperty('body');
+        expect(item.data.comments.items[0]).toHaveProperty('author');
+      }
+    });
+
+    it('limits keys per user, over REST and MCP alike', async () => {
+      const limited = await createTestUser();
+      extraUsers.push(limited.id);
+      const batch = (start: number) =>
+        Array.from({ length: 50 }, (_, i) => `NOPREFIX-${start + i}`);
+      const calls = Math.floor(READ_LIMIT.maxKeys / 50);
+      for (let call = 0; call < calls; call++) {
+        expect((await readAs(limited, { keys: batch(call * 50) })).status).toBe(200);
+      }
+      const over = await readAs(limited, { keys: ['NOPREFIX-1'] });
+      expect(over.status).toBe(429);
+      expect(over.body.error.code).toBe('RATE_LIMITED');
+      await expect(
+        executeAction(
+          'item.read',
+          { keys: ['NOPREFIX-1'] },
+          {
+            userId: limited.id,
+            scopes: ['search:read', 'issues:read'],
+            channel: 'mcp',
+            apiTokenId: 'mcp-test',
+            apiTokenName: 'mcp',
+          },
+        ),
+      ).rejects.toMatchObject({ statusCode: 429, code: 'RATE_LIMITED' });
+      // Someone else is untouched
+      expect((await readAs(stranger, { keys: ['NOPREFIX-1'] })).status).toBe(200);
+    });
+  });
+
+  describe('more access cases', () => {
+    it('follows a space with custom permissions', async () => {
+      const space = await prisma.wikiSpace.create({
+        data: {
+          teamId: ctx.teamId,
+          name: 'Custom',
+          slug: 'read-custom',
+          permissions: { create: { userId: viewer.id, level: 'VIEW' } },
         },
       });
+      await createPage(space.id, ctx.owner.id, { title: 'C', slug: 'c', body: 'Custom' });
+      const key = `${ctx.orgSlug}/${ctx.teamSlug}/read-custom/c`;
+      // Team member without a grant: closed. Guest with a grant, and an org admin: open
+      expect((await readAs(member, { keys: [key] })).body.items[0].error.status).toBe(404);
+      expect((await readAs(viewer, { keys: [key] })).body.items[0].data.title).toBe('C');
+      expect((await readAs(orgAdmin, { keys: [key] })).body.items[0].data.title).toBe('C');
+    });
+
+    it('lets a platform admin read issues, and pages as the page routes do', async () => {
+      const admin = await createTestUser();
+      extraUsers.push(admin.id);
+      await prisma.user.update({ where: { id: admin.id }, data: { isAdmin: true } });
+      const res = await readAs(admin, { keys: [issueKey, mainPageKey] });
+      expect(res.body.items[0].data.title).toBe('Issue 42');
+      // assertPageAccess asks for org membership first, for platform admins as well
+      expect(res.body.items[1].error.status).toBe(404);
+      const page = await prisma.page.findFirstOrThrow({ where: { spaceId, slug: 'main' } });
+      const route = await authGet(`/api/wiki/spaces/${spaceId}/pages/${page.slug}`, admin.token);
+      expect(route.status).toBe(403);
+    });
+
+    it('refuses a deactivated user, by session and by token', async () => {
+      const gone = await addMemberToContext(ctx);
+      extraUsers.push(gone.id);
+      const raw = await tokenWith(gone, ['search:read', 'issues:read']);
+      await prisma.user.update({ where: { id: gone.id }, data: { deactivatedAt: new Date() } });
+      const session = await readAs(gone, { keys: [issueKey] });
+      expect(session.status).toBe(403);
+      expect(session.body.error.code).toBe('ACCOUNT_DEACTIVATED');
+      const token = await readWithToken(raw, { keys: [issueKey] });
+      expect(token.status).toBe(403);
+      expect(token.body.error.code).toBe('ACCOUNT_DEACTIVATED');
+    });
+
+    it('never lists a staged attachment', async () => {
+      await prisma.attachment.create({
+        data: {
+          filename: 's.txt',
+          originalName: 'staged.txt',
+          mimeType: 'text/plain',
+          size: 1,
+          storageKey: 'secret/s.txt',
+          uploaderId: ctx.owner.id,
+          stagedAt: new Date(),
+        },
+      });
+      const res = await readAs(ctx.owner, {
+        keys: [issueKey, mainPageKey],
+        include: ['attachments'],
+      });
+      expect(JSON.stringify(res.body)).not.toContain('staged.txt');
+    });
+
+    it('keeps file names in history from a token without files:read', async () => {
+      const issue = await makeIssue(95);
+      await logActivity('issue', issue.id, 'attachment_added', member.id, {
+        attachmentId: 'att-1',
+        fileName: 'private-plan.pdf',
+      });
+      const without = await tokenWith(member, ['search:read', 'issues:read']);
+      const blind = await readWithToken(without, { keys: [`${prefix}-95`], include: ['history'] });
+      expect(blind.body.items[0].data.history.items).toHaveLength(1);
+      expect(JSON.stringify(blind.body)).not.toContain('private-plan.pdf');
+      expect(JSON.stringify(blind.body)).not.toContain('att-1');
+
+      const withFiles = await tokenWith(member, ['search:read', 'issues:read', 'files:read']);
+      const seeing = await readWithToken(withFiles, {
+        keys: [`${prefix}-95`],
+        include: ['history'],
+      });
+      expect(JSON.stringify(seeing.body)).toContain('private-plan.pdf');
+      const session = await readAs(member, { keys: [`${prefix}-95`], include: ['history'] });
+      expect(JSON.stringify(session.body)).toContain('private-plan.pdf');
     });
   });
 
@@ -650,10 +1145,12 @@ describe('item.read', () => {
         `https://elsewhere.example/${ctx.orgSlug}/${ctx.teamSlug}/wiki/${spaceSlug}/main`,
         `/${ctx.orgSlug}/${ctx.teamSlug}/wiki/${spaceSlug}/main/`,
       ];
-      const res = await readAs(member, { keys });
-      expect(
-        res.body.items.map((i: { data?: { id: string; title: string } }) => i.data?.title),
-      ).toEqual(['Issue 42', 'Issue 42', 'Main', 'Main']);
+      const titles = [];
+      for (const key of keys) {
+        const res = await readAs(member, { keys: [key] });
+        titles.push(res.body.items[0].data?.title);
+      }
+      expect(titles).toEqual(['Issue 42', 'Issue 42', 'Main', 'Main']);
     });
 
     it.each([

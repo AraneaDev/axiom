@@ -63,6 +63,19 @@ export function onPendingRecorded(fn: PendingRecordedListener): void {
   pendingRecordedListener = fn;
 }
 
+type BodySavedListener = (pageId: string, body: string, authorId: string) => Promise<void>;
+let bodySavedListener: BodySavedListener | null = null;
+
+/**
+ * Be told when a save wrote Page.body. The issue link service registers here to keep its mention
+ * rows up to date: it reaches the realtime servers through its broadcasts, so importing it from
+ * here would be an import cycle.
+ * @param fn
+ */
+export function onBodySaved(fn: BodySavedListener): void {
+  bodySavedListener = fn;
+}
+
 /**
  * Whether a pending change's recorded draft is one of the two sides a merge would use, which is
  * also when a notice should name it. With a live session, only when that session opened after the
@@ -284,7 +297,13 @@ async function persistDoc(
     if (saved === null) return 'skipped';
     // The skip above now means "unchanged since the last write", so a revert is still saved
     loadedSnapshots.set(pageId, saved.body);
-    if (saved.wroteBody) knownBodies.set(pageId, saved.body);
+    if (saved.wroteBody) {
+      knownBodies.set(pageId, saved.body);
+      // The page is saved either way: links that lag behind are repaired by the next save
+      await bodySavedListener?.(pageId, saved.body, authorId).catch((err: Error) => {
+        logger.error('Failed to sync issue mentions', { pageId }, err);
+      });
+    }
     if (saved.recorded) {
       // This session now predates the recorded change, and its later drafts are the work to merge
       loadedExternalVersions.set(pageId, null);

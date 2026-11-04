@@ -8,7 +8,7 @@ import { bindStagedAttachments } from '../attachments/upload-intents.service';
 
 import { createPageVersion, lockPage } from './page-versions';
 import { broadcastWikiUpdated } from './wiki-broadcast';
-import { extractIssueIdsFromContent, syncMentionLinks } from './wiki-issue-links.service';
+import { syncBodyMentions } from './wiki-issue-links.service';
 
 export type PageWriteKind = 'EDIT' | 'EXTERNAL' | 'RESTORE';
 export type PageWriteSource = 'api' | 'mcp' | 'restore' | 'editor-session';
@@ -42,10 +42,7 @@ export interface PageWriteDeps {
 /** Replaceable issue-link sync (tests); production extracts the issue ids from the body. */
 export type SyncIssueLinks = (pageId: string, body: string, authorId: string) => Promise<void>;
 
-const defaultSyncIssueLinks: SyncIssueLinks = async (pageId, body, authorId) => {
-  const issueIds = await extractIssueIdsFromContent(body, pageId, authorId);
-  await syncMentionLinks(pageId, issueIds, authorId);
-};
+const defaultSyncIssueLinks: SyncIssueLinks = syncBodyMentions;
 
 /**
  * What every page write does after its transaction: invalidate the tree cache, sync issue links

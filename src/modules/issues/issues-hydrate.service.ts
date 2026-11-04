@@ -34,7 +34,7 @@ export async function hydrateIssueDetail(projectId: string, issueNumber: number,
   const results = await Promise.allSettled([
     getVotes(projectId, issueNumber, userId),
     getWatchers(projectId, issueNumber),
-    getLinks(projectId, issueNumber),
+    getLinks(projectId, issueNumber, userId),
     getChildren(projectId, issueNumber),
     getEpicProgress(projectId, issueNumber),
     getWorklogs(projectId, issueNumber),

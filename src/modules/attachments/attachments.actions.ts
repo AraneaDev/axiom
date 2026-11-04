@@ -95,6 +95,12 @@ async function targetIds(target: UploadTargetInput, userId: string): Promise<Iss
 }
 
 /**
+ * The ids authorize checked, per run of an action, so the handler acts on those: a key resolved a
+ * second time could name something else by then (R11).
+ */
+const authorizedTargets = new WeakMap<ActionContext, IssueRef | PageRef>();
+
+/**
  * Attach a new file to a target: the parent's scope, then edit access to it. Without a target
  * there is no parent to check; the file is the user's own until a body write binds it.
  * @param ctx - Who runs the action
@@ -105,12 +111,14 @@ async function writeTarget(
   ctx: ActionContext,
   { target }: z.infer<typeof uploadTarget>,
 ): Promise<void> {
+  authorizedTargets.delete(ctx);
   if (!target) return;
   const issue = 'projectId' in target || 'issueKey' in target;
   attachmentsService.assertParentAreaScope(ctx.scopes, issue ? 'issues' : 'wiki', true);
   const ids = await targetIds(target, ctx.userId);
   if ('projectId' in ids) await writeIssueRef(ctx, ids);
   else await writePageRef(ctx, ids);
+  authorizedTargets.set(ctx, ids);
 }
 
 /**
@@ -188,7 +196,7 @@ const attachmentActions = [
     handler: async (ctx, input) =>
       uploadIntents.createUploadUrl(
         { userId: ctx.userId, apiTokenId: ctx.apiTokenId },
-        { ...input, target: input.target && (await targetIds(input.target, ctx.userId)) },
+        { ...input, target: authorizedTargets.get(ctx) },
       ),
   }),
   defineAction({
@@ -208,7 +216,7 @@ const attachmentActions = [
     handler: async (ctx, input) =>
       uploadIntents.attachFromUrl(ctx.userId, {
         ...input,
-        target: input.target && (await targetIds(input.target, ctx.userId)),
+        target: authorizedTargets.get(ctx),
       }),
   }),
   defineAction({

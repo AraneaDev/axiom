@@ -4,13 +4,23 @@ import { prisma } from '../../config/database';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { PROJECT_URL_SELECT } from '../../utils/prisma-selects';
+import { viewableIssuesWhere } from '../search/search-access';
+
+/** What a link shows of the issue at either end. */
+const LINKED_ISSUE_SELECT = {
+  id: true,
+  number: true,
+  title: true,
+  project: { select: PROJECT_URL_SELECT },
+} as const;
 
 /**
  *
  * @param projectId
  * @param issueNumber
+ * @param viewerId - Who is looking
  */
-export async function getLinks(projectId: string, issueNumber: number) {
+export async function getLinks(projectId: string, issueNumber: number, viewerId: string) {
   const issue = await findOrThrow(
     prisma.issue.findUnique({
       where: { projectId_number: { projectId, number: issueNumber } },
@@ -18,19 +28,24 @@ export async function getLinks(projectId: string, issueNumber: number) {
     ERR.ISSUE_NOT_FOUND,
   );
 
+  // Only links whose other end the viewer can open, showing what a link needs and no more: a link
+  // made by someone in both projects must not hand the other issue to everyone in this one
+  const otherEnd = await viewableIssuesWhere(viewerId);
   const links = await prisma.issueLink.findMany({
-    where: { OR: [{ fromId: issue.id }, { toId: issue.id }] },
-    include: {
-      from: {
-        include: {
-          project: { select: PROJECT_URL_SELECT },
-        },
-      },
-      to: {
-        include: {
-          project: { select: PROJECT_URL_SELECT },
-        },
-      },
+    where: {
+      OR: [
+        { fromId: issue.id, to: otherEnd },
+        { toId: issue.id, from: otherEnd },
+      ],
+    },
+    select: {
+      id: true,
+      fromId: true,
+      toId: true,
+      type: true,
+      createdAt: true,
+      from: { select: LINKED_ISSUE_SELECT },
+      to: { select: LINKED_ISSUE_SELECT },
     },
   });
 

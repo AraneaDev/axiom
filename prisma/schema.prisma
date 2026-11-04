@@ -781,6 +781,7 @@ model Activity {
   createdAt    DateTime @default(now())
 
   @@index([userId])
+  @@index([resourceType, resourceId, createdAt])
   @@map("activities")
 }
 

@@ -79,7 +79,7 @@ const issueData = z.strictObject({
   comments: capped(
     z.strictObject({
       id: z.string(),
-      body: z.string(),
+      body: z.string().optional(),
       author: userRef,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -161,7 +161,7 @@ const pageData = z.strictObject({
   comments: capped(
     z.strictObject({
       id: z.string(),
-      body: z.string(),
+      body: z.string().optional(),
       anchorText: z.string().nullable(),
       resolved: z.boolean(),
       author: userRef,
@@ -179,6 +179,9 @@ const itemError = z.strictObject({
 });
 
 const readOutput = z.strictObject({
+  /** The most the call returns, and whether that left items with 413 RESPONSE_TOO_LARGE */
+  byteLimit: z.number(),
+  truncated: z.boolean(),
   items: z.array(
     z.union([
       z.strictObject({ key: z.string(), kind: z.literal('issue'), data: issueData }),
@@ -213,12 +216,13 @@ const readActions = [
       keys: z.array(z.string().min(1).max(MAX_KEY_LENGTH)).min(1).max(MAX_KEYS),
       include: z.array(z.enum(includeNames)).optional(),
       fields: z.array(z.enum(fieldNames)).optional(),
+      commentBodies: z.boolean().optional(),
     }),
     output: readOutput,
     rest: { method: 'POST', path: '/api/read', status: 200 },
     // Per item in the handler: resolveKey for access, then the item's own area scope (R4)
     authorize: async () => {},
-    handler: async (ctx, { keys, include, fields }) => readItems(ctx, keys, { include, fields }),
+    handler: async (ctx, { keys, ...options }) => readItems(ctx, keys, options),
   }),
 ];
 

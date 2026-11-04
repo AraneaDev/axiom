@@ -380,8 +380,8 @@ const linkActions = [
     output: z.array(loose),
     rest: { method: 'GET', path: `${ISSUE}/links` },
     authorize: read,
-    handler: async (_ctx, { projectId, issueNumber }) =>
-      linksService.getLinks(projectId, issueNumber),
+    handler: async (ctx, { projectId, issueNumber }) =>
+      linksService.getLinks(projectId, issueNumber, ctx.userId),
   }),
   defineAction({
     name: 'issueLink.add',

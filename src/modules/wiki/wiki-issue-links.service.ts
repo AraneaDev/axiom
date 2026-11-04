@@ -2,7 +2,9 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { checkProjectAccess } from '../../middleware/requireProjectAccess';
 import { broadcastToRoom } from '../../realtime/broadcast';
+import { onBodySaved } from '../../realtime/yjs-persistence';
 import { ERR } from '../../utils/error-messages';
+import { formatIssueKey } from '../../utils/issue-key';
 import {
   PROJECT_URL_SELECT,
   SPACE_URL_SELECT,
@@ -12,6 +14,14 @@ import { viewableIssuesWhere, viewablePagesWhere } from '../search/search-access
 
 // Matches issue keys like AXM-123
 const ISSUE_KEY_RE = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
+
+/**
+ * The issue keys a page body names, whether or not they resolve to anything.
+ * @param content - The page body
+ */
+function issueKeysIn(content: string): Set<string> {
+  return new Set([...content.matchAll(ISSUE_KEY_RE)].map((match) => match[1]));
+}
 
 /**
  * Extract the ids of issues a page body mentions by key (AXM-123). A key only resolves to
@@ -27,11 +37,7 @@ export async function extractIssueIdsFromContent(
   pageId: string,
   authorId: string,
 ): Promise<string[]> {
-  const keys = new Set<string>();
-  let match;
-  while ((match = ISSUE_KEY_RE.exec(content)) !== null) {
-    keys.add(match[1]);
-  }
+  const keys = issueKeysIn(content);
   if (keys.size === 0) return [];
 
   const page = await prisma.page.findUnique({
@@ -102,12 +108,33 @@ export async function removeEmbedLink(pageId: string, issueId: string) {
 }
 
 /**
+ * Make the MENTION rows of a page follow a body just written. Every writer of Page.body comes
+ * through here, because these rows are what the links of an issue are read from.
+ * @param pageId - The page
+ * @param body - The body as stored
+ * @param authorId - Who wrote it
+ */
+export async function syncBodyMentions(pageId: string, body: string, authorId: string) {
+  const issueIds = await extractIssueIdsFromContent(body, pageId, authorId);
+  await syncMentionLinks(pageId, issueIds, authorId, issueKeysIn(body));
+}
+
+onBodySaved(syncBodyMentions);
+
+/**
  *
  * @param pageId
  * @param issueIds
  * @param userId
+ * @param mentionedKeys - The keys the body names. A link whose key is gone from it goes, whoever
+ * wrote this edit. Without it, only links to issues the author can see can go.
  */
-export async function syncMentionLinks(pageId: string, issueIds: string[], userId: string) {
+export async function syncMentionLinks(
+  pageId: string,
+  issueIds: string[],
+  userId: string,
+  mentionedKeys?: Set<string>,
+) {
   const existing = await prisma.wikiPageIssueLink.findMany({
     where: { pageId, linkType: 'MENTION' },
   });
@@ -116,10 +143,23 @@ export async function syncMentionLinks(pageId: string, issueIds: string[], userI
   const newSet = new Set(issueIds);
 
   // The new set only holds issues this author can resolve. A link to an issue they can't
-  // see was made by someone who could, and this edit says nothing about it: keep it.
+  // see was made by someone who could, and while the body still names it this edit says nothing
+  // about it: keep it.
   const dropped = existing.filter((l) => !newSet.has(l.issueId));
-  const removable = new Set(
-    dropped.length === 0
+  const unnamed =
+    mentionedKeys && dropped.length > 0
+      ? (
+          await prisma.issue.findMany({
+            where: { id: { in: dropped.map((l) => l.issueId) } },
+            select: { id: true, number: true, project: { select: { prefix: true } } },
+          })
+        )
+          .filter((i) => !mentionedKeys.has(formatIssueKey(i.project.prefix, i.number)))
+          .map((i) => i.id)
+      : [];
+  const removable = new Set([
+    ...unnamed,
+    ...(dropped.length === 0
       ? []
       : (
           await prisma.issue.findMany({
@@ -131,12 +171,14 @@ export async function syncMentionLinks(pageId: string, issueIds: string[], userI
             },
             select: { id: true },
           })
-        ).map((i) => i.id),
-  );
+        ).map((i) => i.id)),
+  ]);
 
   const toAdd = issueIds.filter((id) => !existingSet.has(id));
   const removedIssueIds = dropped.filter((l) => removable.has(l.issueId)).map((l) => l.issueId);
   const toRemove = dropped.filter((l) => removable.has(l.issueId)).map((l) => l.id);
+
+  if (toAdd.length === 0 && toRemove.length === 0) return;
 
   await prisma.$transaction([
     ...toAdd.map((issueId) =>

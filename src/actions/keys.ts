@@ -4,12 +4,12 @@
  * host. Whatever the caller can't see answers exactly like what doesn't exist, so a key never
  * tells who else has what.
  */
+import type { Prisma } from '@prisma/client';
+
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
-import { assertPageAccess } from '../middleware/rbac';
-import { checkProjectAccess } from '../middleware/requireProjectAccess';
 import { parseAxiomUrl } from '../modules/links/resolve-link.service';
-import { viewableProjectsWhere } from '../modules/search/search-access';
+import { viewablePagesWhere, viewableProjectsWhere } from '../modules/search/search-access';
 import { formatIssueKey } from '../utils/issue-key';
 import { PROJECT_URL_SELECT } from '../utils/prisma-selects';
 
@@ -22,6 +22,34 @@ const MAX_CANDIDATES = 20;
 
 const ISSUE_KEY = /^([A-Z][A-Z0-9]*)-(\d+)$/;
 const CONTROL_CHARACTER = /\p{Cc}/u;
+
+/**
+ * What one user may see, as Prisma filters. They take several queries each and hold for one call,
+ * so a call builds them once. Visibility goes into the lookups themselves: what the user can't see
+ * and what doesn't exist then run the same query, so the timing doesn't tell them apart either.
+ * @param userId - The user
+ */
+export function createViewer(userId: string) {
+  const once = <T>(load: () => Promise<T>) => {
+    let loaded: Promise<T> | undefined;
+    return () => (loaded ??= load());
+  };
+  const projects = once(() => viewableProjectsWhere(userId));
+  return {
+    projects,
+    issues: once(async (): Promise<Prisma.IssueWhereInput> => ({ project: await projects() })),
+    pages: once(() => viewablePagesWhere(userId)),
+    /** The visible projects with a prefix, as a call can hold many keys of one project. */
+    byPrefix: new Map<string, Promise<PrefixMatch[]>>(),
+  };
+}
+export type Viewer = ReturnType<typeof createViewer>;
+
+interface PrefixMatch {
+  id: string;
+  prefix: string;
+  team: { slug: string; org: { slug: string } };
+}
 
 export type ResolvedKey =
   | { kind: 'issue'; projectId: string; issueNumber: number }
@@ -73,7 +101,7 @@ function parseUrlKey(key: string): ParsedKey {
   if (parsed.type === 'wiki') return { kind: 'page', org, team, space: target, slug: identifier };
   // The app's own routes rank the literal wiki segment first, so this path shows a page
   if (target === 'wiki') return { kind: 'page', org, team, space: 'issues', slug: identifier };
-  return { kind: 'issue', org, team, projectSlug: target, number: identifier };
+  return { kind: 'issue', org, team, projectSlug: target, number: canonicalNumber(identifier) };
 }
 
 /**
@@ -110,31 +138,69 @@ export function parseKey(key: string): ParsedKey {
   if (segments.length !== 1 && segments.length !== 3) throw invalidKey();
   const match = ISSUE_KEY.exec(segments[segments.length - 1]);
   if (!match) throw invalidKey();
-  const [, prefix, number] = match;
+  const prefix = match[1];
+  const number = canonicalNumber(match[2]);
   if (segments.length === 1) return { kind: 'issue', prefix, number };
   return { kind: 'issue', org: segments[0], team: segments[1], prefix, number };
+}
+
+/**
+ * Digits without leading zeros, so AXM-042 and AXM-42 are one key.
+ * @param digits - The digits as given
+ */
+function canonicalNumber(digits: string): string {
+  return digits.replace(/^0+(?=\d)/, '');
+}
+
+/**
+ * What identifies the item a key names, however it was spelled: a URL's query and host, or leading
+ * zeros, don't make it another key. A key that can't be parsed is only itself.
+ * @param key - The key as given
+ */
+export function keyIdentity(key: string): string {
+  try {
+    return JSON.stringify(parseKey(key));
+  } catch {
+    return `invalid:${key}`;
+  }
+}
+
+/**
+ * The visible projects using a prefix.
+ * @param prefix - The prefix
+ * @param viewer - Who asks
+ */
+function visibleByPrefix(prefix: string, viewer: Viewer): Promise<PrefixMatch[]> {
+  let found = viewer.byPrefix.get(prefix);
+  if (!found) {
+    found = viewer.projects().then((visible) =>
+      prisma.project.findMany({
+        where: { prefix, AND: [visible] },
+        select: { id: true, ...PROJECT_URL_SELECT },
+        orderBy: { id: 'asc' },
+        take: MAX_CANDIDATES,
+      }),
+    );
+    viewer.byPrefix.set(prefix, found);
+  }
+  return found;
 }
 
 /**
  * The project an issue key points into, among what the user can open.
  * @param parsed - The parsed key
  * @param issueNumber - The issue's number, for the candidates
- * @param userId - Who asks
+ * @param viewer - Who asks
  * @throws {AppError} 404 for no such project, 409 AMBIGUOUS_KEY for a bare prefix that several
  * visible teams use
  */
 async function resolveProjectId(
   parsed: ParsedIssueKey,
   issueNumber: number,
-  userId: string,
+  viewer: Viewer,
 ): Promise<string> {
   if (parsed.org === undefined) {
-    const projects = await prisma.project.findMany({
-      where: { prefix: parsed.prefix, AND: [await viewableProjectsWhere(userId)] },
-      select: { id: true, ...PROJECT_URL_SELECT },
-      orderBy: { id: 'asc' },
-      take: MAX_CANDIDATES,
-    });
+    const projects = await visibleByPrefix(parsed.prefix, viewer);
     if (projects.length === 0) throw keyNotFound();
     if (projects.length > 1) {
       const candidates = projects.map(
@@ -156,22 +222,23 @@ async function resolveProjectId(
       ...(parsed.projectSlug === undefined
         ? { prefix: parsed.prefix }
         : { slug: parsed.projectSlug }),
+      AND: [await viewer.projects()],
     },
     select: { id: true },
   });
-  if (!project || (await checkProjectAccess(userId, project.id)) !== 'ok') throw keyNotFound();
+  if (!project) throw keyNotFound();
   return project.id;
 }
 
 /**
  * Find an issue by key, for someone who may open it.
  * @param parsed - The parsed key
- * @param userId - Who asks
+ * @param viewer - Who asks
  */
-async function resolveIssueKey(parsed: ParsedIssueKey, userId: string): Promise<ResolvedKey> {
+async function resolveIssueKey(parsed: ParsedIssueKey, viewer: Viewer): Promise<ResolvedKey> {
   const issueNumber = Number(parsed.number);
   if (issueNumber > MAX_ISSUE_NUMBER) throw keyNotFound();
-  const projectId = await resolveProjectId(parsed, issueNumber, userId);
+  const projectId = await resolveProjectId(parsed, issueNumber, viewer);
   const issue = await prisma.issue.findUnique({
     where: { projectId_number: { projectId, number: issueNumber } },
     select: { id: true },
@@ -181,25 +248,21 @@ async function resolveIssueKey(parsed: ParsedIssueKey, userId: string): Promise<
 }
 
 /**
- * Find a page by key, for someone who may view it: assertPageAccess, the rule of every page route.
+ * Find a page by key, for someone who may view it: viewablePagesWhere, the rule of assertPageAccess
+ * as a filter.
  * @param parsed - The parsed key
- * @param userId - Who asks
+ * @param viewer - Who asks
  */
-async function resolvePageKey(parsed: ParsedPageKey, userId: string): Promise<ResolvedKey> {
+async function resolvePageKey(parsed: ParsedPageKey, viewer: Viewer): Promise<ResolvedKey> {
   const page = await prisma.page.findFirst({
     where: {
       slug: parsed.slug,
       space: { slug: parsed.space, team: { slug: parsed.team, org: { slug: parsed.org } } },
+      AND: [await viewer.pages()],
     },
-    select: { id: true, spaceId: true, slug: true },
+    select: { spaceId: true, slug: true },
   });
   if (!page) throw keyNotFound();
-  try {
-    await assertPageAccess(userId, page.id, 'view');
-  } catch (err) {
-    if (err instanceof AppError) throw keyNotFound();
-    throw err;
-  }
   return { kind: 'page', spaceId: page.spaceId, pageSlug: page.slug };
 }
 
@@ -207,10 +270,15 @@ async function resolvePageKey(parsed: ParsedPageKey, userId: string): Promise<Re
  * Turn a key into the ids the services take. What it returns, the user may open.
  * @param key - AXM-42, org/team/AXM-42, org/team/space/page-slug or a URL of an issue or page
  * @param userId - Who asks
+ * @param viewer - Their filters, when a call resolves several keys
  * @throws {AppError} 400 INVALID_KEY for no accepted form, 404 for nothing the user can see (never
  * 403), 409 AMBIGUOUS_KEY with details.candidates for a bare prefix several visible teams use
  */
-export async function resolveKey(key: string, userId: string): Promise<ResolvedKey> {
+export async function resolveKey(
+  key: string,
+  userId: string,
+  viewer: Viewer = createViewer(userId),
+): Promise<ResolvedKey> {
   const parsed = parseKey(key);
-  return parsed.kind === 'page' ? resolvePageKey(parsed, userId) : resolveIssueKey(parsed, userId);
+  return parsed.kind === 'page' ? resolvePageKey(parsed, viewer) : resolveIssueKey(parsed, viewer);
 }

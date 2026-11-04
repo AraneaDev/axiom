@@ -6,23 +6,27 @@
  * to the stable shape, so a column added to a table reaches no caller by itself.
  */
 import type { Prisma } from '@prisma/client';
+import { MemoryStore, type Options } from 'express-rate-limit';
 
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { checkProjectAccess } from '../middleware/requireProjectAccess';
 import { scopeAllows, type ScopeArea } from '../middleware/token-scopes';
-import {
-  viewableIssuesWhere,
-  viewablePageIdFilter,
-  viewablePagesWhere,
-} from '../modules/search/search-access';
 import { formatIssueKey } from '../utils/issue-key';
 import { logger } from '../utils/logger';
-import { PROJECT_URL_SELECT, SPACE_URL_SELECT, TEAM_ORG_SELECT } from '../utils/prisma-selects';
+import { PROJECT_URL_SELECT, SPACE_URL_SELECT } from '../utils/prisma-selects';
 
 import type { ActionContext } from './define';
 import { isToken } from './execute';
-import { keyNotFound, parseKey, resolveKey, type ResolvedKey } from './keys';
+import {
+  createViewer,
+  keyIdentity,
+  keyNotFound,
+  parseKey,
+  resolveKey,
+  type ResolvedKey,
+  type Viewer,
+} from './keys';
 
 export const ISSUE_INCLUDES = [
   'comments',
@@ -105,11 +109,22 @@ export const PAGE_FIELDS = [
 ] as const;
 export type ReadField = (typeof ISSUE_FIELDS)[number] | (typeof PAGE_FIELDS)[number];
 
-/** How many items are read at the same time, so one call can't take the whole connection pool. */
-const ITEMS_AT_ONCE = 5;
+/** The most one call returns. Items past it answer 413 RESPONSE_TOO_LARGE and aren't loaded. */
+export const RESPONSE_BYTE_LIMIT = 10 * 1024 * 1024;
+
+/**
+ * Keys per user per minute, however they are divided over calls: a key is what costs queries. It
+ * is counted in readItems, so every way in to the action shares this limit.
+ */
+export const READ_LIMIT = { windowMs: 60_000, maxKeys: 300 } as const;
+
+const readHits = new MemoryStore();
+readHits.init({ windowMs: READ_LIMIT.windowMs } as Options);
 
 /** Keys of free-form activity details that never leave, whatever a future writer puts there. */
 const PRIVATE_DETAIL = /email|secret|token|hash|storagekey|password/i;
+/** Details about files, for a reader whose token doesn't hold files:read. */
+const FILE_DETAIL = /^(fileName|attachmentId)$/;
 
 const USER_REF_SELECT = { id: true, displayName: true } as const;
 
@@ -141,22 +156,43 @@ type IssueSummaryRow = Prisma.IssueGetPayload<{ select: typeof ISSUE_SUMMARY_SEL
 type PageSummaryRow = Prisma.PageGetPayload<{ select: typeof PAGE_SUMMARY_SELECT }>;
 type AttachmentRow = Prisma.AttachmentGetPayload<{ select: typeof ATTACHMENT_SELECT }>;
 
+/** What one call shares between its items. */
+interface Reader {
+  ctx: ActionContext;
+  viewer: Viewer;
+  commentBodies: boolean;
+  budget: ReturnType<typeof createByteBudget>;
+}
+
+function responseTooLarge(): AppError {
+  return new AppError(
+    413,
+    'This call reached its 10 MB limit. Read this key in another call, or with fewer includes, ' +
+      'fewer fields or without comment bodies',
+    'RESPONSE_TOO_LARGE',
+  );
+}
+
 /**
- * The filters of one call. They take several queries each and hold for the whole call.
- * @param userId - The reader
+ * Counts what a call is about to return, as it is loaded: one piece at a time, so what is in
+ * memory stays within the limit plus the one piece that went past it.
+ * @param limit - The most bytes
  */
-function visibilityFor(userId: string) {
-  const once = <T>(load: () => Promise<T>) => {
-    let loaded: Promise<T> | undefined;
-    return () => (loaded ??= load());
-  };
+function createByteBudget(limit: number) {
+  let spent = 0;
   return {
-    issues: once(() => viewableIssuesWhere(userId)),
-    pages: once(() => viewablePagesWhere(userId)),
-    pageIds: once(() => viewablePageIdFilter(userId)),
+    /**
+     * Count a piece of the response.
+     * @param value - The piece
+     * @throws {AppError} 413 RESPONSE_TOO_LARGE past the limit
+     */
+    spend(value: unknown): void {
+      spent += Buffer.byteLength(JSON.stringify(value) ?? '');
+      if (spent > limit) throw responseTooLarge();
+    },
+    exhausted: () => spent > limit,
   };
 }
-type Visibility = ReturnType<typeof visibilityFor>;
 
 /**
  * Rows fetched with one more than the limit, as an include.
@@ -204,35 +240,31 @@ function attachmentItem(row: AttachmentRow) {
 }
 
 /**
- * Free-form details without the keys that never leave.
+ * Free-form details without the keys the reader doesn't get.
  * @param value - A JSON value
+ * @param hidden - Whether a key stays out
  */
-function scrubDetails(value: Prisma.JsonValue): Prisma.JsonValue {
-  if (Array.isArray(value)) return value.map(scrubDetails);
+function scrubDetails(value: Prisma.JsonValue, hidden: (key: string) => boolean): Prisma.JsonValue {
+  if (Array.isArray(value)) return value.map((item) => scrubDetails(item, hidden));
   if (typeof value !== 'object' || value === null) return value;
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key]) => !PRIVATE_DETAIL.test(key))
-      .map(([key, item]) => [key, scrubDetails(item as Prisma.JsonValue)]),
+      .filter(([key]) => !hidden(key))
+      .map(([key, item]) => [key, scrubDetails(item as Prisma.JsonValue, hidden)]),
   );
 }
 
 /**
- * The pages of an issue: linked ones (a row per page and link type), then the pages whose body
- * mentions the key that have no row, as after a save from the collaborative editor. That scan runs
- * only over the spaces the reader can view in the issue's org, the org a mention resolves in, and
- * with a word boundary so AXM-4 does not match AXM-42.
+ * The pages of an issue: its link rows, which every writer of a page body keeps up to date, for
+ * the pages the reader can view.
  * @param issue - The issue
- * @param issue.id
- * @param issue.key
- * @param issue.orgId
- * @param visible - The reader's filters
+ * @param reader - Who reads
  */
-async function issuePages(issue: IssueRef, visible: Visibility) {
+async function issuePages(issue: IssueRef, reader: Reader) {
   const limit = ISSUE_INCLUDE_LIMITS.pages;
   // A page holds at most one row per link type, so this always reaches past the cap
   const rows = await prisma.wikiPageIssueLink.findMany({
-    where: { issueId: issue.id, page: await visible.pages() },
+    where: { issueId: issue.id, page: await reader.viewer.pages() },
     select: { linkType: true, page: { select: PAGE_SUMMARY_SELECT } },
     orderBy: { createdAt: 'desc' },
     take: (limit + 1) * 2,
@@ -243,39 +275,8 @@ async function issuePages(issue: IssueRef, visible: Visibility) {
     entry.linkTypes.push(linkType);
     linked.set(page.id, entry);
   }
-
-  const missing = limit + 1 - linked.size;
-  const mentioned: PageSummaryRow[] = [];
-  if (missing > 0) {
-    const { spaceIds, hiddenPageIds } = await visible.pageIds();
-    const inOrg = await prisma.wikiSpace.findMany({
-      where: { id: { in: spaceIds }, team: { orgId: issue.orgId } },
-      select: { id: true },
-    });
-    if (inOrg.length > 0) {
-      const skip = [...hiddenPageIds, ...linked.keys()];
-      const pattern = `\\y${issue.key.replace(/[^A-Za-z0-9-]/g, '')}\\y`;
-      const found = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM pages
-        WHERE "spaceId" = ANY(${inOrg.map((space) => space.id)})
-          AND NOT (id = ANY(${skip}))
-          AND body ~ ${pattern}
-        ORDER BY "updatedAt" DESC
-        LIMIT ${missing}
-      `;
-      mentioned.push(
-        ...(await prisma.page.findMany({
-          where: { id: { in: found.map((page) => page.id) } },
-          select: PAGE_SUMMARY_SELECT,
-        })),
-      );
-    }
-  }
   return capped(
-    [
-      ...[...linked.values()].map(({ row, linkTypes }) => ({ ...pageSummary(row), linkTypes })),
-      ...mentioned.map((row) => ({ ...pageSummary(row), linkTypes: ['MENTION'] })),
-    ],
+    [...linked.values()].map(({ row, linkTypes }) => ({ ...pageSummary(row), linkTypes })),
     limit,
   );
 }
@@ -283,21 +284,19 @@ async function issuePages(issue: IssueRef, visible: Visibility) {
 /** What the includes of an issue need to know of it. */
 interface IssueRef {
   id: string;
-  key: string;
-  orgId: string;
 }
 
 const ISSUE_INCLUDE_LOADERS: {
-  [K in IssueInclude]: (issue: IssueRef, visible: Visibility) => Promise<unknown>;
+  [K in IssueInclude]: (issue: IssueRef, reader: Reader) => Promise<unknown>;
 } = {
-  comments: async ({ id }) => {
+  comments: async ({ id }, reader) => {
     // The newest ones, in reading order
     const limit = ISSUE_INCLUDE_LIMITS.comments;
     const rows = await prisma.comment.findMany({
       where: { issueId: id },
       select: {
         id: true,
-        body: true,
+        body: reader.commentBodies,
         createdAt: true,
         updatedAt: true,
         author: { select: USER_REF_SELECT },
@@ -316,9 +315,9 @@ const ISSUE_INCLUDE_LOADERS: {
       truncated,
     };
   },
-  links: async ({ id }, visible) => {
+  links: async ({ id }, reader) => {
     const limit = ISSUE_INCLUDE_LIMITS.links;
-    const other = await visible.issues();
+    const other = await reader.viewer.issues();
     // A link counts only when the reader can open the issue at its other end
     const rows = await prisma.issueLink.findMany({
       where: {
@@ -327,23 +326,31 @@ const ISSUE_INCLUDE_LOADERS: {
           { toId: id, from: other },
         ],
       },
-      select: {
-        id: true,
-        type: true,
-        fromId: true,
-        from: { select: ISSUE_SUMMARY_SELECT },
-        to: { select: ISSUE_SUMMARY_SELECT },
-      },
+      select: { id: true, type: true, fromId: true, toId: true },
       orderBy: { createdAt: 'asc' },
       take: limit + 1,
     });
+    // In a second step: Prisma runs every nested select, also for an issue without links
+    const ends = rows.length
+      ? await prisma.issue.findMany({
+          where: { id: { in: rows.map((row) => (row.fromId === id ? row.toId : row.fromId)) } },
+          select: ISSUE_SUMMARY_SELECT,
+        })
+      : [];
+    const endById = new Map(ends.map((end) => [end.id, end]));
     return capped(
-      rows.map((row) => ({
-        id: row.id,
-        type: row.type,
-        direction: row.fromId === id ? 'outward' : 'inward',
-        issue: issueSummary(row.fromId === id ? row.to : row.from),
-      })),
+      rows.flatMap((row) => {
+        const end = endById.get(row.fromId === id ? row.toId : row.fromId);
+        if (!end) return [];
+        return [
+          {
+            id: row.id,
+            type: row.type,
+            direction: row.fromId === id ? 'outward' : 'inward',
+            issue: issueSummary(end),
+          },
+        ];
+      }),
       limit,
     );
   },
@@ -376,8 +383,11 @@ const ISSUE_INCLUDE_LOADERS: {
     });
     return capped(rows.map(attachmentItem), limit);
   },
-  history: async ({ id }) => {
+  history: async ({ id }, reader) => {
     const limit = ISSUE_INCLUDE_LIMITS.history;
+    const hideFiles = !coversArea(reader.ctx, 'files');
+    const hidden = (key: string) =>
+      PRIVATE_DETAIL.test(key) || (hideFiles && FILE_DETAIL.test(key));
     const rows = await prisma.activity.findMany({
       where: { resourceType: 'issue', resourceId: id },
       select: {
@@ -395,7 +405,7 @@ const ISSUE_INCLUDE_LOADERS: {
       rows.map((row) => ({
         id: row.id,
         action: row.action,
-        details: row.details === null ? null : scrubDetails(row.details),
+        details: row.details === null ? null : scrubDetails(row.details, hidden),
         via: row.via,
         actor: row.user,
         createdAt: row.createdAt.toISOString(),
@@ -422,26 +432,26 @@ const ISSUE_INCLUDE_LOADERS: {
       limit,
     );
   },
-  children: async ({ id }, visible) => {
+  children: async ({ id }, reader) => {
     const limit = ISSUE_INCLUDE_LIMITS.children;
     const rows = await prisma.issue.findMany({
-      where: { parentId: id, AND: [await visible.issues()] },
+      where: { parentId: id, AND: [await reader.viewer.issues()] },
       select: ISSUE_SUMMARY_SELECT,
       orderBy: { number: 'asc' },
       take: limit + 1,
     });
     return capped(rows.map(issueSummary), limit);
   },
-  pages: (issue, visible) => issuePages(issue, visible),
+  pages: (issue, reader) => issuePages(issue, reader),
 };
 
 const PAGE_INCLUDE_LOADERS: {
-  [K in PageInclude]: (pageId: string, visible: Visibility) => Promise<unknown>;
+  [K in PageInclude]: (pageId: string, reader: Reader) => Promise<unknown>;
 } = {
-  children: async (pageId, visible) => {
+  children: async (pageId, reader) => {
     const limit = PAGE_INCLUDE_LIMITS.children;
     const rows = await prisma.page.findMany({
-      where: { parentId: pageId, AND: [await visible.pages()] },
+      where: { parentId: pageId, AND: [await reader.viewer.pages()] },
       select: PAGE_SUMMARY_SELECT,
       orderBy: { position: 'asc' },
       take: limit + 1,
@@ -493,11 +503,11 @@ const PAGE_INCLUDE_LOADERS: {
       limit,
     );
   },
-  linkedIssues: async (pageId, visible) => {
+  linkedIssues: async (pageId, reader) => {
     const limit = PAGE_INCLUDE_LIMITS.linkedIssues;
     // An issue holds at most one row per link type, so this always reaches past the cap
     const rows = await prisma.wikiPageIssueLink.findMany({
-      where: { pageId, issue: await visible.issues() },
+      where: { pageId, issue: await reader.viewer.issues() },
       select: { linkType: true, issue: { select: ISSUE_SUMMARY_SELECT } },
       orderBy: { createdAt: 'desc' },
       take: (limit + 1) * 2,
@@ -513,13 +523,13 @@ const PAGE_INCLUDE_LOADERS: {
       limit,
     );
   },
-  comments: async (pageId) => {
+  comments: async (pageId, reader) => {
     const limit = PAGE_INCLUDE_LIMITS.comments;
     const rows = await prisma.pageComment.findMany({
       where: { pageId },
       select: {
         id: true,
-        body: true,
+        body: reader.commentBodies,
         anchorText: true,
         resolved: true,
         createdAt: true,
@@ -558,15 +568,16 @@ function coversArea(ctx: ActionContext, area: ScopeArea): boolean {
 }
 
 /**
- * Load what was asked of the includes that apply to this kind of item, as fields of its data. An
- * include for the other kind is passed over: one call can hold issues and pages.
- * @param ctx - Who reads
+ * Load what was asked of the includes that apply to this kind of item, as fields of its data, one
+ * after the other so the budget can stop in between. An include for the other kind is passed over:
+ * one call can hold issues and pages.
+ * @param reader - Who reads
  * @param include - What was asked
  * @param loaders - The loaders of this kind of item
  * @param load - Runs a loader
  */
 async function loadIncludes<K extends ReadInclude>(
-  ctx: ActionContext,
+  reader: Reader,
   include: readonly ReadInclude[],
   loaders: Record<K, unknown>,
   load: (name: K) => Promise<unknown>,
@@ -574,15 +585,17 @@ async function loadIncludes<K extends ReadInclude>(
   const applicable = [...new Set(include)].filter((name): name is K => name in loaders);
   const covered = (name: K) => {
     const area = INCLUDE_AREA[name];
-    return !area || coversArea(ctx, area);
+    return !area || coversArea(reader.ctx, area);
   };
-  const allowed = applicable.filter(covered);
+  const result: Record<string, unknown> = {};
+  for (const name of applicable.filter(covered)) {
+    const value = await load(name);
+    reader.budget.spend(value);
+    result[name] = value;
+  }
   const omitted = applicable.filter((name) => !covered(name));
-  const loaded = await Promise.all(allowed.map(async (name) => [name, await load(name)]));
-  return {
-    ...Object.fromEntries(loaded),
-    ...(omitted.length > 0 ? { omittedIncludes: omitted } : {}),
-  };
+  if (omitted.length > 0) result.omittedIncludes = omitted;
+  return result;
 }
 
 /**
@@ -606,22 +619,22 @@ function pickFields<T extends { id: string; key: string }>(
 interface ReadOptions {
   include?: ReadInclude[];
   fields?: ReadField[];
+  /** False leaves the bodies of comments out */
+  commentBodies?: boolean;
 }
 
 /**
  * Read one issue.
- * @param ctx - Who reads
+ * @param reader - Who reads
  * @param resolved - Its ids, from resolveKey
  * @param resolved.projectId
  * @param resolved.issueNumber
  * @param options - What to return
- * @param visible - The reader's filters
  */
 async function readIssue(
-  ctx: ActionContext,
+  reader: Reader,
   resolved: { projectId: string; issueNumber: number },
   options: ReadOptions,
-  visible: Visibility,
 ) {
   const issue = await prisma.issue.findUnique({
     where: {
@@ -643,24 +656,23 @@ async function readIssue(
       creator: { select: USER_REF_SELECT },
       labels: { select: { id: true, name: true } },
       sprint: { select: { id: true, name: true } },
-      parent: { select: { ...ISSUE_SUMMARY_SELECT, projectId: true } },
-      project: {
-        select: {
-          id: true,
-          name: true,
-          ...PROJECT_URL_SELECT,
-          team: { select: { orgId: true, ...TEAM_ORG_SELECT } },
-        },
-      },
+      parentId: true,
+      project: { select: { id: true, name: true, ...PROJECT_URL_SELECT } },
     },
   });
   if (!issue) throw keyNotFound();
 
   // A parent elsewhere shows only to who can open that project
+  const parent = issue.parentId
+    ? await prisma.issue.findUnique({
+        where: { id: issue.parentId },
+        select: { ...ISSUE_SUMMARY_SELECT, projectId: true },
+      })
+    : null;
   const parentVisible =
-    issue.parent &&
-    (issue.parent.projectId === resolved.projectId ||
-      (await checkProjectAccess(ctx.userId, issue.parent.projectId)) === 'ok');
+    parent &&
+    (parent.projectId === resolved.projectId ||
+      (await checkProjectAccess(reader.ctx.userId, parent.projectId)) === 'ok');
 
   const summary = issueSummary(issue);
   const base = {
@@ -673,7 +685,7 @@ async function readIssue(
     creator: issue.creator,
     labels: issue.labels,
     sprint: issue.sprint,
-    parent: issue.parent && parentVisible ? issueSummary(issue.parent) : null,
+    parent: parent && parentVisible ? issueSummary(parent) : null,
     project: {
       id: issue.project.id,
       name: issue.project.name,
@@ -689,30 +701,29 @@ async function readIssue(
     updatedAt: issue.updatedAt.toISOString(),
   };
 
-  const ref: IssueRef = { id: issue.id, key: summary.key, orgId: issue.project.team.orgId };
+  const picked = pickFields(base, options.fields);
+  reader.budget.spend(picked);
   const includes = await loadIncludes(
-    ctx,
+    reader,
     options.include ?? [],
     ISSUE_INCLUDE_LOADERS,
-    (name: IssueInclude) => ISSUE_INCLUDE_LOADERS[name](ref, visible),
+    (name: IssueInclude) => ISSUE_INCLUDE_LOADERS[name]({ id: issue.id }, reader),
   );
-  return { ...pickFields(base, options.fields), ...includes };
+  return { ...picked, ...includes };
 }
 
 /**
  * Read one page.
- * @param ctx - Who reads
+ * @param reader - Who reads
  * @param resolved - Its ids, from resolveKey
  * @param resolved.spaceId
  * @param resolved.pageSlug
  * @param options - What to return
- * @param visible - The reader's filters
  */
 async function readPage(
-  ctx: ActionContext,
+  reader: Reader,
   resolved: { spaceId: string; pageSlug: string },
   options: ReadOptions,
-  visible: Visibility,
 ) {
   const page = await prisma.page.findUnique({
     where: { spaceId_slug: { spaceId: resolved.spaceId, slug: resolved.pageSlug } },
@@ -744,13 +755,15 @@ async function readPage(
     createdAt: page.createdAt.toISOString(),
     updatedAt: page.updatedAt.toISOString(),
   };
+  const picked = pickFields(base, options.fields);
+  reader.budget.spend(picked);
   const includes = await loadIncludes(
-    ctx,
+    reader,
     options.include ?? [],
     PAGE_INCLUDE_LOADERS,
-    (name: PageInclude) => PAGE_INCLUDE_LOADERS[name](page.id, visible),
+    (name: PageInclude) => PAGE_INCLUDE_LOADERS[name](page.id, reader),
   );
-  return { ...pickFields(base, options.fields), ...includes };
+  return { ...picked, ...includes };
 }
 
 /**
@@ -782,44 +795,69 @@ function itemError(key: string, err: unknown) {
 /**
  * Read one key. A failure belongs to this item only. The scope comes before any lookup, from the
  * key's text, so a token without it learns nothing about what exists.
- * @param ctx - Who reads
+ * @param reader - Who reads
  * @param key - The key
  * @param options - What to return
- * @param visible - The reader's filters
  */
-async function readItem(
-  ctx: ActionContext,
-  key: string,
-  options: ReadOptions,
-  visible: Visibility,
-) {
+async function readItem(reader: Reader, key: string, options: ReadOptions) {
   try {
     const { kind } = parseKey(key);
-    if (!coversArea(ctx, kind === 'issue' ? 'issues' : 'wiki')) {
+    if (!coversArea(reader.ctx, kind === 'issue' ? 'issues' : 'wiki')) {
       throw new AppError(403, 'This API token does not have the scope for this item', 'SCOPE');
     }
-    const resolved: ResolvedKey = await resolveKey(key, ctx.userId);
+    const resolved: ResolvedKey = await resolveKey(key, reader.ctx.userId, reader.viewer);
     return resolved.kind === 'issue'
-      ? { key, kind: resolved.kind, data: await readIssue(ctx, resolved, options, visible) }
-      : { key, kind: resolved.kind, data: await readPage(ctx, resolved, options, visible) };
+      ? { key, kind: resolved.kind, data: await readIssue(reader, resolved, options) }
+      : { key, kind: resolved.kind, data: await readPage(reader, resolved, options) };
   } catch (err) {
     return itemError(key, err);
   }
 }
 
 /**
- * Read items by key, a few at a time. A key given twice is read and returned once.
+ * Count keys against the user's limit.
+ * @param userId - The user
+ * @param count - How many keys
+ * @throws {AppError} 429 RATE_LIMITED past the limit
+ */
+async function assertReadWithinLimit(userId: string, count: number): Promise<void> {
+  let totalHits = 0;
+  for (let i = 0; i < count; i++) ({ totalHits } = await readHits.increment(userId));
+  if (totalHits > READ_LIMIT.maxKeys) {
+    throw new AppError(429, 'Too many keys read, please try again later', 'RATE_LIMITED');
+  }
+}
+
+/**
+ * Read items by key, one at a time so that one call holds a single connection and stops loading
+ * when its budget runs out. Spellings of one key (AXM-042, a URL with a query) are read and
+ * answered once, under the first.
  * @param ctx - Who reads
  * @param keys - The keys
  * @param options - What to return for each
+ * @throws {AppError} 429 RATE_LIMITED past READ_LIMIT
  */
 export async function readItems(ctx: ActionContext, keys: string[], options: ReadOptions) {
-  const visible = visibilityFor(ctx.userId);
-  const unique = [...new Set(keys)];
-  const items = [];
-  for (let start = 0; start < unique.length; start += ITEMS_AT_ONCE) {
-    const batch = unique.slice(start, start + ITEMS_AT_ONCE);
-    items.push(...(await Promise.all(batch.map((key) => readItem(ctx, key, options, visible)))));
+  const unique = new Map<string, string>();
+  for (const key of keys) {
+    const identity = keyIdentity(key);
+    if (!unique.has(identity)) unique.set(identity, key);
   }
-  return { items };
+  await assertReadWithinLimit(ctx.userId, unique.size);
+
+  const reader: Reader = {
+    ctx,
+    viewer: createViewer(ctx.userId),
+    commentBodies: options.commentBodies ?? true,
+    budget: createByteBudget(RESPONSE_BYTE_LIMIT),
+  };
+  const items = [];
+  for (const key of unique.values()) {
+    items.push(
+      reader.budget.exhausted()
+        ? itemError(key, responseTooLarge())
+        : await readItem(reader, key, options),
+    );
+  }
+  return { items, byteLimit: RESPONSE_BYTE_LIMIT, truncated: reader.budget.exhausted() };
 }

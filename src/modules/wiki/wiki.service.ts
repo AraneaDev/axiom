@@ -18,7 +18,7 @@ import { createPageVersion, restoreDescription } from './page-versions';
 import { writePageBody } from './page-writes';
 import { canAccessSpace } from './space-permissions.service';
 import { broadcastWikiUpdated, isViewRestricted } from './wiki-broadcast';
-import { syncMentionLinks, extractIssueIdsFromContent } from './wiki-issue-links.service';
+import { syncBodyMentions } from './wiki-issue-links.service';
 import { canViewPage, canEditPage, hiddenPageIds } from './wiki-permissions.service';
 import { seedBuiltInTemplates } from './wiki-templates.service';
 
@@ -221,8 +221,7 @@ export async function createPage(
   await logActivity('wiki_page', page.id, 'created', authorId, { title: data.title });
 
   if (body) {
-    const issueIds = await extractIssueIdsFromContent(body, page.id, authorId);
-    await syncMentionLinks(page.id, issueIds, authorId);
+    await syncBodyMentions(page.id, body, authorId);
     await bindStagedAttachments(body, { pageId: page.id }, authorId);
   }
 
@@ -787,7 +786,7 @@ export async function copyPage(
     select: { position: true },
   });
 
-  return prisma.$transaction(async (tx) => {
+  const copy = await prisma.$transaction(async (tx) => {
     const created = await tx.page.create({
       data: {
         spaceId: destSpaceId,
@@ -806,6 +805,8 @@ export async function copyPage(
     });
     return { ...created, versions: [version] };
   });
+  await syncBodyMentions(copy.id, copy.body, authorId);
+  return copy;
 }
 
 async function getDescendantIds(pageId: string): Promise<string[]> {
