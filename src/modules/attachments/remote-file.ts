@@ -1,5 +1,6 @@
 import { MemoryStore, type Options } from 'express-rate-limit';
 
+import { createUserSlots } from '../../lib/user-slots';
 import { AppError } from '../../middleware/errorHandler';
 import { openPublicUrl, type PublicRequestDeps } from '../automation/webhook';
 
@@ -9,7 +10,7 @@ import {
   MAX_ATTACHMENT_BYTES,
   mimeTypeRefusal,
 } from './attachments.service';
-import { createUserSlots, receiveToTempFile, type TempFile } from './temp-files';
+import { receiveToTempFile, type TempFile } from './temp-files';
 
 const FETCH_TIMEOUT_MS = 10_000;
 

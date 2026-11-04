@@ -35,6 +35,10 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     if (err.statusCode >= 500) {
       logger.error('application error', { ...requestContext, statusCode: err.statusCode }, err);
     }
+    // The details carry it too, for callers that only see the body, such as an MCP tool result
+    if (typeof err.details?.retryAfterSeconds === 'number') {
+      res.setHeader('Retry-After', String(err.details.retryAfterSeconds));
+    }
     return res.status(err.statusCode).json({
       error: { message: err.message, code: err.code, details: err.details },
     });

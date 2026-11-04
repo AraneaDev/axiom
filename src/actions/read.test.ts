@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
 import { prisma } from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 import { checkProjectAccess } from '../middleware/requireProjectAccess';
 import { logActivity } from '../modules/activity/activity.service';
 import { copyPage, createPage, updatePage } from '../modules/wiki/wiki.service';
@@ -31,7 +32,7 @@ import { authGet, authPost } from '../test/helpers';
 
 import { executeAction } from './execute';
 import { MAX_KEY_LENGTH, resolveKey } from './keys';
-import { READ_LIMIT, RESPONSE_BYTE_LIMIT } from './read.service';
+import { READ_CONCURRENCY, READ_LIMIT, readSlots, RESPONSE_BYTE_LIMIT } from './read.service';
 
 /** Keys that may never appear anywhere in a response */
 const FORBIDDEN_KEY = /email|storagekey|tokenhash|passwordhash|sharedsecret|^secret$/i;
@@ -1018,6 +1019,75 @@ describe('item.read', () => {
         expect(item.data.comments.items[0]).not.toHaveProperty('body');
         expect(item.data.comments.items[0]).toHaveProperty('author');
       }
+    });
+
+    describe('running at once', () => {
+      /**
+       * Hold read slots until released, as reads in progress do.
+       * @param userId
+       * @param count
+       */
+      const hold = (userId: string, count: number) => {
+        let release = () => {};
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const refused = new AppError(500, 'no free slot in the test');
+        const running = Array.from({ length: count }, () =>
+          readSlots.run(userId, refused, () => held),
+        );
+        return () => {
+          release();
+          return Promise.all(running);
+        };
+      };
+
+      it('refuses the read past the cap over all users, with Retry-After', async () => {
+        const { total, perUser } = READ_CONCURRENCY;
+        const releases = Array.from({ length: Math.ceil(total / perUser) }, (_, i) =>
+          hold(`holder-${i}`, perUser),
+        );
+        try {
+          const over = await readAs(stranger, { keys: ['NOPREFIX-1'] });
+          expect(over.status).toBe(429);
+          expect(over.body.error.code).toBe('RATE_LIMITED');
+          expect(Number(over.headers['retry-after'])).toBeGreaterThan(0);
+          await expect(
+            executeAction(
+              'item.read',
+              { keys: ['NOPREFIX-1'] },
+              {
+                userId: stranger.id,
+                scopes: ['search:read', 'issues:read'],
+                channel: 'mcp',
+                apiTokenId: 'mcp-test',
+                apiTokenName: 'mcp',
+              },
+            ),
+          ).rejects.toMatchObject({ statusCode: 429, code: 'RATE_LIMITED' });
+        } finally {
+          await Promise.all(releases.map((release) => release()));
+        }
+        expect((await readAs(stranger, { keys: ['NOPREFIX-1'] })).status).toBe(200);
+      });
+
+      it('refuses one user past their share, and leaves others alone', async () => {
+        const release = hold(stranger.id, READ_CONCURRENCY.perUser);
+        try {
+          const over = await readAs(stranger, { keys: ['NOPREFIX-1'] });
+          expect(over.status).toBe(429);
+          expect(over.headers['retry-after']).toBeDefined();
+          expect((await readAs(viewer, { keys: ['NOPREFIX-1'] })).status).toBe(200);
+        } finally {
+          await release();
+        }
+      });
+
+      it('gives the slot back after a read', async () => {
+        for (let i = 0; i < READ_CONCURRENCY.perUser + 1; i++) {
+          expect((await readAs(viewer, { keys: ['NOPREFIX-1'] })).status).toBe(200);
+        }
+      });
     });
 
     it('limits keys per user, over REST and MCP alike', async () => {

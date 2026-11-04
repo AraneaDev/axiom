@@ -9,6 +9,7 @@ import type { Prisma } from '@prisma/client';
 import { MemoryStore, type Options } from 'express-rate-limit';
 
 import { prisma } from '../config/database';
+import { createUserSlots } from '../lib/user-slots';
 import { AppError } from '../middleware/errorHandler';
 import { checkProjectAccess } from '../middleware/requireProjectAccess';
 import { scopeAllows, type ScopeArea } from '../middleware/token-scopes';
@@ -117,6 +118,23 @@ export const RESPONSE_BYTE_LIMIT = 10 * 1024 * 1024;
  * is counted in readItems, so every way in to the action shares this limit.
  */
 export const READ_LIMIT = { windowMs: 60_000, maxKeys: 300 } as const;
+
+/**
+ * Reads running at once, in this process. Ten of the largest reads together take about 700 MB,
+ * and the API container has 512 MB. It refuses rather than queues, so that slow reads can't build
+ * up. The keys per minute above say nothing about this: they all fit in a few calls.
+ */
+export const READ_CONCURRENCY = { perUser: 4, total: 16 } as const;
+export const readSlots = createUserSlots(READ_CONCURRENCY.perUser, READ_CONCURRENCY.total);
+
+const READS_BUSY = new AppError(
+  429,
+  'Too many reads running, please try again shortly',
+  'RATE_LIMITED',
+  {
+    retryAfterSeconds: 2,
+  },
+);
 
 const readHits = new MemoryStore();
 readHits.init({ windowMs: READ_LIMIT.windowMs } as Options);
@@ -835,7 +853,7 @@ async function assertReadWithinLimit(userId: string, count: number): Promise<voi
  * @param ctx - Who reads
  * @param keys - The keys
  * @param options - What to return for each
- * @throws {AppError} 429 RATE_LIMITED past READ_LIMIT
+ * @throws {AppError} 429 RATE_LIMITED past READ_LIMIT or READ_CONCURRENCY
  */
 export async function readItems(ctx: ActionContext, keys: string[], options: ReadOptions) {
   const unique = new Map<string, string>();
@@ -843,21 +861,23 @@ export async function readItems(ctx: ActionContext, keys: string[], options: Rea
     const identity = keyIdentity(key);
     if (!unique.has(identity)) unique.set(identity, key);
   }
-  await assertReadWithinLimit(ctx.userId, unique.size);
+  return readSlots.run(ctx.userId, READS_BUSY, async () => {
+    await assertReadWithinLimit(ctx.userId, unique.size);
 
-  const reader: Reader = {
-    ctx,
-    viewer: createViewer(ctx.userId),
-    commentBodies: options.commentBodies ?? true,
-    budget: createByteBudget(RESPONSE_BYTE_LIMIT),
-  };
-  const items = [];
-  for (const key of unique.values()) {
-    items.push(
-      reader.budget.exhausted()
-        ? itemError(key, responseTooLarge())
-        : await readItem(reader, key, options),
-    );
-  }
-  return { items, byteLimit: RESPONSE_BYTE_LIMIT, truncated: reader.budget.exhausted() };
+    const reader: Reader = {
+      ctx,
+      viewer: createViewer(ctx.userId),
+      commentBodies: options.commentBodies ?? true,
+      budget: createByteBudget(RESPONSE_BYTE_LIMIT),
+    };
+    const items = [];
+    for (const key of unique.values()) {
+      items.push(
+        reader.budget.exhausted()
+          ? itemError(key, responseTooLarge())
+          : await readItem(reader, key, options),
+      );
+    }
+    return { items, byteLimit: RESPONSE_BYTE_LIMIT, truncated: reader.budget.exhausted() };
+  });
 }

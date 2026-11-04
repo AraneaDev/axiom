@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 import multer, { type FileFilterCallback, MulterError } from 'multer';
 
 import { type RequestCtx, runWithRequestContext } from '../../lib/request-context';
+import { createUserSlots } from '../../lib/user-slots';
 import { auditMiddleware } from '../../middleware/auditMiddleware';
 import { AppError } from '../../middleware/errorHandler';
 import { signedUploadLimiter } from '../../middleware/rate-limit';
@@ -19,13 +20,7 @@ import {
   MAX_FILENAME_LENGTH,
   mimeTypeRefusal,
 } from './attachments.service';
-import {
-  createUserSlots,
-  newTempPath,
-  receiveToTempFile,
-  removeTempFile,
-  type TempFile,
-} from './temp-files';
+import { newTempPath, receiveToTempFile, removeTempFile, type TempFile } from './temp-files';
 import {
   assertUploadStillAllowed,
   findUsableIntent,
