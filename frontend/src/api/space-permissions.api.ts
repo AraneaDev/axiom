@@ -16,9 +16,9 @@ export interface SpacePermission {
 }
 
 export const spacePermissionsApi = {
-  list: (spaceId: string) => get<SpacePermission[]>(`/spaces/${spaceId}/permissions`),
+  list: (spaceId: string) => get<SpacePermission[]>(`/wiki/spaces/${spaceId}/permissions`),
   upsert: (spaceId: string, data: { userId?: string; teamRole?: string; level: string }) =>
-    put<SpacePermission>(`/spaces/${spaceId}/permissions`, data),
+    put<SpacePermission>(`/wiki/spaces/${spaceId}/permissions`, data),
   remove: (spaceId: string, permissionId: string) =>
-    del(`/spaces/${spaceId}/permissions/${permissionId}`),
+    del(`/wiki/spaces/${spaceId}/permissions/${permissionId}`),
 };

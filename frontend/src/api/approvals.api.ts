@@ -68,7 +68,9 @@ export const approvalsApi = {
 
   // Requests
   createRequest: (issueId: string, data: { targetColumnId: string; approverIds: string[] }) =>
-    post<ApprovalRequest>(`/issues/${issueId}/approval-requests`, data),
+    post<ApprovalRequest>(`/issues/${issueId}/approval-requests/${data.targetColumnId}`, {
+      approverIds: data.approverIds,
+    }),
 
   listRequestsForIssue: (issueId: string) =>
     get<ApprovalRequest[]>(`/issues/${issueId}/approval-requests`),

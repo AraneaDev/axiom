@@ -1,4 +1,4 @@
-import { get, post, patch, del, put } from './client';
+import { get, post, patch, del } from './client';
 
 export interface RoadmapBucket {
   id: string;
@@ -115,7 +115,7 @@ export const roadmapApi = {
     del(`/projects/${projectId}/roadmap/buckets/${bucketId}`),
 
   reorderBuckets: (projectId: string, orderedIds: string[]) =>
-    put<RoadmapBucket[]>(`/projects/${projectId}/roadmap/buckets/reorder`, { orderedIds }),
+    post<RoadmapBucket[]>(`/projects/${projectId}/roadmap/buckets/reorder`, { orderedIds }),
 
   // Data
   getTimeline: (projectId: string, filters?: Filters) =>
