@@ -737,9 +737,12 @@ export async function movePage(
     return updated;
   });
 
+  // A move inside a space changes its tree as well
+  await cacheInvalidate(`wiki:tree:${page.spaceId}`);
+  if (changesSpace) await cacheInvalidate(`wiki:tree:${newSpaceId}`);
+  await broadcastWikiUpdated(newSpaceId, pageId);
+  if (changesSpace) await broadcastWikiUpdated(page.spaceId, pageId);
   if (changesSpace) {
-    await cacheInvalidate(`wiki:tree:${page.spaceId}`);
-    await cacheInvalidate(`wiki:tree:${newSpaceId}`);
     // Sessions on the moved pages checked access against the old space: check again
     for (const id of [pageId, ...descendants]) void revokeLiveAccess({ pageId: id });
   }

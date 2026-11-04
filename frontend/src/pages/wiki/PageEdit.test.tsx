@@ -9,12 +9,16 @@ import type { PendingChange } from '@/hooks/collab-messages';
 
 const mockGetPage = vi.fn();
 const mockGetPendingMerge = vi.fn();
+const mockUpdatePage = vi.fn();
+const mockFlushCollab = vi.fn();
 
 vi.mock('@/api/wiki.api', () => ({
   wikiApi: {
     getPage: (...args: unknown[]) => mockGetPage(...args),
     getPendingMerge: (...args: unknown[]) => mockGetPendingMerge(...args),
     applyMerge: vi.fn(),
+    updatePage: (...args: unknown[]) => mockUpdatePage(...args),
+    flushCollab: (...args: unknown[]) => mockFlushCollab(...args),
     listTemplates: () => Promise.resolve([]),
     getPageTree: () => Promise.resolve([]),
   },
@@ -157,6 +161,18 @@ describe('PageEdit', () => {
     await screen.findByTestId('collab-editor');
     expect(screen.getByRole('button', { name: /^Save$/ })).toBeInTheDocument();
     expect(screen.getByLabelText(/Title/)).not.toHaveAttribute('readonly');
+  });
+
+  it('saving an existing page sends no parentId, so a child page stays where it is', async () => {
+    mockGetPage.mockResolvedValue(page({ canEdit: true, parentId: 'parent-1' }));
+    mockUpdatePage.mockResolvedValue(page());
+    mockFlushCollab.mockResolvedValue({ flushed: true });
+    renderEdit();
+    await screen.findByTestId('collab-editor');
+    await userEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+    await waitFor(() => expect(mockUpdatePage).toHaveBeenCalled());
+    const body = mockUpdatePage.mock.calls[0][2] as Record<string, unknown>;
+    expect(body).not.toHaveProperty('parentId');
   });
 
   it('a viewer sees the page read-only before the session connects', async () => {

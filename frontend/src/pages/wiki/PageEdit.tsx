@@ -222,7 +222,8 @@ export default function PageEdit() {
         return wikiApi.updatePage(currentSpace.id, pageSlug!, {
           title,
           ...(useCollab ? {} : { body }),
-          ...(parentId ? { parentId } : { parentId: null }),
+          // No parent here: the form has no parent picker for an existing page, so sending one
+          // would move it (null means the top level). Moving is the sidebar's job.
           // The flush already stored the description; without a live room the PATCH carries it
           ...(description && !flushed ? { changeDescription: description } : {}),
         });

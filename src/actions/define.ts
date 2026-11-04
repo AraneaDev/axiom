@@ -27,6 +27,8 @@ export interface RestBinding {
   status?: number;
   /** The handler answers through `ctx.http` itself (uploads, downloads, exports). */
   raw?: boolean;
+  /** The route takes no body (a toggle): whatever the request carries is ignored. */
+  emptyBody?: boolean;
 }
 
 /** What authorize receives: the target when the action declares one, else the full input. */

@@ -91,6 +91,27 @@ export async function assertPageAccess(
 }
 
 /**
+ * assertPageAccess for a page addressed by space and slug. A page that does not exist passes, so
+ * the caller answers 404 as before.
+ * @param userId - The user
+ * @param spaceId - The space
+ * @param pageSlug - The page's slug in it
+ * @param mode - 'view' for reads, 'edit' for writes
+ */
+export async function assertPageAccessBySlug(
+  userId: string,
+  spaceId: string,
+  pageSlug: string,
+  mode: 'view' | 'edit',
+): Promise<void> {
+  const page = await prisma.page.findUnique({
+    where: { spaceId_slug: { spaceId, slug: pageSlug } },
+    select: { id: true },
+  });
+  if (page) await assertPageAccess(userId, page.id, mode);
+}
+
+/**
  * Page routes addressed by id. Expects :pageId in route params.
  * @param mode - 'view' (default) for reads, 'edit' for writes
  * @returns Express middleware running assertPageAccess
@@ -119,12 +140,7 @@ export function requireWikiPageBySlug(mode: 'view' | 'edit') {
     try {
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-      const page = await prisma.page.findUnique({
-        where: { spaceId_slug: { spaceId: param(req, 'spaceId'), slug: param(req, 'pageSlug') } },
-        select: { id: true },
-      });
-      if (!page) return next();
-      await assertPageAccess(userId, page.id, mode);
+      await assertPageAccessBySlug(userId, param(req, 'spaceId'), param(req, 'pageSlug'), mode);
       next();
     } catch (err) {
       next(err);

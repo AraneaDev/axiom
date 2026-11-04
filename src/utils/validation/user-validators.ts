@@ -32,6 +32,7 @@ export const createPageSchema = z.object({
   body: z.string().max(500_000).default(''),
   parentId: z
     .string()
+    .min(1)
     .nullable()
     .optional()
     .transform((v) => v ?? undefined),
@@ -50,7 +51,7 @@ export const updatePageSchema = createPageSchema
     isDraft: z.boolean().optional(),
     // null moves the page to the top level, and leaving the field out keeps the parent. The
     // create schema turns null into undefined, which an update must not do
-    parentId: z.string().nullable().optional(),
+    parentId: z.string().min(1).nullable().optional(),
   });
 
 export const flushPageSessionSchema = z.object({
@@ -99,17 +100,17 @@ export const setRestrictionsSchema = z.object({
 // ─── Wiki Page Move / Copy ──────────────────────────────────
 
 export const movePageSchema = z.object({
-  targetSpaceId: z.string().optional(),
-  targetParentId: z.string().nullable().optional(),
+  targetSpaceId: z.string().min(1).optional(),
+  targetParentId: z.string().min(1).nullable().optional(),
 });
 
 export const reorderPageSchema = z.object({
-  parentId: z.string().nullable(),
+  parentId: z.string().min(1).nullable(),
   position: z.number().int().min(0),
 });
 
 export const copyPageSchema = z.object({
-  targetSpaceId: z.string().optional(),
+  targetSpaceId: z.string().min(1).optional(),
   newSlug: z
     .string()
     .min(1)

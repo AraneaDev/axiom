@@ -440,7 +440,7 @@ const personalActions = [
     target: projectTarget,
     input: issueInput,
     output: z.looseObject({ voted: z.boolean() }),
-    rest: { method: 'POST', path: `${ISSUE}/votes/toggle`, status: 200 },
+    rest: { method: 'POST', path: `${ISSUE}/votes/toggle`, status: 200, emptyBody: true },
     authorize: read,
     handler: async (ctx, { projectId, issueNumber }) =>
       votesService.toggleVote(projectId, issueNumber, ctx.userId),
@@ -466,7 +466,7 @@ const personalActions = [
     target: projectTarget,
     input: issueInput,
     output: z.looseObject({ watching: z.boolean() }),
-    rest: { method: 'POST', path: `${ISSUE}/watchers/toggle`, status: 200 },
+    rest: { method: 'POST', path: `${ISSUE}/watchers/toggle`, status: 200, emptyBody: true },
     authorize: read,
     handler: async (ctx, { projectId, issueNumber }) =>
       watchersService.toggleWatch(projectId, issueNumber, ctx.userId),

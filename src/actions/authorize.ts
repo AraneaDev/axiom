@@ -1,9 +1,9 @@
 import type { SpacePermissionLevel } from '@prisma/client';
 
-import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import {
   assertPageAccess,
+  assertPageAccessBySlug,
   checkTeamPermission,
   checkTeamRead,
   checkWikiSpaceOrgAccess,
@@ -125,11 +125,7 @@ export function pageBySlugAccess<T>(
   const space = spaceAccess(level, pickSpace);
   return async (ctx, input) => {
     await space(ctx, input);
-    const page = await prisma.page.findUnique({
-      where: { spaceId_slug: { spaceId: pickSpace(input), slug: pickSlug(input) } },
-      select: { id: true },
-    });
-    if (page) await assertPageAccess(ctx.userId, page.id, mode);
+    await assertPageAccessBySlug(ctx.userId, pickSpace(input), pickSlug(input), mode);
   };
 }
 
@@ -141,13 +137,12 @@ export function pageBySlugAccess<T>(
 export function teamPermission<T>(action: Action, pick: (input: T) => string): Authorizer<T> {
   return async (ctx, input) => {
     const access = await checkTeamPermission(ctx.userId, pick(input), action);
+    if (access === 'ok') return;
     if (access === 'not_found') throw new AppError(404, ERR.TEAM_NOT_FOUND);
     if (access === 'not_org_member') {
       throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
     }
-    if (access === 'forbidden') {
-      throw new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN');
-    }
+    throw new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN');
   };
 }
 

@@ -44,6 +44,8 @@ function assertOutputShape(def: ActionDef, result: unknown): void {
  * @param name - The action's dotted name
  * @param rawInput - Its input, not yet validated
  * @param ctx - Who runs it and through what
+ * @param bodyError - Set by an adapter whose request body is unusable (missing, an array): the
+ * action answers 400 with it once authorize has passed, as a controller validating its body did
  * @returns What the handler returned, unchanged
  * @throws {AppError} 404 UNKNOWN_ACTION, 403 SCOPE, 400 RAW_ACTION, 400 on invalid input, and
  * whatever authorize or the handler throw
@@ -52,6 +54,7 @@ export async function executeAction(
   name: string,
   rawInput: unknown,
   ctx: ActionContext,
+  bodyError?: string,
 ): Promise<unknown> {
   const def = getAction(name);
   if (!def) throw new AppError(404, `Unknown action: ${name}`, 'UNKNOWN_ACTION');
@@ -77,6 +80,7 @@ export async function executeAction(
   };
   return runWithRequestContext(requestCtx, async () => {
     await def.authorize(ctx, target);
+    if (bodyError) throw new AppError(400, bodyError);
     const input = def.target ? validate(def.input, rawInput) : target;
     const result: unknown = await def.handler(ctx, input);
     assertOutputShape(def, result);

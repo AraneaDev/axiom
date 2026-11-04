@@ -67,6 +67,9 @@ function versionNumber(value: unknown): number {
   return parseInt(String(value), 10);
 }
 
+// A bad value reads as missing, so the handler gives the one message the route always gave
+const versionParam = z.union([z.string(), z.number()]).optional().catch(undefined);
+
 const spaceActions = [
   defineAction({
     name: 'space.list',
@@ -74,13 +77,17 @@ const spaceActions = [
     kind: 'read',
     summary: 'List the wiki spaces of a team',
     target: teamTarget,
-    // Anything but the string 'true' reads as false, as it always did
-    input: teamTarget.extend({ includeArchived: z.unknown().optional() }),
+    // Anything but true or the string 'true' reads as false, as it always did
+    input: teamTarget.extend({ includeArchived: z.union([z.boolean(), z.string()]).optional() }),
     output: list,
     rest: { method: 'GET', path: `${WIKI}/team/:teamId/spaces` },
     authorize: inTeam,
     handler: async (ctx, { teamId, includeArchived }) =>
-      wikiService.listSpaces(teamId, includeArchived === 'true', ctx.userId),
+      wikiService.listSpaces(
+        teamId,
+        includeArchived === true || includeArchived === 'true',
+        ctx.userId,
+      ),
   }),
   defineAction({
     name: 'space.get',
@@ -191,8 +198,7 @@ const pageActions = [
     kind: 'read',
     summary: 'Compare two versions of a page',
     target: slugTarget,
-    // Read from the query as text, so a bad value keeps the answer the route always gave
-    input: slugTarget.extend({ from: z.unknown().optional(), to: z.unknown().optional() }),
+    input: slugTarget.extend({ from: versionParam, to: versionParam }),
     output: loose,
     rest: { method: 'GET', path: `${PAGE}/diff` },
     authorize: viewBySlug,
@@ -312,8 +318,11 @@ const linkActions = [
     kind: 'write',
     summary: 'Link an issue to a page, as an embed or a mention',
     target: pageTarget,
-    // Checked by the handler, so that a wrong value keeps the one message the route always gave
-    input: pageTarget.extend({ issueId: z.unknown().optional(), linkType: z.unknown().optional() }),
+    // A wrong value reads as missing, and the handler gives the message the route always gave
+    input: pageTarget.extend({
+      issueId: z.string().optional().catch(undefined),
+      linkType: z.enum(['EMBED', 'MENTION']).optional().catch(undefined),
+    }),
     output: record,
     rest: { method: 'POST', path: `${PAGE_BY_ID}/linked-issues` },
     authorize: editPage,

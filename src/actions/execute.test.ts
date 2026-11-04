@@ -507,6 +507,7 @@ describe('authorizers', () => {
   let spaceId: string;
   let pageId: string;
   let restrictedPageId: string;
+  let editRestrictedPageId: string;
   let issueId: string;
 
   const asUser = (user: TestUser, channel: ActionContext['channel'] = 'ui'): ActionContext => ({
@@ -553,6 +554,17 @@ describe('authorizers', () => {
     restrictedPageId = restricted.id;
     await prisma.pageRestriction.create({
       data: { pageId: restrictedPageId, type: 'VIEW', userId: t.owner.id },
+    });
+    await prisma.page.create({
+      data: { title: 'Locked', slug: 'locked', body: '', spaceId },
+    });
+    editRestrictedPageId = (
+      await prisma.page.findUniqueOrThrow({
+        where: { spaceId_slug: { spaceId, slug: 'locked' } },
+      })
+    ).id;
+    await prisma.pageRestriction.create({
+      data: { pageId: editRestrictedPageId, type: 'EDIT', userId: t.owner.id },
     });
     const issue = await prisma.issue.create({
       data: {
@@ -931,6 +943,11 @@ describe('authorizers', () => {
         label: 'pageBySlugAccess view, restricted page',
         expected: [403, 403, 403, 403, 200, 403, 403, 403],
         build: slugCase('view', 'closed'),
+      },
+      {
+        label: 'pageBySlugAccess edit, edit-restricted page',
+        expected: [403, 403, 403, 403, 200, 403, 403, 403],
+        build: slugCase('edit', 'locked'),
       },
       {
         label: 'pageBySlugAccess view, no such page passes for those who reach the space',
