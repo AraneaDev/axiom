@@ -18,8 +18,6 @@
  *   page restrictions or creating, changing or deleting projects. No scope opens these, so
  *   a write scope on orgs, teams, projects or search does nothing on these paths.
  */
-import type { Action } from '../utils/permissions';
-
 export const SCOPE_AREAS = [
   'issues',
   'sprints',
@@ -166,7 +164,7 @@ function projectAreaOf(path: string): ScopeArea {
 /**
  * Which area an API path belongs to. Anything not listed is token-forbidden.
  * - personal: the user's own profile and notifications, and the user search
- * - mcp: MCP messages, checked again per tool
+ * - mcp: the MCP paths, which only reach this as unknown paths: /api/mcp is a registry route
  * @param path - The request path, starting with /api
  */
 function areaOf(path: string): ScopeArea | 'personal' | 'mcp' | 'none' {
@@ -216,7 +214,7 @@ export function tokenAllows(scopes: readonly string[], method: string, path: str
   if (write && ACCESS_CONTROL.some((re) => re.test(path))) return false;
   const area = areaOf(path);
   if (area === 'none') return false;
-  // MCP messages are checked again by their tool
+  // /api/mcp itself never comes here: each tool call meets the scope of its action
   if (area === 'mcp') {
     return scopeAllows(scopes, 'issues', kind) || scopeAllows(scopes, 'wiki', kind);
   }
@@ -230,21 +228,6 @@ export function tokenAllows(scopes: readonly string[], method: string, path: str
   // The dashboard is issue data, so issues:read opens it as well
   if (area === 'dashboards' && scopeAllows(scopes, 'issues', 'read')) return true;
   return scopeAllows(scopes, area, kind);
-}
-
-/**
- * The scope an MCP tool's action needs.
- * @param scopes - The token's scopes
- * @param action - The tool's permission action
- */
-export function scopesAllowAction(scopes: readonly string[], action: Action): boolean {
-  if (action === 'issue:view') return scopeAllows(scopes, 'issues', 'read');
-  if (action === 'issue:create' || action === 'issue:edit') {
-    return scopeAllows(scopes, 'issues', 'write');
-  }
-  if (action === 'wiki:view') return scopeAllows(scopes, 'wiki', 'read');
-  if (action === 'wiki:edit') return scopeAllows(scopes, 'wiki', 'write');
-  return false;
 }
 
 /**
