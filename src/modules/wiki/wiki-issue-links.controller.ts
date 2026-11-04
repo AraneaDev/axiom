@@ -70,20 +70,3 @@ export async function removeLink(req: Request, res: Response) {
   await linkService.removeEmbedLink(pageId, issueId);
   res.status(204).end();
 }
-
-/**
- *
- * @param req
- * @param res
- */
-export async function listLinkedPagesForIssue(req: Request, res: Response) {
-  const projectId = param(req, 'projectId');
-  const issueNumber = param(req, 'issueNumber');
-  const issue = await linkService.findIssueByNumber(projectId, parseInt(issueNumber, 10));
-  if (!issue) {
-    res.status(404).json({ error: { message: ERR.ISSUE_NOT_FOUND } });
-    return;
-  }
-  const links = await linkService.getLinksForIssue(issue.id, req.userId!);
-  res.json(links);
-}
