@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { prisma } from './config/database';
 import { env } from './config/env';
 import { openApiRouter } from './lib/openapi';
+import { requestContextMiddleware } from './lib/request-context';
 import { auditMiddleware } from './middleware/auditMiddleware';
 import { authenticate } from './middleware/auth';
 import { csrfGuard } from './middleware/csrfGuard';
@@ -116,6 +117,8 @@ app.use((req, res, next) => {
   if (req.path === '/api/mcp/messages') return next();
   express.json({ limit: '5mb' })(req, res, next);
 });
+
+app.use(requestContextMiddleware);
 
 // Rate limiting. The global limit covers the API only: one page load fetches many
 // static assets, and users behind one NAT would otherwise get 429 blank pages.

@@ -597,12 +597,14 @@ model WikiPageIssueLink {
 // ─── Audit Log ──────────────────────────────────────────────
 
 model AuditLog {
-  id       String  @id @default(cuid())
-  orgId    String
-  userId   String?
-  action   String // e.g. "team.create", "issue.delete", "member.role_change"
-  resource String // e.g. "team:cuid123"
-  details  Json? // additional context
+  id         String  @id @default(cuid())
+  orgId      String
+  userId     String?
+  action     String // e.g. "team.create", "issue.delete", "member.role_change"
+  resource   String // e.g. "team:cuid123"
+  details    Json? // additional context
+  apiTokenId String?
+  via        String?
 
   createdAt DateTime @default(now())
 
@@ -743,6 +745,8 @@ model Activity {
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   details      Json?
+  apiTokenId   String?
+  via          String?
   createdAt    DateTime @default(now())
 
   @@index([userId])

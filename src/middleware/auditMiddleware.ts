@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { getRequestContext, runWithRequestContext } from '../lib/request-context';
 import { logAudit } from '../modules/audit/audit.service';
 
 const METHOD_ACTION_MAP: Record<string, string> = {
@@ -61,6 +62,10 @@ export function auditMiddleware(req: Request, res: Response, next: NextFunction)
     return next();
   }
 
+  // The finish event fires outside the request's async chain, so keep the context object
+  // (authenticate fills it in later) and re-enter it when the response is done.
+  const ctx = getRequestContext();
+
   res.on('finish', () => {
     // Only log successful requests (2xx)
     if (res.statusCode < 200 || res.statusCode >= 300) return;
@@ -73,18 +78,21 @@ export function auditMiddleware(req: Request, res: Response, next: NextFunction)
       'unknown';
 
     // Fire-and-forget: do not block the response
-    logAudit({
-      userId: req.userId,
-      action,
-      resourceType,
-      resourceId,
-      ipAddress,
-      details: {
-        method,
-        path: req.originalUrl,
-        statusCode: res.statusCode,
-      },
-    }).catch(() => {
+    const write = () =>
+      logAudit({
+        userId: req.userId,
+        action,
+        resourceType,
+        resourceId,
+        ipAddress,
+        details: {
+          method,
+          path: req.originalUrl,
+          statusCode: res.statusCode,
+        },
+      });
+    const pending = ctx ? runWithRequestContext(ctx, write) : write();
+    pending.catch(() => {
       // Silently ignore audit log failures to avoid disrupting normal operations
     });
   });

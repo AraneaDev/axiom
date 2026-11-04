@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 
 import { prisma } from '../config/database';
 import { env } from '../config/env';
+import { getRequestContext } from '../lib/request-context';
 
 import { AppError } from './errorHandler';
 import { normalizeApiPath, tokenAllows } from './token-scopes';
@@ -18,6 +19,9 @@ declare global {
       userId?: string;
       /** Set when the request authenticated with an API token: the token's scopes */
       tokenScopes?: string[];
+      /** Set when the request authenticated with an API token: the token's id and name */
+      apiTokenId?: string;
+      apiTokenName?: string;
     }
   }
 }
@@ -70,6 +74,15 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 
       req.userId = apiToken.userId;
       req.tokenScopes = apiToken.scopes;
+      req.apiTokenId = apiToken.id;
+      req.apiTokenName = apiToken.name;
+      const ctx = getRequestContext();
+      if (ctx) {
+        ctx.userId = apiToken.userId;
+        ctx.apiTokenId = apiToken.id;
+        ctx.apiTokenName = apiToken.name;
+        ctx.channel = 'rest-token';
+      }
       return next();
     }
 
@@ -87,6 +100,8 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       }
 
       req.userId = payload.userId;
+      const ctx = getRequestContext();
+      if (ctx) ctx.userId = payload.userId;
       return next();
     }
 

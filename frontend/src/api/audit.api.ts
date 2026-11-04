@@ -7,6 +7,8 @@ export interface AuditLogEntry {
   action: string;
   resource: string;
   details: Record<string, unknown> | null;
+  /** Name of the API token that made the change, null for a browser session */
+  via: string | null;
   createdAt: string;
 }
 

@@ -29,6 +29,7 @@ interface ActivityItem {
   resourceType?: string | null;
   resourceLink?: string | null;
   createdAt: string;
+  via?: string | null;
   user: {
     displayName: string;
     username: string;
@@ -98,6 +99,7 @@ export function TeamActivityCard({ activity, orgSlug, teamSlug }: TeamActivityCa
                     >
                       {a.user.displayName}
                     </Link>{' '}
+                    {a.via && <span className="text-text-tertiary">(via {a.via}) </span>}
                     <span className="text-text-secondary">{actionLabel}</span>{' '}
                     {a.resourceLink ? (
                       <Link to={a.resourceLink} className="text-primary hover:underline">

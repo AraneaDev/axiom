@@ -116,6 +116,7 @@ export function ActivityFeed({ activities, className }: ActivityFeedProps) {
               <div className="flex-1 min-w-0 pt-1">
                 <p className="text-sm">
                   <span className="font-medium text-text">{event.user.displayName}</span>{' '}
+                  {event.via && <span className="text-text-tertiary">(via {event.via}) </span>}
                   <span className="text-text-secondary">{config.label}</span>
                   {detailText && <span className="text-text-tertiary"> {detailText}</span>}
                   <span className="text-text-tertiary ml-2 text-xs">
