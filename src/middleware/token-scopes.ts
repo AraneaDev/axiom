@@ -2,23 +2,92 @@
  * API token scopes. A token carries some of these; each request made with a token must be
  * covered by one of them. Session (JWT) requests are not scoped.
  *
- * - issues:read  - read projects, issues, sprints, boards and their settings
- * - issues:write - everything issues:read allows, plus creating and changing them
- * - wiki:read    - read wiki spaces and pages
- * - wiki:write   - everything wiki:read allows, plus creating and changing pages
+ * There is one <area>:read and one <area>:write per area, and write includes read within its
+ * own area only. Which area a path belongs to is decided by areaOf below.
  *
- * Reading the user's own profile, orgs, teams and notifications needs any read scope (write
- * scopes include read); search returns only the areas the token covers; attachments need
- * the scope of their parent (issue or page). Team activity, member profiles and the
- * dashboard are issue data. Managing orgs, teams, members, invitations,
- * tokens, the account and anything under /api/admin is never allowed with a token, and
- * neither is changing space permissions or page restrictions or creating, changing or
- * deleting projects.
+ * Some requests have no area scope of their own or are never open to a token:
+ * - Reading the user's own profile, the user search and notifications needs read on issues
+ *   or wiki; so does changing the user's notification state.
+ * - Search returns only the areas the token covers: it needs search:read, then issues:read or
+ *   wiki:read per section.
+ * - Attachments need files:<kind> here and the scope of their parent (issue or page) in the
+ *   attachments router.
+ * - Team activity, member profiles and team analytics are issue data.
+ * - Managing orgs, teams, members, invitations, tokens, the account and anything under
+ *   /api/admin is never allowed with a token, and neither is changing space permissions or
+ *   page restrictions or creating, changing or deleting projects. No scope opens these, so
+ *   a write scope on orgs, teams, projects or search does nothing on these paths.
  */
 import type { Action } from '../utils/permissions';
 
-export const TOKEN_SCOPES = ['issues:read', 'issues:write', 'wiki:read', 'wiki:write'] as const;
-export type TokenScope = (typeof TOKEN_SCOPES)[number];
+export const SCOPE_AREAS = [
+  'issues',
+  'sprints',
+  'boards',
+  'wiki',
+  'files',
+  'search',
+  'orgs',
+  'teams',
+  'projects',
+  'dashboards',
+  'forms',
+  'automation',
+  'approvals',
+  'admin',
+] as const;
+export type ScopeArea = (typeof SCOPE_AREAS)[number];
+export type TokenScope = `${ScopeArea}:${'read' | 'write'}`;
+
+export const TOKEN_SCOPES: readonly TokenScope[] = SCOPE_AREAS.flatMap((area): TokenScope[] => [
+  `${area}:read`,
+  `${area}:write`,
+]);
+
+/**
+ * What each scope stored before scopes per area became. These reproduce the old reach, and
+ * the migration 20261104120000_token_scope_areas holds the same table.
+ *
+ * Only areas the old scope could really write get a write scope. The old rules refused every
+ * write on projects (create, change, delete), orgs, teams, saved searches and the account,
+ * so legacy tokens hold projects:read, orgs:read, teams:read, search:read and dashboards:read
+ * only, and nothing under admin. Team, org and search reads were open to any old scope.
+ */
+export const LEGACY_SCOPE_MAP: Record<
+  'issues:read' | 'issues:write' | 'wiki:read' | 'wiki:write',
+  TokenScope[]
+> = {
+  'issues:read': [
+    'issues:read',
+    'sprints:read',
+    'boards:read',
+    'projects:read',
+    'forms:read',
+    'automation:read',
+    'approvals:read',
+    'dashboards:read',
+    'files:read',
+    'search:read',
+    'orgs:read',
+    'teams:read',
+  ],
+  'issues:write': [
+    'issues:write',
+    'sprints:write',
+    'boards:write',
+    'projects:read',
+    'forms:write',
+    'automation:write',
+    'approvals:write',
+    'dashboards:read',
+    'files:write',
+    'search:read',
+    'orgs:read',
+    'teams:read',
+  ],
+  'wiki:read': ['wiki:read', 'files:read', 'search:read', 'orgs:read', 'teams:read'],
+  'wiki:write': ['wiki:write', 'files:write', 'search:read', 'orgs:read', 'teams:read'],
+};
 
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -30,6 +99,41 @@ const ACCESS_CONTROL = [
   /^\/api\/projects\/team\/[^/]+$/,
   /^\/api\/projects\/[^/]+$/,
 ];
+
+/** The areas below a project with a scope of their own. All others are issue data. */
+const PROJECT_SUBPATH_AREAS = new Map<string, ScopeArea>([
+  ['sprints', 'sprints'],
+  ['velocity', 'sprints'],
+  ['backlog', 'sprints'],
+  ['board', 'boards'],
+  ['forms', 'forms'],
+  ['intake', 'forms'],
+  ['automation-rules', 'automation'],
+  ['approval-gates', 'approvals'],
+]);
+
+/**
+ * Whether the scopes cover reading (or writing) one area. Write includes read for the same
+ * area, and for no other.
+ * @param scopes - The token's scopes
+ * @param area - The area
+ * @param kind - read or write
+ */
+export function scopeAllows(
+  scopes: readonly string[],
+  area: ScopeArea,
+  kind: 'read' | 'write',
+): boolean {
+  return scopes.includes(`${area}:write`) || (kind === 'read' && scopes.includes(`${area}:read`));
+}
+
+/**
+ * Whether a name is a scope a token can hold.
+ * @param scope - The name to check
+ */
+export function isTokenScope(scope: string): scope is TokenScope {
+  return (TOKEN_SCOPES as readonly string[]).includes(scope);
+}
 
 /**
  * Whether the scopes cover reading (or writing) one area. For routes whose area depends
@@ -43,44 +147,54 @@ export function scopesCover(
   area: 'issues' | 'wiki',
   write: boolean,
 ): boolean {
-  return has(scopes, area, write);
-}
-
-function has(scopes: readonly string[], area: 'issues' | 'wiki', write: boolean): boolean {
-  return write
-    ? scopes.includes(`${area}:write`)
-    : scopes.includes(`${area}:read`) || scopes.includes(`${area}:write`);
+  return scopeAllows(scopes, area, write ? 'write' : 'read');
 }
 
 /**
- * Which areas an API path belongs to. Anything not listed is token-forbidden for writes.
+ * The area of a path under /api/projects. Everything that isn't the project itself or has no
+ * area of its own (labels, milestones, workflows, custom fields, ...) is issue data, which
+ * also keeps those writes out of projects:write.
+ * @param path - The request path, starting with /api/projects
+ */
+function projectAreaOf(path: string): ScopeArea {
+  if (/^\/api\/projects\/team\/[^/]+$/.test(path) || /^\/api\/projects\/[^/]+$/.test(path)) {
+    return 'projects';
+  }
+  return PROJECT_SUBPATH_AREAS.get(path.split('/')[4]) ?? 'issues';
+}
+
+/**
+ * Which area an API path belongs to. Anything not listed is token-forbidden.
+ * - personal: the user's own profile and notifications, and the user search
+ * - mcp: MCP messages, checked again per tool
  * @param path - The request path, starting with /api
  */
-function areaOf(path: string): 'issues' | 'wiki' | 'any' | 'none' {
+function areaOf(path: string): ScopeArea | 'personal' | 'mcp' | 'none' {
   if (path.startsWith('/api/wiki')) return 'wiki';
+  if (path.startsWith('/api/projects')) return projectAreaOf(path);
+  if (path.startsWith('/api/approval-requests')) return 'approvals';
   if (
-    path.startsWith('/api/projects') ||
     path.startsWith('/api/issues') ||
-    path.startsWith('/api/approval-requests') ||
     path.startsWith('/api/custom-fields') ||
     path.startsWith('/api/links') ||
     // Team views made of issue data: roadmap, analytics, activity and member profiles
     /^\/api\/teams\/[^/]+\/(roadmap\/timeline|analytics|activity)$/.test(path) ||
-    /^\/api\/teams\/[^/]+\/members\/profile\/[^/]+$/.test(path) ||
-    path === '/api/users/me/dashboard'
+    /^\/api\/teams\/[^/]+\/members\/profile\/[^/]+$/.test(path)
   ) {
     return 'issues';
   }
-  if (path.startsWith('/api/attachments') || path.startsWith('/api/mcp')) return 'any';
+  if (path === '/api/users/me/dashboard') return 'dashboards';
+  if (path.startsWith('/api/attachments')) return 'files';
+  if (path.startsWith('/api/mcp')) return 'mcp';
+  if (path.startsWith('/api/search')) return 'search';
+  if (path.startsWith('/api/orgs')) return 'orgs';
+  if (path.startsWith('/api/teams')) return 'teams';
   if (
-    path.startsWith('/api/search') ||
-    path.startsWith('/api/orgs') ||
-    path.startsWith('/api/teams') ||
     path.startsWith('/api/users/me') ||
     path.startsWith('/api/users/search') ||
     path.startsWith('/api/notifications')
   ) {
-    return 'any';
+    return 'personal';
   }
   return 'none';
 }
@@ -93,6 +207,7 @@ function areaOf(path: string): 'issues' | 'wiki' | 'any' | 'none' {
  */
 export function tokenAllows(scopes: readonly string[], method: string, path: string): boolean {
   const write = !SAFE.has(method);
+  const kind = write ? 'write' : 'read';
   // Tokens never manage tokens, the account or admin settings
   if (path.startsWith('/api/admin')) return false;
   if (path.startsWith('/api/users/me') && write) return false;
@@ -100,19 +215,21 @@ export function tokenAllows(scopes: readonly string[], method: string, path: str
   // restrictions, creating, changing or deleting projects
   if (write && ACCESS_CONTROL.some((re) => re.test(path))) return false;
   const area = areaOf(path);
-  if (area === 'issues' || area === 'wiki') return has(scopes, area, write);
-  if (area === 'any') {
-    // Attachments and MCP messages are checked again by their parent or tool
-    if (path.startsWith('/api/attachments') || path.startsWith('/api/mcp')) {
-      return write
-        ? has(scopes, 'issues', true) || has(scopes, 'wiki', true)
-        : has(scopes, 'issues', false) || has(scopes, 'wiki', false);
-    }
-    // Org, team, notification and search reads only; managing them is not for tokens
-    if (write && !path.startsWith('/api/notifications')) return false;
-    return has(scopes, 'issues', false) || has(scopes, 'wiki', false);
+  if (area === 'none') return false;
+  // MCP messages are checked again by their tool
+  if (area === 'mcp') {
+    return scopeAllows(scopes, 'issues', kind) || scopeAllows(scopes, 'wiki', kind);
   }
-  return false;
+  // Notification state may be written with a read scope; it only touches the user's own
+  if (area === 'personal') {
+    if (write && !path.startsWith('/api/notifications')) return false;
+    return scopeAllows(scopes, 'issues', 'read') || scopeAllows(scopes, 'wiki', 'read');
+  }
+  // Org, team and search reads only; managing them is not for tokens
+  if (write && (area === 'orgs' || area === 'teams' || area === 'search')) return false;
+  // The dashboard is issue data, so issues:read opens it as well
+  if (area === 'dashboards' && scopeAllows(scopes, 'issues', 'read')) return true;
+  return scopeAllows(scopes, area, kind);
 }
 
 /**
@@ -121,10 +238,12 @@ export function tokenAllows(scopes: readonly string[], method: string, path: str
  * @param action - The tool's permission action
  */
 export function scopesAllowAction(scopes: readonly string[], action: Action): boolean {
-  if (action === 'issue:view') return has(scopes, 'issues', false);
-  if (action === 'issue:create' || action === 'issue:edit') return has(scopes, 'issues', true);
-  if (action === 'wiki:view') return has(scopes, 'wiki', false);
-  if (action === 'wiki:edit') return has(scopes, 'wiki', true);
+  if (action === 'issue:view') return scopeAllows(scopes, 'issues', 'read');
+  if (action === 'issue:create' || action === 'issue:edit') {
+    return scopeAllows(scopes, 'issues', 'write');
+  }
+  if (action === 'wiki:view') return scopeAllows(scopes, 'wiki', 'read');
+  if (action === 'wiki:edit') return scopeAllows(scopes, 'wiki', 'write');
   return false;
 }
 

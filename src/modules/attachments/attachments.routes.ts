@@ -62,9 +62,9 @@ const uploadRateLimit = rateLimit({
 router.use(authenticate);
 
 /**
- * For API tokens: an attachment belongs to an issue or a page, so the token needs the
- * issues or wiki scope that covers it (read to read, write to upload or delete).
- * Session requests pass. Runs after multer on upload so the body is parsed.
+ * For API tokens: an attachment belongs to an issue or a page, so on top of the files scope
+ * (checked by the path rules) the token needs the issues or wiki scope that covers it (read
+ * to read, write to upload or delete). Session requests pass. Runs after multer on upload so the body is parsed.
  * @param req
  * @param _res
  * @param next

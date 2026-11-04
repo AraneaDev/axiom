@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
+import { LEGACY_SCOPE_MAP } from '../../middleware/token-scopes';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -62,10 +63,11 @@ describe('Attachment uploads', () => {
     pageId = (
       await prisma.page.create({ data: { spaceId: space.id, title: 'P', slug: 'p', body: '' } })
     ).id;
-    for (const scope of ['issues:read', 'issues:write', 'wiki:write']) {
+    // Tokens as stored since scopes per area: files:<kind> plus the parent's area
+    for (const scope of ['issues:read', 'issues:write', 'wiki:write'] as const) {
       const res = await authPost('/api/users/me/tokens', ctx.owner.token, {
         name: scope,
-        scopes: [scope],
+        scopes: LEGACY_SCOPE_MAP[scope],
       });
       tokens[scope] = res.body.token;
     }

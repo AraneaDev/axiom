@@ -14,6 +14,8 @@ import { createMcpServer } from '../mcp/server';
 import { cleanupTestContext, createTestContext, type TestContext } from '../test/factory';
 import { authPost } from '../test/helpers';
 
+import { LEGACY_SCOPE_MAP } from './token-scopes';
+
 describe('API token scopes', () => {
   let ctx: TestContext;
   let spaceId: string;
@@ -47,13 +49,14 @@ describe('API token scopes', () => {
     spaceId = (
       await prisma.wikiSpace.create({ data: { teamId: ctx.teamId, name: 'S', slug: 'scopes' } })
     ).id;
-    for (const scopes of [['issues:read'], ['issues:write'], ['wiki:read'], ['wiki:write']]) {
+    // Tokens as stored since scopes per area, so each case still meets the rule it names
+    for (const legacy of ['issues:read', 'issues:write', 'wiki:read', 'wiki:write'] as const) {
       const res = await authPost('/api/users/me/tokens', ctx.owner.token, {
-        name: scopes[0],
-        scopes,
+        name: legacy,
+        scopes: LEGACY_SCOPE_MAP[legacy],
       });
       expect(res.status).toBe(201);
-      tokens[scopes[0]] = res.body.token;
+      tokens[legacy] = res.body.token;
     }
   });
 

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Coins, KeyRound, Plus, Trash2, Copy, X } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import { usersApi } from '@/api/users.api';
 import { Badge } from '@/components/ui/Badge';
@@ -12,9 +12,44 @@ import { Input } from '@/components/ui/Input';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { Skeleton, ListSkeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
+import { Toggle } from '@/components/ui/Toggle';
 import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { formatDate } from '@/lib/utils';
+
+/** The scope areas of the API (src/middleware/token-scopes.ts), in display order */
+const SCOPE_GROUPS = [
+  { area: 'issues', label: 'Issues', description: 'Issues, comments, labels and project settings' },
+  { area: 'sprints', label: 'Sprints', description: 'Sprints, backlog and velocity' },
+  { area: 'boards', label: 'Boards', description: 'Boards and their columns' },
+  { area: 'wiki', label: 'Wiki', description: 'Spaces and pages' },
+  { area: 'files', label: 'Files', description: 'Attachments, with the scope of their parent' },
+  { area: 'search', label: 'Search', description: 'Search, limited to the areas above' },
+  { area: 'orgs', label: 'Organizations', description: 'Organizations and their members' },
+  { area: 'teams', label: 'Teams', description: 'Teams and their members' },
+  { area: 'projects', label: 'Projects', description: 'Projects themselves' },
+  { area: 'dashboards', label: 'Dashboards', description: 'Your dashboard' },
+  { area: 'forms', label: 'Forms', description: 'Forms and their submissions' },
+  { area: 'automation', label: 'Automation', description: 'Automation rules' },
+  { area: 'approvals', label: 'Approvals', description: 'Approval gates and votes' },
+  { area: 'admin', label: 'Admin', description: 'Administration' },
+] as const;
+
+const DEFAULT_SCOPES = ['issues:read', 'wiki:read'];
+
+/**
+ * Turn one scope of an area on or off. Write includes read, so the set holds at most one of
+ * the two; turning write off falls back to read.
+ * @param scopes - The selected scopes
+ * @param area - The area
+ * @param kind - The toggle that changed
+ * @param on - Its new state
+ */
+function toggleScope(scopes: string[], area: string, kind: 'read' | 'write', on: boolean) {
+  const others = scopes.filter((s) => s !== `${area}:read` && s !== `${area}:write`);
+  if (on) return [...others, `${area}:${kind}`];
+  return kind === 'write' ? [...others, `${area}:read`] : others;
+}
 
 /**
  *
@@ -22,7 +57,7 @@ import { formatDate } from '@/lib/utils';
 export default function ApiTokens() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
-  const [scopes, setScopes] = useState('issues:read,wiki:read');
+  const [scopes, setScopes] = useState<string[]>(DEFAULT_SCOPES);
   const [newToken, setNewToken] = useState<string | null>(null);
   const { error, setError } = useFormError();
   const [revokeId, setRevokeId] = useState<string | null>(null);
@@ -36,20 +71,18 @@ export default function ApiTokens() {
     queryFn: usersApi.listApiTokens,
   });
 
-  const createMutation = useMutationWithToast(
-    () => usersApi.createApiToken({ name, scopes: scopes.split(',').map((s) => s.trim()) }),
-    {
-      successMessage: 'Token created',
-      errorMessage: null,
-      invalidateKeys: [['apiTokens']],
-      onSuccess: (data) => {
-        setNewToken(data.token ?? null);
-        setShowForm(false);
-        setName('');
-      },
-      onError: (err) => setError(err.message || 'Failed to create token'),
+  const createMutation = useMutationWithToast(() => usersApi.createApiToken({ name, scopes }), {
+    successMessage: 'Token created',
+    errorMessage: null,
+    invalidateKeys: [['apiTokens']],
+    onSuccess: (data) => {
+      setNewToken(data.token ?? null);
+      setShowForm(false);
+      setName('');
+      setScopes(DEFAULT_SCOPES);
     },
-  );
+    onError: (err) => setError(err.message || 'Failed to create token'),
+  });
 
   const deleteMutation = useMutationWithToast(
     (tokenId: string) => usersApi.deleteApiToken(tokenId),
@@ -85,7 +118,7 @@ export default function ApiTokens() {
   return (
     <SettingsPage
       title="API Tokens"
-      description="Create and manage tokens for API and git HTTPS access"
+      description="Create and manage tokens for API and MCP access"
       icon={Coins}
       helpTitle="Working with tokens"
       helpItems={[
@@ -97,12 +130,7 @@ export default function ApiTokens() {
         {
           title: 'Scopes',
           description:
-            'Scope values are comma-separated and control what the token can access. Leave empty for full access.',
-        },
-        {
-          title: 'Git HTTPS',
-          description:
-            'Use a token as your password when cloning or pushing over HTTPS. Your username remains the same.',
+            'Each area has a read and a write scope, and write includes read. Reading your profile and notifications needs read on issues or wiki. Tokens never manage orgs, teams, members, projects, permissions or tokens, whatever their scopes.',
         },
       ]}
       actions={
@@ -152,19 +180,45 @@ export default function ApiTokens() {
               onChange={(e) => setName(e.target.value)}
               placeholder="CI/CD token"
             />
-            <Input
-              id="scopes"
-              label="Scopes (comma-separated)"
-              value={scopes}
-              onChange={(e) => setScopes(e.target.value)}
-              placeholder="issues:read,wiki:write"
-              hint="Any of issues:read, issues:write, wiki:read, wiki:write. A write scope includes reading. Tokens can't manage orgs, teams, members or tokens."
-            />
+            <div>
+              <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-2">
+                <span className="text-sm font-medium">Scopes</span>
+                <span className="text-xs text-text-secondary text-center">Read</span>
+                <span className="text-xs text-text-secondary text-center">Write</span>
+                {SCOPE_GROUPS.map(({ area, label, description }) => {
+                  const canWrite = scopes.includes(`${area}:write`);
+                  const canRead = canWrite || scopes.includes(`${area}:read`);
+                  return (
+                    <Fragment key={area}>
+                      <div className="min-w-0">
+                        <p className="text-sm">{label}</p>
+                        <p className="text-xs text-text-secondary">{description}</p>
+                      </div>
+                      <Toggle
+                        aria-label={`${label} read`}
+                        checked={canRead}
+                        disabled={canWrite}
+                        onChange={(on) => setScopes(toggleScope(scopes, area, 'read', on))}
+                      />
+                      <Toggle
+                        aria-label={`${label} write`}
+                        checked={canWrite}
+                        onChange={(on) => setScopes(toggleScope(scopes, area, 'write', on))}
+                      />
+                    </Fragment>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-text-secondary">
+                A write scope includes reading. Tokens can't manage orgs, teams, members, projects,
+                permissions or tokens.
+              </p>
+            </div>
             <div className="flex gap-2">
               <Button
                 size="sm"
                 onClick={() => createMutation.mutate()}
-                disabled={createMutation.isPending || !name}
+                disabled={createMutation.isPending || !name || scopes.length === 0}
               >
                 {createMutation.isPending ? (
                   <Spinner size="sm" />

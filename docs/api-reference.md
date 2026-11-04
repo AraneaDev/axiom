@@ -65,14 +65,28 @@ Authorization: Token tk_...
 
 A token acts as its owner, limited to its scopes. A request its scopes don't cover returns `403` with code `SCOPE`.
 
-| Scope | Allows |
-|-------|--------|
-| `issues:read` | Read projects, issues, sprints, boards, milestones and their settings (`/api/projects`, `/api/issues`, `/api/approval-requests`, `/api/custom-fields`, `/api/links`, team roadmap and analytics) |
-| `issues:write` | Everything `issues:read` allows, plus creating and changing them |
-| `wiki:read` | Read wiki spaces and pages (`/api/wiki`) |
-| `wiki:write` | Everything `wiki:read` allows, plus creating and changing pages |
+Each area has an `<area>:read` and an `<area>:write` scope. Write includes read within its own area only.
 
-Reading your profile, orgs, teams and notifications needs any read scope (a write scope includes reading). Search returns only the areas the token covers. Team activity, member profiles and your dashboard count as issue data. An attachment needs the scope of its parent: `issues:*` for an issue's, `wiki:*` for a page's. A token can never manage orgs, teams, members, invitations, tokens, your account or anything under `/api/admin`, change space permissions or page restrictions, or create, change or delete projects. Creating a token with any other scope returns `400`.
+| Area | Covers |
+|------|--------|
+| `issues` | Issues, comments, labels, milestones, templates, workflows, custom fields, links, team roadmap, activity and analytics (`/api/issues`, `/api/custom-fields`, `/api/links`, the rest of `/api/projects/:id/*`) |
+| `sprints` | `/api/projects/:id/sprints`, `velocity`, `backlog` |
+| `boards` | `/api/projects/:id/board` |
+| `wiki` | `/api/wiki` |
+| `files` | `/api/attachments`, together with the scope of the parent (below) |
+| `search` | `/api/search`, reads only |
+| `orgs` | `/api/orgs`, reads only |
+| `teams` | `/api/teams`, reads only |
+| `projects` | `/api/projects/:id` and `/api/projects/team/:teamId`, reads only |
+| `dashboards` | Your dashboard (`issues:read` opens it too) |
+| `forms` | `/api/projects/:id/forms`, `intake` |
+| `automation` | `/api/projects/:id/automation-rules` |
+| `approvals` | `/api/projects/:id/approval-gates`, `/api/approval-requests` |
+| `admin` | Reserved, `/api/admin` stays closed to tokens |
+
+Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. A token can never manage orgs, teams, members, invitations, tokens, your account or anything under `/api/admin`, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. Creating a token with any other scope name returns `400`.
+
+Tokens created before scopes per area were rewritten by migration and reach what they always reached: the old `issues:*` and `wiki:*` scopes became the set of area scopes that covers the same paths (`LEGACY_SCOPE_MAP` in `src/middleware/token-scopes.ts`).
 
 ### Permissions
 
