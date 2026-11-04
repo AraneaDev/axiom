@@ -9,7 +9,7 @@ import { validate } from '../utils/validation/common-validators';
 import { auditAction, auditRefusedBatch } from './audit';
 import type { ActionContext, ActionDef } from './define';
 import { assertRunnable, executeAction } from './execute';
-import { MAX_KEY_LENGTH, parseKey, resolveKey } from './keys';
+import { MAX_KEY_LENGTH, parseKey, resolveContainerKey, resolveKey } from './keys';
 import { getAction } from './registry';
 import { actionContextFromRequest } from './rest';
 
@@ -63,16 +63,21 @@ export function toActError(err: unknown): ActError {
   return { status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' };
 }
 
+type KeyKind = 'issue' | 'page' | 'space' | 'project';
+
 /**
  * Which kind of item an action addresses, by the id fields of its input.
  * @param def - The action
- * @returns 'issue', 'page', or undefined for an action no key can address
+ * @returns 'issue' or 'page' for an item, 'space' or 'project' for the container an action works
+ * in, or undefined for an action no key can address
  */
-export function keyKindOf(def: ActionDef): 'issue' | 'page' | undefined {
+export function keyKindOf(def: ActionDef): KeyKind | undefined {
   const shape = (def.input as { shape?: Record<string, unknown> }).shape;
   if (!shape) return undefined;
   if ('projectId' in shape && 'issueNumber' in shape) return 'issue';
   if ('spaceId' in shape && 'pageSlug' in shape) return 'page';
+  if ('spaceId' in shape) return 'space';
+  if ('projectId' in shape) return 'project';
   return undefined;
 }
 
@@ -90,14 +95,7 @@ async function inputOf(item: ActItem, ctx: ActionContext): Promise<unknown> {
   if (key === undefined) return input ?? {};
   const kind = keyKindOf(assertRunnable(action, ctx));
   if (!kind) throw new AppError(400, `Action ${action} does not take a key`, 'KEY_NOT_ACCEPTED');
-  if (parseKey(key).kind !== kind) {
-    throw new AppError(400, `Action ${action} takes the key of ${an(kind)}`, 'KEY_NOT_ACCEPTED');
-  }
-  const resolved = await resolveKey(key, ctx.userId);
-  const ids =
-    resolved.kind === 'issue'
-      ? { projectId: resolved.projectId, issueNumber: resolved.issueNumber }
-      : { spaceId: resolved.spaceId, pageSlug: resolved.pageSlug };
+  const ids = await idsOfKey(key, kind, action, ctx);
   for (const [field, value] of Object.entries(ids)) {
     const given = input?.[field];
     if (given !== undefined && String(given) !== String(value)) {
@@ -105,6 +103,34 @@ async function inputOf(item: ActItem, ctx: ActionContext): Promise<unknown> {
     }
   }
   return { ...input, ...ids };
+}
+
+/**
+ * The id fields a key stands for in an action.
+ * @param key - The key
+ * @param kind - What the action takes a key for
+ * @param action - The action, for messages
+ * @param ctx - Who runs it
+ */
+async function idsOfKey(
+  key: string,
+  kind: KeyKind,
+  action: string,
+  ctx: ActionContext,
+): Promise<Record<string, string | number>> {
+  if (kind === 'space' || kind === 'project') {
+    const resolved = await resolveContainerKey(key, kind, ctx.userId);
+    return resolved.kind === 'space'
+      ? { spaceId: resolved.spaceId }
+      : { projectId: resolved.projectId };
+  }
+  if (parseKey(key).kind !== kind) {
+    throw new AppError(400, `Action ${action} takes the key of ${an(kind)}`, 'KEY_NOT_ACCEPTED');
+  }
+  const resolved = await resolveKey(key, ctx.userId);
+  return resolved.kind === 'issue'
+    ? { projectId: resolved.projectId, issueNumber: resolved.issueNumber }
+    : { spaceId: resolved.spaceId, pageSlug: resolved.pageSlug };
 }
 
 /**

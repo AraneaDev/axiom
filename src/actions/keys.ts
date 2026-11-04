@@ -10,6 +10,7 @@ import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { parseAxiomUrl } from '../modules/links/resolve-link.service';
 import { viewablePagesWhere, viewableProjectsWhere } from '../modules/search/search-access';
+import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { formatIssueKey } from '../utils/issue-key';
 import { PROJECT_URL_SELECT } from '../utils/prisma-selects';
 
@@ -281,4 +282,103 @@ export async function resolveKey(
 ): Promise<ResolvedKey> {
   const parsed = parseKey(key);
   return parsed.kind === 'page' ? resolvePageKey(parsed, viewer) : resolveIssueKey(parsed, viewer);
+}
+
+/** A container a key can name: the space or the project an action works in. */
+export type ContainerKind = 'space' | 'project';
+
+export type ResolvedContainer =
+  | { kind: 'space'; spaceId: string }
+  | { kind: 'project'; projectId: string };
+
+const PROJECT_PREFIX = /^[A-Z][A-Z0-9]*$/;
+
+/**
+ * The text of a container key: org/team/space for a space, AXM or org/team/AXM for a project. Which
+ * of the two a three-part key is depends on the action, so the caller says. Nothing is looked up.
+ * @param key - The key as given
+ * @param kind - What the action takes
+ * @throws {AppError} 400 KEY_NOT_ACCEPTED for the key of an issue or page, INVALID_KEY otherwise
+ */
+function parseContainerKey(
+  key: string,
+  kind: ContainerKind,
+): { org?: string; team?: string; name: string } {
+  let item: ParsedKey | undefined;
+  try {
+    item = parseKey(key);
+  } catch {
+    item = undefined;
+  }
+  if (item) {
+    const wanted =
+      kind === 'space' ? 'a space as org/team/space' : 'a project as AXM or org/team/AXM';
+    throw new AppError(400, `This action takes the key of ${wanted}`, 'KEY_NOT_ACCEPTED');
+  }
+  const segments = key.split('/');
+  if (key.length > MAX_KEY_LENGTH || CONTROL_CHARACTER.test(key)) throw invalidKey();
+  if (segments.some((segment) => segment === '')) throw invalidKey();
+  if (kind === 'space') {
+    if (segments.length !== 3) throw invalidKey();
+    return { org: segments[0], team: segments[1], name: segments[2] };
+  }
+  if (segments.length !== 1 && segments.length !== 3) throw invalidKey();
+  const name = segments[segments.length - 1];
+  if (!PROJECT_PREFIX.test(name)) throw invalidKey();
+  return segments.length === 1 ? { name } : { org: segments[0], team: segments[1], name };
+}
+
+/**
+ * Turn the key of a space or a project into its id, for someone who may open it. What is invisible
+ * and what is missing answer alike, and a bare prefix is ambiguous only among visible projects.
+ * @param key - org/team/space, or AXM or org/team/AXM
+ * @param kind - What the action takes
+ * @param userId - Who asks
+ * @throws {AppError} 400 INVALID_KEY or KEY_NOT_ACCEPTED, 404 for nothing the user can see, 409
+ * AMBIGUOUS_KEY with details.candidates for a bare prefix several visible teams use
+ */
+export async function resolveContainerKey(
+  key: string,
+  kind: ContainerKind,
+  userId: string,
+): Promise<ResolvedContainer> {
+  const parsed = parseContainerKey(key, kind);
+  if (kind === 'project') {
+    const viewer = createViewer(userId);
+    if (parsed.org === undefined) {
+      const projects = await visibleByPrefix(parsed.name, viewer);
+      if (projects.length === 0) throw keyNotFound();
+      if (projects.length > 1) {
+        const candidates = projects.map(
+          (project) => `${project.team.org.slug}/${project.team.slug}/${project.prefix}`,
+        );
+        throw new AppError(
+          409,
+          `This key matches projects in more than one team: ${candidates.join(', ')}`,
+          'AMBIGUOUS_KEY',
+          { candidates },
+        );
+      }
+      return { kind, projectId: projects[0].id };
+    }
+    const project = await prisma.project.findFirst({
+      where: {
+        prefix: parsed.name,
+        team: { slug: parsed.team, org: { slug: parsed.org } },
+        AND: [await viewer.projects()],
+      },
+      select: { id: true },
+    });
+    if (!project) throw keyNotFound();
+    return { kind, projectId: project.id };
+  }
+  const space = await prisma.wikiSpace.findFirst({
+    where: {
+      slug: parsed.name,
+      team: { slug: parsed.team, org: { slug: parsed.org, members: { some: { userId } } } },
+    },
+    select: { id: true },
+  });
+  if (!space || !(await canAccessSpace(space.id, userId, 'VIEW'))) throw keyNotFound();
+  return { kind, spaceId: space.id };
 }

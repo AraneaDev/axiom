@@ -142,11 +142,13 @@ describe('call budgets for the developer loop', () => {
     const data = answer.data.items[0].data;
     expect(data.title).toBe('Pick me up');
     expect(data.comments.items.map((c: { body: string }) => c.body)).toEqual(['First thoughts']);
-    expect(data.links.items).toHaveLength(1);
+    expect(data.links.items).toEqual([
+      expect.objectContaining({ type: 'BLOCKS', direction: 'outward' }),
+    ]);
     expect(data.attachments.items.map((a: { name: string }) => a.name)).toEqual(['notes.txt']);
     const slugs = data.pages.items.map((p: { slug: string }) => p.slug).sort();
     expect(slugs).toEqual(['linked-page', 'mentioning-page']);
-    expect(calls()).toBeLessThanOrEqual(1);
+    expect(calls()).toBe(1);
   });
 
   it('finishes a ticket in 1 call: status, comment, time and the PR link', async () => {
@@ -166,7 +168,7 @@ describe('call budgets for the developer loop', () => {
 
     expect(answer.isError).toBe(false);
     expect(answer.data.results.every((r: { ok: boolean }) => r.ok)).toBe(true);
-    expect(used).toBeLessThanOrEqual(1);
+    expect(used).toBe(1);
 
     const stored = await prisma.issue.findUniqueOrThrow({
       where: { id: issue.id },
@@ -207,8 +209,8 @@ describe('call budgets for the developer loop', () => {
     const slug = `with-image-${Date.now()}`;
     const created = await callTool(client, 'act', {
       action: 'page.create',
+      key: `${ctx.orgSlug}/${ctx.teamSlug}/${spaceSlug}`,
       input: {
-        spaceId,
         title: 'With image',
         slug,
         body: `Look:\n\n![shot](${staged.data.attachmentUrl})\n`,
@@ -217,7 +219,7 @@ describe('call budgets for the developer loop', () => {
     const used = calls();
 
     expect(created.isError).toBe(false);
-    expect(used).toBeLessThanOrEqual(2);
+    expect(used).toBe(2);
 
     const page = await prisma.page.findFirstOrThrow({
       where: { spaceId, slug },
@@ -237,6 +239,28 @@ describe('call budgets for the developer loop', () => {
       select: { via: true },
     });
     expect(activity.length).toBeGreaterThan(0);
+    expect(activity.every((a) => a.via === TOKEN_NAME)).toBe(true);
+  });
+
+  it('creates an issue by project key in 1 call', async () => {
+    const { client, calls } = await counted(ctx.owner);
+    const created = await callTool(client, 'act', {
+      action: 'issue.create',
+      key: ctx.projectPrefix,
+      input: { title: 'Made by project key' },
+    });
+    const used = calls();
+
+    expect(created.isError).toBe(false);
+    expect(used).toBe(1);
+    const stored = await prisma.issue.findFirstOrThrow({
+      where: { projectId: ctx.projectId, title: 'Made by project key' },
+    });
+    expect(stored.creatorId).toBe(ctx.owner.id);
+    const activity = await prisma.activity.findMany({
+      where: { resourceId: stored.id },
+      select: { via: true },
+    });
     expect(activity.every((a) => a.via === TOKEN_NAME)).toBe(true);
   });
 
@@ -280,12 +304,12 @@ describe('call budgets for the developer loop', () => {
     const byKey = await counted(member);
     const read = await callTool(byKey.client, 'read', { keys: [issue.key] });
     expect(read.data.items[0].data.title).toBe('Find by key');
-    expect(byKey.calls()).toBeLessThanOrEqual(1);
+    expect(byKey.calls()).toBe(1);
 
     const byTitle = await counted(member);
     const search = await callTool(byTitle.client, 'search', { query: title, type: 'wiki' });
     expect(search.isError).toBe(false);
     expect(search.data[0].items[0].key).toBe(pageKey(slug));
-    expect(byTitle.calls()).toBeLessThanOrEqual(1);
+    expect(byTitle.calls()).toBe(1);
   });
 });
