@@ -8,7 +8,6 @@ import * as teamsService from './teams.service';
 
 // Responses keep the shape the REST routes always had (R3)
 const record = z.looseObject({ id: z.string() });
-const loose = z.looseObject({});
 
 const orgTarget = z.object({ orgId: z.string() });
 const teamTarget = z.object({ teamId: z.string() });
@@ -21,12 +20,17 @@ registerActions([
     kind: 'read',
     summary: 'List the teams of an organization, paged; a GUEST sees only their own teams',
     target: orgTarget,
-    input: orgTarget.extend({ limit: z.string().optional(), offset: z.string().optional() }),
-    output: loose,
+    // Any query value passes, as it did before: a repeated ?limit= is read as its first number
+    input: orgTarget.extend({ limit: z.unknown(), offset: z.unknown() }),
+    output: z.looseObject({ data: z.array(record), total: z.number() }),
     rest: { method: 'GET', path: '/api/teams/org/:orgId' },
     authorize: orgMember<z.infer<typeof orgTarget>>((input) => input.orgId),
     handler: async (ctx, { orgId, limit, offset }) =>
-      teamsService.listOrgTeams(orgId, { limit, offset }, ctx.userId),
+      teamsService.listOrgTeams(
+        orgId,
+        { limit: limit as string | undefined, offset: offset as string | undefined },
+        ctx.userId,
+      ),
   }),
   defineAction({
     name: 'team.get',

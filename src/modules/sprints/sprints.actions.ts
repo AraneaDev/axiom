@@ -37,11 +37,10 @@ const writeProject = projectAction<ProjectInput>('issue:edit', (input) => input.
 const sprintOf = (input: SprintInput) => ({ projectId: input.projectId, recordId: input.sprintId });
 const readSprint = ownedByProject(projectOf.sprint, sprintOf);
 const writeSprint = ownedByProject(projectOf.sprint, sprintOf, 'issue:edit');
-const writeSprintIssue = ownedByProject(
-  projectOf.issue,
-  (input: SprintIssueInput) => ({ projectId: input.projectId, recordId: input.issueId }),
-  'issue:edit',
-);
+const issueOwnedByProject = ownedByProject(projectOf.issue, (input: SprintIssueInput) => ({
+  projectId: input.projectId,
+  recordId: input.issueId,
+}));
 
 /**
  * The sprint must belong to the project and so must the issue under it, as the router-level
@@ -51,7 +50,7 @@ const writeSprintIssue = ownedByProject(
  */
 async function writeSprintAndIssue(ctx: ActionContext, input: SprintIssueInput): Promise<void> {
   await writeSprint(ctx, input);
-  await writeSprintIssue(ctx, input);
+  await issueOwnedByProject(ctx, input);
 }
 
 const sprintActions = [
@@ -73,12 +72,13 @@ const sprintActions = [
     kind: 'read',
     summary: 'List the sprints of a project, optionally by status',
     target: projectTarget,
-    input: projectTarget.extend({ status: z.string().optional() }),
+    // Any query value passes, as it did before: a repeated ?status= reaches the service unchanged
+    input: projectTarget.extend({ status: z.unknown() }),
     output: z.array(loose),
     rest: { method: 'GET', path: `${PROJECT}/sprints` },
     authorize: readProject,
     handler: async (_ctx, { projectId, status }) =>
-      sprintsService.listSprints(projectId, { status }),
+      sprintsService.listSprints(projectId, { status: status as string | undefined }),
   }),
   defineAction({
     name: 'sprint.get',
@@ -137,12 +137,19 @@ const sprintActions = [
     summary: 'The report of a sprint: scope, burndown, what got done',
     target: sprintTarget,
     input: sprintTarget,
-    // A typed report: only the shape that leaves matters, so nothing is named here
-    output: z.unknown(),
+    output: z.looseObject({
+      sprint: record,
+      summary: loose,
+      completedIssues: z.array(z.unknown()),
+      incompleteIssues: z.array(z.unknown()),
+      scopeChanges: z.array(z.unknown()),
+    }),
     rest: { method: 'GET', path: `${SPRINT}/report` },
     authorize: readSprint,
-    handler: async (_ctx, { projectId, sprintId }) =>
-      sprintReportService.getSprintReport(projectId, sprintId),
+    // The spread turns the report's interface into a plain object for the loose output schema
+    handler: async (_ctx, { projectId, sprintId }) => ({
+      ...(await sprintReportService.getSprintReport(projectId, sprintId)),
+    }),
   }),
   defineAction({
     name: 'sprint.addIssues',
@@ -177,14 +184,14 @@ const sprintActions = [
     kind: 'read',
     summary: 'Velocity of the last sprints of a project',
     target: projectTarget,
-    input: projectTarget.extend({ count: z.string().optional() }),
+    // Any query value passes, as it did before: a repeated ?count= is read as its first number
+    input: projectTarget.extend({ count: z.unknown() }),
     output: z.array(loose),
     rest: { method: 'GET', path: `${PROJECT}/velocity` },
     authorize: readProject,
     handler: async (_ctx, { projectId, count }) =>
-      sprintsService.getVelocity(projectId, count ? parseInt(count, 10) : undefined),
+      sprintsService.getVelocity(projectId, count ? parseInt(count as string, 10) : undefined),
   }),
-  // The static path comes ahead of /backlog, which would not capture it but reads the same
   defineAction({
     name: 'sprint.backlogHydrate',
     area: 'sprints',

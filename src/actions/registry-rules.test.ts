@@ -5,7 +5,12 @@ import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { normalizeApiPath, TOKEN_SCOPES, tokenAllows } from '../middleware/token-scopes';
+import {
+  normalizeApiPath,
+  scopeAllows,
+  TOKEN_SCOPES,
+  tokenAllows,
+} from '../middleware/token-scopes';
 
 import { defineAction, type ActionDef } from './define';
 import { listActions } from './registry';
@@ -169,6 +174,37 @@ describe('registry rules', () => {
     const root = path.resolve(__dirname, '..');
     const entry = readFileSync(path.join(root, 'index.ts'), 'utf8');
     expect(filesNotImported(findActionFiles(root), root, entry)).toEqual([]);
+  });
+
+  describe('token reach', () => {
+    // Differences from tokenAllows that are intended. Anything else fails the table below.
+    // - uiOnly and tokenBlocked actions: refused to every token, where tokenAllows may have
+    //   let a scope through (plan 3 adds approval)
+    // - R1: attachment actions need the parent's area scope as well, so they are stricter
+    const intended = (def: ActionDef): boolean =>
+      !!def.uiOnly || !!def.tokenBlocked || def.name.startsWith('attachment.');
+
+    // Read when the tests run: the actions files load in beforeAll
+    const tableRows = () =>
+      listActions()
+        .filter((def) => def.rest && !intended(def))
+        .flatMap((def) => TOKEN_SCOPES.map((scope) => ({ def, scope })));
+
+    it('has rows to compare', () => {
+      expect(tableRows().length).toBeGreaterThan(0);
+    });
+
+    it('gives each single scope the reach tokenAllows gave the route', () => {
+      const rows = tableRows();
+      const differences = rows.flatMap(({ def, scope }) => {
+        const { method, path: pattern } = def.rest!;
+        const concrete = pattern.replace(/:[A-Za-z]+/g, 'x');
+        const before = tokenAllows([scope], method, concrete);
+        const after = scopeAllows([scope], def.area, def.kind);
+        return before === after ? [] : [`${def.name} with ${scope}: was ${before}, is ${after}`];
+      });
+      expect(differences).toEqual([]);
+    });
   });
 
   describe('R9: writes that tokens may not make', () => {
