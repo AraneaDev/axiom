@@ -14,6 +14,8 @@ const CLIENT_FILE = 'frontend/src/api/client.ts';
 
 /** Stands in for a template expression while a path is being read */
 const PARAM_MARK = '\uE000';
+/** Stands in for an expression that is visibly a query string */
+const QUERY_MARK = '\uE001';
 
 /** Calls that take a path relative to /api, with the method they default to */
 const RELATIVE_CALLS: Record<string, string> = {
@@ -34,24 +36,25 @@ const EXTRA_REGISTRY_ROUTES = [{ method: 'POST', path: '/api/act' }];
 /**
  * Calls whose path the scan can't read, each with the reason it is safe to skip. The path of
  * each reaches the call through a variable, and is built from an /api literal that is scanned on
- * its own. Matched by file and argument text, so a moved line keeps its entry.
+ * its own. Matched by file and the exact argument text, so a moved line keeps its entry and a new
+ * unreadable call in the same file does not hide behind it.
  */
 const UNREADABLE_ALLOWED: Array<{ file: string; arg: string; reason: string }> = [
-  {
+  ...['`${API_BASE}${path}`', 'path', 'url'].map((arg) => ({
     file: CLIENT_FILE,
-    arg: '*',
+    arg,
     reason:
       'Defines the helpers. Every path they carry arrives as a parameter from a call scanned elsewhere',
-  },
-  {
+  })),
+  ...['src', 'url'].map((arg) => ({
     file: 'frontend/src/components/ui/AttachmentList.tsx',
-    arg: '*',
+    arg,
     reason:
       'The urls come from attachmentsApi.getDownloadUrl and getPreviewUrl, scanned as literals',
-  },
+  })),
   {
     file: 'frontend/src/components/ui/AttachmentPreview.tsx',
-    arg: '*',
+    arg: 'url',
     reason:
       'The urls come from attachmentsApi.getDownloadUrl and getPreviewUrl, scanned as literals',
   },
@@ -155,18 +158,35 @@ function pathText(node: ts.Expression, constants: Map<string, string>): string |
  */
 function expressionText(node: ts.Expression, constants: Map<string, string>): string {
   if (ts.isIdentifier(node) && constants.has(node.text)) return constants.get(node.text)!;
+  if (isQueryString(node, constants)) return QUERY_MARK;
   return pathText(node, constants) ?? PARAM_MARK;
 }
 
 /**
+ * Whether an expression is visibly a query string: a `cond ? `?${x}` : ''`, or a variable or call
+ * named for one (`query`, `qs`, `buildQuery(filters)`). Anything else glued to a path is unknown.
+ * @param node - The expression
+ * @param constants - The file's string constants
+ */
+function isQueryString(node: ts.Expression, constants: Map<string, string>): boolean {
+  if (ts.isConditionalExpression(node)) {
+    return (pathText(node.whenTrue, constants) ?? '').startsWith('?');
+  }
+  const named = ts.isCallExpression(node) ? node.expression : node;
+  return ts.isIdentifier(named) && /^(q|qs|query|querystring|buildquery)$/i.test(named.text);
+}
+
+/**
  * The segments of a path read from source, as ':param' where an expression stands, without the
- * query string. Undefined when the path doesn't start with a literal slash.
+ * query string. Undefined when the path doesn't start with a literal slash, or ends in an unknown
+ * expression glued to a literal.
  * @param text - The text from pathText
  */
 function normalizePath(text: string): string | undefined {
-  // `/x${query}` ends in an expression glued to a literal: a query string, not a segment
-  const trimmed = text.replace(/([^/\uE000])\uE000+$/, '$1');
-  const withoutQuery = trimmed.split('?')[0].split('#')[0];
+  // A query string ends the path, whatever follows it
+  const withoutQuery = text.split(QUERY_MARK)[0].split('?')[0].split('#')[0];
+  // `/x${y}`: an unknown expression glued to a literal could be a segment or a query
+  if (/[^/\uE000]\uE000+$/.test(withoutQuery)) return undefined;
   if (!withoutQuery.startsWith('/') || withoutQuery.startsWith(`/${PARAM_MARK}`)) return undefined;
   const segments = withoutQuery
     .split('/')
@@ -188,8 +208,16 @@ function methodOf(init: ts.Expression | undefined, fallback: string): string | u
   if (!ts.isObjectLiteralExpression(init)) return undefined;
   for (const prop of init.properties) {
     if (ts.isSpreadAssignment(prop)) return undefined;
-    if (ts.isPropertyAssignment(prop) && prop.name.getText() === 'method') {
-      return ts.isStringLiteral(prop.initializer) ? prop.initializer.text.toUpperCase() : undefined;
+    const name =
+      prop.name && (ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name))
+        ? prop.name.text
+        : undefined;
+    // A computed key or a method named otherwise can't be told apart from `method`
+    if (prop.name && ts.isComputedPropertyName(prop.name)) return undefined;
+    if (name === 'method') {
+      return ts.isPropertyAssignment(prop) && ts.isStringLiteral(prop.initializer)
+        ? prop.initializer.text.toUpperCase()
+        : undefined;
     }
   }
   return fallback;
@@ -238,6 +266,25 @@ function clientImports(sf: ts.SourceFile): Map<string, string> {
     }
   }
   return names;
+}
+
+/**
+ * Whether a literal names a module (`import x from '@/api/client'`, `import('@/api/x')`), which
+ * is not a url.
+ * @param node - The literal
+ */
+function isModuleSpecifier(node: ts.Node): boolean {
+  const parent = node.parent;
+  return (
+    ts.isImportDeclaration(parent) ||
+    ts.isExportDeclaration(parent) ||
+    ts.isLiteralTypeNode(parent) ||
+    (ts.isCallExpression(parent) &&
+      (parent.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        /^(mock|doMock|importActual)$/.test(
+          ts.isPropertyAccessExpression(parent.expression) ? parent.expression.name.text : '',
+        )))
+  );
 }
 
 /**
@@ -296,11 +343,14 @@ function scanFrontend(): { calls: FrontendCall[]; unreadable: UnreadableCall[] }
         ts.isStringLiteral(node) ||
         ts.isNoSubstitutionTemplateLiteral(node) ||
         ts.isTemplateExpression(node);
-      if (isString && !inCalls.has(node)) {
+      if (isString && !inCalls.has(node) && !isModuleSpecifier(node)) {
         const text = pathText(node as ts.Expression, constants);
         const normalized = text === undefined ? undefined : normalizePath(text);
         if (normalized?.startsWith('/api/')) {
           calls.push({ method: 'GET', path: normalized, where: where(node) });
+        } else if (text !== undefined && text.includes('/api/')) {
+          // An /api url behind an unknown prefix (`${origin}/api/x`) or suffix
+          unreadable.push({ file: rel, arg: node.getText(), where: where(node) });
         }
         if (isString && ts.isTemplateExpression(node)) return;
       }
@@ -313,8 +363,8 @@ function scanFrontend(): { calls: FrontendCall[]; unreadable: UnreadableCall[] }
 
 /**
  * Whether a request path reaches a route.
- * A param in the request path matches only a param in the route: a variable segment may be any
- * value, so it can't be pinned to a literal route.
+ * A param in the request path matches only a param in the route, and a literal only the same
+ * literal: the frontend writes ids as expressions, so `/issues/stats` is not `/issues/:number`.
  * @param request - The request's segments
  * @param route - The route's segments
  */
@@ -324,7 +374,7 @@ function segmentsMatch(request: string[], route: string[]): boolean {
     request.every((segment, i) =>
       segment === ':param'
         ? route[i].startsWith(':')
-        : route[i].startsWith(':') || segment.toLowerCase() === route[i].toLowerCase(),
+        : segment.toLowerCase() === route[i].toLowerCase(),
     )
   );
 }
@@ -426,22 +476,30 @@ const MIGRATED_DOMAINS: Array<{ domain: string; matches(route: LegacyRoute): boo
   },
 ];
 
-/** Legacy routes that a domain's pattern catches by name but plan 1 does not migrate */
-const DOMAIN_EXEMPTIONS: Array<{ method: string; path: string; reason: string }> = [
+/**
+ * Legacy routes that a domain's pattern catches by name but plan 1 does not migrate. Each names
+ * the plan task that takes it, in .superpowers' plans/2026-10-30-agent-layer-<plan>-*.md.
+ */
+const DOMAIN_EXEMPTIONS: Array<{
+  method: string;
+  path: string;
+  plan: 3 | 4;
+  task: string;
+  reason: string;
+}> = [
   {
     method: 'GET',
     path: '/api/projects/:projectId/issues/:issueNumber/activity',
-    reason: 'The activity feed is the activity module, migrated with the people routes in plan 4',
+    plan: 4,
+    task: 'plan 4, Task 4 (people and notifications: activity)',
+    reason: 'The activity feed belongs to the activity module, not to the issue actions',
   },
   {
     method: 'GET',
     path: '/api/wiki/spaces/:spaceId/pages/:pageSlug/export',
-    reason: 'Page export is a raw download, listed under wiki rest in plan 4',
-  },
-  {
-    method: 'POST',
-    path: '/api/wiki/spaces/:spaceId/pages/:pageSlug/collab/flush',
-    reason: 'Flushing a collaboration session is not a page action; it moves with the wiki routes',
+    plan: 4,
+    task: 'plan 4, Task 2 (wiki rest: export)',
+    reason: 'Page export is a raw download, which plan 4 gives its own handling',
   },
 ];
 
@@ -463,8 +521,7 @@ describe('frontend and registry parity', () => {
     const unexplained = scan.unreadable.filter(
       (call) =>
         !UNREADABLE_ALLOWED.some(
-          (allowed) =>
-            allowed.file === call.file && (allowed.arg === '*' || allowed.arg === call.arg),
+          (allowed) => allowed.file === call.file && allowed.arg === call.arg,
         ),
     );
     expect(unexplained.map((call) => `${call.where}  ${call.arg}`)).toEqual([]);
@@ -473,9 +530,7 @@ describe('frontend and registry parity', () => {
   it('has no allowlist entry that nothing needs', () => {
     const unused = UNREADABLE_ALLOWED.filter(
       (allowed) =>
-        !scan.unreadable.some(
-          (call) => allowed.file === call.file && (allowed.arg === '*' || allowed.arg === call.arg),
-        ),
+        !scan.unreadable.some((call) => allowed.file === call.file && allowed.arg === call.arg),
     );
     expect(unused.map((allowed) => allowed.file)).toEqual([]);
   });
@@ -524,6 +579,24 @@ describe('frontend and registry parity', () => {
       (route) => !stackServes(stack, route.method, route.path.replace(/:[a-zA-Z_]+/g, 'x')),
     );
     expect(missing.map((route) => `${route.method} ${route.path}`)).toEqual([]);
+  });
+
+  it('reaches an Express route with every frontend call', () => {
+    const stack = (app.router as unknown as { stack: RouterLayer[] }).stack;
+    const broken = BROKEN_FRONTEND_CALLS.map(({ method, path }) => ({ method, path }));
+    const lost = scan.calls
+      .filter((call) => !served(broken, call.method, call.path))
+      .filter((call) => !stackServes(stack, call.method, call.path.replace(/:param/g, 'x')))
+      .map((call) => `${call.method} ${call.path}  (${call.where})`);
+    expect([...new Set(lost)].sort()).toEqual([]);
+  });
+
+  it('checks each domain exemption against its plan', () => {
+    const wrong = DOMAIN_EXEMPTIONS.filter((entry) => {
+      const route = LEGACY_ROUTES.find((r) => r.method === entry.method && r.path === entry.path);
+      return route?.plan !== entry.plan || !entry.task.includes(`plan ${entry.plan}`);
+    });
+    expect(wrong.map((entry) => `${entry.method} ${entry.path}`)).toEqual([]);
   });
 
   it('lists a broken frontend call only while no route serves it', () => {

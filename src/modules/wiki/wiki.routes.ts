@@ -64,13 +64,6 @@ router.delete(
 );
 
 // Pages (require org membership via space lookup + space permissions)
-router.post(
-  '/spaces/:spaceId/pages/:pageSlug/collab/flush',
-  requireWikiSpaceAccess(),
-  requireSpacePermission('EDIT'),
-  requireWikiPageBySlug('edit'),
-  wikiController.flushPageSession,
-);
 router.get(
   '/spaces/:spaceId/pages/:pageSlug/export',
   requireWikiSpaceAccess(),

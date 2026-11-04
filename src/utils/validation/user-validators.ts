@@ -56,6 +56,17 @@ export const updatePageSchema = createPageSchema
     parentId: z.string().min(1).nullable().optional(),
   });
 
+/** A grant to one user or to every user with a team role, never both */
+export const setSpacePermissionSchema = z
+  .object({
+    userId: z.string().min(1).optional(),
+    teamRole: z.enum(['ADMIN', 'MEMBER', 'VIEWER']).optional(),
+    level: z.enum(['VIEW', 'EDIT', 'ADMIN']),
+  })
+  .refine((data) => (data.userId === undefined) !== (data.teamRole === undefined), {
+    message: 'Give either userId or teamRole',
+  });
+
 export const flushPageSessionSchema = z.object({
   changeDescription: z.string().max(500).optional(),
 });

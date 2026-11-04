@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler';
 import { param } from '../../utils/params';
+import { validate, setSpacePermissionSchema } from '../../utils/validation';
 
 import * as spacePermService from './space-permissions.service';
 
@@ -17,7 +18,7 @@ export const listPermissions = asyncHandler(async (req: Request, res: Response) 
  * Upsert a permission on a space.
  */
 export const upsertPermission = asyncHandler(async (req: Request, res: Response) => {
-  const { userId, teamRole, level } = req.body;
+  const { userId, teamRole, level } = validate(setSpacePermissionSchema, req.body);
   const permission = await spacePermService.setSpacePermission(param(req, 'spaceId'), {
     userId,
     teamRole,

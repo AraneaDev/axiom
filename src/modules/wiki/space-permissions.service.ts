@@ -148,6 +148,20 @@ export async function setSpacePermission(
     throw new AppError(400, 'Either userId or teamRole is required');
   }
 
+  // A grant to a user needs that user to exist and to belong to the space's org
+  if (data.userId) {
+    const team = await prisma.team.findUnique({
+      where: { id: space.teamId },
+      select: { orgId: true },
+    });
+    const user = await prisma.user.findUnique({ where: { id: data.userId }, select: { id: true } });
+    if (!user) throw new AppError(404, 'User not found');
+    const membership = await prisma.orgMembership.findUnique({
+      where: { userId_orgId: { userId: data.userId, orgId: team!.orgId } },
+    });
+    if (!membership) throw new AppError(403, "User is not a member of the space's organization");
+  }
+
   if (data.userId) {
     const permission = await prisma.spacePermission.upsert({
       where: { spaceId_userId: { spaceId, userId: data.userId } },

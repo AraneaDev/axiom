@@ -57,6 +57,7 @@ export {
   createPageSchema,
   updatePageSchema,
   flushPageSessionSchema,
+  setSpacePermissionSchema,
   createPageTemplateSchema,
   createPageCommentSchema,
   addPageLabelSchema,

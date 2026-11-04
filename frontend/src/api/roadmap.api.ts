@@ -115,7 +115,9 @@ export const roadmapApi = {
     del(`/projects/${projectId}/roadmap/buckets/${bucketId}`),
 
   reorderBuckets: (projectId: string, orderedIds: string[]) =>
-    post<RoadmapBucket[]>(`/projects/${projectId}/roadmap/buckets/reorder`, { orderedIds }),
+    post<RoadmapBucket[]>(`/projects/${projectId}/roadmap/buckets/reorder`, {
+      bucketIds: orderedIds,
+    }),
 
   // Data
   getTimeline: (projectId: string, filters?: Filters) =>

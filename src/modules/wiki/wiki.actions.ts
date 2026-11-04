@@ -13,6 +13,7 @@ import {
   copyPageSchema,
   createPageSchema,
   firstQueryText,
+  flushPageSessionSchema,
   MAX_DB_INT,
   movePageSchema,
   queryCount,
@@ -339,6 +340,24 @@ const pageActions = [
     handler: async (ctx, { spaceId, pageSlug, ...data }) => {
       await wikiService.applyPageMerge(spaceId, pageSlug, ctx.userId, data);
     },
+  }),
+  defineAction({
+    name: 'page.flush',
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Save a page from its live editing session now, with an optional change description',
+    target: slugTarget,
+    input: slugTarget.extend(flushPageSessionSchema.shape),
+    output: z.looseObject({ flushed: z.boolean() }),
+    rest: { method: 'POST', path: `${PAGE}/collab/flush`, status: 200 },
+    authorize: editBySlug,
+    handler: async (ctx, { spaceId, pageSlug, changeDescription }) =>
+      wikiService.flushPageSession(
+        spaceId,
+        pageSlug,
+        ctx.userId,
+        changeDescription?.trim() || undefined,
+      ),
   }),
   defineAction({
     name: 'page.move',

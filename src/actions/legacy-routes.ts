@@ -190,7 +190,6 @@ export const LEGACY_ROUTES: LegacyRoute[] = [
   { method: 'DELETE', path: '/api/wiki/restrictions/:restrictionId', plan: 3 },
   { method: 'PATCH', path: '/api/wiki/spaces/:spaceId', plan: 3 },
   { method: 'GET', path: '/api/wiki/spaces/:spaceId/labels', plan: 4 },
-  { method: 'POST', path: '/api/wiki/spaces/:spaceId/pages/:pageSlug/collab/flush', plan: 4 },
   { method: 'GET', path: '/api/wiki/spaces/:spaceId/pages/:pageSlug/export', plan: 4 },
   { method: 'GET', path: '/api/wiki/spaces/:spaceId/templates', plan: 4 },
   { method: 'POST', path: '/api/wiki/spaces/:spaceId/templates', plan: 4 },
