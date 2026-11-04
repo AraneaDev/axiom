@@ -1,6 +1,4 @@
 import crypto from 'crypto';
-import type { IncomingMessage } from 'http';
-import https from 'https';
 import path from 'path';
 
 import { createId } from '@paralleldrive/cuid2';
@@ -12,25 +10,30 @@ import { AppError } from '../../middleware/errorHandler';
 import { scopeAllows } from '../../middleware/token-scopes';
 import { getStorage } from '../../storage/storage';
 import { ERR } from '../../utils/error-messages';
+import { logger } from '../../utils/logger';
 import { logActivity } from '../activity/activity.service';
-import { assertPublicUrl, publicLookup } from '../automation/webhook';
 
 import {
   assertAttachmentParentAccess,
   assertParentScope,
+  assertStagedQuota,
   bareMimeType,
   isAllowedMimeType,
   MAX_ATTACHMENT_BYTES,
   mimeTypeRefusal,
   uploadAttachment,
 } from './attachments.service';
+import {
+  assertFetchWithinLimit,
+  fetchRemoteFile,
+  type RemoteFetchDeps,
+  withFetchSlot,
+} from './remote-file';
 
 /** How long a signed upload URL works. */
 const UPLOAD_URL_TTL_MS = 10 * 60 * 1000;
 /** How long a staged attachment waits for a body write to reference it. */
 const STAGED_TTL_MS = 24 * 60 * 60 * 1000;
-const FETCH_TIMEOUT_MS = 10_000;
-const MAX_REDIRECTS = 5;
 
 /** A parent as the actions address it. Task 10 adds issue and page keys. */
 export type UploadTarget =
@@ -141,6 +144,7 @@ export async function createUploadUrl(
     throw new AppError(413, 'File is larger than 25 MB', 'FILE_TOO_LARGE');
   }
   const parent = input.target ? await resolveUploadTarget(input.target) : null;
+  if (!parent) await assertStagedQuota(caller.userId);
   const attachmentId = createId();
   const intent = await prisma.uploadIntent.create({
     data: {
@@ -219,6 +223,7 @@ export async function assertUploadStillAllowed(intent: UsableIntent): Promise<vo
     assertParentScope(intent.apiToken.scopes, parent, true);
   }
   await assertAttachmentParentAccess(intent.userId, parent, 'edit');
+  if (!parent.issueId && !parent.pageId) await assertStagedQuota(intent.userId);
 }
 
 /**
@@ -250,100 +255,6 @@ export async function storeSignedUpload(intent: UsableIntent, data: Buffer) {
   );
 }
 
-/** What fetchRemoteFile uses; tests replace the network. */
-export interface RemoteFetchDeps {
-  /** Refuses a URL with an AppError. Runs for the first URL and every redirect. */
-  checkUrl: (url: string) => Promise<void>;
-  /** Connects, and resolves when the response headers are in. */
-  open: (url: URL, signal: AbortSignal) => Promise<IncomingMessage>;
-  /** For the whole fetch, redirects and reading included. */
-  timeoutMs: number;
-}
-
-const defaultFetchDeps: RemoteFetchDeps = {
-  checkUrl: (url) => assertPublicUrl(url, 'Attachment'),
-  // publicLookup: the address checked is the address connected to, so a host can't pass
-  // checkUrl and then resolve to something private (DNS rebinding)
-  open: (url, signal) =>
-    new Promise((resolve, reject) => {
-      https.get(url, { lookup: publicLookup, signal, agent: false }, resolve).on('error', reject);
-    }),
-  timeoutMs: FETCH_TIMEOUT_MS,
-};
-
-/**
- * Read a response up to the attachment limit, however little its Content-Length claimed.
- * @param res - The response
- * @throws {AppError} 413 past the limit
- */
-async function readCapped(res: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of res) {
-    total += (chunk as Buffer).length;
-    if (total > MAX_ATTACHMENT_BYTES) {
-      res.destroy();
-      throw new AppError(413, 'File is larger than 25 MB', 'FILE_TOO_LARGE');
-    }
-    chunks.push(chunk as Buffer);
-  }
-  return Buffer.concat(chunks);
-}
-
-/**
- * Get a file over HTTPS for a user: every hop passes the SSRF guard, with the attachment limits on
- * size and type.
- * @param url - The URL
- * @param deps - Replaceable dependencies (tests)
- * @returns The bytes, and the bare type the server named
- * @throws {AppError} 400 for a refused URL or a failed answer, 413, 415, 502 when the connection
- * fails or times out
- */
-export async function fetchRemoteFile(
-  url: string,
-  deps: Partial<RemoteFetchDeps> = {},
-): Promise<{ data: Buffer; mimeType: string }> {
-  const { checkUrl, open, timeoutMs } = { ...defaultFetchDeps, ...deps };
-  const signal = AbortSignal.timeout(timeoutMs);
-  let current = url;
-  try {
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      await checkUrl(current);
-      const res = await open(new URL(current), signal);
-      const status = res.statusCode ?? 0;
-      const location = res.headers.location;
-      if (status >= 300 && status < 400 && location) {
-        res.destroy();
-        current = new URL(location, current).toString();
-        continue;
-      }
-      try {
-        if (status < 200 || status >= 300) {
-          throw new AppError(400, `The URL answered with status ${status}`, 'FETCH_FAILED');
-        }
-        const mimeType = bareMimeType(res.headers['content-type'] ?? '');
-        if (!isAllowedMimeType(mimeType)) throw mimeTypeRefusal(mimeType);
-        if (Number(res.headers['content-length']) > MAX_ATTACHMENT_BYTES) {
-          throw new AppError(413, 'File is larger than 25 MB', 'FILE_TOO_LARGE');
-        }
-        return { data: await readCapped(res), mimeType };
-      } finally {
-        res.destroy();
-      }
-    }
-  } catch (err) {
-    if (err instanceof AppError) throw err;
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ERR_BLOCKED_ADDRESS') {
-      throw new AppError(400, 'Attachment URL resolves to a private/internal IP');
-    }
-    if (code === 'ERR_INVALID_URL') throw new AppError(400, 'The URL redirected to an invalid URL');
-    // The cause stays here: it would tell a caller what the server can reach
-    throw new AppError(502, 'Could not fetch the URL', 'FETCH_FAILED');
-  }
-  throw new AppError(400, 'The URL redirected too many times', 'FETCH_FAILED');
-}
-
 /**
  * The file name for a fetched file without a given one: the last part of the URL's path.
  * @param url - The URL, which has been fetched
@@ -371,19 +282,23 @@ export async function attachFromUrl(
   input: { url: string; target?: UploadTarget; filename?: string },
   deps: Partial<RemoteFetchDeps> = {},
 ) {
+  await assertFetchWithinLimit(userId);
   const parent = input.target ? await resolveUploadTarget(input.target) : null;
+  if (!parent) await assertStagedQuota(userId);
   const filename = input.filename ? cleanFilename(input.filename) : undefined;
-  const { data, mimeType } = await fetchRemoteFile(input.url, deps);
-  return uploadAttachment(
-    {
-      originalname: filename ?? filenameFromUrl(input.url),
-      mimetype: mimeType,
-      size: data.length,
-      buffer: data,
-    },
-    userId,
-    { ...(parent ?? {}), staged: !parent },
-  );
+  return withFetchSlot(async () => {
+    const { data, mimeType } = await fetchRemoteFile(input.url, deps);
+    return uploadAttachment(
+      {
+        originalname: filename ?? filenameFromUrl(input.url),
+        mimetype: mimeType,
+        size: data.length,
+        buffer: data,
+      },
+      userId,
+      { ...(parent ?? {}), staged: !parent },
+    );
+  });
 }
 
 const ATTACHMENT_REFERENCE = /\/api\/attachments\/([a-z0-9]+)/g;
@@ -441,15 +356,25 @@ export async function cleanupExpiredUploads(): Promise<void> {
   await prisma.uploadIntent.deleteMany({ where: { expiresAt: { lt: new Date(now) } } });
 
   const stagedBefore = new Date(now - STAGED_TTL_MS);
+  const abandonedRows = { stagedAt: { lt: stagedBefore }, issueId: null, pageId: null };
   const abandoned = await prisma.attachment.findMany({
-    where: { stagedAt: { lt: stagedBefore } },
+    where: abandonedRows,
     select: { id: true, storageKey: true },
   });
   const storage = getStorage();
   for (const attachment of abandoned) {
-    const removed = await prisma.attachment.deleteMany({
-      where: { id: attachment.id, stagedAt: { lt: stagedBefore } },
-    });
-    if (removed.count === 1) await storage.delete(attachment.storageKey);
+    // One row that fails doesn't stop the round
+    try {
+      const removed = await prisma.attachment.deleteMany({
+        where: { id: attachment.id, ...abandonedRows },
+      });
+      if (removed.count === 1) await storage.delete(attachment.storageKey);
+    } catch (err) {
+      logger.error(
+        'Could not remove a staged attachment',
+        { attachmentId: attachment.id, storageKey: attachment.storageKey },
+        err as Error,
+      );
+    }
   }
 }

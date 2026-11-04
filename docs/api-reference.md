@@ -2453,6 +2453,7 @@ Upload a file. Request must use `multipart/form-data`.
 | Field | Type | Description |
 |-------|------|-------------|
 | `file` | file | The file to upload |
+| `issueId`, `pageId` | string | The parent. Without one the file is staged, like one from `upload-url` |
 
 **Response 201:**
 
@@ -2481,13 +2482,13 @@ Get a signed URL for one upload, for a client that can't send multipart or doesn
 
 **Response 201:** `{ uploadUrl, uploadId, expiresAt, attachmentUrl }`
 
-A staged file is visible to its uploader only. It joins an issue or page when you reference `attachmentUrl` in an issue, comment or page body after uploading, and it is removed after 24 hours if you don't.
+A staged file is visible to its uploader only. It joins an issue or page when you reference `attachmentUrl` in an issue, comment or page body after uploading, and it is removed after 24 hours if you don't. You can hold 100 staged files at once; past that, new ones get `429`.
 
 ### PUT /api/uploads/:uploadId?sig=...
 
 Store the file: the request body is its raw content. This route takes no `Authorization` or `X-Requested-With` header, because the signature is the credential. Edit access to the target is checked again here, as are the scopes of the token that asked for the URL.
 
-**Response 201:** The attachment. **403:** the same answer for a wrong signature, an unknown id and a URL that expired or was used. **413:** larger than `size`. **415:** another type than `mimeType`, or a compressed body. A refused upload leaves the URL usable until it expires.
+**Response 201:** The attachment. **403:** the same answer for a wrong signature, an unknown id and a URL that expired or was used. **408:** the body took more than 2 minutes. **413:** larger than `size`. **415:** another type than `mimeType`, or a compressed body. A refused upload leaves the URL usable until it expires.
 
 ### POST /api/attachments/from-url
 
@@ -2495,7 +2496,7 @@ Fetch a file from a public HTTPS URL into an attachment. Private addresses are r
 
 **Request body:** `url`, and optionally `filename` and `target` as above.
 
-**Response 201:** The attachment. **400:** a refused URL or an answer that isn't a success. **413**, **415:** over the limits. **502:** the connection failed or timed out.
+**Response 201:** The attachment. **400:** a refused URL, an answer that isn't a success, or an empty file. **413**, **415:** over the limits. **429:** more than 10 fetches per minute, or too many running. **502:** the connection failed or timed out.
 
 ### GET /api/attachments
 

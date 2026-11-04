@@ -1,5 +1,7 @@
 import { lookup as dnsLookup, type LookupAddress } from 'dns';
 import dns from 'dns/promises';
+import type { IncomingMessage } from 'http';
+import https from 'https';
 import net from 'net';
 
 import { AppError } from '../../middleware/errorHandler';
@@ -23,10 +25,11 @@ for (const [network, prefix] of [
   BLOCKED_IPV4.addSubnet(network, prefix, 'ipv4');
 }
 for (const [network, prefix] of [
-  ['::', 128],
-  ['::1', 128],
+  ['::', 96], // unspecified, loopback and IPv4-compatible, which can embed a private address
   ['::ffff:0:0', 96], // IPv4-mapped
   ['64:ff9b::', 96], // NAT64, can embed a private IPv4 address
+  ['64:ff9b:1::', 48], // local-use NAT64, same
+  ['100::', 64], // discard
   ['2001::', 32], // Teredo, same
   ['2002::', 16], // 6to4, same
   ['fc00::', 7], // unique local
@@ -121,25 +124,138 @@ export const publicLookup: net.LookupFunction = (hostname, options, callback) =>
   });
 };
 
+const MAX_REDIRECTS = 5;
+
+/** A request to a URL outside this server. */
+export interface PublicRequest {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  signal: AbortSignal;
+}
+
+/** What openPublicUrl uses; tests replace the network. */
+export interface PublicRequestDeps {
+  /** Refuses a URL with an AppError. Runs for the first URL and every redirect. */
+  checkUrl: (url: string) => Promise<void>;
+  /** Connects, and resolves when the response headers are in. */
+  open: (url: URL, request: PublicRequest) => Promise<IncomingMessage>;
+}
+
+// publicLookup: the address checked is the address connected to, so a host can't pass checkUrl and
+// then resolve to something private (DNS rebinding)
+const openPinned: PublicRequestDeps['open'] = (url, { method, headers, body, signal }) =>
+  new Promise((resolve, reject) => {
+    https
+      .request(url, { method, headers, signal, lookup: publicLookup, agent: false }, resolve)
+      .on('error', reject)
+      .end(body);
+  });
+
 /**
- *
- * @param url
- * @param data
- * @param method
- * @param headers
+ * The request a redirect leads to, by the rules browsers and fetch follow: 307 and 308 repeat it,
+ * the others turn it into a GET. Another origin doesn't get the caller's headers, which can hold
+ * a secret for the first one.
+ * @param request - The request that was redirected
+ * @param status - The redirect's status
+ * @param sameOrigin - Whether the redirect stays on the origin
+ */
+function redirectedRequest(
+  request: PublicRequest,
+  status: number,
+  sameOrigin: boolean,
+): PublicRequest {
+  const repeat = status === 307 || status === 308;
+  const headers = Object.entries(request.headers ?? {}).filter(([name]) => {
+    const isContentType = name.toLowerCase() === 'content-type';
+    return isContentType ? repeat : sameOrigin;
+  });
+  return {
+    ...request,
+    method: repeat ? request.method : 'GET',
+    body: repeat ? request.body : undefined,
+    headers: Object.fromEntries(headers),
+  };
+}
+
+/**
+ * Send a request to a URL a user gave, following redirects: each hop passes the guard and connects
+ * through the pinned lookup. The caller reads or destroys the response it gets.
+ * @param url - The URL
+ * @param request - The request
+ * @param label - How messages name the URL
+ * @param deps - Replaceable dependencies (tests)
+ * @returns The first response that isn't a redirect
+ * @throws {AppError} 400 for a refused address, a bad redirect or too many of them
+ */
+export async function openPublicUrl(
+  url: string,
+  request: PublicRequest,
+  label: string,
+  deps: Partial<PublicRequestDeps> = {},
+): Promise<IncomingMessage> {
+  const checkUrl = deps.checkUrl ?? ((target: string) => assertPublicUrl(target, label));
+  const open = deps.open ?? openPinned;
+  let current = url;
+  let currentRequest = request;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await checkUrl(current);
+    let res: IncomingMessage;
+    try {
+      res = await open(new URL(current), currentRequest);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ERR_BLOCKED_ADDRESS') {
+        throw new AppError(400, `${label} URL resolves to a private/internal IP`);
+      }
+      throw err;
+    }
+    const status = res.statusCode ?? 0;
+    const location = res.headers.location;
+    if (status < 300 || status >= 400 || !location) return res;
+    res.destroy();
+
+    let next: URL;
+    try {
+      next = new URL(location, current);
+    } catch {
+      throw new AppError(400, `${label} URL redirected to an invalid URL`);
+    }
+    currentRequest = redirectedRequest(
+      currentRequest,
+      status,
+      next.origin === new URL(current).origin,
+    );
+    current = next.href;
+  }
+  throw new AppError(400, `${label} URL redirected too many times`);
+}
+
+/**
+ * Send an automation's webhook. The response is not read: only that it was delivered counts.
+ * @param url - The URL
+ * @param data - What to send as JSON
+ * @param method - The HTTP method
+ * @param headers - Extra headers
+ * @param deps - Replaceable dependencies (tests)
  */
 export async function executeWebhook(
   url: string,
   data: Record<string, unknown>,
   method = 'POST',
   headers?: Record<string, string>,
+  deps: Partial<PublicRequestDeps> = {},
 ) {
-  await assertPublicUrl(url);
-
-  await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(data),
-    signal: AbortSignal.timeout(10000),
-  });
+  const res = await openPublicUrl(
+    url,
+    {
+      method,
+      headers: { 'Content-Type': 'application/json', ...headers },
+      // A GET or HEAD has no body
+      body: /^(get|head)$/i.test(method) ? undefined : JSON.stringify(data),
+      signal: AbortSignal.timeout(10000),
+    },
+    'Webhook',
+    deps,
+  );
+  res.destroy();
 }

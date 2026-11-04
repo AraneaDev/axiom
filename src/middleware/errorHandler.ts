@@ -48,6 +48,14 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     });
   }
 
+  // A malformed percent-escape in a path param, which the router refuses with its own status
+  if (err instanceof URIError) {
+    const status = (err as URIError & { status?: number }).status ?? 400;
+    return res.status(status).json({
+      error: { message: 'The URL is not valid', code: 'BAD_REQUEST' },
+    });
+  }
+
   logger.fatal('unhandled error', requestContext, err);
   return res.status(500).json({
     error: { message: 'Internal server error', code: 'INTERNAL_ERROR' },

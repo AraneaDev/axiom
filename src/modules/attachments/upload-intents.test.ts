@@ -28,11 +28,15 @@ import { authGet, authPatch, authPost } from '../../test/helpers';
 import { isBlockedAddress, publicLookup } from '../automation/webhook';
 
 import {
+  fetchRemoteFile,
+  FROM_URL_LIMIT,
+  MAX_CONCURRENT_FETCHES,
+  type RemoteFetchDeps,
+} from './remote-file';
+import {
   attachFromUrl,
   bindStagedAttachments,
   cleanupExpiredUploads,
-  fetchRemoteFile,
-  type RemoteFetchDeps,
 } from './upload-intents.service';
 
 // Uploads go to a throwaway directory, never the repository
@@ -224,7 +228,7 @@ describe('upload intents', () => {
           where: { userId: ctx.owner.id, resource: `attachment:${uploadId}` },
         });
         expect(entry?.action).toBe('update');
-        expect(JSON.stringify(entry?.details)).toContain('sig=[redacted]');
+        expect(JSON.stringify(entry?.details)).not.toContain('sig');
       });
     });
 
@@ -495,12 +499,31 @@ describe('upload intents', () => {
       });
     });
 
-    it('keeps the signature out of the logs', () => {
-      const url = '/api/uploads/abc?x=1&sig=secret';
-      expect(loggableUrl({ originalUrl: url } as never)).toBe(
-        '/api/uploads/abc?x=1&sig=[redacted]',
-      );
-      expect(loggableUrl({ originalUrl: '/api/issues?a=1' } as never)).toBe('/api/issues?a=1');
+    it('keeps the whole query of a signed upload out of the logs', () => {
+      const logged = (originalUrl: string) => loggableUrl({ originalUrl } as never);
+      expect(logged('/api/uploads/abc?x=1&sig=secret')).toBe('/api/uploads/abc');
+      expect(logged('/api/uploads/abc?%73ig=secret')).toBe('/api/uploads/abc');
+      expect(logged('/API/Uploads/abc?sig=secret')).toBe('/API/Uploads/abc');
+      expect(logged('/api/issues?a=1')).toBe('/api/issues?a=1');
+    });
+
+    it('accepts no other spelling of the signature in the audit trail', async () => {
+      const { uploadUrl, uploadId } = await ownerUrl();
+      const sig = uploadUrl.split('sig=')[1];
+      expect((await put(`/api/uploads/${uploadId}?%73ig=${sig}`)).status).toBe(201);
+      await vi.waitFor(async () => {
+        const entry = await prisma.auditLog.findFirst({
+          where: { resource: `attachment:${uploadId}` },
+        });
+        expect(JSON.stringify(entry?.details)).toContain(`/api/uploads/${uploadId}`);
+        expect(JSON.stringify(entry?.details)).not.toContain(sig);
+      });
+    });
+
+    it('answers 400 for a malformed escape in the id', async () => {
+      const res = await put(`/api/uploads/%E0%A4%A?sig=x`);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('BAD_REQUEST');
     });
   });
 
@@ -601,16 +624,16 @@ describe('upload intents', () => {
       expect(await attachmentRow(staged.id)).toMatchObject({ pageId: first.id, stagedAt: null });
     });
 
-    it('leaves an upload without a parent from the old path alone', async () => {
+    it('stages a multipart upload without a parent, and binds it the same way', async () => {
       const multipart = await request(app)
         .post('/api/attachments')
         .set('Authorization', `Bearer ${ctx.owner.token}`)
         .set('X-Requested-With', 'XMLHttpRequest')
         .attach('file', Buffer.from('plain'), 'plain.txt');
       expect(multipart.status).toBe(201);
-      expect(multipart.body.stagedAt).toBeNull();
+      expect(multipart.body.stagedAt).not.toBeNull();
       await bindStagedAttachments(reference(multipart.body.id), { pageId }, ctx.owner.id);
-      expect((await attachmentRow(multipart.body.id)).pageId).toBeNull();
+      expect(await attachmentRow(multipart.body.id)).toMatchObject({ pageId, stagedAt: null });
     });
 
     it('ignores a body with no reference', async () => {
@@ -654,12 +677,40 @@ describe('upload intents', () => {
       });
       expect(left).toEqual([{ id: live.uploadId }]);
     });
+
+    it('goes on after a file it could not delete, and leaves bound rows alone', async () => {
+      const longAgo = new Date(Date.now() - 25 * 60 * 60_000);
+      const stuck = await stage(ctx.owner);
+      const next = await stage(ctx.owner);
+      const parented = await stage(ctx.owner);
+      // A directory where the file should be: unlink throws
+      fs.mkdirSync(path.join(storagePath, 'a-directory'), { recursive: true });
+      await prisma.attachment.update({
+        where: { id: stuck.id },
+        data: { storageKey: 'a-directory', stagedAt: longAgo },
+      });
+      await prisma.attachment.update({ where: { id: next.id }, data: { stagedAt: longAgo } });
+      // Not a state the code writes: the guard must hold even so
+      await prisma.attachment.update({
+        where: { id: parented.id },
+        data: { stagedAt: longAgo, pageId },
+      });
+
+      await expect(cleanupExpiredUploads()).resolves.toBeUndefined();
+
+      const removed = (id: string) => prisma.attachment.findUnique({ where: { id } });
+      expect(await removed(stuck.id)).toBeNull();
+      expect(await removed(next.id)).toBeNull();
+      expect(await removed(parented.id)).not.toBeNull();
+    });
   });
 
   describe('fromUrl', () => {
     it('fromUrl refuses private addresses', async () => {
       const before = await storedState();
-      for (const url of [
+      // More than one user may fetch in a minute
+      const users = [await createTestUser(), await createTestUser()];
+      for (const [i, url] of [
         'http://127.0.0.1/x',
         'https://127.0.0.1/x',
         'https://2130706433/x',
@@ -673,11 +724,12 @@ describe('upload intents', () => {
         'https://user:pass@example.com/x',
         'not a url',
         'file:///etc/passwd',
-      ]) {
-        const res = await fromUrl(url);
+      ].entries()) {
+        const res = await fromUrl(url, {}, `Bearer ${users[i % 2].token}`);
         expect({ url, status: res.status }).toEqual({ url, status: 400 });
       }
       expect(await storedState()).toEqual(before);
+      await prisma.user.deleteMany({ where: { id: { in: users.map((user) => user.id) } } });
     });
 
     it('stores what it fetched, on the target or staged', async () => {
@@ -689,7 +741,7 @@ describe('upload intents', () => {
       const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
       const deps: Partial<RemoteFetchDeps> = {
         checkUrl: async () => {},
-        open: (url, signal) =>
+        open: (url, { signal }) =>
           new Promise((resolve, reject) => {
             http.get(url, { signal, agent: false }, resolve).on('error', reject);
           }),
@@ -733,7 +785,7 @@ describe('upload intents', () => {
     describe('fetching', () => {
       let server: http.Server;
       let base: string;
-      let hits: string[];
+      let hits: string[] = [];
 
       beforeAll(async () => {
         server = http.createServer((req, res) => {
@@ -754,6 +806,9 @@ describe('upload intents', () => {
             res.end('<script>');
           } else if (req.url === '/no-type') {
             res.end('bytes');
+          } else if (req.url === '/empty') {
+            res.setHeader('Content-Type', 'text/plain');
+            res.end();
           } else if (req.url === '/huge-declared') {
             res.setHeader('Content-Type', 'image/png');
             res.setHeader('Content-Length', String(25 * MB + 1));
@@ -793,7 +848,7 @@ describe('upload intents', () => {
           const { assertPublicUrl } = await import('../automation/webhook');
           await assertPublicUrl(url, 'Attachment');
         },
-        open: (url, signal) =>
+        open: (url, { signal }) =>
           new Promise((resolve, reject) => {
             http.get(url, { signal, agent: false }, resolve).on('error', reject);
           }),
@@ -823,7 +878,10 @@ describe('upload intents', () => {
 
       it('applies the MIME allowlist to what the server sends', async () => {
         await expect(fetchPath('/html')).rejects.toMatchObject({ statusCode: 415 });
-        await expect(fetchPath('/no-type')).rejects.toMatchObject({ statusCode: 415 });
+        await expect(fetchPath('/no-type')).rejects.toMatchObject({
+          statusCode: 415,
+          message: 'The URL did not name a file type',
+        });
       });
 
       it('caps the size, by the header and while reading', async () => {
@@ -837,9 +895,52 @@ describe('upload intents', () => {
         });
       });
 
+      it('refuses an empty file, as a signed upload does', async () => {
+        await expect(fetchPath('/empty')).rejects.toMatchObject({ statusCode: 400 });
+      });
+
+      it('caps the fetches running at once', async () => {
+        const user = await createTestUser();
+        const hanging = Array.from({ length: MAX_CONCURRENT_FETCHES }, () =>
+          attachFromUrl(user.id, { url: `${base}/hang` }, { ...deps, timeoutMs: 500 }).catch(
+            (err: unknown) => err,
+          ),
+        );
+        await vi.waitFor(() =>
+          expect(hits.filter((hit) => hit === '/hang').length).toBeGreaterThan(0),
+        );
+        await expect(
+          attachFromUrl(user.id, { url: `${base}/file.png` }, deps),
+        ).rejects.toMatchObject({ statusCode: 429 });
+        await Promise.all(hanging);
+        // The slots come back
+        const after = await attachFromUrl(user.id, { url: `${base}/file.png` }, deps);
+        expect(after.mimeType).toBe('image/png');
+        await prisma.user.delete({ where: { id: user.id } });
+      });
+
       it('refuses an answer that is not a success', async () => {
         await expect(fetchPath('/missing')).rejects.toMatchObject({ statusCode: 400 });
       });
+    });
+
+    it('connects through the pinned lookup, whatever checkUrl let through', async () => {
+      await expect(
+        fetchRemoteFile('https://localhost:1/x', { checkUrl: async () => {} }),
+      ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('private') });
+    });
+
+    it('holds a user to the fetch limit', async () => {
+      const user = await createTestUser();
+      const statuses: number[] = [];
+      for (let i = 0; i <= FROM_URL_LIMIT.max; i++) {
+        statuses.push((await fromUrl('https://127.0.0.1/x', {}, `Bearer ${user.token}`)).status);
+      }
+      expect(statuses.slice(0, -1).every((status) => status === 400)).toBe(true);
+      expect(statuses.at(-1)).toBe(429);
+      // Another user is not affected
+      expect((await fromUrl('https://127.0.0.1/x')).status).toBe(400);
+      await prisma.user.delete({ where: { id: user.id } });
     });
 
     it('pins the connection to an address it checked', async () => {
@@ -868,6 +969,11 @@ describe('upload intents', () => {
       ['255.255.255.255', true],
       ['::', true],
       ['::1', true],
+      ['::127.0.0.1', true],
+      ['::7f00:1', true],
+      ['::a9fe:a9fe', true],
+      ['64:ff9b:1::7f00:1', true],
+      ['100::1', true],
       ['::ffff:127.0.0.1', true],
       ['::ffff:7f00:1', true],
       ['::ffff:8.8.8.8', true],

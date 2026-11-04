@@ -110,7 +110,8 @@ const attachmentActions = [
     name: 'attachment.upload',
     area: 'files',
     kind: 'write',
-    summary: 'Upload a file as multipart/form-data, on an issue or page or on neither',
+    summary:
+      'Upload a file as multipart/form-data, on an issue or page. Without one the file is staged.',
     // Nothing to authorize on yet: the ids are in the multipart body, which is parsed in the
     // handler. The handler authorizes on them there, and removes the file when refused.
     target: z.object({}),
@@ -126,7 +127,13 @@ const attachmentActions = [
         const fields = validate(multipartFields, req.body ?? {});
         attachmentsService.assertParentScope(ctx.scopes, fields, true);
         if (!file) throw new AppError(400, 'No file provided', 'MISSING_FILE');
-        res.status(201).json(await attachmentsService.uploadAttachment(file, ctx.userId, fields));
+        // Without a parent it is staged, as with the other ways in, so it doesn't stay forever
+        const staged = !fields.issueId && !fields.pageId;
+        const attachment = await attachmentsService.uploadAttachment(file, ctx.userId, {
+          ...fields,
+          staged,
+        });
+        res.status(201).json(attachment);
       } catch (err) {
         if (file) await fs.unlink(file.path).catch(() => {});
         throw err;

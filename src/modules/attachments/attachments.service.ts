@@ -60,6 +60,28 @@ export function mimeTypeRefusal(mimeType: string): AppError {
   return new AppError(415, `File type ${mimeType} is not allowed`);
 }
 
+/** Staged files a user can hold at once, whichever way they arrived. */
+export const MAX_STAGED_PER_USER = 100;
+
+/**
+ * Refuse a new staged file when the user holds as many as they may. Nobody else can see staged
+ * files and they cost storage until the day is out, so this bounds what one user can pile up.
+ * @param userId - The user
+ * @throws {AppError} 429 STAGED_LIMIT
+ */
+export async function assertStagedQuota(userId: string): Promise<void> {
+  const staged = await prisma.attachment.count({
+    where: { uploaderId: userId, stagedAt: { not: null } },
+  });
+  if (staged >= MAX_STAGED_PER_USER) {
+    throw new AppError(
+      429,
+      'Too many staged files: reference them in a body or delete them first',
+      'STAGED_LIMIT',
+    );
+  }
+}
+
 /** The parent of an attachment, as far as it has one. */
 export interface AttachmentParent {
   issueId?: string | null;
@@ -192,6 +214,8 @@ export async function uploadAttachment(
         throw new AppError(400, 'The comment does not belong to this issue', 'BAD_REQUEST');
       }
     }
+
+    if (opts.staged) await assertStagedQuota(uploaderId);
 
     const storageKey = buildStorageKey(file.originalname);
     const storage = getStorage();
