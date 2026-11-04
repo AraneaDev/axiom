@@ -276,6 +276,49 @@ export async function searchIssues(
 
 // ─── Wiki Search (FTS) ──────────────────────────────────────
 
+const WIKI_RESULT_INCLUDE = {
+  space: { select: SPACE_URL_SELECT },
+  pageLabels: true,
+} satisfies Prisma.PageInclude;
+
+type WikiResultRow = Prisma.PageGetPayload<{ include: typeof WIKI_RESULT_INCLUDE }>;
+
+/**
+ * A page as a wiki search result.
+ * @param page - The page
+ * @param snippet - The matching text, when the search has it
+ */
+function wikiResultItem(page: WikiResultRow, snippet: string) {
+  return {
+    ...page,
+    url: `/${page.space.team.org.slug}/${page.space.team.slug}/wiki/${page.space.slug}/${page.slug}`,
+    spaceName: page.space.name,
+    spaceId: page.spaceId,
+    labels: page.pageLabels.map((l: { label: string }) => l.label),
+    snippet,
+  };
+}
+
+/**
+ * Pages with exactly this title, whatever its case, that the user could open. Full-text ranking
+ * can't promise these: it stems words, drops punctuation and cuts off by rank.
+ * @param title - The title
+ * @param userId - Who searches
+ * @param limit - The most to return
+ */
+export async function pagesByExactTitle(title: string, userId: string, limit: number) {
+  const pages = await prisma.page.findMany({
+    where: {
+      title: { equals: title, mode: 'insensitive' },
+      AND: [await viewablePagesWhere(userId)],
+    },
+    include: WIKI_RESULT_INCLUDE,
+    take: limit,
+    orderBy: { updatedAt: 'desc' },
+  });
+  return pages.map((page) => wikiResultItem(page, ''));
+}
+
 /**
  *
  * @param freeText
@@ -357,10 +400,7 @@ export async function searchWiki(
       const [pages, total] = await Promise.all([
         prisma.page.findMany({
           where,
-          include: {
-            space: { select: SPACE_URL_SELECT },
-            pageLabels: true,
-          },
+          include: WIKI_RESULT_INCLUDE,
           take: params.limit,
           skip: params.offset,
           orderBy: { updatedAt: 'desc' },
@@ -371,14 +411,7 @@ export async function searchWiki(
       return {
         type: 'wiki',
         total,
-        items: pages.map((p: (typeof pages)[number]) => ({
-          ...p,
-          url: `/${p.space.team.org.slug}/${p.space.team.slug}/wiki/${p.space.slug}/${p.slug}`,
-          spaceName: p.space.name,
-          spaceId: p.spaceId,
-          labels: p.pageLabels.map((l: { label: string }) => l.label),
-          snippet: snippetMap.get(p.id) ?? '',
-        })),
+        items: pages.map((p) => wikiResultItem(p, snippetMap.get(p.id) ?? '')),
       };
     } catch {
       // Fallback
@@ -396,10 +429,7 @@ export async function searchWiki(
   const [pages, total] = await Promise.all([
     prisma.page.findMany({
       where,
-      include: {
-        space: { select: SPACE_URL_SELECT },
-        pageLabels: true,
-      },
+      include: WIKI_RESULT_INCLUDE,
       take: params.limit,
       skip: params.offset,
       orderBy: { updatedAt: 'desc' },
@@ -410,13 +440,6 @@ export async function searchWiki(
   return {
     type: 'wiki',
     total,
-    items: pages.map((p: (typeof pages)[number]) => ({
-      ...p,
-      url: `/${p.space.team.org.slug}/${p.space.team.slug}/wiki/${p.space.slug}/${p.slug}`,
-      spaceName: p.space.name,
-      spaceId: p.spaceId,
-      labels: p.pageLabels.map((l: { label: string }) => l.label),
-      snippet: '',
-    })),
+    items: pages.map((p) => wikiResultItem(p, '')),
   };
 }

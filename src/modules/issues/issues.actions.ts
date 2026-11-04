@@ -199,14 +199,24 @@ const issueActions = [
     name: 'issue.update',
     area: 'issues',
     kind: 'write',
-    summary: 'Change fields of an issue',
+    summary: 'Change fields of an issue. Move it with status (a column name) or columnId.',
     target: projectTarget,
-    input: issueInput.extend(updateIssueSchema.shape),
+    input: issueInput.extend(updateIssueSchema.shape).extend({
+      status: z.string().min(1).max(255).optional(),
+    }),
     output: record,
     rest: { method: 'PATCH', path: ISSUE },
     authorize: write,
-    handler: async (ctx, { projectId, issueNumber, ...data }) =>
-      issuesService.updateIssue(projectId, issueNumber, data, ctx.userId),
+    handler: async (ctx, { projectId, issueNumber, status, ...data }) => {
+      if (status === undefined) {
+        return issuesService.updateIssue(projectId, issueNumber, data, ctx.userId);
+      }
+      if (data.columnId !== undefined) {
+        throw new AppError(400, 'Give status or columnId, not both');
+      }
+      const columnId = await issuesService.columnIdForStatus(projectId, status);
+      return issuesService.updateIssue(projectId, issueNumber, { ...data, columnId }, ctx.userId);
+    },
   }),
   defineAction({
     name: 'issue.delete',

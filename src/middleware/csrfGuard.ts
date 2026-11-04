@@ -12,9 +12,10 @@ import { Request, Response, NextFunction } from 'express';
  */
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-// Paths exempt from CSRF. MCP clients authenticate via Bearer token and cannot inject
-// custom headers into SSE transport requests.
-const CSRF_EXEMPT_PATHS = new Set(['/mcp/messages']);
+// Paths exempt from CSRF, relative to the /api mount. The MCP endpoint only reads the
+// Authorization header, so a cross-site request carries no credential, and MCP clients don't
+// send this header.
+const CSRF_EXEMPT_PATHS = new Set(['/mcp']);
 
 /**
  * CSRF guard middleware requiring X-Requested-With header on mutations.

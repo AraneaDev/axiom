@@ -36,6 +36,41 @@ function assertOutputShape(def: ActionDef, result: unknown): void {
 }
 
 /**
+ * Why this caller can't run this action at all, whatever its input: the checks before any id is
+ * read. Describe uses this to list what a caller can run, and a key is only resolved after it.
+ * @param def - The action
+ * @param ctx - Who runs it and through what
+ */
+export function actionRefusal(def: ActionDef, ctx: ActionContext): AppError | undefined {
+  const token = isToken(ctx);
+  if (token && (def.uiOnly || def.tokenBlocked)) return scopeRefusal();
+  if (def.rest?.raw && !ctx.http) {
+    const alternative = def.rawAlternative ? ` ${def.rawAlternative}` : '';
+    return new AppError(
+      400,
+      `Action ${def.name} is only available over REST.${alternative}`,
+      'RAW_ACTION',
+    );
+  }
+  if (token && !scopeAllows(ctx.scopes ?? [], def.area, def.kind)) return scopeRefusal();
+  return undefined;
+}
+
+/**
+ * The action with this name, if this caller can run it.
+ * @param name - The action's dotted name
+ * @param ctx - Who runs it and through what
+ * @throws {AppError} 404 UNKNOWN_ACTION, 403 SCOPE, 400 RAW_ACTION
+ */
+export function assertRunnable(name: string, ctx: ActionContext): ActionDef {
+  const def = getAction(name);
+  if (!def) throw new AppError(404, `Unknown action: ${name}`, 'UNKNOWN_ACTION');
+  const refusal = actionRefusal(def, ctx);
+  if (refusal) throw refusal;
+  return def;
+}
+
+/**
  * Run an action. Every adapter comes through here, so REST and MCP share one order of checks:
  * unknown name, uiOnly or tokenBlocked, raw binding, token scope, target, authorize, full input,
  * handler.
@@ -56,17 +91,7 @@ export async function executeAction(
   ctx: ActionContext,
   bodyError?: string,
 ): Promise<unknown> {
-  const def = getAction(name);
-  if (!def) throw new AppError(404, `Unknown action: ${name}`, 'UNKNOWN_ACTION');
-
-  const token = isToken(ctx);
-  if (token && (def.uiOnly || def.tokenBlocked)) throw scopeRefusal();
-
-  if (def.rest?.raw && !ctx.http) {
-    throw new AppError(400, `Action ${name} is only available over REST`, 'RAW_ACTION');
-  }
-
-  if (token && !scopeAllows(ctx.scopes ?? [], def.area, def.kind)) throw scopeRefusal();
+  const def = assertRunnable(name, ctx);
 
   const target = validate(def.target ?? def.input, rawInput);
 

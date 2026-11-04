@@ -2,17 +2,14 @@
  * API token scopes are enforced: a read-scoped token can't write, a wiki token can't touch
  * issues, tokens can't manage orgs or mint tokens, and unknown scopes are refused.
  */
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../config/database';
 import app from '../index';
-import { mcpContext } from '../mcp/context';
-import { createMcpServer } from '../mcp/server';
 import { cleanupTestContext, createTestContext, type TestContext } from '../test/factory';
 import { authPost } from '../test/helpers';
+import { callTool, connectMcp, serveApp } from '../test/mcp-client';
 
 import { LEGACY_SCOPE_MAP } from './token-scopes';
 
@@ -108,22 +105,22 @@ describe('API token scopes', () => {
   });
 
   it('applies scopes to MCP tools', async () => {
-    const server = createMcpServer(ctx.owner.id);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'scoped', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    const run = (name: string, args: Record<string, unknown>) =>
-      mcpContext.run({ userId: ctx.owner.id, scopes: ['issues:read'] }, async () => {
-        try {
-          const res = await client.callTool({ name, arguments: args });
-          return res.isError === true ? 'denied' : 'ok';
-        } catch {
-          return 'denied';
-        }
+    const served = await serveApp();
+    const tokenHeader = async (scopes: string[]) => {
+      const res = await authPost('/api/users/me/tokens', ctx.owner.token, {
+        name: `mcp-${scopes.join('-')}`,
+        scopes,
       });
-    const list = await run('list_issues', { projectId: ctx.projectId });
-    const create = await run('create_issue', { projectId: ctx.projectId, title: 'via mcp' });
+      expect(res.status).toBe(201);
+      return `Token ${res.body.token}`;
+    };
+    const client = await connectMcp(served.base, await tokenHeader(['issues:read']));
+    const run = async (action: string, input: Record<string, unknown>) =>
+      (await callTool(client, 'act', { action, input })).isError ? 'denied' : 'ok';
+    const list = await run('issue.list', { projectId: ctx.projectId });
+    const create = await run('issue.create', { projectId: ctx.projectId, title: 'via mcp' });
     expect([list, create]).toEqual(['ok', 'denied']);
+    await client.close();
 
     // A wiki-only token's MCP search returns no issues, an issues token's does
     const term = `scopedsearch${Date.now()}`;
@@ -137,17 +134,18 @@ describe('API token scopes', () => {
       },
     });
     const searchAs = async (scopes: string[]) => {
-      const res = await mcpContext.run({ userId: ctx.owner.id, scopes }, () =>
-        client.callTool({ name: 'search', arguments: { query: term, type: 'all' } }),
-      );
-      const text = (res.content as Array<{ text: string }>)[0].text;
-      return (JSON.parse(text) as Array<{ type: string }>).map((r) => r.type);
+      const scoped = await connectMcp(served.base, await tokenHeader(scopes));
+      const { data } = await callTool(scoped, 'search', { query: term, type: 'all' });
+      await scoped.close();
+      return (data as Array<{ type: string; items: unknown[] }>)
+        .filter((section) => section.items.length > 0)
+        .map((section) => section.type);
     };
-    const wikiTypes = await searchAs(['wiki:read']);
-    const issueTypes = await searchAs(['issues:read']);
-    await client.close();
+    const wikiTypes = await searchAs(['search:read', 'wiki:read']);
+    const issueTypes = await searchAs(['search:read', 'issues:read']);
+    await served.close();
     expect(wikiTypes).toEqual([]);
-    expect(issueTypes).toEqual(['issue']);
+    expect(issueTypes).toEqual(['issues']);
   });
 
   it('8, 12, 13, 14: scopes follow the resource, and tokens never change access control', async () => {

@@ -2,13 +2,9 @@
  * Team-wide reads need team membership (or org OWNER/ADMIN, or platform admin), project
  * settings need the matching role, and team activity stays within the team's resources.
  */
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../../config/database';
-import { mcpContext } from '../../mcp/context';
-import { createMcpServer } from '../../mcp/server';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -18,6 +14,7 @@ import {
   type TestUser,
 } from '../../test/factory';
 import { authDel, authGet, authPatch, authPost } from '../../test/helpers';
+import { callTool, withMcpClient } from '../../test/mcp-client';
 
 describe('Team access', () => {
   let ctx: TestContext;
@@ -100,20 +97,13 @@ describe('Team access', () => {
     ]);
     expect(results.map((r) => r.status)).toEqual([403, 403, 403, 403, 403, 403]);
 
-    const server = createMcpServer(orgOnly.id);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'orgonly', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    let failed = false;
-    try {
-      const res = await mcpContext.run({ userId: orgOnly.id }, () =>
-        client.callTool({ name: 'list_projects', arguments: { teamId: ctx.teamId } }),
-      );
-      failed = res.isError === true;
-    } catch {
-      failed = true;
-    }
-    await client.close();
+    const failed = await withMcpClient(`Bearer ${orgOnly.token}`, async (client) => {
+      const res = await callTool(client, 'act', {
+        action: 'project.list',
+        input: { teamId: ctx.teamId },
+      });
+      return res.isError;
+    });
     expect(failed).toBe(true);
 
     expect((await authGet(`/api/teams/${ctx.teamId}`, teamViewer.token)).status).toBe(200);

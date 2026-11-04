@@ -1,13 +1,9 @@
 /**
  * Page listings (tree, space, children) leave out pages a VIEW restriction hides.
  */
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../../config/database';
-import { mcpContext } from '../../mcp/context';
-import { createMcpServer } from '../../mcp/server';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -16,6 +12,7 @@ import {
   type TestUser,
 } from '../../test/factory';
 import { authDel, authGet, authPatch, authPost, authPut } from '../../test/helpers';
+import { callTool, withMcpClient } from '../../test/mcp-client';
 
 describe('Hidden pages in listings', () => {
   let ctx: TestContext;
@@ -73,16 +70,11 @@ describe('Hidden pages in listings', () => {
   });
 
   it('leaves hidden pages out of the MCP page tree', async () => {
-    const server = createMcpServer(member.id);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'vis', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    const res = await mcpContext.run({ userId: member.id }, () =>
-      client.callTool({ name: 'get_page_tree', arguments: { spaceId } }),
+    const res = await withMcpClient(`Bearer ${member.token}`, (client) =>
+      callTool(client, 'act', { action: 'page.tree', input: { spaceId } }),
     );
-    await client.close();
-    expect(res.isError).toBeFalsy();
-    expect(JSON.stringify(res.content)).not.toContain(SECRET);
+    expect(res.isError).toBe(false);
+    expect(res.text).not.toContain(SECRET);
   });
 
   it('refuses every page route on a hidden page to a member it hides it from', async () => {
@@ -206,7 +198,7 @@ describe('Hidden pages in listings', () => {
     }
   });
 
-  it("refuses MCP create_wiki_page from another space's template", async () => {
+  it("MCP page.create can't take the body of another space's template", async () => {
     const other = await createTestContext(`wikivistpl${Date.now()}`);
     try {
       const foreignSpace = await prisma.wikiSpace.create({
@@ -215,19 +207,17 @@ describe('Hidden pages in listings', () => {
       const template = await prisma.pageTemplate.create({
         data: { spaceId: foreignSpace.id, name: 'T', body: `${SECRET} template body` },
       });
-      const server = createMcpServer(member.id);
-      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      const client = new Client({ name: 'tpl', version: '0.0.0' });
-      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-      const res = await mcpContext.run({ userId: member.id }, () =>
-        client.callTool({
-          name: 'create_wiki_page',
-          arguments: { spaceId, title: 'From tpl', slug: 'from-tpl', templateId: template.id },
+      const res = await withMcpClient(`Bearer ${member.token}`, (client) =>
+        callTool(client, 'act', {
+          action: 'page.create',
+          input: { spaceId, title: 'From tpl', slug: 'from-tpl', templateId: template.id },
         }),
       );
-      await client.close();
-      expect(res.isError).toBe(true);
-      expect(await prisma.page.count({ where: { spaceId, slug: 'from-tpl' } })).toBe(0);
+      // The action has no templateId: templates resolve through resolve-template, which checks
+      // the space. The field is dropped, so nothing of the template ends up in the page.
+      expect(res.text).not.toContain(SECRET);
+      const page = await prisma.page.findFirst({ where: { spaceId, slug: 'from-tpl' } });
+      expect(page?.body ?? '').not.toContain(SECRET);
     } finally {
       await cleanupTestContext(other);
     }
@@ -254,15 +244,11 @@ describe('Hidden pages in listings', () => {
       expect(JSON.stringify(res.body)).not.toContain(SECRET);
     }
 
-    const server = createMcpServer(member.id);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'spaces', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    const mcp = await mcpContext.run({ userId: member.id }, () =>
-      client.callTool({ name: 'list_wiki_spaces', arguments: { teamId: ctx.teamId } }),
+    const mcp = await withMcpClient(`Bearer ${member.token}`, (client) =>
+      callTool(client, 'act', { action: 'space.list', input: { teamId: ctx.teamId } }),
     );
-    await client.close();
-    expect(JSON.stringify(mcp.content)).not.toContain(locked.id);
+    expect(mcp.isError).toBe(false);
+    expect(mcp.text).not.toContain(locked.id);
   });
 
   it("O: a viewer can't delete or resolve someone else's comment", async () => {
@@ -309,7 +295,7 @@ describe('Hidden pages in listings', () => {
     }
   });
 
-  it('18: MCP list_wiki_spaces pages through every visible space', async () => {
+  it('18: MCP space.list gives every visible space, and only those', async () => {
     const team = await prisma.team.create({
       data: {
         orgId: ctx.orgId,
@@ -334,29 +320,12 @@ describe('Hidden pages in listings', () => {
       data: { teamId: team.id, name: 'P3', slug: 'p3' },
     });
 
-    const server = createMcpServer(member.id);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'paging', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    const seen: string[] = [];
-    let cursor: string | undefined;
-    for (let i = 0; i < 5; i++) {
-      const res = await mcpContext.run({ userId: member.id }, () =>
-        client.callTool({
-          name: 'list_wiki_spaces',
-          arguments: { teamId: team.id, limit: 1, ...(cursor ? { cursor } : {}) },
-        }),
-      );
-      const body = JSON.parse((res.content as Array<{ text: string }>)[0].text) as {
-        data: Array<{ id: string }>;
-        next_cursor?: string;
-      };
-      seen.push(...body.data.map((d) => d.id));
-      cursor = body.next_cursor;
-      if (!cursor) break;
-    }
-    await client.close();
-    expect(seen).toEqual([first.id, third.id]);
+    const res = await withMcpClient(`Bearer ${member.token}`, (client) =>
+      callTool(client, 'act', { action: 'space.list', input: { teamId: team.id } }),
+    );
+    expect(res.isError).toBe(false);
+    const seen = (res.data as Array<{ id: string }>).map((space) => space.id);
+    expect(seen.sort()).toEqual([first.id, third.id].sort());
   });
 
   it('20: no parent cycles, and a moved page takes its subtree along', async () => {

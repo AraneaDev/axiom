@@ -1,13 +1,9 @@
 /**
  * Search returns only what the searcher could open through the REST routes.
  */
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../../config/database';
-import { mcpContext } from '../../mcp/context';
-import { createMcpServer } from '../../mcp/server';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -17,6 +13,7 @@ import {
   type TestUser,
 } from '../../test/factory';
 import { authGet } from '../../test/helpers';
+import { callTool, withMcpClient } from '../../test/mcp-client';
 
 describe('Search access', () => {
   const MARK = `zebrafinch${Date.now()}`;
@@ -32,17 +29,12 @@ describe('Search access', () => {
     return JSON.stringify(res.body);
   };
 
-  const mcpSearch = async (user: TestUser) => {
-    const server = createMcpServer(user.id);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'search', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    const res = await mcpContext.run({ userId: user.id }, () =>
-      client.callTool({ name: 'search', arguments: { query: MARK, type: 'all' } }),
-    );
-    await client.close();
-    return JSON.stringify(res.content);
-  };
+  const mcpSearch = async (user: TestUser) =>
+    withMcpClient(`Bearer ${user.token}`, async (client) => {
+      const res = await callTool(client, 'search', { query: MARK, type: 'all' });
+      expect(res.isError).toBe(false);
+      return res.text;
+    });
 
   beforeAll(async () => {
     ctx = await createTestContext(`srchacc${Date.now()}`);

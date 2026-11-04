@@ -1,0 +1,1226 @@
+/**
+ * The MCP server over real HTTP: the five tools, the same paths and refusals as REST, batches, and
+ * the security cases of the SSE server it replaced.
+ */
+import { execFile } from 'child_process';
+import { randomBytes } from 'crypto';
+import { rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import path from 'path';
+import { promisify } from 'util';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import request from 'supertest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+
+import { ACT_LIMIT, MAX_BATCH_ITEMS } from '../actions/batch';
+import { defineAction } from '../actions/define';
+import { registerActions } from '../actions/registry';
+import { prisma } from '../config/database';
+import app from '../index';
+import { SEARCH_LIMIT } from '../middleware/rate-limit';
+import { TOKEN_SCOPES } from '../middleware/token-scopes';
+import {
+  getSiteSettings,
+  updateSiteSettings,
+} from '../modules/site-settings/site-settings.service';
+import {
+  addMemberToContext,
+  cleanupTestContext,
+  createTestContext,
+  createTestUser,
+  type TestContext,
+  type TestUser,
+} from '../test/factory';
+import { authPost } from '../test/helpers';
+import { callTool, connectMcp, serveApp, type ToolAnswer } from '../test/mcp-client';
+
+const storagePath = path.join(tmpdir(), `axiom-mcp-test-${process.pid}`);
+process.env.STORAGE_PATH = storagePath;
+
+const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
+const INITIALIZE = {
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'initialize',
+  params: {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'raw', version: '0.0.0' },
+  },
+};
+const MCP_ACCEPT = 'application/json, text/event-stream';
+
+describe('MCP server', () => {
+  let ctx: TestContext;
+  let base: string;
+  let closeServer: () => Promise<void>;
+  let spaceId: string;
+  const clients: Client[] = [];
+  const created: string[] = [];
+
+  // A token of the context's owner, or of another user through their JWT
+  async function tokenHeader(scopes: string[], owner: TestUser = ctx.owner, name = 'mcp-agent') {
+    const res = await authPost('/api/users/me/tokens', owner.token, { name, scopes });
+    expect(res.status).toBe(201);
+    return `Token ${res.body.token}`;
+  }
+
+  async function client(authorization: string): Promise<Client> {
+    const connected = await connectMcp(base, authorization);
+    clients.push(connected);
+    return connected;
+  }
+
+  const asUser = (user: TestUser) => client(`Bearer ${user.token}`);
+
+  function rawPost(body: unknown, headers: Record<string, string> = {}) {
+    return fetch(`${base}/api/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: MCP_ACCEPT, ...headers },
+      body: JSON.stringify(body),
+    });
+  }
+
+  // issue.create takes the highest number plus one, so counting down never meets it
+  let nextNumber = 1_000_000;
+  async function createIssue(title = 'An issue') {
+    const number = nextNumber--;
+    await prisma.issue.create({
+      data: { projectId: ctx.projectId, number, title, body: '', creatorId: ctx.owner.id },
+    });
+    return { number, key: `${ctx.projectPrefix}-${number}` };
+  }
+
+  async function createPage(slug: string, body = 'before', inSpace = spaceId) {
+    return prisma.page.create({ data: { spaceId: inSpace, title: slug, slug, body } });
+  }
+
+  function expectRefused(answer: ToolAnswer, status: number, code?: string) {
+    expect(answer.isError).toBe(true);
+    expect(answer.data.status).toBe(status);
+    if (code) expect(answer.data.code).toBe(code);
+    expect(Object.keys(answer.data).sort()).toEqual(['code', 'message', 'status']);
+  }
+
+  beforeAll(async () => {
+    ctx = await createTestContext(`mcpag${Date.now()}`);
+    const space = await prisma.wikiSpace.create({
+      data: { teamId: ctx.teamId, name: 'Agent space', slug: 'agent-space' },
+    });
+    spaceId = space.id;
+    ({ base, close: closeServer } = await serveApp());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterAll(async () => {
+    await Promise.all(clients.map((c) => c.close()));
+    await closeServer();
+    await cleanupTestContext(ctx);
+    await prisma.user.deleteMany({ where: { id: { in: created } } });
+    await rm(storagePath, { recursive: true, force: true });
+  });
+
+  async function newUser() {
+    const user = await createTestUser();
+    created.push(user.id);
+    return user;
+  }
+
+  async function newMember() {
+    const member = await addMemberToContext(ctx);
+    created.push(member.id);
+    return member;
+  }
+
+  describe('tools', () => {
+    it('lists exactly the five tools', async () => {
+      const { tools } = await (await asUser(ctx.owner)).listTools();
+      expect(tools.map((t) => t.name).sort()).toEqual([
+        'act',
+        'describe',
+        'read',
+        'search',
+        'upload',
+      ]);
+      for (const tool of tools) expect(tool.inputSchema.type).toBe('object');
+    });
+
+    it('answers an unknown tool, such as a removed one, as an unknown-tool error', async () => {
+      const c = await asUser(ctx.owner);
+      expectRefused(await callTool(c, 'list_repos'), 404, 'UNKNOWN_TOOL');
+      expectRefused(await callTool(c, 'get_issue', { issueNumber: 1 }), 404, 'UNKNOWN_TOOL');
+    });
+
+    it('act runs issue.update with the same scope rules as REST', async () => {
+      const { number } = await createIssue();
+      const header = await tokenHeader(['wiki:write', 'search:read']);
+      const answer = await callTool(await client(header), 'act', {
+        action: 'issue.update',
+        input: { projectId: ctx.projectId, issueNumber: number, title: 'Nope' },
+      });
+      expectRefused(answer, 403, 'SCOPE');
+
+      const rest = await request(app)
+        .patch(`/api/projects/${ctx.projectId}/issues/${number}`)
+        .set('Authorization', header)
+        .set(CSRF)
+        .send({ title: 'Nope' });
+      expect(rest.status).toBe(403);
+      expect(rest.body.error.code).toBe('SCOPE');
+      expect(answer.data.message).toBe(rest.body.error.message);
+
+      const writer = await client(await tokenHeader(['issues:write']));
+      const done = await callTool(writer, 'act', {
+        action: 'issue.update',
+        input: { projectId: ctx.projectId, issueNumber: number, title: 'Changed' },
+      });
+      expect(done.isError).toBe(false);
+      expect(done.data.title).toBe('Changed');
+    });
+
+    it('a token with only a read scope can use the endpoint, which is always a POST', async () => {
+      const c = await client(await tokenHeader(['sprints:read']));
+      const sprints = await callTool(c, 'act', {
+        action: 'sprint.list',
+        input: { projectId: ctx.projectId },
+      });
+      expect(sprints.isError).toBe(false);
+    });
+
+    it('attributes writes to the name of the token, whatever the client calls itself', async () => {
+      const { number } = await createIssue();
+      const c = await client(await tokenHeader(['issues:write'], ctx.owner, 'ci-bot'));
+      await callTool(c, 'act', {
+        action: 'comment.add',
+        input: { projectId: ctx.projectId, issueNumber: number, body: 'From the agent' },
+      });
+      const comment = await prisma.comment.findFirstOrThrow({
+        where: { body: 'From the agent' },
+      });
+      expect(comment.authorId).toBe(ctx.owner.id);
+      const activity = await prisma.activity.findFirstOrThrow({
+        where: { via: 'ci-bot' },
+      });
+      expect(activity.apiTokenId).not.toBeNull();
+    });
+  });
+
+  describe('describe', () => {
+    it('hides actions the token scopes do not allow', async () => {
+      const c = await client(await tokenHeader(['wiki:read']));
+      const { data } = await callTool(c, 'describe');
+      const names = (data as Array<{ name: string; area: string }>).map((a) => a.name);
+      expect(names).toContain('page.get');
+      expect(names).not.toContain('issue.update');
+      expect(names).not.toContain('page.update');
+      expect(new Set((data as Array<{ area: string }>).map((a) => a.area))).toEqual(
+        new Set(['wiki']),
+      );
+
+      expectRefused(await callTool(c, 'describe', { action: 'issue.update' }), 403, 'SCOPE');
+    });
+
+    it('lists neither what tokens may never run nor what needs raw HTTP', async () => {
+      const { data } = await callTool(await asUser(ctx.owner), 'describe');
+      const names = (data as Array<{ name: string }>).map((a) => a.name);
+      expect(names).toContain('issue.update');
+      expect(names).toContain('search.run');
+      expect(names).toContain('item.read');
+      expect(names).not.toContain('attachment.upload');
+      expect(names).not.toContain('attachment.download');
+      expect(names).not.toContain('issue.export');
+    });
+
+    it('narrows by area, and gives a schema for every action it lists', async () => {
+      const c = await asUser(ctx.owner);
+      const sprints = await callTool(c, 'describe', { area: 'sprints' });
+      expect((sprints.data as Array<{ area: string }>).every((a) => a.area === 'sprints')).toBe(
+        true,
+      );
+
+      const { data } = await callTool(c, 'describe');
+      for (const { name } of data as Array<{ name: string }>) {
+        const one = await callTool(c, 'describe', { action: name });
+        expect(one.isError, name).toBe(false);
+        expect(one.data.input, name).toBeTypeOf('object');
+        expect(one.data.output, name).toBeTypeOf('object');
+      }
+      const update = await callTool(c, 'describe', { action: 'issue.update' });
+      expect(update.data.key).toBe('issue');
+      expect(Object.keys(update.data.input.properties)).toEqual(
+        expect.arrayContaining(['projectId', 'issueNumber', 'status', 'columnId']),
+      );
+    });
+
+    it('answers an unknown action, and a raw one naming what to use', async () => {
+      const c = await asUser(ctx.owner);
+      expectRefused(await callTool(c, 'describe', { action: 'nope.nope' }), 404, 'UNKNOWN_ACTION');
+      const raw = await callTool(c, 'describe', { action: 'attachment.upload' });
+      expectRefused(raw, 400, 'RAW_ACTION');
+      expect(raw.data.message).toContain('upload tool');
+    });
+  });
+
+  describe('act', () => {
+    it('refuses a raw action, naming the alternative', async () => {
+      const answer = await callTool(await asUser(ctx.owner), 'act', {
+        action: 'attachment.upload',
+        input: {},
+      });
+      expectRefused(answer, 400, 'RAW_ACTION');
+      expect(answer.data.message).toContain('upload tool');
+    });
+
+    it('asks for exactly one of action and batch', async () => {
+      const c = await asUser(ctx.owner);
+      expectRefused(await callTool(c, 'act', {}), 400);
+      const both = await callTool(c, 'act', {
+        action: 'org.list',
+        batch: [{ action: 'org.list' }],
+      });
+      expectRefused(both, 400);
+    });
+
+    it('a batch stops at the first failure and marks the rest skipped', async () => {
+      const { data, isError } = await callTool(await asUser(ctx.owner), 'act', {
+        batch: [
+          { action: 'issue.create', input: { projectId: ctx.projectId, title: 'Batch one' } },
+          { action: 'issue.create', input: { projectId: ctx.projectId, title: 'Batch two' } },
+          { action: 'issue.create', input: { projectId: ctx.projectId } },
+          { action: 'issue.create', input: { projectId: ctx.projectId, title: 'Batch four' } },
+        ],
+      });
+      expect(isError).toBe(false);
+      expect(data.completed).toBe(2);
+      expect(data.results.map((r: { ok: boolean }) => r.ok)).toEqual([true, true, false, false]);
+      expect(data.results[2].error).toMatchObject({ status: 400 });
+      expect(data.results[3]).toEqual({ ok: false, skipped: true });
+      expect(
+        await prisma.issue.count({
+          where: { projectId: ctx.projectId, title: { in: ['Batch one', 'Batch two'] } },
+        }),
+      ).toBe(2);
+      expect(
+        await prisma.issue.count({ where: { projectId: ctx.projectId, title: 'Batch four' } }),
+      ).toBe(0);
+    });
+
+    it('authorizes each item of a batch on its own', async () => {
+      const { number } = await createIssue();
+      const c = await client(await tokenHeader(['issues:read']));
+      const { data } = await callTool(c, 'act', {
+        batch: [
+          { action: 'issue.get', input: { projectId: ctx.projectId, issueNumber: number } },
+          {
+            action: 'issue.update',
+            input: { projectId: ctx.projectId, issueNumber: number, title: 'Sneaky' },
+          },
+          { action: 'issue.get', input: { projectId: ctx.projectId, issueNumber: number } },
+        ],
+      });
+      expect(data.completed).toBe(1);
+      expect(data.results[1].error).toMatchObject({ status: 403, code: 'SCOPE' });
+      expect(data.results[2].skipped).toBe(true);
+    });
+
+    it('refuses a batch over the limit without running anything', async () => {
+      const title = `Over the limit ${Date.now()}`;
+      const batch = Array.from({ length: MAX_BATCH_ITEMS + 1 }, () => ({
+        action: 'issue.create',
+        input: { projectId: ctx.projectId, title },
+      }));
+      expectRefused(await callTool(await asUser(ctx.owner), 'act', { batch }), 400);
+
+      const rest = await authPost('/api/act', ctx.owner.token, { batch });
+      expect(rest.status).toBe(400);
+      expect(await prisma.issue.count({ where: { title } })).toBe(0);
+    });
+
+    it('counts batch items toward a limit per user, before running anything', async () => {
+      const user = await newUser();
+      const c = await asUser(user);
+      const batch = Array.from({ length: MAX_BATCH_ITEMS }, () => ({ action: 'nope.nope' }));
+      for (let used = 0; used + MAX_BATCH_ITEMS <= ACT_LIMIT.max; used += MAX_BATCH_ITEMS) {
+        const { data, isError } = await callTool(c, 'act', { batch });
+        expect(isError).toBe(false);
+        expect(data.results[0].error.code).toBe('UNKNOWN_ACTION');
+      }
+      expectRefused(await callTool(c, 'act', { batch }), 429, 'RATE_LIMITED');
+      // A single action draws from the same count
+      expectRefused(await callTool(c, 'act', { action: 'org.list' }), 429, 'RATE_LIMITED');
+      // Another user has a count of their own
+      expect((await callTool(await asUser(ctx.owner), 'act', { action: 'org.list' })).isError).toBe(
+        false,
+      );
+    });
+
+    it('gives a generic answer on an unexpected error', async () => {
+      const issues = await import('../modules/issues/issues.service');
+      vi.spyOn(issues, 'getTimeReport').mockRejectedValue(
+        new Error('Invalid `prisma.issue.findMany()` invocation: secret connection string'),
+      );
+      const c = await asUser(ctx.owner);
+      const answer = await callTool(c, 'act', {
+        action: 'issue.timeReport',
+        input: { projectId: ctx.projectId },
+      });
+      expect(answer).toMatchObject({
+        isError: true,
+        data: { status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' },
+      });
+      expect(answer.text).not.toContain('prisma');
+      expect(answer.text).not.toContain('stack');
+    });
+  });
+
+  describe('act by key', () => {
+    it('updates an issue in one call by key and status name, any case', async () => {
+      const { number, key } = await createIssue();
+      const c = await client(await tokenHeader(['issues:write']));
+      const done = await callTool(c, 'act', {
+        action: 'issue.update',
+        key,
+        input: { status: 'dOnE' },
+      });
+      expect(done.isError).toBe(false);
+      const issue = await prisma.issue.findUniqueOrThrow({
+        where: { projectId_number: { projectId: ctx.projectId, number } },
+        include: { column: true },
+      });
+      expect(issue.column?.name.toLowerCase()).toBe('done');
+    });
+
+    it('takes a page key for a page action', async () => {
+      const page = await createPage(`by-key-${Date.now()}`);
+      const c = await asUser(ctx.owner);
+      const key = `${ctx.orgSlug}/${ctx.teamSlug}/agent-space/${page.slug}`;
+      const updated = await callTool(c, 'act', {
+        action: 'page.update',
+        key,
+        input: { body: 'after' },
+      });
+      expect(updated.isError).toBe(false);
+      expect((await prisma.page.findUniqueOrThrow({ where: { id: page.id } })).body).toBe('after');
+    });
+
+    it('answers 400 on a conflict between the key and the ids in the input', async () => {
+      const { number, key } = await createIssue();
+      const c = await asUser(ctx.owner);
+      expectRefused(
+        await callTool(c, 'act', {
+          action: 'issue.update',
+          key,
+          input: { projectId: 'another-project', title: 'x' },
+        }),
+        400,
+        'KEY_CONFLICT',
+      );
+      expectRefused(
+        await callTool(c, 'act', {
+          action: 'issue.update',
+          key,
+          input: { issueNumber: number + 1000, title: 'x' },
+        }),
+        400,
+        'KEY_CONFLICT',
+      );
+      // The same ids are no conflict
+      const same = await callTool(c, 'act', {
+        action: 'issue.get',
+        key,
+        input: { projectId: ctx.projectId, issueNumber: number },
+      });
+      expect(same.isError).toBe(false);
+    });
+
+    it('answers 404 alike for an invisible and a missing issue', async () => {
+      const { key } = await createIssue();
+      const stranger = await newUser();
+      const c = await asUser(stranger);
+      const hidden = await callTool(c, 'act', { action: 'issue.get', key });
+      const missing = await callTool(c, 'act', {
+        action: 'issue.get',
+        key: `${ctx.projectPrefix}-99999`,
+      });
+      expectRefused(hidden, 404, 'NOT_FOUND');
+      expect(hidden.data).toEqual(missing.data);
+    });
+
+    it('answers AMBIGUOUS_KEY for a prefix two visible teams use', async () => {
+      const { key, number } = await createIssue();
+      const other = await prisma.team.create({
+        data: {
+          orgId: ctx.orgId,
+          name: 'Twin',
+          slug: `twin-${Date.now()}`,
+          members: { create: { userId: ctx.owner.id, role: 'ADMIN' } },
+        },
+      });
+      const twin = await prisma.project.create({
+        data: { teamId: other.id, name: 'Twin', slug: 'twin', prefix: ctx.projectPrefix },
+      });
+      try {
+        const c = await asUser(ctx.owner);
+        expectRefused(await callTool(c, 'act', { action: 'issue.get', key }), 409, 'AMBIGUOUS_KEY');
+        const full = await callTool(c, 'act', {
+          action: 'issue.get',
+          key: `${ctx.orgSlug}/${ctx.teamSlug}/${key}`,
+        });
+        expect(full.data.number).toBe(number);
+      } finally {
+        await prisma.project.delete({ where: { id: twin.id } });
+        await prisma.team.delete({ where: { id: other.id } });
+      }
+    });
+
+    it('does not look up a key for a token that may not run the action', async () => {
+      const c = await client(await tokenHeader(['wiki:write']));
+      const missing = await callTool(c, 'act', {
+        action: 'issue.get',
+        key: `${ctx.projectPrefix}-99999`,
+      });
+      expectRefused(missing, 403, 'SCOPE');
+    });
+
+    it('holds the key to the role check of the action', async () => {
+      const { number, key } = await createIssue('Role check');
+      const viewer = await newMember();
+      await prisma.teamMembership.update({
+        where: { userId_teamId: { userId: viewer.id, teamId: ctx.teamId } },
+        data: { role: 'VIEWER' },
+      });
+      const c = await asUser(viewer);
+      expectRefused(
+        await callTool(c, 'act', { action: 'issue.update', key, input: { title: 'x' } }),
+        403,
+        'FORBIDDEN',
+      );
+      const issue = await prisma.issue.findUniqueOrThrow({
+        where: { projectId_number: { projectId: ctx.projectId, number } },
+      });
+      expect(issue.title).toBe('Role check');
+    });
+
+    it('refuses a key an action cannot take, or of the other kind', async () => {
+      const { key } = await createIssue();
+      const c = await asUser(ctx.owner);
+      expectRefused(await callTool(c, 'act', { action: 'org.list', key }), 400, 'KEY_NOT_ACCEPTED');
+      expectRefused(await callTool(c, 'act', { action: 'page.get', key }), 400, 'KEY_NOT_ACCEPTED');
+      expectRefused(
+        await callTool(c, 'act', { action: 'issue.get', key: 'not a key' }),
+        400,
+        'INVALID_KEY',
+      );
+    });
+
+    it('resolves a key per item of a batch, and over REST', async () => {
+      const first = await createIssue('First');
+      const second = await createIssue('Second');
+      const res = await authPost('/api/act', ctx.owner.token, {
+        batch: [
+          { action: 'issue.get', key: first.key },
+          { action: 'issue.get', key: second.key },
+        ],
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.completed).toBe(2);
+      expect(res.body.results.map((r: { result: { title: string } }) => r.result.title)).toEqual([
+        'First',
+        'Second',
+      ]);
+    });
+  });
+
+  describe('status by name', () => {
+    it('answers 400 listing the valid names for an unknown one', async () => {
+      const { key } = await createIssue();
+      const answer = await callTool(await asUser(ctx.owner), 'act', {
+        action: 'issue.update',
+        key,
+        input: { status: 'Shipped' },
+      });
+      expectRefused(answer, 400, 'INVALID_STATUS');
+      const columns = await prisma.boardColumn.findMany({ where: { projectId: ctx.projectId } });
+      expect(columns.length).toBeGreaterThan(0);
+      for (const column of columns) expect(answer.data.message).toContain(column.name);
+    });
+
+    it('answers 400 when both status and columnId are given', async () => {
+      const { key } = await createIssue();
+      const column = await prisma.boardColumn.findFirstOrThrow({
+        where: { projectId: ctx.projectId },
+      });
+      expectRefused(
+        await callTool(await asUser(ctx.owner), 'act', {
+          action: 'issue.update',
+          key,
+          input: { status: column.name, columnId: column.id },
+        }),
+        400,
+      );
+    });
+
+    it('works over REST too', async () => {
+      const { number } = await createIssue();
+      const column = await prisma.boardColumn.findFirstOrThrow({
+        where: { projectId: ctx.projectId },
+        orderBy: { position: 'desc' },
+      });
+      const res = await request(app)
+        .patch(`/api/projects/${ctx.projectId}/issues/${number}`)
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .set(CSRF)
+        .send({ status: column.name.toUpperCase() });
+      expect(res.status).toBe(200);
+      expect(res.body.columnId).toBe(column.id);
+    });
+
+    it('still meets approval gates and workflow rules', async () => {
+      const columns = await prisma.boardColumn.findMany({
+        where: { projectId: ctx.projectId },
+        orderBy: { position: 'asc' },
+      });
+      const [from, to] = [columns[0], columns[columns.length - 1]];
+      const { number, key } = await createIssue();
+      await prisma.issue.update({
+        where: { projectId_number: { projectId: ctx.projectId, number } },
+        data: { columnId: from.id },
+      });
+      const c = await asUser(ctx.owner);
+      const move = () =>
+        callTool(c, 'act', { action: 'issue.update', key, input: { status: to.name } });
+
+      const gate = await prisma.approvalGate.create({
+        data: { projectId: ctx.projectId, fromColumnId: from.id, toColumnId: to.id },
+      });
+      expectRefused(await move(), 409);
+      await prisma.approvalGate.delete({ where: { id: gate.id } });
+
+      // The source column has a rule, and it doesn't lead to this one
+      const rule = await prisma.workflowRule.create({
+        data: { projectId: ctx.projectId, fromColumnId: from.id, toColumnId: columns[1].id },
+      });
+      const refused = await move();
+      await prisma.workflowRule.delete({ where: { id: rule.id } });
+      expectRefused(refused, 400);
+      expect(refused.data.message).toContain('workflow rules');
+
+      expect((await move()).isError).toBe(false);
+    });
+  });
+
+  describe('read and search', () => {
+    it('read is item.read, with its per-item scope', async () => {
+      const { key } = await createIssue('Readable');
+      const page = await createPage(`readable-${Date.now()}`);
+      const pageKey = `${ctx.orgSlug}/${ctx.teamSlug}/agent-space/${page.slug}`;
+      const c = await client(await tokenHeader(['search:read', 'issues:read']));
+      const { data } = await callTool(c, 'read', { keys: [key, pageKey] });
+      expect(data.items[0].data.title).toBe('Readable');
+      expect(data.items[1].error).toMatchObject({ status: 403, code: 'SCOPE' });
+    });
+
+    it('search needs search:read and shows only the sections the token covers', async () => {
+      const mark = `agentsearch${Date.now()}`;
+      await createIssue(`Issue ${mark}`);
+      await createPage(mark, `Page body ${mark}`);
+
+      expectRefused(
+        await callTool(await client(await tokenHeader(['issues:read'])), 'search', { query: mark }),
+        403,
+        'SCOPE',
+      );
+
+      const types = async (scopes: string[], args: object = {}) => {
+        const c = await client(await tokenHeader(scopes));
+        const { data } = await callTool(c, 'search', { query: mark, ...args });
+        return (data as Array<{ type: string }>).map((section) => section.type);
+      };
+      expect(await types(['search:read'])).toEqual([]);
+      expect(await types(['search:read', 'issues:read'])).toEqual(['issues']);
+      expect(await types(['search:read', 'wiki:read'])).toEqual(['wiki']);
+      expect(await types(['search:read', 'issues:read', 'wiki:read'], { type: 'wiki' })).toEqual([
+        'wiki',
+      ]);
+    });
+
+    it('answers small results named by a key that read takes', async () => {
+      const mark = `compactsearch${Date.now()}`;
+      await createIssue(`Issue ${mark}`);
+      const page = await createPage(`${mark}-page`, `Body ${mark}`);
+      const c = await asUser(ctx.owner);
+      const { data } = await callTool(c, 'search', { query: mark });
+      const [issues, wiki] = data as Array<{ items: Array<Record<string, string>> }>;
+      expect(issues.items[0].fullKey).toContain(`${ctx.orgSlug}/${ctx.teamSlug}/`);
+      expect(wiki.items[0].key).toBe(`${ctx.orgSlug}/${ctx.teamSlug}/agent-space/${page.slug}`);
+      expect(wiki.items[0]).not.toHaveProperty('body');
+      expect(issues.items[0]).not.toHaveProperty('body');
+
+      const read = await callTool(c, 'read', {
+        keys: [issues.items[0].fullKey, wiki.items[0].key],
+      });
+      expect(read.data.items.every((item: { data?: unknown }) => item.data)).toBe(true);
+    });
+
+    it('puts a page titled exactly the query first, even punctuation full-text drops', async () => {
+      const title = `C++ & Friends ${Date.now()}`;
+      const exact = await prisma.page.create({
+        data: {
+          spaceId,
+          title,
+          slug: `exact-${Date.now()}`,
+          body: 'Nothing else',
+          updatedAt: new Date(0),
+        },
+      });
+      await createPage(`also-${Date.now()}`, `This names ${title} in its text`);
+      const { data } = await callTool(await asUser(ctx.owner), 'search', {
+        query: title.toLowerCase(),
+        type: 'wiki',
+        limit: 1,
+      });
+      expect(data[0].items).toHaveLength(1);
+      expect(data[0].items[0].slug).toBe(exact.slug);
+    });
+
+    it('holds the exact title to page access', async () => {
+      const title = `Hidden exact ${Date.now()}`;
+      const page = await prisma.page.create({
+        data: { spaceId, title, slug: `hidden-exact-${Date.now()}`, body: 'x' },
+      });
+      await prisma.pageRestriction.create({
+        data: { pageId: page.id, type: 'VIEW', userId: ctx.owner.id },
+      });
+      const member = await newMember();
+      const { text } = await callTool(await asUser(member), 'search', { query: title });
+      expect(text).not.toContain(page.slug);
+    });
+
+    it('limits searches per user as the REST search does', async () => {
+      const user = await newUser();
+      const c = await asUser(user);
+      for (let i = 0; i < SEARCH_LIMIT.max; i++) {
+        expect((await callTool(c, 'search', { query: 'nothing' })).isError).toBe(false);
+      }
+      expectRefused(await callTool(c, 'search', { query: 'nothing' }), 429, 'RATE_LIMITED');
+      const viaAct = await callTool(c, 'act', {
+        action: 'search.run',
+        input: { query: 'nothing' },
+      });
+      expectRefused(viaAct, 429, 'RATE_LIMITED');
+    });
+  });
+
+  describe('upload', () => {
+    const png = Buffer.from('89504e470d0a1a0a', 'hex');
+    const file = { filename: 'shot.png', mimeType: 'image/png', size: png.length };
+
+    it('answers a curl line that really uploads the file to the issue a key names', async () => {
+      const { number, key } = await createIssue();
+      const c = await client(await tokenHeader(['files:write', 'issues:write']));
+      const { data, isError } = await callTool(c, 'upload', { ...file, target: key });
+      expect(isError).toBe(false);
+      expect(data.uploadUrl.startsWith(`${base}/api/uploads/`)).toBe(true);
+      expect(data.attachmentUrl).toBeTruthy();
+      expect(data.curl).toContain('@<path>');
+
+      const local = path.join(tmpdir(), `mcp-upload-${randomBytes(6).toString('hex')}.png`);
+      await writeFile(local, png);
+      try {
+        const line = (data.curl as string).replace('@<path>', `@${local}`);
+        await promisify(execFile)('sh', ['-c', `${line} --fail --silent --show-error`]);
+      } finally {
+        await rm(local, { force: true });
+      }
+      const issue = await prisma.issue.findUniqueOrThrow({
+        where: { projectId_number: { projectId: ctx.projectId, number } },
+        include: { attachments: true },
+      });
+      expect(issue.attachments.map((a) => a.originalName)).toEqual(['shot.png']);
+    });
+
+    it('takes a page key, and an object target', async () => {
+      const page = await createPage(`upload-${Date.now()}`);
+      const key = `${ctx.orgSlug}/${ctx.teamSlug}/agent-space/${page.slug}`;
+      const c = await asUser(ctx.owner);
+      expect((await callTool(c, 'upload', { ...file, target: key })).isError).toBe(false);
+      const object = await callTool(c, 'upload', { ...file, target: { pageKey: key } });
+      expect(object.isError).toBe(false);
+    });
+
+    it('holds to the scopes of Task 8', async () => {
+      const { key } = await createIssue();
+      const noFiles = await client(await tokenHeader(['issues:write']));
+      expectRefused(await callTool(noFiles, 'upload', { ...file, target: key }), 403, 'SCOPE');
+      const noParent = await client(await tokenHeader(['files:write']));
+      expectRefused(await callTool(noParent, 'upload', { ...file, target: key }), 403, 'SCOPE');
+    });
+
+    it('with url goes through attachment.fromUrl and its guard', async () => {
+      const answer = await callTool(await asUser(ctx.owner), 'upload', {
+        url: 'http://127.0.0.1/secret',
+      });
+      expect(answer.isError).toBe(true);
+      expect(answer.data.status).toBe(400);
+    });
+
+    it('refuses a raw call without the fields of a file', async () => {
+      expectRefused(await callTool(await asUser(ctx.owner), 'upload', {}), 400);
+    });
+  });
+
+  describe('HTTP', () => {
+    it('refuses the old SSE endpoints', async () => {
+      const { token } = ctx.owner;
+      const stream = await fetch(`${base}/api/mcp`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
+      });
+      expect(stream.status).toBe(405);
+      expect(stream.headers.get('content-type')).not.toContain('text/event-stream');
+      await stream.text();
+
+      const messages = await authPost('/api/mcp/messages?session=abc', token, {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/list',
+      });
+      expect(messages.status).toBe(404);
+    });
+
+    it('answers DELETE with 405, as there is no session to end', async () => {
+      const res = await fetch(`${base}/api/mcp`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${ctx.owner.token}` },
+      });
+      expect(res.status).toBe(405);
+    });
+
+    it('asks for authentication first, on every method', async () => {
+      expect((await rawPost(INITIALIZE)).status).toBe(401);
+      expect((await fetch(`${base}/api/mcp`)).status).toBe(401);
+      expect((await fetch(`${base}/api/mcp`, { method: 'DELETE' })).status).toBe(401);
+    });
+
+    it('needs no CSRF header on exactly /api/mcp', async () => {
+      const auth = { Authorization: `Bearer ${ctx.owner.token}` };
+      expect((await rawPost(INITIALIZE, auth)).status).toBe(200);
+
+      const other = await fetch(`${base}/api/mcp/messages`, {
+        method: 'POST',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      expect(other.status).toBe(403);
+      expect(((await other.json()) as { error: { code: string } }).error.code).toBe(
+        'CSRF_HEADER_MISSING',
+      );
+
+      const act = await fetch(`${base}/api/act`, {
+        method: 'POST',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'org.list' }),
+      });
+      expect(act.status).toBe(403);
+    });
+
+    it('refuses a foreign Origin ahead of everything, and allows none or the site', async () => {
+      const auth = { Authorization: `Bearer ${ctx.owner.token}` };
+      for (const origin of ['https://evil.example', 'null', 'not a url']) {
+        const res = await rawPost(INITIALIZE, { ...auth, Origin: origin });
+        expect(res.status, origin).toBe(403);
+        expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+          'INVALID_ORIGIN',
+        );
+      }
+      expect((await rawPost(INITIALIZE, { ...auth, Origin: 'http://localhost:7000' })).status).toBe(
+        200,
+      );
+
+      vi.stubEnv('FRONTEND_URL', 'https://axiom.example/');
+      try {
+        expect(
+          (await rawPost(INITIALIZE, { ...auth, Origin: 'https://axiom.example' })).status,
+        ).toBe(200);
+        expect(
+          (await rawPost(INITIALIZE, { ...auth, Origin: 'http://localhost:7000' })).status,
+        ).toBe(403);
+        expect((await rawPost(INITIALIZE, auth)).status).toBe(200);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('answers a body it cannot parse or take as a client error', async () => {
+      const auth = { Authorization: `Bearer ${ctx.owner.token}` };
+      const malformed = await fetch(`${base}/api/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: MCP_ACCEPT, ...auth },
+        body: '{ not json',
+      });
+      expect(malformed.status).toBe(400);
+      const tooLarge = await fetch(`${base}/api/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: MCP_ACCEPT, ...auth },
+        body: JSON.stringify({ padding: 'x'.repeat(6 * 1024 * 1024) }),
+      });
+      expect(tooLarge.status).toBe(413);
+    });
+
+    it('takes one message per request, so one request is one call', async () => {
+      const res = await rawPost([INITIALIZE, { jsonrpc: '2.0', id: 2, method: 'tools/list' }], {
+        Authorization: `Bearer ${ctx.owner.token}`,
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('closes the server and transport of every request', async () => {
+      const close = vi.spyOn(StreamableHTTPServerTransport.prototype, 'close');
+      const res = await rawPost(INITIALIZE, { Authorization: `Bearer ${ctx.owner.token}` });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('mcp-session-id')).toBeNull();
+      await res.json();
+      await vi.waitFor(() => expect(close).toHaveBeenCalled());
+    });
+
+    it('keeps requiring 2FA of a session where the site enforces it', async () => {
+      const before = (await getSiteSettings()).enforce2fa;
+      await updateSiteSettings({ enforce2fa: true });
+      try {
+        const user = await newUser();
+        const res = await rawPost(INITIALIZE, { Authorization: `Bearer ${user.token}` });
+        expect(res.status).toBe(403);
+        expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+          'TWO_FACTOR_SETUP_REQUIRED',
+        );
+      } finally {
+        await updateSiteSettings({ enforce2fa: before });
+      }
+    });
+
+    it('runs /api/act with a token, by its own scopes', async () => {
+      const header = await tokenHeader(['issues:read']);
+      const { number } = await createIssue();
+      const post = (body: object) =>
+        request(app).post('/api/act').set('Authorization', header).set(CSRF).send(body);
+
+      const read = await post({
+        action: 'issue.get',
+        input: { projectId: ctx.projectId, issueNumber: number },
+      });
+      expect(read.status).toBe(200);
+      expect(read.body.number).toBe(number);
+
+      const write = await post({
+        action: 'issue.update',
+        input: { projectId: ctx.projectId, issueNumber: number, title: 'x' },
+      });
+      expect(write.status).toBe(403);
+      expect(write.body.error.code).toBe('SCOPE');
+
+      expect((await post({})).status).toBe(400);
+      expect((await post({ batch: [] })).status).toBe(400);
+      expect((await post({ action: 'attachment.download', input: { id: 'x' } })).status).toBe(400);
+    });
+
+    it('answers a raw action over /api/act with 400', async () => {
+      const res = await authPost('/api/act', ctx.owner.token, {
+        action: 'attachment.upload',
+        input: {},
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('RAW_ACTION');
+    });
+  });
+
+  // ─── From mcp-session.test.ts: a message could only reach its owner's SSE session ─────
+  describe('identity per request', () => {
+    it('runs as whoever authenticated this request, whatever session it names', async () => {
+      const { number } = await createIssue('Only the team');
+      const stranger = await newUser();
+      const call = {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'act',
+          arguments: {
+            action: 'issue.get',
+            input: { projectId: ctx.projectId, issueNumber: number },
+          },
+        },
+      };
+      const asStranger = await rawPost(call, {
+        Authorization: `Bearer ${stranger.token}`,
+        'Mcp-Session-Id': 'the-session-of-the-owner',
+      });
+      const text = await asStranger.text();
+      expect(text).toContain('isError');
+      expect(text).not.toContain('Only the team');
+
+      const asOwner = await rawPost(call, { Authorization: `Bearer ${ctx.owner.token}` });
+      expect(await asOwner.text()).toContain('Only the team');
+    });
+
+    it('stops working the moment a user is deactivated or a token removed', async () => {
+      const member = await newMember();
+      const header = await tokenHeader(['issues:read'], member);
+      const c = await client(header);
+      const session = await asUser(member);
+      const list = { action: 'issue.list', input: { projectId: ctx.projectId } };
+      expect((await callTool(c, 'act', list)).isError).toBe(false);
+
+      await prisma.user.update({ where: { id: member.id }, data: { deactivatedAt: new Date() } });
+      await expect(callTool(c, 'act', list)).rejects.toThrow();
+      await expect(callTool(session, 'act', list)).rejects.toThrow();
+      const raw = await rawPost(INITIALIZE, { Authorization: header });
+      expect(raw.status).toBe(403);
+      expect(((await raw.json()) as { error: { code: string } }).error.code).toBe(
+        'ACCOUNT_DEACTIVATED',
+      );
+      await prisma.user.update({ where: { id: member.id }, data: { deactivatedAt: null } });
+
+      await prisma.apiToken.deleteMany({ where: { userId: member.id } });
+      await expect(callTool(c, 'act', list)).rejects.toThrow();
+    });
+  });
+
+  // ─── From mcp.test.ts ─────────────────────────────────────────────────────────────────
+  describe('security cases of the old server', () => {
+    const slugPage = (slug: string, inSpace = spaceId) => ({ spaceId: inSpace, pageSlug: slug });
+
+    it('page.update enforces edit permission, and the owner writes a plain EDIT', async () => {
+      const page = await createPage(`edit-${Date.now()}`);
+      const viewer = await newMember();
+      await prisma.orgMembership.update({
+        where: { userId_orgId: { userId: viewer.id, orgId: ctx.orgId } },
+        data: { role: 'VIEWER' },
+      });
+      // Team MEMBER would grant wiki:edit on its own: a viewer has no team role
+      await prisma.teamMembership.deleteMany({ where: { userId: viewer.id } });
+
+      const refused = await callTool(await asUser(viewer), 'act', {
+        action: 'page.update',
+        input: { ...slugPage(page.slug), body: 'hacked' },
+      });
+      expect(refused.isError).toBe(true);
+      expect((await prisma.page.findUniqueOrThrow({ where: { id: page.id } })).body).toBe('before');
+
+      const ok = await callTool(await asUser(ctx.owner), 'act', {
+        action: 'page.update',
+        input: { ...slugPage(page.slug), body: 'after' },
+      });
+      expect(ok.isError).toBe(false);
+      const versions = await prisma.pageVersion.findMany({ where: { pageId: page.id } });
+      expect(versions.map((v) => v.kind)).toEqual(['EDIT']);
+      expect((await prisma.page.findUniqueOrThrow({ where: { id: page.id } })).body).toBe('after');
+    });
+
+    it('page writes require EDIT access to the space', async () => {
+      const space = await prisma.wikiSpace.create({
+        data: { teamId: ctx.teamId, name: 'Locked', slug: `locked-${Date.now()}` },
+      });
+      const page = await createPage('locked-page', 'before', space.id);
+      // A team member, so the org and page checks pass, who may only view this space
+      const reader = await newMember();
+      await prisma.spacePermission.create({
+        data: { spaceId: space.id, userId: reader.id, level: 'VIEW' },
+      });
+      const c = await asUser(reader);
+      const update = await callTool(c, 'act', {
+        action: 'page.update',
+        input: { ...slugPage('locked-page', space.id), body: 'changed by a reader' },
+      });
+      const create = await callTool(c, 'act', {
+        action: 'page.create',
+        input: { spaceId: space.id, title: 'Sneaky', slug: 'sneaky', body: 'x' },
+      });
+      expect(update.isError).toBe(true);
+      expect(create.isError).toBe(true);
+      expect((await prisma.page.findUniqueOrThrow({ where: { id: page.id } })).body).toBe('before');
+      expect(await prisma.page.count({ where: { spaceId: space.id, slug: 'sneaky' } })).toBe(0);
+    });
+
+    it('denies issue.delete and page.delete in another org', async () => {
+      const { number } = await createIssue('Keep me');
+      const page = await createPage(`keep-${Date.now()}`);
+      const c = await asUser(await newUser());
+      const issue = await callTool(c, 'act', {
+        action: 'issue.delete',
+        input: { projectId: ctx.projectId, issueNumber: number },
+      });
+      const wiki = await callTool(c, 'act', {
+        action: 'page.delete',
+        input: slugPage(page.slug),
+      });
+      expect(issue.isError).toBe(true);
+      expect(wiki.isError).toBe(true);
+      expect(await prisma.issue.count({ where: { projectId: ctx.projectId, number } })).toBe(1);
+      expect(await prisma.page.count({ where: { id: page.id } })).toBe(1);
+    });
+
+    it('cross-org: a stranger reads nothing of an issue by id, by key or by search', async () => {
+      const mark = `crossorg${Date.now()}`;
+      const { number, key } = await createIssue(`Secret ${mark}`);
+      const c = await asUser(await newUser());
+      const byId = await callTool(c, 'act', {
+        action: 'issue.get',
+        input: { projectId: ctx.projectId, issueNumber: number },
+      });
+      const byKey = await callTool(c, 'read', { keys: [key] });
+      const search = await callTool(c, 'search', { query: mark });
+      expect(byId.isError).toBe(true);
+      expect(byKey.data.items[0].error.status).toBe(404);
+      for (const { text } of [byId, byKey, search]) expect(text).not.toContain(mark);
+    });
+
+    it('denies issue actions to an org member who is not on the project team', async () => {
+      const { number } = await createIssue('Team only');
+      const orgOnly = await newUser();
+      await prisma.orgMembership.create({
+        data: { orgId: ctx.orgId, userId: orgOnly.id, role: 'MEMBER' },
+      });
+      const c = await asUser(orgOnly);
+      const issueIds = { projectId: ctx.projectId, issueNumber: number };
+      const list = await callTool(c, 'act', {
+        action: 'issue.list',
+        input: { projectId: ctx.projectId },
+      });
+      const get = await callTool(c, 'act', { action: 'issue.get', input: issueIds });
+      expect(list.isError).toBe(true);
+      expect(get.isError).toBe(true);
+      expect(get.text).not.toContain('Team only');
+
+      const sprint = await prisma.sprint.create({
+        data: {
+          projectId: ctx.projectId,
+          name: 'S1',
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 86_400_000),
+        },
+      });
+      const getSprint = await callTool(c, 'act', {
+        action: 'sprint.get',
+        input: { projectId: ctx.projectId, sprintId: sprint.id },
+      });
+      expect(getSprint.isError).toBe(true);
+
+      // A team member still gets through
+      const ok = await callTool(await asUser(await newMember()), 'act', {
+        action: 'issue.get',
+        input: issueIds,
+      });
+      expect(ok.isError).toBe(false);
+      expect(ok.text).toContain('Team only');
+    });
+
+    it('does not reveal a VIEW-restricted page by action or by key', async () => {
+      const slug = `secret-${Date.now()}`;
+      const page = await createPage(slug, 'classified body');
+      await prisma.pageRestriction.create({
+        data: { pageId: page.id, type: 'VIEW', userId: ctx.owner.id },
+      });
+      const c = await asUser(await newMember());
+      const get = await callTool(c, 'act', { action: 'page.get', input: slugPage(slug) });
+      const read = await callTool(c, 'read', {
+        keys: [`${ctx.orgSlug}/${ctx.teamSlug}/agent-space/${slug}`],
+      });
+      expect(get.isError).toBe(true);
+      expect(read.data.items[0].error.status).toBe(404);
+      for (const { text } of [get, read]) expect(text).not.toContain('classified body');
+    });
+
+    it('denies page.get in a space whose permissions leave the user out', async () => {
+      const space = await prisma.wikiSpace.create({
+        data: {
+          teamId: ctx.teamId,
+          name: 'Locked Space',
+          slug: `rest-locked-${Date.now()}`,
+          permissions: { create: { userId: ctx.owner.id, level: 'ADMIN' } },
+        },
+      });
+      await createPage('locked', 'locked body', space.id);
+      const res = await callTool(await asUser(await newMember()), 'act', {
+        action: 'page.get',
+        input: slugPage('locked', space.id),
+      });
+      expect(res.isError).toBe(true);
+      expect(res.text).not.toContain('locked body');
+    });
+
+    it('team role wins: an org MEMBER whose team role is VIEWER reads but does not write', async () => {
+      const teamViewer = await newMember();
+      await prisma.teamMembership.update({
+        where: { userId_teamId: { userId: teamViewer.id, teamId: ctx.teamId } },
+        data: { role: 'VIEWER' },
+      });
+      const c = await asUser(teamViewer);
+      const create = await callTool(c, 'act', {
+        action: 'issue.create',
+        input: { projectId: ctx.projectId, title: 'by a team viewer' },
+      });
+      const read = await callTool(c, 'act', {
+        action: 'issue.list',
+        input: { projectId: ctx.projectId },
+      });
+      expect([create.isError, read.isError]).toEqual([true, false]);
+    });
+
+    it('an explicit space grant works over MCP as it does over REST', async () => {
+      const granted = await newMember();
+      await prisma.orgMembership.update({
+        where: { userId_orgId: { userId: granted.id, orgId: ctx.orgId } },
+        data: { role: 'VIEWER' },
+      });
+      await prisma.teamMembership.deleteMany({ where: { userId: granted.id } });
+      const space = await prisma.wikiSpace.create({
+        data: {
+          teamId: ctx.teamId,
+          name: 'Granted',
+          slug: `granted-${Date.now()}`,
+          permissions: { create: { userId: granted.id, level: 'EDIT' } },
+        },
+      });
+      await createPage('g', 'before', space.id);
+      const res = await callTool(await asUser(granted), 'act', {
+        action: 'page.update',
+        input: { ...slugPage('g', space.id), body: 'after' },
+      });
+      expect(res.isError).toBe(false);
+    });
+
+    it('uiOnly and tokenBlocked actions stay closed over MCP, with every scope or a session', async () => {
+      registerActions(
+        (['test.mcpUiOnly', 'test.mcpTokenBlocked'] as const).map((name) =>
+          defineAction({
+            name,
+            area: 'issues',
+            kind: 'read',
+            summary: name,
+            input: z.object({}),
+            output: z.looseObject({}),
+            ...(name === 'test.mcpUiOnly' ? { uiOnly: true } : { tokenBlocked: true }),
+            authorize: async () => {},
+            handler: async () => ({ ran: true }),
+          }),
+        ),
+      );
+      const allScopes = await client(await tokenHeader([...TOKEN_SCOPES]));
+      for (const c of [allScopes, await asUser(ctx.owner)]) {
+        const { data } = await callTool(c, 'describe');
+        const names = (data as Array<{ name: string }>).map((a) => a.name);
+        expect(names).toContain('issue.get');
+        for (const action of ['test.mcpUiOnly', 'test.mcpTokenBlocked']) {
+          expect(names).not.toContain(action);
+          expectRefused(await callTool(c, 'describe', { action }), 403, 'SCOPE');
+          expectRefused(await callTool(c, 'act', { action }), 403, 'SCOPE');
+        }
+      }
+    });
+  });
+});

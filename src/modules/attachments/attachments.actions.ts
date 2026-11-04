@@ -150,6 +150,7 @@ const attachmentActions = [
     input: multipartFields,
     output: nothing,
     rest: { method: 'POST', path: BASE, raw: true },
+    rawAlternative: 'Use the upload tool, or attachment.createUploadUrl.',
     authorize: async () => {},
     handler: async (ctx) => {
       const { req, res } = httpOf(ctx);
@@ -253,6 +254,7 @@ const attachmentActions = [
     input: idTarget,
     output: nothing,
     rest: { method: 'GET', path: `${BASE}/:id/preview`, raw: true },
+    rawAlternative: 'Use attachment.convert for its text, or GET the file over HTTP.',
     authorize: readAttachment,
     handler: async (ctx, { id }) => {
       const { res } = httpOf(ctx);
@@ -287,6 +289,7 @@ const attachmentActions = [
     input: idTarget,
     output: nothing,
     rest: { method: 'GET', path: `${BASE}/:id`, raw: true },
+    rawAlternative: 'Use attachment.convert for its text, or GET the file over HTTP.',
     authorize: readAttachment,
     handler: async (ctx, { id }) => {
       const { res } = httpOf(ctx);

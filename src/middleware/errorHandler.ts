@@ -59,6 +59,19 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     });
   }
 
+  // The JSON body parser refusing a body: the caller's mistake, in the caller's words
+  const bodyError = (err as Error & { type?: string }).type;
+  if (bodyError === 'entity.parse.failed') {
+    return res.status(400).json({
+      error: { message: 'The request body is not valid JSON', code: 'INVALID_JSON' },
+    });
+  }
+  if (bodyError === 'entity.too.large') {
+    return res.status(413).json({
+      error: { message: 'The request body is too large', code: 'BODY_TOO_LARGE' },
+    });
+  }
+
   logger.fatal('unhandled error', requestContext, err);
   return res.status(500).json({
     error: { message: 'Internal server error', code: 'INTERNAL_ERROR' },

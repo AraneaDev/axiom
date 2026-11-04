@@ -66,6 +66,8 @@ export interface ActionDef<
    */
   tokenBlocked?: boolean;
   rest?: RestBinding;
+  /** For a `raw` binding: what to use instead where it can't run, told in the 400 it answers. */
+  rawAlternative?: string;
   /** Throws an AppError (403/404) to refuse. */
   authorize(ctx: ActionContext, target: AuthorizeInput<I, T>): Promise<void>;
   handler(ctx: ActionContext, input: z.infer<I>): Promise<z.infer<O>>;

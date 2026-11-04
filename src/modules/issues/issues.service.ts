@@ -340,6 +340,30 @@ export async function listIssues(
 }
 
 /**
+ * The board column a status name stands for within a project, whatever its case.
+ * @param projectId - The project
+ * @param status - The column's name
+ * @throws {AppError} 400 INVALID_STATUS naming the valid statuses, for a name that isn't exactly one column
+ */
+export async function columnIdForStatus(projectId: string, status: string): Promise<string> {
+  const columns = await prisma.boardColumn.findMany({
+    where: { projectId },
+    select: { id: true, name: true },
+    orderBy: { position: 'asc' },
+  });
+  const wanted = status.toLowerCase();
+  const matches = columns.filter((column) => column.name.toLowerCase() === wanted);
+  if (matches.length === 1) return matches[0].id;
+  const valid = columns.map((column) => column.name).join(', ');
+  const problem = matches.length > 1 ? 'Several columns are named' : 'Unknown status';
+  throw new AppError(
+    400,
+    `${problem} "${status}". Valid statuses: ${valid}. Use columnId for a shared name.`,
+    'INVALID_STATUS',
+  );
+}
+
+/**
  * Update an existing issue with partial data, logging granular activity events and firing automation rules.
  * @param projectId - The project the issue belongs to
  * @param issueNumber - The issue number within the project

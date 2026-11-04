@@ -1,0 +1,179 @@
+import { z } from 'zod';
+
+import { actRequest, keyKindOf, runAct } from '../actions/batch';
+import type { ActionContext, ActionDef } from '../actions/define';
+import { actionRefusal, assertRunnable, executeAction } from '../actions/execute';
+import { MAX_KEY_LENGTH, parseKey } from '../actions/keys';
+import { getAction, listActions } from '../actions/registry';
+import { SCOPE_AREAS } from '../middleware/token-scopes';
+import { bareMimeType, MAX_FILENAME_LENGTH } from '../modules/attachments/attachments.service';
+import { validate } from '../utils/validation/common-validators';
+
+/** What a tool call runs with. */
+export interface ToolEnv {
+  ctx: ActionContext;
+  /** Where this request came in, for URLs the agent uses next */
+  origin: string;
+}
+
+export interface AgentTool {
+  name: string;
+  description: string;
+  /** Read when tools are listed: an action's own input is the tool's input */
+  input: () => z.ZodType;
+  run: (args: unknown, env: ToolEnv) => Promise<unknown>;
+}
+
+const describeInput = z.strictObject({
+  area: z.enum(SCOPE_AREAS).optional(),
+  action: z.string().min(1).max(200).optional(),
+});
+
+const uploadInput = z.strictObject({
+  filename: z.string().min(1).max(MAX_FILENAME_LENGTH).optional(),
+  mimeType: z.string().min(1).max(255).optional(),
+  size: z.number().int().positive().optional(),
+  url: z.string().min(1).max(2048).optional(),
+  target: z
+    .union([z.string().min(1).max(MAX_KEY_LENGTH), z.record(z.string(), z.unknown())])
+    .optional(),
+});
+
+/**
+ * An action's schema as JSON Schema. What JSON Schema can't express reads as "anything".
+ * @param schema - The Zod schema
+ * @param io - Whether it is read as input or output
+ */
+function jsonSchemaOf(schema: z.ZodType, io: 'input' | 'output'): Record<string, unknown> {
+  return z.toJSONSchema(schema, { io, unrepresentable: 'any' });
+}
+
+/**
+ * The input schema of a registered action.
+ * @param name - The action
+ */
+function inputOfAction(name: string): z.ZodType {
+  const def: ActionDef | undefined = getAction(name);
+  if (!def) throw new Error(`Action ${name} is not registered`);
+  return def.input as z.ZodType;
+}
+
+/**
+ * Quote a value for a POSIX shell.
+ * @param value - The value
+ */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * A target given as a bare key, in the form the attachment actions take.
+ * @param target - A key, or a target object
+ */
+function uploadTarget(target: z.infer<typeof uploadInput>['target']) {
+  if (typeof target !== 'string') return target;
+  return parseKey(target).kind === 'issue' ? { issueKey: target } : { pageKey: target };
+}
+
+export const AGENT_TOOLS: AgentTool[] = [
+  {
+    name: 'search',
+    description:
+      'Search issues and wiki pages you can open. Free text, plus filters such as type:bug, ' +
+      'status:done or assignee:name. Results carry the key to pass to read.',
+    input: () => inputOfAction('search.run'),
+    run: (args, { ctx }) => executeAction('search.run', args, ctx),
+  },
+  {
+    name: 'read',
+    description:
+      'Read issues and pages in one call by key or URL: AXM-42, org/team/AXM-42, ' +
+      'org/team/space/page-slug. Use include for comments, links, history, attachments and more. ' +
+      'Each key answers for itself.',
+    input: () => inputOfAction('item.read'),
+    run: (args, { ctx }) => executeAction('item.read', args, ctx),
+  },
+  {
+    name: 'describe',
+    description:
+      'Find what you can do. Without action: the names and summaries your token allows, ' +
+      'optionally for one area. With action: its input and output as JSON Schema.',
+    input: () => describeInput,
+    run: async (args, { ctx }) => {
+      const { area, action } = validate(describeInput, args);
+      if (action !== undefined) {
+        const def = assertRunnable(action, ctx);
+        return {
+          name: def.name,
+          area: def.area,
+          kind: def.kind,
+          summary: def.summary,
+          key: keyKindOf(def) ?? null,
+          input: jsonSchemaOf(def.input as z.ZodType, 'input'),
+          output: jsonSchemaOf(def.output as z.ZodType, 'output'),
+        };
+      }
+      return listActions()
+        .filter((def) => (area === undefined || def.area === area) && !actionRefusal(def, ctx))
+        .map(({ name, area: defArea, kind, summary }) => ({
+          name,
+          area: defArea,
+          kind,
+          summary,
+        }));
+    },
+  },
+  {
+    name: 'act',
+    description:
+      'Run an action by name, as listed by describe: { action, input }, optionally with key to ' +
+      "address its issue or page, as in { action: 'issue.update', key: 'AXM-42', input: { status: " +
+      "'Done' } }. Or up to 25 in order with { batch: [...] }: it stops at the first failure, " +
+      'reports the rest as skipped, and what already ran stays done.',
+    input: () => actRequest,
+    run: (args, { ctx }) => runAct(validate(actRequest, args), ctx),
+  },
+  {
+    name: 'upload',
+    description:
+      'Add a file. With url: fetches it from a public HTTPS URL. Otherwise give filename, ' +
+      'mimeType and size to get a signed URL, then run the curl line it returns with your file: ' +
+      "curl -X PUT -H 'Content-Type: <mimeType>' --data-binary @<path> '<uploadUrl>'. target is a " +
+      'key such as AXM-42 or org/team/space/page-slug; without one the file is staged until a body ' +
+      'references attachmentUrl.',
+    input: () => uploadInput,
+    run: async (args, { ctx, origin }) => {
+      const { url, target, filename, mimeType, size } = validate(uploadInput, args);
+      const location = uploadTarget(target);
+      if (url !== undefined) {
+        return executeAction('attachment.fromUrl', { url, filename, target: location }, ctx);
+      }
+      const created = (await executeAction(
+        'attachment.createUploadUrl',
+        { filename, mimeType, size, target: location },
+        ctx,
+      )) as { uploadUrl: string };
+      const uploadUrl = `${origin}${created.uploadUrl}`;
+      // The signed route refuses any other type, and curl sends a form type by default
+      const contentType = `Content-Type: ${bareMimeType(mimeType ?? '')}`;
+      return {
+        ...created,
+        uploadUrl,
+        curl: `curl -X PUT -H ${shellQuote(contentType)} --data-binary @<path> ${shellQuote(uploadUrl)}`,
+      };
+    },
+  },
+];
+
+/** The tools as tools/list answers them. Their schemas don't change, so this is built once. */
+let listed: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>;
+
+/** The tools as tools/list answers them. */
+export function listAgentTools() {
+  listed ??= AGENT_TOOLS.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: jsonSchemaOf(tool.input(), 'input'),
+  }));
+  return listed;
+}

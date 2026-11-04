@@ -4,12 +4,14 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 
+import { handleAct } from './actions/batch';
 import { listActions } from './actions/registry';
-import { mountActions } from './actions/rest';
+import { markRegistryRoute, mountActions } from './actions/rest';
 import { prisma } from './config/database';
 import { env } from './config/env';
 import { openApiRouter } from './lib/openapi';
 import { requestContextMiddleware } from './lib/request-context';
+import { checkMcpOrigin, handleMcpPost, refuseMcpStream } from './mcp/agent-server';
 import { auditMiddleware } from './middleware/auditMiddleware';
 import { authenticate } from './middleware/auth';
 import { csrfGuard } from './middleware/csrfGuard';
@@ -45,6 +47,7 @@ import './modules/orgs/orgs.actions';
 import './modules/teams/teams.actions';
 import './modules/projects/projects.actions';
 import './modules/sprints/sprints.actions';
+import './modules/search/search.actions';
 import issuesRoutes from './modules/issues/issues.routes';
 import labelsRoutes from './modules/labels/labels.routes';
 import linksRoutes from './modules/links/links.routes';
@@ -63,27 +66,6 @@ import wikiRoutes from './modules/wiki/wiki.routes';
 import workflowRoutes from './modules/workflows/workflows.routes';
 import { createWebSocketServer } from './realtime/ws-server';
 import { logger } from './utils/logger';
-
-// MCP SDK excluded from typecheck — see https://github.com/modelcontextprotocol/typescript-sdk/issues/985
-
-let handleMcpSse: import('express').RequestHandler;
-let handleMcpMessage: import('express').RequestHandler;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mcp = require('./mcp/server') as {
-    handleMcpSse: import('express').RequestHandler;
-    handleMcpMessage: import('express').RequestHandler;
-  };
-  handleMcpSse = mcp.handleMcpSse;
-  handleMcpMessage = mcp.handleMcpMessage;
-} catch {
-  // MCP SDK may not be available in test environments
-  const noop: import('express').RequestHandler = (_req, res) => {
-    res.status(501).json({ error: { message: 'MCP not available' } });
-  };
-  handleMcpSse = noop;
-  handleMcpMessage = noop;
-}
 
 const app = express();
 
@@ -124,11 +106,7 @@ app.use(metricsCollector);
 // PUT /api/uploads/:uploadId has its signature as credential and its own limits. It sits ahead of
 // the JSON parser, the CSRF guard and require2fa, and nothing else takes this way past them.
 app.use(signedUploadRouter);
-app.use((req, res, next) => {
-  // Skip JSON body parsing for MCP messages -- the SSE transport reads the raw stream
-  if (req.path === '/api/mcp/messages') return next();
-  express.json({ limit: '5mb' })(req, res, next);
-});
+app.use(express.json({ limit: '5mb' }));
 
 app.use(requestContextMiddleware);
 
@@ -169,6 +147,14 @@ const actionsRouter = express.Router();
 mountActions(actionsRouter, listActions());
 app.use(actionsRouter);
 
+// Actions by name, and the MCP server. Each action checks the token's scope, so these are registry
+// routes, and they sit ahead of the legacy routers whose router.use(authenticate) would ask
+// tokenAllows.
+app.post('/api/act', markRegistryRoute, authenticate, handleAct);
+app.post('/api/mcp', checkMcpOrigin, markRegistryRoute, authenticate, handleMcpPost);
+app.get('/api/mcp', checkMcpOrigin, markRegistryRoute, authenticate, refuseMcpStream);
+app.delete('/api/mcp', checkMcpOrigin, markRegistryRoute, authenticate, refuseMcpStream);
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -199,10 +185,6 @@ app.use('/api/projects', formRoutes);
 app.use('/api/projects', intakeRoutes);
 app.use('/api/projects', roadmapRoutes);
 app.use('/api', teamRoadmapRoutes);
-
-// MCP SSE endpoint
-app.get('/api/mcp', authenticate, handleMcpSse);
-app.post('/api/mcp/messages', authenticate, handleMcpMessage);
 
 // OpenAPI spec + Scalar docs UI
 app.use('/api', openApiRouter);

@@ -54,7 +54,7 @@ function captures(earlier: string[], later: string[]): boolean {
  * @param _res - Unused
  * @param next - Continues to authenticate
  */
-const markRegistryRoute: RequestHandler = (req, _res, next) => {
+export const markRegistryRoute: RequestHandler = (req, _res, next) => {
   req.registryRoute = true;
   next();
 };
