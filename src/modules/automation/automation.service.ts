@@ -248,6 +248,8 @@ function matchesCondition(
 ): boolean {
   if (rule.condition) {
     const ast = parse(rule.condition);
+    // A condition stored before these were refused: the caller logs it and the rule doesn't run
+    assertKnownFields(ast, issueFieldRegistry);
     return evaluate(ast, context.issue, issueFieldRegistry, {
       currentUserId: context.actorId,
       projectId: context.issue.projectId,

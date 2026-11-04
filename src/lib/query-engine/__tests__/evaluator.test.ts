@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import type { QueryContext } from '../ast';
-import { assertKnownFields, evaluate } from '../evaluator';
+import { assertKnownFields, evaluate, freeTextOf } from '../evaluator';
 import { issueFieldRegistry } from '../fields/issue-fields';
 import { parse } from '../parser';
 
@@ -129,5 +129,25 @@ describe('evaluator', () => {
     expect(() => check('type = Bug AND (NOT priority IN (High) OR label = "x")')).not.toThrow();
     expect(() => check('type = Bug AND (NOT nonsense = 1)')).toThrow('nonsense');
     expect(() => check('__proto__ IN (1)')).toThrow('__proto__');
+  });
+
+  it('gives text no way to make a condition true', () => {
+    expect(evaluate({ type: 'freetext', value: 'x' }, {}, issueFieldRegistry, {})).toBe(false);
+  });
+
+  it('refuses text and unknown functions in a condition', () => {
+    const check = (query: string) => assertKnownFields(parse(query), issueFieldRegistry);
+    expect(() => check('garbage ((')).toThrow('text');
+    expect(() => check('type:bug words')).toThrow('text');
+    expect(() => check('type = nope()')).toThrow('nope');
+    expect(() => check('assignee IN (nope())')).toThrow('nope');
+    expect(() => check('assignee = currentUser()')).not.toThrow();
+    expect(() => check('created > now(-1d)')).not.toThrow();
+  });
+
+  it('reads the free text of a query, in either order', () => {
+    expect(freeTextOf(parse('type:bug salt pepper'))).toBe('salt pepper');
+    expect(freeTextOf(parse('salt type:bug'))).toBe('salt');
+    expect(freeTextOf(parse('type = Bug'))).toBe('');
   });
 });

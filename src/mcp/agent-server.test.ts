@@ -20,6 +20,7 @@ import { defineAction } from '../actions/define';
 import { executeAction } from '../actions/execute';
 import { registerActions } from '../actions/registry';
 import { prisma } from '../config/database';
+import { cacheGet, cacheInvalidate } from '../config/redis';
 import app from '../index';
 import { issueFieldRegistry } from '../lib/query-engine';
 import { AppError } from '../middleware/errorHandler';
@@ -1788,6 +1789,157 @@ describe('MCP server', () => {
       } finally {
         await prisma.automationRule.deleteMany({ where: { id: { in: [broken.id, working.id] } } });
       }
+    });
+
+    it('keeps the free text of a mixed query, in either order, on list and search', async () => {
+      const word = `salt${Date.now()}`;
+      const make = (title: string, type: 'BUG' | 'TASK') =>
+        prisma.issue.create({
+          data: {
+            projectId: ctx.projectId,
+            number: nextNumber--,
+            title,
+            body: '',
+            type,
+            creatorId: ctx.owner.id,
+          },
+        });
+      await make(`Bug with ${word}`, 'BUG');
+      await make(`Task with ${word}`, 'TASK');
+      await make(`Bug without it ${Date.now()}`, 'BUG');
+      const c = await asUser(ctx.owner);
+      for (const q of [`type:bug ${word}`, `${word} type:bug`]) {
+        const list = await callTool(c, 'act', {
+          action: 'issue.list',
+          input: { projectId: ctx.projectId, q },
+        });
+        expect(
+          list.data.issues.map((i: { title: string }) => i.title),
+          q,
+        ).toEqual([`Bug with ${word}`]);
+        const hydrated = await callTool(c, 'act', {
+          action: 'issue.hydrateList',
+          input: { projectId: ctx.projectId, q },
+        });
+        expect(hydrated.data.issues.total, q).toBe(1);
+
+        const search = await callTool(c, 'search', { query: q, type: 'issues' });
+        expect(
+          search.data[0].items.map((i: { title: string }) => i.title),
+          q,
+        ).toEqual([`Bug with ${word}`]);
+        const rest = await request(app)
+          .get(`/api/search?type=issues&q=${encodeURIComponent(q)}`)
+          .set('Authorization', `Bearer ${ctx.owner.token}`);
+        expect(
+          rest.body[0].items.map((i: { title: string }) => i.title),
+          q,
+        ).toEqual([`Bug with ${word}`]);
+      }
+
+      // Text matched only by LIKE, which full text can't stem into, still needs the filter
+      const partial = word.slice(2);
+      const like = await callTool(c, 'search', { query: `type:bug ${partial}`, type: 'issues' });
+      expect(like.data[0].items.map((i: { title: string }) => i.title)).toEqual([
+        `Bug with ${word}`,
+      ]);
+    });
+
+    it('refuses text and unknown functions in a rule, and a stored one never fires', async () => {
+      const rulesPath = `/api/projects/${ctx.projectId}/automation-rules`;
+      const header = { Authorization: `Bearer ${ctx.owner.token}`, ...CSRF };
+      const body = (condition: string) => ({
+        name: 'Bad',
+        trigger: 'issue:created',
+        condition,
+        actions: [{ type: 'add_label', name: 'bad' }],
+      });
+      const bad = ['garbage ((', 'just words', 'type:bug words', 'type = nope()'];
+      for (const condition of bad) {
+        const res = await request(app).post(rulesPath).set(header).send(body(condition));
+        expect(res.status, condition).toBe(400);
+      }
+      const good = await request(app).post(rulesPath).set(header).send(body('type = Bug'));
+      expect(good.status).toBe(201);
+      for (const condition of bad) {
+        const res = await request(app)
+          .patch(`${rulesPath}/${good.body.id}`)
+          .set(header)
+          .send({ condition });
+        expect(res.status, condition).toBe(400);
+      }
+      await prisma.automationRule.delete({ where: { id: good.body.id } });
+
+      const label = `fired-${Date.now()}`;
+      const stored = await prisma.automationRule.create({
+        data: {
+          projectId: ctx.projectId,
+          name: 'Stored text',
+          trigger: 'issue:created',
+          condition: 'garbage ((',
+          actions: [{ type: 'add_label', name: label }],
+        },
+      });
+      try {
+        const created = await authPost(`/api/projects/${ctx.projectId}/issues`, ctx.owner.token, {
+          title: 'Not for the stored rule',
+        });
+        expect(created.status).toBe(201);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(await prisma.label.count({ where: { name: label } })).toBe(0);
+      } finally {
+        await prisma.automationRule.delete({ where: { id: stored.id } });
+      }
+    });
+
+    it('prunes the shared page tree per viewer, whoever filled the cache', async () => {
+      const space = await prisma.wikiSpace.create({
+        data: { teamId: ctx.teamId, name: 'Tree', slug: `tree-${Date.now()}` },
+      });
+      const title = `Tree secret ${Date.now()}`;
+      const open = await createPage('open-root', 'x', space.id);
+      const later = await createPage('restricted-later', 'x', space.id);
+      await prisma.page.update({ where: { id: later.id }, data: { title: `${title} later` } });
+      const hidden = await createPage('hidden', 'x', space.id);
+      await prisma.page.update({ where: { id: hidden.id }, data: { title } });
+      await prisma.page.create({
+        data: {
+          spaceId: space.id,
+          title: `${title} child`,
+          slug: 'child',
+          body: 'x',
+          parentId: hidden.id,
+        },
+      });
+      await prisma.pageRestriction.create({
+        data: { pageId: hidden.id, type: 'VIEW', userId: ctx.owner.id },
+      });
+      const member = await newMember();
+      const tree = (user: TestUser) =>
+        request(app)
+          .get(`/api/wiki/spaces/${space.id}/tree`)
+          .set('Authorization', `Bearer ${user.token}`);
+
+      await cacheInvalidate(`wiki:tree:${space.id}`);
+      // The allowed viewer fills the cache with the whole tree
+      expect(JSON.stringify((await tree(ctx.owner)).body)).toContain(`${title} child`);
+      expect(await cacheGet(`wiki:tree:${space.id}`)).not.toBeNull();
+      const seen = JSON.stringify((await tree(member)).body);
+      expect(seen).toContain(open.slug);
+      expect(seen).not.toContain(`"title":"${title}"`);
+      expect(seen).not.toContain(`${title} child`);
+      const overMcp = await callTool(await asUser(member), 'act', {
+        action: 'page.tree',
+        input: { spaceId: space.id },
+      });
+      expect(overMcp.text).not.toContain(`${title} child`);
+
+      // A restriction added while the entry is cached counts at once
+      await prisma.pageRestriction.create({
+        data: { pageId: later.id, type: 'VIEW', userId: ctx.owner.id },
+      });
+      expect(JSON.stringify((await tree(member)).body)).not.toContain(`${title} later`);
+      expect(JSON.stringify((await tree(ctx.owner)).body)).toContain(`${title} later`);
     });
 
     it('keeps a query to the project issue.list was authorized on', async () => {

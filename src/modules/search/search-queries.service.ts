@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
-import { parse, compileToPrisma, QueryValueError } from '../../lib/query-engine';
+import { parse, compileToPrisma, freeTextOf, QueryValueError } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
 import { formatIssueKey } from '../../utils/issue-key';
@@ -126,8 +126,9 @@ export async function searchIssues(
     where.projectId = params.projectId;
   }
 
-  // Try query engine for structured queries
+  // Try query engine for structured queries. It leaves only its free text nodes to search for
   let usedQueryEngine = false;
+  let searchText = freeText;
   if (rawQuery && /[=><!~]|(?:^|\s)(?:AND|OR|NOT|IN)(?:\s|$)|\w+:/.test(rawQuery)) {
     try {
       const ast = parse(rawQuery);
@@ -138,6 +139,7 @@ export async function searchIssues(
       if (Object.keys(engineWhere).length > 0) {
         andClauses.push(engineWhere as Prisma.IssueWhereInput);
         usedQueryEngine = true;
+        searchText = freeTextOf(ast);
       }
     } catch (err) {
       if (err instanceof QueryValueError) throw new AppError(400, err.message, 'INVALID_QUERY');
@@ -198,8 +200,7 @@ export async function searchIssues(
 
   where.AND = [accessClause, ...andClauses];
 
-  // The engine read the whole query, so none of it is text to find as well
-  const tsq = usedQueryEngine ? '' : toTsQuery(freeText);
+  const tsq = toTsQuery(searchText);
   const useFts = tsq.length > 0;
 
   // If we have free text, use PostgreSQL full-text search via $queryRaw for ranking
@@ -230,8 +231,8 @@ export async function searchIssues(
       if (ftsIds.length === 0) {
         // FTS found nothing -- fall back to LIKE search
         where.OR = [
-          { title: { contains: freeText, mode: 'insensitive' } },
-          { body: { contains: freeText, mode: 'insensitive' } },
+          { title: { contains: searchText, mode: 'insensitive' } },
+          { body: { contains: searchText, mode: 'insensitive' } },
         ];
       } else {
         where.id = { in: ftsIds };
@@ -239,8 +240,8 @@ export async function searchIssues(
     } catch {
       // Fallback to LIKE search if FTS fails (e.g., invalid query)
       where.OR = [
-        { title: { contains: freeText, mode: 'insensitive' } },
-        { body: { contains: freeText, mode: 'insensitive' } },
+        { title: { contains: searchText, mode: 'insensitive' } },
+        { body: { contains: searchText, mode: 'insensitive' } },
       ];
     }
   } else if (!andClauses.length) {

@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { cacheable } from '../../config/redis';
-import { parse, compileToPrisma, QueryValueError } from '../../lib/query-engine';
+import { parse, compileToPrisma, freeTextOf, QueryValueError } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
@@ -305,6 +305,8 @@ export async function listIssues(
         const engineWhere = compileToPrisma(ast, issueFieldRegistry, { projectId });
         // In AND, so that no query can replace the project this list was authorized on
         where.AND = [engineWhere as Prisma.IssueWhereInput];
+        const text = freeTextOf(ast);
+        if (text) applyPlainTextSearch(where, text);
       } catch (err) {
         if (err instanceof QueryValueError) throw new AppError(400, err.message, 'INVALID_QUERY');
         // If parse fails, fall back to plain text search

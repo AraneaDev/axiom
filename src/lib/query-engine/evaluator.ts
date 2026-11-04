@@ -212,20 +212,61 @@ function evaluateIn(
 }
 
 /**
- * Refuse a condition that names a field the registry doesn't have: it parses, and could only fail
- * later, when its rule is evaluated.
+ * Refuse a function the engine doesn't have, at any depth of its value.
+ * @param value - A value of a condition
+ * @throws {Error} For an unknown function
+ */
+function assertKnownFunctions(value: Value): void {
+  if (value.type !== 'function') return;
+  if (!Object.hasOwn(builtinFunctions, value.name.toLowerCase())) {
+    throw new Error(`Unknown function: ${value.name}`);
+  }
+  value.args.forEach(assertKnownFunctions);
+}
+
+/**
+ * Refuse a rule condition that could not decide anything: one that names a field or function the
+ * registry doesn't have, which could only fail later, or holds plain text, which says nothing about
+ * an issue. Such text parses, as anything does that isn't a structured query.
  * @param ast - The parsed condition
  * @param registry - The fields
- * @throws {Error} For an unknown field
+ * @throws {Error} Saying what is wrong
  */
 export function assertKnownFields(ast: Expression, registry: FieldRegistry): void {
   const pending: Expression[] = [ast];
   while (pending.length > 0) {
     const node = pending.pop() as Expression;
-    if (node.type === 'comparison' || node.type === 'in') lookupField(node.field, registry);
-    else if (node.type === 'and' || node.type === 'or') pending.push(node.left, node.right);
+    if (node.type === 'comparison') {
+      lookupField(node.field, registry);
+      assertKnownFunctions(node.value);
+    } else if (node.type === 'in') {
+      lookupField(node.field, registry);
+      node.values.forEach(assertKnownFunctions);
+    } else if (node.type === 'and' || node.type === 'or') {
+      pending.push(node.left, node.right);
+    } else if (node.type === 'not') {
+      pending.push(node.operand);
+    } else if (node.type === 'freetext') {
+      throw new Error(`A condition can't hold plain text: "${node.value}"`);
+    }
+  }
+}
+
+/**
+ * The plain text of a query, which the structured part leaves for a text search.
+ * @param ast - The parsed query
+ * @returns Its text in query order, or the empty string
+ */
+export function freeTextOf(ast: Expression): string {
+  const parts: string[] = [];
+  const pending: Expression[] = [ast];
+  while (pending.length > 0) {
+    const node = pending.pop() as Expression;
+    if (node.type === 'freetext') parts.push(node.value);
+    else if (node.type === 'and' || node.type === 'or') pending.push(node.right, node.left);
     else if (node.type === 'not') pending.push(node.operand);
   }
+  return parts.join(' ');
 }
 
 /**
@@ -261,8 +302,9 @@ export function evaluate(
     case 'not':
       return !evaluate(ast.operand, obj, registry, context);
 
+    // Text says nothing about the object, so it must never be what makes a rule fire
     case 'freetext':
-      return true;
+      return false;
 
     default: {
       const _exhaustive: never = ast;
