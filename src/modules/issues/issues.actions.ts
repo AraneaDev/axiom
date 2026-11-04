@@ -45,6 +45,14 @@ const linkTarget = projectTarget.extend({ linkId: z.string() });
 type ProjectInput = z.infer<typeof projectTarget>;
 
 const read = projectRead<ProjectInput>((input) => input.projectId);
+const ownsComment = ownedByProject(
+  projectOf.comment,
+  (input: z.infer<typeof commentTarget>) => ({
+    projectId: input.projectId,
+    recordId: input.commentId,
+  }),
+  'issue:edit',
+);
 const write = projectAction<ProjectInput>('issue:edit', (input) => input.projectId);
 
 /**
@@ -220,7 +228,7 @@ const issueActions = [
     kind: 'write',
     summary: 'Move an issue to a board column and position',
     target: projectTarget,
-    input: issueInput.extend({ columnId: z.string(), position: z.number().int() }),
+    input: issueInput.extend({ columnId: z.string(), position: z.number().int().optional() }),
     output: record,
     rest: { method: 'PATCH', path: `${ISSUE}/move` },
     authorize: write,
@@ -310,14 +318,7 @@ const commentActions = [
     input: commentTarget.extend({ body: z.unknown() }),
     output: record,
     rest: { method: 'PATCH', path: `${PROJECT}/comments/:commentId` },
-    authorize: ownedByProject(
-      projectOf.comment,
-      (input: z.infer<typeof commentTarget>) => ({
-        projectId: input.projectId,
-        recordId: input.commentId,
-      }),
-      'issue:edit',
-    ),
+    authorize: ownsComment,
     handler: async (ctx, { commentId, body }) => {
       if (!body || typeof body !== 'string') throw new AppError(400, 'body is required');
       return issuesService.updateComment(commentId, ctx.userId, body);
@@ -332,14 +333,7 @@ const commentActions = [
     input: commentTarget,
     output: nothing,
     rest: { method: 'DELETE', path: `${PROJECT}/comments/:commentId` },
-    authorize: ownedByProject(
-      projectOf.comment,
-      (input: z.infer<typeof commentTarget>) => ({
-        projectId: input.projectId,
-        recordId: input.commentId,
-      }),
-      'issue:edit',
-    ),
+    authorize: ownsComment,
     handler: async (ctx, { commentId }) => {
       await issuesService.deleteComment(commentId, ctx.userId);
     },
@@ -495,8 +489,6 @@ const personalActions = [
   }),
 ];
 
-const webLinkTarget = projectTarget.extend({ linkId: z.string() });
-
 const webLinkActions = [
   defineAction({
     name: 'issueWebLink.list',
@@ -529,13 +521,13 @@ const webLinkActions = [
     area: 'issues',
     kind: 'write',
     summary: 'Remove an external link from an issue',
-    target: webLinkTarget,
-    input: webLinkTarget.extend({ issueNumber: strictInt }),
+    target: linkTarget,
+    input: linkTarget.extend({ issueNumber: strictInt }),
     output: nothing,
     rest: { method: 'DELETE', path: `${ISSUE}/web-links/:linkId` },
     authorize: ownedByProject(
       projectOf.issueWebLink,
-      (input: z.infer<typeof webLinkTarget>) => ({
+      (input: z.infer<typeof linkTarget>) => ({
         projectId: input.projectId,
         recordId: input.linkId,
       }),

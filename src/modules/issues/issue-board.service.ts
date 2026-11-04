@@ -59,7 +59,7 @@ export async function moveIssue(
   projectId: string,
   issueNumber: number,
   columnId: string,
-  position: number,
+  position: number | undefined,
   options?: { skipAutomation?: boolean },
 ) {
   const issue = await findOrThrow(

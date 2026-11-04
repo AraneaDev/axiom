@@ -42,7 +42,13 @@ export const updatePageSchema = createPageSchema
   .extend({
     changeDescription: z.string().max(500).optional(),
   })
-  .partial();
+  .partial()
+  // partial() keeps the defaults of body and isDraft, which would blank a page on a title-only
+  // update or turn a draft into a published page
+  .extend({
+    body: z.string().max(500_000).optional(),
+    isDraft: z.boolean().optional(),
+  });
 
 export const flushPageSessionSchema = z.object({
   changeDescription: z.string().max(500).optional(),

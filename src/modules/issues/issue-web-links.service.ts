@@ -1,8 +1,18 @@
 import { prisma } from '../../config/database';
+import { broadcastToRoom } from '../../realtime/broadcast';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 
 import { findIssueOrThrow } from './issue-utils';
+
+/**
+ * Tell the other open tabs the issue changed, as the issue service does for its own writes.
+ * @param projectId - The issue's project
+ * @param issueId - The issue
+ */
+function announceChange(projectId: string, issueId: string) {
+  broadcastToRoom(`project:${projectId}`, { type: 'issue:updated', projectId, issueId });
+}
 
 const WEB_LINK_INCLUDE = { createdBy: { select: USER_BASIC_SELECT } };
 
@@ -24,10 +34,12 @@ export async function addWebLink(
   data: { url: string; title?: string },
 ) {
   const issue = await findIssueOrThrow(projectId, issueNumber);
-  return prisma.issueWebLink.create({
+  const link = await prisma.issueWebLink.create({
     data: { issueId: issue.id, url: data.url, title: data.title ?? null, createdById: userId },
     include: WEB_LINK_INCLUDE,
   });
+  announceChange(projectId, issue.id);
+  return link;
 }
 
 /**
@@ -59,4 +71,5 @@ export async function deleteWebLink(projectId: string, issueNumber: number, link
     'Web link not found',
   );
   await prisma.issueWebLink.delete({ where: { id: link.id } });
+  announceChange(projectId, issue.id);
 }

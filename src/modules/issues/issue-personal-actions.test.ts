@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -49,6 +51,7 @@ describe('Issue actions: access and ids', () => {
   });
 
   afterAll(async () => {
+    await prisma.apiToken.deleteMany({ where: { userId: ctx.owner.id } });
     await cleanupTestContext(ctx);
     await prisma.user.deleteMany({ where: { id: { in: [viewer.id, outsider.id] } } });
   });
@@ -106,5 +109,66 @@ describe('Issue actions: access and ids', () => {
       .get(`/api/projects/${ctx.projectId}/issues/5abc`)
       .set('Authorization', as(outsider));
     expect(res.status).toBe(403);
+  });
+
+  it('keeps the other fields on a title-only update', async () => {
+    const created = await request(app)
+      .post(`/api/projects/${ctx.projectId}/issues`)
+      .set('Authorization', as(ctx.owner))
+      .set(XHR)
+      .send({ title: 'Keep me', body: 'Long text', type: 'BUG', priority: 'HIGH' });
+    const url = `/api/projects/${ctx.projectId}/issues/${created.body.number}`;
+
+    const updated = await request(app)
+      .patch(url)
+      .set('Authorization', as(ctx.owner))
+      .set(XHR)
+      .send({ title: 'Renamed' });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({
+      title: 'Renamed',
+      body: 'Long text',
+      type: 'BUG',
+      priority: 'HIGH',
+    });
+  });
+
+  it('does not read a write from the query string', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${ctx.projectId}/issues?title=from-query`)
+      .set('Authorization', as(ctx.owner))
+      .set(XHR)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('moves an issue without a position', async () => {
+    const column = await prisma.boardColumn.findFirst({ where: { projectId: ctx.projectId } });
+    const res = await request(app)
+      .patch(`${issue}/move`)
+      .set('Authorization', as(ctx.owner))
+      .set(XHR)
+      .send({ columnId: column!.id });
+    expect(res.status).toBe(200);
+  });
+
+  it.each(['votes', 'watchers'])('refuses a read-only token on %s/toggle', async (kind) => {
+    const raw = `tk_${crypto.randomBytes(24).toString('hex')}`;
+    await prisma.apiToken.create({
+      data: {
+        userId: ctx.owner.id,
+        name: 'toggle-test',
+        tokenHash: crypto.createHash('sha256').update(raw).digest('hex'),
+        prefix: raw.slice(0, 11),
+        scopes: ['issues:read'],
+      },
+    });
+    const res = await request(app)
+      .post(`${issue}/${kind}/toggle`)
+      .set('Authorization', `Token ${raw}`)
+      .set(XHR)
+      .send({});
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('SCOPE');
   });
 });

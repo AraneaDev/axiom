@@ -220,7 +220,10 @@ export const createIssueTemplateSchema = z.object({
   assigneeId: z.string().optional(),
 });
 
-export const updateIssueTemplateSchema = createIssueTemplateSchema.partial();
+// partial() keeps the default of body, which would blank it on an update that leaves it out
+export const updateIssueTemplateSchema = createIssueTemplateSchema.partial().extend({
+  body: z.string().max(100_000).optional(),
+});
 
 // --- Milestones ---
 

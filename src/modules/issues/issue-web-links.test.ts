@@ -187,4 +187,30 @@ describe('Issue web links', () => {
       .send({ url: 'https://example.com/issues-token' });
     expect(res.status).toBe(201);
   });
+
+  it('answers 404 for a link id that belongs to another project', async () => {
+    const other = await createTestContext('web-links-other');
+    try {
+      const issueRes = await request(app)
+        .post(`/api/projects/${other.projectId}/issues`)
+        .set('Authorization', as(other.owner))
+        .set(XHR)
+        .send({ title: 'Elsewhere' });
+      const foreign = await request(app)
+        .post(`/api/projects/${other.projectId}/issues/${issueRes.body.number}/web-links`)
+        .set('Authorization', as(other.owner))
+        .set(XHR)
+        .send({ url: 'https://example.com/foreign' });
+      expect(foreign.status).toBe(201);
+
+      const res = await request(app)
+        .delete(`${base}/${foreign.body.id}`)
+        .set('Authorization', as(ctx.owner))
+        .set(XHR);
+      expect(res.status).toBe(404);
+      expect(await prisma.issueWebLink.count({ where: { id: foreign.body.id } })).toBe(1);
+    } finally {
+      await cleanupTestContext(other);
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, Plus, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 interface IssueWebLinksCardProps {
   projectId: string;
@@ -20,33 +21,45 @@ interface IssueWebLinksCardProps {
  * @param root0.issueNumber
  */
 export function IssueWebLinksCard({ projectId, issueNumber }: IssueWebLinksCardProps) {
-  const queryClient = useQueryClient();
-  const queryKey = ['issue-web-links', projectId, issueNumber];
+  // Under ['issue', projectId], so the issue:updated event refreshes it in other tabs
+  const queryKey = ['issue', projectId, issueNumber, 'web-links'];
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
 
-  const { data: links = [], isLoading } = useQuery({
+  const {
+    data: links = [],
+    isLoading,
+    error: listError,
+  } = useQuery({
     queryKey,
     queryFn: () => issueWebLinksApi.list(projectId, issueNumber),
   });
 
-  const add = useMutation({
-    mutationFn: () =>
+  const add = useMutationWithToast(
+    () =>
       issueWebLinksApi.add(projectId, issueNumber, {
         url: url.trim(),
         ...(title.trim() ? { title: title.trim() } : {}),
       }),
-    onSuccess: () => {
-      setUrl('');
-      setTitle('');
-      void queryClient.invalidateQueries({ queryKey });
+    {
+      successMessage: 'Link added',
+      errorMessage: 'Could not add the link',
+      invalidateKeys: [queryKey],
+      onSuccess: () => {
+        setUrl('');
+        setTitle('');
+      },
     },
-  });
+  );
 
-  const remove = useMutation({
-    mutationFn: (linkId: string) => issueWebLinksApi.remove(projectId, issueNumber, linkId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey }),
-  });
+  const remove = useMutationWithToast(
+    (linkId: string) => issueWebLinksApi.remove(projectId, issueNumber, linkId),
+    {
+      successMessage: 'Link removed',
+      errorMessage: 'Could not remove the link',
+      invalidateKeys: [queryKey],
+    },
+  );
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -63,6 +76,8 @@ export function IssueWebLinksCard({ projectId, issueNumber }: IssueWebLinksCardP
           <span className="ml-auto text-xs text-text-tertiary">{links.length}</span>
         )}
       </div>
+
+      {listError && <p className="text-xs text-danger mb-3">Could not load the links.</p>}
 
       {links.length > 0 && (
         <div className="space-y-1 mb-3">
@@ -108,11 +123,6 @@ export function IssueWebLinksCard({ projectId, issueNumber }: IssueWebLinksCardP
           maxLength={200}
           onChange={(event) => setTitle(event.target.value)}
         />
-        {add.isError && (
-          <p className="text-xs text-danger">
-            {add.error instanceof Error ? add.error.message : 'Could not add the link'}
-          </p>
-        )}
         <Button type="submit" variant="secondary" size="sm" disabled={!url.trim() || add.isPending}>
           <Plus className="h-3.5 w-3.5" />
           Add link

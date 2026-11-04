@@ -12,7 +12,12 @@ export const createIssueSchema = z.object({
   dueDate: z.string().datetime().optional(),
 });
 
+// partial() keeps the defaults of createIssueSchema, so a title-only update would reset the
+// body, type and priority. These three are declared again without them.
 export const updateIssueSchema = createIssueSchema.partial().extend({
+  body: z.string().max(100_000).optional(),
+  type: z.enum(['TASK', 'BUG', 'STORY', 'EPIC']).optional(),
+  priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional(),
   columnId: z.string().optional(),
   position: z.number().int().optional(),
   storyPoints: z.number().int().min(0).max(100).nullable().optional(),

@@ -249,7 +249,7 @@ describe('REST adapter', () => {
       expect(updated.body).toEqual({ ok: true });
     });
 
-    it('lets params win over the body and the body over the query', async () => {
+    it('lets params win over the body, and ignores the query on a write (R14)', async () => {
       const res = await request(app)
         .post('/api/rest-test/things/7?id=8&from=query')
         .set(CSRF)
@@ -261,7 +261,8 @@ describe('REST adapter', () => {
         .post('/api/rest-test/things/7?from=query')
         .set(CSRF)
         .set('Authorization', jwtHeader);
-      expect(queried.body).toEqual({ id: 7, from: 'query' });
+      expect(queried.status).toBe(400);
+      expect(queried.body.error.message).toContain('from');
     });
 
     it('answers invalid input through the error handler', async () => {

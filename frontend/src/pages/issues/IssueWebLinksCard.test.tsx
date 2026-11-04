@@ -6,6 +6,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockList = vi.fn();
 const mockAdd = vi.fn();
 const mockRemove = vi.fn();
+const mockToastError = vi.fn();
+
+vi.mock('@/components/ui/Toast', () => ({
+  useToast: () => ({ success: vi.fn(), error: mockToastError }),
+}));
 
 vi.mock('@/api/issue-web-links.api', () => ({
   issueWebLinksApi: {
@@ -66,5 +71,19 @@ describe('IssueWebLinksCard', () => {
     renderCard();
     await userEvent.click(await screen.findByRole('button', { name: 'Remove link' }));
     await waitFor(() => expect(mockRemove).toHaveBeenCalledWith('proj1', 7, 'a'));
+  });
+
+  it('says so when the list cannot be loaded', async () => {
+    mockList.mockRejectedValue(new Error('down'));
+    renderCard();
+    expect(await screen.findByText('Could not load the links.')).toBeInTheDocument();
+  });
+
+  it('tells the user when a link cannot be removed', async () => {
+    mockList.mockResolvedValue([link('a', 'https://example.com/a', 'Spec')]);
+    mockRemove.mockRejectedValue(new Error('no'));
+    renderCard();
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove link' }));
+    await waitFor(() => expect(mockToastError).toHaveBeenCalledWith('Could not remove the link'));
   });
 });

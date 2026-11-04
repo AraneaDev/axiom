@@ -120,8 +120,10 @@ export function mountActions(router: Router, defs: ActionDef[]): void {
     route(binding.path, markRegistryRoute, authenticate, async (req, res) => {
       const ctx = actionContextFromRequest(req);
       if (binding.raw) ctx.http = { req, res };
-      // The body and query can't override the params that authorize reads
-      const input: unknown = { ...req.query, ...req.body, ...req.params };
+      // Only a read takes its fields from the query (R14); a write reads the body, as the old
+      // controllers did. Neither can override the params that authorize reads.
+      const query = binding.method === 'GET' ? req.query : {};
+      const input: unknown = { ...query, ...req.body, ...req.params };
       sendResult(res, binding, await executeAction(def.name, input, ctx));
     });
   }
