@@ -2,6 +2,7 @@ import crypto from 'crypto';
 
 import type { Request, Response, NextFunction } from 'express';
 
+import { requestPathname } from '../lib/request-path';
 import { logger } from '../utils/logger';
 
 import { isBackendPath } from './static-frontend';
@@ -37,7 +38,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
 
   res.setHeader('X-Request-Id', requestId);
 
-  const frontend = !isBackendPath(req.originalUrl.split('?')[0]);
+  const frontend = !isBackendPath(requestPathname(req));
   const start = Date.now();
   res.on('finish', () => {
     if (frontend && res.statusCode < 500) return;

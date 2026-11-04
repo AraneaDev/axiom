@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-import { isRegistryRoute } from '../actions/rest';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { getRequestContext } from '../lib/request-context';
+import { requestPathname } from '../lib/request-path';
 
 import { AppError } from './errorHandler';
 import { normalizeApiPath, tokenAllows } from './token-scopes';
@@ -12,12 +12,6 @@ import { normalizeApiPath, tokenAllows } from './token-scopes';
 export interface AuthPayload {
   userId: string;
 }
-
-/**
- * Escapes and doubled slashes: normalizeApiPath reads other segments here than Express routes
- * on, so such a path can match a binding and still reach a legacy route.
- */
-const RESPELLED_PATH = /%|\/\//;
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace -- Express augmentation requires namespace
@@ -29,6 +23,8 @@ declare global {
       /** Set when the request authenticated with an API token: the token's id and name */
       apiTokenId?: string;
       apiTokenName?: string;
+      /** Set by a registry binding's own route: the action checks the token's scope */
+      registryRoute?: boolean;
     }
   }
 }
@@ -74,11 +70,10 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 
       // A token only reaches what its scopes cover (see token-scopes.ts)
       // Every spelling Express routes to the same handler meets the same rule
-      const rawPath = req.originalUrl.split('?')[0];
-      const path = normalizeApiPath(rawPath);
-      // On a registry route the action checks the scope; see executeAction
-      const actionDecides = !RESPELLED_PATH.test(rawPath) && isRegistryRoute(req.method, path);
-      if (!actionDecides && !tokenAllows(apiToken.scopes, req.method, path)) {
+      if (
+        !req.registryRoute &&
+        !tokenAllows(apiToken.scopes, req.method, normalizeApiPath(requestPathname(req)))
+      ) {
         throw new AppError(403, 'This API token does not have the scope for this request', 'SCOPE');
       }
 

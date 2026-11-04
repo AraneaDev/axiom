@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { getRequestContext, runWithRequestContext } from '../lib/request-context';
+import { requestPathname } from '../lib/request-path';
 import { logAudit } from '../modules/audit/audit.service';
 
 const METHOD_ACTION_MAP: Record<string, string> = {
@@ -70,8 +71,9 @@ export function auditMiddleware(req: Request, res: Response, next: NextFunction)
     // Only log successful requests (2xx)
     if (res.statusCode < 200 || res.statusCode >= 300) return;
 
-    const resourceType = resolveResourceType(req.originalUrl);
-    const resourceId = extractResourceId(req.originalUrl);
+    const pathname = requestPathname(req);
+    const resourceType = resolveResourceType(pathname);
+    const resourceId = extractResourceId(pathname);
     const ipAddress =
       (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
       req.socket.remoteAddress ||

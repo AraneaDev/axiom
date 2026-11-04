@@ -1,9 +1,11 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+
+import { normalizeApiPath, TOKEN_SCOPES, tokenAllows } from '../middleware/token-scopes';
 
 import { defineAction, type ActionDef } from './define';
 import { listActions } from './registry';
@@ -24,18 +26,32 @@ function findActionFiles(root: string): string[] {
 }
 
 /**
- * Import actions files. A file that registers nothing fails here, or its actions would escape
- * the rules below: these files register themselves when imported.
+ * Import actions files. These register themselves when imported, so a file that never calls
+ * registerActions fails here, or its actions would escape the rules below. Read from the source:
+ * counting what an import adds fails on a file that another one already imported.
  * @param files - Absolute paths
  */
 async function loadActionFiles(files: string[]): Promise<void> {
   for (const file of files) {
-    const before = listActions().length;
-    await import(file);
-    if (listActions().length === before) {
+    if (!readFileSync(file, 'utf8').includes('registerActions(')) {
       throw new Error(`${file} registered no actions; call registerActions when imported`);
     }
+    await import(file);
   }
+}
+
+/**
+ * The actions files the app does not import, whose routes would silently stay on the legacy
+ * routers and whose actions would be missing from describe.
+ * @param files - Absolute paths
+ * @param root - The directory the entry file is in
+ * @param entrySource - The source of the entry file
+ */
+function filesNotImported(files: string[], root: string, entrySource: string): string[] {
+  return files.filter((file) => {
+    const specifier = `./${path.relative(root, file).split(path.sep).join('/').replace(/\.ts$/, '')}`;
+    return !entrySource.includes(`'${specifier}'`);
+  });
 }
 
 /**
@@ -59,6 +75,27 @@ function paramsOf(restPath: string): string[] {
 }
 
 /**
+ * Whether an object schema does something with unknown fields: a loose one hands them to the
+ * handler and a strict one answers 400 before authorize runs. Only the default strips them.
+ * @param schema - The schema
+ */
+function hasCatchall(schema: z.ZodType): boolean {
+  return schema instanceof z.ZodObject && schema.def.catchall !== undefined;
+}
+
+/**
+ * Whether the legacy table refuses this binding to a token holding every scope. Those are the
+ * always-blocked rules, which skip the table on a registry route and so must become a flag.
+ * @param binding - The binding
+ * @param binding.method - Its method
+ * @param binding.path - Its path
+ */
+function alwaysBlocked(binding: NonNullable<ActionDef['rest']>): boolean {
+  const concrete = binding.path.replace(/:[^/]+/g, 'probe');
+  return !tokenAllows(TOKEN_SCOPES, binding.method, normalizeApiPath(concrete));
+}
+
+/**
  * What an action breaks of the rules for the registry.
  * @param def - The action
  */
@@ -75,10 +112,19 @@ function ruleViolations(def: ActionDef): string[] {
     violations.push(`${def.name}: a write in area ${def.area} needs uiOnly or tokenBlocked (R9)`);
   }
 
+  if (def.rest && !def.uiOnly && !def.tokenBlocked && alwaysBlocked(def.rest)) {
+    violations.push(
+      `${def.name}: tokenAllows refuses ${def.rest.method} ${def.rest.path} to every token, ` +
+        'so it needs uiOnly or tokenBlocked (R7, R9)',
+    );
+  }
+
   if (def.rest && !def.target) {
     const params = paramsOf(def.rest.path);
     const beyondParams =
-      !inputFields || Object.keys(inputFields).some((field) => !params.includes(field));
+      !inputFields ||
+      hasCatchall(def.input) ||
+      Object.keys(inputFields).some((field) => !params.includes(field));
     if (beyondParams) {
       violations.push(`${def.name}: an input beyond the path params needs a target (R10, R11)`);
     }
@@ -119,6 +165,12 @@ describe('registry rules', () => {
     expect(listActions().flatMap(ruleViolations)).toEqual([]);
   });
 
+  it('finds every actions file imported by the app', () => {
+    const root = path.resolve(__dirname, '..');
+    const entry = readFileSync(path.join(root, 'index.ts'), 'utf8');
+    expect(filesNotImported(findActionFiles(root), root, entry)).toEqual([]);
+  });
+
   describe('R9: writes that tokens may not make', () => {
     it.each(['admin', 'orgs', 'teams', 'projects'] as const)(
       'fails on a write in area %s without a flag',
@@ -144,6 +196,27 @@ describe('registry rules', () => {
       expect(ruleViolations(defineAction({ ...base, area: 'orgs', kind: 'read' }))).toEqual([]);
       expect(ruleViolations(defineAction({ ...write, area: 'issues' }))).toEqual([]);
     });
+
+    it.each([
+      ['PATCH', '/api/projects/:projectId'],
+      ['DELETE', '/api/projects/:projectId'],
+      ['PUT', '/api/wiki/pages/:pageId/restrictions'],
+      ['GET', '/api/admin/users'],
+      ['PATCH', '/api/users/me'],
+    ] as const)('fails on %s %s in an open area, which tokenAllows always blocks', (method, p) => {
+      const params = Object.fromEntries(paramsOf(p).map((name) => [name, z.string()]));
+      const base = {
+        ...throwaway,
+        name: 'throwaway.blockedPath',
+        area: 'issues' as const,
+        kind: 'write' as const,
+        input: z.object(params),
+        rest: { method, path: p },
+      };
+      expect(ruleViolations(defineAction(base))).toEqual([expect.stringContaining('R7, R9')]);
+      expect(ruleViolations(defineAction({ ...base, tokenBlocked: true }))).toEqual([]);
+      expect(ruleViolations(defineAction({ ...base, uiOnly: true }))).toEqual([]);
+    });
   });
 
   describe('R10, R11: a binding with more than path params declares a target', () => {
@@ -152,7 +225,7 @@ describe('registry rules', () => {
       name: 'throwaway.bound',
       area: 'issues' as const,
       kind: 'write' as const,
-      rest: { method: 'POST' as const, path: '/api/x/:projectId' },
+      rest: { method: 'POST' as const, path: '/api/wiki/x/:projectId' },
     };
 
     it('fails on body or query fields without a target', () => {
@@ -169,6 +242,15 @@ describe('registry rules', () => {
         input: z.object({ projectId: z.string() }).transform((value) => value),
       });
       expect(ruleViolations(action)).toEqual([expect.stringContaining('needs a target')]);
+    });
+
+    it.each([
+      ['loose', z.looseObject({ projectId: z.string() })],
+      ['strict', z.strictObject({ projectId: z.string() })],
+    ])('fails on a %s input of only path params, which takes or refuses more', (_name, input) => {
+      expect(ruleViolations(defineAction({ ...bound, input }))).toEqual([
+        expect.stringContaining('needs a target'),
+      ]);
     });
 
     it('passes when the input is only the path params, or there is no binding', () => {
@@ -231,25 +313,50 @@ describe('registry rules', () => {
   });
 
   describe('loading actions files', () => {
+    const registers = 'const registerActions = (_: unknown[]) => {};\nregisterActions([]);\n';
     let root: string;
 
     beforeAll(() => {
       root = mkdtempSync(path.join(tmpdir(), 'registry-rules-'));
       mkdirSync(path.join(root, 'deep', 'er'), { recursive: true });
+      mkdirSync(path.join(root, 'empty'));
       mkdirSync(path.join(root, 'node_modules'));
-      writeFileSync(path.join(root, 'deep', 'er', 'a.actions.ts'), 'export const a = 1;\n');
+      writeFileSync(path.join(root, 'deep', 'er', 'a.actions.ts'), registers);
+      writeFileSync(
+        path.join(root, 'deep', 'b.actions.ts'),
+        `import './er/a.actions';\n${registers}`,
+      );
       writeFileSync(path.join(root, 'deep', 'a.actions.test.ts'), '');
       writeFileSync(path.join(root, 'deep', 'a.routes.ts'), '');
-      writeFileSync(path.join(root, 'node_modules', 'b.actions.ts'), '');
+      writeFileSync(path.join(root, 'empty', 'c.actions.ts'), 'export const c = 1;\n');
+      writeFileSync(path.join(root, 'node_modules', 'd.actions.ts'), '');
       return () => rmSync(root, { recursive: true });
     });
 
     it('finds every actions file at any depth, and no others', () => {
-      expect(findActionFiles(root)).toEqual([path.join(root, 'deep', 'er', 'a.actions.ts')]);
+      expect(findActionFiles(path.join(root, 'deep')).sort()).toEqual([
+        path.join(root, 'deep', 'b.actions.ts'),
+        path.join(root, 'deep', 'er', 'a.actions.ts'),
+      ]);
+      expect(findActionFiles(root)).not.toContain(path.join(root, 'node_modules', 'd.actions.ts'));
+    });
+
+    it('accepts an actions file that imports another, in either order', async () => {
+      const deep = path.join(root, 'deep');
+      const [a, b] = [path.join(deep, 'er', 'a.actions.ts'), path.join(deep, 'b.actions.ts')];
+      await expect(loadActionFiles([b, a])).resolves.toBeUndefined();
     });
 
     it('fails on an actions file that registers nothing', async () => {
-      await expect(loadActionFiles(findActionFiles(root))).rejects.toThrow('registered no actions');
+      await expect(loadActionFiles(findActionFiles(path.join(root, 'empty')))).rejects.toThrow(
+        'registered no actions',
+      );
+    });
+
+    it('fails on an actions file the entry file does not import', () => {
+      const files = ['/src/modules/a/a.actions.ts', '/src/modules/b/b.actions.ts'];
+      const entry = "import './modules/a/a.actions';\n";
+      expect(filesNotImported(files, '/src', entry)).toEqual(['/src/modules/b/b.actions.ts']);
     });
   });
 });

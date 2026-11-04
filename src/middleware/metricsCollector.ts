@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 
+import { requestPathname } from '../lib/request-path';
 import { metrics } from '../modules/health/health.metrics';
 
 import { isBackendPath } from './static-frontend';
@@ -13,7 +14,7 @@ import { isBackendPath } from './static-frontend';
  * @param next
  */
 export function metricsCollector(req: Request, res: Response, next: NextFunction): void {
-  if (!isBackendPath(req.originalUrl.split('?')[0])) return next();
+  if (!isBackendPath(requestPathname(req))) return next();
   const start = Date.now();
 
   res.on('finish', () => {

@@ -10,7 +10,12 @@ export interface ActionContext {
   apiTokenName?: string;
   scopes?: readonly string[];
   channel: 'ui' | 'rest-token' | 'mcp';
-  /** The raw request and response. The REST adapter sets this for `raw` bindings only. */
+  /**
+   * The raw request and response. The REST adapter sets this for `raw` bindings only. A handler
+   * reads ids from its `input`, never from `http.req.query` or `http.req.params`: authorize saw
+   * the merged input, in which a param overrides a query field of the same name, so the two can
+   * differ and the handler would act on what was not authorized.
+   */
   http?: { req: Request; res: Response };
 }
 

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { prisma } from '../config/database';
+import { requestPathname } from '../lib/request-path';
 import { ERR } from '../utils/error-messages';
 import { param } from '../utils/params';
 import type { Action } from '../utils/permissions';
@@ -225,11 +226,7 @@ export function requireProjectWrite(action: Action = 'issue:edit') {
   return async (req: Request, _res: Response, next: NextFunction) => {
     if (SAFE_METHODS.has(req.method)) return next();
     // Watching and voting are personal actions, open to anyone who can read the issue
-    if (
-      /\/issues\/\d+\/(watchers|votes)\/toggle$/.test(
-        normalizeApiPath(req.originalUrl.split('?')[0]),
-      )
-    ) {
+    if (/\/issues\/\d+\/(watchers|votes)\/toggle$/.test(normalizeApiPath(requestPathname(req)))) {
       return next();
     }
     try {

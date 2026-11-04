@@ -1,6 +1,7 @@
 import crypto from 'crypto';
+import type { Server } from 'http';
 
-import type { Express } from 'express';
+import express, { type Express } from 'express';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -8,11 +9,12 @@ import { z } from 'zod';
 import { prisma } from '../config/database';
 import { getRequestContext } from '../lib/request-context';
 import { TOKEN_SCOPES } from '../middleware/token-scopes';
+import { listenForRawRequests, rawRequest } from '../test/raw-request';
 
-import { defineAction, type ActionContext } from './define';
+import { defineAction, type ActionContext, type ActionDef } from './define';
 import * as execute from './execute';
 import { registerActions } from './registry';
-import { isRegistryRoute } from './rest';
+import { mountActions } from './rest';
 
 const output = z.looseObject({});
 const noAuthorize = async () => {};
@@ -142,6 +144,18 @@ registerActions([
     rest: { method: 'PATCH', path: '/api/admin/rest-guard/:id' },
     authorize: noAuthorize,
     handler: async () => ({ ok: true }),
+  }),
+  // Beside the legacy PATCH /api/projects/:projectId, which a fragment can reach
+  defineAction({
+    name: 'rest.probe',
+    area: 'issues',
+    kind: 'write',
+    summary: 'A binding that the spelling of a legacy path normalizes into',
+    input: z.looseObject({}),
+    output,
+    rest: { method: 'PATCH', path: '/api/projects/:projectId/probe-labels' },
+    authorize: noAuthorize,
+    handler: async () => ({ action: 'rest.probe' }),
   }),
   defineAction({
     name: 'rest.scopePath',
@@ -319,21 +333,39 @@ describe('REST adapter', () => {
     });
   });
 
-  describe('isRegistryRoute', () => {
-    it('matches mounted bindings by method and pattern', () => {
-      expect(isRegistryRoute('GET', '/api/rest-test/x/bulk')).toBe(true);
-      expect(isRegistryRoute('GET', '/api/rest-test/x/anything')).toBe(true);
-      expect(isRegistryRoute('POST', '/api/rest-test/x/bulk')).toBe(false);
-      expect(isRegistryRoute('GET', '/api/rest-test/x')).toBe(false);
-      expect(isRegistryRoute('GET', '/api/rest-test/x/a/b')).toBe(false);
+  describe('mountActions', () => {
+    const route = (method: 'GET' | 'POST', path: string): ActionDef =>
+      defineAction({
+        name: `throwaway ${method} ${path}`,
+        area: 'issues',
+        kind: 'read',
+        summary: 'Throwaway, never registered',
+        input: z.object({}),
+        output,
+        rest: { method, path },
+        authorize: noAuthorize,
+        handler: async () => ({}),
+      });
+    const mount = (...defs: ActionDef[]) => mountActions(express.Router(), defs);
+
+    it('throws on a duplicate method and path, however its params are named or cased', () => {
+      expect(() => mount(route('GET', '/x/:id'), route('GET', '/x/:id'))).toThrow('unreachable');
+      expect(() => mount(route('GET', '/x/:id'), route('GET', '/X/:other'))).toThrow('unreachable');
     });
 
-    it('matches camelCase params against a normalized path', () => {
-      expect(isRegistryRoute('GET', '/api/teams/some-team')).toBe(true);
+    it('throws on a static path after the param path that captures it', () => {
+      expect(() => mount(route('GET', '/x/:id'), route('GET', '/x/bulk'))).toThrow('unreachable');
     });
 
-    it('treats HEAD as the GET that Express routes it to', () => {
-      expect(isRegistryRoute('HEAD', '/api/rest-test/x/bulk')).toBe(true);
+    it('accepts paths that leave each other reachable', () => {
+      expect(() => mount(route('GET', '/x/bulk'), route('GET', '/x/:id'))).not.toThrow();
+      expect(() => mount(route('GET', '/x/:id'), route('POST', '/x/bulk'))).not.toThrow();
+      expect(() => mount(route('GET', '/x/:id'), route('GET', '/x/:id/y'))).not.toThrow();
+      expect(() => mount(route('GET', '/a/:b/c'), route('GET', '/a/d/:e'))).not.toThrow();
+    });
+
+    it('throws on a path it cannot compare', () => {
+      expect(() => mount(route('GET', '/x/*rest'))).toThrow('Unsupported segment');
     });
   });
 
@@ -365,7 +397,7 @@ describe('REST adapter', () => {
       ['a doubled slash', '/api/admin/rest-guard//x'],
       ['an encoded static segment', '/api/%61dmin/rest-guard/x'],
     ])(
-      'does not skip the legacy table for %s, which Express may route elsewhere',
+      'does not skip the legacy table for %s, which Express routes elsewhere',
       async (_name, path) => {
         const token = await tokenWith(['issues:write']);
         const res = await request(app).patch(path).set(CSRF).set('Authorization', token);
@@ -373,6 +405,61 @@ describe('REST adapter', () => {
         expect(res.body.error.code).toBe('SCOPE');
       },
     );
+
+    it('leaves the scope to the action for a path Express routes to the binding', async () => {
+      const token = await tokenWith(['issues:write']);
+      const res = await request(app)
+        .patch('/api/admin/rest-guard/a%20b')
+        .set(CSRF)
+        .set('Authorization', token);
+      expect(res.status).toBe(200);
+    });
+
+    describe('with a fragment, which Express routes without', () => {
+      let server: Server;
+      let projectId: string;
+      let cleanup: () => Promise<void>;
+
+      beforeAll(async () => {
+        const { createTestContext, cleanupTestContext } = await import('../test/factory');
+        const ctx = await createTestContext(`rest-${Date.now()}`);
+        projectId = ctx.projectId;
+        cleanup = () => cleanupTestContext(ctx);
+        server = await listenForRawRequests(app);
+      });
+
+      afterAll(async () => {
+        await new Promise((resolve) => server.close(resolve));
+        await cleanup();
+      });
+
+      it('does not skip the legacy table when the fragment spells a binding', async () => {
+        const token = await tokenWith(['issues:write']);
+        const res = await rawRequest(
+          server,
+          'PATCH',
+          `/api/projects/${projectId}#/probe-labels`,
+          token,
+          { name: 'renamed through a fragment' },
+        );
+        expect(res.status).toBe(403);
+        expect(res.body.error?.code).toBe('SCOPE');
+        const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+        expect(project.name).not.toBe('renamed through a fragment');
+      });
+
+      it('still reaches the binding when a fragment follows its own path', async () => {
+        const token = await tokenWith(['issues:write']);
+        const res = await rawRequest(
+          server,
+          'PATCH',
+          `/api/projects/${projectId}/probe-labels#x`,
+          token,
+        );
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ action: 'rest.probe' });
+      });
+    });
 
     it('builds the context from the session or the token', async () => {
       seenContexts.length = 0;

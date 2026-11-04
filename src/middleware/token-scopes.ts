@@ -251,7 +251,7 @@ export function scopesAllowAction(scopes: readonly string[], action: Action): bo
  * The path as Express routes it, for matching: Express 5 routing is case-insensitive and
  * non-strict, so `/api/Projects/x/` reaches the same handler as `/api/projects/x`. Decode
  * percent-escapes, lower-case, collapse repeated slashes and drop trailing ones, so every
- * spelling meets the same rule. Use on the path without its query string.
+ * spelling meets the same rule. Use on the path from requestPathname.
  * @param path - The raw request path
  */
 export function normalizeApiPath(path: string): string {

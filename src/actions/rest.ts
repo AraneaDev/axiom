@@ -1,4 +1,4 @@
-import type { Request, Response, Router } from 'express';
+import type { Request, RequestHandler, Response, Router } from 'express';
 
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
@@ -17,17 +17,13 @@ const ROUTER_METHOD = {
 const LITERAL_SEGMENT = /^[a-z0-9._~-]+$/;
 const PARAM_SEGMENT = /^:[a-z_][a-z0-9_]*$/;
 
-/** What mountActions has mounted, for isRegistryRoute: lower-case segments, params as `:name`. */
-const mountedRoutes: Array<{ method: RestBinding['method']; segments: string[] }> = [];
-
 /**
- * A binding's path as segments to compare with a normalized path. Only literal and `:param`
- * segments: isRegistryRoute must agree with Express on what a path matches, and it would not on
- * wildcards or optional groups.
+ * A binding's path as lower-case segments, as Express compares them. Only literal and `:param`
+ * segments, so that mountActions can tell which paths capture which.
  * @param path - The binding's path
  * @throws {Error} On any other pattern, at startup
  */
-function compilePath(path: string): string[] {
+function pathSegments(path: string): string[] {
   const segments = path.toLowerCase().split('/').filter(Boolean);
   for (const segment of segments) {
     if (!LITERAL_SEGMENT.test(segment) && !PARAM_SEGMENT.test(segment)) {
@@ -38,22 +34,30 @@ function compilePath(path: string): string[] {
 }
 
 /**
- * Whether a registry binding owns this request, so that the action checks the token's scope
- * instead of the legacy path table. Only bindings that were mounted count.
- * @param method - The HTTP method
- * @param normalizedPath - The path, through normalizeApiPath
+ * Whether a mounted path takes every request a later path would match, leaving that one
+ * unreachable: a duplicate, or a param path ahead of the static path it captures.
+ * @param earlier - The segments mounted first
+ * @param later - The segments mounted after
  */
-export function isRegistryRoute(method: string, normalizedPath: string): boolean {
-  // Express routes HEAD to the GET handler
-  const wanted = method === 'HEAD' ? 'GET' : method;
-  const segments = normalizedPath.split('/').filter(Boolean);
-  return mountedRoutes.some(
-    (route) =>
-      route.method === wanted &&
-      route.segments.length === segments.length &&
-      route.segments.every((segment, i) => segment.startsWith(':') || segment === segments[i]),
+function captures(earlier: string[], later: string[]): boolean {
+  return (
+    earlier.length === later.length &&
+    earlier.every((segment, i) => segment.startsWith(':') || segment === later[i])
   );
 }
+
+/**
+ * Tell authenticate that Express routed this request to a registry binding, so the action checks
+ * the token's scope. A binding answers every request it gets, so the mark never reaches a legacy
+ * route.
+ * @param req - The request
+ * @param _res - Unused
+ * @param next - Continues to authenticate
+ */
+const markRegistryRoute: RequestHandler = (req, _res, next) => {
+  req.registryRoute = true;
+  next();
+};
 
 /**
  * Who runs an action, from what authenticate left on the request.
@@ -93,19 +97,32 @@ function sendResult(res: Response, binding: RestBinding, result: unknown): void 
  * this router sits in front of the legacy routers and must let their paths through untouched.
  * @param router - The router to mount on, at the root: binding paths are complete
  * @param defs - The actions; those without a binding are skipped
+ * @throws {Error} At startup, on a path that an earlier one leaves unreachable
  */
 export function mountActions(router: Router, defs: ActionDef[]): void {
+  const mounted: Array<{ def: ActionDef; method: RestBinding['method']; segments: string[] }> = [];
   for (const def of defs) {
     const binding = def.rest;
     if (!binding) continue;
-    const segments = compilePath(binding.path);
-    router[ROUTER_METHOD[binding.method]](binding.path, authenticate, async (req, res) => {
+    const segments = pathSegments(binding.path);
+    const captor = mounted.find(
+      (route) => route.method === binding.method && captures(route.segments, segments),
+    );
+    if (captor) {
+      throw new Error(
+        `Action ${def.name} is unreachable: ${binding.method} ${binding.path} is captured by ` +
+          `${captor.def.name} at ${captor.def.rest?.path}`,
+      );
+    }
+    mounted.push({ def, method: binding.method, segments });
+
+    const route = router[ROUTER_METHOD[binding.method]].bind(router);
+    route(binding.path, markRegistryRoute, authenticate, async (req, res) => {
       const ctx = actionContextFromRequest(req);
       if (binding.raw) ctx.http = { req, res };
       // The body and query can't override the params that authorize reads
       const input: unknown = { ...req.query, ...req.body, ...req.params };
       sendResult(res, binding, await executeAction(def.name, input, ctx));
     });
-    mountedRoutes.push({ method: binding.method, segments });
   }
 }
