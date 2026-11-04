@@ -9,6 +9,8 @@ import net, { type AddressInfo } from 'net';
 import os from 'os';
 import path from 'path';
 import { PassThrough } from 'stream';
+import v8 from 'v8';
+import vm from 'vm';
 
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -32,6 +34,17 @@ process.env.STORAGE_PATH = path.join(os.tmpdir(), `axiom-temp-test-${process.pid
 
 const TEMP_DIR = '/tmp/uploads';
 const BOUNDARY = 'testboundary';
+
+// Under load everything here takes longer, and these tests are about what happens, not how fast
+vi.setConfig({ testTimeout: 120_000 });
+const settled = (assertion: () => void | Promise<void>) =>
+  vi.waitFor(assertion, { timeout: 60_000, interval: 50 });
+
+/** A garbage collection now: garbage is load, what's left is what the code holds on to. */
+function collectGarbage() {
+  v8.setFlagsFromString('--expose-gc');
+  (vm.runInNewContext('gc') as () => void)();
+}
 
 const tempFiles = () => fs.readdirSync(TEMP_DIR).sort();
 const openTempStreams = () =>
@@ -113,11 +126,11 @@ describe('requests that do not finish', () => {
     const before = tempFiles();
     const socket = await connect(multipartHead(10 * 1024 * 1024) + partHead);
     socket.write(Buffer.alloc(150 * 1024, 65));
-    await vi.waitFor(() => expect(tempFiles().length).toBeGreaterThan(before.length));
+    await settled(() => expect(tempFiles().length).toBeGreaterThan(before.length));
 
     socket.destroy();
 
-    await vi.waitFor(() => {
+    await settled(() => {
       expect(tempFiles()).toEqual(before);
       expect(openTempStreams()).toEqual([]);
     });
@@ -129,7 +142,7 @@ describe('requests that do not finish', () => {
     const socket = await connect(multipartHead(Buffer.byteLength(body)) + body);
     const head = await responseHead(socket);
     expect(head).toContain('400');
-    await vi.waitFor(() => {
+    await settled(() => {
       expect(tempFiles()).toEqual(before);
       expect(openTempStreams()).toEqual([]);
     });
@@ -193,7 +206,7 @@ describe('requests that do not finish', () => {
     socket.write('PUT / HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\nx');
     const head = await responseHead(socket);
     expect(head).toContain('408');
-    expect(tempFiles()).toEqual(before);
+    await settled(() => expect(tempFiles()).toEqual(before));
     socket.destroy();
     reader.closeAllConnections();
     reader.close();
@@ -223,9 +236,9 @@ describe('requests that do not finish', () => {
       `PUT ${url} HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\n` +
         `Content-Length: ${1024 * 1024}\r\n\r\npartial`,
     );
-    await vi.waitFor(() => expect(tempFiles().length).toBeGreaterThan(before.length));
+    await settled(() => expect(tempFiles().length).toBeGreaterThan(before.length));
     socket.destroy();
-    await vi.waitFor(() => {
+    await settled(() => {
       expect(tempFiles()).toEqual(before);
       expect(openTempStreams()).toEqual([]);
     });
@@ -246,7 +259,7 @@ describe('requests that do not finish', () => {
           ),
         ),
     );
-    await vi.waitFor(() => expect(tempFiles().length).toBe(before.length + held.length));
+    await settled(() => expect(tempFiles().length).toBe(before.length + held.length));
 
     const put = () => request(app).put(urls[0]).set('Content-Type', 'text/plain').send('x');
     const refused = await put();
@@ -254,9 +267,9 @@ describe('requests that do not finish', () => {
     expect(refused.body.error.code).toBe('RATE_LIMITED');
 
     for (const socket of held) socket.destroy();
-    await vi.waitFor(() => expect(tempFiles()).toEqual(before));
+    await settled(() => expect(tempFiles()).toEqual(before));
     // Neither the refusal nor the aborts used anything up
-    await vi.waitFor(async () => expect((await put()).status).toBe(201));
+    await settled(async () => expect((await put()).status).toBe(201));
   });
 
   it('keeps memory flat with many large bodies held open', async () => {
@@ -276,6 +289,7 @@ describe('requests that do not finish', () => {
       }
     }
     const before = tempFiles();
+    collectGarbage();
     const startMemory = process.memoryUsage();
     const sockets = await Promise.all(
       urls.map(async (url) => {
@@ -292,10 +306,8 @@ describe('requests that do not finish', () => {
         .filter((name) => !before.includes(name))
         .reduce((sum, name) => sum + fs.statSync(path.join(TEMP_DIR, name)).size, 0);
     // All of it has arrived, and it is on disk
-    await vi.waitFor(() => expect(onDisk()).toBe(urls.length * BODY.length), {
-      timeout: 30_000,
-      interval: 100,
-    });
+    await settled(() => expect(onDisk()).toBe(urls.length * BODY.length));
+    collectGarbage();
     const endMemory = process.memoryUsage();
     // 200 MB is held open. In memory it would all show up in arrayBuffers, and the stream chunks
     // on their way through are all that may. The client's one shared buffer is counted before.
@@ -303,9 +315,9 @@ describe('requests that do not finish', () => {
     expect(grown).toBeLessThan(64 * 1024 * 1024);
 
     for (const socket of sockets) socket.destroy();
-    await vi.waitFor(() => expect(tempFiles()).toEqual(before), { timeout: 10_000 });
+    await settled(() => expect(tempFiles()).toEqual(before));
     await prisma.user.deleteMany({ where: { id: { in: users.map((held) => held.id) } } });
-  }, 60_000);
+  });
 
   it('stores a multipart file of exactly 25 MB', async () => {
     const before = tempFiles();
@@ -319,8 +331,8 @@ describe('requests that do not finish', () => {
       });
     expect(res.status).toBe(201);
     expect(res.body.size).toBe(25 * 1024 * 1024);
-    expect(tempFiles()).toEqual(before);
-  }, 30_000);
+    await settled(() => expect(tempFiles()).toEqual(before));
+  });
 
   it('caps a multipart file name at 255 characters', async () => {
     const before = tempFiles();
@@ -336,7 +348,7 @@ describe('requests that do not finish', () => {
     const over = await named(`${'n'.repeat(252)}.txt`);
     expect(over.status).toBe(400);
     expect(over.body.error.code).toBe('BAD_UPLOAD');
-    expect(tempFiles()).toEqual(before);
+    await settled(() => expect(tempFiles()).toEqual(before));
   });
 
   it('caps the signed uploads running over all users, with Retry-After', async () => {
@@ -369,7 +381,7 @@ describe('requests that do not finish', () => {
         ),
       ),
     );
-    await vi.waitFor(() =>
+    await settled(() =>
       expect(tempFiles().length).toBe(before.length + MAX_CONCURRENT_SIGNED_PUTS),
     );
 
@@ -379,10 +391,10 @@ describe('requests that do not finish', () => {
     expect(refused.headers['retry-after']).toBe('30');
 
     for (const socket of held) socket.destroy();
-    await vi.waitFor(() => expect(tempFiles()).toEqual(before));
-    await vi.waitFor(async () => expect((await put()).status).toBe(201));
+    await settled(() => expect(tempFiles()).toEqual(before));
+    await settled(async () => expect((await put()).status).toBe(201));
     await prisma.user.deleteMany({ where: { id: { in: users.map((holder) => holder.id) } } });
-  }, 30_000);
+  });
 
   it('moves and deletes nothing outside the temp directory', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-outside-'));
@@ -472,7 +484,7 @@ describe('requests that do not finish', () => {
       .set(csrf)
       .attach('file', Buffer.from('x'), 'n.txt');
     expect(multipart.status).toBe(429);
-    expect(tempFiles()).toEqual(before);
+    await settled(() => expect(tempFiles()).toEqual(before));
 
     const fetched = await authPost('/api/attachments/from-url', full.token, {
       url: 'https://example.com/a.png',

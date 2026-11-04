@@ -348,6 +348,7 @@ model Issue {
   @@unique([projectId, number])
   @@index([assigneeId])
   @@index([creatorId])
+  @@index([parentId])
   @@map("issues")
 }
 

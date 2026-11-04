@@ -138,6 +138,14 @@ describe('Team access', () => {
     expect(ids).toEqual([secondTeamId]);
   });
 
+  it('indexes issues.parentId, so deleting an issue does not scan the table', async () => {
+    const rows = await prisma.$queryRaw<Array<{ indexname: string }>>`
+      SELECT indexname FROM pg_indexes
+      WHERE tablename = 'issues' AND indexdef LIKE '%("parentId")%'
+    `;
+    expect(rows).toHaveLength(1);
+  });
+
   it('23: team activity works for a team with more issues than a query can bind', async () => {
     // One INSERT ... SELECT: past the 32,767 bind-parameter limit of an IN list
     await prisma.$executeRaw`
