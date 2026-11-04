@@ -109,4 +109,43 @@ describe('request context and via attribution', () => {
     expect(row?.via).toBe('Claude Code');
     expect(row?.apiTokenId).toBe(apiToken.id);
   });
+
+  it('bulk edits made with a token carry via on every activity row', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${ctx.projectId}/issues/bulk`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .set('Authorization', `Token ${apiToken.raw}`)
+      .send({ issueIds: [issueId], updates: { priority: 'HIGH' } });
+    expect(res.status).toBe(200);
+
+    const row = await prisma.activity.findFirst({
+      where: { resourceId: issueId, action: 'bulk_updated' },
+    });
+    expect(row?.via).toBe('Claude Code');
+    expect(row?.apiTokenId).toBe(apiToken.id);
+  });
+
+  it('the activity API returns via', async () => {
+    const res = await request(app)
+      .get(`/api/projects/${ctx.projectId}/issues/${issueNumber}/activity`)
+      .set('Authorization', `Bearer ${ctx.owner.token}`);
+    expect(res.status).toBe(200);
+    const vias = res.body.activities.map((a: { via: string | null }) => a.via);
+    expect(vias).toContain('Claude Code');
+    expect(vias).toContain(null);
+  });
+
+  it('the audit API returns via', async () => {
+    const admin = await prisma.user.update({
+      where: { id: ctx.owner.id },
+      data: { isAdmin: true },
+    });
+    const res = await request(app)
+      .get('/api/admin/audit-logs')
+      .query({ userId: admin.id, limit: 100 })
+      .set('Authorization', `Bearer ${ctx.owner.token}`);
+    expect(res.status).toBe(200);
+    const vias = res.body.logs.map((l: { via: string | null }) => l.via);
+    expect(vias).toContain('Claude Code');
+  });
 });

@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
+import { ViaLabel } from '@/components/ui/ViaLabel';
 import { formatRelative } from '@/lib/utils';
 
 const ACTION_LABELS: Record<string, string> = {
@@ -99,7 +100,7 @@ export function TeamActivityCard({ activity, orgSlug, teamSlug }: TeamActivityCa
                     >
                       {a.user.displayName}
                     </Link>{' '}
-                    {a.via && <span className="text-text-tertiary">(via {a.via}) </span>}
+                    <ViaLabel via={a.via} />{' '}
                     <span className="text-text-secondary">{actionLabel}</span>{' '}
                     {a.resourceLink ? (
                       <Link to={a.resourceLink} className="text-primary hover:underline">

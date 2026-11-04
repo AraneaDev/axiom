@@ -32,6 +32,7 @@ export interface DashboardActivity {
   resourceId: string;
   details: Record<string, unknown> | null;
   createdAt: string;
+  via: string | null;
   user: { id: string; displayName: string; username: string; avatarUrl: string | null };
   resourceTitle: string | null;
   resourceLink: string | null;

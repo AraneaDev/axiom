@@ -40,3 +40,12 @@ export const requestContextMiddleware: RequestHandler = (
 ) => {
   runWithRequestContext({ channel: 'ui' }, () => next());
 };
+
+/**
+ * The attribution columns (`apiTokenId`, `via`) for a row written now. Both are null
+ * outside a token request, so every activity and audit write can spread this.
+ */
+export function attributionFields(): { apiTokenId: string | null; via: string | null } {
+  const ctx = getRequestContext();
+  return { apiTokenId: ctx?.apiTokenId ?? null, via: ctx?.apiTokenName ?? null };
+}

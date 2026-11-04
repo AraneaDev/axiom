@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
-import { getRequestContext } from '../../lib/request-context';
+import { attributionFields } from '../../lib/request-context';
 import { parseServicePagination } from '../../utils/pagination';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 
@@ -36,7 +36,6 @@ export async function logActivity(
   userId: string,
   details?: Record<string, unknown>,
 ) {
-  const ctx = getRequestContext();
   try {
     await prisma.activity.create({
       data: {
@@ -44,8 +43,7 @@ export async function logActivity(
         resourceId,
         action,
         userId,
-        apiTokenId: ctx?.apiTokenId ?? null,
-        via: ctx?.apiTokenName ?? null,
+        ...attributionFields(),
         details: details ? (details as Prisma.InputJsonValue) : Prisma.JsonNull,
       },
     });

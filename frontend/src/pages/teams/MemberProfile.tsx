@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
+import { ViaLabel } from '@/components/ui/ViaLabel';
 import { useTeamContext } from '@/hooks/useTeamContext';
 import { formatDate, formatRelative } from '@/lib/utils';
 
@@ -109,6 +110,7 @@ export default function MemberProfile() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm">
                         <span className="font-medium">{a.user.displayName}</span>{' '}
+                        <ViaLabel via={a.via} />{' '}
                         <span className="text-text-secondary">{a.action}</span>{' '}
                         <span className="text-text-secondary">{a.resourceType?.toLowerCase()}</span>
                       </p>

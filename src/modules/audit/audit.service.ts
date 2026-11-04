@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { getRequestContext } from '../../lib/request-context';
+import { attributionFields } from '../../lib/request-context';
 import { parseServicePagination } from '../../utils/pagination';
 
 export interface LogAuditData {
@@ -30,12 +30,9 @@ export interface ListAuditLogsOpts {
 export async function logAudit(data: LogAuditData) {
   const resource = data.resourceId ? `${data.resourceType}:${data.resourceId}` : data.resourceType;
 
-  const ctx = getRequestContext();
-
   return prisma.auditLog.create({
     data: {
-      apiTokenId: ctx?.apiTokenId ?? null,
-      via: ctx?.apiTokenName ?? null,
+      ...attributionFields(),
       orgId: data.orgId ?? 'system',
       userId: data.userId ?? null,
       action: data.action,

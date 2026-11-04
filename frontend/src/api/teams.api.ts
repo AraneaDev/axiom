@@ -105,6 +105,7 @@ export const teamsApi = {
         resourceId: string;
         details: Record<string, unknown> | null;
         createdAt: string;
+        via: string | null;
         user: { id: string; displayName: string; username: string; avatarUrl: string | null };
       }[];
     }>(`/teams/${teamId}/members/profile/${username}`),

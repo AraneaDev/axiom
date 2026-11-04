@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
+import { attributionFields } from '../../lib/request-context';
 import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
@@ -119,6 +120,7 @@ export async function bulkUpdate(
         resourceId: id,
         action: 'bulk_updated',
         userId,
+        ...attributionFields(),
         details: { fields: changedFields } as Prisma.InputJsonValue,
       })),
     });
