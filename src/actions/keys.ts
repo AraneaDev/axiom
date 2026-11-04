@@ -8,6 +8,7 @@ import type { Prisma } from '@prisma/client';
 
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { checkWikiSpaceOrgAccess } from '../middleware/rbac';
 import { parseAxiomUrl } from '../modules/links/resolve-link.service';
 import { viewablePagesWhere, viewableProjectsWhere } from '../modules/search/search-access';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
@@ -375,10 +376,16 @@ export async function resolveContainerKey(
   const space = await prisma.wikiSpace.findFirst({
     where: {
       slug: parsed.name,
-      team: { slug: parsed.team, org: { slug: parsed.org, members: { some: { userId } } } },
+      team: { slug: parsed.team, org: { slug: parsed.org } },
     },
     select: { id: true },
   });
-  if (!space || !(await canAccessSpace(space.id, userId, 'VIEW'))) throw keyNotFound();
+  if (
+    !space ||
+    (await checkWikiSpaceOrgAccess(space.id, userId)) !== 'ok' ||
+    !(await canAccessSpace(space.id, userId, 'VIEW'))
+  ) {
+    throw keyNotFound();
+  }
   return { kind, spaceId: space.id };
 }

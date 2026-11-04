@@ -30,7 +30,11 @@ export async function checkWikiSpaceOrgAccess(
   const orgMembership = await prisma.orgMembership.findUnique({
     where: { userId_orgId: { userId, orgId: space.team.orgId } },
   });
-  return orgMembership ? 'ok' : 'forbidden';
+  if (orgMembership) return 'ok';
+
+  // Platform admins keep full rights outside their orgs, as in checkProjectAccess
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  return user?.isAdmin ? 'ok' : 'forbidden';
 }
 
 /**

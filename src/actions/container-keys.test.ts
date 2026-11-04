@@ -92,6 +92,26 @@ describe('container keys', () => {
       expect(missing).toMatchObject({ statusCode: 404, code: 'NOT_FOUND' });
     });
 
+    it('lets a platform admin outside the org use a space, as with a project', async () => {
+      const admin = await createTestUser();
+      extraUsers.push(admin.id);
+      await prisma.user.update({ where: { id: admin.id }, data: { isAdmin: true } });
+      await expect(resolveContainerKey(spaceKey, 'space', admin.id)).resolves.toEqual({
+        kind: 'space',
+        spaceId,
+      });
+      const fetched = (await act(admin, { action: 'space.get', input: { spaceId } })) as {
+        id: string;
+      };
+      expect(fetched.id).toBe(spaceId);
+      const page = (await act(admin, {
+        action: 'page.create',
+        key: spaceKey,
+        input: { title: 'By platform admin', slug: 'by-platform-admin', body: 'Hello' },
+      })) as { spaceId: string };
+      expect(page.spaceId).toBe(spaceId);
+    });
+
     it('follows the space access rule: not an off-team member, not past a custom permission', async () => {
       await expect(resolveContainerKey(spaceKey, 'space', offTeam.id)).rejects.toMatchObject({
         statusCode: 404,
