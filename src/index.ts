@@ -4,6 +4,8 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 
+import { listActions } from './actions/registry';
+import { mountActions } from './actions/rest';
 import { prisma } from './config/database';
 import { env } from './config/env';
 import { openApiRouter } from './lib/openapi';
@@ -150,6 +152,12 @@ app.get('/health', (_req, res) => {
 
 // Audit middleware: registers finish listener to log mutating API requests
 app.use('/api', auditMiddleware);
+
+// Registry actions come ahead of the legacy routers, so that their router.use middleware never
+// runs on a migrated path. An actions file must be imported above to be in this list.
+const actionsRouter = express.Router();
+mountActions(actionsRouter, listActions());
+app.use(actionsRouter);
 
 // API routes
 app.use('/api/auth', authRoutes);

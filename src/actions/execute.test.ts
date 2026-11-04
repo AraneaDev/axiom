@@ -64,6 +64,7 @@ const issueAuthorize = vi.fn(async () => {});
 const wikiHandler = vi.fn(async () => ({ id: 'p1' }));
 const refusedHandler = vi.fn(async () => ({ ok: true }));
 const uiOnlyHandler = vi.fn(async () => ({ ok: true }));
+const tokenBlockedHandler = vi.fn(async () => ({ ok: true }));
 const rawHandler = vi.fn(async () => undefined);
 
 const targetAuthorize = vi.fn(async () => {});
@@ -127,6 +128,17 @@ registerActions([
       throw new AppError(403, 'Nope', 'FORBIDDEN');
     },
     handler: refusedHandler,
+  }),
+  defineAction({
+    name: 'test.tokenBlocked',
+    area: 'orgs',
+    kind: 'write',
+    summary: 'A normal action for the browser, refused to every token',
+    input: z.object({}),
+    output: z.looseObject({ ok: z.boolean() }),
+    tokenBlocked: true,
+    authorize: async () => {},
+    handler: tokenBlockedHandler,
   }),
   defineAction({
     name: 'test.uiOnly',
@@ -285,6 +297,29 @@ describe('executeAction', () => {
     expect(uiOnlyHandler).not.toHaveBeenCalled();
 
     await expect(executeAction('test.uiOnly', {}, session)).resolves.toEqual({ ok: true });
+  });
+
+  it('refuses tokenBlocked actions to tokens and runs them for a session', async () => {
+    tokenBlockedHandler.mockClear();
+    for (const channel of ['rest-token', 'mcp'] as const) {
+      const err = await refusal(
+        'test.tokenBlocked',
+        {},
+        {
+          userId: USER_ID,
+          apiTokenId: 't',
+          apiTokenName: 'n',
+          scopes: [...TOKEN_SCOPES],
+          channel,
+        },
+      );
+      expect(err.statusCode).toBe(403);
+      expect(err.code).toBe('SCOPE');
+    }
+    expect(tokenBlockedHandler).not.toHaveBeenCalled();
+
+    await expect(executeAction('test.tokenBlocked', {}, session)).resolves.toEqual({ ok: true });
+    expect(tokenBlockedHandler).toHaveBeenCalledTimes(1);
   });
 
   it('does not scope a browser session', async () => {

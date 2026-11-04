@@ -52,6 +52,11 @@ export interface ActionDef<
   destructive?: boolean;
   /** Login and the like: never open to a token or MCP, whatever its scopes */
   uiOnly?: boolean;
+  /**
+   * A normal action for a browser session, refused to every token until plan 3 adds approval.
+   * Answers like uiOnly; use this for what the UI still calls as an ordinary action.
+   */
+  tokenBlocked?: boolean;
   rest?: RestBinding;
   /** Throws an AppError (403/404) to refuse. */
   authorize(ctx: ActionContext, target: AuthorizeInput<I, T>): Promise<void>;

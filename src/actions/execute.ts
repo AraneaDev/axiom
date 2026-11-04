@@ -37,7 +37,8 @@ function assertOutputShape(def: ActionDef, result: unknown): void {
 
 /**
  * Run an action. Every adapter comes through here, so REST and MCP share one order of checks:
- * unknown name, uiOnly, raw binding, token scope, target, authorize, full input, handler.
+ * unknown name, uiOnly or tokenBlocked, raw binding, token scope, target, authorize, full input,
+ * handler.
  * Authorization comes before the full input so that a refused caller keeps today's 403/404
  * with an invalid body and can't probe the input schema.
  * @param name - The action's dotted name
@@ -56,7 +57,7 @@ export async function executeAction(
   if (!def) throw new AppError(404, `Unknown action: ${name}`, 'UNKNOWN_ACTION');
 
   const token = isToken(ctx);
-  if (token && def.uiOnly) throw scopeRefusal();
+  if (token && (def.uiOnly || def.tokenBlocked)) throw scopeRefusal();
 
   if (def.rest?.raw && !ctx.http) {
     throw new AppError(400, `Action ${name} is only available over REST`, 'RAW_ACTION');
