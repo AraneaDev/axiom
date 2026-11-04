@@ -47,6 +47,7 @@
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@scalar/api-reference": "^1.60.0",
     "@scalar/express-api-reference": "^0.9.6",
     "@types/nodemailer": "^7.0.11",
     "bcryptjs": "^3.0.3",

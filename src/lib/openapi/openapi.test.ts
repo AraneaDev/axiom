@@ -192,6 +192,40 @@ describe('OpenAPI from the action registry', () => {
     expect(upload?.operation['security']).toEqual([]);
   });
 
+  it('documents login, registration, refresh, logout and search with their schemas', () => {
+    const find = (path: string, method: string) =>
+      ops.find((op) => op.path === path && op.method === method)?.operation;
+    const login = find('/api/auth/login', 'post')!;
+    const loginBody = login.requestBody!.content['application/json'].schema as {
+      required: string[];
+    };
+    expect(loginBody.required).toEqual(expect.arrayContaining(['login', 'password']));
+    expect(login['security']).toEqual([]);
+    expect(find('/api/auth/register', 'post')).toBeDefined();
+    expect(find('/api/auth/refresh', 'post')).toBeDefined();
+    expect(find('/api/auth/logout', 'post')!['security']).toBeUndefined();
+    const search = find('/api/search', 'get')!;
+    expect(search.parameters).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'q', in: 'query', required: true })]),
+    );
+  });
+
+  it('documents what /api/mcp answers in its own error shape', () => {
+    const mcp = (method: string) =>
+      ops.find((op) => op.path === '/api/mcp' && op.method === method)!.operation;
+    for (const method of ['get', 'delete']) {
+      expect(Object.keys(mcp(method).responses).sort()).toEqual(['401', '403', '405']);
+    }
+    for (const status of ['400', '415']) {
+      const response = mcp('post').responses[status] as {
+        content: Record<string, { schema: Json }>;
+      };
+      expect(response.content['application/json'].schema).toMatchObject({
+        required: ['jsonrpc', 'error', 'id'],
+      });
+    }
+  });
+
   describe('served by the app', () => {
     let app: Parameters<typeof request>[0];
 
@@ -206,21 +240,26 @@ describe('OpenAPI from the action registry', () => {
       expect(Object.keys(res.body.paths)).toContain('/api/act');
     });
 
-    it('answers /api/docs with a policy that lets the page run', async () => {
+    it('answers /api/docs with no third-party script, in the page or in its policy', async () => {
       const res = await request(app).get('/api/docs');
       expect(res.status).toBe(200);
       const html = res.text;
-      const cdn = html.match(/<script src="(https:\/\/[^/"]+)[^"]*"/)?.[1];
-      expect(cdn).toBeDefined();
+      expect(html).not.toMatch(/https?:\/\//);
+      const sources = [...html.matchAll(/<script[^>]*\ssrc="([^"]+)"/g)].map((match) => match[1]);
+      expect(sources).toEqual(['/api/docs/assets/standalone.js']);
       const inline = html.match(/<script type="text\/javascript">([\s\S]*?)<\/script>/)![1];
       const hash = `'sha256-${createHash('sha256').update(inline).digest('base64')}'`;
       const scriptSrc = String(res.headers['content-security-policy'])
         .split(';')
         .map((directive) => directive.trim())
         .find((directive) => directive.startsWith('script-src '))!;
-      expect(scriptSrc).toContain("'self'");
-      expect(scriptSrc).toContain(cdn);
-      expect(scriptSrc).toContain(hash);
+      expect(scriptSrc.split(' ').slice(1)).toEqual(["'self'", hash]);
+    });
+
+    it('serves the Scalar bundle from the app itself', async () => {
+      const res = await request(app).get('/api/docs/assets/standalone.js');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/javascript/);
     });
 
     it('keeps the policy of every other page strict', async () => {
