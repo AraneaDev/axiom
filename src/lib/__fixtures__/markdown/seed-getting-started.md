@@ -6,11 +6,11 @@ This guide covers everything you need to get Axiom running locally, from prerequ
 
 ## Prerequisites
 
-| Requirement | Minimum version | Notes |
-|-------------|----------------|-------|
-| Node.js | 24.0.0 | The `engines` field in `package.json` enforces this. Node 25 is used in active development. |
-| Docker Desktop | any recent | Required for the recommended Docker path. Compose v2 (`docker compose`) must be available. |
-| Git | 2.x | Needed to clone the repo. |
+| Requirement    | Minimum version | Notes                                                                                       |
+| -------------- | --------------- | ------------------------------------------------------------------------------------------- |
+| Node.js        | 24.0.0          | The `engines` field in `package.json` enforces this. Node 25 is used in active development. |
+| Docker Desktop | any recent      | Required for the recommended Docker path. Compose v2 (`docker compose`) must be available.  |
+| Git            | 2.x             | Needed to clone the repo.                                                                   |
 
 For the manual (non-Docker) path you also need PostgreSQL 16 and Redis 7 running locally.
 
@@ -41,13 +41,13 @@ npm run docker:dev:down
 
 ### What runs where
 
-| Service | Port | Description |
-|---------|------|-------------|
+| Service    | Port | Description                                               |
+| ---------- | ---- | --------------------------------------------------------- |
 | PostgreSQL | 5432 | Primary database (`axiom` DB + `axiom_test` DB for tests) |
-| Redis | 6379 | Cache and BullMQ job queue |
-| Mailserver | 25 | Local SMTP only (docker-mailserver, SMTP_ONLY mode) |
-| API | 3000 | Express backend with hot-reload via tsx watch |
-| Frontend | 7000 | Vite dev server with HMR |
+| Redis      | 6379 | Cache and BullMQ job queue                                |
+| Mailserver | 25   | Local SMTP only (docker-mailserver, SMTP_ONLY mode)       |
+| API        | 3000 | Express backend with hot-reload via tsx watch             |
+| Frontend   | 7000 | Vite dev server with HMR                                  |
 
 Both the `api` and `web` containers mount source directories as bind volumes, so file changes on the host are reflected immediately without rebuilding the image.
 
@@ -120,22 +120,22 @@ The Vite dev server starts on port 7000.
 
 Copy `.env.example` to `.env`. The table below describes each variable.
 
-| Variable | Default | Required | Description |
-|----------|---------|----------|-------------|
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/axiom?schema=public` | Yes | PostgreSQL connection string pointing to the `axiom` database. |
-| `JWT_SECRET` | `change-me-to-a-random-secret` | Yes | Secret for signing access tokens. Must be at least 32 characters in production. |
-| `JWT_REFRESH_SECRET` | `change-me-to-another-random-secret` | Yes | Secret for signing refresh tokens. Must be at least 32 characters in production. |
-| `PORT` | `3000` | No | Port the Express API listens on. |
-| `NODE_ENV` | `development` | No | `development`, `test`, or `production`. Controls logging verbosity and error detail. |
-| `CORS_ORIGIN` | `http://localhost:7000` | Yes | Allowed origin(s) for CORS. Use `*` in dev only. Set to your domain in production. |
-| `STORAGE_PATH` | `.data/uploads` | Yes | Filesystem path for uploaded file attachments. |
-| `VITE_API_URL` | `http://localhost:3000` | Yes | The API base URL used by the Vite frontend at build and dev time. Must be reachable from the browser. |
-| `REDIS_URL` | `redis://localhost:6379` | No | Redis connection string. The app runs without Redis but loses job queuing and caching. |
-| `SMTP_HOST` | _(empty)_ | No | SMTP hostname. When unset, email delivery is disabled and the app continues to work without it. In Docker dev, `mailserver` handles this automatically. |
-| `SMTP_PORT` | `25` | No | SMTP port. |
-| `SMTP_USER` | _(empty)_ | No | SMTP authentication username. |
-| `SMTP_PASS` | _(empty)_ | No | SMTP authentication password. |
-| `SMTP_FROM` | `Axiom <noreply@axiom.local>` | No | From address for outbound email. |
+| Variable             | Default                                                             | Required | Description                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`       | `postgresql://postgres:postgres@localhost:5432/axiom?schema=public` | Yes      | PostgreSQL connection string pointing to the `axiom` database.                                                                                          |
+| `JWT_SECRET`         | `change-me-to-a-random-secret`                                      | Yes      | Secret for signing access tokens. Must be at least 32 characters in production.                                                                         |
+| `JWT_REFRESH_SECRET` | `change-me-to-another-random-secret`                                | Yes      | Secret for signing refresh tokens. Must be at least 32 characters in production.                                                                        |
+| `PORT`               | `3000`                                                              | No       | Port the Express API listens on.                                                                                                                        |
+| `NODE_ENV`           | `development`                                                       | No       | `development`, `test`, or `production`. Controls logging verbosity and error detail.                                                                    |
+| `CORS_ORIGIN`        | `http://localhost:7000`                                             | Yes      | Allowed origin(s) for CORS. Use `*` in dev only. Set to your domain in production.                                                                      |
+| `STORAGE_PATH`       | `.data/uploads`                                                     | Yes      | Filesystem path for uploaded file attachments.                                                                                                          |
+| `VITE_API_URL`       | `http://localhost:3000`                                             | Yes      | The API base URL used by the Vite frontend at build and dev time. Must be reachable from the browser.                                                   |
+| `REDIS_URL`          | `redis://localhost:6379`                                            | No       | Redis connection string. The app runs without Redis but loses job queuing and caching.                                                                  |
+| `SMTP_HOST`          | _(empty)_                                                           | No       | SMTP hostname. When unset, email delivery is disabled and the app continues to work without it. In Docker dev, `mailserver` handles this automatically. |
+| `SMTP_PORT`          | `25`                                                                | No       | SMTP port.                                                                                                                                              |
+| `SMTP_USER`          | _(empty)_                                                           | No       | SMTP authentication username.                                                                                                                           |
+| `SMTP_PASS`          | _(empty)_                                                           | No       | SMTP authentication password.                                                                                                                           |
+| `SMTP_FROM`          | `Axiom <noreply@axiom.local>`                                       | No       | From address for outbound email.                                                                                                                        |
 
 In the Docker dev stack these variables are injected directly into the container environment via `docker-compose.dev.yml` and do not require a `.env` file on the host.
 
@@ -193,10 +193,10 @@ npm run db:seed
 
 ### Demo credentials
 
-| Username | Email | Password | Role |
-|----------|-------|----------|------|
-| `tim` | `tim@aranea.dev` | `password123` | OWNER |
-| `test` | `test@aranea.dev` | `password123` | MEMBER |
+| Username | Email             | Password      | Role   |
+| -------- | ----------------- | ------------- | ------ |
+| `tim`    | `tim@aranea.dev`  | `password123` | OWNER  |
+| `test`   | `test@aranea.dev` | `password123` | MEMBER |
 
 ---
 
@@ -260,12 +260,12 @@ The `mailserver` service has a 15-second `start_period` before health checks beg
 
 The following extensions improve the development experience:
 
-| Extension ID | Purpose |
-|---|---|
-| `Prisma.prisma` | Syntax highlighting and auto-format for `.prisma` schema files |
-| `dbaeumer.vscode-eslint` | Inline lint errors from ESLint |
-| `esbenp.prettier-vscode` | Format on save via Prettier |
-| `bradlc.vscode-tailwindcss` | Class name completion for Tailwind v4 |
+| Extension ID                | Purpose                                                        |
+| --------------------------- | -------------------------------------------------------------- |
+| `Prisma.prisma`             | Syntax highlighting and auto-format for `.prisma` schema files |
+| `dbaeumer.vscode-eslint`    | Inline lint errors from ESLint                                 |
+| `esbenp.prettier-vscode`    | Format on save via Prettier                                    |
+| `bradlc.vscode-tailwindcss` | Class name completion for Tailwind v4                          |
 
 ### Recommended workspace settings
 

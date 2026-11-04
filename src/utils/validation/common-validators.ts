@@ -252,7 +252,7 @@ export const updateMilestoneSchema = createMilestoneSchema.partial().extend({
 const digits = z
   .string()
   .regex(/^\d*$/, 'must be a whole number, 0 or more')
-  .refine((value) => Number(value) <= MAX_DB_INT, 'is too large');
+  .refine((value) => !/^\d+$/.test(value) || Number(value) <= MAX_DB_INT, 'is too large');
 
 /**
  * A paging or count value in a query: digits, a repeated value, or a whole number from an MCP

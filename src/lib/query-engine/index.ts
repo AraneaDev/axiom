@@ -1,5 +1,5 @@
 export { parse } from './parser';
-export { compileToPrisma } from './compiler';
+export { compileToPrisma, QueryValueError } from './compiler';
 export { evaluate } from './evaluator';
 export { resolveTemplate } from './template';
 export { builtinFunctions } from './functions';

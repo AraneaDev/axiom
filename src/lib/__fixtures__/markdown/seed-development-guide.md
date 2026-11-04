@@ -59,53 +59,53 @@ npm run tunnel:down
 
 ### Root (`package.json`)
 
-| Script | Command | Description |
-|--------|---------|-------------|
-| `dev` | `tsx watch src/index.ts` | Run backend with file-watch restarts |
-| `build` | `tsc` | Compile TypeScript to `dist/` |
-| `start` | `node dist/index.js` | Run the compiled production build |
-| `db:generate` | `prisma generate` | Regenerate Prisma client from schema |
-| `db:migrate` | `prisma migrate dev` | Apply pending migrations and regenerate client |
-| `db:push` | `prisma db push` | Push schema changes without creating a migration (used by test setup) |
-| `db:setup-admin` | `tsx scripts/setup-admin.ts` | Interactive admin account creation |
-| `db:seed` | `tsx scripts/seed-demo.ts` | Seed demo data (idempotent) |
-| `test` | `vitest` | Run Vitest in watch mode |
-| `test:run` | `vitest run` | Run Vitest once (CI mode) |
-| `test:coverage` | `vitest run --coverage` | Run with v8 coverage report |
-| `lint` | `eslint src/` | Lint backend source |
-| `lint:fix` | `eslint src/ --fix` | Lint and auto-fix backend source |
-| `format` | `prettier --write "src/**/*.ts"` | Format backend source |
-| `format:check` | `prettier --check "src/**/*.ts"` | Check backend formatting without writing |
-| `typecheck` | `tsc --noEmit` | Type-check backend only |
-| `check` | typecheck + lint + format:check + test:run | Full CI gate |
-| `docker:dev` | `docker compose -f docker-compose.dev.yml up -d` | Start dev stack detached |
-| `docker:dev:down` | `docker compose -f docker-compose.dev.yml down` | Stop dev stack |
-| `docker:dev:logs` | `docker compose -f docker-compose.dev.yml logs -f` | Tail dev stack logs |
-| `tunnel` | Start tunnel profile + follow logs | Expose frontend via Cloudflare tunnel |
-| `tunnel:down` | Stop tunnel service | Stop the tunnel only |
-| `docker:prod` | `docker compose up -d` | Start production stack |
-| `docker:prod:down` | `docker compose down` | Stop production stack |
-| `docker:prod:build` | `docker compose build` | Build production images |
-| `e2e` | `playwright test` | Run all Playwright E2E tests |
-| `e2e:ui` | `playwright test --ui` | Run E2E with Playwright UI |
-| `e2e:headed` | `playwright test --headed` | Run E2E with visible browser |
-| `e2e:report` | `playwright show-report` | Open the last HTML test report |
+| Script              | Command                                            | Description                                                           |
+| ------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| `dev`               | `tsx watch src/index.ts`                           | Run backend with file-watch restarts                                  |
+| `build`             | `tsc`                                              | Compile TypeScript to `dist/`                                         |
+| `start`             | `node dist/index.js`                               | Run the compiled production build                                     |
+| `db:generate`       | `prisma generate`                                  | Regenerate Prisma client from schema                                  |
+| `db:migrate`        | `prisma migrate dev`                               | Apply pending migrations and regenerate client                        |
+| `db:push`           | `prisma db push`                                   | Push schema changes without creating a migration (used by test setup) |
+| `db:setup-admin`    | `tsx scripts/setup-admin.ts`                       | Interactive admin account creation                                    |
+| `db:seed`           | `tsx scripts/seed-demo.ts`                         | Seed demo data (idempotent)                                           |
+| `test`              | `vitest`                                           | Run Vitest in watch mode                                              |
+| `test:run`          | `vitest run`                                       | Run Vitest once (CI mode)                                             |
+| `test:coverage`     | `vitest run --coverage`                            | Run with v8 coverage report                                           |
+| `lint`              | `eslint src/`                                      | Lint backend source                                                   |
+| `lint:fix`          | `eslint src/ --fix`                                | Lint and auto-fix backend source                                      |
+| `format`            | `prettier --write "src/**/*.ts"`                   | Format backend source                                                 |
+| `format:check`      | `prettier --check "src/**/*.ts"`                   | Check backend formatting without writing                              |
+| `typecheck`         | `tsc --noEmit`                                     | Type-check backend only                                               |
+| `check`             | typecheck + lint + format:check + test:run         | Full CI gate                                                          |
+| `docker:dev`        | `docker compose -f docker-compose.dev.yml up -d`   | Start dev stack detached                                              |
+| `docker:dev:down`   | `docker compose -f docker-compose.dev.yml down`    | Stop dev stack                                                        |
+| `docker:dev:logs`   | `docker compose -f docker-compose.dev.yml logs -f` | Tail dev stack logs                                                   |
+| `tunnel`            | Start tunnel profile + follow logs                 | Expose frontend via Cloudflare tunnel                                 |
+| `tunnel:down`       | Stop tunnel service                                | Stop the tunnel only                                                  |
+| `docker:prod`       | `docker compose up -d`                             | Start production stack                                                |
+| `docker:prod:down`  | `docker compose down`                              | Stop production stack                                                 |
+| `docker:prod:build` | `docker compose build`                             | Build production images                                               |
+| `e2e`               | `playwright test`                                  | Run all Playwright E2E tests                                          |
+| `e2e:ui`            | `playwright test --ui`                             | Run E2E with Playwright UI                                            |
+| `e2e:headed`        | `playwright test --headed`                         | Run E2E with visible browser                                          |
+| `e2e:report`        | `playwright show-report`                           | Open the last HTML test report                                        |
 
 ### Frontend (`frontend/package.json`)
 
-| Script | Command | Description |
-|--------|---------|-------------|
-| `dev` | `vite` | Vite dev server on port 7000 |
-| `build` | `tsc -b && vite build` | Type-check then bundle for production |
-| `preview` | `vite preview` | Serve the production build locally |
-| `lint` | `eslint src/` | Lint frontend source |
-| `lint:fix` | `eslint src/ --fix` | Lint and auto-fix frontend source |
-| `format` | `prettier --write "src/**/*.{ts,tsx}"` | Format frontend source |
-| `format:check` | `prettier --check "src/**/*.{ts,tsx}"` | Check frontend formatting |
-| `typecheck` | `tsc -b` | Type-check frontend (composite build) |
-| `check` | typecheck + lint + format:check | Full frontend CI gate |
-| `test` | `vitest` | Frontend unit tests in watch mode |
-| `test:run` | `vitest run` | Frontend unit tests once |
+| Script         | Command                                | Description                           |
+| -------------- | -------------------------------------- | ------------------------------------- |
+| `dev`          | `vite`                                 | Vite dev server on port 7000          |
+| `build`        | `tsc -b && vite build`                 | Type-check then bundle for production |
+| `preview`      | `vite preview`                         | Serve the production build locally    |
+| `lint`         | `eslint src/`                          | Lint frontend source                  |
+| `lint:fix`     | `eslint src/ --fix`                    | Lint and auto-fix frontend source     |
+| `format`       | `prettier --write "src/**/*.{ts,tsx}"` | Format frontend source                |
+| `format:check` | `prettier --check "src/**/*.{ts,tsx}"` | Check frontend formatting             |
+| `typecheck`    | `tsc -b`                               | Type-check frontend (composite build) |
+| `check`        | typecheck + lint + format:check        | Full frontend CI gate                 |
+| `test`         | `vitest`                               | Frontend unit tests in watch mode     |
+| `test:run`     | `vitest run`                           | Frontend unit tests once              |
 
 ---
 
@@ -192,10 +192,7 @@ The `lint-staged` configuration in `package.json`:
 ```json
 {
   "lint-staged": {
-    "src/**/*.ts": [
-      "eslint --fix",
-      "prettier --write"
-    ],
+    "src/**/*.ts": ["eslint --fix", "prettier --write"],
     "frontend/src/**/*.{ts,tsx}": [
       "npx eslint --fix --config frontend/eslint.config.mjs",
       "prettier --write"
@@ -512,6 +509,7 @@ export function WidgetsPage() {
 ```
 
 Key conventions:
+
 - Use `get`/`post`/`patch`/`del` from `@/api/client`, never `fetch` directly.
 - Use `useQuery` for all data fetching; no `useEffect` + `fetch`.
 - Query keys must be arrays matching the resource hierarchy, e.g. `['widgets', orgSlug]`.
@@ -524,11 +522,11 @@ Pages are lazy-loaded:
 
 ```tsx
 const WidgetsPage = lazy(() =>
-  import('./pages/WidgetsPage').then((m) => ({ default: m.WidgetsPage }))
+  import('./pages/WidgetsPage').then((m) => ({ default: m.WidgetsPage })),
 );
 
 // inside the route tree:
-<Route path="/:org/:team/widgets" element={<WidgetsPage />} />
+<Route path="/:org/:team/widgets" element={<WidgetsPage />} />;
 ```
 
 ### Step 3: Add an API helper (optional but recommended)
@@ -539,8 +537,7 @@ import { get, post } from './client';
 
 export const widgetsApi = {
   list: (orgSlug: string) => get<Widget[]>(`/api/orgs/${orgSlug}/widgets`),
-  create: (orgSlug: string, name: string) =>
-    post<Widget>(`/api/orgs/${orgSlug}/widgets`, { name }),
+  create: (orgSlug: string, name: string) => post<Widget>(`/api/orgs/${orgSlug}/widgets`, { name }),
 };
 ```
 
@@ -583,25 +580,25 @@ export const issueFieldRegistry: FieldRegistry = {
 
 **Field types:**
 
-| Type | Use for |
-|------|---------|
-| `enum` | Fields with a fixed set of string values (status, priority, type) |
-| `string` | Free-text fields (title, description) |
-| `number` | Numeric fields (count, estimate) |
-| `date` | Date/datetime fields |
-| `relation` | Foreign key fields resolved via a join |
-| `user` | User assignment fields (assignee, reporter) |
+| Type       | Use for                                                           |
+| ---------- | ----------------------------------------------------------------- |
+| `enum`     | Fields with a fixed set of string values (status, priority, type) |
+| `string`   | Free-text fields (title, description)                             |
+| `number`   | Numeric fields (count, estimate)                                  |
+| `date`     | Date/datetime fields                                              |
+| `relation` | Foreign key fields resolved via a join                            |
+| `user`     | User assignment fields (assignee, reporter)                       |
 
 **Field options:**
 
-| Option | Purpose |
-|--------|---------|
-| `column` | The Prisma model field name to filter on |
-| `values` | Allowed enum values (for `enum` type) |
-| `ordinal` | Map of enum value to sort order (for ordering by enum fields) |
-| `join` | Relation name to include when the field requires a JOIN |
-| `many` | `true` if the relation is one-to-many (e.g., labels) |
-| `aliasField` | Alternative field name accepted in queries (display alias) |
+| Option       | Purpose                                                       |
+| ------------ | ------------------------------------------------------------- |
+| `column`     | The Prisma model field name to filter on                      |
+| `values`     | Allowed enum values (for `enum` type)                         |
+| `ordinal`    | Map of enum value to sort order (for ordering by enum fields) |
+| `join`       | Relation name to include when the field requires a JOIN       |
+| `many`       | `true` if the relation is one-to-many (e.g., labels)          |
+| `aliasField` | Alternative field name accepted in queries (display alias)    |
 
 ### Adding a field registry for a new resource type
 
@@ -646,11 +643,11 @@ case 'SET_MILESTONE': {
 
 **Guards to respect:**
 
-| Guard | Purpose |
-|-------|---------|
-| `skipAutomation` flag on the issue | Prevents re-triggering while an automation is already running on that issue |
-| Depth counter | Limits recursive automation chains to prevent infinite loops |
-| Creation limits | Caps the number of sub-issues or comments that can be created in a single automation run |
+| Guard                              | Purpose                                                                                  |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| `skipAutomation` flag on the issue | Prevents re-triggering while an automation is already running on that issue              |
+| Depth counter                      | Limits recursive automation chains to prevent infinite loops                             |
+| Creation limits                    | Caps the number of sub-issues or comments that can be created in a single automation run |
 
 Always check these guards before performing any write in a new action case.
 
@@ -728,21 +725,21 @@ Template variables are used in automation action values and wiki page templates.
 
 **`AutomationTemplateContext`** -- available inside automation action values:
 
-| Path | Value |
-|------|-------|
-| `{{issue.*}}` | Any field on the issue being processed |
-| `{{trigger.field}}` | The field name that triggered the rule |
+| Path                   | Value                                       |
+| ---------------------- | ------------------------------------------- |
+| `{{issue.*}}`          | Any field on the issue being processed      |
+| `{{trigger.field}}`    | The field name that triggered the rule      |
 | `{{trigger.oldValue}}` | Previous value before the triggering change |
-| `{{trigger.newValue}}` | New value after the triggering change |
-| `{{actor.username}}` | User who caused the triggering event |
+| `{{trigger.newValue}}` | New value after the triggering change       |
+| `{{actor.username}}`   | User who caused the triggering event        |
 
 **`WikiTemplateContext`** -- available in wiki page templates:
 
-| Path | Value |
-|------|-------|
+| Path                | Value                                    |
+| ------------------- | ---------------------------------------- |
 | `{{currentUser()}}` | Username of the person creating the page |
-| `{{team.name}}` | Name of the current team |
-| `{{space.name}}` | Name of the wiki space |
+| `{{team.name}}`     | Name of the current team                 |
+| `{{space.name}}`    | Name of the wiki space                   |
 
 ### Unresolved references
 

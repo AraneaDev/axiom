@@ -28,6 +28,8 @@ export interface FieldDefinition {
   join?: string;
   many?: boolean;
   aliasField?: string;
+  /** The column can be empty, so `= null` is a question it can answer */
+  nullable?: boolean;
 }
 
 export type FieldRegistry = Record<string, FieldDefinition>;

@@ -17,9 +17,12 @@ import { z } from 'zod';
 
 import { ACT_LIMIT, MAX_BATCH_ITEMS } from '../actions/batch';
 import { defineAction } from '../actions/define';
+import { executeAction } from '../actions/execute';
 import { registerActions } from '../actions/registry';
 import { prisma } from '../config/database';
 import app from '../index';
+import { issueFieldRegistry } from '../lib/query-engine';
+import { AppError } from '../middleware/errorHandler';
 import { SEARCH_LIMIT } from '../middleware/rate-limit';
 import { TOKEN_SCOPES } from '../middleware/token-scopes';
 import {
@@ -949,6 +952,18 @@ describe('MCP server', () => {
   });
 
   describe('review fixes', () => {
+    // Search has a limit per user, so the query table takes a new user every 25 searches
+    let searcherId: string | undefined;
+    let searches = 0;
+    async function searcher(): Promise<string> {
+      if (!searcherId || searches >= 25) {
+        searcherId = (await newMember()).id;
+        searches = 0;
+      }
+      searches++;
+      return searcherId;
+    }
+
     it('takes application/json only, so no body gets past the parser and its limit', async () => {
       const issue = await createIssue();
       const title = `By array ${Date.now()}`;
@@ -1261,6 +1276,9 @@ describe('MCP server', () => {
         expect(restLimit.body.total).toBe(26);
         const described = await callTool(c, 'describe', { action: 'sprint.list' });
         expect(described.data.summary).toContain('total');
+        const spaceList = await callTool(c, 'describe', { action: 'space.list' });
+        expect(spaceList.data.summary).toContain('total');
+        expect(spaceList.data.summary).not.toContain('Over MCP');
       } finally {
         await prisma.project.delete({ where: { id: project.id } });
         await prisma.team.delete({ where: { id: team.id } });
@@ -1497,6 +1515,172 @@ describe('MCP server', () => {
         where: { details: { path: ['ipAddress'], equals: spoof } },
       });
       expect(spoofed).toBe(0);
+    });
+
+    it('logs the origin and path of a URL, never its query', async () => {
+      const token = `audit-url-${Date.now()}`;
+      const c = await client(await tokenHeaderFor(ctx.owner, TOKEN_SCOPES, token));
+      await callTool(c, 'upload', {
+        url: 'https://user:pw@localhost/x/y.png?X-Amz-Signature=secret#frag',
+      });
+      await callTool(c, 'act', {
+        action: 'issue.delete',
+        key: `https://localhost/org/team/project/issues/99999?sig=secret`,
+      });
+      const rows = await prisma.auditLog.findMany({ where: { via: token } });
+      expect(rows).toHaveLength(2);
+      const text = JSON.stringify(rows.map((row) => row.details));
+      expect(text).toContain('https://localhost/x/y.png');
+      expect(text).not.toContain('secret');
+      expect(text).not.toContain('user:pw');
+    });
+
+    it('refuses NUL in the fields and the file name of a multipart upload', async () => {
+      const bytes = Buffer.from([1, 2, 3]);
+      const post = () =>
+        request(app)
+          .post('/api/attachments')
+          .set('Authorization', `Bearer ${ctx.owner.token}`)
+          .set(CSRF);
+      for (const field of ['issueId', 'pageId', 'commentId']) {
+        const res = await post()
+          .field(field, 'a\u0000b')
+          .attach('file', bytes, { filename: 'a.png', contentType: 'image/png' });
+        expect(res.status, field).toBe(400);
+      }
+      const named = await post().attach('file', bytes, {
+        filename: 'a\u0000b.png',
+        contentType: 'image/png',
+      });
+      expect(named.status).toBeLessThan(500);
+    });
+
+    it('reports one problem for a limit that is no number', async () => {
+      const answer = await callTool(await asUser(ctx.owner), 'act', {
+        action: 'sprint.list',
+        input: { projectId: ctx.projectId, limit: 'x' },
+      });
+      expectRefused(answer, 400);
+      expect(answer.data.message).toContain('whole number');
+      expect(answer.data.message).not.toContain('too large');
+    });
+
+    it('takes digits past the column as text in q, on issue.list and its hydration', async () => {
+      const title = `Order 2147483648 ${Date.now()}`;
+      await createIssue(title);
+      const c = await asUser(ctx.owner);
+      const list = await callTool(c, 'act', {
+        action: 'issue.list',
+        input: { projectId: ctx.projectId, q: '2147483648' },
+      });
+      expect(list.isError).toBe(false);
+      expect(list.data.issues.map((i: { title: string }) => i.title)).toContain(title);
+      const hydrated = await callTool(c, 'act', {
+        action: 'issue.hydrateList',
+        input: { projectId: ctx.projectId, q: '2147483648' },
+      });
+      expect(hydrated.data.issues.issues.map((i: { title: string }) => i.title)).toContain(title);
+    });
+
+    it('answers 400 on a value out of range in a query, on every way in', async () => {
+      const c = await asUser(ctx.owner);
+      const queries = ['number = 2147483648', 'storyPoints = 99999999999', 'type = NOPE'];
+      for (const q of queries) {
+        const list = await callTool(c, 'act', {
+          action: 'issue.list',
+          input: { projectId: ctx.projectId, q },
+        });
+        expectRefused(list, 400, 'INVALID_QUERY');
+        expectRefused(
+          await callTool(c, 'act', {
+            action: 'issue.hydrateList',
+            input: { projectId: ctx.projectId, q },
+          }),
+          400,
+          'INVALID_QUERY',
+        );
+        expectRefused(await callTool(c, 'search', { query: q }), 400, 'INVALID_QUERY');
+        const rest = await request(app)
+          .get(`/api/search?q=${encodeURIComponent(q)}`)
+          .set('Authorization', `Bearer ${ctx.owner.token}`);
+        expect(rest.status, q).toBe(400);
+      }
+    });
+
+    it('never answers 500 on a query, across fields, operators and values', async () => {
+      const fields = Object.keys(issueFieldRegistry);
+      const operators = ['=', '!=', '>', '<', '>=', '<=', '~'];
+      const values = [
+        '2147483648',
+        '-2147483649',
+        '1.5',
+        '5',
+        '"abc"',
+        'null',
+        'now()',
+        '"2026-01-01"',
+      ];
+      const queries = fields.flatMap((field) => [
+        ...operators.flatMap((op) => values.map((value) => `${field} ${op} ${value}`)),
+        `${field} IN ("a", "b")`,
+        `${field} NOT IN (1, 2147483648)`,
+        `${field} IN (null)`,
+      ]);
+      const session = { userId: ctx.owner.id, channel: 'ui' as const };
+      const failures: string[] = [];
+      for (const q of queries) {
+        for (const [action, input] of [
+          ['issue.list', { projectId: ctx.projectId, q }],
+          ['search.run', { query: q, type: 'issues' }],
+        ] as const) {
+          // A user of their own for the search limit: this runs far past 30 a minute
+          const asCaller =
+            action === 'search.run' ? { ...session, userId: await searcher() } : session;
+          try {
+            await executeAction(action, input, asCaller);
+          } catch (err) {
+            if (!(err instanceof AppError) || err.statusCode >= 500) {
+              failures.push(`${action} ${q}: ${String((err as Error).message).slice(0, 120)}`);
+            }
+          }
+        }
+      }
+      expect(failures).toEqual([]);
+    }, 120_000);
+
+    it('keeps a query to the project issue.list was authorized on', async () => {
+      const other = await createTestContext(`mcpother${Date.now()}`);
+      try {
+        await prisma.issue.create({
+          data: {
+            projectId: other.projectId,
+            number: 1,
+            title: 'Secret of another org',
+            body: '',
+            creatorId: other.owner.id,
+          },
+        });
+        const c = await asUser(ctx.owner);
+        for (const q of [
+          `project = "${other.projectId}"`,
+          `project = "${other.projectId}" OR title ~ "Secret"`,
+          `NOT project = "${ctx.projectId}"`,
+          `project IN ("${other.projectId}")`,
+        ]) {
+          const { text } = await callTool(c, 'act', {
+            action: 'issue.list',
+            input: { projectId: ctx.projectId, q },
+          });
+          expect(text, q).not.toContain('Secret of another org');
+          const hydrated = await callTool(c, 'act', {
+            action: 'issue.hydrateList',
+            input: { projectId: ctx.projectId, q },
+          });
+          expect(hydrated.text, q).not.toContain('Secret of another org');
+        }
+      } finally {
+        await cleanupTestContext(other);
+      }
     });
 
     it('answers 400 naming an unknown field on the act path, and REST still drops it', async () => {

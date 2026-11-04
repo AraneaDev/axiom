@@ -130,7 +130,6 @@ function httpOf(ctx: ActionContext) {
   return ctx.http;
 }
 
-/** The fields of a multipart upload. Empty and repeated values can't name a parent. */
 /** Where a new file went, for its audit row: the target field holds the ids or the key. */
 const UPLOAD_AUDIT_INPUT = [
   'target.projectId',
@@ -142,10 +141,18 @@ const UPLOAD_AUDIT_INPUT = [
   'filename',
 ];
 
+/** An id in a multipart field. This body isn't parsed when the /api NUL guard runs. */
+const multipartId = z
+  .string()
+  .min(1)
+  .refine((value) => !value.includes('\u0000'), 'must not contain a NUL character')
+  .optional();
+
+/** The fields of a multipart upload. Empty and repeated values can't name a parent. */
 const multipartFields = z.object({
-  issueId: z.string().min(1).optional(),
-  pageId: z.string().min(1).optional(),
-  commentId: z.string().min(1).optional(),
+  issueId: multipartId,
+  pageId: multipartId,
+  commentId: multipartId,
 });
 
 const attachmentActions = [
@@ -171,6 +178,9 @@ const attachmentActions = [
         const fields = validate(multipartFields, req.body ?? {});
         attachmentsService.assertParentScope(ctx.scopes, fields, true);
         if (!file) throw new AppError(400, 'No file provided', 'MISSING_FILE');
+        if (file.originalname.includes('\u0000')) {
+          throw new AppError(400, 'The file name may not contain a NUL character', 'INVALID_TEXT');
+        }
         // Without a parent it is staged, as with the other ways in, so it doesn't stay forever
         const staged = !fields.issueId && !fields.pageId;
         const attachment = await attachmentsService.uploadAttachment(file, ctx.userId, {

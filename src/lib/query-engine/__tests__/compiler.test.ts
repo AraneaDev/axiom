@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import type { QueryContext } from '../ast';
-import { compileToPrisma } from '../compiler';
+import type { Expression, QueryContext, Value } from '../ast';
+import { compileToPrisma, QueryValueError } from '../compiler';
 import { issueFieldRegistry } from '../fields/issue-fields';
 import { parse } from '../parser';
 
@@ -96,5 +96,63 @@ describe('compiler', () => {
   it('throws for non-ordinal enum with > operator', () => {
     const ast = parse('type > Bug');
     expect(() => compileToPrisma(ast, issueFieldRegistry, ctx)).toThrow("Cannot use '>'");
+  });
+
+  it.each([
+    ['number = 2147483648', 'between'],
+    ['number = -2147483649', 'between'],
+    ['storyPoints > 99999999999', 'between'],
+    ['number = "abc"', 'whole number'],
+    ['number ~ "1"', "can't be used"],
+    ['created > "not a date"', 'date'],
+    ['created ~ "2026"', "can't be used"],
+    ['type = NOPE', 'one of'],
+    ['type ~ "BU"', "can't be used"],
+    ['type IN (NOPE)', 'one of'],
+    ['number IN (1, 2147483648)', 'between'],
+  ])('refuses %s as a query value error', (query, message) => {
+    const ast = parse(query);
+    const compile = () => compileToPrisma(ast, issueFieldRegistry, ctx);
+    expect(compile).toThrow(QueryValueError);
+    expect(compile).toThrow(message);
+  });
+
+  // The grammar has no null or sign or fraction of its own (`-5` reads 5, `null` reads as text),
+  // so these values only come as an AST
+  it.each([
+    ['number', '=', { type: 'null' }, 'null'],
+    ['storyPoints', '>', { type: 'null' }, 'null'],
+    ['title', '=', { type: 'null' }, 'null'],
+    ['number', '=', { type: 'number', value: 1.5 }, 'whole number'],
+    ['number', '=', { type: 'number', value: -2147483649 }, 'between'],
+  ] as const)('refuses %s %s %j', (field, operator, value, message) => {
+    const ast: Expression = { type: 'comparison', field, operator, value };
+    expect(() => compileToPrisma(ast, issueFieldRegistry, ctx)).toThrow(message);
+  });
+
+  it('keeps the edges of the column and the empty questions', () => {
+    const compile = (query: string) => compileToPrisma(parse(query), issueFieldRegistry, ctx);
+    const compileAst = (field: string, operator: '=' | '!=', value: Value) =>
+      compileToPrisma({ type: 'comparison', field, operator, value }, issueFieldRegistry, ctx);
+    expect(compile('number = 2147483647')).toEqual({ number: 2147483647 });
+    expect(compileAst('number', '=', { type: 'number', value: -2147483648 })).toEqual({
+      number: -2147483648,
+    });
+    expect(compileAst('storyPoints', '=', { type: 'null' })).toEqual({ storyPoints: null });
+    expect(compileAst('assignee', '!=', { type: 'null' })).toEqual({ assigneeId: { not: null } });
+    expect(compile('title = 5')).toEqual({ title: '5' });
+    expect(compile('created > "2026-01-31"')).toEqual({
+      createdAt: { gt: new Date('2026-01-31') },
+    });
+  });
+
+  it('compiles IN on a relation through its join', () => {
+    const compile = (query: string) => compileToPrisma(parse(query), issueFieldRegistry, ctx);
+    expect(compile('status IN ("Done", "Todo")')).toEqual({
+      column: { name: { in: ['Done', 'Todo'], mode: 'insensitive' } },
+    });
+    expect(compile('label NOT IN ("a")')).toEqual({
+      labels: { none: { name: { in: ['a'], mode: 'insensitive' } } },
+    });
   });
 });

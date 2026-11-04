@@ -1,6 +1,59 @@
-import type { Expression, Value, FieldRegistry, QueryContext } from './ast';
+import type { Expression, FieldDefinition, FieldRegistry, QueryContext, Value } from './ast';
 import { PRIORITY_ORDINALS } from './fields/issue-fields';
 import { builtinFunctions } from './functions';
+
+/** The range of an integer column. */
+const MIN_INT = -2147483648;
+const MAX_INT = 2147483647;
+
+/**
+ * A query that parses and names real fields, but holds a value its field can't be compared with.
+ * Callers answer this as a bad query. It must never reach the database as a failed query.
+ */
+export class QueryValueError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'QueryValueError';
+  }
+}
+
+/**
+ * A value as its column takes it.
+ * @param field - The field as written, for the message
+ * @param fieldDef - The field
+ * @param value - The resolved value
+ * @param allowNull - Whether the operator can ask about empty at all
+ * @throws {QueryValueError} When the column can't be compared with it
+ */
+function columnValue(
+  field: string,
+  fieldDef: FieldDefinition,
+  value: unknown,
+  allowNull: boolean,
+): unknown {
+  if (value === null) {
+    if (allowNull && fieldDef.nullable) return null;
+    throw new QueryValueError(`'${field}' can't be compared with null here`);
+  }
+  if (fieldDef.type === 'number') {
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+      throw new QueryValueError(`'${field}' takes a whole number`);
+    }
+    if (value < MIN_INT || value > MAX_INT) {
+      throw new QueryValueError(`'${field}' takes a number between ${MIN_INT} and ${MAX_INT}`);
+    }
+    return value;
+  }
+  if (fieldDef.type === 'date') {
+    const date = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null;
+    const year = date?.getUTCFullYear();
+    if (!date || year === undefined || Number.isNaN(year) || year < 0 || year > 9999) {
+      throw new QueryValueError(`'${field}' takes a date, such as "2026-01-31"`);
+    }
+    return date;
+  }
+  return String(value);
+}
 
 function resolveValue(value: Value, context: QueryContext): unknown {
   if (value.type === 'null') return null;
@@ -14,10 +67,13 @@ function resolveValue(value: Value, context: QueryContext): unknown {
   return null;
 }
 
-function normalizeEnum(val: string, values: string[]): string {
+function normalizeEnum(field: string, val: string, values: string[]): string {
   const upper = val.toUpperCase();
   const match = values.find((v) => v.toUpperCase() === upper);
-  return match ?? upper;
+  if (match === undefined) {
+    throw new QueryValueError(`'${field}' takes one of ${values.join(', ')}`);
+  }
+  return match;
 }
 
 function ordinalComparison(
@@ -102,54 +158,39 @@ function compileComparison(
       return ordinalComparison(field, column, enumValues, operator, rawVal);
     }
 
+    if (operator !== '=' && operator !== '!=') {
+      throw new QueryValueError(`'${field}' can't be used with ${operator}`);
+    }
     const rawVal = resolved != null ? String(resolved) : '';
-    const normalized = normalizeEnum(rawVal, enumValues);
-
-    if (operator === '=') return { [column]: normalized };
-    if (operator === '!=') return { [column]: { not: normalized } };
+    const normalized = normalizeEnum(field, rawVal, enumValues);
+    return { [column]: operator === '=' ? normalized : { not: normalized } };
   }
-
-  // User fields
-  if (fieldDef.type === 'user') {
-    if (resolved === null) {
-      if (operator === '=') return { [column]: null };
-      if (operator === '!=') return { [column]: { not: null } };
-    }
-    // When the value came from a function (e.g. currentUser()), resolved is the userId
-    if (value.type === 'function') {
-      if (operator === '=') return { [column]: resolved };
-      if (operator === '!=') return { [column]: { not: resolved } };
-    }
-    // String value - use aliasField for username lookup if available
-    if (operator === '=') return { [column]: resolved };
-    if (operator === '!=') return { [column]: { not: resolved } };
-  }
-
-  // Numeric and date fields
-  const opMap: Record<string, string> = {
-    '=': 'equals',
-    '!=': 'not',
-    '>': 'gt',
-    '<': 'lt',
-    '>=': 'gte',
-    '<=': 'lte',
-  };
 
   // Contains operator
   if (operator === '~') {
-    return { [column]: { contains: resolved, mode: 'insensitive' } };
+    if (fieldDef.type === 'number' || fieldDef.type === 'date') {
+      throw new QueryValueError(`'${field}' can't be used with ~`);
+    }
+    return {
+      [column]: { contains: columnValue(field, fieldDef, resolved, false), mode: 'insensitive' },
+    };
   }
+
+  // Only = and != can ask whether a column is empty
+  const scalar = columnValue(field, fieldDef, resolved, operator === '=' || operator === '!=');
 
   if (operator === '=') {
-    return { [column]: resolved };
+    return { [column]: scalar };
   }
   if (operator === '!=') {
-    return { [column]: { not: resolved } };
+    return { [column]: { not: scalar } };
   }
 
+  // Numeric and date fields
+  const opMap: Record<string, string> = { '>': 'gt', '<': 'lt', '>=': 'gte', '<=': 'lte' };
   const prismaOp = opMap[operator];
   if (prismaOp) {
-    return { [column]: { [prismaOp]: resolved } };
+    return { [column]: { [prismaOp]: scalar } };
   }
 
   throw new Error(`Unsupported operator: ${operator}`);
@@ -173,11 +214,28 @@ function compileIn(
 
   if (fieldDef.type === 'enum') {
     const enumValues = fieldDef.values ?? [];
-    const normalized = resolved.map((v) => normalizeEnum(String(v), enumValues));
+    const normalized = resolved.map((v) => normalizeEnum(field, String(v), enumValues));
     return { [column]: negated ? { notIn: normalized } : { in: normalized } };
   }
 
-  return { [column]: negated ? { notIn: resolved } : { in: resolved } };
+  const scalars = resolved.map((v) => columnValue(field, fieldDef, v, false));
+
+  // Relation fields go through their join, as a comparison does
+  if (fieldDef.type === 'relation' && fieldDef.join) {
+    const parts = column.split('.');
+    const subField = parts.length > 1 ? parts[parts.length - 1] : 'name';
+    const filter = { in: scalars, mode: 'insensitive' };
+    if (fieldDef.many) {
+      return { [fieldDef.join]: { [negated ? 'none' : 'some']: { [subField]: filter } } };
+    }
+    return {
+      [fieldDef.join]: {
+        [subField]: negated ? { notIn: scalars, mode: 'insensitive' } : filter,
+      },
+    };
+  }
+
+  return { [column]: negated ? { notIn: scalars } : { in: scalars } };
 }
 
 /**

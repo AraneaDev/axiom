@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { cacheable } from '../../config/redis';
-import { parse, compileToPrisma } from '../../lib/query-engine';
+import { parse, compileToPrisma, QueryValueError } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
 import { broadcastToRoom } from '../../realtime/broadcast';
@@ -18,6 +18,7 @@ import {
   TEAM_ORG_INCLUDE,
   PROJECT_TEAM_ORG_INCLUDE,
 } from '../../utils/prisma-selects';
+import { MAX_DB_INT } from '../../utils/validation/common-validators';
 import { logActivity } from '../activity/activity.service';
 import { bindStagedAttachments } from '../attachments/upload-intents.service';
 import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
@@ -237,7 +238,8 @@ function isStructuredQuery(q: string): boolean {
  */
 function applyPlainTextSearch(where: Prisma.IssueWhereInput, q: string): void {
   const num = parseInt(q, 10);
-  if (!isNaN(num)) {
+  // Digits past the column can't be an issue number, and are still text to find
+  if (!isNaN(num) && Math.abs(num) <= MAX_DB_INT) {
     where.OR = [{ number: num }, { title: { contains: q, mode: 'insensitive' } }];
   } else {
     where.title = { contains: q, mode: 'insensitive' };
@@ -289,8 +291,10 @@ export async function listIssues(
       try {
         const ast = parse(filters.q);
         const engineWhere = compileToPrisma(ast, issueFieldRegistry, { projectId });
-        Object.assign(where, engineWhere);
-      } catch {
+        // In AND, so that no query can replace the project this list was authorized on
+        where.AND = [engineWhere as Prisma.IssueWhereInput];
+      } catch (err) {
+        if (err instanceof QueryValueError) throw new AppError(400, err.message, 'INVALID_QUERY');
         // If parse fails, fall back to plain text search
         applyPlainTextSearch(where, filters.q);
       }

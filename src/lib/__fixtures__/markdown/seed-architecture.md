@@ -23,6 +23,7 @@
 Axiom is a self-hosted Jira and Confluence replacement built for agents: issue tracking, sprints and boards, a collaborative wiki, and an MCP server so agents can work in the same projects you do. A GitHub integration is planned for the code side. It is built as a monorepo with a Node.js/Express API backend and a React single-page application frontend.
 
 **Key versions:**
+
 - Node.js 25
 - Express 5.2
 - Prisma 7.5 (with `@prisma/adapter-pg` driver adapter)
@@ -66,12 +67,12 @@ graph TD
 
 One image, one codebase. Each container runs a different entry point. Production has no separate web container: Express serves the built frontend (`STATIC_DIR`, default `public`), so the `web` node in the diagram above exists only in development (Vite with HMR).
 
-| Service | Entry point | Volumes | Ports | Role |
-|---|---|---|---|---|
-| `migrate` | `node dist/migrate.js` (one-shot) | none | Runs `prisma migrate deploy`. Exits 0. |
-| `api` | `node dist/index.js` | `uploads` | `${PORT:-7000}:3000` | REST, WebSocket, MCP, and the built SPA (served from `/app/public`). |
-| `worker` | `node dist/worker.js` | none | none | Email queue consumer. |
-| `db`, `redis` | images | `pgdata`, `redis_data` | internal | `redis` requires `REDIS_PASSWORD`. |
+| Service       | Entry point                       | Volumes                | Ports                                  | Role                                                                 |
+| ------------- | --------------------------------- | ---------------------- | -------------------------------------- | -------------------------------------------------------------------- |
+| `migrate`     | `node dist/migrate.js` (one-shot) | none                   | Runs `prisma migrate deploy`. Exits 0. |
+| `api`         | `node dist/index.js`              | `uploads`              | `${PORT:-7000}:3000`                   | REST, WebSocket, MCP, and the built SPA (served from `/app/public`). |
+| `worker`      | `node dist/worker.js`             | none                   | none                                   | Email queue consumer.                                                |
+| `db`, `redis` | images                            | `pgdata`, `redis_data` | internal                               | `redis` requires `REDIS_PASSWORD`.                                   |
 
 `api` and `worker` each declare `depends_on: migrate: condition: service_completed_successfully`, so migrations finish before either of them starts.
 
@@ -113,20 +114,20 @@ Controllers receive `req`/`res` and call service functions. Services never touch
 
 **Registered modules (route prefix → module):**
 
-| Prefix | Module |
-|--------|--------|
-| `/api/auth` | auth |
-| `/api/users` | users |
-| `/api/orgs` | orgs |
-| `/api/teams` | teams |
-| `/api/projects` | projects, issues, activity, sprints, custom-fields, workflows, automation, labels, issue-templates, milestones |
-| `/api/wiki` | wiki |
-| `/api/search` | search |
-| `/api/attachments` | attachments |
-| `/api/notifications` | notifications |
-| `/api/saved-filters` | saved-filters |
-| `/api/admin` | admin, audit |
-| `/api/mcp` | Model Context Protocol SSE endpoint (authenticated) |
+| Prefix               | Module                                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `/api/auth`          | auth                                                                                                           |
+| `/api/users`         | users                                                                                                          |
+| `/api/orgs`          | orgs                                                                                                           |
+| `/api/teams`         | teams                                                                                                          |
+| `/api/projects`      | projects, issues, activity, sprints, custom-fields, workflows, automation, labels, issue-templates, milestones |
+| `/api/wiki`          | wiki                                                                                                           |
+| `/api/search`        | search                                                                                                         |
+| `/api/attachments`   | attachments                                                                                                    |
+| `/api/notifications` | notifications                                                                                                  |
+| `/api/saved-filters` | saved-filters                                                                                                  |
+| `/api/admin`         | admin, audit                                                                                                   |
+| `/api/mcp`           | Model Context Protocol SSE endpoint (authenticated)                                                            |
 
 ### Supporting Infrastructure
 
@@ -167,10 +168,10 @@ AST
 
 **Two compiler backends:**
 
-| Backend | Input | Output | Used by |
-|---------|-------|--------|---------|
-| Prisma compiler | Query AST | `Prisma.IssueWhereInput` | Issue list / search endpoint |
-| Boolean evaluator | Query AST + issue object | `true` / `false` | Automation condition matching |
+| Backend           | Input                    | Output                   | Used by                       |
+| ----------------- | ------------------------ | ------------------------ | ----------------------------- |
+| Prisma compiler   | Query AST                | `Prisma.IssueWhereInput` | Issue list / search endpoint  |
+| Boolean evaluator | Query AST + issue object | `true` / `false`         | Automation condition matching |
 
 **Field registry:** Each backend registers a set of known field names and their type mappings. Adding support for a new filterable field means registering it in the field registry — the lexer, parser, and AST are unaffected.
 
@@ -202,6 +203,7 @@ Automation rules are stored as `AutomationRule` records and evaluated at trigger
 **Condition format:** Rule conditions are stored as query strings in `AutomationRule.condition` (e.g., `status:open AND priority:high`). These strings are compiled by the query engine's boolean evaluator against a hydrated issue object at trigger time. The legacy `AutomationRule.conditions` JSON field is retained for backward-compatibility migration only.
 
 **Trigger sites:** Automation is triggered from issue mutation services (create, update, status change, assignment, label change). Each trigger site:
+
 1. Fetches a fully hydrated issue using the `AUTOMATION_ISSUE_INCLUDE` constant (ensures all relation fields needed by condition evaluation are present)
 2. Evaluates each active rule's condition string against the issue object
 3. For matching rules, executes each action in order
@@ -209,16 +211,16 @@ Automation rules are stored as `AutomationRule` records and evaluated at trigger
 
 **Action types:**
 
-| Action type | Description |
-|-------------|-------------|
-| `set_status` | Change issue status to a named column |
-| `set_assignee` | Assign or unassign the issue |
-| `add_label` | Add a label by name |
-| `add_comment` | Post a comment (body supports `{{...}}` templates) |
-| `set_field` | Set a custom field value |
-| `create_issue` | Create a linked child issue |
-| `send_email` | Send an email to a specified address |
-| `webhook` | POST a JSON payload to an external URL (SSRF-protected) |
+| Action type    | Description                                             |
+| -------------- | ------------------------------------------------------- |
+| `set_status`   | Change issue status to a named column                   |
+| `set_assignee` | Assign or unassign the issue                            |
+| `add_label`    | Add a label by name                                     |
+| `add_comment`  | Post a comment (body supports `{{...}}` templates)      |
+| `set_field`    | Set a custom field value                                |
+| `create_issue` | Create a linked child issue                             |
+| `send_email`   | Send an email to a specified address                    |
+| `webhook`      | POST a JSON payload to an external URL (SSRF-protected) |
 
 **Template expressions in actions:** Action field values support `{{expression}}` syntax resolved via the template resolver. At execution time the resolver receives an `AutomationTemplateContext` containing the triggering issue and actor.
 
@@ -230,21 +232,21 @@ The `{{expression}}` syntax is shared between automation actions and wiki page t
 
 **Context types:**
 
-| Context | Used by | Available as |
-|---------|---------|--------------|
-| `AutomationTemplateContext` | Automation actions | `issue`, `actor` |
-| `WikiTemplateContext` | Wiki template resolution | `currentUser`, `page` |
+| Context                     | Used by                  | Available as          |
+| --------------------------- | ------------------------ | --------------------- |
+| `AutomationTemplateContext` | Automation actions       | `issue`, `actor`      |
+| `WikiTemplateContext`       | Wiki template resolution | `currentUser`, `page` |
 
 **Built-in functions available in all contexts:**
 
-| Function | Returns |
-|----------|---------|
-| `currentUser()` | Display name of the authenticated user |
-| `now()` | Current timestamp (ISO 8601) |
-| `empty()` | Empty string (useful for clearing fields) |
+| Function          | Returns                                          |
+| ----------------- | ------------------------------------------------ |
+| `currentUser()`   | Display name of the authenticated user           |
+| `now()`           | Current timestamp (ISO 8601)                     |
+| `empty()`         | Empty string (useful for clearing fields)        |
 | `currentSprint()` | Name of the active sprint in the current project |
-| `startOfDay()` | Midnight of the current day (ISO 8601) |
-| `startOfWeek()` | Midnight of the current Monday (ISO 8601) |
+| `startOfDay()`    | Midnight of the current day (ISO 8601)           |
+| `startOfWeek()`   | Midnight of the current Monday (ISO 8601)        |
 
 **Wiki template resolution endpoint:** `POST /api/wiki/templates/:id/resolve` accepts a `WikiTemplateContext` payload and returns the template body with all `{{...}}` expressions substituted. This allows the frontend to preview a resolved template before inserting it into a page.
 
@@ -312,12 +314,14 @@ erDiagram
 Axiom supports two authentication methods, all resolved in `src/middleware/auth.ts`:
 
 **1. JWT Bearer tokens (browser sessions)**
+
 - Short-lived access tokens signed with `JWT_SECRET`
 - `Authorization: Bearer eyJ...`
 - Payload: `{ userId: string }`
 - Auto-refresh: the frontend API client intercepts 401 responses, calls `POST /api/auth/refresh`, and retries the original request. Concurrent 401s share a single refresh promise to avoid token races.
 
 **2. API tokens (programmatic)**
+
 - Long-lived tokens with the prefix `tk_`, stored as SHA-256 hashes in the `api_tokens` table
 - `Authorization: Token tk_...`
 - Support optional expiry and scopes (e.g., `["issues:read", "issues:write"]`)
@@ -383,15 +387,15 @@ graph LR
 
 **Event types:**
 
-| Event type | Triggered by | Room |
-|------------|-------------|------|
-| `issue:updated` | Issue mutation | `project:{projectId}` |
-| `issue:created` | New issue | `project:{projectId}` |
-| `comment:added` | New comment | `project:{projectId}` |
-| `board:moved` | Column change | `project:{projectId}` |
-| `issue:links-updated` | Wiki page linked to or unlinked from an issue | `issue:{issueId}` |
-| `wiki:updated` | Page save | `wiki:{spaceId}` |
-| `notification` | Any notification | `user:{userId}` |
+| Event type            | Triggered by                                  | Room                  |
+| --------------------- | --------------------------------------------- | --------------------- |
+| `issue:updated`       | Issue mutation                                | `project:{projectId}` |
+| `issue:created`       | New issue                                     | `project:{projectId}` |
+| `comment:added`       | New comment                                   | `project:{projectId}` |
+| `board:moved`         | Column change                                 | `project:{projectId}` |
+| `issue:links-updated` | Wiki page linked to or unlinked from an issue | `issue:{issueId}`     |
+| `wiki:updated`        | Page save                                     | `wiki:{spaceId}`      |
+| `notification`        | Any notification                              | `user:{userId}`       |
 
 The frontend hook `useRealtimeInvalidation` subscribes to relevant rooms and calls `queryClient.invalidateQueries()` on matching events, keeping TanStack Query caches fresh without polling.
 
@@ -412,18 +416,18 @@ Implements the Yjs sync protocol for real-time collaborative wiki editing:
 
 ### Technology Stack
 
-| Concern | Library | Version |
-|---------|---------|---------|
-| UI framework | React | 19.2 |
-| Build tool | Vite | 8.0 |
-| Routing | React Router | 7.13 |
-| Server state | TanStack Query | 5.95 |
-| Client state | Zustand | 5.0 |
-| Editor | TipTap | 3.20 |
-| CRDT | Yjs | 13.6 |
-| Icons | lucide-react | 1.7 |
-| CSS | Tailwind CSS | 4.x |
-| TypeScript | 5.8 | |
+| Concern      | Library        | Version |
+| ------------ | -------------- | ------- |
+| UI framework | React          | 19.2    |
+| Build tool   | Vite           | 8.0     |
+| Routing      | React Router   | 7.13    |
+| Server state | TanStack Query | 5.95    |
+| Client state | Zustand        | 5.0     |
+| Editor       | TipTap         | 3.20    |
+| CRDT         | Yjs            | 13.6    |
+| Icons        | lucide-react   | 1.7     |
+| CSS          | Tailwind CSS   | 4.x     |
+| TypeScript   | 5.8            |         |
 
 ### Directory Structure
 
@@ -471,6 +475,7 @@ On app load, `App.tsx` calls `loadUser()`. If an access token exists in `localSt
 ### API Client
 
 `frontend/src/api/client.ts` provides `get`, `post`, `patch`, `del` helpers built on `fetch`. Every request automatically:
+
 - Attaches `Authorization: Bearer {accessToken}`
 - Attaches `X-Requested-With: XMLHttpRequest` (CSRF header required by the server)
 - On 401: triggers a shared `refreshPromise` (deduplicating concurrent refreshes), then retries the original request once
@@ -552,10 +557,10 @@ All error responses share the shape `{ error: { message: string, code?: string }
 
 `express-rate-limit` enforces two tiers (both disabled in the test environment):
 
-| Limiter | Routes | Window | Limit |
-|---------|--------|--------|-------|
-| Global | All routes | 60 s | 300 requests |
-| Auth | `/api/auth/login`, `/api/auth/refresh`, `/api/auth/register` | 60 s | 15 requests |
+| Limiter | Routes                                                       | Window | Limit        |
+| ------- | ------------------------------------------------------------ | ------ | ------------ |
+| Global  | All routes                                                   | 60 s   | 300 requests |
+| Auth    | `/api/auth/login`, `/api/auth/refresh`, `/api/auth/register` | 60 s   | 15 requests  |
 
 Standard `RateLimit-*` response headers are sent; legacy `X-RateLimit-*` headers are disabled.
 
@@ -585,16 +590,16 @@ Every mutating API route operating on an org, team, or project resource is prote
 
 The dev stack is defined in `docker-compose.dev.yml` and started with `npm run docker:dev`.
 
-| Service | Image | Port | Purpose |
-|---------|-------|------|---------|
-| `db` | postgres:16-alpine | 5432 | Primary database |
-| `redis` | redis:7-alpine | 6379 | Cache and email queue broker, password `axiom_dev_redis` |
-| `mailserver` | docker-mailserver | 25 | Local SMTP for email testing |
-| `migrate` | Custom (Dockerfile.dev) | none | Runs `prisma migrate deploy`, then exits (one-shot) |
-| `api` | Custom (Dockerfile.dev) | 3000 | Express API with `tsx` watch |
-| `worker` | Custom (Dockerfile.dev) | none | Email queue consumer with `tsx` watch |
-| `web` | Custom (Dockerfile.dev) | 7000 | Vite dev server |
-| `tunnel` | cloudflare/cloudflared | — | Optional Cloudflare tunnel (Docker profile: `tunnel`) |
+| Service      | Image                   | Port | Purpose                                                  |
+| ------------ | ----------------------- | ---- | -------------------------------------------------------- |
+| `db`         | postgres:16-alpine      | 5432 | Primary database                                         |
+| `redis`      | redis:7-alpine          | 6379 | Cache and email queue broker, password `axiom_dev_redis` |
+| `mailserver` | docker-mailserver       | 25   | Local SMTP for email testing                             |
+| `migrate`    | Custom (Dockerfile.dev) | none | Runs `prisma migrate deploy`, then exits (one-shot)      |
+| `api`        | Custom (Dockerfile.dev) | 3000 | Express API with `tsx` watch                             |
+| `worker`     | Custom (Dockerfile.dev) | none | Email queue consumer with `tsx` watch                    |
+| `web`        | Custom (Dockerfile.dev) | 7000 | Vite dev server                                          |
+| `tunnel`     | cloudflare/cloudflared  | —    | Optional Cloudflare tunnel (Docker profile: `tunnel`)    |
 
 Source directories are bind-mounted into the containers so that code changes on the host are reflected immediately without rebuilding images.
 

@@ -1,4 +1,5 @@
 import { runWithRequestContext } from '../lib/request-context';
+import { loggableExternalUrl } from '../lib/request-path';
 import { AppError } from '../middleware/errorHandler';
 import { logAudit } from '../modules/audit/audit.service';
 import { logger } from '../utils/logger';
@@ -7,6 +8,8 @@ import type { ActionContext, ActionDef } from './define';
 
 /** Fields of an action's input that name what it works on. */
 const TARGET_FIELD = /^id$|^slug$|Id$|Number$|Slug$/;
+/** Anything with a scheme, whichever field it is in: a URL's query can hold a credential. */
+const URL_LIKE = /^[a-z][a-z0-9+.-]*:\/\//i;
 const MAX_VALUE_LENGTH = 200;
 const MAX_LIST_ITEMS = 50;
 /** The most a row's target holds, whatever a caller sent. */
@@ -22,6 +25,7 @@ type Target = Record<string, TargetValue | boolean>;
 function cleanScalar(value: unknown): string | number | undefined {
   if (typeof value === 'number') return value;
   if (typeof value === 'string') {
+    if (URL_LIKE.test(value)) return loggableExternalUrl(value).slice(0, MAX_VALUE_LENGTH);
     return value
       .slice(0, MAX_VALUE_LENGTH * 2)
       .replace(/\p{Cc}/gu, '')

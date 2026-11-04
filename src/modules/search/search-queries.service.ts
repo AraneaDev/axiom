@@ -1,8 +1,9 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
-import { parse, compileToPrisma } from '../../lib/query-engine';
+import { parse, compileToPrisma, QueryValueError } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
+import { AppError } from '../../middleware/errorHandler';
 import { formatIssueKey } from '../../utils/issue-key';
 import {
   PROJECT_URL_WITH_NAME_SELECT,
@@ -138,7 +139,8 @@ export async function searchIssues(
         andClauses.push(engineWhere as Prisma.IssueWhereInput);
         usedQueryEngine = true;
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof QueryValueError) throw new AppError(400, err.message, 'INVALID_QUERY');
       // Fall through to legacy structured filter parsing below
     }
   }

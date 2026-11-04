@@ -1,4 +1,4 @@
-| Field | Type | Notes |
-| --- | --- | --- |
+| Field  | Type        | Notes            |
+| ------ | ----------- | ---------------- |
 | `type` | `TASK\|BUG` | Pipe inside code |
-| name | string | **required** |
+| name   | string      | **required**     |

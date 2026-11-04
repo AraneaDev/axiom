@@ -144,7 +144,8 @@ const spaceActions = [
     area: 'wiki',
     kind: 'read',
     summary:
-      'List the wiki spaces of a team. Over MCP, 20 unless limit says otherwise (up to 100).',
+      'List the wiki spaces of a team: all of them, or with limit (1 to 100) and offset a page as ' +
+      '{ data, total, limit, offset }.',
     target: teamTarget,
     // Anything but true or the string 'true' reads as false, as it always did
     input: teamTarget.extend({

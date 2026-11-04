@@ -1,3 +1,4 @@
+import { AppError } from '../../middleware/errorHandler';
 import { parsePagination } from '../../utils/pagination';
 import { settled } from '../../utils/settled';
 import { listActivities } from '../activity/activity.service';
@@ -105,6 +106,16 @@ export async function hydrateIssuesList(
     listSavedFilters(userId, projectId),
     listFieldDefinitions(projectId),
   ]);
+
+  // A refused query is the caller's to read, not a part of the page that failed to load
+  const [listed] = results;
+  if (
+    listed.status === 'rejected' &&
+    listed.reason instanceof AppError &&
+    listed.reason.statusCode < 500
+  ) {
+    throw listed.reason;
+  }
 
   return {
     issues: settled(results[0], 'issues'),

@@ -20,11 +20,11 @@ X-Requested-With: XMLHttpRequest
 
 ### Rate Limiting
 
-| Scope | Limit |
-|-------|-------|
-| Global | 300 requests per minute |
-| Auth endpoints (`/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`) | 15 requests per minute |
-| Attachment uploads | 10 uploads per minute |
+| Scope                                                                         | Limit                   |
+| ----------------------------------------------------------------------------- | ----------------------- |
+| Global                                                                        | 300 requests per minute |
+| Auth endpoints (`/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`) | 15 requests per minute  |
+| Attachment uploads                                                            | 10 uploads per minute   |
 
 Rate limit headers returned on every response:
 
@@ -70,25 +70,25 @@ All errors follow this structure:
 
 Common HTTP status codes:
 
-| Code | Meaning |
-|------|---------|
-| 400 | Bad request — invalid input |
-| 401 | Unauthorized — missing or expired token |
-| 403 | Forbidden — insufficient permissions |
-| 404 | Not found |
-| 409 | Conflict — duplicate resource |
-| 422 | Unprocessable entity — validation failure |
-| 429 | Rate limit exceeded |
-| 500 | Internal server error |
+| Code | Meaning                                   |
+| ---- | ----------------------------------------- |
+| 400  | Bad request — invalid input               |
+| 401  | Unauthorized — missing or expired token   |
+| 403  | Forbidden — insufficient permissions      |
+| 404  | Not found                                 |
+| 409  | Conflict — duplicate resource             |
+| 422  | Unprocessable entity — validation failure |
+| 429  | Rate limit exceeded                       |
+| 500  | Internal server error                     |
 
 ### Pagination
 
 List endpoints that support pagination accept the following query parameters:
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `page` | integer | Page number (1-based, default: 1) |
-| `limit` | integer | Items per page (default varies, max 100) |
+| Parameter | Type    | Description                              |
+| --------- | ------- | ---------------------------------------- |
+| `page`    | integer | Page number (1-based, default: 1)        |
+| `limit`   | integer | Items per page (default varies, max 100) |
 
 Paginated responses include metadata:
 
@@ -330,17 +330,15 @@ Search for users by username or email.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `q` | string | Search query |
+| Parameter | Type   | Description  |
+| --------- | ------ | ------------ |
+| `q`       | string | Search query |
 
 **Response 200:**
 
 ```json
 {
-  "users": [
-    { "id": "usr_01HZ...", "username": "tim", "avatarUrl": null }
-  ]
+  "users": [{ "id": "usr_01HZ...", "username": "tim", "avatarUrl": null }]
 }
 ```
 
@@ -478,9 +476,7 @@ List organizations the current user belongs to.
 
 ```json
 {
-  "orgs": [
-    { "id": "org_01HZ...", "name": "Aranea.Dev", "slug": "aranea-dev" }
-  ]
+  "orgs": [{ "id": "org_01HZ...", "name": "Aranea.Dev", "slug": "aranea-dev" }]
 }
 ```
 
@@ -900,19 +896,19 @@ List issues in a project.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `status` | string | Filter by status (`TODO`, `IN_PROGRESS`, `DONE`, etc.) |
-| `priority` | string | Filter by priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) |
-| `assigneeId` | string | Filter by assignee user ID |
-| `labelName` | string | Filter by label name |
-| `milestoneId` | string | Filter by milestone |
-| `sprintId` | string | Filter by sprint |
-| `q` | string | Structured query string (see [Query Language Reference](#query-language-reference)). Supports simple mode (`type:bug priority:high`) and complex mode (`type = Bug AND priority IN (High, Critical)`). When provided, replaces all individual filter params. |
-| `page` | integer | Page number |
-| `limit` | integer | Items per page |
-| `sort` | string | Sort field (`createdAt`, `priority`, `number`) |
-| `order` | string | Sort direction: `asc` or `desc` |
+| Parameter     | Type    | Description                                                                                                                                                                                                                                                  |
+| ------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `status`      | string  | Filter by status (`TODO`, `IN_PROGRESS`, `DONE`, etc.)                                                                                                                                                                                                       |
+| `priority`    | string  | Filter by priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)                                                                                                                                                                                                     |
+| `assigneeId`  | string  | Filter by assignee user ID                                                                                                                                                                                                                                   |
+| `labelName`   | string  | Filter by label name                                                                                                                                                                                                                                         |
+| `milestoneId` | string  | Filter by milestone                                                                                                                                                                                                                                          |
+| `sprintId`    | string  | Filter by sprint                                                                                                                                                                                                                                             |
+| `q`           | string  | Structured query string (see [Query Language Reference](#query-language-reference)). Supports simple mode (`type:bug priority:high`) and complex mode (`type = Bug AND priority IN (High, Critical)`). When provided, replaces all individual filter params. |
+| `page`        | integer | Page number                                                                                                                                                                                                                                                  |
+| `limit`       | integer | Items per page                                                                                                                                                                                                                                               |
+| `sort`        | string  | Sort field (`createdAt`, `priority`, `number`)                                                                                                                                                                                                               |
+| `order`       | string  | Sort direction: `asc` or `desc`                                                                                                                                                                                                                              |
 
 **Response 200:** Paginated issue list.
 
@@ -1451,9 +1447,7 @@ List all labels in a project.
 
 ```json
 {
-  "labels": [
-    { "name": "bug", "color": "#d73a4a", "description": "Something is not working" }
-  ]
+  "labels": [{ "name": "bug", "color": "#d73a4a", "description": "Something is not working" }]
 }
 ```
 
@@ -1726,28 +1720,28 @@ Create an automation rule.
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Display name for the rule |
-| `trigger` | string | Event that fires the rule |
-| `triggerValue` | string | Value associated with the trigger (e.g. label name) |
-| `condition` | string | Optional query string condition evaluated before running the action (e.g. `"type = Bug AND priority IN (High, Critical)"`). Validated on creation. |
-| `conditions` | array | **Deprecated.** Legacy JSON condition format. Use `condition` instead. |
-| `action` | string | Action type to execute (see action types below) |
-| `actionValue` | string | Value for the action (depends on action type) |
+| Field          | Type   | Description                                                                                                                                        |
+| -------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | string | Display name for the rule                                                                                                                          |
+| `trigger`      | string | Event that fires the rule                                                                                                                          |
+| `triggerValue` | string | Value associated with the trigger (e.g. label name)                                                                                                |
+| `condition`    | string | Optional query string condition evaluated before running the action (e.g. `"type = Bug AND priority IN (High, Critical)"`). Validated on creation. |
+| `conditions`   | array  | **Deprecated.** Legacy JSON condition format. Use `condition` instead.                                                                             |
+| `action`       | string | Action type to execute (see action types below)                                                                                                    |
+| `actionValue`  | string | Value for the action (depends on action type)                                                                                                      |
 
 **Action types:**
 
-| Action | Description | `actionValue` |
-|--------|-------------|---------------|
-| `ASSIGN_USER` | Assign the issue to a user | User ID |
-| `SET_STATUS` | Set the issue status | Status name |
-| `SET_PRIORITY` | Set the issue priority | Priority name |
-| `ADD_LABEL` | Add a label to the issue | Label name |
-| `set_field` | Set any issue field by name | JSON object: `{ "field": "storyPoints", "value": 3 }` |
-| `create_issue` | Create a new linked issue | JSON object with issue fields |
-| `send_email` | Send an email notification | JSON object: `{ "to": "user@example.com", "subject": "...", "body": "..." }` |
-| `webhook` | Send an HTTP POST to a URL | JSON object: `{ "url": "https://...", "headers": { ... } }` |
+| Action         | Description                 | `actionValue`                                                                |
+| -------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| `ASSIGN_USER`  | Assign the issue to a user  | User ID                                                                      |
+| `SET_STATUS`   | Set the issue status        | Status name                                                                  |
+| `SET_PRIORITY` | Set the issue priority      | Priority name                                                                |
+| `ADD_LABEL`    | Add a label to the issue    | Label name                                                                   |
+| `set_field`    | Set any issue field by name | JSON object: `{ "field": "storyPoints", "value": 3 }`                        |
+| `create_issue` | Create a new linked issue   | JSON object with issue fields                                                |
+| `send_email`   | Send an email notification  | JSON object: `{ "to": "user@example.com", "subject": "...", "body": "..." }` |
+| `webhook`      | Send an HTTP POST to a URL  | JSON object: `{ "url": "https://...", "headers": { ... } }`                  |
 
 **Response 201:** Automation rule object.
 
@@ -1885,9 +1879,9 @@ Export a wiki page in the specified format.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `format` | string | Export format: `html`, `pdf`, `docx`, `epub`, `latex`, `txt` |
+| Parameter | Type   | Description                                                  |
+| --------- | ------ | ------------------------------------------------------------ |
+| `format`  | string | Export format: `html`, `pdf`, `docx`, `epub`, `latex`, `txt` |
 
 **Response 200:** File download in the requested format.
 
@@ -1941,11 +1935,11 @@ Resolve template variables in a wiki template body. All `{{expression}}` placeho
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `body` | string | Template body containing `{{expression}}` placeholders |
-| `context.teamId` | string | Team ID used for resolving team-scoped variables |
-| `context.spaceId` | string | Wiki space ID |
+| Field               | Type   | Description                                                |
+| ------------------- | ------ | ---------------------------------------------------------- |
+| `body`              | string | Template body containing `{{expression}}` placeholders     |
+| `context.teamId`    | string | Team ID used for resolving team-scoped variables           |
+| `context.spaceId`   | string | Wiki space ID                                              |
 | `context.projectId` | string | Optional project ID for resolving project-scoped variables |
 
 **Response 200:**
@@ -2074,13 +2068,13 @@ Full-text search across issues and wiki pages.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `q` | string | Search query (required) |
-| `type` | string | Filter by type: `issue`, `wiki` |
-| `orgId` | string | Limit to an organization |
-| `teamId` | string | Limit to a team |
-| `projectId` | string | Limit to a project |
+| Parameter   | Type   | Description                     |
+| ----------- | ------ | ------------------------------- |
+| `q`         | string | Search query (required)         |
+| `type`      | string | Filter by type: `issue`, `wiki` |
+| `orgId`     | string | Limit to an organization        |
+| `teamId`    | string | Limit to a team                 |
+| `projectId` | string | Limit to a project              |
 
 **Response 200:**
 
@@ -2241,49 +2235,49 @@ status != Done AND assignee = currentUser() AND created >= now(-7d)
 
 ### Field Reference
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `type` | string | Issue type name (e.g. `Bug`, `Feature`, `Task`) |
-| `status` | string | Status name (e.g. `Todo`, `In Progress`, `Done`) |
-| `priority` | string | `Low`, `Medium`, `High`, `Critical` |
-| `assignee` | string | Username, user ID, or `@me` / `currentUser()` |
-| `creator` | string | Username or user ID |
-| `label` | string | Label name |
-| `sprint` | string | Sprint name or `currentSprint()` |
-| `project` | string | Project ID or slug |
-| `storyPoints` | number | Story point estimate |
-| `created` | date | Creation timestamp |
-| `updated` | date | Last-updated timestamp |
-| `dueDate` | date | Due date |
-| `number` | number | Issue number within the project |
-| `title` | string | Issue title (use `~` for contains) |
+| Field         | Type   | Notes                                            |
+| ------------- | ------ | ------------------------------------------------ |
+| `type`        | string | Issue type name (e.g. `Bug`, `Feature`, `Task`)  |
+| `status`      | string | Status name (e.g. `Todo`, `In Progress`, `Done`) |
+| `priority`    | string | `Low`, `Medium`, `High`, `Critical`              |
+| `assignee`    | string | Username, user ID, or `@me` / `currentUser()`    |
+| `creator`     | string | Username or user ID                              |
+| `label`       | string | Label name                                       |
+| `sprint`      | string | Sprint name or `currentSprint()`                 |
+| `project`     | string | Project ID or slug                               |
+| `storyPoints` | number | Story point estimate                             |
+| `created`     | date   | Creation timestamp                               |
+| `updated`     | date   | Last-updated timestamp                           |
+| `dueDate`     | date   | Due date                                         |
+| `number`      | number | Issue number within the project                  |
+| `title`       | string | Issue title (use `~` for contains)               |
 
 ### Operator Reference
 
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `=` | Equal | `priority = High` |
-| `!=` | Not equal | `status != Done` |
-| `>` | Greater than | `storyPoints > 3` |
-| `<` | Less than | `storyPoints < 8` |
-| `>=` | Greater than or equal | `created >= now(-7d)` |
-| `<=` | Less than or equal | `dueDate <= now()` |
-| `~` | Contains (substring) | `title ~ "login"` |
-| `IN` | Matches any value in list | `priority IN (High, Critical)` |
+| Operator | Description                | Example                           |
+| -------- | -------------------------- | --------------------------------- |
+| `=`      | Equal                      | `priority = High`                 |
+| `!=`     | Not equal                  | `status != Done`                  |
+| `>`      | Greater than               | `storyPoints > 3`                 |
+| `<`      | Less than                  | `storyPoints < 8`                 |
+| `>=`     | Greater than or equal      | `created >= now(-7d)`             |
+| `<=`     | Less than or equal         | `dueDate <= now()`                |
+| `~`      | Contains (substring)       | `title ~ "login"`                 |
+| `IN`     | Matches any value in list  | `priority IN (High, Critical)`    |
 | `NOT IN` | Matches none of the values | `status NOT IN (Done, Cancelled)` |
 
 Operators are case-insensitive (`IN`, `in`, and `In` are all valid).
 
 ### Function Reference
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `currentUser()` | Resolves to the authenticated user. Alias: `@me` | `assignee = currentUser()` |
-| `currentSprint()` | Resolves to the active sprint in the project | `sprint = currentSprint()` |
-| `now()` | Current timestamp, with optional offset | `created >= now(-7d)` |
-| `startOfDay()` | Midnight of the current day | `created >= startOfDay()` |
-| `startOfWeek()` | Midnight of the first day of the current week | `updated >= startOfWeek()` |
-| `empty()` | Matches null / unset fields | `assignee = empty()` |
+| Function          | Description                                      | Example                    |
+| ----------------- | ------------------------------------------------ | -------------------------- |
+| `currentUser()`   | Resolves to the authenticated user. Alias: `@me` | `assignee = currentUser()` |
+| `currentSprint()` | Resolves to the active sprint in the project     | `sprint = currentSprint()` |
+| `now()`           | Current timestamp, with optional offset          | `created >= now(-7d)`      |
+| `startOfDay()`    | Midnight of the current day                      | `created >= startOfDay()`  |
+| `startOfWeek()`   | Midnight of the first day of the current week    | `updated >= startOfWeek()` |
+| `empty()`         | Matches null / unset fields                      | `assignee = empty()`       |
 
 **`now()` offset syntax:** `now(-Nd)` subtracts N days; `now(+Nd)` adds N days. Unit `d` (days) is the only supported unit.
 
@@ -2324,8 +2318,8 @@ Upload a file. Request must use `multipart/form-data`.
 
 **Form fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
+| Field  | Type | Description        |
+| ------ | ---- | ------------------ |
 | `file` | file | The file to upload |
 
 **Response 201:**
@@ -2531,15 +2525,15 @@ List audit log entries.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `userId` | string | Filter by acting user |
-| `action` | string | Filter by action type (e.g., `issue.update`) |
-| `resourceType` | string | Filter by resource type (e.g., `Issue`) |
-| `from` | string | ISO date: start of range |
-| `to` | string | ISO date: end of range |
-| `page` | integer | Page number |
-| `limit` | integer | Items per page |
+| Parameter      | Type    | Description                                  |
+| -------------- | ------- | -------------------------------------------- |
+| `userId`       | string  | Filter by acting user                        |
+| `action`       | string  | Filter by action type (e.g., `issue.update`) |
+| `resourceType` | string  | Filter by resource type (e.g., `Issue`)      |
+| `from`         | string  | ISO date: start of range                     |
+| `to`           | string  | ISO date: end of range                       |
+| `page`         | integer | Page number                                  |
+| `limit`        | integer | Items per page                               |
 
 **Response 200:**
 
