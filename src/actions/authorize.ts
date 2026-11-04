@@ -1,0 +1,112 @@
+import type { SpacePermissionLevel } from '@prisma/client';
+
+import { AppError } from '../middleware/errorHandler';
+import { assertPageAccess, checkTeamRead, checkWikiSpaceOrgAccess } from '../middleware/rbac';
+import { checkProjectAccess, checkProjectAction } from '../middleware/requireProjectAccess';
+import { canAccessSpace } from '../modules/wiki/space-permissions.service';
+import { ERR } from '../utils/error-messages';
+import type { Action } from '../utils/permissions';
+
+import type { ActionContext } from './define';
+
+/** An action's authorize function, for an action whose input is T. */
+type Authorizer<T> = (ctx: ActionContext, input: T) => Promise<void>;
+
+/**
+ * Check the same thing as requireProjectAccess: a place on the project's team, or platform admin.
+ * @param userId - The user
+ * @param projectId - The project
+ */
+async function assertProjectRead(userId: string, projectId: string): Promise<void> {
+  const access = await checkProjectAccess(userId, projectId);
+  if (access === 'not_found') throw new AppError(404, ERR.PROJECT_NOT_FOUND);
+  if (access === 'forbidden') throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
+}
+
+/**
+ * Read a project: requireProjectAccess.
+ * @param pick - Finds the project id in the input
+ */
+export function projectRead<T>(pick: (input: T) => string): Authorizer<T> {
+  return (ctx, input) => assertProjectRead(ctx.userId, pick(input));
+}
+
+/**
+ * Act on a project: requireProjectAccess, then requireProjectAction. Both are needed, because
+ * checkProjectAction accepts an org role alone and REST turns away whoever is not on the team.
+ * @param action - The permission action
+ * @param pick - Finds the project id in the input
+ */
+export function projectAction<T>(action: Action, pick: (input: T) => string): Authorizer<T> {
+  return async (ctx, input) => {
+    const projectId = pick(input);
+    await assertProjectRead(ctx.userId, projectId);
+    if ((await checkProjectAction(ctx.userId, projectId, action)) !== 'ok') {
+      throw new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN');
+    }
+  };
+}
+
+/**
+ * Reach a space: requireWikiSpaceAccess, then requireSpacePermission. Both are needed, because
+ * canAccessSpace does not check the org on every path.
+ * @param level - The minimum level on the space
+ * @param pick - Finds the space id in the input
+ */
+export function spaceAccess<T>(
+  level: SpacePermissionLevel,
+  pick: (input: T) => string,
+): Authorizer<T> {
+  return async (ctx, input) => {
+    const spaceId = pick(input);
+    const access = await checkWikiSpaceOrgAccess(spaceId, ctx.userId);
+    if (access === 'not_found') throw new AppError(404, 'Wiki space not found');
+    if (access === 'forbidden') {
+      throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
+    }
+    if (!(await canAccessSpace(spaceId, ctx.userId, level))) {
+      throw new AppError(403, 'You do not have access to this space');
+    }
+  };
+}
+
+/**
+ * Reach a page: assertPageAccess, which checks the org and the space before canViewPage or
+ * canEditPage. Those two alone pass for anyone when the page has no restrictions.
+ * @param mode - 'view' for reads, 'edit' for writes
+ * @param pick - Finds the page id in the input
+ */
+export function pageAccess<T>(mode: 'view' | 'edit', pick: (input: T) => string): Authorizer<T> {
+  return (ctx, input) => assertPageAccess(ctx.userId, pick(input), mode);
+}
+
+/**
+ * Team-wide reads: requireTeamMember.
+ * @param pick - Finds the team id in the input
+ */
+export function teamRead<T>(pick: (input: T) => string): Authorizer<T> {
+  return async (ctx, input) => {
+    const access = await checkTeamRead(ctx.userId, pick(input));
+    if (access === 'not_found') throw new AppError(404, ERR.TEAM_NOT_FOUND);
+    if (access === 'forbidden') throw new AppError(403, 'You are not a member of this team');
+  };
+}
+
+/**
+ * A record addressed through a project: requireProjectAccess, then requireOwnedByProject. A
+ * record of another project answers 404, as if it did not exist in this one. This does not
+ * check a role: for writes, run projectAction as well.
+ * @param resolver - Returns the projects the record belongs to; see `projectOf`
+ * @param pick - Finds the project id and the record id in the input
+ */
+export function ownedByProject<T>(
+  resolver: (id: string) => Promise<Array<string | null | undefined>>,
+  pick: (input: T) => { projectId: string; recordId: string },
+): Authorizer<T> {
+  return async (ctx, input) => {
+    const { projectId, recordId } = pick(input);
+    await assertProjectRead(ctx.userId, projectId);
+    const owners = await resolver(recordId);
+    if (!owners.includes(projectId)) throw new AppError(404, 'Not found in this project');
+  };
+}
