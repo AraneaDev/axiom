@@ -60,7 +60,7 @@ describe('IssueWebLinksCard', () => {
     mockList.mockResolvedValue([]);
     renderCard();
     await userEvent.type(await screen.findByLabelText('Link URL'), 'https://example.com/new');
-    await userEvent.click(screen.getByRole('button', { name: /add link/i }));
+    await userEvent.click(screen.getByRole('button', { name: /add web link/i }));
     await waitFor(() =>
       expect(mockAdd).toHaveBeenCalledWith('proj1', 7, { url: 'https://example.com/new' }),
     );

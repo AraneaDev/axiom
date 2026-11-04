@@ -125,7 +125,7 @@ export function IssueWebLinksCard({ projectId, issueNumber }: IssueWebLinksCardP
         />
         <Button type="submit" variant="secondary" size="sm" disabled={!url.trim() || add.isPending}>
           <Plus className="h-3.5 w-3.5" />
-          Add link
+          Add web link
         </Button>
       </form>
     </Card>
