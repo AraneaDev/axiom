@@ -118,6 +118,7 @@ export function IssueDetailComments({
           placeholder="Write a comment... Use @ to mention users, ^ to reference issues"
           compact
           projectId={projectId}
+          uploadTarget={{ issueId: issue.id }}
         />
         <Button
           size="sm"
@@ -194,6 +195,7 @@ export function IssueDetailComments({
                         onChange={editCommentDraft.setDraft}
                         compact
                         projectId={projectId}
+                        uploadTarget={{ issueId: issue.id }}
                       />
                       <div className="flex gap-2">
                         <Button

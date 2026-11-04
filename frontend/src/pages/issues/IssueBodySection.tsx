@@ -9,6 +9,7 @@ interface IssueBodySectionProps {
   body: string | null;
   basePath: string;
   projectId?: string;
+  issueId?: string;
   isEditing: boolean;
   draft: string;
   onDraftChange: (value: string) => void;
@@ -23,6 +24,7 @@ interface IssueBodySectionProps {
  * @param root0.body
  * @param root0.basePath
  * @param root0.projectId
+ * @param root0.issueId
  * @param root0.isEditing
  * @param root0.draft
  * @param root0.onDraftChange
@@ -34,6 +36,7 @@ export function IssueBodySection({
   body,
   basePath,
   projectId,
+  issueId,
   isEditing,
   draft,
   onDraftChange,
@@ -45,7 +48,12 @@ export function IssueBodySection({
     <Card className="p-5 mb-8">
       {isEditing ? (
         <div className="space-y-2">
-          <MarkdownEditor value={draft} onChange={onDraftChange} projectId={projectId} />
+          <MarkdownEditor
+            value={draft}
+            onChange={onDraftChange}
+            projectId={projectId}
+            uploadTarget={issueId ? { issueId } : undefined}
+          />
           <div className="flex gap-2">
             <Button size="sm" onClick={onSave}>
               <Check className="h-4 w-4" /> Save

@@ -14,6 +14,7 @@ import {
   Minus,
   Link as LinkIcon,
   ImageIcon,
+  Upload,
   Table as TableIcon,
   MessageSquareWarning,
   ListChecks,
@@ -29,6 +30,12 @@ import { cn } from '@/lib/utils';
 import { buildEditorExtensions } from './editor-extensions';
 import { editorMarkdown } from './editor-markdown';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
+import {
+  type ImageUploadTarget,
+  insertImageFromUrl,
+  pickAndInsertImage,
+  useImageUpload,
+} from './image-upload';
 
 interface MarkdownEditorProps {
   value: string;
@@ -36,6 +43,8 @@ interface MarkdownEditorProps {
   placeholder?: string;
   compact?: boolean;
   projectId?: string;
+  /** The page or issue uploaded images belong to; without one they are staged until the body is saved */
+  uploadTarget?: ImageUploadTarget;
 }
 
 interface ToolbarButtonProps {
@@ -78,6 +87,7 @@ function ToolbarDivider() {
  * @param props.placeholder - Placeholder text when the editor is empty.
  * @param props.compact - Reduces minimum height and hides advanced toolbar buttons when true.
  * @param props.projectId - Project ID used for issue reference autocomplete suggestions.
+ * @param props.uploadTarget - Page or issue that uploaded images attach to; staged when omitted.
  */
 export function MarkdownEditor({
   value,
@@ -85,6 +95,7 @@ export function MarkdownEditor({
   placeholder,
   compact = false,
   projectId,
+  uploadTarget,
 }: MarkdownEditorProps) {
   // Each editor instance gets a stable key for the shared mutable store
   const [instanceId] = useState(() => nextEditorInstanceId());
@@ -115,6 +126,8 @@ export function MarkdownEditor({
     },
   });
 
+  useImageUpload(editor, uploadTarget);
+
   // Sync external value changes (e.g. loading existing content)
   useEffect(() => {
     if (editor && value !== undefined) {
@@ -134,13 +147,6 @@ export function MarkdownEditor({
     const url = window.prompt('URL:');
     if (url) {
       editor!.chain().focus().setLink({ href: url }).run();
-    }
-  }
-
-  function insertImage() {
-    const url = window.prompt('Image URL:');
-    if (url) {
-      editor!.chain().focus().setImage({ src: url }).run();
     }
   }
 
@@ -256,7 +262,10 @@ export function MarkdownEditor({
 
         {!compact && (
           <>
-            <ToolbarButton onClick={insertImage} title="Image">
+            <ToolbarButton onClick={() => pickAndInsertImage(editor)} title="Upload image">
+              <Upload className={ic} />
+            </ToolbarButton>
+            <ToolbarButton onClick={() => insertImageFromUrl(editor)} title="Image URL">
               <ImageIcon className={ic} />
             </ToolbarButton>
             <ToolbarButton onClick={insertTable} title="Table">

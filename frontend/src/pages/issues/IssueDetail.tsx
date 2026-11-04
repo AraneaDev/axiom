@@ -300,6 +300,7 @@ export default function IssueDetail() {
           body={issue.body}
           basePath={`/${org}/${teamSlug}/${projectSlug}`}
           projectId={currentProject?.id}
+          issueId={issue.id}
           isEditing={bodyDraftState.isEditing}
           draft={bodyDraftState.draft}
           onDraftChange={bodyDraftState.setDraft}

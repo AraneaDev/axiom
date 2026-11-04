@@ -33,6 +33,8 @@ const identical: Record<string, string> = {
   tableAtoms: '| a |\n| --- |\n| <span class="mention">@T</span> |\n',
   tableCodeBackslash: '| a |\n| --- |\n| `x\\\\|y` |\n',
   inlineImage: 'text ![s](x.png) more',
+  attachmentImage:
+    'See ![a chart](/api/attachments/cm1abc23) here.\n\n![](/api/attachments/cm1abc24)',
   tightListWithCode: '- step:\n  ```bash\n  npm ci\n  ```\n- done',
 };
 

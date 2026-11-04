@@ -21,6 +21,7 @@ import {
   Minus,
   Link as LinkIcon,
   ImageIcon,
+  Upload,
   Table as TableIcon,
   MessageSquareWarning,
   ListChecks,
@@ -41,6 +42,12 @@ import { CollaborationCursorExtension } from './CollaborationCursorExtension';
 import { buildEditorExtensions } from './editor-extensions';
 import { editorMarkdown } from './editor-markdown';
 import { editorProjectIds, nextEditorInstanceId } from './editor-state';
+import {
+  type ImageUploadTarget,
+  insertImageFromUrl,
+  pickAndInsertImage,
+  useImageUpload,
+} from './image-upload';
 
 interface CollaborativeEditorProps {
   ydoc: Y.Doc;
@@ -49,6 +56,8 @@ interface CollaborativeEditorProps {
   onChange?: (md: string) => void;
   placeholder?: string;
   projectId?: string;
+  /** The page uploaded images belong to */
+  uploadTarget?: ImageUploadTarget;
   /** Set while a merge swaps the content: the editor is read-only and shows "Merging..." */
   locked?: { byName: string } | null;
   /** Whether the user may edit; viewers get a read-only editor */
@@ -94,6 +103,7 @@ function ToolbarDivider() {
  * @param root0.onChange
  * @param root0.placeholder
  * @param root0.projectId
+ * @param root0.uploadTarget
  * @param root0.locked
  * @param root0.canEdit
  */
@@ -104,6 +114,7 @@ export function CollaborativeEditor({
   onChange,
   placeholder,
   projectId,
+  uploadTarget,
   locked = null,
   canEdit = true,
 }: CollaborativeEditorProps) {
@@ -149,6 +160,8 @@ export function CollaborativeEditor({
     },
   });
 
+  useImageUpload(editor, uploadTarget);
+
   // Read-only during a merge lock; a layout effect, so it applies in the same render as the lock
   const editable = !locked && canEdit;
   useLayoutEffect(() => {
@@ -170,13 +183,6 @@ export function CollaborativeEditor({
     const url = window.prompt('URL:');
     if (url) {
       editor!.chain().focus().setLink({ href: url }).run();
-    }
-  }
-
-  function insertImage() {
-    const url = window.prompt('Image URL:');
-    if (url) {
-      editor!.chain().focus().setImage({ src: url }).run();
     }
   }
 
@@ -280,7 +286,10 @@ export function CollaborativeEditor({
         <ToolbarButton onClick={insertLink} active={editor.isActive('link')} title="Link">
           <LinkIcon className={ic} />
         </ToolbarButton>
-        <ToolbarButton onClick={insertImage} title="Image">
+        <ToolbarButton onClick={() => pickAndInsertImage(editor)} title="Upload image">
+          <Upload className={ic} />
+        </ToolbarButton>
+        <ToolbarButton onClick={() => insertImageFromUrl(editor)} title="Image URL">
           <ImageIcon className={ic} />
         </ToolbarButton>
         <ToolbarButton onClick={insertTable} title="Table">

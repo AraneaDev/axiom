@@ -11,9 +11,12 @@ import {
 } from 'lucide-react';
 import { marked, type Token } from 'marked';
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
+import { attachmentIdOf } from '@/hooks/useAttachmentObjectUrl';
 import { cn } from '@/lib/utils';
 
+import { AttachmentImage } from './AttachmentImage';
 import { MermaidBlock } from './MermaidBlock';
 
 // Slug formula must match extractToc in PageView.tsx
@@ -37,9 +40,70 @@ const headingRenderer = {
     return `<h${depth} id="${id}">${inner}</h${depth}>\n`;
   },
 };
-marked.use({ renderer: headingRenderer });
+
+function escapeAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// Attachment images need the auth header, which an <img> cannot send: leave a slot that
+// HtmlContent fills with an AttachmentImage. Other images use marked's default.
+const imageRenderer = {
+  image({ href, text }: { href: string; text: string }) {
+    if (attachmentIdOf(href) === null) return false;
+    return `<span class="attachment-image-slot" data-attachment-src="${escapeAttr(href)}" data-alt="${escapeAttr(text)}"></span>`;
+  },
+};
+marked.use({ renderer: { ...headingRenderer, ...imageRenderer } });
 
 type Segment = { type: 'html'; content: string } | { type: 'mermaid'; content: string };
+
+interface ImageSlot {
+  el: HTMLElement;
+  src: string;
+  alt: string;
+}
+
+/**
+ * Sanitized HTML from the renderer. Attachment image slots in it are filled with
+ * AttachmentImage, which loads the file with auth and shows it from a blob URL.
+ * @param props - The HTML and wrapper classes.
+ * @param props.html - Sanitized HTML.
+ * @param props.className - Classes for the wrapper div.
+ */
+function HtmlContent({ html, className }: { html: string; className?: string }) {
+  // The wrapper is remounted when the HTML changes (key), so its slots are always current
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  const slots = useMemo<ImageSlot[]>(() => {
+    if (!container) return [];
+    return Array.from(container.querySelectorAll<HTMLElement>('span[data-attachment-src]')).map(
+      (el) => ({ el, src: el.dataset.attachmentSrc ?? '', alt: el.dataset.alt ?? '' }),
+    );
+  }, [container]);
+  // A new object every render would make React write the HTML again, wiping the filled slots
+  const innerHtml = useMemo(() => ({ __html: html }), [html]);
+
+  return (
+    <>
+      <div
+        key={html}
+        ref={setContainer}
+        className={className}
+        dangerouslySetInnerHTML={innerHtml}
+      />
+      {slots.map((slot, i) =>
+        createPortal(
+          <AttachmentImage src={slot.src} alt={slot.alt} />,
+          slot.el,
+          `${slot.src}-${i}`,
+        ),
+      )}
+    </>
+  );
+}
 
 const MERMAID_FENCE = /```mermaid\s*\n([\s\S]*?)```/g;
 
@@ -274,10 +338,7 @@ function ReadOnlyCallout({ type, html }: { type: CalloutType; html: string }) {
   return (
     <div className={cn('my-3 rounded-r-md border-l-4 p-3 flex gap-3', styles.border, styles.bg)}>
       <Icon className={cn('h-5 w-5 flex-shrink-0 mt-0.5', styles.icon)} />
-      <div
-        className="flex-1 min-w-0 prose prose-sm max-w-none"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      <HtmlContent html={html} className="flex-1 min-w-0 prose prose-sm max-w-none" />
     </div>
   );
 }
@@ -305,9 +366,9 @@ function ReadOnlyCollapsible({
         {title}
       </button>
       {isOpen && (
-        <div
+        <HtmlContent
+          html={html}
           className="border-t border-border px-3 py-2 prose prose-sm max-w-none"
-          dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
     </div>
@@ -375,9 +436,7 @@ function processCustomBlocks(html: string, allHtml: string): React.ReactNode[] {
 
   const flushBuffer = () => {
     if (htmlBuffer.trim()) {
-      parts.push(
-        <div key={`html-${partIndex++}`} dangerouslySetInnerHTML={{ __html: htmlBuffer }} />,
-      );
+      parts.push(<HtmlContent key={`html-${partIndex++}`} html={htmlBuffer} />);
     }
     htmlBuffer = '';
   };
@@ -430,7 +489,7 @@ function processCustomBlocks(html: string, allHtml: string): React.ReactNode[] {
 
   flushBuffer();
 
-  return parts.length > 0 ? parts : [<div key="full" dangerouslySetInnerHTML={{ __html: html }} />];
+  return parts.length > 0 ? parts : [<HtmlContent key="full" html={html} />];
 }
 
 /**
@@ -468,7 +527,7 @@ export function MarkdownRenderer({ content, className = '', basePath }: Markdown
             seg.content.includes('data-table-of-contents') ? (
               <div key={i}>{processCustomBlocks(seg.content, fullHtml)}</div>
             ) : (
-              <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />
+              <HtmlContent key={i} html={seg.content} />
             )
           ) : null
         ) : (

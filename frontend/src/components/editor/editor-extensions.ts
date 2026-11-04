@@ -7,6 +7,7 @@ import { getSchemaExtensions } from '@/editor-core/schema-extensions';
 
 import { CalloutExtension } from './CalloutExtension';
 import { CollapsibleExtension } from './CollapsibleExtension';
+import { ImageExtension } from './ImageExtension';
 import { IssueEmbedExtension } from './IssueEmbedExtension';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
@@ -51,6 +52,7 @@ export function buildEditorExtensions({
     tableOfContents: TableOfContentsExtension,
     smartLink: SmartLinkExtension,
     issueEmbed: IssueEmbedExtension,
+    image: ImageExtension,
   };
 
   const extensions: AnyExtension[] = [];

@@ -2,6 +2,7 @@ import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./MermaidBlock', () => ({ MermaidBlock: () => null }));
+vi.mock('@/api/client', () => ({ fetchWithAuth: vi.fn() }));
 
 import { MarkdownRenderer } from './MarkdownRenderer';
 

@@ -32,6 +32,16 @@ export function useToast() {
   return ctx;
 }
 
+/**
+ * Like useToast, but returns null outside a ToastProvider instead of throwing. For components
+ * that can be mounted without one and only need to report a failure when they can.
+ * @returns The toast API, or null.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useOptionalToast() {
+  return useContext(ToastContext);
+}
+
 const ICONS = { success: CheckCircle, error: AlertCircle, info: Info };
 const STYLES = {
   success: 'bg-success/10 border-success/20 text-success',

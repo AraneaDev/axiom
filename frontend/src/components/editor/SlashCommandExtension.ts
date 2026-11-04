@@ -17,12 +17,14 @@ import {
   ListTree,
   Quote,
   Minus,
-  ImageIcon,
+  Upload,
+  Link,
   GitBranch,
   CircleDot,
 } from 'lucide-react';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
 
+import { insertImageFromUrl, pickAndInsertImage } from './image-upload';
 import SlashCommandMenu, {
   type SlashCommandItem,
   type SlashCommandMenuRef,
@@ -131,15 +133,16 @@ const commands: CommandDefinition[] = [
   },
   // Media
   {
-    name: 'Image',
+    name: 'Image: Upload file',
     category: 'Media',
-    icon: ImageIcon,
-    action: (editor) => {
-      const url = window.prompt('Image URL:');
-      if (url) {
-        editor.chain().focus().setImage({ src: url }).run();
-      }
-    },
+    icon: Upload,
+    action: (editor) => pickAndInsertImage(editor),
+  },
+  {
+    name: 'Image: Image URL',
+    category: 'Media',
+    icon: Link,
+    action: (editor) => insertImageFromUrl(editor),
   },
   {
     name: 'Mermaid Diagram',

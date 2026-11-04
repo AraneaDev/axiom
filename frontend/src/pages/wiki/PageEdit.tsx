@@ -384,6 +384,7 @@ export default function PageEdit() {
                   fragmentName={collab.fragmentName}
                   onChange={setBody}
                   placeholder="Write your content..."
+                  uploadTarget={existingPage?.id ? { pageId: existingPage.id } : undefined}
                   locked={collab.locked}
                   canEdit={canEdit}
                 />
@@ -392,6 +393,7 @@ export default function PageEdit() {
                   value={body}
                   onChange={setBody}
                   placeholder="Write your content..."
+                  uploadTarget={existingPage?.id ? { pageId: existingPage.id } : undefined}
                 />
               ) : (
                 <Card className="min-h-[300px] p-4">
