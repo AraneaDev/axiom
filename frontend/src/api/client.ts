@@ -150,6 +150,33 @@ export async function fetchWithAuth(url: string, init?: RequestInit): Promise<Re
 }
 
 /**
+ * Fetch a file as a Blob with auth. Refreshes an expired access token once (sharing the
+ * single in-flight refresh with the other helpers) and retries.
+ * @param url - Absolute path of the file, e.g. /api/attachments/<id>.
+ * @returns The file.
+ * @throws {ApiError} With the response status when the file can't be fetched.
+ */
+export async function getBlob(url: string): Promise<Blob> {
+  let res = await fetchWithAuth(url);
+  if (res.status === 401 && refreshToken) {
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    try {
+      await refreshPromise;
+    } catch {
+      window.location.href = '/login';
+      throw new ApiError(401, 'Session expired');
+    }
+    res = await fetchWithAuth(url);
+  }
+  if (!res.ok) throw new ApiError(res.status, 'File could not be loaded');
+  return res.blob();
+}
+
+/**
  * Send a FormData request with auth, auto-refresh, and error handling.
  * Use for file uploads where Content-Type must be set by the browser.
  * @param path

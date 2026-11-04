@@ -554,6 +554,22 @@ describe('upload intents', () => {
       expect((await authGet(`/api/attachments/${staged.id}`, stranger.token)).status).toBe(403);
     });
 
+    it('binds a staged image when a new page is created with the reference', async () => {
+      // The editor has no page yet while it creates one: the upload is staged
+      const staged = await stage(ctx.owner);
+      const slug = `new-page-${Date.now()}`;
+      const created = await authPost(`/api/wiki/spaces/${spaceId}/pages`, ctx.owner.token, {
+        title: slug,
+        slug,
+        body: `New ${reference(staged.id)}`,
+      });
+      expect(created.status).toBe(201);
+      expect(await attachmentRow(staged.id)).toMatchObject({
+        pageId: created.body.id,
+        stagedAt: null,
+      });
+    });
+
     it("does not bind another user's staged attachment", async () => {
       const staged = await stage(stranger);
       const res = await updatePage(pageSlug, reference(staged.id));

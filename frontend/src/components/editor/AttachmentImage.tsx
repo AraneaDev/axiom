@@ -1,5 +1,6 @@
-import { ImageOff, Loader2 } from 'lucide-react';
+import { ImageOff } from 'lucide-react';
 
+import { Spinner } from '@/components/ui/Spinner';
 import { useAttachmentObjectUrl } from '@/hooks/useAttachmentObjectUrl';
 import { cn } from '@/lib/utils';
 
@@ -41,7 +42,7 @@ export function AttachmentImage({ src, alt = '', className }: AttachmentImagePro
         className="inline-flex items-center justify-center rounded-md bg-surface-tertiary px-4 py-3"
         data-testid="attachment-image-loading"
       >
-        <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />
+        <Spinner size="sm" />
       </span>
     );
   }

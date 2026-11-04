@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import { fetchWithAuth } from '@/api/client';
+import { getBlob } from '@/api/client';
 
 const ATTACHMENT_SRC = /^\/api\/attachments\/([A-Za-z0-9_-]+)$/;
 
@@ -12,12 +12,6 @@ const ATTACHMENT_SRC = /^\/api\/attachments\/([A-Za-z0-9_-]+)$/;
  */
 export function attachmentIdOf(src: string): string | null {
   return ATTACHMENT_SRC.exec(src)?.[1] ?? null;
-}
-
-async function fetchAttachmentBlob(id: string): Promise<Blob> {
-  const res = await fetchWithAuth(`/api/attachments/${id}`);
-  if (!res.ok) throw new Error(`Attachment ${id} could not be loaded (${res.status})`);
-  return res.blob();
 }
 
 /**
@@ -34,7 +28,7 @@ export function useAttachmentObjectUrl(src: string): { url: string | null; error
   const id = attachmentIdOf(src);
   const { data: blob, isError } = useQuery({
     queryKey: ['attachment-blob', id],
-    queryFn: () => fetchAttachmentBlob(id!),
+    queryFn: () => getBlob(`/api/attachments/${id}`),
     enabled: id !== null,
     staleTime: Infinity,
   });

@@ -79,8 +79,11 @@ function HtmlContent({ html, className }: { html: string; className?: string }) 
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const slots = useMemo<ImageSlot[]>(() => {
     if (!container) return [];
-    return Array.from(container.querySelectorAll<HTMLElement>('span[data-attachment-src]')).map(
-      (el) => ({ el, src: el.dataset.attachmentSrc ?? '', alt: el.dataset.alt ?? '' }),
+    return (
+      Array.from(container.querySelectorAll<HTMLElement>('span[data-attachment-src]'))
+        .map((el) => ({ el, src: el.dataset.attachmentSrc ?? '', alt: el.dataset.alt ?? '' }))
+        // Raw HTML can write this span too: only attachment paths may be fetched
+        .filter((slot) => attachmentIdOf(slot.src) !== null)
     );
   }, [container]);
   // A new object every render would make React write the HTML again, wiping the filled slots

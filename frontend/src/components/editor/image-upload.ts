@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/core';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import { useOptionalToast } from '@/components/ui/Toast';
@@ -27,19 +27,25 @@ export function useImageUpload(editor: Editor | null, target?: ImageUploadTarget
   const toast = useOptionalToast();
   const issueId = target?.issueId;
   const pageId = target?.pageId;
+  // The toast API is a new object every render; read it through a ref so the editor's
+  // config is set once per editor and target, not on every render
+  const toastRef = useRef(toast);
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
   useEffect(() => {
     if (!editor) return;
     configs.set(editor, {
       target: issueId || pageId ? { issueId, pageId } : undefined,
       onError: (message) => {
-        if (toast) toast.error(message);
+        if (toastRef.current) toastRef.current.error(message);
         else console.error(message);
       },
     });
     return () => {
       configs.delete(editor);
     };
-  }, [editor, issueId, pageId, toast]);
+  }, [editor, issueId, pageId]);
 }
 
 /**

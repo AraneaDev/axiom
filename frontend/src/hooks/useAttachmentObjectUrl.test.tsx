@@ -3,9 +3,9 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockFetchWithAuth = vi.fn();
+const mockGetBlob = vi.fn();
 vi.mock('@/api/client', () => ({
-  fetchWithAuth: (...args: unknown[]) => mockFetchWithAuth(...args),
+  getBlob: (...args: unknown[]) => mockGetBlob(...args),
 }));
 
 import { useAttachmentObjectUrl } from './useAttachmentObjectUrl';
@@ -22,7 +22,7 @@ describe('useAttachmentObjectUrl', () => {
   const revoke = vi.fn();
 
   beforeEach(() => {
-    mockFetchWithAuth.mockReset();
+    mockGetBlob.mockReset();
     revoke.mockReset();
     counter = 0;
     URL.createObjectURL = vi.fn(() => `blob:test/${++counter}`);
@@ -30,13 +30,13 @@ describe('useAttachmentObjectUrl', () => {
   });
 
   it('fetches an attachment source with auth and returns a blob URL', async () => {
-    mockFetchWithAuth.mockResolvedValue({ ok: true, blob: async () => new Blob(['x']) });
+    mockGetBlob.mockResolvedValue(new Blob(['x']));
     const { result } = renderHook(() => useAttachmentObjectUrl('/api/attachments/abc123'), {
       wrapper: makeWrapper(),
     });
     expect(result.current).toEqual({ url: null, error: false });
     await waitFor(() => expect(result.current.url).toBe('blob:test/1'));
-    expect(mockFetchWithAuth).toHaveBeenCalledWith('/api/attachments/abc123');
+    expect(mockGetBlob).toHaveBeenCalledWith('/api/attachments/abc123');
     expect(result.current.error).toBe(false);
   });
 
@@ -45,11 +45,11 @@ describe('useAttachmentObjectUrl', () => {
       wrapper: makeWrapper(),
     });
     expect(result.current).toEqual({ url: 'https://example.com/a.png', error: false });
-    expect(mockFetchWithAuth).not.toHaveBeenCalled();
+    expect(mockGetBlob).not.toHaveBeenCalled();
   });
 
   it('reports an error when the fetch is refused', async () => {
-    mockFetchWithAuth.mockResolvedValue({ ok: false, status: 404 });
+    mockGetBlob.mockRejectedValue(new Error('404'));
     const { result } = renderHook(() => useAttachmentObjectUrl('/api/attachments/gone'), {
       wrapper: makeWrapper(),
     });
@@ -58,7 +58,7 @@ describe('useAttachmentObjectUrl', () => {
   });
 
   it('revokes the blob URL on unmount and fetches the same attachment once', async () => {
-    mockFetchWithAuth.mockResolvedValue({ ok: true, blob: async () => new Blob(['x']) });
+    mockGetBlob.mockResolvedValue(new Blob(['x']));
     const wrapper = makeWrapper();
     const first = renderHook(() => useAttachmentObjectUrl('/api/attachments/abc123'), { wrapper });
     const second = renderHook(() => useAttachmentObjectUrl('/api/attachments/abc123'), {
@@ -66,14 +66,18 @@ describe('useAttachmentObjectUrl', () => {
     });
     await waitFor(() => expect(first.result.current.url).not.toBeNull());
     await waitFor(() => expect(second.result.current.url).not.toBeNull());
-    expect(mockFetchWithAuth).toHaveBeenCalledTimes(1);
+    expect(mockGetBlob).toHaveBeenCalledTimes(1);
     const url = first.result.current.url;
+    const otherUrl = second.result.current.url;
+    expect(otherUrl).not.toBe(url);
     first.unmount();
     expect(revoke).toHaveBeenCalledWith(url);
+    expect(revoke).not.toHaveBeenCalledWith(otherUrl);
+    expect(second.result.current.url).toBe(otherUrl);
   });
 
   it('revokes the previous blob URL when the source changes', async () => {
-    mockFetchWithAuth.mockResolvedValue({ ok: true, blob: async () => new Blob(['x']) });
+    mockGetBlob.mockResolvedValue(new Blob(['x']));
     const { result, rerender } = renderHook(({ src }) => useAttachmentObjectUrl(src), {
       wrapper: makeWrapper(),
       initialProps: { src: '/api/attachments/one' },
