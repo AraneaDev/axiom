@@ -71,6 +71,42 @@ describe('require2fa with enforcement on', () => {
     expect(res.status).toBeLessThan(300);
   });
 
+  it('lets them read their own profile, which the app loads first', async () => {
+    const res = await request(app).get('/api/users/me').set('Authorization', bearer());
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(without2fa.id);
+  });
+
+  it.each(['PATCH', 'PUT', 'POST', 'DELETE', 'HEAD'])(
+    'refuses them %s on that same path',
+    async (method) => {
+      const res = await rawRequest(server, method, '/api/users/me', bearer(), {
+        displayName: 'Changed without 2FA',
+      });
+      expect(res.status).toBe(403);
+      if (method !== 'HEAD') expect(res.body.error?.code).toBe(REQUIRED);
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: without2fa.id } });
+      expect(user.displayName).not.toBe('Changed without 2FA');
+    },
+  );
+
+  it.each([
+    ['GET', '/api/auth/logout'],
+    ['GET', '/api/auth/2fa/enable'],
+    ['DELETE', '/api/auth/2fa/disable'],
+    ['PATCH', '/api/auth/login'],
+  ])('refuses %s %s, an exempt path with another method', async (method, target) => {
+    const res = await rawRequest(server, method, target, bearer());
+    expect(res.status).toBe(403);
+    expect(res.body.error?.code).toBe(REQUIRED);
+  });
+
+  it('does not exempt what lies below the profile', async () => {
+    const res = await request(app).get('/api/users/me/dashboard').set('Authorization', bearer());
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe(REQUIRED);
+  });
+
   it('refuses them everything else', async () => {
     const res = await request(app).get('/api/notifications').set('Authorization', bearer());
     expect(res.status).toBe(403);
@@ -94,6 +130,9 @@ describe('require2fa with enforcement on', () => {
     ['an exempt path in a fragment', '/api/notifications#/auth/me'],
     ['an exempt path in the query', '/api/notifications?x=/auth/me'],
     ['an exempt path as a prefix', '/api/auth/me/x'],
+    ['the profile in upper case', '/api/USERS/ME'],
+    ['the profile with a trailing slash', '/api/users/me/'],
+    ['the profile with an encoded slash', '/api/users%2Fme'],
   ])('does not count %s as exempt', async (_name, target) => {
     const res = await rawRequest(server, 'GET', target, bearer());
     expect(res.status, target).toBe(403);

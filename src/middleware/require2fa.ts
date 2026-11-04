@@ -8,20 +8,22 @@ import { getSiteSettings } from '../modules/site-settings/site-settings.service'
 import type { AuthPayload } from './auth';
 
 /**
- * Routes exempt from 2FA enforcement (users need these to set up 2FA or manage session).
- * Relative to the /api mount, as `req.path` is. Matched exactly, so another spelling of one of
- * these meets the check.
+ * Requests exempt from 2FA enforcement: what the app needs to load, set up 2FA and manage the
+ * session, by method and path relative to the /api mount, as `req.path` is. Matched exactly, so
+ * another spelling or method of one of these meets the check. The user's own profile is exempt
+ * for reading only: the app loads it first, and changing it needs 2FA.
  */
-const EXEMPT_PATHS = new Set([
-  '/auth/2fa/enable',
-  '/auth/2fa/verify',
-  '/auth/2fa/disable',
-  '/auth/logout',
-  '/auth/refresh',
-  '/auth/me',
-  '/auth/login',
-  '/auth/register',
-  '/site-settings',
+const EXEMPT_REQUESTS = new Set([
+  'POST /auth/2fa/enable',
+  'POST /auth/2fa/verify',
+  'POST /auth/2fa/disable',
+  'POST /auth/logout',
+  'POST /auth/refresh',
+  'GET /auth/me',
+  'POST /auth/login',
+  'POST /auth/register',
+  'GET /site-settings',
+  'GET /users/me',
 ]);
 
 /**
@@ -49,8 +51,8 @@ export async function require2fa(req: Request, res: Response, next: NextFunction
       }
     }
 
-    // Skip exempt paths
-    if (EXEMPT_PATHS.has(req.path)) return next();
+    // Skip exempt requests
+    if (EXEMPT_REQUESTS.has(`${req.method} ${req.path}`)) return next();
 
     const settings = await getSiteSettings();
     if (!settings.enforce2fa) return next();

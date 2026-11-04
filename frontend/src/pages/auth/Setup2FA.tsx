@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ShieldCheck } from 'lucide-react';
+import { LogOut, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -9,12 +9,14 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Spinner, PageLoader } from '@/components/ui/Spinner';
 import { useFormError } from '@/hooks/useFormError';
+import { useAuthStore } from '@/stores/auth.store';
 
 /**
  *
  */
 export default function Setup2FA() {
   const navigate = useNavigate();
+  const { loadUser, logout } = useAuthStore();
   const [code, setCode] = useState('');
   const { error, setError, clearError } = useFormError();
   const [loading, setLoading] = useState(false);
@@ -23,6 +25,12 @@ export default function Setup2FA() {
     queryKey: ['2fa-setup'],
     queryFn: () => authApi.enable2FA(),
     retry: false,
+    // Each call makes a new secret, so a refetch would invalidate the code being scanned, and a
+    // cached one could show the secret to the next user of this tab
+    gcTime: 0,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     meta: { onError: () => navigate('/') },
   });
 
@@ -31,6 +39,7 @@ export default function Setup2FA() {
     setLoading(true);
     try {
       await authApi.verify2FA(code);
+      await loadUser();
       navigate('/');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Invalid code');
@@ -89,6 +98,10 @@ export default function Setup2FA() {
             )}
           </Button>
         </div>
+
+        <Button variant="ghost" size="sm" onClick={logout} className="mt-4 w-full">
+          <LogOut className="h-3.5 w-3.5" /> Sign out
+        </Button>
       </Card>
     </div>
   );

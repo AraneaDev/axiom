@@ -1,3 +1,5 @@
+/** Outside the app shell, so nothing on it calls a route that 2FA enforcement refuses. */
+const TWO_FACTOR_SETUP_PATH = '/setup-2fa';
 const API_BASE = '/api';
 
 class ApiError extends Error {
@@ -113,13 +115,15 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
       return {};
     });
 
-    // 2FA enforcement — redirect to security settings
+    // 2FA enforcement: the setup page is the one page this user can use
     if (
       res.status === 403 &&
       body?.error?.code === 'TWO_FACTOR_SETUP_REQUIRED' &&
       typeof window !== 'undefined'
     ) {
-      window.location.href = '/settings/security';
+      if (window.location.pathname !== TWO_FACTOR_SETUP_PATH) {
+        window.location.href = TWO_FACTOR_SETUP_PATH;
+      }
       return Promise.reject(new Error(body.error.message));
     }
 
@@ -193,13 +197,15 @@ export async function apiFormData<T = unknown>(
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
 
-    // 2FA enforcement — redirect to security settings
+    // 2FA enforcement: the setup page is the one page this user can use
     if (
       res.status === 403 &&
       body?.error?.code === 'TWO_FACTOR_SETUP_REQUIRED' &&
       typeof window !== 'undefined'
     ) {
-      window.location.href = '/settings/security';
+      if (window.location.pathname !== TWO_FACTOR_SETUP_PATH) {
+        window.location.href = TWO_FACTOR_SETUP_PATH;
+      }
       return Promise.reject(new Error(body.error.message));
     }
 
