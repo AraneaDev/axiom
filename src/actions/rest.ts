@@ -124,9 +124,13 @@ export function mountActions(router: Router, defs: ActionDef[]): void {
       // controllers did. Neither can override the params that authorize reads.
       const query = binding.method === 'GET' ? req.query : {};
       // An action with a target has fields beyond its path params (R10), which a write reads from
-      // the body, unless the binding says it takes none (a toggle)
+      // the body, unless the binding says it takes none (a toggle). A raw handler reads its own:
+      // a multipart body isn't parsed yet at this point.
       const takesBody =
-        ['POST', 'PUT', 'PATCH'].includes(binding.method) && !!def.target && !binding.emptyBody;
+        ['POST', 'PUT', 'PATCH'].includes(binding.method) &&
+        !!def.target &&
+        !binding.emptyBody &&
+        !binding.raw;
       const body: unknown = req.body;
       const plain = typeof body === 'object' && body !== null && !Array.isArray(body);
       // The old controllers validated the body, so none or an array was a 400; it comes after

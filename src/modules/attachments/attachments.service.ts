@@ -10,12 +10,110 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { assertPageAccess } from '../../middleware/rbac';
 import { checkProjectAccess, checkProjectAction } from '../../middleware/requireProjectAccess';
+import { scopesCover } from '../../middleware/token-scopes';
 import { getStorage } from '../../storage/storage';
 import { ERR } from '../../utils/error-messages';
 import { PROJECT_TEAM_ORG_INCLUDE, SPACE_TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
 
 const execFileAsync = promisify(execFile);
+
+/** The most an attachment can hold, whichever way it arrives. */
+export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+const ALLOWED_MIME_PATTERNS = [
+  /^image\//,
+  /^application\/pdf$/,
+  /^application\/msword$/,
+  /^application\/vnd\.openxmlformats-officedocument\./,
+  /^text\/plain$/,
+  /^text\/csv$/,
+  /^application\/zip$/,
+  /^application\/x-tar$/,
+  /^application\/gzip$/,
+];
+
+/** type/subtype and nothing else: the value ends up in a response header. */
+const MIME_TOKEN = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/;
+
+/**
+ * Whether a file of this type may be stored.
+ * @param mimeType - A bare type, without parameters
+ */
+export function isAllowedMimeType(mimeType: string): boolean {
+  return MIME_TOKEN.test(mimeType) && ALLOWED_MIME_PATTERNS.some((re) => re.test(mimeType));
+}
+
+/**
+ * The bare type of a Content-Type value.
+ * @param contentType - A value such as `Image/PNG; charset=binary`
+ */
+export function bareMimeType(contentType: string): string {
+  return contentType.split(';')[0].trim().toLowerCase();
+}
+
+/**
+ * The refusal for a type that may not be stored.
+ * @param mimeType - The type
+ */
+export function mimeTypeRefusal(mimeType: string): AppError {
+  return new AppError(415, `File type ${mimeType} is not allowed`);
+}
+
+/** The parent of an attachment, as far as it has one. */
+export interface AttachmentParent {
+  issueId?: string | null;
+  pageId?: string | null;
+}
+
+/**
+ * For API tokens: an attachment belongs to an issue or a page, so on top of the files scope the
+ * token needs the issues or wiki scope that covers it (read to read, write to upload or delete).
+ * A session has no scopes and passes.
+ * @param scopes - The token's scopes, undefined for a session
+ * @param area - The area of the parent
+ * @param write - Whether the action writes
+ * @throws {AppError} 403 SCOPE
+ */
+export function assertParentAreaScope(
+  scopes: readonly string[] | undefined,
+  area: 'issues' | 'wiki',
+  write: boolean,
+): void {
+  if (scopes && !scopesCover(scopes, area, write)) {
+    throw new AppError(403, 'This API token does not have the scope for this attachment', 'SCOPE');
+  }
+}
+
+/**
+ * The same for a parent by its ids, where either or both may be set.
+ * @param scopes - The token's scopes, undefined for a session
+ * @param parent - The attachment's parent
+ * @param write - Whether the action writes
+ * @throws {AppError} 403 SCOPE
+ */
+export function assertParentScope(
+  scopes: readonly string[] | undefined,
+  parent: AttachmentParent,
+  write: boolean,
+): void {
+  if (parent.issueId) assertParentAreaScope(scopes, 'issues', write);
+  if (parent.pageId) assertParentAreaScope(scopes, 'wiki', write);
+}
+
+/**
+ * The parent of a stored attachment, empty when there is no such attachment: the action answers
+ * 404 for that itself, once the scope has passed.
+ * @param id - The attachment ID
+ */
+export async function getAttachmentParent(id: string): Promise<AttachmentParent> {
+  return (
+    (await prisma.attachment.findUnique({
+      where: { id },
+      select: { issueId: true, pageId: true },
+    })) ?? {}
+  );
+}
 
 const PANDOC_FORMAT_MAP: Record<string, string> = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
@@ -38,28 +136,51 @@ function buildStorageKey(originalName: string): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  const ext = path.extname(originalName).slice(1) || 'bin';
+  // The name comes from the client: only plain characters reach the key
+  const ext =
+    path
+      .extname(originalName)
+      .slice(1)
+      .replace(/[^a-zA-Z0-9]/g, '') || 'bin';
   const id = createId();
   return `attachments/${year}/${month}/${id}.${ext}`;
 }
 
+/** A file to store: from multer on disk (`path`), or in memory (`buffer`). */
+export interface IncomingFile {
+  originalname: string;
+  mimetype: string;
+  size: number;
+  path?: string;
+  buffer?: Buffer;
+}
+
 /**
  * Upload a file to storage and create the database record linking it to a resource.
- * @param file - The uploaded file from multer (supports both disk and memory storage)
+ * A temp file on disk is gone afterwards, whatever the outcome.
+ * @param file - The uploaded file
  * @param uploaderId - The user uploading the file
  * @param opts - Optional resource links (issueId, pageId, commentId)
  * @param opts.issueId
  * @param opts.pageId
  * @param opts.commentId
+ * @param opts.id - The attachment's id, when one was reserved for it
+ * @param opts.staged - Keep it without a parent until a body write references it
  * @returns The created attachment record
  */
 export async function uploadAttachment(
-  file: Express.Multer.File,
+  file: IncomingFile,
   uploaderId: string,
-  opts: { issueId?: string; pageId?: string; commentId?: string },
+  opts: {
+    issueId?: string;
+    pageId?: string;
+    commentId?: string;
+    id?: string;
+    staged?: boolean;
+  },
 ) {
-  // Attaching writes to the parent: refuse before storing anything, and drop the upload
   try {
+    // Attaching writes to the parent: refuse before storing anything
     await assertAttachmentParentAccess(uploaderId, opts, 'edit');
     // A comment attachment must name the comment's own issue
     if (opts.commentId) {
@@ -71,45 +192,45 @@ export async function uploadAttachment(
         throw new AppError(400, 'The comment does not belong to this issue', 'BAD_REQUEST');
       }
     }
-  } catch (err) {
+
+    const storageKey = buildStorageKey(file.originalname);
+    const storage = getStorage();
+    const fileData = file.path ? await fs.readFile(file.path) : (file.buffer ?? Buffer.alloc(0));
+    await storage.put(storageKey, fileData, file.mimetype);
+
+    let attachment;
+    try {
+      attachment = await prisma.attachment.create({
+        data: {
+          ...(opts.id ? { id: opts.id } : {}),
+          filename: path.basename(storageKey),
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          storageKey,
+          uploaderId,
+          issueId: opts.issueId ?? null,
+          pageId: opts.pageId ?? null,
+          commentId: opts.commentId ?? null,
+          stagedAt: opts.staged ? new Date() : null,
+        },
+      });
+    } catch (err) {
+      await storage.delete(storageKey).catch(() => {});
+      throw err;
+    }
+
+    if (opts.issueId) {
+      await logActivity('issue', opts.issueId, 'attachment_added', uploaderId, {
+        attachmentId: attachment.id,
+        fileName: file.originalname,
+      });
+    }
+
+    return attachment;
+  } finally {
     if (file.path) await fs.unlink(file.path).catch(() => {});
-    throw err;
   }
-
-  const storageKey = buildStorageKey(file.originalname);
-  const storage = getStorage();
-
-  // Support both disk storage (file.path) and memory storage (file.buffer)
-  const fileData = file.path ? await fs.readFile(file.path) : file.buffer;
-  await storage.put(storageKey, fileData, file.mimetype);
-
-  // Clean up temp file from disk storage
-  if (file.path) {
-    await fs.unlink(file.path).catch(() => {});
-  }
-
-  const attachment = await prisma.attachment.create({
-    data: {
-      filename: path.basename(storageKey),
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      storageKey,
-      uploaderId,
-      issueId: opts.issueId ?? null,
-      pageId: opts.pageId ?? null,
-      commentId: opts.commentId ?? null,
-    },
-  });
-
-  if (opts.issueId) {
-    await logActivity('issue', opts.issueId, 'attachment_added', uploaderId, {
-      attachmentId: attachment.id,
-      fileName: file.originalname,
-    });
-  }
-
-  return attachment;
 }
 
 /**
@@ -225,6 +346,29 @@ export async function listAttachments(opts: { issueId?: string; pageId?: string 
  * @throws {AppError} 403 if user is not the uploader
  */
 export async function deleteAttachment(id: string, userId: string) {
+  const attachment = await getDeletableAttachment(id, userId);
+
+  const storage = getStorage();
+  await storage.delete(attachment.storageKey);
+  await prisma.attachment.delete({ where: { id } });
+
+  if (attachment.issueId) {
+    await logActivity('issue', attachment.issueId, 'attachment_removed', userId, {
+      attachmentId: id,
+      fileName: attachment.originalName,
+    });
+  }
+}
+
+/**
+ * Get an attachment this user may delete.
+ * @param id - The attachment ID
+ * @param userId - The user attempting the deletion
+ * @returns The attachment record
+ * @throws {AppError} 404 if attachment not found
+ * @throws {AppError} 403 if user is not the uploader or can no longer change the parent
+ */
+export async function getDeletableAttachment(id: string, userId: string) {
   const attachment = await prisma.attachment.findUnique({ where: { id } });
   if (!attachment) throw new AppError(404, ERR.ATTACHMENT_NOT_FOUND, 'NOT_FOUND');
 
@@ -238,17 +382,7 @@ export async function deleteAttachment(id: string, userId: string) {
   if (attachment.issueId || attachment.pageId) {
     await assertAttachmentParentAccess(userId, attachment, 'edit');
   }
-
-  const storage = getStorage();
-  await storage.delete(attachment.storageKey);
-  await prisma.attachment.delete({ where: { id } });
-
-  if (attachment.issueId) {
-    await logActivity('issue', attachment.issueId, 'attachment_removed', userId, {
-      attachmentId: id,
-      fileName: attachment.originalName,
-    });
-  }
+  return attachment;
 }
 
 /**

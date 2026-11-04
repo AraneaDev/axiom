@@ -106,6 +106,9 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+    # Cleanup deletes staged files from the same volume the app stores them on
+    volumes:
+      - uploads:/data/uploads
     mem_limit: 256m
     cpus: 0.5
 

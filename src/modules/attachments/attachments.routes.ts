@@ -1,42 +1,38 @@
 import fs from 'fs';
 import path from 'path';
 
-import { NextFunction, Request, Response, Router } from 'express';
+import express, { type Request, type RequestHandler, type Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import multer, { FileFilterCallback } from 'multer';
+import multer, { type FileFilterCallback, MulterError } from 'multer';
 
-import { prisma } from '../../config/database';
-import { authenticate } from '../../middleware/auth';
+import { type RequestCtx, runWithRequestContext } from '../../lib/request-context';
+import { auditMiddleware } from '../../middleware/auditMiddleware';
 import { AppError } from '../../middleware/errorHandler';
-import { scopesCover } from '../../middleware/token-scopes';
+import { signedUploadLimiter } from '../../middleware/rate-limit';
+import { param } from '../../utils/params';
 
-import * as controller from './attachments.controller';
-
-const router = Router();
+import {
+  bareMimeType,
+  isAllowedMimeType,
+  MAX_ATTACHMENT_BYTES,
+  mimeTypeRefusal,
+} from './attachments.service';
+import {
+  assertUploadStillAllowed,
+  findUsableIntent,
+  storeSignedUpload,
+} from './upload-intents.service';
 
 const UPLOAD_DIR = '/tmp/uploads';
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-const ALLOWED_MIME_PATTERNS = [
-  /^image\//,
-  /^application\/pdf$/,
-  /^application\/msword$/,
-  /^application\/vnd\.openxmlformats-officedocument\./,
-  /^text\/plain$/,
-  /^text\/csv$/,
-  /^application\/zip$/,
-  /^application\/x-tar$/,
-  /^application\/gzip$/,
-];
-
 function fileFilter(_req: Express.Request, file: Express.Multer.File, cb: FileFilterCallback) {
-  const allowed = ALLOWED_MIME_PATTERNS.some((pattern) => pattern.test(file.mimetype));
-  if (allowed) {
+  if (isAllowedMimeType(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new AppError(415, `File type ${file.mimetype} is not allowed`));
+    cb(mimeTypeRefusal(file.mimetype));
   }
 }
 
@@ -49,67 +45,115 @@ const upload = multer({
       cb(null, `${unique}-${safeName}`);
     },
   }),
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+  limits: { fileSize: MAX_ATTACHMENT_BYTES },
   fileFilter,
 });
 
 const uploadRateLimit = rateLimit({
   windowMs: 60_000,
   max: 10,
-  message: { error: { message: 'Too many uploads, please try again later' } },
+  // Runs inside a handler, which has to hear about the refusal instead of being left waiting
+  handler: (_req, _res, next, options) => {
+    next(new AppError(options.statusCode, 'Too many uploads, please try again later'));
+  },
 });
 
-router.use(authenticate);
-
 /**
- * For API tokens: an attachment belongs to an issue or a page, so on top of the files scope
- * (checked by the path rules) the token needs the issues or wiki scope that covers it (read
- * to read, write to upload or delete). Session requests pass. Runs after multer on upload so the body is parsed.
- * @param req
- * @param _res
- * @param next
+ * Run a middleware inside a handler.
+ * @param middleware - The middleware
+ * @param req - The request
+ * @param res - The response
  */
-async function requireParentScope(req: Request, _res: Response, next: NextFunction) {
-  try {
-    const scopes = req.tokenScopes;
-    if (!scopes) return next();
-    const write = req.method !== 'GET' && req.method !== 'HEAD';
-    let parent: { issueId?: string | null; pageId?: string | null } = {};
-    if (req.params.id) {
-      parent =
-        (await prisma.attachment.findUnique({
-          where: { id: String(req.params.id) },
-          select: { issueId: true, pageId: true },
-        })) ?? {};
-    } else {
-      const source = (write ? req.body : req.query) as Record<string, unknown>;
-      parent = {
-        issueId: typeof source.issueId === 'string' ? source.issueId : undefined,
-        pageId: typeof source.pageId === 'string' ? source.pageId : undefined,
-      };
-    }
-    const ok =
-      (!parent.issueId || scopesCover(scopes, 'issues', write)) &&
-      (!parent.pageId || scopesCover(scopes, 'wiki', write));
-    if (!ok) {
-      // Refused after multer stored the upload: drop the temp file
-      if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {});
-      return next(
-        new AppError(403, 'This API token does not have the scope for this attachment', 'SCOPE'),
-      );
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
+function runMiddleware(middleware: RequestHandler, req: Request, res: Response): Promise<void> {
+  return new Promise((resolve, reject) => {
+    void middleware(req, res, (err?: unknown) => (err ? reject(err as Error) : resolve()));
+  });
 }
 
-router.post('/', uploadRateLimit, upload.single('file'), requireParentScope, controller.upload);
-router.get('/', requireParentScope, controller.list);
-router.get('/:id/meta', requireParentScope, controller.getMeta);
-router.get('/:id/preview', requireParentScope, controller.preview);
-router.get('/:id/convert', requireParentScope, controller.convertToMarkdown);
-router.get('/:id', requireParentScope, controller.download);
-router.delete('/:id', requireParentScope, controller.remove);
+/**
+ * What a client hears about a multipart body multer turned down. Multer removes a partly written
+ * temp file itself in all of these. An error with a code is the server's own (a full disk).
+ * @param err - What multer gave
+ */
+function multipartRefusal(err: unknown): unknown {
+  if (err instanceof MulterError) {
+    return err.code === 'LIMIT_FILE_SIZE'
+      ? new AppError(413, 'File is larger than 25 MB', 'FILE_TOO_LARGE')
+      : new AppError(400, err.message, 'BAD_UPLOAD');
+  }
+  if (err instanceof AppError || (err as NodeJS.ErrnoException).code) return err;
+  return new AppError(400, 'The upload could not be read', 'BAD_UPLOAD');
+}
 
-export default router;
+/**
+ * Apply the upload rate limit and parse a multipart body into `req.file` and `req.body`. A file
+ * left on disk after this is for the caller to store or remove.
+ * @param req - The request
+ * @param res - The response
+ */
+export async function receiveMultipart(req: Request, res: Response): Promise<void> {
+  await runMiddleware(uploadRateLimit, req, res);
+  await runMiddleware(upload.single('file'), req, res).catch((err: unknown) => {
+    throw multipartRefusal(err);
+  });
+}
+
+/**
+ * Read the raw body, without inflating it: the limit is on what gets stored.
+ * @param req - The request
+ * @param res - The response
+ * @param limit - The most it may hold
+ * @throws {AppError} 413 past the limit, 415 when it is compressed, 400 when it is empty
+ */
+async function readRawBody(req: Request, res: Response, limit: number): Promise<Buffer> {
+  const parser = express.raw({ type: () => true, limit, inflate: false });
+  await runMiddleware(parser, req, res).catch((err: { type?: string; status?: number }) => {
+    if (err.type === 'entity.too.large') {
+      throw new AppError(413, 'The file is larger than this upload URL allows', 'FILE_TOO_LARGE');
+    }
+    if (err.type === 'encoding.unsupported') {
+      throw new AppError(415, 'Compressed uploads are not supported');
+    }
+    if (err.status && err.status < 500) throw new AppError(err.status, 'The upload failed');
+    throw err;
+  });
+  const body: unknown = req.body;
+  if (!Buffer.isBuffer(body) || body.length === 0) {
+    throw new AppError(400, 'No file provided', 'MISSING_FILE');
+  }
+  return body;
+}
+
+/**
+ * Signed uploads. index.ts mounts this ahead of the JSON parser, the CSRF guard and require2fa:
+ * the signature is the credential and there is no session a forged request could ride on. It is
+ * one exact method and path, so every other request meets those as usual.
+ *
+ * The signature comes first and the body last, so that nobody can make the server buffer 25 MB
+ * without holding a valid URL. It answers for itself what authenticate and the audit middleware
+ * would do for a request further down.
+ */
+export const signedUploadRouter = Router();
+
+signedUploadRouter.put('/api/uploads/:uploadId', signedUploadLimiter, async (req, res) => {
+  const intent = await findUsableIntent(param(req, 'uploadId'), req.query.sig);
+
+  req.userId = intent.userId;
+  const requestCtx: RequestCtx = {
+    userId: intent.userId,
+    apiTokenId: intent.apiToken?.id,
+    apiTokenName: intent.apiToken?.name,
+    channel: intent.apiToken ? 'rest-token' : 'ui',
+  };
+  await runWithRequestContext(requestCtx, async () => {
+    auditMiddleware(req, res, () => {});
+
+    // The type was signed for: anything else is refused rather than stored under the wrong one
+    const sent = req.headers['content-type'];
+    if (sent && bareMimeType(sent) !== intent.mimeType) throw mimeTypeRefusal(bareMimeType(sent));
+
+    await assertUploadStillAllowed(intent);
+    const data = await readRawBody(req, res, intent.maxBytes);
+    res.status(201).json(await storeSignedUpload(intent, data));
+  });
+});

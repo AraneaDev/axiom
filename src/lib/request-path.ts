@@ -11,3 +11,12 @@ import parseurl from 'parseurl';
 export function requestPathname(req: Request): string {
   return parseurl.original(req)?.pathname ?? '/';
 }
+
+/**
+ * The request URL for logs. A signed upload URL can still be used when its request failed, so its
+ * signature stays out of them.
+ * @param req - The request
+ */
+export function loggableUrl(req: Pick<Request, 'originalUrl'>): string {
+  return req.originalUrl.replace(/([?&]sig=)[^&#]*/g, '$1[redacted]');
+}

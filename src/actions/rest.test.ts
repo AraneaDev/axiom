@@ -139,6 +139,20 @@ registerActions([
       ctx.http?.res.status(200).type('text/plain').send(ctx.http.req.originalUrl);
     },
   }),
+  defineAction({
+    name: 'rest.rawWithTarget',
+    area: 'issues',
+    kind: 'write',
+    summary: 'Reads its own body, as a multipart upload does',
+    target: z.object({}),
+    input: z.object({}),
+    output: z.undefined(),
+    rest: { method: 'POST', path: '/api/rest-test/raw-target', raw: true },
+    authorize: noAuthorize,
+    handler: async (ctx) => {
+      ctx.http?.res.status(201).end();
+    },
+  }),
   // The legacy table refuses every token on /api/admin, and lets wiki scopes through on /api/wiki
   reader('rest.legacyRefuses', 'issues', '/api/admin/rest-test'),
   reader('rest.legacyAllows', 'issues', '/api/wiki/rest-test'),
@@ -319,6 +333,16 @@ describe('REST adapter', () => {
       seenContexts.length = 0;
       await request(app).get('/api/rest-test/context').set('Authorization', jwtHeader);
       expect(seenContexts[0].http).toBeUndefined();
+    });
+
+    it('leaves the body of a raw write with a target to its handler', async () => {
+      const res = await request(app)
+        .post('/api/rest-test/raw-target')
+        .set(CSRF)
+        .set('Authorization', jwtHeader)
+        .set('Content-Type', 'multipart/form-data; boundary=x')
+        .send('--x--\r\n');
+      expect(res.status).toBe(201);
     });
   });
 

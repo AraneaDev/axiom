@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { getRequestContext, runWithRequestContext } from '../lib/request-context';
-import { requestPathname } from '../lib/request-path';
+import { loggableUrl, requestPathname } from '../lib/request-path';
 import { logAudit } from '../modules/audit/audit.service';
 
 const METHOD_ACTION_MAP: Record<string, string> = {
@@ -19,6 +19,7 @@ const PATH_RESOURCE_MAP: [RegExp, string][] = [
   [/\/api\/users/, 'user'],
   [/\/api\/notifications/, 'notification'],
   [/\/api\/attachments/, 'attachment'],
+  [/\/api\/uploads/, 'attachment'],
   [/\/api\/saved-filters/, 'saved_filter'],
   [/\/api\/search/, 'search'],
 ];
@@ -89,7 +90,7 @@ export function auditMiddleware(req: Request, res: Response, next: NextFunction)
         ipAddress,
         details: {
           method,
-          path: req.originalUrl,
+          path: loggableUrl(req),
           statusCode: res.statusCode,
         },
       });

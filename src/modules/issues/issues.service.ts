@@ -19,6 +19,7 @@ import {
   PROJECT_TEAM_ORG_INCLUDE,
 } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
+import { bindStagedAttachments } from '../attachments/upload-intents.service';
 import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
 import { createNotification } from '../notifications/notifications.service';
 
@@ -139,6 +140,8 @@ export async function createIssue(
 
   await invalidateIssueCache(projectId);
   await logActivity('issue', issue.id, 'created', creatorId, { title: data.title });
+
+  if (data.body) await bindStagedAttachments(data.body, { issueId: issue.id }, creatorId);
 
   // Notify @mentioned users in the issue body
   if (data.body) {
@@ -491,6 +494,7 @@ export async function updateIssue(
   }
   if (data.body !== undefined && data.body !== issue.body) {
     await logActivity('issue', issue.id, 'updated', actorId, { field: 'body' });
+    await bindStagedAttachments(data.body, { issueId: issue.id }, actorId);
   }
 
   // Fire automation rules (non-blocking)

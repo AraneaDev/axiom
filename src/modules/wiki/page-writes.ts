@@ -4,6 +4,7 @@ import { prisma } from '../../config/database';
 import { cacheInvalidate } from '../../config/redis';
 import { normalizeMarkdown } from '../../lib/editor-core';
 import { emitExternalChange, isRoomLive } from '../../realtime/room-registry';
+import { bindStagedAttachments } from '../attachments/upload-intents.service';
 
 import { createPageVersion, lockPage } from './page-versions';
 import { broadcastWikiUpdated } from './wiki-broadcast';
@@ -48,7 +49,7 @@ const defaultSyncIssueLinks: SyncIssueLinks = async (pageId, body, authorId) => 
 
 /**
  * What every page write does after its transaction: invalidate the tree cache, sync issue links
- * for a body that was written, and tell the space's subscribers.
+ * and bind staged attachments for a body that was written, and tell the space's subscribers.
  * @param page - The written page
  * @param page.id
  * @param page.spaceId
@@ -63,7 +64,10 @@ export async function finishPageWrite(
   syncIssueLinks: SyncIssueLinks = defaultSyncIssueLinks,
 ): Promise<void> {
   await cacheInvalidate(`wiki:tree:${page.spaceId}`);
-  if (writtenBody !== null) await syncIssueLinks(page.id, writtenBody, authorId);
+  if (writtenBody !== null) {
+    await syncIssueLinks(page.id, writtenBody, authorId);
+    await bindStagedAttachments(writtenBody, { pageId: page.id }, authorId);
+  }
   await broadcastWikiUpdated(page.spaceId, page.id);
 }
 

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 
+import { loggableUrl } from '../lib/request-path';
 import { logger } from '../utils/logger';
 
 export class AppError extends Error {
@@ -25,7 +26,7 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
   const requestContext = {
     requestId: req.requestId,
     method: req.method,
-    url: req.originalUrl,
+    url: loggableUrl(req),
   };
 
   if (err instanceof AppError) {

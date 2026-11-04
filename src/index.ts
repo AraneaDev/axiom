@@ -24,7 +24,7 @@ import adminRoutes from './modules/admin/admin.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
 import approvalActionRoutes from './modules/approvals/approvals-actions.routes';
 import approvalGateRoutes from './modules/approvals/approvals.routes';
-import attachmentsRoutes from './modules/attachments/attachments.routes';
+import { signedUploadRouter } from './modules/attachments/attachments.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import authRoutes from './modules/auth/auth.routes';
 import automationRoutes from './modules/automation/automation.routes';
@@ -37,6 +37,7 @@ import healthRoutes from './modules/health/health.routes';
 import intakeRoutes from './modules/intake/intake.routes';
 import invitationsRoutes from './modules/invitations/invitations.routes';
 import issueTemplatesRoutes from './modules/issue-templates/issue-templates.routes';
+import './modules/attachments/attachments.actions';
 import './modules/issues/issues.actions';
 import './modules/wiki/wiki.actions';
 import './modules/orgs/orgs.actions';
@@ -119,6 +120,9 @@ app.use(
 );
 app.use(requestLogger);
 app.use(metricsCollector);
+// PUT /api/uploads/:uploadId has its signature as credential and its own limits. It sits ahead of
+// the JSON parser, the CSRF guard and require2fa, and nothing else takes this way past them.
+app.use(signedUploadRouter);
 app.use((req, res, next) => {
   // Skip JSON body parsing for MCP messages -- the SSE transport reads the raw stream
   if (req.path === '/api/mcp/messages') return next();
@@ -185,7 +189,6 @@ app.use('/api/projects', issueTemplatesRoutes);
 app.use('/api/projects', milestonesRoutes);
 app.use('/api/links', linksRoutes);
 app.use('/api', customFieldsDirectRoutes);
-app.use('/api/attachments', attachmentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/saved-filters', savedFiltersRoutes);
 app.use('/api/admin', adminRoutes);

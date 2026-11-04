@@ -18,6 +18,15 @@ export const globalLimiter = rateLimit({
   skip,
 });
 
+/** Signed upload URLs: 30 req/min per IP. The route has no auth header, so this slows probing. */
+export const SIGNED_UPLOAD_LIMIT = { windowMs: 60_000, max: 30 } as const;
+
+export const signedUploadLimiter = rateLimit({
+  ...SIGNED_UPLOAD_LIMIT,
+  message: errorMessage('Too many uploads, please try again later'),
+  skip,
+});
+
 /** Auth endpoints: 15 req/min */
 export const authLimiter = rateLimit({
   windowMs: 60_000,

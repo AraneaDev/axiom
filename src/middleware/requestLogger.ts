@@ -2,7 +2,7 @@ import crypto from 'crypto';
 
 import type { Request, Response, NextFunction } from 'express';
 
-import { requestPathname } from '../lib/request-path';
+import { loggableUrl, requestPathname } from '../lib/request-path';
 import { logger } from '../utils/logger';
 
 import { isBackendPath } from './static-frontend';
@@ -33,7 +33,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
   req.log = logger.child({
     requestId,
     method: req.method,
-    url: req.originalUrl,
+    url: loggableUrl(req),
   });
 
   res.setHeader('X-Request-Id', requestId);

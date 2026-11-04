@@ -11,6 +11,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT, TEAM_ORG_INCLUDE } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
+import { bindStagedAttachments } from '../attachments/upload-intents.service';
 
 import { applyMerge, getPendingMerge } from './page-merge';
 import { createPageVersion, restoreDescription } from './page-versions';
@@ -222,6 +223,7 @@ export async function createPage(
   if (body) {
     const issueIds = await extractIssueIdsFromContent(body, page.id, authorId);
     await syncMentionLinks(page.id, issueIds, authorId);
+    await bindStagedAttachments(body, { pageId: page.id }, authorId);
   }
 
   await broadcastWikiUpdated(spaceId, page.id);

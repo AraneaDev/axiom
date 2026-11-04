@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger';
 import { notifyMentions } from '../../utils/mention-notifier';
 import { TEAM_ORG_SELECT, USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { logActivity } from '../activity/activity.service';
+import { bindStagedAttachments } from '../attachments/upload-intents.service';
 import { createNotification } from '../notifications/notifications.service';
 
 /**
@@ -23,6 +24,7 @@ export async function addComment(issueId: string, authorId: string, body: string
   });
 
   await logActivity('issue', issueId, 'commented', authorId, { commentId: comment.id });
+  await bindStagedAttachments(body, { issueId }, authorId);
 
   // Notify issue assignee about the new comment (if not the commenter)
   const issue = await prisma.issue.findUnique({
@@ -88,11 +90,13 @@ export async function updateComment(commentId: string, userId: string, body: str
   );
   assertAuthor(comment, userId, 'edit');
 
-  return prisma.comment.update({
+  const updated = await prisma.comment.update({
     where: { id: commentId },
     data: { body },
     include: { author: { select: USER_BASIC_SELECT } },
   });
+  await bindStagedAttachments(body, { issueId: comment.issueId }, userId);
+  return updated;
 }
 
 /**

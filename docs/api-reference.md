@@ -25,6 +25,7 @@ X-Requested-With: XMLHttpRequest
 | Global | 300 requests per minute |
 | Auth endpoints (`/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`) | 15 requests per minute |
 | Attachment uploads | 10 uploads per minute |
+| Signed uploads (`PUT /api/uploads/:uploadId`) | 30 requests per minute |
 
 Rate limit headers returned on every response:
 
@@ -2464,6 +2465,37 @@ Upload a file. Request must use `multipart/form-data`.
   "url": "/api/attachments/att_01HZ..."
 }
 ```
+
+### POST /api/attachments/upload-url
+
+Get a signed URL for one upload, for a client that can't send multipart or doesn't hold the file yet. It works once, for 10 minutes.
+
+**Request body:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `filename` | string | The name to store the file under |
+| `mimeType` | string | One of the allowed types; the upload must be sent with this type |
+| `size` | integer | The most the upload may hold, at most 25 MB |
+| `target` | object | Optional. `{ projectId, issueNumber }` or `{ spaceId, pageSlug }`. Without one the file is staged |
+
+**Response 201:** `{ uploadUrl, uploadId, expiresAt, attachmentUrl }`
+
+A staged file is visible to its uploader only. It joins an issue or page when you reference `attachmentUrl` in an issue, comment or page body after uploading, and it is removed after 24 hours if you don't.
+
+### PUT /api/uploads/:uploadId?sig=...
+
+Store the file: the request body is its raw content. This route takes no `Authorization` or `X-Requested-With` header, because the signature is the credential. Edit access to the target is checked again here, as are the scopes of the token that asked for the URL.
+
+**Response 201:** The attachment. **403:** the same answer for a wrong signature, an unknown id and a URL that expired or was used. **413:** larger than `size`. **415:** another type than `mimeType`, or a compressed body. A refused upload leaves the URL usable until it expires.
+
+### POST /api/attachments/from-url
+
+Fetch a file from a public HTTPS URL into an attachment. Private addresses are refused, for every redirect as well. The same size and type limits apply, with a 10 second timeout.
+
+**Request body:** `url`, and optionally `filename` and `target` as above.
+
+**Response 201:** The attachment. **400:** a refused URL or an answer that isn't a success. **413**, **415:** over the limits. **502:** the connection failed or timed out.
 
 ### GET /api/attachments
 

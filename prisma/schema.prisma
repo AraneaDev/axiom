@@ -31,6 +31,7 @@ model User {
 
   // Relations
   apiTokens               ApiToken[]
+  uploadIntents           UploadIntent[]
   orgMemberships          OrgMembership[]
   teamMemberships         TeamMembership[]
   assignedIssues          Issue[]                  @relation("assignee")
@@ -74,6 +75,8 @@ model ApiToken {
   lastUsedAt DateTime?
   expiresAt  DateTime?
   createdAt  DateTime  @default(now())
+
+  uploadIntents UploadIntent[]
 
   @@map("api_tokens")
 }
@@ -734,9 +737,35 @@ model Attachment {
   page         Page?    @relation(fields: [pageId], references: [id], onDelete: Cascade)
   commentId    String?
   comment      Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  /// Set while the upload has no parent yet; a body write that references it binds it
+  stagedAt     DateTime?
   createdAt    DateTime @default(now())
 
+  @@index([uploaderId, stagedAt])
+  @@index([stagedAt])
   @@map("attachments")
+}
+
+/// A signed upload URL. A revoked token or a removed user takes its URLs along
+model UploadIntent {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiTokenId   String?
+  apiToken     ApiToken? @relation(fields: [apiTokenId], references: [id], onDelete: Cascade)
+  /// The parent as { issueId } or { pageId }; null stages the upload
+  target       Json?
+  filename     String
+  mimeType     String
+  maxBytes     Int
+  expiresAt    DateTime
+  usedAt       DateTime?
+  /// Reserved when the URL is made, so that its caller knows the attachment's URL in advance
+  attachmentId String
+  createdAt    DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@map("upload_intents")
 }
 
 model Activity {
