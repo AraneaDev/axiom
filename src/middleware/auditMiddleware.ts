@@ -81,10 +81,8 @@ export function auditMiddleware(req: Request, res: Response, next: NextFunction)
     if (AUDITED_PER_ACTION.has(normalizeApiPath(pathname))) return;
     const resourceType = resolveResourceType(pathname);
     const resourceId = extractResourceId(pathname);
-    const ipAddress =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      req.socket.remoteAddress ||
-      'unknown';
+    // Honours TRUST_PROXY. The header itself is anyone's to send
+    const ipAddress = req.ip ?? 'unknown';
 
     // Fire-and-forget: do not block the response
     const write = () =>

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { auditAction } from '../actions/audit';
 import { actRequest, countActItems, keyKindOf, runAct } from '../actions/batch';
 import type { ActionContext, ActionDef } from '../actions/define';
 import { actionRefusal, assertRunnable, executeAction } from '../actions/execute';
@@ -61,13 +62,21 @@ function jsonSchemaOf(schema: z.ZodType, io: 'input' | 'output'): Record<string,
 }
 
 /**
+ * A registered action a tool is built on.
+ * @param name - The action
+ */
+function inputAction(name: string): ActionDef {
+  const def = getAction(name);
+  if (!def) throw new Error(`Action ${name} is not registered`);
+  return def;
+}
+
+/**
  * The input schema of a registered action.
  * @param name - The action
  */
 function inputOfAction(name: string): z.ZodType {
-  const def: ActionDef | undefined = getAction(name);
-  if (!def) throw new Error(`Action ${name} is not registered`);
-  return def.input as z.ZodType;
+  return inputAction(name).input as z.ZodType;
 }
 
 /**
@@ -162,13 +171,23 @@ export const AGENT_TOOLS: AgentTool[] = [
     input: () => uploadInput,
     run: async (args, { ctx, origin }) => {
       const { url, target, filename, mimeType, size } = validate(uploadInput, args);
-      await countActItems(ctx.userId);
-      const location = uploadTarget(target);
+      const action = url !== undefined ? 'attachment.fromUrl' : 'attachment.createUploadUrl';
+      let location: ReturnType<typeof uploadTarget>;
+      try {
+        await countActItems(ctx.userId);
+        location = uploadTarget(target);
+      } catch (err) {
+        // Stopped before the action, so its row is written here
+        const given = { url, filename, target: typeof target === 'string' ? undefined : target };
+        const key = typeof target === 'string' ? target : undefined;
+        await auditAction(inputAction(action), given, ctx, { err, key });
+        throw err;
+      }
       if (url !== undefined) {
-        return executeAction('attachment.fromUrl', { url, filename, target: location }, ctx);
+        return executeAction(action, { url, filename, target: location }, ctx);
       }
       const created = (await executeAction(
-        'attachment.createUploadUrl',
+        action,
         { filename, mimeType, size, target: location },
         ctx,
       )) as { uploadUrl: string };

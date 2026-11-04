@@ -72,6 +72,11 @@ export interface ActionDef<
    */
   tokenBlocked?: boolean;
   rest?: RestBinding;
+  /**
+   * What an audit row names beyond the id fields of the schemas and the id of the result: dotted
+   * paths, for targets in other fields, lists, and what the action created.
+   */
+  auditFields?: { input?: string[]; result?: string[] };
   /** Reads its text fields itself and answers per item, so NUL isn't refused for the whole call. */
   checksOwnText?: boolean;
   /** For a `raw` binding: what to use instead where it can't run, told in the 400 it answers. */

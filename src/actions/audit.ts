@@ -5,32 +5,112 @@ import { logger } from '../utils/logger';
 
 import type { ActionContext, ActionDef } from './define';
 
-/** Input fields that name what an action works on. No other field of a raw input is recorded. */
-const TARGET_FIELD = /^id$|Id$|Number$|Slug$/;
-const MAX_TARGET_VALUE = 200;
+/** Fields of an action's input that name what it works on. */
+const TARGET_FIELD = /^id$|^slug$|Id$|Number$|Slug$/;
+const MAX_VALUE_LENGTH = 200;
+const MAX_LIST_ITEMS = 50;
+/** The most a row's target holds, whatever a caller sent. */
+const MAX_TARGET_LENGTH = 2000;
+
+type TargetValue = string | number | Array<string | number>;
+type Target = Record<string, TargetValue | boolean>;
 
 /**
- * The ids in an input, not yet validated: a refused caller wrote them, so they are bounded and
- * cleaned, and text fields stay out of the log.
- * @param rawInput - The input
+ * A scalar as the log may hold it: bounded, and without what Postgres refuses in JSON.
+ * @param value - The value
  */
-function targetOf(rawInput: unknown): Record<string, string | number> {
-  if (typeof rawInput !== 'object' || rawInput === null) return {};
-  const target: Record<string, string | number> = {};
-  for (const [field, value] of Object.entries(rawInput)) {
-    if (!TARGET_FIELD.test(field)) continue;
-    if (typeof value === 'number') target[field] = value;
-    else if (typeof value === 'string') target[field] = cleanValue(value);
+function cleanScalar(value: unknown): string | number | undefined {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    return value
+      .slice(0, MAX_VALUE_LENGTH * 2)
+      .replace(/\p{Cc}/gu, '')
+      .slice(0, MAX_VALUE_LENGTH);
   }
-  return target;
+  return undefined;
 }
 
 /**
- * A value as the log may hold it: Postgres takes no NUL in JSON, and nobody needs a megabyte.
- * @param value - The value
+ * Add one field, leaving out what isn't a scalar or a list of them. A list keeps its length.
+ * @param target - The target so far
+ * @param field - The name in the row
+ * @param value - The value, as given
  */
-function cleanValue(value: string): string {
-  return value.replace(/\p{Cc}/gu, '').slice(0, MAX_TARGET_VALUE);
+function addField(target: Target, field: string, value: unknown): void {
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, MAX_LIST_ITEMS)
+      .map(cleanScalar)
+      .filter((item) => item !== undefined);
+    target[field] = items;
+    target[`${field}Count`] = value.length;
+    return;
+  }
+  const scalar = cleanScalar(value);
+  if (scalar !== undefined) target[field] = scalar;
+}
+
+/**
+ * The value at a dotted path of own properties.
+ * @param source - An input or a result, of any shape
+ * @param path - For example target.issueKey
+ */
+function valueAt(source: unknown, path: string): unknown {
+  let value = source;
+  for (const part of path.split('.')) {
+    if (typeof value !== 'object' || value === null || !Object.hasOwn(value, part))
+      return undefined;
+    value = (value as Record<string, unknown>)[part];
+  }
+  return value;
+}
+
+/**
+ * The fields of a schema, when it is an object.
+ * @param schema - The target or input schema
+ */
+function shapeFields(schema: unknown): string[] {
+  const { shape } = (schema ?? {}) as { shape?: Record<string, unknown> };
+  return shape ? Object.keys(shape) : [];
+}
+
+/**
+ * What a row says the action worked on. Only names the action itself declares are read, so what a
+ * caller adds to the input never reaches the log: the id fields of its schemas, its `auditFields`,
+ * and the id of what it returned.
+ * @param def - The action
+ * @param rawInput - Its input as given, possibly from a refused caller
+ * @param result - What it returned, if it ran
+ * @param key - The key it was addressed by, when it stopped there
+ */
+function targetOf(def: ActionDef, rawInput: unknown, result: unknown, key?: string): Target {
+  const target: Target = {};
+  const idFields = [...shapeFields(def.target), ...shapeFields(def.input)].filter((field) =>
+    TARGET_FIELD.test(field),
+  );
+  for (const field of new Set(idFields)) addField(target, field, valueAt(rawInput, field));
+  for (const path of def.auditFields?.input ?? []) {
+    addField(target, path.split('.').pop() as string, valueAt(rawInput, path));
+  }
+  if (key !== undefined) addField(target, 'key', key);
+  addField(target, 'resultId', valueAt(result, 'id'));
+  for (const path of def.auditFields?.result ?? []) {
+    addField(target, path.split('.').pop() as string, valueAt(result, path));
+  }
+  return JSON.stringify(target).length <= MAX_TARGET_LENGTH ? target : shrink(target);
+}
+
+/**
+ * A target past the cap: scalars stay in order until it is full.
+ * @param target - The target
+ */
+function shrink(target: Target): Target {
+  const kept: Target = { truncated: true };
+  for (const [field, value] of Object.entries(target)) {
+    const next = { ...kept, [field]: value };
+    if (JSON.stringify(next).length <= MAX_TARGET_LENGTH) kept[field] = value;
+  }
+  return kept;
 }
 
 /**
@@ -55,23 +135,20 @@ export function auditedPerAction(ctx: ActionContext): boolean {
 }
 
 /**
- * The audit row of one write action, done or refused. A failure to write it is logged and changes
- * nothing about the answer. Reads aren't audited, as over REST.
- * @param def - The action
- * @param rawInput - Its input as given
+ * Write a row. A failure to write it is logged and changes nothing about the answer.
+ * @param action - The row's action
+ * @param resourceType - The row's resource
+ * @param target - What was worked on
  * @param ctx - Who ran it
  * @param err - What it threw, if anything
- * @param key - The key it was addressed by, when that is all there is
  */
-export async function auditAction(
-  def: ActionDef,
-  rawInput: unknown,
+async function writeRow(
+  action: string,
+  resourceType: string,
+  target: Record<string, unknown>,
   ctx: ActionContext,
-  err?: unknown,
-  key?: string,
+  err: unknown,
 ): Promise<void> {
-  if (def.kind !== 'write' || !auditedPerAction(ctx)) return;
-  const target = { ...targetOf(rawInput), ...(key === undefined ? {} : { key: cleanValue(key) }) };
   const requestCtx = {
     userId: ctx.userId,
     apiTokenId: ctx.apiTokenId,
@@ -82,13 +159,53 @@ export async function auditAction(
     await runWithRequestContext(requestCtx, () =>
       logAudit({
         userId: ctx.userId,
-        action: def.name,
-        resourceType: def.area,
+        action,
+        resourceType,
         ipAddress: ctx.byName?.ipAddress,
         details: { target, channel: ctx.channel, ...outcomeOf(err) },
       }),
     );
   } catch (auditError) {
-    logger.error('writing an action audit row failed', { action: def.name }, auditError as Error);
+    logger.error('writing an action audit row failed', { action }, auditError as Error);
   }
+}
+
+/**
+ * The audit row of one write action, done or refused. Reads aren't audited, as over REST.
+ * @param def - The action
+ * @param rawInput - Its input as given
+ * @param ctx - Who ran it
+ * @param outcome - How it ended
+ * @param outcome.err - What it threw, if anything
+ * @param outcome.result - What it returned, if it ran
+ * @param outcome.key - The key it was addressed by, when it stopped there
+ */
+export async function auditAction(
+  def: ActionDef,
+  rawInput: unknown,
+  ctx: ActionContext,
+  outcome: { err?: unknown; result?: unknown; key?: string } = {},
+): Promise<void> {
+  if (def.kind !== 'write' || !auditedPerAction(ctx)) return;
+  const target = targetOf(def, rawInput, outcome.result, outcome.key);
+  await writeRow(def.name, def.area, target, ctx, outcome.err);
+}
+
+/**
+ * The one row of a batch refused as a whole, when it holds a write. One row, so being past the
+ * limit can't write 25 per request.
+ * @param writes - The names of its write actions, of any length
+ * @param items - How many items it holds
+ * @param ctx - Who sent it
+ * @param err - The refusal
+ */
+export async function auditRefusedBatch(
+  writes: string[],
+  items: number,
+  ctx: ActionContext,
+  err: unknown,
+): Promise<void> {
+  if (writes.length === 0 || !auditedPerAction(ctx)) return;
+  const actions = [...new Set(writes.slice(0, MAX_LIST_ITEMS))].slice(0, 10);
+  await writeRow('act.batch', 'act', { items, actions }, ctx, err);
 }

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { MAX_DB_INT } from './common-validators';
+import { dbInt, MAX_DB_INT } from './common-validators';
 
 const ISSUE_TYPES = ['TASK', 'BUG', 'STORY', 'EPIC'] as const;
 const ISSUE_PRIORITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
@@ -37,7 +37,7 @@ export const updateIssueSchema = createIssueSchema.partial().extend({
   type: z.enum(['TASK', 'BUG', 'STORY', 'EPIC']).optional(),
   priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional(),
   columnId: z.string().optional(),
-  position: z.number().int().max(MAX_DB_INT).optional(),
+  position: dbInt.optional(),
   storyPoints: z.number().int().min(0).max(100).nullable().optional(),
   sprintId: z.string().nullable().optional(),
   timeEstimate: z.number().int().min(0).max(MAX_DB_INT).nullable().optional(),
@@ -88,7 +88,7 @@ export const issueListQuerySchema = z.object({
   sprintId: z.string().optional(),
   label: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
+  offset: z.coerce.number().int().min(0).max(MAX_DB_INT).optional(),
 });
 
 // ─── Sprints ───────────────────────────────────────────────

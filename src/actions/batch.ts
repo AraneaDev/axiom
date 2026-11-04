@@ -6,7 +6,7 @@ import { perUserLimit } from '../middleware/rate-limit';
 import { logger } from '../utils/logger';
 import { validate } from '../utils/validation/common-validators';
 
-import { auditAction } from './audit';
+import { auditAction, auditRefusedBatch } from './audit';
 import type { ActionContext, ActionDef } from './define';
 import { assertRunnable, executeAction } from './execute';
 import { MAX_KEY_LENGTH, parseKey, resolveKey } from './keys';
@@ -119,7 +119,7 @@ async function runItem(item: ActItem, ctx: ActionContext): Promise<unknown> {
     input = await inputOf(item, ctx);
   } catch (err) {
     const def = getAction(item.action);
-    if (def) await auditAction(def, item.input, ctx, err, item.key);
+    if (def) await auditAction(def, item.input, ctx, { err, key: item.key });
     throw err;
   }
   return executeAction(item.action, input, ctx);
@@ -145,10 +145,19 @@ export async function executeBatch(
   items: ActItem[],
   ctx: ActionContext,
 ): Promise<{ results: BatchResult[]; completed: number }> {
-  if (items.length > MAX_BATCH_ITEMS) {
-    throw new AppError(400, `A batch holds at most ${MAX_BATCH_ITEMS} items`, 'BATCH_TOO_LARGE');
+  try {
+    if (items.length > MAX_BATCH_ITEMS) {
+      throw new AppError(400, `A batch holds at most ${MAX_BATCH_ITEMS} items`, 'BATCH_TOO_LARGE');
+    }
+    await countActItems(ctx.userId, items.length);
+  } catch (err) {
+    const writes = items
+      .map((item) => getAction(item.action))
+      .filter((def) => def?.kind === 'write')
+      .map((def) => (def as ActionDef).name);
+    await auditRefusedBatch(writes, items.length, ctx, err);
+    throw err;
   }
-  await countActItems(ctx.userId, items.length);
 
   const results: BatchResult[] = [];
   let failed = false;
@@ -183,7 +192,13 @@ export async function runAct(request: ActRequest, ctx: ActionContext): Promise<u
     return executeBatch(batch, ctx);
   }
   if (action === undefined) throw new AppError(400, 'Give either action or batch');
-  await countActItems(ctx.userId);
+  try {
+    await countActItems(ctx.userId);
+  } catch (err) {
+    const def = getAction(action);
+    if (def) await auditAction(def, input, ctx, { err, key });
+    throw err;
+  }
   return runItem({ action, key, input }, ctx);
 }
 

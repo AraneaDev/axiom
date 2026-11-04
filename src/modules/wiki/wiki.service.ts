@@ -92,7 +92,8 @@ export async function listSpaces(teamId: string, includeArchived = false, userId
   const spaces = await prisma.wikiSpace.findMany({
     where: { teamId, ...(includeArchived ? {} : { isArchived: false }) },
     include: { _count: { select: { pages: true } } },
-    orderBy: { name: 'asc' },
+    // The id keeps pages stable among spaces of one name
+    orderBy: [{ name: 'asc' }, { id: 'asc' }],
   });
   if (!userId) return spaces;
   // Spaces whose own permissions leave the user out are not listed

@@ -1,4 +1,5 @@
 import { runWithRequestContext } from '../lib/request-context';
+import { containsNul } from '../lib/text-guard';
 import { AppError } from '../middleware/errorHandler';
 import { scopeAllows } from '../middleware/token-scopes';
 import { validate } from '../utils/validation/common-validators';
@@ -73,27 +74,6 @@ export function assertRunnable(name: string, ctx: ActionContext): ActionDef {
 }
 
 /**
- * Refuse NUL in any text of an input: Postgres can't store or compare it, so it would come back as
- * a generic 500. It comes ahead of authorize, which reads the ids.
- * @param value - The input, or a part of it
- * @throws {AppError} 400 INVALID_TEXT
- */
-function assertNoNul(value: unknown): void {
-  if (typeof value === 'string') {
-    if (value.includes('\u0000')) {
-      throw new AppError(400, 'Text may not contain a NUL character', 'INVALID_TEXT');
-    }
-  } else if (Array.isArray(value)) {
-    value.forEach(assertNoNul);
-  } else if (typeof value === 'object' && value !== null) {
-    for (const [field, inner] of Object.entries(value)) {
-      assertNoNul(field);
-      assertNoNul(inner);
-    }
-  }
-}
-
-/**
  * The full input schema, refusing unknown fields where the caller names the action: an agent's
  * misspelled field must not read as success. REST keeps dropping them, as it always did.
  * @param def - The action
@@ -130,10 +110,10 @@ export async function executeAction(
   if (!def) throw new AppError(404, `Unknown action: ${name}`, 'UNKNOWN_ACTION');
   try {
     const result = await runAction(def, rawInput, ctx, bodyError);
-    await auditAction(def, rawInput, ctx);
+    await auditAction(def, rawInput, ctx, { result });
     return result;
   } catch (err) {
-    await auditAction(def, rawInput, ctx, err);
+    await auditAction(def, rawInput, ctx, { err });
     throw err;
   }
 }
@@ -153,7 +133,10 @@ async function runAction(
 ): Promise<unknown> {
   const refusal = actionRefusal(def, ctx);
   if (refusal) throw refusal;
-  if (!def.checksOwnText) assertNoNul(rawInput);
+  // Ahead of authorize, which reads the ids: Postgres can't compare NUL, so it would be a failed query
+  if (!def.checksOwnText && containsNul(rawInput)) {
+    throw new AppError(400, 'Text may not contain a NUL character', 'INVALID_TEXT');
+  }
 
   const target = validate(def.target ?? def.input, rawInput);
 

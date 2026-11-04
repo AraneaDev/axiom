@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { pageAccess, pageBySlugAccess, spaceAccess, teamPermission } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
-import { listWindow } from '../../actions/paging';
+import { listWindow, pagedList } from '../../actions/paging';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { checkWikiSpaceOrgAccess } from '../../middleware/rbac';
@@ -13,6 +13,7 @@ import {
   copyPageSchema,
   createPageSchema,
   firstQueryText,
+  MAX_DB_INT,
   movePageSchema,
   queryCount,
   reorderPageSchema,
@@ -79,6 +80,14 @@ function versionNumber(value: unknown): number {
 // always gave
 const versionParam = z.union([z.string(), z.number()]).catch('');
 
+/**
+ * Whether a version number can be looked up at all. Past the column it would be a failed query.
+ * @param version - The number read from the query
+ */
+function isVersionNumber(version: number): boolean {
+  return Number.isInteger(version) && Math.abs(version) <= MAX_DB_INT;
+}
+
 /** The ids a template's variables read. A team id may come along; nothing reads it. */
 const resolveTemplateTarget = z.object({
   context: z.object({ spaceId: z.string(), projectId: z.string().optional() }),
@@ -114,6 +123,7 @@ const templateActions = [
     summary: 'Fill in the {{variables}} of a template text for a space',
     target: resolveTemplateTarget,
     input: resolveTemplateTarget.extend({ body: z.string() }),
+    auditFields: { input: ['context.spaceId', 'context.projectId'] },
     output: z.looseObject({ body: z.string() }),
     rest: { method: 'POST', path: `${WIKI}/resolve-template`, status: 200 },
     authorize: authorizeResolveTemplate,
@@ -142,7 +152,7 @@ const spaceActions = [
       limit: queryCount,
       offset: queryCount,
     }),
-    output: list,
+    output: z.union([list, z.looseObject({ data: list, total: z.number() })]),
     rest: { method: 'GET', path: `${WIKI}/team/:teamId/spaces` },
     authorize: inTeam,
     handler: async (ctx, { teamId, includeArchived, limit, offset }) => {
@@ -151,8 +161,10 @@ const spaceActions = [
         includeArchived === true || includeArchived === 'true',
         ctx.userId,
       );
-      const { take, skip } = listWindow(ctx, firstQueryText(limit), firstQueryText(offset));
-      return take === undefined ? spaces.slice(skip) : spaces.slice(skip, skip + take);
+      const window = listWindow(firstQueryText(limit), firstQueryText(offset));
+      if (!window) return spaces;
+      const data = spaces.slice(window.skip, window.skip + window.take);
+      return pagedList(data, spaces.length, window);
     },
   }),
   defineAction({
@@ -278,7 +290,7 @@ const pageActions = [
     handler: async (_ctx, { spaceId, pageSlug, from, to }) => {
       const fromVersion = versionNumber(from);
       const toVersion = versionNumber(to);
-      if (isNaN(fromVersion) || isNaN(toVersion)) {
+      if (!isVersionNumber(fromVersion) || !isVersionNumber(toVersion)) {
         throw new AppError(400, 'Both "from" and "to" query params are required as integers');
       }
       return wikiService.diffVersions(spaceId, pageSlug, fromVersion, toVersion);
@@ -291,6 +303,7 @@ const pageActions = [
     summary: 'Restore an earlier version of a page',
     target: slugTarget,
     input: slugTarget.extend(restoreVersionSchema.shape),
+    auditFields: { input: ['version'] },
     output: record,
     rest: { method: 'POST', path: `${PAGE}/restore`, status: 200 },
     authorize: editBySlug,
@@ -394,7 +407,7 @@ const linkActions = [
     // A wrong or missing value reads as '', and the handler gives the message the route always gave
     input: pageTarget.extend({
       issueId: z.string().catch(''),
-      linkType: z.enum(['EMBED', 'MENTION']).optional().catch(undefined),
+      linkType: z.enum(['EMBED', 'MENTION']).catch('' as 'EMBED'),
     }),
     output: record,
     rest: { method: 'POST', path: `${PAGE_BY_ID}/linked-issues` },

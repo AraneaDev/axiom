@@ -22,6 +22,7 @@ import { authenticate } from './middleware/auth';
 import { csrfGuard } from './middleware/csrfGuard';
 import { errorHandler } from './middleware/errorHandler';
 import { metricsCollector } from './middleware/metricsCollector';
+import { nulGuard } from './middleware/nulGuard';
 import { globalLimiter, authLimiter, searchLimiter } from './middleware/rate-limit.js';
 import { requestLogger } from './middleware/requestLogger';
 import { require2fa } from './middleware/require2fa';
@@ -112,6 +113,7 @@ app.use(metricsCollector);
 // the JSON parser, the CSRF guard and require2fa, and nothing else takes this way past them.
 app.use(signedUploadRouter);
 app.use(express.json({ limit: '5mb' }));
+app.use('/api', nulGuard);
 
 app.use(requestContextMiddleware);
 

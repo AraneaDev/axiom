@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { TOKEN_SCOPES } from '../../middleware/token-scopes';
 
+import { MAX_DB_INT } from './common-validators';
+
 // ─── API Tokens ─────────────────────────────────────────────
 
 export const createApiTokenSchema = z.object({
@@ -59,7 +61,7 @@ export const flushPageSessionSchema = z.object({
 });
 
 export const restoreVersionSchema = z.object({
-  version: z.number().int().min(1),
+  version: z.number().int().min(1).max(MAX_DB_INT),
 });
 
 export const applyMergeSchema = z.object({
@@ -106,7 +108,7 @@ export const movePageSchema = z.object({
 
 export const reorderPageSchema = z.object({
   parentId: z.string().min(1).nullable(),
-  position: z.number().int().min(0),
+  position: z.number().int().min(0).max(MAX_DB_INT),
 });
 
 export const copyPageSchema = z.object({

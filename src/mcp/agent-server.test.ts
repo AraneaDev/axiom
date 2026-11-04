@@ -1191,7 +1191,7 @@ describe('MCP server', () => {
       }
     });
 
-    it('space.list and sprint.list take limit and offset, with a default for agents', async () => {
+    it('space.list and sprint.list are whole without limit, and pages with data and total', async () => {
       const team = await prisma.team.create({
         data: {
           orgId: ctx.orgId,
@@ -1200,49 +1200,303 @@ describe('MCP server', () => {
           members: { create: { userId: ctx.owner.id, role: 'ADMIN' } },
         },
       });
+      // One name and one start date for all: only the tie-break keeps pages apart
       await prisma.wikiSpace.createMany({
-        data: Array.from({ length: 22 }, (_, i) => ({
+        data: Array.from({ length: 26 }, (_, i) => ({
           teamId: team.id,
-          name: `S${String(i).padStart(2, '0')}`,
+          name: 'Same',
           slug: `s${i}`,
         })),
       });
       const project = await prisma.project.create({
         data: { teamId: team.id, name: 'Many', slug: 'many', prefix: 'MNY' },
       });
+      const start = new Date(2026, 0, 1);
       await prisma.sprint.createMany({
-        data: Array.from({ length: 22 }, (_, i) => ({
+        data: Array.from({ length: 26 }, (_, i) => ({
           projectId: project.id,
           name: `Sprint ${i}`,
-          startDate: new Date(2026, 0, i + 1),
-          endDate: new Date(2026, 1, i + 1),
+          startDate: start,
+          endDate: new Date(2026, 1, 1),
         })),
       });
       try {
         const c = await asUser(ctx.owner);
-        const spaces = (input: object = {}) =>
-          callTool(c, 'act', { action: 'space.list', input: { teamId: team.id, ...input } });
-        const sprints = (input: object = {}) =>
-          callTool(c, 'act', { action: 'sprint.list', input: { projectId: project.id, ...input } });
+        const lists = {
+          'space.list': (input: object = {}) =>
+            callTool(c, 'act', { action: 'space.list', input: { teamId: team.id, ...input } }),
+          'sprint.list': (input: object = {}) =>
+            callTool(c, 'act', {
+              action: 'sprint.list',
+              input: { projectId: project.id, ...input },
+            }),
+        };
+        for (const [name, list] of Object.entries(lists)) {
+          const whole = (await list()).data as Array<{ id: string }>;
+          expect(whole, name).toHaveLength(26);
 
-        expect((await spaces()).data).toHaveLength(20);
-        expect((await sprints()).data).toHaveLength(20);
-        const two = await spaces({ limit: 2, offset: 1 });
-        expect(two.data.map((s: { name: string }) => s.name)).toEqual(['S01', 'S02']);
-        expect((await sprints({ limit: 3 })).data).toHaveLength(3);
+          const seen: string[] = [];
+          for (let offset = 0; offset < 26; offset += 5) {
+            const { data } = await list({ limit: 5, offset });
+            expect(data.total, name).toBe(26);
+            expect(data.limit, name).toBe(5);
+            expect(data.offset, name).toBe(offset);
+            seen.push(...data.data.map((item: { id: string }) => item.id));
+          }
+          expect(seen, name).toHaveLength(26);
+          expect(new Set(seen).size, name).toBe(26);
+
+          expectRefused(await list({ limit: 0 }), 400);
+          expectRefused(await list({ limit: 101 }), 400);
+        }
 
         const rest = await request(app)
           .get(`/api/wiki/team/${team.id}/spaces`)
           .set('Authorization', `Bearer ${ctx.owner.token}`);
-        expect(rest.body).toHaveLength(22);
+        expect(rest.body).toHaveLength(26);
         const restLimit = await request(app)
           .get(`/api/projects/${project.id}/sprints?limit=2`)
           .set('Authorization', `Bearer ${ctx.owner.token}`);
-        expect(restLimit.body).toHaveLength(2);
+        expect(restLimit.body.data).toHaveLength(2);
+        expect(restLimit.body.total).toBe(26);
+        const described = await callTool(c, 'describe', { action: 'sprint.list' });
+        expect(described.data.summary).toContain('total');
       } finally {
         await prisma.project.delete({ where: { id: project.id } });
         await prisma.team.delete({ where: { id: team.id } });
       }
+    });
+
+    it('audit rows hold only known fields, within a cap, whatever a caller sends', async () => {
+      const issue = await createIssue();
+      const stranger = await newUser();
+      const token = `audit-stuff-${Date.now()}`;
+      const header = await tokenHeaderFor(stranger, TOKEN_SCOPES, token);
+      const input: Record<string, unknown> = {
+        projectId: ctx.projectId,
+        issueNumber: issue.number,
+      };
+      for (let i = 0; i < 5000; i++) input[`f${i}Id`] = `value-${i}`;
+      const refused = await callTool(await client(header), 'act', {
+        action: 'issue.delete',
+        input,
+      });
+      expectRefused(refused, 403);
+      const huge = await callTool(await client(header), 'act', {
+        action: 'issue.delete',
+        input: { projectId: 'x'.repeat(100_000), issueNumber: issue.number },
+      });
+      expect(huge.isError).toBe(true);
+      const rows = await prisma.auditLog.findMany({ where: { via: token } });
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(JSON.stringify(row.details).length).toBeLessThan(3000);
+        expect(JSON.stringify(row.details)).not.toContain('f1Id');
+      }
+      expect((rows[0].details as { target: object }).target).toMatchObject({
+        issueNumber: issue.number,
+      });
+    });
+
+    it('audit rows name the real target of uploads, lists and what was created', async () => {
+      const issue = await createIssue();
+      const token = `audit-target-${Date.now()}`;
+      const c = await client(await tokenHeaderFor(ctx.owner, TOKEN_SCOPES, token));
+      const lastRow = async (action: string) =>
+        prisma.auditLog.findFirstOrThrow({
+          where: { via: token, action },
+          orderBy: { createdAt: 'desc' },
+        });
+      const file = { filename: 'a.png', mimeType: 'image/png', size: 8 };
+
+      await callTool(c, 'upload', { ...file, target: issue.key });
+      expect((await lastRow('attachment.createUploadUrl')).details).toMatchObject({
+        outcome: 'ok',
+        target: { issueKey: issue.key },
+      });
+
+      await callTool(c, 'upload', { url: 'http://127.0.0.1/x', target: issue.key });
+      expect((await lastRow('attachment.fromUrl')).details).toMatchObject({
+        outcome: 'refused',
+        target: { issueKey: issue.key, url: 'http://127.0.0.1/x' },
+      });
+
+      expectRefused(await callTool(c, 'upload', { ...file, target: 'not a key' }), 400);
+      expect((await lastRow('attachment.createUploadUrl')).details).toMatchObject({
+        outcome: 'refused',
+        code: 'INVALID_KEY',
+        target: { key: 'not a key' },
+      });
+
+      const created = await callTool(c, 'act', {
+        action: 'issue.create',
+        input: { projectId: ctx.projectId, title: 'Audited' },
+      });
+      expect((await lastRow('issue.create')).details).toMatchObject({
+        target: {
+          projectId: ctx.projectId,
+          number: created.data.number,
+          resultId: created.data.id,
+        },
+      });
+
+      const ids = Array.from({ length: 60 }, (_, i) => `issue-${i}`);
+      await callTool(c, 'act', {
+        action: 'issue.bulkUpdate',
+        input: { projectId: ctx.projectId, issueIds: ids, updates: { priority: 'LOW' } },
+      });
+      const bulk = (await lastRow('issue.bulkUpdate')).details as {
+        target: { issueIds: string[]; issueIdsCount: number };
+      };
+      expect(bulk.target.issueIds.slice(0, 2)).toEqual(['issue-0', 'issue-1']);
+      expect(bulk.target.issueIdsCount).toBe(60);
+
+      const sprint = await prisma.sprint.create({
+        data: {
+          projectId: ctx.projectId,
+          name: 'Audited',
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 86_400_000),
+        },
+      });
+      const one = await prisma.issue.findFirstOrThrow({ where: { projectId: ctx.projectId } });
+      await callTool(c, 'act', {
+        action: 'sprint.addIssues',
+        input: { projectId: ctx.projectId, sprintId: sprint.id, issueIds: [one.id] },
+      });
+      expect((await lastRow('sprint.addIssues')).details).toMatchObject({
+        target: { sprintId: sprint.id, issueIds: [one.id] },
+      });
+    });
+
+    it('a 429 on a write writes a refused row, for one action and for a batch', async () => {
+      const user = await newUser();
+      const token = `audit-429-${Date.now()}`;
+      const c = await client(await tokenHeaderFor(user, TOKEN_SCOPES, token));
+      const unknown = Array.from({ length: MAX_BATCH_ITEMS }, () => ({ action: 'nope.nope' }));
+      for (let used = 0; used + MAX_BATCH_ITEMS <= ACT_LIMIT.max; used += MAX_BATCH_ITEMS) {
+        await callTool(c, 'act', { batch: unknown });
+      }
+      const create = { action: 'issue.create', input: { projectId: ctx.projectId, title: 'x' } };
+      expectRefused(await callTool(c, 'act', create), 429);
+      expectRefused(await callTool(c, 'act', { batch: [create, create] }), 429);
+      expectRefused(await callTool(c, 'upload', { url: 'https://example.com/a.png' }), 429);
+      const rows = await prisma.auditLog.findMany({
+        where: { via: token },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(rows.map((r) => r.action)).toEqual([
+        'issue.create',
+        'act.batch',
+        'attachment.fromUrl',
+      ]);
+      for (const row of rows) {
+        expect(row.details).toMatchObject({ outcome: 'refused', status: 429 });
+      }
+      expect((rows[1].details as { target: object }).target).toMatchObject({
+        items: 2,
+        actions: ['issue.create'],
+      });
+    });
+
+    it('issue.hydrateList takes typed filters on act and over REST', async () => {
+      const c = await asUser(ctx.owner);
+      const hydrate = (input: object) =>
+        callTool(c, 'act', {
+          action: 'issue.hydrateList',
+          input: { projectId: ctx.projectId, ...input },
+        });
+      const ok = await hydrate({ q: 'nothing-here', type: 'bug', limit: 5 });
+      expect(ok.isError).toBe(false);
+      expect(ok.data.issues).toBeDefined();
+      expectRefused(await hydrate({ type: 'NOPE' }), 400);
+      expectRefused(await hydrate({ nonsense: 'x' }), 400);
+
+      const described = await callTool(c, 'describe', { action: 'issue.hydrateList' });
+      expect(described.data.input.additionalProperties).toBeUndefined();
+      expect(Object.keys(described.data.input.properties)).toContain('priority');
+
+      const get = (query: string) =>
+        request(app)
+          .get(`/api/projects/${ctx.projectId}/issues/hydrate?${query}`)
+          .set('Authorization', `Bearer ${ctx.owner.token}`);
+      expect((await get('type=NOPE')).status).toBe(400);
+      expect((await get('type=BUG&limit=5')).status).toBe(200);
+    });
+
+    it('takes binary files with NUL bytes, and refuses NUL text on any /api route', async () => {
+      const bytes = Buffer.from([0, 1, 0, 2, 0, 3, 0, 4]);
+      const { data } = await callTool(await asUser(ctx.owner), 'upload', {
+        filename: 'nul.png',
+        mimeType: 'image/png',
+        size: bytes.length,
+      });
+      const put = await fetch(data.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/png' },
+        body: bytes,
+      });
+      expect(put.status).toBe(201);
+      const multipart = await request(app)
+        .post('/api/attachments')
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .set(CSRF)
+        .attach('file', bytes, { filename: 'multi.png', contentType: 'image/png' });
+      expect(multipart.status).toBe(201);
+
+      const legacy = await request(app)
+        .post('/api/saved-filters')
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .set(CSRF)
+        .send({ name: 'a\u0000b', filter: {} });
+      expect(legacy.status).toBe(400);
+      expect(legacy.body.error.code).toBe('INVALID_TEXT');
+      const inQuery = await request(app)
+        .get('/api/notifications?x=a%00b')
+        .set('Authorization', `Bearer ${ctx.owner.token}`);
+      expect(inQuery.status).toBe(400);
+      const inPath = await request(app)
+        .get('/api/users/a%00b')
+        .set('Authorization', `Bearer ${ctx.owner.token}`);
+      expect(inPath.status).toBe(400);
+    });
+
+    it('survives deeply nested input', async () => {
+      const deep = `${'{"a":'.repeat(400_000)}1${'}'.repeat(400_000)}`;
+      const res = await fetch(`${base}/api/act`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${ctx.owner.token}`,
+          ...CSRF,
+        },
+        body: `{"action":"org.list","input":${deep}}`,
+      });
+      expect(res.status).toBeLessThan(500);
+    });
+
+    it('audits the proxy-aware address over REST, not a header anyone can send', async () => {
+      const spoof = `6.6.${Date.now() % 250}.${Math.floor(Math.random() * 250)}`;
+      const res = await request(app)
+        .post(`/api/projects/${ctx.projectId}/issues`)
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .set(CSRF)
+        .set('X-Forwarded-For', spoof)
+        .send({ title: `Spoof ${Date.now()}` });
+      expect(res.status).toBe(201);
+      await vi.waitFor(async () => {
+        const rows = await prisma.auditLog.findMany({
+          where: { userId: ctx.owner.id },
+          orderBy: { createdAt: 'desc' },
+          take: 3,
+        });
+        expect(rows.some((row) => row.details !== null)).toBe(true);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const spoofed = await prisma.auditLog.count({
+        where: { details: { path: ['ipAddress'], equals: spoof } },
+      });
+      expect(spoofed).toBe(0);
     });
 
     it('answers 400 naming an unknown field on the act path, and REST still drops it', async () => {
@@ -1301,6 +1555,15 @@ describe('MCP server', () => {
       expect(link.text).toContain('EMBED');
       expect(link.text).not.toContain('""');
       expect(link.data.input.properties.linkType.default).toBeUndefined();
+      expect(link.data.input.properties.linkType.enum).toEqual(['EMBED', 'MENTION']);
+      expect(link.data.input.required).toContain('linkType');
+      const pageForLink = await createPage(`link-${Date.now()}`);
+      const missing = await callTool(c, 'act', {
+        action: 'pageIssueLink.add',
+        input: { pageId: pageForLink.id, issueId: 'x' },
+      });
+      expectRefused(missing, 400);
+      expect(missing.data.message).toContain('EMBED or MENTION');
       expect(link.data.input.properties.issueId.default).toBeUndefined();
       const diff = await callTool(c, 'describe', { action: 'page.diff' });
       expect(JSON.stringify(diff.data.input)).not.toContain('"default":""');

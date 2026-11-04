@@ -34,6 +34,8 @@ export {
   updateMilestoneSchema,
   queryCount,
   firstQueryText,
+  dbInt,
+  MAX_DB_INT,
 } from './validation/common-validators';
 
 export {

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
-import { listWindow } from '../../actions/paging';
+import { listWindow, pagedList } from '../../actions/paging';
 import { registerActions } from '../../actions/registry';
 import { projectOf } from '../../middleware/requireProjectAccess';
 import {
@@ -74,8 +74,8 @@ const sprintActions = [
     area: 'sprints',
     kind: 'read',
     summary:
-      'List the sprints of a project, optionally by status. Over MCP, 20 unless limit says ' +
-      'otherwise (up to 100).',
+      'List the sprints of a project, optionally by status: all of them, or with limit (1 to 100) ' +
+      'and offset a page as { data, total, limit, offset }.',
     target: projectTarget,
     // An empty ?status= means no filter, as it did
     input: projectTarget.extend({
@@ -83,14 +83,19 @@ const sprintActions = [
       limit: queryCount,
       offset: queryCount,
     }),
-    output: z.array(loose),
+    output: z.union([z.array(loose), z.looseObject({ data: z.array(loose), total: z.number() })]),
     rest: { method: 'GET', path: `${PROJECT}/sprints` },
     authorize: readProject,
-    handler: async (ctx, { projectId, status, limit, offset }) =>
-      sprintsService.listSprints(projectId, {
-        status: status || undefined,
-        ...listWindow(ctx, firstQueryText(limit), firstQueryText(offset)),
-      }),
+    handler: async (_ctx, { projectId, status, limit, offset }) => {
+      const filter = { status: status || undefined };
+      const window = listWindow(firstQueryText(limit), firstQueryText(offset));
+      if (!window) return sprintsService.listSprints(projectId, filter);
+      const [data, total] = await Promise.all([
+        sprintsService.listSprints(projectId, { ...filter, ...window }),
+        sprintsService.countSprints(projectId, filter),
+      ]);
+      return pagedList(data, total, window);
+    },
   }),
   defineAction({
     name: 'sprint.get',
@@ -170,6 +175,7 @@ const sprintActions = [
     summary: 'Add issues to a sprint',
     target: sprintTarget,
     input: sprintTarget.extend(addSprintIssuesSchema.shape),
+    auditFields: { input: ['issueIds'] },
     output: record,
     rest: { method: 'POST', path: `${SPRINT}/issues`, status: 200 },
     authorize: writeSprint,

@@ -56,6 +56,21 @@ export async function createSprint(
 }
 
 /**
+ * How many sprints a project has, optionally by status.
+ * @param projectId - The project
+ * @param opts - The filter
+ * @param opts.status - The status
+ */
+export async function countSprints(projectId: string, opts?: { status?: string }) {
+  return prisma.sprint.count({
+    where: {
+      projectId,
+      ...(opts?.status ? { status: opts.status as Prisma.EnumSprintStatusFilter } : {}),
+    },
+  });
+}
+
+/**
  * List sprints for a project, optionally filtered by status, with computed story points.
  * @param projectId - The project to list sprints for
  * @param opts - Optional filter and page
@@ -87,7 +102,8 @@ export async function listSprints(
         },
       },
     },
-    orderBy: { startDate: 'desc' },
+    // The id keeps pages stable among sprints that start together
+    orderBy: [{ startDate: 'desc' }, { id: 'asc' }],
     ...(opts?.take === undefined ? {} : { take: opts.take }),
     ...(opts?.skip ? { skip: opts.skip } : {}),
   });

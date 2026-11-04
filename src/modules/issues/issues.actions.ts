@@ -11,9 +11,12 @@ import {
   bulkUpdateIssuesSchema,
   createCommentSchema,
   createIssueSchema,
+  dbInt,
+  firstQueryText,
   issueListQuerySchema,
   issueWebLinkSchema,
   logWorkSchema,
+  queryCount,
   strictInt,
   updateIssueSchema,
 } from '../../utils/validation';
@@ -72,6 +75,7 @@ const issueActions = [
     summary: 'Create an issue in a project',
     target: projectTarget,
     input: projectTarget.extend(createIssueSchema.shape),
+    auditFields: { result: ['number'] },
     output: record,
     rest: { method: 'POST', path: `${PROJECT}/issues` },
     authorize: write,
@@ -145,6 +149,7 @@ const issueActions = [
     summary: 'Change several issues at once',
     target: projectTarget,
     input: projectTarget.extend(bulkUpdateIssuesSchema.shape),
+    auditFields: { input: ['issueIds'] },
     output: loose,
     rest: { method: 'PATCH', path: `${PROJECT}/issues/bulk` },
     authorize: write,
@@ -157,15 +162,22 @@ const issueActions = [
     kind: 'read',
     summary: 'The issue list view in one call: issues, columns, sprints, filters, fields',
     target: projectTarget,
-    input: projectTarget.loose(),
+    // The filters of issue.list. Paging stays as lenient as this route always read it
+    input: projectTarget
+      .extend(issueListQuerySchema.shape)
+      .extend({ limit: queryCount, offset: queryCount }),
     output: loose,
     rest: { method: 'GET', path: `${PROJECT}/issues/hydrate` },
     authorize: read,
-    handler: async (ctx, { projectId, ...rest }) => {
+    handler: async (ctx, { projectId, limit, offset, ...rest }) => {
       const filters: Record<string, string> = {};
       for (const [key, value] of Object.entries(rest)) {
         if (typeof value === 'string') filters[key] = value;
       }
+      const limitText = firstQueryText(limit);
+      const offsetText = firstQueryText(offset);
+      if (limitText) filters.limit = limitText;
+      if (offsetText) filters.offset = offsetText;
       return hydrateService.hydrateIssuesList(projectId, filters, ctx.userId);
     },
   }),
@@ -238,7 +250,7 @@ const issueActions = [
     kind: 'write',
     summary: 'Move an issue to a board column and position',
     target: projectTarget,
-    input: issueInput.extend({ columnId: z.string(), position: z.number().int().optional() }),
+    input: issueInput.extend({ columnId: z.string(), position: dbInt.optional() }),
     output: record,
     rest: { method: 'PATCH', path: `${ISSUE}/move` },
     authorize: write,

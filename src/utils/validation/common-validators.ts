@@ -22,6 +22,10 @@ export function validate<T extends z.ZodTypeAny>(schema: T, data: unknown): z.ou
 
 /** The largest value of an integer column: anything past it is a failed query, not a miss. */
 export const MAX_DB_INT = 2147483647;
+export const MIN_DB_INT = -2147483648;
+
+/** A whole number that fits an integer column. */
+export const dbInt = z.number().int().min(MIN_DB_INT).max(MAX_DB_INT);
 
 /**
  * A whole number from a number or from digits only. `z.coerce.number()` also takes `''`, `' 5 '`
@@ -152,7 +156,7 @@ export const searchSchema = z.object({
   since: z.string().optional(),
   until: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  offset: z.coerce.number().int().min(0).default(0),
+  offset: z.coerce.number().int().min(0).max(MAX_DB_INT).default(0),
 });
 
 export const savedSearchSchema = z.object({
@@ -169,7 +173,7 @@ export const savedSearchSchema = z.object({
 export const adminListUsersQuerySchema = z.object({
   search: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
+  offset: z.coerce.number().int().min(0).max(MAX_DB_INT).optional(),
 });
 
 export const adminUpdateUserSchema = z.object({
@@ -245,13 +249,18 @@ export const updateMilestoneSchema = createMilestoneSchema.partial().extend({
   status: z.enum(['OPEN', 'CLOSED']).optional(),
 });
 
-const digits = z.string().regex(/^\d*$/, 'must be a whole number, 0 or more');
+const digits = z
+  .string()
+  .regex(/^\d*$/, 'must be a whole number, 0 or more')
+  .refine((value) => Number(value) <= MAX_DB_INT, 'is too large');
 
 /**
  * A paging or count value in a query: digits, a repeated value, or a whole number from an MCP
  * caller. Handlers narrow it with `firstQueryText`.
  */
-export const queryCount = z.union([digits, z.array(digits), z.number().int().min(0)]).optional();
+export const queryCount = z
+  .union([digits, z.array(digits), z.number().int().min(0).max(MAX_DB_INT)])
+  .optional();
 
 /**
  * The text of a query value: a number as its digits, a repeated value as its first.

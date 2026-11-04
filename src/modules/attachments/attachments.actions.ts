@@ -7,7 +7,7 @@ import { defineAction, type ActionContext } from '../../actions/define';
 import { MAX_KEY_LENGTH, parseKey, resolveKey } from '../../actions/keys';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
-import { validate } from '../../utils/validation/common-validators';
+import { MAX_DB_INT, validate } from '../../utils/validation/common-validators';
 
 import { receiveMultipart } from './attachments.routes';
 import * as attachmentsService from './attachments.service';
@@ -25,7 +25,7 @@ const listTarget = z.object({ issueId: z.string().optional(), pageId: z.string()
 
 const issueRef = z.strictObject({
   projectId: z.string().min(1),
-  issueNumber: z.number().int().positive(),
+  issueNumber: z.number().int().positive().max(MAX_DB_INT),
 });
 const pageRef = z.strictObject({ spaceId: z.string().min(1), pageSlug: z.string().min(1) });
 const keyValue = z.string().min(1).max(MAX_KEY_LENGTH);
@@ -131,6 +131,17 @@ function httpOf(ctx: ActionContext) {
 }
 
 /** The fields of a multipart upload. Empty and repeated values can't name a parent. */
+/** Where a new file went, for its audit row: the target field holds the ids or the key. */
+const UPLOAD_AUDIT_INPUT = [
+  'target.projectId',
+  'target.issueNumber',
+  'target.spaceId',
+  'target.pageSlug',
+  'target.issueKey',
+  'target.pageKey',
+  'filename',
+];
+
 const multipartFields = z.object({
   issueId: z.string().min(1).optional(),
   pageId: z.string().min(1).optional(),
@@ -186,6 +197,7 @@ const attachmentActions = [
       mimeType: z.string().min(1).max(255),
       size: z.number().int().positive(),
     }),
+    auditFields: { input: UPLOAD_AUDIT_INPUT, result: ['uploadId'] },
     output: z.object({
       uploadUrl: z.string(),
       uploadId: z.string(),
@@ -211,6 +223,7 @@ const attachmentActions = [
       url: z.string().min(1).max(2048),
       filename: z.string().min(1).max(attachmentsService.MAX_FILENAME_LENGTH).optional(),
     }),
+    auditFields: { input: [...UPLOAD_AUDIT_INPUT, 'url'] },
     output: record,
     rest: { method: 'POST', path: `${BASE}/from-url` },
     authorize: writeTarget,
