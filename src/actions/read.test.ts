@@ -1138,17 +1138,17 @@ describe('item.read', () => {
       expect((await readAs(orgAdmin, { keys: [key] })).body.items[0].data.title).toBe('C');
     });
 
-    it('lets a platform admin read issues, and pages as the page routes do', async () => {
+    it('lets a platform admin read issues and pages, as the page routes do', async () => {
       const admin = await createTestUser();
       extraUsers.push(admin.id);
       await prisma.user.update({ where: { id: admin.id }, data: { isAdmin: true } });
       const res = await readAs(admin, { keys: [issueKey, mainPageKey] });
       expect(res.body.items[0].data.title).toBe('Issue 42');
-      // assertPageAccess asks for org membership first, for platform admins as well
-      expect(res.body.items[1].error.status).toBe(404);
+      expect(res.body.items[1].error).toBeUndefined();
       const page = await prisma.page.findFirstOrThrow({ where: { spaceId, slug: 'main' } });
+      expect(res.body.items[1].data.slug).toBe(page.slug);
       const route = await authGet(`/api/wiki/spaces/${spaceId}/pages/${page.slug}`, admin.token);
-      expect(route.status).toBe(403);
+      expect(route.status).toBe(200);
     });
 
     it('refuses a deactivated user, by session and by token', async () => {
