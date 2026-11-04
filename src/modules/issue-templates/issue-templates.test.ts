@@ -116,6 +116,17 @@ describe('Issue Templates API', () => {
     expect(res.body.body).toBe('Updated body');
   });
 
+  it('keeps the body when an update leaves it out', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${projectId}/issue-templates/${templateId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ title: 'Bug: only the title' });
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe('Bug: only the title');
+    expect(res.body.body).toBe('Updated body');
+  });
+
   // 5. Template not found
   it('5. should return 404 for non-existent template', async () => {
     const res = await request(app)

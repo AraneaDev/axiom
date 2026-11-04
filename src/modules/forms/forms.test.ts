@@ -108,6 +108,17 @@ describe('Forms API', () => {
       expect(res.body.issueFieldMapping).toBe('title');
       fieldId = res.body.id;
     });
+
+    it('leaves required alone when a patch does not name it', async () => {
+      const res = await request(app)
+        .patch(`/api/projects/${projectId}/forms/${formId}/pages/${pageId}/fields/${fieldId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ label: 'Issue Title Renamed' });
+      expect(res.status).toBe(200);
+      expect(res.body.label).toBe('Issue Title Renamed');
+      expect(res.body.required).toBe(true);
+    });
   });
 
   describe('PATCH /api/projects/:projectId/forms/:formId/publish', () => {

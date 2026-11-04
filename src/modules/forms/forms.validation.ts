@@ -88,7 +88,10 @@ export const createFieldSchema = z.object({
   position: z.number().int().min(0).optional(),
 });
 
-export const updateFieldSchema = createFieldSchema.partial();
+// Without the create default: a patch that leaves out `required` must leave it alone
+export const updateFieldSchema = createFieldSchema
+  .partial()
+  .extend({ required: z.boolean().optional() });
 
 export const reorderFieldsSchema = z.object({
   fieldIds: z.array(z.string()).min(1),
