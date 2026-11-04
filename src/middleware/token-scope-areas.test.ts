@@ -50,7 +50,7 @@ function oldAreaOf(path: string): 'issues' | 'wiki' | 'any' | 'none' {
   ) {
     return 'issues';
   }
-  if (path.startsWith('/api/attachments') || path.startsWith('/api/mcp')) return 'any';
+  if (path.startsWith('/api/attachments')) return 'any';
   if (
     path.startsWith('/api/search') ||
     path.startsWith('/api/orgs') ||
@@ -71,7 +71,7 @@ function oldTokenAllows(scopes: readonly string[], method: string, path: string)
   const area = oldAreaOf(path);
   if (area === 'issues' || area === 'wiki') return oldHas(scopes, area, write);
   if (area === 'any') {
-    if (path.startsWith('/api/attachments') || path.startsWith('/api/mcp')) {
+    if (path.startsWith('/api/attachments')) {
       return write
         ? oldHas(scopes, 'issues', true) || oldHas(scopes, 'wiki', true)
         : oldHas(scopes, 'issues', false) || oldHas(scopes, 'wiki', false);
@@ -162,8 +162,6 @@ const ROUTE_PATHS = [
   '/api/attachments',
   '/api/attachments/a1',
   '/api/attachments/a1/meta',
-  '/api/mcp',
-  '/api/mcp/messages',
   '/api/search',
   '/api/search/spaces',
   '/api/search/saved',

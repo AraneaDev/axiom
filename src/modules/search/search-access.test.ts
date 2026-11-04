@@ -30,7 +30,7 @@ describe('Search access', () => {
   };
 
   const mcpSearch = async (user: TestUser) =>
-    withMcpClient(`Bearer ${user.token}`, async (client) => {
+    withMcpClient(user, async (client) => {
       const res = await callTool(client, 'search', { query: MARK, type: 'all' });
       expect(res.isError).toBe(false);
       return res.text;

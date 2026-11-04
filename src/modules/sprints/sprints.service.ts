@@ -58,12 +58,17 @@ export async function createSprint(
 /**
  * List sprints for a project, optionally filtered by status, with computed story points.
  * @param projectId - The project to list sprints for
- * @param opts - Optional filter options (status)
+ * @param opts - Optional filter and page
  * @param opts.status
+ * @param opts.take - The most to return
+ * @param opts.skip - How many to pass over
  * @returns List of sprints with issues and computed story point totals
  * @throws {AppError} 404 if project not found
  */
-export async function listSprints(projectId: string, opts?: { status?: string }) {
+export async function listSprints(
+  projectId: string,
+  opts?: { status?: string; take?: number; skip?: number },
+) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
 
   const where: Prisma.SprintWhereInput = { projectId };
@@ -83,6 +88,8 @@ export async function listSprints(projectId: string, opts?: { status?: string })
       },
     },
     orderBy: { startDate: 'desc' },
+    ...(opts?.take === undefined ? {} : { take: opts.take }),
+    ...(opts?.skip ? { skip: opts.skip } : {}),
   });
 
   return (sprints as SprintWithIssues[]).map((s: SprintWithIssues) => ({

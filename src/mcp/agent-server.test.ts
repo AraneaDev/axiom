@@ -35,7 +35,13 @@ import {
   type TestUser,
 } from '../test/factory';
 import { authPost } from '../test/helpers';
-import { callTool, connectMcp, serveApp, type ToolAnswer } from '../test/mcp-client';
+import {
+  callTool,
+  connectMcp,
+  serveApp,
+  tokenHeaderFor,
+  type ToolAnswer,
+} from '../test/mcp-client';
 
 const storagePath = path.join(tmpdir(), `axiom-mcp-test-${process.pid}`);
 process.env.STORAGE_PATH = storagePath;
@@ -58,15 +64,12 @@ describe('MCP server', () => {
   let base: string;
   let closeServer: () => Promise<void>;
   let spaceId: string;
+  let ownerAuth: Record<string, string>;
   const clients: Client[] = [];
   const created: string[] = [];
 
-  // A token of the context's owner, or of another user through their JWT
-  async function tokenHeader(scopes: string[], owner: TestUser = ctx.owner, name = 'mcp-agent') {
-    const res = await authPost('/api/users/me/tokens', owner.token, { name, scopes });
-    expect(res.status).toBe(201);
-    return `Token ${res.body.token}`;
-  }
+  const tokenHeader = (scopes: string[], owner: TestUser = ctx.owner, name = 'mcp-agent') =>
+    tokenHeaderFor(owner, scopes, name);
 
   async function client(authorization: string): Promise<Client> {
     const connected = await connectMcp(base, authorization);
@@ -74,7 +77,7 @@ describe('MCP server', () => {
     return connected;
   }
 
-  const asUser = (user: TestUser) => client(`Bearer ${user.token}`);
+  const asUser = async (user: TestUser) => client(await tokenHeaderFor(user));
 
   function rawPost(body: unknown, headers: Record<string, string> = {}) {
     return fetch(`${base}/api/mcp`, {
@@ -112,6 +115,7 @@ describe('MCP server', () => {
     });
     spaceId = space.id;
     ({ base, close: closeServer } = await serveApp());
+    ownerAuth = { Authorization: await tokenHeaderFor(ctx.owner) };
   });
 
   afterEach(() => {
@@ -296,7 +300,7 @@ describe('MCP server', () => {
           { action: 'issue.create', input: { projectId: ctx.projectId, title: 'Batch four' } },
         ],
       });
-      expect(isError).toBe(false);
+      expect(isError).toBe(true);
       expect(data.completed).toBe(2);
       expect(data.results.map((r: { ok: boolean }) => r.ok)).toEqual([true, true, false, false]);
       expect(data.results[2].error).toMatchObject({ status: 400 });
@@ -335,10 +339,15 @@ describe('MCP server', () => {
         action: 'issue.create',
         input: { projectId: ctx.projectId, title },
       }));
-      expectRefused(await callTool(await asUser(ctx.owner), 'act', { batch }), 400);
+      expectRefused(
+        await callTool(await asUser(ctx.owner), 'act', { batch }),
+        400,
+        'BATCH_TOO_LARGE',
+      );
 
       const rest = await authPost('/api/act', ctx.owner.token, { batch });
       expect(rest.status).toBe(400);
+      expect(rest.body.error.code).toBe('BATCH_TOO_LARGE');
       expect(await prisma.issue.count({ where: { title } })).toBe(0);
     });
 
@@ -348,7 +357,7 @@ describe('MCP server', () => {
       const batch = Array.from({ length: MAX_BATCH_ITEMS }, () => ({ action: 'nope.nope' }));
       for (let used = 0; used + MAX_BATCH_ITEMS <= ACT_LIMIT.max; used += MAX_BATCH_ITEMS) {
         const { data, isError } = await callTool(c, 'act', { batch });
-        expect(isError).toBe(false);
+        expect(isError).toBe(true);
         expect(data.results[0].error.code).toBe('UNKNOWN_ACTION');
       }
       expectRefused(await callTool(c, 'act', { batch }), 429, 'RATE_LIMITED');
@@ -779,7 +788,7 @@ describe('MCP server', () => {
     it('refuses the old SSE endpoints', async () => {
       const { token } = ctx.owner;
       const stream = await fetch(`${base}/api/mcp`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
+        headers: { ...ownerAuth, Accept: 'text/event-stream' },
       });
       expect(stream.status).toBe(405);
       expect(stream.headers.get('content-type')).not.toContain('text/event-stream');
@@ -796,7 +805,7 @@ describe('MCP server', () => {
     it('answers DELETE with 405, as there is no session to end', async () => {
       const res = await fetch(`${base}/api/mcp`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${ctx.owner.token}` },
+        headers: ownerAuth,
       });
       expect(res.status).toBe(405);
     });
@@ -808,7 +817,7 @@ describe('MCP server', () => {
     });
 
     it('needs no CSRF header on exactly /api/mcp', async () => {
-      const auth = { Authorization: `Bearer ${ctx.owner.token}` };
+      const auth = ownerAuth;
       expect((await rawPost(INITIALIZE, auth)).status).toBe(200);
 
       const other = await fetch(`${base}/api/mcp/messages`, {
@@ -830,7 +839,7 @@ describe('MCP server', () => {
     });
 
     it('refuses a foreign Origin ahead of everything, and allows none or the site', async () => {
-      const auth = { Authorization: `Bearer ${ctx.owner.token}` };
+      const auth = ownerAuth;
       for (const origin of ['https://evil.example', 'null', 'not a url']) {
         const res = await rawPost(INITIALIZE, { ...auth, Origin: origin });
         expect(res.status, origin).toBe(403);
@@ -857,7 +866,7 @@ describe('MCP server', () => {
     });
 
     it('answers a body it cannot parse or take as a client error', async () => {
-      const auth = { Authorization: `Bearer ${ctx.owner.token}` };
+      const auth = ownerAuth;
       const malformed = await fetch(`${base}/api/mcp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: MCP_ACCEPT, ...auth },
@@ -873,15 +882,16 @@ describe('MCP server', () => {
     });
 
     it('takes one message per request, so one request is one call', async () => {
-      const res = await rawPost([INITIALIZE, { jsonrpc: '2.0', id: 2, method: 'tools/list' }], {
-        Authorization: `Bearer ${ctx.owner.token}`,
-      });
+      const res = await rawPost(
+        [INITIALIZE, { jsonrpc: '2.0', id: 2, method: 'tools/list' }],
+        ownerAuth,
+      );
       expect(res.status).toBe(400);
     });
 
     it('closes the server and transport of every request', async () => {
       const close = vi.spyOn(StreamableHTTPServerTransport.prototype, 'close');
-      const res = await rawPost(INITIALIZE, { Authorization: `Bearer ${ctx.owner.token}` });
+      const res = await rawPost(INITIALIZE, ownerAuth);
       expect(res.status).toBe(200);
       expect(res.headers.get('mcp-session-id')).toBeNull();
       await res.json();
@@ -938,6 +948,399 @@ describe('MCP server', () => {
     });
   });
 
+  describe('review fixes', () => {
+    it('takes application/json only, so no body gets past the parser and its limit', async () => {
+      const issue = await createIssue();
+      const title = `By array ${Date.now()}`;
+      const call = {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'act',
+          arguments: {
+            action: 'comment.add',
+            key: issue.key,
+            input: { body: title },
+          },
+        },
+      };
+      for (const spelling of ['application/json-patch+json', 'text/plain; x=application/json']) {
+        const array = await rawPost([call, call, call], { ...ownerAuth, 'Content-Type': spelling });
+        expect(array.status, spelling).toBe(415);
+        const single = await rawPost(call, { ...ownerAuth, 'Content-Type': spelling });
+        expect(single.status, spelling).toBe(415);
+      }
+      expect(await prisma.comment.count({ where: { body: title } })).toBe(0);
+
+      const charset = await rawPost(INITIALIZE, {
+        ...ownerAuth,
+        'Content-Type': 'application/json; charset=utf-8',
+      });
+      expect(charset.status).toBe(200);
+      for (const body of ['"text"', '3', 'null']) {
+        const res = await fetch(`${base}/api/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: MCP_ACCEPT, ...ownerAuth },
+          body,
+        });
+        expect(res.status, body).toBe(400);
+      }
+    });
+
+    it('counts upload toward the act limit', async () => {
+      const user = await newUser();
+      const c = await asUser(user);
+      const batch = Array.from({ length: MAX_BATCH_ITEMS }, () => ({ action: 'nope.nope' }));
+      for (let used = 0; used + MAX_BATCH_ITEMS <= ACT_LIMIT.max; used += MAX_BATCH_ITEMS) {
+        await callTool(c, 'act', { batch });
+      }
+      expectRefused(await callTool(c, 'upload', { url: 'https://example.com/a.png' }), 429);
+    });
+
+    it('R21: one audit row per write through MCP, with action, ids, outcome and via', async () => {
+      const issue = await createIssue();
+      const token = `audit-bot-${Date.now()}`;
+      const c = await client(await tokenHeader(['issues:write'], ctx.owner, token));
+      const rows = () =>
+        prisma.auditLog.findMany({ where: { via: token }, orderBy: { createdAt: 'asc' } });
+
+      await callTool(c, 'act', { action: 'issue.get', key: issue.key });
+      await callTool(c, 'describe');
+      expect(await rows()).toEqual([]);
+
+      await callTool(c, 'act', { action: 'issue.update', key: issue.key, input: { title: 'New' } });
+      const [ok] = await rows();
+      expect(ok.action).toBe('issue.update');
+      expect(ok.details).toMatchObject({
+        outcome: 'ok',
+        target: { projectId: ctx.projectId, issueNumber: issue.number },
+      });
+
+      // A refused delete reads as refused, not as a 200
+      await callTool(c, 'act', {
+        action: 'page.delete',
+        input: { spaceId, pageSlug: 'nothing' },
+      });
+      const refused = (await rows())[1];
+      expect(refused.action).toBe('page.delete');
+      expect(refused.details).toMatchObject({ outcome: 'refused', status: 403, code: 'SCOPE' });
+
+      // A key that resolves to nothing is a refused write too
+      await callTool(c, 'act', {
+        action: 'issue.delete',
+        key: `${ctx.projectPrefix}-99999`,
+      });
+      expect((await rows())[2].details).toMatchObject({
+        outcome: 'refused',
+        status: 404,
+        target: { key: `${ctx.projectPrefix}-99999` },
+      });
+      expect(await prisma.auditLog.count({ where: { via: token, action: 'create' } })).toBe(0);
+    });
+
+    it('R21: a batch writes one row per item that ran, and /api/act a row per action', async () => {
+      const token = `audit-batch-${Date.now()}`;
+      const header = await tokenHeader(['issues:write'], ctx.owner, token);
+      const c = await client(header);
+      const create = { action: 'issue.create', input: { projectId: ctx.projectId, title: 'B' } };
+      await callTool(c, 'act', {
+        batch: [create, { action: 'issue.create', input: { projectId: ctx.projectId } }, create],
+      });
+      const rows = await prisma.auditLog.findMany({
+        where: { via: token },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(rows.map((r) => [r.action, (r.details as { outcome: string }).outcome])).toEqual([
+        ['issue.create', 'ok'],
+        ['issue.create', 'refused'],
+      ]);
+
+      const session = await authPost('/api/act', ctx.owner.token, {
+        action: 'issue.create',
+        input: { projectId: ctx.projectId, title: `Act audit ${Date.now()}` },
+      });
+      expect(session.status).toBe(200);
+      await vi.waitFor(async () => {
+        const row = await prisma.auditLog.findFirstOrThrow({
+          where: { userId: ctx.owner.id, action: 'issue.create', via: null },
+          orderBy: { createdAt: 'desc' },
+        });
+        expect(row.details).toMatchObject({ outcome: 'ok' });
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const httpRows = await prisma.auditLog.count({
+        where: { resource: 'unknown', userId: ctx.owner.id },
+      });
+      expect(httpRows).toBe(0);
+    });
+
+    it('page.create takes a template of the space, resolved, or says why not', async () => {
+      const template = await prisma.pageTemplate.create({
+        data: { spaceId, name: 'T', body: 'By {{currentUser.username}}' },
+      });
+      const c = await asUser(ctx.owner);
+      const slug = `from-template-${Date.now()}`;
+      const made = await callTool(c, 'act', {
+        action: 'page.create',
+        input: { spaceId, title: 'From template', slug, templateId: template.id },
+      });
+      expect(made.isError).toBe(false);
+      expect(made.data.body).toBe(`By ${ctx.owner.username}`);
+
+      expectRefused(
+        await callTool(c, 'act', {
+          action: 'page.create',
+          input: { spaceId, title: 'Both', slug: `${slug}-b`, body: 'x', templateId: template.id },
+        }),
+        400,
+      );
+      expectRefused(
+        await callTool(c, 'act', {
+          action: 'page.create',
+          input: { spaceId, title: 'None', slug: `${slug}-n`, templateId: 'missing' },
+        }),
+        404,
+      );
+    });
+
+    it('pageTemplate.resolve resolves over MCP, with the checks of the route', async () => {
+      const c = await asUser(ctx.owner);
+      const ok = await callTool(c, 'act', {
+        action: 'pageTemplate.resolve',
+        input: { body: 'In {{space.slug}}', context: { spaceId } },
+      });
+      expect(ok.data.body).toBe('In agent-space');
+
+      const stranger = await asUser(await newUser());
+      const refused = await callTool(stranger, 'act', {
+        action: 'pageTemplate.resolve',
+        input: { body: '{{space.name}}', context: { spaceId } },
+      });
+      expectRefused(refused, 403);
+      expect(refused.text).not.toContain('Agent space');
+    });
+
+    it('issue.list filters answer 400 naming the valid values, and agree with search', async () => {
+      const mark = `filter${Date.now()}`;
+      const made = await prisma.issue.create({
+        data: {
+          projectId: ctx.projectId,
+          number: nextNumber--,
+          title: `Bug ${mark}`,
+          body: '',
+          type: 'BUG',
+          priority: 'HIGH',
+          creatorId: ctx.owner.id,
+        },
+      });
+      const c = await asUser(ctx.owner);
+      const list = (input: object) =>
+        callTool(c, 'act', {
+          action: 'issue.list',
+          input: { projectId: ctx.projectId, q: mark, ...input },
+        });
+      for (const input of [{ type: 'bug' }, { type: 'BUG' }, { priority: 'high' }, { type: '' }]) {
+        const { data, isError } = await list(input);
+        expect(isError, JSON.stringify(input)).toBe(false);
+        expect(data.issues.map((i: { id: string }) => i.id)).toEqual([made.id]);
+      }
+      expect((await list({ type: 'story' })).data.issues).toEqual([]);
+
+      const wrong = await list({ type: 'nonsense' });
+      expectRefused(wrong, 400);
+      expect(wrong.data.message).toContain('BUG');
+
+      const rest = await request(app)
+        .get(`/api/projects/${ctx.projectId}/issues?priority=nope`)
+        .set('Authorization', `Bearer ${ctx.owner.token}`);
+      expect(rest.status).toBe(400);
+
+      const search = await callTool(c, 'search', { query: `type:bug ${mark}`, type: 'issues' });
+      expect(search.data[0].items.map((i: { title: string }) => i.title)).toEqual([`Bug ${mark}`]);
+    });
+
+    it('R22: /api/mcp refuses a session and says to create a token', async () => {
+      const auth = { Authorization: `Bearer ${ctx.owner.token}` };
+      for (const res of [
+        await rawPost(INITIALIZE, auth),
+        await fetch(`${base}/api/mcp`, { headers: auth }),
+        await fetch(`${base}/api/mcp`, { method: 'DELETE', headers: auth }),
+      ]) {
+        expect(res.status).toBe(401);
+        const body = (await res.json()) as { error: { code: string; message: string } };
+        expect(body.error.code).toBe('TOKEN_REQUIRED');
+        expect(body.error.message).toContain('token');
+      }
+      const act = await authPost('/api/act', ctx.owner.token, { action: 'org.list' });
+      expect(act.status).toBe(200);
+    });
+
+    it('answers a malformed tools/call with a clean error', async () => {
+      for (const params of [{}, { name: 42 }, { name: 'act', arguments: 'nope' }]) {
+        const res = await rawPost(
+          { jsonrpc: '2.0', id: 9, method: 'tools/call', params },
+          ownerAuth,
+        );
+        const text = await res.text();
+        const body = JSON.parse(text) as { error: { code: number; message: string }; id: number };
+        expect(body.id).toBe(9);
+        expect(body.error.code).toBe(-32602);
+        expect(text).not.toContain('invalid_type');
+        expect(text).not.toContain('expected');
+      }
+    });
+
+    it('space.list and sprint.list take limit and offset, with a default for agents', async () => {
+      const team = await prisma.team.create({
+        data: {
+          orgId: ctx.orgId,
+          name: 'Many',
+          slug: `many-${Date.now()}`,
+          members: { create: { userId: ctx.owner.id, role: 'ADMIN' } },
+        },
+      });
+      await prisma.wikiSpace.createMany({
+        data: Array.from({ length: 22 }, (_, i) => ({
+          teamId: team.id,
+          name: `S${String(i).padStart(2, '0')}`,
+          slug: `s${i}`,
+        })),
+      });
+      const project = await prisma.project.create({
+        data: { teamId: team.id, name: 'Many', slug: 'many', prefix: 'MNY' },
+      });
+      await prisma.sprint.createMany({
+        data: Array.from({ length: 22 }, (_, i) => ({
+          projectId: project.id,
+          name: `Sprint ${i}`,
+          startDate: new Date(2026, 0, i + 1),
+          endDate: new Date(2026, 1, i + 1),
+        })),
+      });
+      try {
+        const c = await asUser(ctx.owner);
+        const spaces = (input: object = {}) =>
+          callTool(c, 'act', { action: 'space.list', input: { teamId: team.id, ...input } });
+        const sprints = (input: object = {}) =>
+          callTool(c, 'act', { action: 'sprint.list', input: { projectId: project.id, ...input } });
+
+        expect((await spaces()).data).toHaveLength(20);
+        expect((await sprints()).data).toHaveLength(20);
+        const two = await spaces({ limit: 2, offset: 1 });
+        expect(two.data.map((s: { name: string }) => s.name)).toEqual(['S01', 'S02']);
+        expect((await sprints({ limit: 3 })).data).toHaveLength(3);
+
+        const rest = await request(app)
+          .get(`/api/wiki/team/${team.id}/spaces`)
+          .set('Authorization', `Bearer ${ctx.owner.token}`);
+        expect(rest.body).toHaveLength(22);
+        const restLimit = await request(app)
+          .get(`/api/projects/${project.id}/sprints?limit=2`)
+          .set('Authorization', `Bearer ${ctx.owner.token}`);
+        expect(restLimit.body).toHaveLength(2);
+      } finally {
+        await prisma.project.delete({ where: { id: project.id } });
+        await prisma.team.delete({ where: { id: team.id } });
+      }
+    });
+
+    it('answers 400 naming an unknown field on the act path, and REST still drops it', async () => {
+      const { number, key } = await createIssue('Unchanged');
+      const c = await asUser(ctx.owner);
+      const answer = await callTool(c, 'act', {
+        action: 'issue.update',
+        key,
+        input: { titel: 'x' },
+      });
+      expectRefused(answer, 400);
+      expect(answer.data.message).toContain('titel');
+
+      const batch = await authPost('/api/act', ctx.owner.token, {
+        action: 'issue.update',
+        input: { projectId: ctx.projectId, issueNumber: number, titel: 'x' },
+      });
+      expect(batch.status).toBe(400);
+
+      // A refused caller still sees the refusal, not the field check
+      const stranger = await asUser(await newUser());
+      expectRefused(
+        await callTool(stranger, 'act', {
+          action: 'issue.update',
+          input: { projectId: ctx.projectId, issueNumber: number, titel: 'x' },
+        }),
+        403,
+      );
+
+      const rest = await request(app)
+        .patch(`/api/projects/${ctx.projectId}/issues/${number}`)
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .set(CSRF)
+        .send({ titel: 'x' });
+      expect(rest.status).toBe(200);
+    });
+
+    it('builds uploadUrl from the configured site origin when there is one', async () => {
+      vi.stubEnv('FRONTEND_URL', 'https://axiom.example/');
+      try {
+        const { data } = await callTool(await asUser(ctx.owner), 'upload', {
+          filename: 'a.png',
+          mimeType: 'image/png',
+          size: 8,
+        });
+        expect(data.uploadUrl.startsWith('https://axiom.example/api/uploads/')).toBe(true);
+        expect(data.curl).toContain('https://axiom.example/api/uploads/');
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('publishes the real enum of linkType, and no default for a catch field', async () => {
+      const c = await asUser(ctx.owner);
+      const link = await callTool(c, 'describe', { action: 'pageIssueLink.add' });
+      expect(link.text).toContain('EMBED');
+      expect(link.text).not.toContain('""');
+      expect(link.data.input.properties.linkType.default).toBeUndefined();
+      expect(link.data.input.properties.issueId.default).toBeUndefined();
+      const diff = await callTool(c, 'describe', { action: 'page.diff' });
+      expect(JSON.stringify(diff.data.input)).not.toContain('"default":""');
+      const comment = await callTool(c, 'describe', { action: 'comment.update' });
+      expect(comment.data.input.properties.body.default).toBeUndefined();
+    });
+
+    it('answers 400 on NUL and on a number past the column, over REST and act', async () => {
+      const { key, number } = await createIssue();
+      const c = await asUser(ctx.owner);
+      const cases: Array<[string, Record<string, unknown>]> = [
+        ['issue.get', { projectId: 'a\u0000b', issueNumber: 1 }],
+        ['issue.create', { projectId: ctx.projectId, title: 'a\u0000b' }],
+        ['comment.add', { projectId: ctx.projectId, issueNumber: number, body: 'a\u0000b' }],
+        ['search.run', { query: 'a\u0000b' }],
+        ['issue.get', { projectId: ctx.projectId, issueNumber: 2 ** 31 }],
+        ['issue.get', { projectId: ctx.projectId, issueNumber: String(2 ** 31) }],
+      ];
+      for (const [action, input] of cases) {
+        expectRefused(await callTool(c, 'act', { action, input }), 400);
+      }
+      const { token } = ctx.owner;
+      const restCases = [
+        request(app).get(`/api/projects/a%00b/issues/1`),
+        request(app).get(`/api/projects/${ctx.projectId}/issues/${2 ** 31}`),
+        request(app).get('/api/search?q=a%00b'),
+      ];
+      for (const req of restCases) {
+        expect((await req.set('Authorization', `Bearer ${token}`)).status).toBe(400);
+      }
+      const title = await authPost(`/api/projects/${ctx.projectId}/issues`, token, {
+        title: 'a\u0000b',
+      });
+      expect(title.status).toBe(400);
+      expect((await callTool(c, 'read', { keys: [`${key}\u0000`] })).data.items[0].error.code).toBe(
+        'INVALID_KEY',
+      );
+    });
+  });
+
   // ─── From mcp-session.test.ts: a message could only reach its owner's SSE session ─────
   describe('identity per request', () => {
     it('runs as whoever authenticated this request, whatever session it names', async () => {
@@ -956,14 +1359,14 @@ describe('MCP server', () => {
         },
       };
       const asStranger = await rawPost(call, {
-        Authorization: `Bearer ${stranger.token}`,
+        Authorization: await tokenHeaderFor(stranger),
         'Mcp-Session-Id': 'the-session-of-the-owner',
       });
       const text = await asStranger.text();
       expect(text).toContain('isError');
       expect(text).not.toContain('Only the team');
 
-      const asOwner = await rawPost(call, { Authorization: `Bearer ${ctx.owner.token}` });
+      const asOwner = await rawPost(call, ownerAuth);
       expect(await asOwner.text()).toContain('Only the team');
     });
 
@@ -971,13 +1374,11 @@ describe('MCP server', () => {
       const member = await newMember();
       const header = await tokenHeader(['issues:read'], member);
       const c = await client(header);
-      const session = await asUser(member);
       const list = { action: 'issue.list', input: { projectId: ctx.projectId } };
       expect((await callTool(c, 'act', list)).isError).toBe(false);
 
       await prisma.user.update({ where: { id: member.id }, data: { deactivatedAt: new Date() } });
       await expect(callTool(c, 'act', list)).rejects.toThrow();
-      await expect(callTool(session, 'act', list)).rejects.toThrow();
       const raw = await rawPost(INITIALIZE, { Authorization: header });
       expect(raw.status).toBe(403);
       expect(((await raw.json()) as { error: { code: string } }).error.code).toBe(
@@ -1194,7 +1595,7 @@ describe('MCP server', () => {
       expect(res.isError).toBe(false);
     });
 
-    it('uiOnly and tokenBlocked actions stay closed over MCP, with every scope or a session', async () => {
+    it('uiOnly and tokenBlocked stay closed over MCP with every scope, uiOnly on /api/act too', async () => {
       registerActions(
         (['test.mcpUiOnly', 'test.mcpTokenBlocked'] as const).map((name) =>
           defineAction({
@@ -1210,17 +1611,24 @@ describe('MCP server', () => {
           }),
         ),
       );
-      const allScopes = await client(await tokenHeader([...TOKEN_SCOPES]));
-      for (const c of [allScopes, await asUser(ctx.owner)]) {
-        const { data } = await callTool(c, 'describe');
-        const names = (data as Array<{ name: string }>).map((a) => a.name);
-        expect(names).toContain('issue.get');
-        for (const action of ['test.mcpUiOnly', 'test.mcpTokenBlocked']) {
-          expect(names).not.toContain(action);
-          expectRefused(await callTool(c, 'describe', { action }), 403, 'SCOPE');
-          expectRefused(await callTool(c, 'act', { action }), 403, 'SCOPE');
-        }
+      const c = await client(await tokenHeader([...TOKEN_SCOPES]));
+      const { data } = await callTool(c, 'describe');
+      const names = (data as Array<{ name: string }>).map((a) => a.name);
+      expect(names).toContain('issue.get');
+      for (const action of ['test.mcpUiOnly', 'test.mcpTokenBlocked']) {
+        expect(names).not.toContain(action);
+        expectRefused(await callTool(c, 'describe', { action }), 403, 'SCOPE');
+        expectRefused(await callTool(c, 'act', { action }), 403, 'SCOPE');
       }
+
+      // A session names actions on /api/act: uiOnly stays for its own routes, with their limiters,
+      // while tokenBlocked is a normal action for a session
+      const uiOnly = await authPost('/api/act', ctx.owner.token, { action: 'test.mcpUiOnly' });
+      expect(uiOnly.status).toBe(403);
+      const blocked = await authPost('/api/act', ctx.owner.token, {
+        action: 'test.mcpTokenBlocked',
+      });
+      expect(blocked.status).toBe(200);
     });
   });
 });

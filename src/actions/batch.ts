@@ -6,9 +6,11 @@ import { perUserLimit } from '../middleware/rate-limit';
 import { logger } from '../utils/logger';
 import { validate } from '../utils/validation/common-validators';
 
+import { auditAction } from './audit';
 import type { ActionContext, ActionDef } from './define';
 import { assertRunnable, executeAction } from './execute';
 import { MAX_KEY_LENGTH, parseKey, resolveKey } from './keys';
+import { getAction } from './registry';
 import { actionContextFromRequest } from './rest';
 
 /** The most items in one batch. */
@@ -20,7 +22,8 @@ export const MAX_BATCH_ITEMS = 25;
  */
 export const ACT_LIMIT = { windowMs: 60_000, max: 300 } as const;
 
-const countItems = perUserLimit(ACT_LIMIT, 'Too many actions, please try again later');
+/** Counts toward ACT_LIMIT, for each way an agent runs actions. */
+export const countActItems = perUserLimit(ACT_LIMIT, 'Too many actions, please try again later');
 
 const actItem = z.strictObject({
   action: z.string().min(1).max(200),
@@ -32,7 +35,8 @@ export type ActItem = z.infer<typeof actItem>;
 
 /** One action, or a batch: the body of /api/act and the input of the act tool. */
 export const actRequest = actItem.partial({ action: true }).extend({
-  batch: z.array(actItem).min(1).max(MAX_BATCH_ITEMS).optional(),
+  // The upper bound is executeBatch's, with its own code
+  batch: z.array(actItem).min(1).describe(`At most ${MAX_BATCH_ITEMS} items`).optional(),
 });
 
 type ActRequest = z.infer<typeof actRequest>;
@@ -104,6 +108,24 @@ async function inputOf(item: ActItem, ctx: ActionContext): Promise<unknown> {
 }
 
 /**
+ * Run one item. A write refused while resolving its key never reaches executeAction, so its audit
+ * row is written here.
+ * @param item - The item
+ * @param ctx - Who runs it
+ */
+async function runItem(item: ActItem, ctx: ActionContext): Promise<unknown> {
+  let input: unknown;
+  try {
+    input = await inputOf(item, ctx);
+  } catch (err) {
+    const def = getAction(item.action);
+    if (def) await auditAction(def, item.input, ctx, err, item.key);
+    throw err;
+  }
+  return executeAction(item.action, input, ctx);
+}
+
+/**
  * The kind of item with its article, for a message.
  * @param kind - The kind
  */
@@ -126,7 +148,7 @@ export async function executeBatch(
   if (items.length > MAX_BATCH_ITEMS) {
     throw new AppError(400, `A batch holds at most ${MAX_BATCH_ITEMS} items`, 'BATCH_TOO_LARGE');
   }
-  await countItems(ctx.userId, items.length);
+  await countActItems(ctx.userId, items.length);
 
   const results: BatchResult[] = [];
   let failed = false;
@@ -136,8 +158,7 @@ export async function executeBatch(
       continue;
     }
     try {
-      const result = await executeAction(item.action, await inputOf(item, ctx), ctx);
-      results.push({ ok: true, result });
+      results.push({ ok: true, result: await runItem(item, ctx) });
     } catch (err) {
       failed = true;
       results.push({ ok: false, error: toActError(err) });
@@ -162,8 +183,8 @@ export async function runAct(request: ActRequest, ctx: ActionContext): Promise<u
     return executeBatch(batch, ctx);
   }
   if (action === undefined) throw new AppError(400, 'Give either action or batch');
-  await countItems(ctx.userId);
-  return executeAction(action, await inputOf({ action, key, input }, ctx), ctx);
+  await countActItems(ctx.userId);
+  return runItem({ action, key, input }, ctx);
 }
 
 /**
@@ -172,7 +193,7 @@ export async function runAct(request: ActRequest, ctx: ActionContext): Promise<u
  * @param res - The response
  */
 export async function handleAct(req: Request, res: Response): Promise<void> {
-  const ctx = actionContextFromRequest(req);
+  const ctx = { ...actionContextFromRequest(req), byName: { ipAddress: req.ip } };
   const result = await runAct(validate(actRequest, req.body), ctx);
   res.status(200).json(result === undefined ? { ok: true } : result);
 }

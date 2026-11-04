@@ -171,6 +171,31 @@ export function requireWikiCommentAccess() {
 }
 
 /**
+ * Whether a user may reach a template: the org and the space it belongs to.
+ * @param userId - The user
+ * @param templateId - The template
+ * @param level - The minimum level on its space
+ * @throws {AppError} 404 for no such template, 403 otherwise
+ */
+export async function assertTemplateAccess(
+  userId: string,
+  templateId: string,
+  level: SpacePermissionLevel = 'VIEW',
+): Promise<void> {
+  const template = await prisma.pageTemplate.findUnique({
+    where: { id: templateId },
+    select: { spaceId: true },
+  });
+  if (!template) throw new AppError(404, ERR.TEMPLATE_NOT_FOUND);
+  if ((await checkWikiSpaceOrgAccess(template.spaceId, userId)) !== 'ok') {
+    throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
+  }
+  if (!(await canAccessSpace(template.spaceId, userId, level))) {
+    throw new AppError(403, 'You do not have access to this space');
+  }
+}
+
+/**
  * Template routes: org membership and the space permission at the given level.
  * Expects :templateId.
  * @param level - VIEW (default) for reads, EDIT for changes
@@ -181,17 +206,7 @@ export function requireWikiTemplateAccess(level: SpacePermissionLevel = 'VIEW') 
     try {
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-      const template = await prisma.pageTemplate.findUnique({
-        where: { id: param(req, 'templateId') },
-        select: { spaceId: true },
-      });
-      if (!template) throw new AppError(404, ERR.TEMPLATE_NOT_FOUND);
-      if ((await checkWikiSpaceOrgAccess(template.spaceId, userId)) !== 'ok') {
-        throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
-      }
-      if (!(await canAccessSpace(template.spaceId, userId, level))) {
-        throw new AppError(403, 'You do not have access to this space');
-      }
+      await assertTemplateAccess(userId, param(req, 'templateId'), level);
       next();
     } catch (err) {
       next(err);

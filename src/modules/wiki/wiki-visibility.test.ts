@@ -70,7 +70,7 @@ describe('Hidden pages in listings', () => {
   });
 
   it('leaves hidden pages out of the MCP page tree', async () => {
-    const res = await withMcpClient(`Bearer ${member.token}`, (client) =>
+    const res = await withMcpClient(member, (client) =>
       callTool(client, 'act', { action: 'page.tree', input: { spaceId } }),
     );
     expect(res.isError).toBe(false);
@@ -198,7 +198,7 @@ describe('Hidden pages in listings', () => {
     }
   });
 
-  it("MCP page.create can't take the body of another space's template", async () => {
+  it("refuses MCP page.create from another org's template", async () => {
     const other = await createTestContext(`wikivistpl${Date.now()}`);
     try {
       const foreignSpace = await prisma.wikiSpace.create({
@@ -207,17 +207,15 @@ describe('Hidden pages in listings', () => {
       const template = await prisma.pageTemplate.create({
         data: { spaceId: foreignSpace.id, name: 'T', body: `${SECRET} template body` },
       });
-      const res = await withMcpClient(`Bearer ${member.token}`, (client) =>
+      const res = await withMcpClient(member, (client) =>
         callTool(client, 'act', {
           action: 'page.create',
           input: { spaceId, title: 'From tpl', slug: 'from-tpl', templateId: template.id },
         }),
       );
-      // The action has no templateId: templates resolve through resolve-template, which checks
-      // the space. The field is dropped, so nothing of the template ends up in the page.
+      expect(res.isError).toBe(true);
       expect(res.text).not.toContain(SECRET);
-      const page = await prisma.page.findFirst({ where: { spaceId, slug: 'from-tpl' } });
-      expect(page?.body ?? '').not.toContain(SECRET);
+      expect(await prisma.page.count({ where: { spaceId, slug: 'from-tpl' } })).toBe(0);
     } finally {
       await cleanupTestContext(other);
     }
@@ -244,7 +242,7 @@ describe('Hidden pages in listings', () => {
       expect(JSON.stringify(res.body)).not.toContain(SECRET);
     }
 
-    const mcp = await withMcpClient(`Bearer ${member.token}`, (client) =>
+    const mcp = await withMcpClient(member, (client) =>
       callTool(client, 'act', { action: 'space.list', input: { teamId: ctx.teamId } }),
     );
     expect(mcp.isError).toBe(false);
@@ -320,7 +318,7 @@ describe('Hidden pages in listings', () => {
       data: { teamId: team.id, name: 'P3', slug: 'p3' },
     });
 
-    const res = await withMcpClient(`Bearer ${member.token}`, (client) =>
+    const res = await withMcpClient(member, (client) =>
       callTool(client, 'act', { action: 'space.list', input: { teamId: team.id } }),
     );
     expect(res.isError).toBe(false);

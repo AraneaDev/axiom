@@ -20,16 +20,20 @@ export function validate<T extends z.ZodTypeAny>(schema: T, data: unknown): z.ou
 
 // ─── Shared Validators ─────────────────────────────────────
 
+/** The largest value of an integer column: anything past it is a failed query, not a miss. */
+export const MAX_DB_INT = 2147483647;
+
 /**
  * A whole number from a number or from digits only. `z.coerce.number()` also takes `''`, `' 5 '`
  * and `0x10`, and `parseInt` reads `5abc` as 5, so ids that come from a path or a body use this.
  */
 export const strictInt = z.union([
-  z.number().int().min(0),
+  z.number().int().min(0).max(MAX_DB_INT),
   z
     .string()
     .regex(/^\d+$/, 'must be a whole number')
-    .transform((value) => parseInt(value, 10)),
+    .transform((value) => parseInt(value, 10))
+    .pipe(z.number().max(MAX_DB_INT)),
 ]);
 
 /** Reusable slug: 2-50 lowercase alphanumeric + hyphens */
@@ -135,7 +139,11 @@ export const updateLabelSchema = createLabelSchema.partial();
 // ─── Search ─────────────────────────────────────────────────
 
 export const searchSchema = z.object({
-  q: z.string().min(1).max(1000),
+  q: z
+    .string()
+    .min(1)
+    .max(1000)
+    .refine((value) => !value.includes('\u0000'), 'must not contain a NUL character'),
   type: z.enum(['issues', 'wiki', 'all']).default('all'),
   teamId: z.string().optional(),
   projectId: z.string().optional(),

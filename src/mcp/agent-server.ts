@@ -1,16 +1,19 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequestSchema,
+  ErrorCode,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import type { Request, RequestHandler } from 'express';
 
 import { toActError, type ActError } from '../actions/batch';
 import type { ActionContext } from '../actions/define';
 import { actionContextFromRequest } from '../actions/rest';
 import { env as config } from '../config/env';
-import { TOKEN_SCOPES } from '../middleware/token-scopes';
 import { logger } from '../utils/logger';
 
-import { AGENT_TOOLS, listAgentTools, type ToolEnv } from './agent-tools';
+import { AGENT_TOOLS, FailedResult, listAgentTools, type ToolEnv } from './agent-tools';
 
 const INSTRUCTIONS =
   'Axiom holds issues, sprints and wiki pages. Use search to find things and read to open them ' +
@@ -54,7 +57,9 @@ export function createAgentServer(toolEnv: ToolEnv): Server {
       });
     }
     try {
-      return toolResult(await tool.run(params.arguments ?? {}, toolEnv));
+      const result = await tool.run(params.arguments ?? {}, toolEnv);
+      if (result instanceof FailedResult) return { ...toolResult(result.value), isError: true };
+      return toolResult(result);
     } catch (err) {
       return toolError(toActError(err));
     }
@@ -63,13 +68,12 @@ export function createAgentServer(toolEnv: ToolEnv): Server {
 }
 
 /**
- * Who runs the tools of this request. Over MCP a session counts as a token holding every scope, so
- * what is closed to MCP whatever the scopes (uiOnly, tokenBlocked) stays closed to it too.
- * @param req - An authenticated request
+ * Who runs the tools of this request.
+ * @param req - A request authenticated with an API token (requireApiToken)
  */
 function mcpContextFromRequest(req: Request): ActionContext {
   const ctx = actionContextFromRequest(req);
-  return { ...ctx, channel: 'mcp', scopes: ctx.scopes ?? TOKEN_SCOPES };
+  return { ...ctx, channel: 'mcp', byName: { ipAddress: req.ip } };
 }
 
 /**
@@ -126,6 +130,38 @@ export const checkMcpOrigin: RequestHandler = (req, res, next) => {
 };
 
 /**
+ * /api/mcp takes API tokens only: a session's writes would carry no `via`, and an agent's work
+ * would read as the person's own (R22).
+ * @param req - An authenticated request
+ * @param res - The response
+ * @param next - Continues to the handler
+ */
+export const requireApiToken: RequestHandler = (req, res, next) => {
+  if (req.apiTokenId !== undefined) {
+    next();
+    return;
+  }
+  res.status(401).json({
+    error: {
+      message:
+        'The MCP endpoint takes API tokens. Create a token under Settings, API tokens, and send ' +
+        'Authorization: Token <token>.',
+      code: 'TOKEN_REQUIRED',
+    },
+  });
+};
+
+/**
+ * Where a URL for this caller should point: the configured site, else where the request came in,
+ * which reads forwarded headers when TRUST_PROXY allows them.
+ * @param req - The request
+ */
+function publicOrigin(req: Request): string {
+  const site = process.env.FRONTEND_URL ? normalizeOrigin(process.env.FRONTEND_URL) : '';
+  return site || `${req.protocol}://${req.host ?? ''}`;
+}
+
+/**
  * A JSON-RPC error answered outside of any server.
  * @param message - The message
  */
@@ -151,23 +187,42 @@ export const refuseMcpStream: RequestHandler = (_req, res) => {
  * @param res - The response
  */
 export const handleMcpPost: RequestHandler = async (req, res) => {
-  if (Array.isArray(req.body)) {
+  // Anything else skips the JSON parser and its limit: the transport would read the raw stream
+  if (!req.is('application/json')) {
+    res.status(415).json(jsonRpcError('Send Content-Type: application/json'));
+    return;
+  }
+  const body: unknown = req.body;
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     res.status(400).json(jsonRpcError('Send one JSON-RPC message per request'));
     return;
   }
   const server = createAgentServer({
     ctx: mcpContextFromRequest(req),
-    origin: `${req.protocol}://${req.host ?? ''}`,
+    origin: publicOrigin(req),
   });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   });
+  // Tool handlers answer their own failures, so -32603 only ever means the SDK refused the shape of
+  // a request, and its message is a raw Zod dump
+  const send = transport.send.bind(transport);
+  transport.send = (message, options) =>
+    send(
+      'error' in message && message.error.code === ErrorCode.InternalError
+        ? {
+            ...message,
+            error: { code: ErrorCode.InvalidParams, message: 'Invalid request parameters' },
+          }
+        : message,
+      options,
+    );
   res.on('close', () => {
     server.close().catch((err: unknown) => {
       logger.error('closing an MCP server failed', {}, err as Error);
     });
   });
   await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+  await transport.handleRequest(req, res, body);
 };

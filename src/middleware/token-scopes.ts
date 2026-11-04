@@ -164,10 +164,9 @@ function projectAreaOf(path: string): ScopeArea {
 /**
  * Which area an API path belongs to. Anything not listed is token-forbidden.
  * - personal: the user's own profile and notifications, and the user search
- * - mcp: the MCP paths, which only reach this as unknown paths: /api/mcp is a registry route
  * @param path - The request path, starting with /api
  */
-function areaOf(path: string): ScopeArea | 'personal' | 'mcp' | 'none' {
+function areaOf(path: string): ScopeArea | 'personal' | 'none' {
   if (path.startsWith('/api/wiki')) return 'wiki';
   if (path.startsWith('/api/projects')) return projectAreaOf(path);
   if (path.startsWith('/api/approval-requests')) return 'approvals';
@@ -183,7 +182,6 @@ function areaOf(path: string): ScopeArea | 'personal' | 'mcp' | 'none' {
   }
   if (path === '/api/users/me/dashboard') return 'dashboards';
   if (path.startsWith('/api/attachments')) return 'files';
-  if (path.startsWith('/api/mcp')) return 'mcp';
   if (path.startsWith('/api/search')) return 'search';
   if (path.startsWith('/api/orgs')) return 'orgs';
   if (path.startsWith('/api/teams')) return 'teams';
@@ -214,10 +212,6 @@ export function tokenAllows(scopes: readonly string[], method: string, path: str
   if (write && ACCESS_CONTROL.some((re) => re.test(path))) return false;
   const area = areaOf(path);
   if (area === 'none') return false;
-  // /api/mcp itself never comes here: each tool call meets the scope of its action
-  if (area === 'mcp') {
-    return scopeAllows(scopes, 'issues', kind) || scopeAllows(scopes, 'wiki', kind);
-  }
   // Notification state may be written with a read scope; it only touches the user's own
   if (area === 'personal') {
     if (write && !path.startsWith('/api/notifications')) return false;

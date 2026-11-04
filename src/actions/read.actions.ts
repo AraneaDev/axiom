@@ -219,6 +219,7 @@ const readActions = [
       commentBodies: z.boolean().optional(),
     }),
     output: readOutput,
+    checksOwnText: true,
     rest: { method: 'POST', path: '/api/read', status: 200 },
     // Per item in the handler: resolveKey for access, then the item's own area scope (R4)
     authorize: async () => {},

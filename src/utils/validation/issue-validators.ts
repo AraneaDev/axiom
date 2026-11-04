@@ -1,5 +1,23 @@
 import { z } from 'zod';
 
+import { MAX_DB_INT } from './common-validators';
+
+const ISSUE_TYPES = ['TASK', 'BUG', 'STORY', 'EPIC'] as const;
+const ISSUE_PRIORITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
+
+/**
+ * A filter on an enum column: either case, the empty value of a bare `?type=` meaning no filter.
+ * The search filters read `type:bug` the same way.
+ * @param values - The column's values
+ */
+function enumFilter(values: readonly string[]) {
+  const accepted = [...values, ...values.map((value) => value.toLowerCase()), ''];
+  return z
+    .enum(accepted as [string, ...string[]])
+    .transform((value) => value.toUpperCase())
+    .optional();
+}
+
 // ─── Issues ─────────────────────────────────────────────────
 
 export const createIssueSchema = z.object({
@@ -19,11 +37,11 @@ export const updateIssueSchema = createIssueSchema.partial().extend({
   type: z.enum(['TASK', 'BUG', 'STORY', 'EPIC']).optional(),
   priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional(),
   columnId: z.string().optional(),
-  position: z.number().int().optional(),
+  position: z.number().int().max(MAX_DB_INT).optional(),
   storyPoints: z.number().int().min(0).max(100).nullable().optional(),
   sprintId: z.string().nullable().optional(),
-  timeEstimate: z.number().int().min(0).nullable().optional(),
-  timeSpent: z.number().int().min(0).nullable().optional(),
+  timeEstimate: z.number().int().min(0).max(MAX_DB_INT).nullable().optional(),
+  timeSpent: z.number().int().min(0).max(MAX_DB_INT).nullable().optional(),
   startDate: z.string().datetime().nullable().optional(),
   roadmapBucketId: z.string().nullable().optional(),
 });
@@ -31,7 +49,7 @@ export const updateIssueSchema = createIssueSchema.partial().extend({
 // ─── Worklogs ───────────────────────────────────────────────
 
 export const logWorkSchema = z.object({
-  minutes: z.number().int().min(1),
+  minutes: z.number().int().min(1).max(MAX_DB_INT),
   description: z.string().max(500).optional(),
 });
 
@@ -63,8 +81,8 @@ export const bulkUpdateIssuesSchema = z.object({
 
 export const issueListQuerySchema = z.object({
   q: z.string().max(1000).optional(),
-  type: z.string().optional(),
-  priority: z.string().optional(),
+  type: enumFilter(ISSUE_TYPES),
+  priority: enumFilter(ISSUE_PRIORITIES),
   assigneeId: z.string().optional(),
   columnId: z.string().optional(),
   sprintId: z.string().optional(),

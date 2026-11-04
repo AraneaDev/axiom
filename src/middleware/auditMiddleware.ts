@@ -4,6 +4,11 @@ import { getRequestContext, runWithRequestContext } from '../lib/request-context
 import { loggableUrl, requestPathname } from '../lib/request-path';
 import { logAudit } from '../modules/audit/audit.service';
 
+import { normalizeApiPath } from './token-scopes';
+
+/** One path, many actions: executeAction writes a row per action for these (R21). */
+const AUDITED_PER_ACTION = new Set(['/api/mcp', '/api/act']);
+
 const METHOD_ACTION_MAP: Record<string, string> = {
   POST: 'create',
   PATCH: 'update',
@@ -73,6 +78,7 @@ export function auditMiddleware(req: Request, res: Response, next: NextFunction)
     if (res.statusCode < 200 || res.statusCode >= 300) return;
 
     const pathname = requestPathname(req);
+    if (AUDITED_PER_ACTION.has(normalizeApiPath(pathname))) return;
     const resourceType = resolveResourceType(pathname);
     const resourceId = extractResourceId(pathname);
     const ipAddress =

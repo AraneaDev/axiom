@@ -18,6 +18,12 @@ export interface ActionContext {
    * act on what was not authorized.
    */
   http?: { req: Request; res: Response };
+  /**
+   * Set by the adapters where the caller names the action (/api/act and MCP) rather than a route
+   * deciding it. These audit per action, parse the input strictly, and leave uiOnly actions to
+   * their own routes and limiters.
+   */
+  byName?: { ipAddress?: string };
 }
 
 /** Where the REST adapter mounts an action. */
@@ -66,6 +72,8 @@ export interface ActionDef<
    */
   tokenBlocked?: boolean;
   rest?: RestBinding;
+  /** Reads its text fields itself and answers per item, so NUL isn't refused for the whole call. */
+  checksOwnText?: boolean;
   /** For a `raw` binding: what to use instead where it can't run, told in the 400 it answers. */
   rawAlternative?: string;
   /** Throws an AppError (403/404) to refuse. */

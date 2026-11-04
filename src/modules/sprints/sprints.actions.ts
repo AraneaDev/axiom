@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
+import { listWindow } from '../../actions/paging';
 import { registerActions } from '../../actions/registry';
 import { projectOf } from '../../middleware/requireProjectAccess';
 import {
@@ -72,17 +73,24 @@ const sprintActions = [
     name: 'sprint.list',
     area: 'sprints',
     kind: 'read',
-    summary: 'List the sprints of a project, optionally by status',
+    summary:
+      'List the sprints of a project, optionally by status. Over MCP, 20 unless limit says ' +
+      'otherwise (up to 100).',
     target: projectTarget,
     // An empty ?status= means no filter, as it did
     input: projectTarget.extend({
       status: z.union([z.literal(''), z.enum(['PLANNING', 'ACTIVE', 'COMPLETED'])]).optional(),
+      limit: queryCount,
+      offset: queryCount,
     }),
     output: z.array(loose),
     rest: { method: 'GET', path: `${PROJECT}/sprints` },
     authorize: readProject,
-    handler: async (_ctx, { projectId, status }) =>
-      sprintsService.listSprints(projectId, { status: status || undefined }),
+    handler: async (ctx, { projectId, status, limit, offset }) =>
+      sprintsService.listSprints(projectId, {
+        status: status || undefined,
+        ...listWindow(ctx, firstQueryText(limit), firstQueryText(offset)),
+      }),
   }),
   defineAction({
     name: 'sprint.get',

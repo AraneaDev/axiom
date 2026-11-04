@@ -11,7 +11,12 @@ import { prisma } from './config/database';
 import { env } from './config/env';
 import { openApiRouter } from './lib/openapi';
 import { requestContextMiddleware } from './lib/request-context';
-import { checkMcpOrigin, handleMcpPost, refuseMcpStream } from './mcp/agent-server';
+import {
+  checkMcpOrigin,
+  handleMcpPost,
+  refuseMcpStream,
+  requireApiToken,
+} from './mcp/agent-server';
 import { auditMiddleware } from './middleware/auditMiddleware';
 import { authenticate } from './middleware/auth';
 import { csrfGuard } from './middleware/csrfGuard';
@@ -151,9 +156,10 @@ app.use(actionsRouter);
 // routes, and they sit ahead of the legacy routers whose router.use(authenticate) would ask
 // tokenAllows.
 app.post('/api/act', markRegistryRoute, authenticate, handleAct);
-app.post('/api/mcp', checkMcpOrigin, markRegistryRoute, authenticate, handleMcpPost);
-app.get('/api/mcp', checkMcpOrigin, markRegistryRoute, authenticate, refuseMcpStream);
-app.delete('/api/mcp', checkMcpOrigin, markRegistryRoute, authenticate, refuseMcpStream);
+const mcpAccess = [checkMcpOrigin, markRegistryRoute, authenticate, requireApiToken];
+app.post('/api/mcp', mcpAccess, handleMcpPost);
+app.get('/api/mcp', mcpAccess, refuseMcpStream);
+app.delete('/api/mcp', mcpAccess, refuseMcpStream);
 
 // API routes
 app.use('/api/auth', authRoutes);

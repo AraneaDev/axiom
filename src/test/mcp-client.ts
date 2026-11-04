@@ -5,6 +5,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 import app from '../index';
+import { TOKEN_SCOPES } from '../middleware/token-scopes';
+
+import type { TestUser } from './factory';
+import { authPost } from './helpers';
 
 /**
  * Serve the app on a free port, for what needs a real socket.
@@ -37,6 +41,22 @@ export async function connectMcp(base: string, authorization: string): Promise<C
   return client;
 }
 
+/**
+ * An Authorization header for a new API token of a user: /api/mcp takes tokens only.
+ * @param user - The user, with a session
+ * @param scopes - The token's scopes; by default all, so only the user's own access counts
+ * @param name - The token's name, which writes carry as `via`
+ */
+export async function tokenHeaderFor(
+  user: TestUser,
+  scopes: readonly string[] = TOKEN_SCOPES,
+  name = 'mcp-test',
+): Promise<string> {
+  const res = await authPost('/api/users/me/tokens', user.token, { name, scopes: [...scopes] });
+  if (res.status !== 201) throw new Error(`Could not create a token: ${res.status}`);
+  return `Token ${res.body.token}`;
+}
+
 /** What a tool answered, its text parsed. */
 export interface ToolAnswer {
   isError: boolean;
@@ -63,17 +83,17 @@ export async function callTool(
 }
 
 /**
- * Serve the app, connect one client, run the work, and stop both.
- * @param authorization - The Authorization header, with its scheme
+ * Serve the app, connect one client as a user through a token, run the work, and stop both.
+ * @param user - The user
  * @param work - What to do with the client
  */
 export async function withMcpClient<T>(
-  authorization: string,
+  user: TestUser,
   work: (client: Client) => Promise<T>,
 ): Promise<T> {
   const served = await serveApp();
   try {
-    const client = await connectMcp(served.base, authorization);
+    const client = await connectMcp(served.base, await tokenHeaderFor(user));
     try {
       return await work(client);
     } finally {

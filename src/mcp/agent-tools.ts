@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { actRequest, keyKindOf, runAct } from '../actions/batch';
+import { actRequest, countActItems, keyKindOf, runAct } from '../actions/batch';
 import type { ActionContext, ActionDef } from '../actions/define';
 import { actionRefusal, assertRunnable, executeAction } from '../actions/execute';
 import { MAX_KEY_LENGTH, parseKey } from '../actions/keys';
@@ -14,6 +14,11 @@ export interface ToolEnv {
   ctx: ActionContext;
   /** Where this request came in, for URLs the agent uses next */
   origin: string;
+}
+
+/** A result the agent must read as a failure, though it holds what did complete. */
+export class FailedResult {
+  constructor(public readonly value: unknown) {}
 }
 
 export interface AgentTool {
@@ -45,7 +50,14 @@ const uploadInput = z.strictObject({
  * @param io - Whether it is read as input or output
  */
 function jsonSchemaOf(schema: z.ZodType, io: 'input' | 'output'): Record<string, unknown> {
-  return z.toJSONSchema(schema, { io, unrepresentable: 'any' });
+  return z.toJSONSchema(schema, {
+    io,
+    unrepresentable: 'any',
+    // A catch value only says how a wrong value reads to the handler: it is no default to publish
+    override: ({ zodSchema, jsonSchema }) => {
+      if (zodSchema._zod.def.type === 'catch') delete jsonSchema.default;
+    },
+  });
 }
 
 /**
@@ -131,7 +143,13 @@ export const AGENT_TOOLS: AgentTool[] = [
       "'Done' } }. Or up to 25 in order with { batch: [...] }: it stops at the first failure, " +
       'reports the rest as skipped, and what already ran stays done.',
     input: () => actRequest,
-    run: (args, { ctx }) => runAct(validate(actRequest, args), ctx),
+    run: async (args, { ctx }) => {
+      const request = validate(actRequest, args);
+      const result = await runAct(request, ctx);
+      if (!request.batch) return result;
+      const { results } = result as { results: Array<{ ok: boolean }> };
+      return results.every((item) => item.ok) ? result : new FailedResult(result);
+    },
   },
   {
     name: 'upload',
@@ -144,6 +162,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     input: () => uploadInput,
     run: async (args, { ctx, origin }) => {
       const { url, target, filename, mimeType, size } = validate(uploadInput, args);
+      await countActItems(ctx.userId);
       const location = uploadTarget(target);
       if (url !== undefined) {
         return executeAction('attachment.fromUrl', { url, filename, target: location }, ctx);

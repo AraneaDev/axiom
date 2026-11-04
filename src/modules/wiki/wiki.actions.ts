@@ -1,23 +1,31 @@
 import { z } from 'zod';
 
 import { pageAccess, pageBySlugAccess, spaceAccess, teamPermission } from '../../actions/authorize';
-import { defineAction } from '../../actions/define';
+import { defineAction, type ActionContext } from '../../actions/define';
+import { listWindow } from '../../actions/paging';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
+import { checkWikiSpaceOrgAccess } from '../../middleware/rbac';
+import { checkProjectAccess } from '../../middleware/requireProjectAccess';
+import { ERR } from '../../utils/error-messages';
 import {
   applyMergeSchema,
   copyPageSchema,
   createPageSchema,
+  firstQueryText,
   movePageSchema,
+  queryCount,
   reorderPageSchema,
   restoreVersionSchema,
   updatePageSchema,
 } from '../../utils/validation';
 
 import { assertPageDestinationWritable } from './page-destination';
+import { canAccessSpace } from './space-permissions.service';
 import { hydrateWikiPage } from './wiki-hydrate.service';
 import * as linkService from './wiki-issue-links.service';
 import { hiddenPageIds, pruneHiddenPages } from './wiki-permissions.service';
+import { bodyFromTemplate, resolveWikiTemplate } from './wiki-template-resolver.service';
 import * as wikiService from './wiki.service';
 
 // Responses keep the shape the REST routes always had (R3): the output schemas name the key
@@ -71,24 +79,81 @@ function versionNumber(value: unknown): number {
 // always gave
 const versionParam = z.union([z.string(), z.number()]).catch('');
 
+/** The ids a template's variables read. A team id may come along; nothing reads it. */
+const resolveTemplateTarget = z.object({
+  context: z.object({ spaceId: z.string(), projectId: z.string().optional() }),
+});
+
+/**
+ * Resolving a template reads the names of the space and project: the user must be able to open them.
+ * @param ctx - Who runs the action
+ * @param target - The space, and optionally the project
+ */
+async function authorizeResolveTemplate(
+  ctx: ActionContext,
+  target: z.infer<typeof resolveTemplateTarget>,
+): Promise<void> {
+  const { spaceId, projectId } = target.context;
+  const space = await checkWikiSpaceOrgAccess(spaceId, ctx.userId);
+  if (space === 'not_found') throw new AppError(404, ERR.SPACE_NOT_FOUND);
+  if (space === 'forbidden' || !(await canAccessSpace(spaceId, ctx.userId, 'VIEW'))) {
+    throw new AppError(403, 'You do not have access to this space');
+  }
+  if (!projectId) return;
+  const project = await checkProjectAccess(ctx.userId, projectId);
+  if (project === 'not_found') throw new AppError(404, ERR.PROJECT_NOT_FOUND);
+  if (project === 'forbidden') throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
+}
+
+const templateActions = [
+  defineAction({
+    name: 'pageTemplate.resolve',
+    area: 'wiki',
+    // A POST under /api/wiki, which only a wiki:write token has ever reached (R7)
+    kind: 'write',
+    summary: 'Fill in the {{variables}} of a template text for a space',
+    target: resolveTemplateTarget,
+    input: resolveTemplateTarget.extend({ body: z.string() }),
+    output: z.looseObject({ body: z.string() }),
+    rest: { method: 'POST', path: `${WIKI}/resolve-template`, status: 200 },
+    authorize: authorizeResolveTemplate,
+    handler: async (ctx, { body, context: { spaceId, projectId } }) => ({
+      body: await resolveWikiTemplate(body, {
+        teamId: '',
+        spaceId,
+        projectId,
+        userId: ctx.userId,
+      }),
+    }),
+  }),
+];
+
 const spaceActions = [
   defineAction({
     name: 'space.list',
     area: 'wiki',
     kind: 'read',
-    summary: 'List the wiki spaces of a team',
+    summary:
+      'List the wiki spaces of a team. Over MCP, 20 unless limit says otherwise (up to 100).',
     target: teamTarget,
     // Anything but true or the string 'true' reads as false, as it always did
-    input: teamTarget.extend({ includeArchived: z.union([z.boolean(), z.string()]).optional() }),
+    input: teamTarget.extend({
+      includeArchived: z.union([z.boolean(), z.string()]).optional(),
+      limit: queryCount,
+      offset: queryCount,
+    }),
     output: list,
     rest: { method: 'GET', path: `${WIKI}/team/:teamId/spaces` },
     authorize: inTeam,
-    handler: async (ctx, { teamId, includeArchived }) =>
-      wikiService.listSpaces(
+    handler: async (ctx, { teamId, includeArchived, limit, offset }) => {
+      const spaces = await wikiService.listSpaces(
         teamId,
         includeArchived === true || includeArchived === 'true',
         ctx.userId,
-      ),
+      );
+      const { take, skip } = listWindow(ctx, firstQueryText(limit), firstQueryText(offset));
+      return take === undefined ? spaces.slice(skip) : spaces.slice(skip, skip + take);
+    },
   }),
   defineAction({
     name: 'space.get',
@@ -125,13 +190,20 @@ const pageActions = [
     name: 'page.create',
     area: 'wiki',
     kind: 'write',
-    summary: 'Create a page in a space',
+    summary: 'Create a page in a space, with a body or from a template (templateId)',
     target: spaceTarget,
-    input: spaceTarget.extend(createPageSchema.shape),
+    input: spaceTarget.extend(createPageSchema.shape).extend({
+      templateId: z.string().min(1).optional(),
+    }),
     output: record,
     rest: { method: 'POST', path: `${SPACE}/pages` },
     authorize: editSpace,
-    handler: async (ctx, { spaceId, ...data }) => wikiService.createPage(spaceId, ctx.userId, data),
+    handler: async (ctx, { spaceId, templateId, ...data }) => {
+      if (templateId === undefined) return wikiService.createPage(spaceId, ctx.userId, data);
+      if (data.body) throw new AppError(400, 'Give body or templateId, not both');
+      const body = await bodyFromTemplate(templateId, spaceId, ctx.userId);
+      return wikiService.createPage(spaceId, ctx.userId, { ...data, body });
+    },
   }),
   defineAction({
     name: 'page.get',
@@ -322,13 +394,13 @@ const linkActions = [
     // A wrong or missing value reads as '', and the handler gives the message the route always gave
     input: pageTarget.extend({
       issueId: z.string().catch(''),
-      linkType: z.enum(['EMBED', 'MENTION', '']).catch(''),
+      linkType: z.enum(['EMBED', 'MENTION']).optional().catch(undefined),
     }),
     output: record,
     rest: { method: 'POST', path: `${PAGE_BY_ID}/linked-issues` },
     authorize: editPage,
     handler: async (ctx, { pageId, issueId, linkType }) => {
-      if (!issueId || (linkType !== 'EMBED' && linkType !== 'MENTION')) {
+      if (!issueId || !linkType) {
         throw new AppError(400, 'issueId and a linkType of EMBED or MENTION are required');
       }
       return linkService.addLinkForUser(pageId, issueId, linkType, ctx.userId);
@@ -349,4 +421,4 @@ const linkActions = [
   }),
 ];
 
-registerActions([...spaceActions, ...pageActions, ...linkActions]);
+registerActions([...templateActions, ...spaceActions, ...pageActions, ...linkActions]);

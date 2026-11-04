@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 import { scopeAllows } from '../middleware/token-scopes';
 import { validate } from '../utils/validation/common-validators';
 
+import { auditAction } from './audit';
 import type { ActionContext, ActionDef } from './define';
 import { getAction } from './registry';
 
@@ -43,7 +44,8 @@ function assertOutputShape(def: ActionDef, result: unknown): void {
  */
 export function actionRefusal(def: ActionDef, ctx: ActionContext): AppError | undefined {
   const token = isToken(ctx);
-  if (token && (def.uiOnly || def.tokenBlocked)) return scopeRefusal();
+  if ((token || ctx.byName) && def.uiOnly) return scopeRefusal();
+  if (token && def.tokenBlocked) return scopeRefusal();
   if (def.rest?.raw && !ctx.http) {
     const alternative = def.rawAlternative ? ` ${def.rawAlternative}` : '';
     return new AppError(
@@ -71,6 +73,39 @@ export function assertRunnable(name: string, ctx: ActionContext): ActionDef {
 }
 
 /**
+ * Refuse NUL in any text of an input: Postgres can't store or compare it, so it would come back as
+ * a generic 500. It comes ahead of authorize, which reads the ids.
+ * @param value - The input, or a part of it
+ * @throws {AppError} 400 INVALID_TEXT
+ */
+function assertNoNul(value: unknown): void {
+  if (typeof value === 'string') {
+    if (value.includes('\u0000')) {
+      throw new AppError(400, 'Text may not contain a NUL character', 'INVALID_TEXT');
+    }
+  } else if (Array.isArray(value)) {
+    value.forEach(assertNoNul);
+  } else if (typeof value === 'object' && value !== null) {
+    for (const [field, inner] of Object.entries(value)) {
+      assertNoNul(field);
+      assertNoNul(inner);
+    }
+  }
+}
+
+/**
+ * The full input schema, refusing unknown fields where the caller names the action: an agent's
+ * misspelled field must not read as success. REST keeps dropping them, as it always did.
+ * @param def - The action
+ * @param ctx - Who runs it
+ */
+function fullInputSchema(def: ActionDef, ctx: ActionContext): ActionDef['input'] {
+  if (!ctx.byName) return def.input;
+  const strict = (def.input as { strict?: () => ActionDef['input'] }).strict;
+  return strict ? strict.call(def.input) : def.input;
+}
+
+/**
  * Run an action. Every adapter comes through here, so REST and MCP share one order of checks:
  * unknown name, uiOnly or tokenBlocked, raw binding, token scope, target, authorize, full input,
  * handler.
@@ -91,7 +126,34 @@ export async function executeAction(
   ctx: ActionContext,
   bodyError?: string,
 ): Promise<unknown> {
-  const def = assertRunnable(name, ctx);
+  const def = getAction(name);
+  if (!def) throw new AppError(404, `Unknown action: ${name}`, 'UNKNOWN_ACTION');
+  try {
+    const result = await runAction(def, rawInput, ctx, bodyError);
+    await auditAction(def, rawInput, ctx);
+    return result;
+  } catch (err) {
+    await auditAction(def, rawInput, ctx, err);
+    throw err;
+  }
+}
+
+/**
+ * The checks and the handler of executeAction.
+ * @param def - The action
+ * @param rawInput - Its input, not yet validated
+ * @param ctx - Who runs it and through what
+ * @param bodyError - See executeAction
+ */
+async function runAction(
+  def: ActionDef,
+  rawInput: unknown,
+  ctx: ActionContext,
+  bodyError?: string,
+): Promise<unknown> {
+  const refusal = actionRefusal(def, ctx);
+  if (refusal) throw refusal;
+  if (!def.checksOwnText) assertNoNul(rawInput);
 
   const target = validate(def.target ?? def.input, rawInput);
 
@@ -106,7 +168,7 @@ export async function executeAction(
   return runWithRequestContext(requestCtx, async () => {
     await def.authorize(ctx, target);
     if (bodyError) throw new AppError(400, bodyError);
-    const input = def.target ? validate(def.input, rawInput) : target;
+    const input = def.target || ctx.byName ? validate(fullInputSchema(def, ctx), rawInput) : target;
     const result: unknown = await def.handler(ctx, input);
     assertOutputShape(def, result);
     return result;

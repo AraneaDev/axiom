@@ -97,7 +97,7 @@ describe('Team access', () => {
     ]);
     expect(results.map((r) => r.status)).toEqual([403, 403, 403, 403, 403, 403]);
 
-    const failed = await withMcpClient(`Bearer ${orgOnly.token}`, async (client) => {
+    const failed = await withMcpClient(orgOnly, async (client) => {
       const res = await callTool(client, 'act', {
         action: 'project.list',
         input: { teamId: ctx.teamId },
