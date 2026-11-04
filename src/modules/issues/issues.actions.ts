@@ -314,8 +314,8 @@ const commentActions = [
     kind: 'write',
     summary: 'Edit your own comment',
     target: commentTarget,
-    // Kept as the controller had it: anything but a string reads as missing, a 400 'body is required'
-    input: commentTarget.extend({ body: z.string().optional().catch(undefined) }),
+    // Anything but a string reads as '', so the handler gives the 400 'body is required' as before
+    input: commentTarget.extend({ body: z.string().catch('') }),
     output: record,
     rest: { method: 'PATCH', path: `${PROJECT}/comments/:commentId` },
     authorize: ownsComment,

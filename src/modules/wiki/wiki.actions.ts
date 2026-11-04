@@ -67,8 +67,9 @@ function versionNumber(value: unknown): number {
   return parseInt(String(value), 10);
 }
 
-// A bad value reads as missing, so the handler gives the one message the route always gave
-const versionParam = z.union([z.string(), z.number()]).optional().catch(undefined);
+// A bad or missing value reads as '', which is NaN: the handler gives the one message the route
+// always gave
+const versionParam = z.union([z.string(), z.number()]).catch('');
 
 const spaceActions = [
   defineAction({
@@ -318,16 +319,16 @@ const linkActions = [
     kind: 'write',
     summary: 'Link an issue to a page, as an embed or a mention',
     target: pageTarget,
-    // A wrong value reads as missing, and the handler gives the message the route always gave
+    // A wrong or missing value reads as '', and the handler gives the message the route always gave
     input: pageTarget.extend({
-      issueId: z.string().optional().catch(undefined),
-      linkType: z.enum(['EMBED', 'MENTION']).optional().catch(undefined),
+      issueId: z.string().catch(''),
+      linkType: z.enum(['EMBED', 'MENTION', '']).catch(''),
     }),
     output: record,
     rest: { method: 'POST', path: `${PAGE_BY_ID}/linked-issues` },
     authorize: editPage,
     handler: async (ctx, { pageId, issueId, linkType }) => {
-      if (typeof issueId !== 'string' || (linkType !== 'EMBED' && linkType !== 'MENTION')) {
+      if (!issueId || (linkType !== 'EMBED' && linkType !== 'MENTION')) {
         throw new AppError(400, 'issueId and a linkType of EMBED or MENTION are required');
       }
       return linkService.addLinkForUser(pageId, issueId, linkType, ctx.userId);

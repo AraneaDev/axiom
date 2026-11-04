@@ -66,7 +66,14 @@ describe('query values', () => {
     },
   );
 
-  it.each([true, { a: 1 }, 1.5])('refuses %j as a velocity count from MCP', async (count) => {
+  it.each([['abc'], ['-1'], ['2.5']])('answers 400 for count=%s', async (count) => {
+    const res = await request(app)
+      .get(`/api/projects/${ctx.projectId}/velocity?count=${count}`)
+      .set('Authorization', auth);
+    expect(res.status).toBe(400);
+  });
+
+  it.each([true, { a: 1 }, 1.5, -1])('refuses %j as a velocity count from MCP', async (count) => {
     await expect(
       executeAction('sprint.velocity', { projectId: ctx.projectId, count }, mcp()),
     ).rejects.toMatchObject({ statusCode: 400 });
@@ -95,7 +102,14 @@ describe('query values', () => {
     expect(fromNumber).toMatchObject({ limit: fromText.body.limit });
   });
 
-  it.each([true, { a: 1 }, 1.5])('refuses %j as a team limit from MCP', async (limit) => {
+  it.each(['abc', '-1'])('answers 400 for limit=%s', async (limit) => {
+    const res = await request(app)
+      .get(`/api/teams/org/${ctx.orgId}?limit=${limit}`)
+      .set('Authorization', auth);
+    expect(res.status).toBe(400);
+  });
+
+  it.each([true, { a: 1 }, 1.5, -1])('refuses %j as a team limit from MCP', async (limit) => {
     await expect(
       executeAction('team.list', { orgId: ctx.orgId, limit }, mcp()),
     ).rejects.toMatchObject({ statusCode: 400 });

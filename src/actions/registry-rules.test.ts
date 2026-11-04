@@ -135,6 +135,9 @@ function ruleViolations(def: ActionDef): string[] {
     }
   }
 
+  if (isUntyped(def.input)) {
+    violations.push(`${def.name}: the whole input is z.unknown() or z.any(); type it (R16)`);
+  }
   for (const [field, schema] of Object.entries(inputFields ?? {})) {
     if (isUntyped(schema)) {
       violations.push(`${def.name}: input.${field} is z.unknown() or z.any(); type it (R16)`);
@@ -166,8 +169,17 @@ function isUntyped(schema: z.ZodType): boolean {
   for (;;) {
     const type = current._zod.def.type;
     if (type === 'unknown' || type === 'any') return true;
-    if (type === 'optional' || type === 'nullable' || type === 'default') {
-      current = (current as z.ZodOptional).unwrap() as z.ZodType;
+    const wrappers = [
+      'optional',
+      'nullable',
+      'default',
+      'prefault',
+      'catch',
+      'readonly',
+      'nonoptional',
+    ];
+    if (wrappers.includes(type)) {
+      current = (current._zod.def as unknown as { innerType: z.ZodType }).innerType;
     } else {
       return false;
     }
@@ -205,6 +217,8 @@ describe('registry rules', () => {
     // - uiOnly and tokenBlocked: refused to every token, whatever tokenAllows let through
     // - R1: attachment actions need the parent's area scope as well, so they may reach less,
     //   never more
+    // Refused actions that tokenAllows let through, each with the reason. None so far.
+    const REFUSED_ON_PURPOSE = new Set<string>();
     const isRefused = (def: ActionDef): boolean => !!def.uiOnly || !!def.tokenBlocked;
     const isAttachment = (def: ActionDef): boolean => def.name.startsWith('attachment.');
 
@@ -225,8 +239,12 @@ describe('registry rules', () => {
         const before = tokenAllows([scope], method, concrete);
         // What the registry lets this scope do: nothing for a refused action
         const after = !isRefused(def) && scopeAllows([scope], def.area, def.kind);
+        // A refused action is fine where tokenAllows refused it too: for every scope, or as a
+        // write in an area tokens may not write. Anything else needs a name in the allowlist.
+        const alsoRefusedBefore =
+          !before || (def.kind === 'write' && TOKEN_BLOCKED_WRITE_AREAS.has(def.area));
         const fine = isRefused(def)
-          ? !after
+          ? !after && (alsoRefusedBefore || REFUSED_ON_PURPOSE.has(def.name))
           : isAttachment(def)
             ? !after || before
             : before === after;
@@ -241,6 +259,9 @@ describe('registry rules', () => {
       ['z.unknown()', z.unknown()],
       ['z.any()', z.any()],
       ['an optional z.unknown()', z.unknown().optional()],
+      ['a caught z.unknown()', z.unknown().catch('')],
+      ['a readonly z.any()', z.any().readonly()],
+      ['a prefault z.unknown()', z.unknown().prefault('x')],
     ])('fails on a field that is %s', (_label, schema) => {
       const action = defineAction({
         ...throwaway,
@@ -250,6 +271,19 @@ describe('registry rules', () => {
         input: z.object({ filter: schema }),
       });
       expect(ruleViolations(action)).toEqual([expect.stringContaining('R16')]);
+    });
+
+    it('fails on an input that is z.unknown() as a whole', () => {
+      const action = defineAction({
+        ...throwaway,
+        name: 'throwaway.wholeUntyped',
+        area: 'issues',
+        kind: 'read',
+        input: z.unknown(),
+      });
+      expect(ruleViolations(action)).toEqual(
+        expect.arrayContaining([expect.stringContaining('whole input')]),
+      );
     });
 
     it('passes on a typed field', () => {
