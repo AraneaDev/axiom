@@ -32,8 +32,27 @@ export function projectRead<T>(pick: (input: T) => string): Authorizer<T> {
 }
 
 /**
- * Act on a project: requireProjectAccess, then requireProjectAction. Both are needed, because
- * checkProjectAction accepts an org role alone and REST turns away whoever is not on the team.
+ * Check the user's role allows the action on a project, as requireProjectAction does.
+ * @param userId - The user
+ * @param projectId - The project
+ * @param action - The permission action
+ */
+async function assertProjectRole(userId: string, projectId: string, action: Action): Promise<void> {
+  const access = await checkProjectAction(userId, projectId, action);
+  if (access === 'not_found') throw new AppError(404, ERR.PROJECT_NOT_FOUND);
+  if (access === 'forbidden') {
+    throw new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN');
+  }
+}
+
+/**
+ * Act on a project: the checks of requireProjectAccess and requireProjectWrite, with the same
+ * status and code. Both are needed, because checkProjectAction accepts an org role alone and
+ * REST turns away whoever is not on the team.
+ *
+ * Access comes first here, where REST routes run requireProjectWrite first. So someone off the
+ * team whose org role lacks the action reads "Access denied" instead of "Insufficient
+ * permissions". This is the only difference from REST.
  * @param action - The permission action
  * @param pick - Finds the project id in the input
  */
@@ -41,9 +60,7 @@ export function projectAction<T>(action: Action, pick: (input: T) => string): Au
   return async (ctx, input) => {
     const projectId = pick(input);
     await assertProjectRead(ctx.userId, projectId);
-    if ((await checkProjectAction(ctx.userId, projectId, action)) !== 'ok') {
-      throw new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN');
-    }
+    await assertProjectRole(ctx.userId, projectId, action);
   };
 }
 
@@ -93,19 +110,23 @@ export function teamRead<T>(pick: (input: T) => string): Authorizer<T> {
 }
 
 /**
- * A record addressed through a project: requireProjectAccess, then requireOwnedByProject. A
- * record of another project answers 404, as if it did not exist in this one. This does not
- * check a role: for writes, run projectAction as well.
+ * A record addressed through a project: requireProjectAccess, the role check when `action` is
+ * given, then requireOwnedByProject. A record of another project answers 404, as if it did not
+ * exist in this one. Writes pass `action`; see projectAction for the one message that differs
+ * from REST.
  * @param resolver - Returns the projects the record belongs to; see `projectOf`
  * @param pick - Finds the project id and the record id in the input
+ * @param action - The permission action, for writes
  */
 export function ownedByProject<T>(
   resolver: (id: string) => Promise<Array<string | null | undefined>>,
   pick: (input: T) => { projectId: string; recordId: string },
+  action?: Action,
 ): Authorizer<T> {
   return async (ctx, input) => {
     const { projectId, recordId } = pick(input);
     await assertProjectRead(ctx.userId, projectId);
+    if (action) await assertProjectRole(ctx.userId, projectId, action);
     const owners = await resolver(recordId);
     if (!owners.includes(projectId)) throw new AppError(404, 'Not found in this project');
   };

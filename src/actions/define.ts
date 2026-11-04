@@ -23,9 +23,16 @@ export interface RestBinding {
   raw?: boolean;
 }
 
+/** What authorize receives: the target when the action declares one, else the full input. */
+type AuthorizeInput<I extends z.ZodType, T> = T extends z.ZodType ? z.infer<T> : z.infer<I>;
+
 // `any` by default so that one list can hold actions with different schemas
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export interface ActionDef<I extends z.ZodType = any, O extends z.ZodType = any> {
+export interface ActionDef<
+  I extends z.ZodType = any,
+  O extends z.ZodType = any,
+  T extends z.ZodType | undefined = any,
+> {
   /** Dotted, e.g. 'issue.update' */
   name: string;
   area: ScopeArea;
@@ -34,24 +41,34 @@ export interface ActionDef<I extends z.ZodType = any, O extends z.ZodType = any>
   summary: string;
   input: I;
   output: O;
+  /**
+   * Only the ids authorize needs. Authorization runs before the full input is validated, so a
+   * refused caller gets 403/404 whatever the body holds. Actions with a body must declare this.
+   * Without it, authorize gets the full input, parsed first.
+   */
+  target?: T;
   /** Used by plan 3 */
   destructive?: boolean;
   /** Login and the like: never open to a token or MCP, whatever its scopes */
   uiOnly?: boolean;
   rest?: RestBinding;
   /** Throws an AppError (403/404) to refuse. */
-  authorize(ctx: ActionContext, input: z.infer<I>): Promise<void>;
+  authorize(ctx: ActionContext, target: AuthorizeInput<I, T>): Promise<void>;
   handler(ctx: ActionContext, input: z.infer<I>): Promise<z.infer<O>>;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
  * Declare an action. Returns it unchanged; this exists so that TypeScript infers the handler's
- * input and output from the schemas.
+ * input and output from the schemas, and authorize's input from the target or the full input.
  * @param def - The action
  */
 export function defineAction<I extends z.ZodType, O extends z.ZodType>(
-  def: ActionDef<I, O>,
-): ActionDef<I, O> {
+  def: ActionDef<I, O, undefined> & { target?: undefined },
+): ActionDef<I, O, undefined>;
+export function defineAction<I extends z.ZodType, O extends z.ZodType, T extends z.ZodType>(
+  def: ActionDef<I, O, T> & { target: T },
+): ActionDef<I, O, T>;
+export function defineAction(def: ActionDef): ActionDef {
   return def;
 }

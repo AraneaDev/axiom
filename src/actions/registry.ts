@@ -9,7 +9,7 @@ const actions = new Map<string, ActionDef>();
  * @throws {Error} When a name is already registered
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function registerActions(defs: ActionDef<any, any>[]): void {
+export function registerActions(defs: ActionDef<any, any, any>[]): void {
   for (const def of defs) {
     if (actions.has(def.name)) throw new Error(`Action ${def.name} is already registered`);
     actions.set(def.name, def);

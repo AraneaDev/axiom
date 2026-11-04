@@ -37,7 +37,9 @@ function assertOutputShape(def: ActionDef, result: unknown): void {
 
 /**
  * Run an action. Every adapter comes through here, so REST and MCP share one order of checks:
- * unknown name, uiOnly, token scope, raw binding, validation, authorize, handler.
+ * unknown name, uiOnly, raw binding, token scope, target, authorize, full input, handler.
+ * Authorization comes before the full input so that a refused caller keeps today's 403/404
+ * with an invalid body and can't probe the input schema.
  * @param name - The action's dotted name
  * @param rawInput - Its input, not yet validated
  * @param ctx - Who runs it and through what
@@ -53,16 +55,16 @@ export async function executeAction(
   const def = getAction(name);
   if (!def) throw new AppError(404, `Unknown action: ${name}`, 'UNKNOWN_ACTION');
 
-  if (isToken(ctx)) {
-    if (def.uiOnly) throw scopeRefusal();
-    if (!scopeAllows(ctx.scopes ?? [], def.area, def.kind)) throw scopeRefusal();
-  }
+  const token = isToken(ctx);
+  if (token && def.uiOnly) throw scopeRefusal();
 
   if (def.rest?.raw && !ctx.http) {
     throw new AppError(400, `Action ${name} is only available over REST`, 'RAW_ACTION');
   }
 
-  const input = validate(def.input, rawInput);
+  if (token && !scopeAllows(ctx.scopes ?? [], def.area, def.kind)) throw scopeRefusal();
+
+  const target = validate(def.target ?? def.input, rawInput);
 
   // Services read the attribution of their writes from the request context, so it must say
   // who runs this action whichever adapter called
@@ -73,7 +75,8 @@ export async function executeAction(
     channel: ctx.channel,
   };
   return runWithRequestContext(requestCtx, async () => {
-    await def.authorize(ctx, input);
+    await def.authorize(ctx, target);
+    const input = def.target ? validate(def.input, rawInput) : target;
     const result: unknown = await def.handler(ctx, input);
     assertOutputShape(def, result);
     return result;

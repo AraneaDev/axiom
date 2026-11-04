@@ -5,9 +5,21 @@ import { z } from 'zod';
 
 import { prisma } from '../config/database';
 import { attributionFields, getRequestContext } from '../lib/request-context';
+import { authenticate } from '../middleware/auth';
 import { AppError, errorHandler } from '../middleware/errorHandler';
-import { projectOf } from '../middleware/requireProjectAccess';
+import {
+  requireTeamMember,
+  requireWikiPageAccess,
+  requireWikiSpaceAccess,
+} from '../middleware/rbac';
+import {
+  projectOf,
+  requireOwnedByProject,
+  requireProjectAccess,
+  requireProjectWrite,
+} from '../middleware/requireProjectAccess';
 import { TOKEN_SCOPES } from '../middleware/token-scopes';
+import { requireSpacePermission } from '../modules/wiki/space-permissions.middleware';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -54,9 +66,35 @@ const refusedHandler = vi.fn(async () => ({ ok: true }));
 const uiOnlyHandler = vi.fn(async () => ({ ok: true }));
 const rawHandler = vi.fn(async () => undefined);
 
+const targetAuthorize = vi.fn(async () => {});
+const targetHandler = vi.fn(async () => ({ id: 'x' }));
+
 const output = z.looseObject({ id: z.string() });
 
 registerActions([
+  defineAction({
+    name: 'test.targeted',
+    area: 'issues',
+    kind: 'write',
+    summary: 'Authorizes on the target alone',
+    target: z.object({ projectId: z.string() }),
+    input: z.object({ projectId: z.string(), title: z.string().min(3) }),
+    output,
+    authorize: targetAuthorize,
+    handler: targetHandler,
+  }),
+  defineAction({
+    name: 'test.uiOnlyRaw',
+    area: 'admin',
+    kind: 'read',
+    summary: 'Both flags at once',
+    input: z.object({}),
+    output: z.undefined(),
+    uiOnly: true,
+    rest: { method: 'GET', path: '/api/test/ui-raw', raw: true },
+    authorize: async () => {},
+    handler: async () => undefined,
+  }),
   defineAction({
     name: 'test.issueWrite',
     area: 'issues',
@@ -268,19 +306,44 @@ describe('executeAction', () => {
     }
   });
 
-  it('refuses a raw action without the REST response, after the scope check', async () => {
+  it('refuses a raw action without the REST response, before the scope check', async () => {
     rawHandler.mockClear();
-    const err = await refusal('test.raw', {}, wikiTokenOverMcp);
-    expect(err.statusCode).toBe(400);
-    expect(err.code).toBe('RAW_ACTION');
+    for (const scopes of [wikiOnlyScopes, []]) {
+      const err = await refusal('test.raw', {}, { ...wikiTokenOverMcp, scopes });
+      expect(err.statusCode).toBe(400);
+      expect(err.code).toBe('RAW_ACTION');
+    }
     expect(rawHandler).not.toHaveBeenCalled();
 
-    const noScope = await refusal('test.raw', {}, { ...wikiTokenOverMcp, scopes: [] });
-    expect(noScope.code).toBe('SCOPE');
-
     const http = { req: {}, res: {} } as NonNullable<ActionContext['http']>;
+    const noScope = await refusal('test.raw', {}, { ...wikiToken, scopes: [], http });
+    expect(noScope.code).toBe('SCOPE');
+    expect(rawHandler).not.toHaveBeenCalled();
+
     await executeAction('test.raw', {}, { ...wikiToken, http });
     expect(rawHandler).toHaveBeenCalledOnce();
+  });
+
+  it('refuses a uiOnly raw action to a token as uiOnly, not as raw', async () => {
+    const err = await refusal('test.uiOnlyRaw', {}, wikiTokenOverMcp);
+    expect(err.code).toBe('SCOPE');
+  });
+
+  it('gives authorize only the target and the handler the full input', async () => {
+    targetAuthorize.mockClear();
+    targetHandler.mockClear();
+    const raw = { projectId: 'p1', title: 'abc', junk: 1 };
+    await executeAction('test.targeted', raw, session);
+    expect(targetAuthorize).toHaveBeenCalledWith(session, { projectId: 'p1' });
+    expect(targetHandler).toHaveBeenCalledWith(session, { projectId: 'p1', title: 'abc' });
+  });
+
+  it('answers 400 when the target itself is invalid, before authorize', async () => {
+    targetAuthorize.mockClear();
+    const err = await refusal('test.targeted', { title: 'abc' }, session);
+    expect(err.statusCode).toBe(400);
+    expect(err.message).toContain('projectId:');
+    expect(targetAuthorize).not.toHaveBeenCalled();
   });
 
   it('fails on output that drifts from the schema while testing', async () => {
@@ -595,5 +658,363 @@ describe('authorizers', () => {
         executeAction('test.projectWrite', input, asUser(t.owner, channel)),
       ).resolves.toEqual({ id: 'x' });
     }
+  });
+
+  describe('authorize before full validation (R10)', () => {
+    const handler = vi.fn(async () => ({ id: 'x' }));
+    const invalidBody = { title: 'x' };
+
+    beforeAll(() => {
+      registerActions([
+        defineAction({
+          name: 'test.projectBody',
+          area: 'issues',
+          kind: 'write',
+          summary: 'A body behind a real authorizer',
+          target: z.object({ projectId: z.string() }),
+          input: z.object({ projectId: z.string(), title: z.string().min(3) }),
+          output,
+          authorize: projectAction('issue:edit', (target) => target.projectId),
+          handler,
+        }),
+      ]);
+    });
+
+    for (const channel of ['ui', 'rest-token', 'mcp'] as const) {
+      it(`keeps the refusal with an invalid body over ${channel}`, async () => {
+        handler.mockClear();
+        const input = { ...invalidBody, projectId: t.projectId };
+
+        const offTeam = await refusal('test.projectBody', input, asUser(orgOnly, channel));
+        expect([offTeam.statusCode, offTeam.code]).toEqual([403, 'FORBIDDEN']);
+        const noRole = await refusal('test.projectBody', input, asUser(viewer, channel));
+        expect([noRole.statusCode, noRole.code]).toEqual([403, 'FORBIDDEN']);
+        const noOrg = await refusal('test.projectBody', input, asUser(stranger, channel));
+        expect(noOrg.statusCode).toBe(403);
+
+        const missing = await refusal(
+          'test.projectBody',
+          { ...invalidBody, projectId: 'missing' },
+          asUser(t.owner, channel),
+        );
+        expect(missing.statusCode).toBe(404);
+        expect(handler).not.toHaveBeenCalled();
+      });
+
+      it(`answers 400 to an authorized caller with an invalid body over ${channel}`, async () => {
+        handler.mockClear();
+        const err = await refusal(
+          'test.projectBody',
+          { ...invalidBody, projectId: t.projectId },
+          asUser(t.owner, channel),
+        );
+        expect(err.statusCode).toBe(400);
+        expect(err.message).toContain('title:');
+        expect(handler).not.toHaveBeenCalled();
+      });
+    }
+  });
+
+  describe('ownedByProject with an action', () => {
+    const check = () =>
+      ownedByProject(
+        projectOf.issue,
+        (i: { projectId: string; id: string }) => ({ projectId: i.projectId, recordId: i.id }),
+        'issue:edit',
+      );
+
+    it('runs the access, role and owner checks in one call', async () => {
+      const input = { projectId: t.projectId, id: issueId };
+      expect(await status(check()(asUser(t.owner), input))).toBe('ok');
+      expect(await status(check()(asUser(orgOnly), input))).toMatchObject({
+        status: 403,
+        message: 'Access denied',
+      });
+      expect(await status(check()(asUser(viewer), input))).toMatchObject({
+        status: 403,
+        message: 'Insufficient permissions: issue:edit',
+        code: 'FORBIDDEN',
+      });
+      expect(
+        await status(check()(asUser(t.owner), { projectId: t.projectId, id: 'missing' })),
+      ).toMatchObject({ status: 404, message: 'Not found in this project' });
+    });
+  });
+
+  describe('parity with the REST middleware', () => {
+    const USERS = [
+      'stranger',
+      'orgViewer',
+      'orgGuest',
+      'orgMember',
+      'orgAdmin',
+      'teamViewer',
+      'teamMember',
+      'platformAdmin',
+    ] as const;
+    type UserName = (typeof USERS)[number];
+    type Check = (ctx: ActionContext, input: never) => Promise<void>;
+    interface Case {
+      label: string;
+      /** Expected status per user, in USERS order: the table must not pass by all failing alike */
+      expected: number[];
+      /** Whether REST checks the role before access: the one permitted message difference */
+      write?: boolean;
+      build: () => { method: 'get' | 'post'; path: string; check: Check; input: unknown };
+    }
+
+    const users = {} as Record<UserName, TestUser>;
+    let extraUserIds: string[];
+    let foreignIssueId: string;
+    const app = express();
+    const ok: express.RequestHandler = (_req, res) => {
+      res.json({ ok: true });
+    };
+
+    const byProject = (i: { projectId: string }) => i.projectId;
+    const bySpace = (i: { spaceId: string }) => i.spaceId;
+    const byPage = (i: { pageId: string }) => i.pageId;
+    const byTeam = (i: { teamId: string }) => i.teamId;
+    const byRecord = (i: { projectId: string; id: string }) => ({
+      projectId: i.projectId,
+      recordId: i.id,
+    });
+
+    const onProject = [403, 403, 403, 403, 403, 200, 200, 200];
+    const onProjectWrite = [403, 403, 403, 403, 403, 403, 200, 200];
+    const onSpace = [403, 403, 403, 403, 200, 200, 200, 403];
+    const onSpaceEdit = [403, 403, 403, 403, 200, 403, 200, 403];
+    const allMissing = [404, 404, 404, 404, 404, 404, 404, 404];
+
+    const projectReadCase = (projectId: () => string) => () => ({
+      method: 'get' as const,
+      path: `/project/${projectId()}`,
+      check: projectRead(byProject) as Check,
+      input: { projectId: projectId() },
+    });
+    const projectActionCase = (projectId: () => string) => () => ({
+      method: 'post' as const,
+      path: `/project/${projectId()}`,
+      check: projectAction('issue:edit', byProject) as Check,
+      input: { projectId: projectId() },
+    });
+    const spaceCase =
+      (level: 'VIEW' | 'EDIT', id: () => string) => (): ReturnType<Case['build']> => ({
+        method: level === 'VIEW' ? 'get' : 'post',
+        path: `/space/${id()}`,
+        check: spaceAccess(level, bySpace) as Check,
+        input: { spaceId: id() },
+      });
+    const pageCase =
+      (mode: 'view' | 'edit', id: () => string) => (): ReturnType<Case['build']> => ({
+        method: mode === 'view' ? 'get' : 'post',
+        path: `/page/${id()}`,
+        check: pageAccess(mode, byPage) as Check,
+        input: { pageId: id() },
+      });
+    const teamCase = (id: () => string) => () => ({
+      method: 'get' as const,
+      path: `/team/${id()}`,
+      check: teamRead(byTeam) as Check,
+      input: { teamId: id() },
+    });
+    const ownedCase =
+      (write: boolean, projectId: () => string, recordId: () => string) =>
+      (): ReturnType<Case['build']> => ({
+        method: write ? 'post' : 'get',
+        path: `/project/${projectId()}/record/${recordId()}`,
+        check: ownedByProject(projectOf.issue, byRecord, write ? 'issue:edit' : undefined) as Check,
+        input: { projectId: projectId(), id: recordId() },
+      });
+
+    const missing = () => 'missing';
+    const CASES: Case[] = [
+      { label: 'projectRead', expected: onProject, build: projectReadCase(() => t.projectId) },
+      {
+        label: 'projectRead, no such project',
+        expected: allMissing,
+        build: projectReadCase(missing),
+      },
+      {
+        label: 'projectAction',
+        expected: onProjectWrite,
+        write: true,
+        build: projectActionCase(() => t.projectId),
+      },
+      {
+        label: 'projectAction, no such project',
+        expected: allMissing,
+        write: true,
+        build: projectActionCase(missing),
+      },
+      { label: 'spaceAccess VIEW', expected: onSpace, build: spaceCase('VIEW', () => spaceId) },
+      { label: 'spaceAccess EDIT', expected: onSpaceEdit, build: spaceCase('EDIT', () => spaceId) },
+      {
+        label: 'spaceAccess, no such space',
+        expected: allMissing,
+        build: spaceCase('VIEW', missing),
+      },
+      { label: 'pageAccess view', expected: onSpace, build: pageCase('view', () => pageId) },
+      { label: 'pageAccess edit', expected: onSpaceEdit, build: pageCase('edit', () => pageId) },
+      {
+        label: 'pageAccess view, restricted page',
+        expected: [403, 403, 403, 403, 200, 403, 403, 403],
+        build: pageCase('view', () => restrictedPageId),
+      },
+      { label: 'pageAccess, no such page', expected: allMissing, build: pageCase('view', missing) },
+      {
+        label: 'teamRead',
+        expected: [403, 403, 403, 403, 200, 200, 200, 200],
+        build: teamCase(() => t.teamId),
+      },
+      { label: 'teamRead, no such team', expected: allMissing, build: teamCase(missing) },
+      {
+        label: 'ownedByProject',
+        expected: onProject,
+        build: ownedCase(
+          false,
+          () => t.projectId,
+          () => issueId,
+        ),
+      },
+      {
+        label: 'ownedByProject, record of another project',
+        expected: [403, 403, 403, 403, 403, 404, 404, 404],
+        build: ownedCase(
+          false,
+          () => t.projectId,
+          () => foreignIssueId,
+        ),
+      },
+      {
+        label: 'ownedByProject with action',
+        expected: onProjectWrite,
+        write: true,
+        build: ownedCase(
+          true,
+          () => t.projectId,
+          () => issueId,
+        ),
+      },
+      {
+        label: 'ownedByProject with action, record of another project',
+        expected: [403, 403, 403, 403, 403, 403, 404, 404],
+        write: true,
+        build: ownedCase(
+          true,
+          () => t.projectId,
+          () => foreignIssueId,
+        ),
+      },
+      {
+        label: 'ownedByProject with action, no such project',
+        expected: allMissing,
+        write: true,
+        build: ownedCase(true, missing, () => issueId),
+      },
+    ];
+
+    beforeAll(async () => {
+      // The chains the real routers mount, in their order, behind the real authenticate
+      const owned = requireOwnedByProject('id', projectOf.issue);
+      app.get('/project/:projectId', authenticate, requireProjectAccess, ok);
+      app.post(
+        '/project/:projectId',
+        authenticate,
+        requireProjectWrite(),
+        requireProjectAccess,
+        ok,
+      );
+      app.get('/project/:projectId/record/:id', authenticate, requireProjectAccess, owned, ok);
+      app.post(
+        '/project/:projectId/record/:id',
+        authenticate,
+        requireProjectWrite(),
+        requireProjectAccess,
+        owned,
+        ok,
+      );
+      const spaceChain = (level: 'VIEW' | 'EDIT') => [
+        authenticate,
+        requireWikiSpaceAccess(),
+        requireSpacePermission(level),
+        ok,
+      ];
+      app.get('/space/:spaceId', ...spaceChain('VIEW'));
+      app.post('/space/:spaceId', ...spaceChain('EDIT'));
+      app.get('/page/:pageId', authenticate, requireWikiPageAccess('view'), ok);
+      app.post('/page/:pageId', authenticate, requireWikiPageAccess('edit'), ok);
+      app.get('/team/:teamId', authenticate, requireTeamMember(), ok);
+      app.use(errorHandler);
+
+      const inOrg = async (role: 'VIEWER' | 'GUEST' | 'ADMIN') => {
+        const user = await createTestUser();
+        await prisma.orgMembership.create({ data: { userId: user.id, orgId: t.orgId, role } });
+        return user;
+      };
+      users.stranger = stranger;
+      users.orgMember = orgOnly;
+      users.teamViewer = viewer;
+      users.orgViewer = await inOrg('VIEWER');
+      users.orgGuest = await inOrg('GUEST');
+      users.orgAdmin = await inOrg('ADMIN');
+      users.teamMember = await addMemberToContext(t);
+      users.platformAdmin = await createTestUser();
+      await prisma.user.update({ where: { id: users.platformAdmin.id }, data: { isAdmin: true } });
+      extraUserIds = [
+        users.orgViewer.id,
+        users.orgGuest.id,
+        users.orgAdmin.id,
+        users.teamMember.id,
+        users.platformAdmin.id,
+      ];
+
+      const foreign = await prisma.issue.create({
+        data: {
+          title: 'Foreign',
+          body: '',
+          number: 1,
+          projectId: other.projectId,
+          creatorId: other.owner.id,
+        },
+      });
+      foreignIssueId = foreign.id;
+    });
+
+    afterAll(async () => {
+      await prisma.orgMembership.deleteMany({ where: { userId: { in: extraUserIds } } });
+      await prisma.teamMembership.deleteMany({ where: { userId: { in: extraUserIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: extraUserIds } } });
+    });
+
+    it.each(CASES)('$label', async ({ expected, write, build }) => {
+      const { method, path, check, input } = build();
+      const rows: unknown[] = [];
+      const want: unknown[] = [];
+
+      for (const [index, name] of USERS.entries()) {
+        const user = users[name];
+        const res = await request(app)[method](path).set('Authorization', `Bearer ${user.token}`);
+        const rest = {
+          status: res.status,
+          code: res.body.error?.code as string | undefined,
+          message: res.body.error?.message as string | undefined,
+        };
+        const result = await status(check(asUser(user), input as never));
+        const action =
+          result === 'ok' ? { status: 200, code: undefined, message: undefined } : result;
+
+        const permitted =
+          write &&
+          rest.message === 'Insufficient permissions: issue:edit' &&
+          action.message === 'Access denied' &&
+          !['teamViewer', 'teamMember'].includes(name);
+        rows.push({ name, ...action, message: permitted ? rest.message : action.message });
+        want.push({ name, ...rest });
+        expect(rest.status, `${name} over REST`).toBe(expected[index]);
+      }
+
+      expect(rows).toEqual(want);
+    });
   });
 });
