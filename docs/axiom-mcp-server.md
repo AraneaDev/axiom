@@ -19,7 +19,7 @@ A browser request must come from an allowed origin (`CORS_ORIGIN` or `FRONTEND_U
 
 ### Create a token
 
-In Axiom open Settings, API tokens, and create one. Name it after the agent (`claude-code`, `codex`), since that name becomes `via`. Give it the scopes it needs, below. Over REST: `POST /api/users/me/tokens` with `{ "name": "claude-code", "scopes": ["issues:write", "search:read"] }`. The token is shown once.
+In Axiom open Settings, API tokens, and create one. Name it after the agent (`claude-code`, `codex`), since that name becomes `via`. A new token starts with `search:read`, `issues:read`, `wiki:read` and `files:read`, which is what `search` and `read` need. Add the write scopes the agent should have, below. Over REST: `POST /api/users/me/tokens` with `{ "name": "claude-code", "scopes": ["search:read", "issues:write", "wiki:write", "files:write"] }`. The token is shown once.
 
 ## Setup
 
@@ -156,7 +156,7 @@ A token has one `<area>:read` and one `<area>:write` scope per area, and write i
 | `act`          | The scope of the action's area, for example `issues:write` for `issue.update`, `wiki:write` for `page.create` |
 | `upload`       | `files:write` and the scope of the target's area                                                              |
 
-The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals` and `admin`. A token can never manage orgs, teams, members, tokens or your account, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
+The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation` and `approvals`. `search`, `orgs`, `teams`, `projects` and `dashboards` have only a read scope for now, and `admin` none: a scope no action uses can't be minted, so a token never gains reach later without you choosing it. A token can never manage orgs, teams, members, tokens or your account, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
 
 ## Limits
 

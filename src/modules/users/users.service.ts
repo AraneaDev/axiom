@@ -2,7 +2,7 @@ import crypto from 'crypto';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
-import { isTokenScope } from '../../middleware/token-scopes';
+import { isMintableScope } from '../../middleware/token-scopes';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
@@ -309,8 +309,8 @@ export async function createApiToken(
     expiresInDays?: number;
   },
 ) {
-  if (!data.scopes.every(isTokenScope)) {
-    throw new AppError(400, 'Unknown token scope');
+  if (!data.scopes.every(isMintableScope)) {
+    throw new AppError(400, 'Unknown token scope, or one no action uses yet');
   }
 
   // Generate token: tk_ prefix + 48 random bytes

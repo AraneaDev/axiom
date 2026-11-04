@@ -15,41 +15,8 @@ import { Spinner } from '@/components/ui/Spinner';
 import { Toggle } from '@/components/ui/Toggle';
 import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import { DEFAULT_SCOPES, SCOPE_GROUPS, toggleScope } from '@/lib/token-scopes';
 import { formatDate } from '@/lib/utils';
-
-/** The scope areas of the API (src/middleware/token-scopes.ts), in display order */
-const SCOPE_GROUPS = [
-  { area: 'issues', label: 'Issues', description: 'Issues, comments, labels and project settings' },
-  { area: 'sprints', label: 'Sprints', description: 'Sprints, backlog and velocity' },
-  { area: 'boards', label: 'Boards', description: 'Boards and their columns' },
-  { area: 'wiki', label: 'Wiki', description: 'Spaces and pages' },
-  { area: 'files', label: 'Files', description: 'Attachments, with the scope of their parent' },
-  { area: 'search', label: 'Search', description: 'Search, limited to the areas above' },
-  { area: 'orgs', label: 'Organizations', description: 'Organizations and their members' },
-  { area: 'teams', label: 'Teams', description: 'Teams and their members' },
-  { area: 'projects', label: 'Projects', description: 'Projects themselves' },
-  { area: 'dashboards', label: 'Dashboards', description: 'Your dashboard' },
-  { area: 'forms', label: 'Forms', description: 'Forms and their submissions' },
-  { area: 'automation', label: 'Automation', description: 'Automation rules' },
-  { area: 'approvals', label: 'Approvals', description: 'Approval gates and votes' },
-  { area: 'admin', label: 'Admin', description: 'Administration' },
-] as const;
-
-const DEFAULT_SCOPES = ['issues:read', 'wiki:read'];
-
-/**
- * Turn one scope of an area on or off. Write includes read, so the set holds at most one of
- * the two; turning write off falls back to read.
- * @param scopes - The selected scopes
- * @param area - The area
- * @param kind - The toggle that changed
- * @param on - Its new state
- */
-function toggleScope(scopes: string[], area: string, kind: 'read' | 'write', on: boolean) {
-  const others = scopes.filter((s) => s !== `${area}:read` && s !== `${area}:write`);
-  if (on) return [...others, `${area}:${kind}`];
-  return kind === 'write' ? [...others, `${area}:read`] : others;
-}
 
 /**
  *
@@ -57,7 +24,7 @@ function toggleScope(scopes: string[], area: string, kind: 'read' | 'write', on:
 export default function ApiTokens() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
-  const [scopes, setScopes] = useState<string[]>(DEFAULT_SCOPES);
+  const [scopes, setScopes] = useState<string[]>([...DEFAULT_SCOPES]);
   const [newToken, setNewToken] = useState<string | null>(null);
   const { error, setError } = useFormError();
   const [revokeId, setRevokeId] = useState<string | null>(null);
@@ -79,7 +46,7 @@ export default function ApiTokens() {
       setNewToken(data.token ?? null);
       setShowForm(false);
       setName('');
-      setScopes(DEFAULT_SCOPES);
+      setScopes([...DEFAULT_SCOPES]);
     },
     onError: (err) => setError(err.message || 'Failed to create token'),
   });
@@ -185,7 +152,8 @@ export default function ApiTokens() {
                 <span className="text-sm font-medium">Scopes</span>
                 <span className="text-xs text-text-secondary text-center">Read</span>
                 <span className="text-xs text-text-secondary text-center">Write</span>
-                {SCOPE_GROUPS.map(({ area, label, description }) => {
+                {SCOPE_GROUPS.map((group) => {
+                  const { area, label, description } = group;
                   const canWrite = scopes.includes(`${area}:write`);
                   const canRead = canWrite || scopes.includes(`${area}:read`);
                   return (
@@ -200,18 +168,23 @@ export default function ApiTokens() {
                         disabled={canWrite}
                         onChange={(on) => setScopes(toggleScope(scopes, area, 'read', on))}
                       />
-                      <Toggle
-                        aria-label={`${label} write`}
-                        checked={canWrite}
-                        onChange={(on) => setScopes(toggleScope(scopes, area, 'write', on))}
-                      />
+                      {'readOnly' in group ? (
+                        <span />
+                      ) : (
+                        <Toggle
+                          aria-label={`${label} write`}
+                          checked={canWrite}
+                          onChange={(on) => setScopes(toggleScope(scopes, area, 'write', on))}
+                        />
+                      )}
                     </Fragment>
                   );
                 })}
               </div>
               <p className="mt-2 text-xs text-text-secondary">
-                A write scope includes reading. Tokens can't manage orgs, teams, members, projects,
-                permissions or tokens.
+                The read and search tools need Search; what they return also needs read on Issues,
+                Wiki or Files. A write scope includes reading. Tokens can't manage orgs, teams,
+                members, projects, permissions or tokens.
               </p>
             </div>
             <div className="flex gap-2">

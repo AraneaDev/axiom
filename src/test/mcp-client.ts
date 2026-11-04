@@ -5,7 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 import app from '../index';
-import { TOKEN_SCOPES } from '../middleware/token-scopes';
+import { MINTABLE_SCOPES } from '../middleware/token-scopes';
 
 import type { TestUser } from './factory';
 import { authPost } from './helpers';
@@ -44,12 +44,12 @@ export async function connectMcp(base: string, authorization: string): Promise<C
 /**
  * An Authorization header for a new API token of a user: /api/mcp takes tokens only.
  * @param user - The user, with a session
- * @param scopes - The token's scopes; by default all, so only the user's own access counts
+ * @param scopes - The token's scopes; by default all a token can get, so only the user's own access counts
  * @param name - The token's name, which writes carry as `via`
  */
 export async function tokenHeaderFor(
   user: TestUser,
-  scopes: readonly string[] = TOKEN_SCOPES,
+  scopes: readonly string[] = MINTABLE_SCOPES,
   name = 'mcp-test',
 ): Promise<string> {
   const res = await authPost('/api/users/me/tokens', user.token, { name, scopes: [...scopes] });

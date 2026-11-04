@@ -9,6 +9,7 @@ import { join } from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../config/database';
+import { createApiToken } from '../modules/users/users.service';
 import { cleanupTestContext, createTestContext, type TestContext } from '../test/factory';
 import { authPost } from '../test/helpers';
 
@@ -17,6 +18,8 @@ import {
   normalizeApiPath,
   SCOPE_AREAS,
   scopeAllows,
+  INERT_SCOPES,
+  MINTABLE_SCOPES,
   TOKEN_SCOPES,
   tokenAllows,
 } from './token-scopes';
@@ -433,12 +436,28 @@ describe('token scopes per area', () => {
     expect(res.status).toBe(400);
   });
 
-  it('accepts every area scope on create', async () => {
+  it('accepts every mintable scope on create', async () => {
     const res = await authPost('/api/users/me/tokens', ctx.owner.token, {
       name: 'all',
-      scopes: [...TOKEN_SCOPES],
+      scopes: [...MINTABLE_SCOPES],
     });
     expect(res.status).toBe(201);
-    expect(res.body.scopes).toEqual([...TOKEN_SCOPES]);
+    expect(res.body.scopes).toEqual([...MINTABLE_SCOPES]);
+  });
+
+  it.each(INERT_SCOPES)('refuses the inert scope %s on create', async (scope) => {
+    const res = await authPost('/api/users/me/tokens', ctx.owner.token, {
+      name: 'inert',
+      scopes: ['issues:read', scope],
+    });
+    expect(res.status).toBe(400);
+    const stored = await prisma.apiToken.count({ where: { name: 'inert' } });
+    expect(stored).toBe(0);
+  });
+
+  it('refuses an inert scope in the service too, not only in the request schema', async () => {
+    await expect(
+      createApiToken(ctx.owner.id, { name: 'inert', scopes: ['admin:write'] }),
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 });

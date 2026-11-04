@@ -25,7 +25,7 @@ import app from '../index';
 import { issueFieldRegistry } from '../lib/query-engine';
 import { AppError } from '../middleware/errorHandler';
 import { SEARCH_LIMIT } from '../middleware/rate-limit';
-import { TOKEN_SCOPES } from '../middleware/token-scopes';
+import { MINTABLE_SCOPES } from '../middleware/token-scopes';
 import {
   getSiteSettings,
   updateSiteSettings,
@@ -637,6 +637,17 @@ describe('MCP server', () => {
       const { data } = await callTool(c, 'read', { keys: [key, pageKey] });
       expect(data.items[0].data.title).toBe('Readable');
       expect(data.items[1].error).toMatchObject({ status: 403, code: 'SCOPE' });
+    });
+
+    it('a token with the scopes the token page starts with can read and search', async () => {
+      const { key } = await createIssue('Default scopes');
+      const c = await client(
+        await tokenHeader(['search:read', 'issues:read', 'wiki:read', 'files:read']),
+      );
+      const read = await callTool(c, 'read', { keys: [key], include: ['attachments'] });
+      expect(read.data.items[0].error).toBeUndefined();
+      expect(read.data.items[0].data.title).toBe('Default scopes');
+      expect((await callTool(c, 'search', { query: 'Default scopes' })).isError).toBe(false);
     });
 
     it('search needs search:read and shows only the sections the token covers', async () => {
@@ -1290,7 +1301,7 @@ describe('MCP server', () => {
       const issue = await createIssue();
       const stranger = await newUser();
       const token = `audit-stuff-${Date.now()}`;
-      const header = await tokenHeaderFor(stranger, TOKEN_SCOPES, token);
+      const header = await tokenHeaderFor(stranger, MINTABLE_SCOPES, token);
       const input: Record<string, unknown> = {
         projectId: ctx.projectId,
         issueNumber: issue.number,
@@ -1320,7 +1331,7 @@ describe('MCP server', () => {
     it('audit rows name the real target of uploads, lists and what was created', async () => {
       const issue = await createIssue();
       const token = `audit-target-${Date.now()}`;
-      const c = await client(await tokenHeaderFor(ctx.owner, TOKEN_SCOPES, token));
+      const c = await client(await tokenHeaderFor(ctx.owner, MINTABLE_SCOPES, token));
       const lastRow = async (action: string) =>
         prisma.auditLog.findFirstOrThrow({
           where: { via: token, action },
@@ -1391,7 +1402,7 @@ describe('MCP server', () => {
     it('a 429 on a write writes a refused row, for one action and for a batch', async () => {
       const user = await newUser();
       const token = `audit-429-${Date.now()}`;
-      const c = await client(await tokenHeaderFor(user, TOKEN_SCOPES, token));
+      const c = await client(await tokenHeaderFor(user, MINTABLE_SCOPES, token));
       const unknown = Array.from({ length: MAX_BATCH_ITEMS }, () => ({ action: 'nope.nope' }));
       for (let used = 0; used + MAX_BATCH_ITEMS <= ACT_LIMIT.max; used += MAX_BATCH_ITEMS) {
         await callTool(c, 'act', { batch: unknown });
@@ -1520,7 +1531,7 @@ describe('MCP server', () => {
 
     it('logs the origin and path of a URL, never its query', async () => {
       const token = `audit-url-${Date.now()}`;
-      const c = await client(await tokenHeaderFor(ctx.owner, TOKEN_SCOPES, token));
+      const c = await client(await tokenHeaderFor(ctx.owner, MINTABLE_SCOPES, token));
       await callTool(c, 'upload', {
         url: 'https://user:pw@localhost/x/y.png?X-Amz-Signature=secret#frag',
       });
@@ -2352,7 +2363,7 @@ describe('MCP server', () => {
           }),
         ),
       );
-      const c = await client(await tokenHeader([...TOKEN_SCOPES]));
+      const c = await client(await tokenHeader([...MINTABLE_SCOPES]));
       const { data } = await callTool(c, 'describe');
       const names = (data as Array<{ name: string }>).map((a) => a.name);
       expect(names).toContain('issue.get');

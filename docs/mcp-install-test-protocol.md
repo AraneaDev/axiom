@@ -20,7 +20,7 @@ ACCESS=$(curl -s -X POST http://localhost:3000/api/auth/login \
 curl -s -X POST http://localhost:3000/api/users/me/tokens \
   -H "Authorization: Bearer $ACCESS" -H "Content-Type: application/json" \
   -H "X-Requested-With: XMLHttpRequest" \
-  -d '{"name": "claude-code", "scopes": ["issues:write", "wiki:write", "files:write", "search:read"]}' \
+  -d '{"name": "claude-code", "scopes": ["search:read", "issues:write", "wiki:write", "files:write"]}' \
   | jq -r '.token'
 ```
 

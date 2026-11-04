@@ -43,6 +43,23 @@ export const TOKEN_SCOPES: readonly TokenScope[] = SCOPE_AREAS.flatMap((area): T
 ]);
 
 /**
+ * Scopes no action or route honours yet. A token holding one would gain that reach silently the
+ * day the area gets its actions, so they can't be minted until then. Plan 3 lifts them per area.
+ */
+export const INERT_SCOPES: readonly TokenScope[] = [
+  'admin:read',
+  'admin:write',
+  'orgs:write',
+  'teams:write',
+  'projects:write',
+  'search:write',
+  'dashboards:write',
+];
+
+/** The scopes a new token can be given. */
+export const MINTABLE_SCOPES = TOKEN_SCOPES.filter((scope) => !INERT_SCOPES.includes(scope));
+
+/**
  * What each scope stored before scopes per area became. These reproduce the old reach, and
  * the migration 20261104120000_token_scope_areas holds the same table.
  *
@@ -126,11 +143,11 @@ export function scopeAllows(
 }
 
 /**
- * Whether a name is a scope a token can hold.
+ * Whether a new token can be given this scope.
  * @param scope - The name to check
  */
-export function isTokenScope(scope: string): scope is TokenScope {
-  return (TOKEN_SCOPES as readonly string[]).includes(scope);
+export function isMintableScope(scope: string): scope is TokenScope {
+  return (MINTABLE_SCOPES as readonly string[]).includes(scope);
 }
 
 /**
