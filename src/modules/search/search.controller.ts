@@ -23,6 +23,11 @@ export const search = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getAccessibleSpaces = asyncHandler(async (req: Request, res: Response) => {
+  // Space names are wiki data: search:read alone doesn't show them to a token
+  if (req.tokenScopes && !scopesCover(req.tokenScopes, 'wiki', false)) {
+    res.json([]);
+    return;
+  }
   const spaces = await searchService.getAccessibleSpaces(req.userId!);
   res.json(spaces);
 });

@@ -1,9 +1,13 @@
 /**
  * Search returns only what the searcher could open through the REST routes.
  */
+import crypto from 'crypto';
+
+import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../../config/database';
+import app from '../../index';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -112,6 +116,27 @@ describe('Search access', () => {
     const res = await authGet('/api/search/spaces', member.token);
     expect(res.status).toBe(200);
     expect(res.body.map((s: { id: string }) => s.id)).not.toContain(lockedSpaceId);
+  });
+
+  it('lists no spaces to a token without wiki:read', async () => {
+    const listWith = async (scopes: string[]) => {
+      const raw = `tk_${crypto.randomBytes(24).toString('hex')}`;
+      await prisma.apiToken.create({
+        data: {
+          userId: ctx.owner.id,
+          name: 'spaces-test',
+          tokenHash: crypto.createHash('sha256').update(raw).digest('hex'),
+          prefix: raw.slice(0, 11),
+          scopes,
+        },
+      });
+      return request(app).get('/api/search/spaces').set('Authorization', `Token ${raw}`);
+    };
+    const issuesOnly = await listWith(['search:read', 'issues:read']);
+    expect(issuesOnly.status).toBe(200);
+    expect(issuesOnly.body).toEqual([]);
+    const wiki = await listWith(['search:read', 'wiki:read']);
+    expect(wiki.body.map((s: { id: string }) => s.id)).toContain(lockedSpaceId);
   });
 
   it('F: finds the searcher’s matches even when other orgs have many better-ranked ones', async () => {
