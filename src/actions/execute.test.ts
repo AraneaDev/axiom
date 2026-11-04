@@ -70,6 +70,7 @@ const targetAuthorize = vi.fn(async () => {});
 const targetHandler = vi.fn(async () => ({ id: 'x' }));
 
 const output = z.looseObject({ id: z.string() });
+const projectTarget = z.object({ projectId: z.string() });
 
 registerActions([
   defineAction({
@@ -77,8 +78,8 @@ registerActions([
     area: 'issues',
     kind: 'write',
     summary: 'Authorizes on the target alone',
-    target: z.object({ projectId: z.string() }),
-    input: z.object({ projectId: z.string(), title: z.string().min(3) }),
+    target: projectTarget,
+    input: projectTarget.extend({ title: z.string().min(3) }),
     output,
     authorize: targetAuthorize,
     handler: targetHandler,
@@ -671,8 +672,8 @@ describe('authorizers', () => {
           area: 'issues',
           kind: 'write',
           summary: 'A body behind a real authorizer',
-          target: z.object({ projectId: z.string() }),
-          input: z.object({ projectId: z.string(), title: z.string().min(3) }),
+          target: projectTarget,
+          input: projectTarget.extend({ title: z.string().min(3) }),
           output,
           authorize: projectAction('issue:edit', (target) => target.projectId),
           handler,

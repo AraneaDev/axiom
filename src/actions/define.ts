@@ -45,6 +45,7 @@ export interface ActionDef<
    * Only the ids authorize needs. Authorization runs before the full input is validated, so a
    * refused caller gets 403/404 whatever the body holds. Actions with a body must declare this.
    * Without it, authorize gets the full input, parsed first.
+   * Declare `input` as `target.extend({...})`, so authorize and the handler parse ids alike.
    */
   target?: T;
   /** Used by plan 3 */

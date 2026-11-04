@@ -50,9 +50,13 @@ async function assertProjectRole(userId: string, projectId: string, action: Acti
  * status and code. Both are needed, because checkProjectAction accepts an org role alone and
  * REST turns away whoever is not on the team.
  *
- * Access comes first here, where REST routes run requireProjectWrite first. So someone off the
- * team whose org role lacks the action reads "Access denied" instead of "Insufficient
- * permissions". This is the only difference from REST.
+ * Messages can differ from REST, status and code do not:
+ * - Access comes first here, where REST routes run requireProjectWrite first. So someone off
+ *   the team whose org role lacks the action reads "Access denied" instead of "Insufficient
+ *   permissions".
+ * - Settings routes stack requireProjectWrite() on requireProjectWrite('team:manage_members').
+ *   A team VIEWER reads "Insufficient permissions: issue:edit" there over REST, and here the
+ *   message names the action given, "Insufficient permissions: team:manage_members".
  * @param action - The permission action
  * @param pick - Finds the project id in the input
  */
@@ -112,8 +116,8 @@ export function teamRead<T>(pick: (input: T) => string): Authorizer<T> {
 /**
  * A record addressed through a project: requireProjectAccess, the role check when `action` is
  * given, then requireOwnedByProject. A record of another project answers 404, as if it did not
- * exist in this one. Writes pass `action`; see projectAction for the one message that differs
- * from REST.
+ * exist in this one. Writes pass `action`; see projectAction for the messages that differ from
+ * REST.
  * @param resolver - Returns the projects the record belongs to; see `projectOf`
  * @param pick - Finds the project id and the record id in the input
  * @param action - The permission action, for writes
