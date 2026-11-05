@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { Prisma, type AgentApproval, type AgentApprovalStatus } from '@prisma/client';
 
 import {
-  DEFAULT_POLICY,
+  isToken,
   needsApproval,
   PendingApproval,
   type EffectivePolicy,
@@ -20,6 +20,7 @@ import { logger } from '../../utils/logger';
 import { createNotification } from '../notifications/notifications.service';
 
 import { OUTCOME_UNKNOWN } from './agent-approvals.cleanup';
+import { policyForCall } from './agent-policy.service';
 
 const MAX_INPUT_BYTES = 256 * 1024;
 const MAX_RESULT_BYTES = 1024 * 1024;
@@ -62,14 +63,6 @@ function ownedBy(ctx: ActionContext): Prisma.AgentApprovalWhereInput {
   return ctx.apiTokenId === undefined
     ? { userId: ctx.userId }
     : { userId: ctx.userId, apiTokenId: ctx.apiTokenId };
-}
-
-/**
- * The policy of a caller. Only the defaults until org and user rules exist.
- * @param _ctx - Who runs the action
- */
-function policyFor(_ctx: ActionContext): EffectivePolicy {
-  return DEFAULT_POLICY;
 }
 
 /**
@@ -268,7 +261,8 @@ export async function approvalGate(
   input: unknown,
   ctx: ActionContext,
 ): Promise<PendingApproval | undefined> {
-  const policy = policyFor(ctx);
+  if (!isToken(ctx)) return undefined;
+  const policy = await policyForCall(ctx.userId, input);
   if (!(await needsApproval(def, input, ctx, policy))) return undefined;
   if (await isApprovedRun(def, ctx)) return undefined;
   return requestApproval(def, rawInput, input, ctx, policy);

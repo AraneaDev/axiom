@@ -29,11 +29,14 @@ const TOKEN_BLOCKED_WRITE_AREAS = new Set(['admin', 'orgs', 'teams', 'projects']
  *   (the issue list's presets). Plan 2 gives agents saved queries in area dashboards (P12), so
  *   the scope decides now. Legacy tokens hold dashboards:read and gain no write.
  * - dashboard.*, dashboardWidget.*, /api/dashboards: new in plan 2, area dashboards (P12)
+ * - agentApproval.*, agentPolicy.*: new in plan 3, area approvals
  */
 const NO_LEGACY_ROUTE = new Set([
   'agentApproval.list',
   'agentApproval.get',
   'agentApproval.wait',
+  'agentPolicy.get',
+  'agentPolicy.update',
   'item.read',
   'query.run',
   'savedQuery.list',

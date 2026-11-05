@@ -11,6 +11,10 @@ export interface EffectivePolicy {
   };
   /** How long a request waits before it expires */
   expiresMinutes: number;
+  /** Actions that always wait, by name (user and org rules) */
+  alsoRequire?: readonly string[];
+  /** Actions that never wait, by name (org rules); never lifts an admin action */
+  neverRequire?: readonly string[];
 }
 
 export const DEFAULT_POLICY: EffectivePolicy = {
@@ -60,6 +64,8 @@ export async function needsApproval(
 ): Promise<boolean> {
   if (!isToken(ctx)) return false;
   if (def.admin) return true;
+  if (policy.alsoRequire?.includes(def.name)) return true;
+  if (policy.neverRequire?.includes(def.name)) return false;
   const { requireFor } = policy;
   if (def.destructive && requireFor.destructive) return true;
   if (def.bulkCount && def.bulkCount(input) > requireFor.bulkOver) return true;

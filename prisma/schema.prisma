@@ -45,6 +45,7 @@ model User {
   pageComments            PageComment[]
   savedFilters            SavedFilter[]
   dashboards              Dashboard[]
+  agentPolicy             AgentPolicy?
   starredPages            StarredPage[]            @relation("UserStarredPages")
   pageViews               PageView[]               @relation("UserPageViews")
   issueVotes              IssueVote[]
@@ -156,6 +157,7 @@ model Organization {
   invitations  Invitation[]
   savedFilters SavedFilter[]
   dashboards   Dashboard[]
+  agentPolicy  AgentPolicy?
 
   @@map("organizations")
 }
@@ -1317,4 +1319,18 @@ model AgentApproval {
   @@index([status, expiresAt])
   @@index([decidedAt])
   @@map("agent_approvals")
+}
+
+/// Rules for what a token's call waits on, per org (set by an owner) or per user (tighten only).
+/// Exactly one of orgId and userId is set.
+model AgentPolicy {
+  id        String        @id @default(cuid())
+  orgId     String?       @unique
+  org       Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId    String?       @unique
+  user      User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rules     Json
+  updatedAt DateTime      @updatedAt
+
+  @@map("agent_policies")
 }
