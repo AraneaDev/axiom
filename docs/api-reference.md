@@ -189,7 +189,7 @@ Endpoints, all `approvals` area:
 
 | Method and path | Action | Notes |
 | --- | --- | --- |
-| `GET /api/agent-approvals` | `agentApproval.list` | `status`, `limit` (100 at most), `offset`; your own requests |
+| `GET /api/agent-approvals` | `agentApproval.list` | `status`, `state` (`open` or `decided`), `limit` (100 at most), `offset`; your own requests |
 | `GET /api/agent-approvals/:id` | `agentApproval.get` | One request with input and outcome |
 | `GET /api/agent-approvals/:id/wait` | `agentApproval.wait` | Waits up to 25 seconds (`seconds`), two at once per user (`429`) |
 | `POST /api/agent-approvals/:id/approve` | `agentApproval.approve` | Web UI only |

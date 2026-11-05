@@ -35,6 +35,10 @@ const agentApprovalActions = [
       status: z
         .enum(['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'EXECUTED', 'FAILED'])
         .optional(),
+      state: z
+        .enum(['open', 'decided'])
+        .optional()
+        .describe('open: waiting and not expired; decided: everything else'),
       limit: strictInt.optional().describe('At most 100, the default'),
       offset: strictInt.optional(),
     }),

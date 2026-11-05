@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Bot, CheckCircle, History, Hourglass, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
@@ -7,6 +7,7 @@ import { agentApprovalsApi, type AgentApprovalSummary } from '@/api/agent-approv
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Pagination } from '@/components/ui/Pagination';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead } from '@/components/ui/Table';
 import { Tabs } from '@/components/ui/Tabs';
@@ -14,6 +15,8 @@ import { effectiveStatus, REFETCH_MS, STATUS_LABELS, STATUS_VARIANTS } from '@/l
 import { formatRelative } from '@/lib/utils';
 
 type Tab = 'pending' | 'history';
+
+const HISTORY_PAGE = 25;
 
 const TABS = [
   { key: 'pending', label: 'Pending', icon: <Hourglass className="h-4 w-4" /> },
@@ -26,6 +29,7 @@ const TABS = [
  */
 export default function AgentApprovals() {
   const [tab, setTab] = useState<Tab>('pending');
+  const [offset, setOffset] = useState(0);
   // Expiry sends no event: the clock moves the rows, and the refetch confirms them
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -34,11 +38,12 @@ export default function AgentApprovals() {
   }, []);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['agent-approvals', 'list', tab],
+    queryKey: ['agent-approvals', 'list', tab, tab === 'history' ? offset : 0],
     queryFn: () =>
       tab === 'pending'
         ? agentApprovalsApi.list({ status: 'PENDING' })
-        : agentApprovalsApi.list({ limit: 100 }),
+        : agentApprovalsApi.list({ state: 'decided', limit: HISTORY_PAGE, offset }),
+    placeholderData: keepPreviousData,
     refetchInterval: REFETCH_MS,
     refetchOnWindowFocus: true,
   });
@@ -57,7 +62,15 @@ export default function AgentApprovals() {
       <p className="mb-4 text-sm text-text-secondary">
         Actions that an agent asked to run with your rights. Nothing runs until you approve it here.
       </p>
-      <Tabs tabs={TABS} activeKey={tab} onChange={(key) => setTab(key as Tab)} className="mb-4" />
+      <Tabs
+        tabs={TABS}
+        activeKey={tab}
+        onChange={(key) => {
+          setTab(key as Tab);
+          setOffset(0);
+        }}
+        className="mb-4"
+      />
 
       {isLoading ? (
         <ListSkeleton rows={4} />
@@ -116,6 +129,15 @@ export default function AgentApprovals() {
             </Tbody>
           </Table>
         </TableContainer>
+      )}
+      {tab === 'history' && (data?.total ?? 0) > HISTORY_PAGE && (
+        <Pagination
+          className="mt-3"
+          total={data?.total ?? 0}
+          limit={HISTORY_PAGE}
+          offset={offset}
+          onPageChange={setOffset}
+        />
       )}
     </div>
   );

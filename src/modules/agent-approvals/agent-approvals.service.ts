@@ -299,18 +299,39 @@ function statusWhere(status: AgentApprovalStatus): Prisma.AgentApprovalWhereInpu
 }
 
 /**
+ * Open requests wait and have not expired; decided is everything else, a lapsed one included.
+ * @param state - open or decided
+ */
+function stateWhere(state: 'open' | 'decided'): Prisma.AgentApprovalWhereInput {
+  const open = statusWhere('PENDING');
+  return state === 'open' ? open : { NOT: open };
+}
+
+/**
  * List requests, newest first, without what they hold.
  * @param ctx - Who reads
  * @param opts - The filter and the window
  * @param opts.status - Only this status
+ * @param opts.state - Only open or only decided ones
  * @param opts.limit - At most this many, up to MAX_LIST_LIMIT
  * @param opts.offset - Skip this many
  */
 export async function listAgentApprovals(
   ctx: ActionContext,
-  opts: { status?: AgentApprovalStatus; limit?: number; offset?: number },
+  opts: {
+    status?: AgentApprovalStatus;
+    state?: 'open' | 'decided';
+    limit?: number;
+    offset?: number;
+  },
 ) {
-  const where = { ...ownedBy(ctx), ...(opts.status ? statusWhere(opts.status) : {}) };
+  const where: Prisma.AgentApprovalWhereInput = {
+    AND: [
+      ownedBy(ctx),
+      opts.status ? statusWhere(opts.status) : {},
+      opts.state ? stateWhere(opts.state) : {},
+    ],
+  };
   const take = Math.min(Math.max(opts.limit ?? MAX_LIST_LIMIT, 1), MAX_LIST_LIMIT);
   const skip = opts.offset ?? 0;
   const [rows, total] = await Promise.all([

@@ -41,9 +41,17 @@ interface ListResult {
 
 /** Requests that agents made and wait for your decision. Only the web UI approves. */
 export const agentApprovalsApi = {
-  list: (params: { status?: AgentApprovalStatus; limit?: number; offset?: number } = {}) => {
+  list: (
+    params: {
+      status?: AgentApprovalStatus;
+      state?: 'open' | 'decided';
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
     const search = new URLSearchParams();
     if (params.status) search.set('status', params.status);
+    if (params.state) search.set('state', params.state);
     if (params.limit !== undefined) search.set('limit', String(params.limit));
     if (params.offset !== undefined) search.set('offset', String(params.offset));
     const query = search.size > 0 ? '?' + search.toString() : '';

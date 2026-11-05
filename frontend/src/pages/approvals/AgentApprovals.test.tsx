@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -75,5 +75,20 @@ describe('AgentApprovals', () => {
     show();
     expect(await screen.findByText('Delete <b>bold</b> **x**')).toBeInTheDocument();
     expect(document.querySelector('b')).toBeNull();
+  });
+
+  it('asks for the decided requests a page at a time, so older ones are reachable', async () => {
+    list.mockResolvedValue({
+      data: [row({ id: 'a2', status: 'EXECUTED', preview: 'Done' })],
+      total: 60,
+    });
+    show();
+    fireEvent.click(await screen.findByRole('tab', { name: /history/i }));
+    await screen.findByText('Done');
+    expect(list).toHaveBeenLastCalledWith({ state: 'decided', limit: 25, offset: 0 });
+    fireEvent.click(screen.getByTitle('Next page'));
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith({ state: 'decided', limit: 25, offset: 25 }),
+    );
   });
 });

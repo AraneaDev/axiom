@@ -1404,6 +1404,33 @@ describe('agent approvals', () => {
       expect(waiting.body.data[0].input).toBeUndefined();
     });
 
+    it('lists the decided requests apart from the open ones, and pages through them', async () => {
+      const open = await pendingOn('still open');
+      const lapsed = await pendingOn('lapsed');
+      await prisma.agentApproval.update({
+        where: { id: lapsed },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+      const decided: string[] = [];
+      for (const value of ['one', 'two', 'three']) {
+        const id = await pendingOn(value);
+        await approve(id);
+        decided.push(id);
+      }
+      const first = await authGet('/api/agent-approvals?state=decided&limit=2', owner.token);
+      expect(first.status).toBe(200);
+      expect(first.body.total).toBe(4);
+      expect(first.body.data).toHaveLength(2);
+      const next = await authGet(
+        '/api/agent-approvals?state=decided&limit=2&offset=2',
+        owner.token,
+      );
+      const ids = [...first.body.data, ...next.body.data].map((row: { id: string }) => row.id);
+      expect(new Set(ids)).toEqual(new Set([...decided, lapsed]));
+      const waiting = await authGet('/api/agent-approvals?state=open', owner.token);
+      expect(waiting.body.data.map((row: { id: string }) => row.id)).toEqual([open]);
+    });
+
     it('answers 404 for the row of another user', async () => {
       const id = await pendingOn('private');
       const res = await authGet(`/api/agent-approvals/${id}`, member.token);
