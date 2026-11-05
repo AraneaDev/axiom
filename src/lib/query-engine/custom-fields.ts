@@ -129,10 +129,20 @@ export function unknownCustomField(name: string): QueryValueError {
   return new QueryValueError(`Unknown custom field '${name}'`);
 }
 
+/**
+ * What a USER field holds for a value: stored are ids, and a query may also say a username.
+ * @param operand - The value
+ * @param context - Holds who has that username
+ */
+function userIds(operand: string, context: QueryContext): string[] {
+  return [operand, ...(context.customFieldUsers?.get(operand.toLowerCase()) ?? [])];
+}
+
 function valueFilter(
   type: CustomFieldType,
   operator: ComparisonOp,
   operand: number | Date | string,
+  context: QueryContext,
 ): Record<string, unknown> {
   if (type === 'NUMBER' || type === 'DATE') {
     const column = type === 'NUMBER' ? 'numberValue' : 'dateValue';
@@ -142,7 +152,10 @@ function valueFilter(
   const literal = likeLiteral(String(operand));
   const insensitive = { mode: 'insensitive' };
   if (operator === '~') return { value: { contains: literal, ...insensitive } };
-  if (type === 'USER') return { value: operand };
+  if (type === 'USER') {
+    const ids = userIds(String(operand), context);
+    return { value: ids.length === 1 ? ids[0] : { in: ids } };
+  }
   if (type === 'MULTI_SELECT') {
     // Stored as "A,B"
     return {
@@ -189,7 +202,7 @@ export function compileCustomField(
     }
     const operand = castOperand(type, value);
     if (operand === null) continue;
-    const filter = valueFilter(type, operator === '!=' ? '=' : operator, operand);
+    const filter = valueFilter(type, operator === '!=' ? '=' : operator, operand, context);
     branches.push(operator === '!=' ? lacks(filter) : has(filter));
   }
   return branches.length > 0 ? { OR: branches } : MATCH_NOTHING;
@@ -200,6 +213,7 @@ function rowMatches(
   operator: ComparisonOp,
   operand: number | Date | string,
   stored: string,
+  context: QueryContext,
 ): boolean {
   if (type === 'NUMBER' || type === 'DATE') {
     const typed = typedCustomFieldValue(stored);
@@ -213,7 +227,7 @@ function rowMatches(
     return actual === target;
   }
   const wanted = String(operand);
-  if (type === 'USER') return stored === wanted;
+  if (type === 'USER') return userIds(wanted, context).includes(stored);
   const lower = wanted.toLowerCase();
   if (operator === '~') return stored.toLowerCase().includes(lower);
   if (type === 'MULTI_SELECT') {
@@ -261,7 +275,7 @@ export function evaluateCustomField(
     const operand = castOperand(type, value);
     if (operand === null) return false;
     const comparison = operator === '!=' ? '=' : operator;
-    const found = rows.some((row) => rowMatches(type, comparison, operand, row));
+    const found = rows.some((row) => rowMatches(type, comparison, operand, row, context));
     return operator === '!=' ? !found : found;
   });
 }

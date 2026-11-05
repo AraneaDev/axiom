@@ -155,7 +155,7 @@ describe('the language fixes', () => {
     expect(compile('assignee IN (currentUser())', noUser)).toEqual(nothing);
     expect(compile('assignee NOT IN (currentUser())', noUser)).toEqual({});
     expect(compile('assignee IN (currentUser(), "u2")', noUser)).toEqual({
-      assigneeId: { in: ['u2'] },
+      OR: [{ assigneeId: 'u2' }, { assignee: { username: { equals: 'u2', mode: 'insensitive' } } }],
     });
     expect(() => compile('created > currentUser()', noUser)).toThrow(QueryValueError);
 
@@ -236,6 +236,153 @@ describe('the language fixes', () => {
   });
 });
 
+describe('names as well as ids', () => {
+  const named = {
+    ...issue,
+    assigneeId: 'id-a',
+    assignee: { id: 'id-a', username: 'Tim' },
+    creatorId: 'id-c',
+    creator: { id: 'id-c', username: 'jane_d' },
+    sprintId: 'id-s',
+    sprint: { id: 'id-s', name: 'Sprint 1', status: 'ACTIVE' },
+    projectId: 'id-p',
+    project: { id: 'id-p', prefix: 'AXM' },
+  };
+
+  it('compiles an id or a name', () => {
+    expect(compile('assignee = tim')).toEqual({
+      OR: [
+        { assigneeId: 'tim' },
+        { assignee: { username: { equals: 'tim', mode: 'insensitive' } } },
+      ],
+    });
+    expect(compile('sprint = "Sprint 1"')).toEqual({
+      OR: [
+        { sprintId: 'Sprint 1' },
+        { sprint: { name: { equals: 'Sprint 1', mode: 'insensitive' } } },
+      ],
+    });
+    expect(compile('project = AXM')).toEqual({
+      OR: [{ projectId: 'axm' }, { project: { prefix: { equals: 'axm', mode: 'insensitive' } } }],
+    });
+    expect(compile('creator = "jane_d"')).toEqual({
+      OR: [
+        { creatorId: 'jane_d' },
+        { creator: { username: { equals: 'jane\\_d', mode: 'insensitive' } } },
+      ],
+    });
+  });
+
+  it('counts an empty column as different, only on a column that can be empty', () => {
+    const named = { assignee: { username: { equals: 'tim', mode: 'insensitive' } } };
+    expect(compile('assignee != tim')).toEqual({
+      OR: [{ assigneeId: null }, { AND: [{ assigneeId: { not: 'tim' } }, { NOT: named }] }],
+    });
+    expect(compile('project != axm')).toEqual({
+      AND: [
+        { projectId: { not: 'axm' } },
+        { NOT: { project: { prefix: { equals: 'axm', mode: 'insensitive' } } } },
+      ],
+    });
+    expect(compile('assignee != currentUser()')).toEqual({
+      OR: [{ assigneeId: null }, { assigneeId: { not: 'user-1' } }],
+    });
+  });
+
+  it('keeps the empty questions and what a function means', () => {
+    expect(compile('assignee = currentUser()')).toEqual({ assigneeId: 'user-1' });
+    expect(compile('sprint = null')).toEqual({ sprintId: null });
+  });
+
+  it('compiles a list', () => {
+    expect(compile('assignee IN (tim, jan)')).toEqual({
+      OR: [
+        { assigneeId: { in: ['tim', 'jan'] } },
+        { assignee: { username: { in: ['tim', 'jan'], mode: 'insensitive' } } },
+      ],
+    });
+  });
+
+  it('evaluates', () => {
+    const cases: Array<[string, boolean]> = [
+      ['assignee = tim', true],
+      ['assignee = TIM', true],
+      ['assignee = "id-a"', true],
+      ['assignee = jan', false],
+      ['assignee != tim', false],
+      ['assignee != jan', true],
+      ['creator = "JANE_D"', true],
+      ['sprint = "sprint 1"', true],
+      ['sprint = "id-s"', true],
+      ['sprint = "Sprint 2"', false],
+      ['project = AXM', true],
+      ['project = "id-p"', true],
+      ['project != AXM', false],
+      ['project = OTHER', false],
+      ['assignee IN (jan, tim)', true],
+      ['assignee NOT IN (jan, tim)', false],
+      ['project IN (OTHER)', false],
+      ['project NOT IN (OTHER)', true],
+    ];
+    for (const [query, expected] of cases) expect(run(query, named), query).toBe(expected);
+    const empty = { ...named, assigneeId: null, assignee: null };
+    expect(run('assignee = tim', empty)).toBe(false);
+    expect(run('assignee != tim', empty)).toBe(true);
+    expect(run('assignee NOT IN (tim)', empty)).toBe(true);
+  });
+
+  it('reads a username on a USER custom field through what the resolve step found', () => {
+    const context = { ...ctx, customFieldUsers: new Map([['tim', ['user-1']]]) };
+    expect(compile('cf.Owner = tim', context)).toMatchObject({
+      OR: [{ customFieldValues: { some: { value: { in: ['tim', 'user-1'] } } } }],
+    });
+    expect(run('cf.Owner = tim', issue, context)).toBe(true);
+    expect(run('cf.Owner != tim', issue, context)).toBe(false);
+    expect(run('cf.Owner = jan', issue, context)).toBe(false);
+    expect(run('cf.Owner = "user-1"', issue, context)).toBe(true);
+  });
+});
+
+describe('an unquoted ISO date', () => {
+  it('lexes as one value', () => {
+    expect(parse('created > 2026-01-31')).toMatchObject({
+      value: { type: 'string', value: '2026-01-31' },
+    });
+    expect(parse('cf."Ship date" > 2026-01-31')).toMatchObject({
+      type: 'comparison',
+      value: { type: 'string', value: '2026-01-31' },
+    });
+    expect(parse('created IN (2026-01-31, 2026-02-01)')).toMatchObject({
+      values: [{ value: '2026-01-31' }, { value: '2026-02-01' }],
+    });
+  });
+
+  it('compiles and evaluates as the quoted one', () => {
+    expect(compile('created > 2026-01-31')).toEqual(compile('created > "2026-01-31"'));
+    expect(compile('cf."Ship date" > 2026-02-01')).toEqual(
+      compile('cf."Ship date" > "2026-02-01"'),
+    );
+    expect(run('cf."Ship date" > 2026-02-01')).toBe(true);
+    expect(run('cf."Ship date" > 2026-04-01')).toBe(false);
+    const old = { ...issue, createdAt: new Date('2026-03-01') };
+    expect(run('created > 2026-02-01', old)).toBe(true);
+    expect(run('created > 2026-04-01', old)).toBe(false);
+    expect(run('created > "2026-02-01"', old)).toBe(true);
+    expect(run('created > "not a date"', old)).toBe(false);
+  });
+
+  it('answers a bad date as a bad date', () => {
+    expect(() => compile('created > 2026-13-45')).toThrow('date');
+    expect(compile('cf."Ship date" > 2026-02-31')).toEqual({ id: { in: [] } });
+  });
+
+  it('leaves other numbers with hyphens alone', () => {
+    expect(() => parse('number = 1-2 AND type = Bug')).toThrow();
+    expect(parse('number = 2026')).toMatchObject({ value: { type: 'number', value: 2026 } });
+    expect(freeTextOf(parse('type = Bug 2026-01-01'))).toBe('2026-01-01');
+  });
+});
+
 describe('blocked and blocks', () => {
   const OPEN = { NOT: { column: { isDone: true } } };
   const blockedWhere = {
@@ -245,9 +392,14 @@ describe('blocked and blocks', () => {
     ],
   };
   const blocksWhere = {
-    OR: [
-      { linksFrom: { some: { type: 'BLOCKS', to: OPEN } } },
-      { linksTo: { some: { type: 'IS_BLOCKED_BY', from: OPEN } } },
+    AND: [
+      OPEN,
+      {
+        OR: [
+          { linksFrom: { some: { type: 'BLOCKS' } } },
+          { linksTo: { some: { type: 'IS_BLOCKED_BY' } } },
+        ],
+      },
     ],
   };
 
@@ -304,6 +456,21 @@ describe('blocked and blocks', () => {
         linksTo: [],
       }),
     ).toBe(false);
+  });
+
+  it('a done issue blocks nothing, whatever the state of the other one', () => {
+    const blocking = {
+      ...issue,
+      linksFrom: [{ type: 'BLOCKS', toId: 'x', to: done }],
+      linksTo: [],
+    };
+    expect(run('blocks = true', blocking)).toBe(true);
+    expect(run('blocks = true', { ...blocking, column: { isDone: true } })).toBe(false);
+    expect(run('blocks = false', { ...blocking, column: { isDone: true } })).toBe(true);
+    expect(run('blocks = true', { ...blocking, column: null })).toBe(true);
+    expect(() => run('blocks = true', { ...blocking, column: { name: 'Doing' } })).toThrow(
+      'isDone',
+    );
   });
 
   it('throws when the links were not hydrated, rather than reading them as none', () => {

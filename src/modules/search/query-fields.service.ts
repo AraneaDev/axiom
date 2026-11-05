@@ -36,15 +36,20 @@ const NOT_AN_ISSUE_KEY = "'linked' takes an issue key, such as AXM-12";
  */
 export type QueryScope = { userId: string; projectId?: string } | { projectId: string };
 
-export type ResolvedQueryFields = Pick<QueryContext, 'customFields' | 'linkedIssues'>;
+export type ResolvedQueryFields = Pick<
+  QueryContext,
+  'customFields' | 'customFieldUsers' | 'linkedIssues'
+>;
 
 /**
  * The custom field names and linked keys a query holds.
  * @param ast - The query
  */
-function collect(ast: Expression): { names: Set<string>; keys: Set<string> } {
+function collect(ast: Expression) {
   const names = new Set<string>();
   const keys = new Set<string>();
+  // The text a custom field is compared with, which may be a username
+  const texts: Array<{ name: string; text: string }> = [];
   const addKeys = (values: Value[]) => {
     for (const value of values) {
       if (value.type === 'string') keys.add(value.value);
@@ -59,13 +64,17 @@ function collect(ast: Expression): { names: Set<string>; keys: Set<string> } {
     else if (node.type === 'not') pending.push(node.operand);
     else if (node.type === 'comparison' || node.type === 'in') {
       const name = customFieldName(node.field);
-      if (name !== null) names.add(name);
-      else if (node.field.toLowerCase() === 'linked') {
+      if (name !== null) {
+        names.add(name);
+        for (const value of node.type === 'in' ? node.values : [node.value]) {
+          if (value.type === 'string') texts.push({ name, text: value.value });
+        }
+      } else if (node.field.toLowerCase() === 'linked') {
         addKeys(node.type === 'in' ? node.values : [node.value]);
       }
     }
   }
-  return { names, keys };
+  return { names, keys, texts };
 }
 
 /**
@@ -104,6 +113,39 @@ async function resolveCustomFields(
     if (!types.has(name.toLowerCase())) throw unknownCustomField(name);
   }
   return types;
+}
+
+/**
+ * Who a text compared with a USER field may name. A username found here only widens the comparison
+ * on values of issues the query may see, so it tells nothing about who exists.
+ * @param texts - The text per custom field
+ * @param types - The types of each name
+ * @returns Ids per username in lower case
+ */
+async function resolveCustomFieldUsers(
+  texts: Array<{ name: string; text: string }>,
+  types: Map<string, CustomFieldType[]>,
+): Promise<Map<string, string[]>> {
+  const usernames = new Set(
+    texts
+      .filter(({ name }) => types.get(name.toLowerCase())?.includes('USER'))
+      .map(({ text }) => text.toLowerCase()),
+  );
+  const users = new Map<string, string[]>();
+  if (usernames.size === 0) return users;
+  const rows = await prisma.user.findMany({
+    where: {
+      OR: [...usernames].map((username) => ({
+        username: { equals: likeLiteral(username), mode: 'insensitive' as const },
+      })),
+    },
+    select: { id: true, username: true },
+  });
+  for (const row of rows) {
+    const username = row.username.toLowerCase();
+    users.set(username, [...(users.get(username) ?? []), row.id]);
+  }
+  return users;
 }
 
 /**
@@ -193,12 +235,15 @@ export async function resolveQueryFields(
   ast: Expression,
   scope: QueryScope,
 ): Promise<ResolvedQueryFields> {
-  const { names, keys } = collect(ast);
+  const { names, keys, texts } = collect(ast);
   if (keys.size > MAX_LINKED_KEYS) {
     throw new QueryValueError(`A query can name at most ${MAX_LINKED_KEYS} issue keys`);
   }
   const resolved: ResolvedQueryFields = {};
-  if (names.size > 0) resolved.customFields = await resolveCustomFields(names, scope);
+  if (names.size > 0) {
+    resolved.customFields = await resolveCustomFields(names, scope);
+    resolved.customFieldUsers = await resolveCustomFieldUsers(texts, resolved.customFields);
+  }
   if (keys.size > 0) {
     const list = [...keys];
     const viewer = 'userId' in scope ? createViewer(scope.userId) : null;

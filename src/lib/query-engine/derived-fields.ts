@@ -18,23 +18,28 @@ export interface DerivedField {
 const OPEN_ISSUE: Where = { NOT: { column: { isDone: true } } };
 
 /**
- * Links are normally stored both ways, but older or half-deleted pairs may hold one side only.
- * @param own - The link type read from this issue
- * @param incoming - The same fact as read from the other issue
+ * An issue waiting on an open issue. Links are normally stored both ways, but older or half-deleted
+ * pairs may hold one side only.
  */
-function linkedToOpen(own: string, incoming: string): Where {
-  return {
-    OR: [
-      { linksFrom: { some: { type: own, to: OPEN_ISSUE } } },
-      { linksTo: { some: { type: incoming, from: OPEN_ISSUE } } },
-    ],
-  };
-}
+export const BLOCKED_WHERE: Where = {
+  OR: [
+    { linksFrom: { some: { type: 'IS_BLOCKED_BY', to: OPEN_ISSUE } } },
+    { linksTo: { some: { type: 'BLOCKS', from: OPEN_ISSUE } } },
+  ],
+};
 
-/** An issue waiting on an open issue. */
-export const BLOCKED_WHERE = linkedToOpen('IS_BLOCKED_BY', 'BLOCKS');
-/** An issue an open issue waits on. */
-export const BLOCKS_WHERE = linkedToOpen('BLOCKS', 'IS_BLOCKED_BY');
+/** An open issue with a blocking link to another, on either side. A done issue blocks nothing. */
+export const BLOCKS_WHERE: Where = {
+  AND: [
+    OPEN_ISSUE,
+    {
+      OR: [
+        { linksFrom: { some: { type: 'BLOCKS' } } },
+        { linksTo: { some: { type: 'IS_BLOCKED_BY' } } },
+      ],
+    },
+  ],
+};
 
 /**
  * Whether a boolean field's comparison asks for true.
@@ -70,20 +75,31 @@ function isOpen(link: HydratedLink, side: 'to' | 'from', field: string): boolean
   return column?.isDone !== true;
 }
 
-function hasOpenLink(issue: Issue, own: string, incoming: string, field: string): boolean {
-  const outgoing = linksOf(issue, 'linksFrom', field);
-  const coming = linksOf(issue, 'linksTo', field);
+function isBlocked(issue: Issue): boolean {
+  const outgoing = linksOf(issue, 'linksFrom', 'blocked');
+  const incoming = linksOf(issue, 'linksTo', 'blocked');
   return (
-    outgoing.some((link) => link.type === own && isOpen(link, 'to', field)) ||
-    coming.some((link) => link.type === incoming && isOpen(link, 'from', field))
+    outgoing.some((link) => link.type === 'IS_BLOCKED_BY' && isOpen(link, 'to', 'blocked')) ||
+    incoming.some((link) => link.type === 'BLOCKS' && isOpen(link, 'from', 'blocked'))
   );
 }
 
-function linkField(field: string, where: Where, own: string, incoming: string): DerivedField {
+function isBlocking(issue: Issue): boolean {
+  const outgoing = linksOf(issue, 'linksFrom', 'blocks');
+  const incoming = linksOf(issue, 'linksTo', 'blocks');
+  const column = hydrated(issue, 'column', 'blocks') as Issue | null;
+  const issueDone = column !== null && hydrated(column, 'isDone', 'blocks') === true;
+  return (
+    !issueDone &&
+    (outgoing.some((link) => link.type === 'BLOCKS') ||
+      incoming.some((link) => link.type === 'IS_BLOCKED_BY'))
+  );
+}
+
+function linkField(field: string, where: Where, holds: (issue: Issue) => boolean): DerivedField {
   return {
     compile: (operator, value) => (wantsTrue(field, operator, value) ? where : { NOT: where }),
-    evaluate: (operator, value, issue) =>
-      hasOpenLink(issue, own, incoming, field) === wantsTrue(field, operator, value),
+    evaluate: (operator, value, issue) => holds(issue) === wantsTrue(field, operator, value),
   };
 }
 
@@ -196,8 +212,8 @@ const sprintstate: DerivedField = {
 };
 
 export const derivedFields: Record<string, DerivedField> = {
-  blocked: linkField('blocked', BLOCKED_WHERE, 'IS_BLOCKED_BY', 'BLOCKS'),
-  blocks: linkField('blocks', BLOCKS_WHERE, 'BLOCKS', 'IS_BLOCKED_BY'),
+  blocked: linkField('blocked', BLOCKED_WHERE, isBlocked),
+  blocks: linkField('blocks', BLOCKS_WHERE, isBlocking),
   linked,
   text,
   done,

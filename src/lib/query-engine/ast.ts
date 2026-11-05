@@ -42,6 +42,8 @@ export interface QueryContext {
   projectId?: string;
   /** Per custom field name in lower case, the types it has among what the query may see */
   customFields?: Map<string, CustomFieldType[]>;
+  /** Per username in lower case, the ids of who has it: for custom fields of type USER */
+  customFieldUsers?: Map<string, string[]>;
   /** Per key as written in the query, the issue it names, or null for nothing visible */
   linkedIssues?: Map<string, string | null>;
 }

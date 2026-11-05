@@ -51,6 +51,8 @@ export type Token =
 
 /** An issue key, as a whole word */
 const ISSUE_KEY_WORD = /^[A-Z][A-Z0-9]*-\d+(?![A-Za-z0-9_@-])/;
+/** An ISO date, as a whole word: without this it would read as a number and some text */
+const ISO_DATE_WORD = /^\d{4}-\d{2}-\d{2}(?![A-Za-z0-9_@-])/;
 /** cf.Name or cf."Name with spaces" */
 const CUSTOM_FIELD_WORD = /^cf\.(?:"([^"]*)"|([A-Za-z0-9_]+))/i;
 /** A number, with the minus a value may start with */
@@ -194,6 +196,13 @@ function tokenizeComplex(input: string): Token[] {
     if (input[i] === '=' || input[i] === '>' || input[i] === '<' || input[i] === '~') {
       tokens.push({ type: TokenType.OPERATOR, value: input[i], position: start });
       i++;
+      continue;
+    }
+
+    const isoDateMatch = input.slice(i).match(ISO_DATE_WORD);
+    if (isoDateMatch) {
+      tokens.push({ type: TokenType.STRING, value: isoDateMatch[0], position: start });
+      i += isoDateMatch[0].length;
       continue;
     }
 

@@ -2463,8 +2463,8 @@ status != Done AND assignee = currentUser() AND created >= now(-7d)
 | `assignee`    | string | Username, user ID, or `@me` / `currentUser()`    |
 | `creator`     | string | Username or user ID                              |
 | `label`       | string | Label name                                       |
-| `sprint`      | string | Sprint name or `currentSprint()`                 |
-| `project`     | string | Project ID or slug                               |
+| `sprint`      | string | Sprint name, sprint ID or `currentSprint()`      |
+| `project`     | string | Project prefix or ID                             |
 | `storyPoints` | number | Story point estimate                             |
 | `created`     | date   | Creation timestamp                               |
 | `updated`     | date   | Last-updated timestamp                           |
@@ -2472,7 +2472,7 @@ status != Done AND assignee = currentUser() AND created >= now(-7d)
 | `number`      | number | Issue number within the project                  |
 | `title`       | string | Issue title (use `~` for contains)               |
 | `blocked`     | boolean | Waits on an issue that isn't in a done column: an own `IS_BLOCKED_BY` link to it, or a `BLOCKS` link from it. `= true` or `= false` |
-| `blocks`      | boolean | The mirror of `blocked`: an own `BLOCKS` link to an open issue, or an `IS_BLOCKED_BY` link from one |
+| `blocks`      | boolean | The issue isn't done and has a blocking link to another issue, stored on either side. A done issue blocks nothing |
 | `linked`      | issue key | Any link to that issue, either way: `linked = AXM-12`. A key you can't see matches nothing, as a missing one does. `linked = null` asks for no links at all. A key with org and team is quoted: `linked = "org/team/AXM-12"` |
 | `text`        | string | Title or body, with `~` only: `text ~ "login"` |
 | `done`        | boolean | The issue's column is a done column. An issue outside any column is not done |
@@ -2490,7 +2490,7 @@ The name is case-insensitive. A name that no project in your view has is a 400 n
 | `TEXT`, `SELECT` | `=`, `!=`, `~` | Text, case-insensitive |
 | `NUMBER` | `=`, `!=`, `>`, `<`, `>=`, `<=` | By value, so `10 > 9`; `"1.5"` and `1.5` are the same |
 | `DATE` | `=`, `!=`, `>`, `<`, `>=`, `<=` | By value; dates like `"2026-03-01"` and functions like `now(-7d)` |
-| `USER` | `=`, `!=` | The user id, or `currentUser()` |
+| `USER` | `=`, `!=` | A username, the user id, or `currentUser()` |
 | `MULTI_SELECT` | `=`, `!=` | Membership: `cf.Areas = Web` matches `Api,Web` |
 
 A value that can't be read as the definition's type matches nothing, and so does a stored value that doesn't read as its type. `!=` also holds for an issue with no value, in a project that has the field; in other projects no comparison on the field holds. `= null` asks for no value or a cleared one, `!= null` for a filled one. `IN` and `NOT IN` work as a list of `=` and `!=`.
@@ -2512,6 +2512,8 @@ A value that can't be read as the definition's type matches nothing, and so does
 Operators are case-insensitive (`IN`, `in`, and `In` are all valid).
 
 `null` (without quotes) is the empty value, as `empty()` is: `assignee = null`. `"null"` is the text. Numbers may be negative and have a fraction: `cf.Cost > -1.5`.
+
+Names with a hyphen or a space need quotes: `assignee = "jan-willem"`. An issue key is upper case, or quoted with org and team. A date in `YYYY-MM-DD` form needs no quotes: `created > 2026-01-31`.
 
 Text next to a comparison searches for that text, as with `type:bug login`: `type = Bug login page`.
 

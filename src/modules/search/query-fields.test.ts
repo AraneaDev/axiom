@@ -222,10 +222,15 @@ describe('query fields', () => {
       expect(unblocked).not.toContain('blockedByOpen');
     });
 
-    it('blocks is the mirror: a link saying so, to an open issue', async () => {
+    it('blocks needs the issue itself open, and a link from either side', async () => {
       const result = await found('blocks = true');
-      expect(result).toEqual(['doneBlocker', 'openBlocker']);
-      expect(await found('blocks = false')).toContain('plain');
+      expect(result).toEqual(['openBlocker']);
+      expect(result).not.toContain('doneBlocker');
+      const incoming = await makeIssue('blockerByIncoming');
+      await link(ids.plain, incoming.id, 'IS_BLOCKED_BY');
+      expect(await found('blocks = true')).toEqual(['blockerByIncoming', 'openBlocker']);
+      expect(await found('blocks = false')).toContain('doneBlocker');
+      await prisma.issueLink.deleteMany({ where: { toId: incoming.id } });
     });
 
     it('a blocker without a column is open', async () => {
@@ -437,6 +442,169 @@ describe('query fields', () => {
     });
   });
 
+  describe('names as well as ids', () => {
+    let named: string;
+    let otherOrg: TestContext;
+
+    beforeAll(async () => {
+      const sprint = await prisma.sprint.create({
+        data: {
+          projectId: ctx.projectId,
+          name: 'Named sprint',
+          startDate: new Date(),
+          endDate: new Date(),
+        },
+      });
+      const issue = await makeIssue('named', { assigneeId: member.id, sprintId: sprint.id });
+      named = issue.id;
+      await setFieldValue(named, defs.Owner, member.id);
+      // Another org, with the same prefix and an issue a member must never reach
+      otherOrg = await createTestContext('query-fields-prefix');
+      await prisma.project.update({
+        where: { id: otherOrg.projectId },
+        data: { prefix: ctx.projectPrefix },
+      });
+      await prisma.issue.create({
+        data: {
+          projectId: otherOrg.projectId,
+          number: 1,
+          title: 'Other org',
+          body: '',
+          creatorId: otherOrg.owner.id,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await cleanupTestContext(otherOrg);
+    });
+
+    it('assignee and creator by username, any case, and by id', async () => {
+      expect(await found(`assignee = "${member.username.toUpperCase()}"`)).toEqual(['named']);
+      expect(await found(`assignee = "${member.id}"`)).toEqual(['named']);
+      expect(await found(`assignee IN ("${member.username}", "nobody-here")`)).toEqual(['named']);
+      expect(await found(`assignee != "${member.username}"`)).toContain('plain');
+      expect(await found(`assignee != "${member.username}"`)).not.toContain('named');
+      expect(await found(`creator = "${ctx.owner.username}"`)).toContain('plain');
+      expect(await found('assignee = "nobody-here"')).toEqual([]);
+    });
+
+    it('sprint by name, and by id', async () => {
+      expect(await found('sprint = "named SPRINT"')).toEqual(['named']);
+      const sprint = await prisma.issue.findUniqueOrThrow({ where: { id: named } });
+      expect(await found(`sprint = "${sprint.sprintId}"`)).toEqual(['named']);
+      expect(await found('sprint != "Named sprint"')).toContain('plain');
+    });
+
+    it('project by prefix, and by id', async () => {
+      const all = await found(`project = ${ctx.projectPrefix}`);
+      expect(all).toContain('plain');
+      expect(await found(`project = "${ctx.projectId}"`)).toEqual(all);
+      expect(await found(`project != ${ctx.projectPrefix}`)).toEqual([]);
+    });
+
+    it('a USER custom field by username', async () => {
+      expect(await found(`cf.Owner = "${member.username}"`)).toEqual(['named']);
+      expect(await found(`cf.Owner = "${member.id}"`)).toEqual(['named']);
+      expect(await found(`cf.Owner != "${member.username}"`)).toContain('plain');
+      expect(await found('cf.Owner = "nobody-here"')).toEqual([]);
+    });
+
+    it('a prefix another org also uses reaches nothing outside what the caller sees', async () => {
+      const q = `project = ${ctx.projectPrefix}`;
+      const search = await searchIssues('', {}, params(member.id), q);
+      const projects = new Set(
+        (search.items as Array<{ projectId: string }>).map((item) => item.projectId),
+      );
+      expect([...projects]).toEqual([ctx.projectId]);
+      const other = await searchIssues('', {}, params(otherOrg.owner.id), q);
+      expect(
+        new Set((other.items as Array<{ projectId: string }>).map((item) => item.projectId)),
+      ).toEqual(new Set([otherOrg.projectId]));
+      // An id of another org doesn't open it either, nor does != on the prefix
+      const byId = await searchIssues(
+        '',
+        {},
+        params(member.id),
+        `project = "${otherOrg.projectId}"`,
+      );
+      expect(byId.items).toEqual([]);
+      const negated = await searchIssues(
+        '',
+        {},
+        params(member.id),
+        `project != ${ctx.projectPrefix}`,
+      );
+      expect(negated.items).toEqual([]);
+      const list = await listIssues(ctx.projectId, { q: `project = "${otherOrg.projectId}"` });
+      expect(list.issues).toEqual([]);
+      const listed = await listIssues(ctx.projectId, { q });
+      expect(listed.issues.every((i: { projectId: string }) => i.projectId === ctx.projectId)).toBe(
+        true,
+      );
+    });
+
+    it('a rule fires on a name', async () => {
+      const issue = await prisma.issue.findUniqueOrThrow({
+        where: { id: named },
+        include: AUTOMATION_ISSUE_INCLUDE,
+      });
+      const rule = await createRule(ctx.projectId, {
+        name: 'by name',
+        trigger: 'label:added',
+        condition: `assignee = "${member.username}" AND project = ${ctx.projectPrefix} AND sprint = "Named sprint" AND cf.Owner = "${member.username}"`,
+        actions: [{ type: 'add_label', name: 'fired-by-name' }],
+      });
+      await evaluateRules(ctx.projectId, 'label:added', {
+        issue,
+        actorId: ctx.owner.id,
+        label: 'x',
+      });
+      await prisma.automationRule.delete({ where: { id: rule.id } });
+      const after = await prisma.issue.findUniqueOrThrow({
+        where: { id: named },
+        include: { labels: true },
+      });
+      expect(after.labels.map((l) => l.name)).toContain('fired-by-name');
+    });
+
+    it('agrees with the evaluator', async () => {
+      const queries = [
+        `assignee = "${member.username}"`,
+        `assignee != "${member.username}"`,
+        `assignee = "${member.id}"`,
+        `assignee != "${member.id}"`,
+        `assignee IN ("${member.username}", "nobody-here")`,
+        `assignee NOT IN ("${member.username}")`,
+        'assignee != currentUser()',
+        `creator = "${ctx.owner.username}"`,
+        `creator != "${ctx.owner.username}"`,
+        'sprint = "Named sprint"',
+        'sprint != "Named sprint"',
+        'sprint IN ("Named sprint", "Now")',
+        'sprint NOT IN ("Named sprint")',
+        `project = ${ctx.projectPrefix}`,
+        `project != ${ctx.projectPrefix}`,
+        `project = "${ctx.projectId}"`,
+        `project NOT IN (${ctx.projectPrefix})`,
+        `cf.Owner = "${member.username}"`,
+        `cf.Owner != "${member.username}"`,
+        `cf.Owner IN ("${member.username}", "${ctx.owner.username}")`,
+        'cf."Ship date" > 2026-02-01',
+        'created > 2020-01-01',
+      ];
+      for (const query of queries) {
+        expect(await found(query), query).toEqual(await evaluated(query));
+      }
+    });
+  });
+
+  it('an unquoted ISO date works on created and on a date custom field', async () => {
+    expect(await found('cf."Ship date" > 2026-02-01')).toEqual(['plain']);
+    expect(await found('created < 2020-01-01')).toEqual([]);
+    expect(await found('created > 2020-01-01')).toContain('plain');
+  });
+
   it('the database and the evaluator agree', async () => {
     const queries = [
       'blocked = true',
@@ -496,7 +664,9 @@ describe('query fields', () => {
     it('search gives currentUser() its user', async () => {
       await makeIssue('mine', { assigneeId: member.id });
       const result = await searchIssues('', {}, params(member.id, ctx.projectId), 'assignee:@me');
-      expect(result.items.map((i: { id: string }) => i.id)).toEqual([ids.mine]);
+      expect(result.items.map((i: { id: string }) => i.id).sort()).toEqual(
+        [ids.mine, ids.named].sort(),
+      );
     });
 
     it('search keeps the text after a spaced comparison', async () => {
@@ -519,7 +689,9 @@ describe('query fields', () => {
       });
       const q = 'assignee = currentUser()';
       const mine = await listIssues(ctx.projectId, { q, currentUserId: member.id });
-      expect(mine.issues.map((i: { id: string }) => i.id)).toEqual([ids.mine]);
+      expect(mine.issues.map((i: { id: string }) => i.id).sort()).toEqual(
+        [ids.mine, ids.named].sort(),
+      );
       // The cached answer of one user is not another's
       const theirs = await listIssues(ctx.projectId, { q, currentUserId: ctx.owner.id });
       expect(theirs.issues).toEqual([]);

@@ -128,6 +128,33 @@ function ordinalComparison(
   return { [column]: { in: qualifying } };
 }
 
+/**
+ * A field that takes its id or a name, as Prisma filters: `assignee = tim`, `project = AXM`.
+ * @param fieldDef - The field, with an aliasField such as "assignee.username"
+ * @param values - The values, each an id or a name
+ * @returns What holds for a list of values, and for none of them. An empty column isn't any value,
+ * so it counts as none of them, as the evaluator reads it
+ */
+function aliasFilters(fieldDef: FieldDefinition, values: string[]) {
+  const [relation, name] = (fieldDef.aliasField as string).split('.');
+  const single = values.length === 1;
+  const column = fieldDef.column;
+  const named = {
+    [relation]: {
+      [name]: single
+        ? { equals: likeLiteral(values[0]), mode: 'insensitive' }
+        : { in: values, mode: 'insensitive' },
+    },
+  };
+  const none = {
+    AND: [{ [column]: single ? { not: values[0] } : { notIn: values } }, { NOT: named }],
+  };
+  return {
+    any: { OR: [{ [column]: single ? values[0] : { in: values } }, named] },
+    none: fieldDef.nullable ? { OR: [{ [column]: null }, none] } : none,
+  };
+}
+
 function compileComparison(
   field: string,
   operator: string,
@@ -160,6 +187,18 @@ function compileComparison(
     (operator === '=' || operator === '!=')
   ) {
     return operator === '=' ? CURRENT_SPRINT_WHERE : { NOT: CURRENT_SPRINT_WHERE };
+  }
+
+  // Fields that take a name as well as an id. A function's value is an id, or no name at all
+  if (fieldDef.aliasField && resolved !== null && (operator === '=' || operator === '!=')) {
+    if (value.type !== 'function') {
+      const { any, none } = aliasFilters(fieldDef, [String(resolved)]);
+      return operator === '=' ? any : none;
+    }
+    // An empty column differs from any id, as the evaluator reads it
+    if (operator === '!=' && fieldDef.nullable && typeof resolved === 'string') {
+      return { OR: [{ [fieldDef.column]: null }, { [fieldDef.column]: { not: resolved } }] };
+    }
   }
 
   // Relation fields (join-based): status, label
@@ -280,6 +319,11 @@ function compileIn(
   }
 
   const scalars = resolved.map((v) => columnValue(field, fieldDef, v, false));
+
+  if (fieldDef.aliasField) {
+    const { any, none } = aliasFilters(fieldDef, scalars as string[]);
+    return negated ? none : any;
+  }
 
   // Relation fields go through their join, as a comparison does
   if (fieldDef.type === 'relation' && fieldDef.join) {

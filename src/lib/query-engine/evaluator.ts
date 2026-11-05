@@ -112,10 +112,12 @@ function compareValues(
     if (operator === '<=') return actual <= expected;
   }
 
-  // Date comparisons
-  if (actual instanceof Date && expected instanceof Date) {
+  // Date comparisons. A date in a query is text, as the compiler reads it
+  const expectedDate =
+    actual instanceof Date && typeof expected === 'string' ? new Date(expected) : expected;
+  if (actual instanceof Date && expectedDate instanceof Date) {
     const at = actual.getTime();
-    const et = expected.getTime();
+    const et = expectedDate.getTime();
     if (operator === '=') return at === et;
     if (operator === '!=') return at !== et;
     if (operator === '>') return at > et;
@@ -130,6 +132,27 @@ function compareValues(
   if (operator === '!=') return String(actual) !== String(expected);
 
   return false;
+}
+
+/**
+ * Whether a field that takes a name as well as an id holds one of these values. Ids are exact,
+ * names are not, as in the compiler.
+ * @param obj - The issue
+ * @param fieldDef - The field, with an aliasField
+ * @param values - The values
+ */
+function matchesIdOrName(
+  obj: Record<string, unknown>,
+  fieldDef: FieldDefinition,
+  values: string[],
+): boolean {
+  const id = getByPath(obj, fieldDef.column);
+  const name = getByPath(obj, fieldDef.aliasField as string);
+  return values.some(
+    (value) =>
+      (id != null && String(id) === value) ||
+      (name != null && String(name).toLowerCase() === value.toLowerCase()),
+  );
 }
 
 function evaluateComparison(
@@ -163,6 +186,16 @@ function evaluateComparison(
     const sprint = hydrated(obj, 'sprint', 'currentSprint()') as Record<string, unknown> | null;
     const active = sprint !== null && hydrated(sprint, 'status', 'currentSprint()') === 'ACTIVE';
     return active === (operator === '=');
+  }
+
+  // Fields that take a name as well as an id. A function's value is an id, or no name at all
+  if (
+    fieldDef.aliasField &&
+    value.type !== 'function' &&
+    resolved !== null &&
+    (operator === '=' || operator === '!=')
+  ) {
+    return matchesIdOrName(obj, fieldDef, [String(resolved)]) === (operator === '=');
   }
 
   // Many-relation (e.g. labels)
@@ -249,6 +282,15 @@ function evaluateIn(
         const name = row[subField];
         return name != null && wanted.includes(String(name).toUpperCase());
       });
+    return negated ? !found : found;
+  }
+
+  if (fieldDef.aliasField) {
+    const found = matchesIdOrName(
+      obj,
+      fieldDef,
+      resolvedValues.filter((rv) => rv != null).map(String),
+    );
     return negated ? !found : found;
   }
 
