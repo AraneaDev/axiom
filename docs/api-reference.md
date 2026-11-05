@@ -2506,7 +2506,7 @@ A value that can't be read as the definition's type matches nothing, and so does
 | `<`      | Less than                  | `storyPoints < 8`                 |
 | `>=`     | Greater than or equal      | `created >= now(-7d)`             |
 | `<=`     | Less than or equal         | `dueDate <= now()`                |
-| `~`      | Contains (substring)       | `title ~ "login"`                 |
+| `~`      | Contains (substring). On `assignee`, `creator`, `sprint` and `project` it reads the username, sprint name or prefix | `title ~ "login"`, `project ~ OV` |
 | `IN`     | Matches any value in list  | `priority IN (High, Critical)`    |
 | `NOT IN` | Matches none of the values | `status NOT IN (Done, Cancelled)` |
 

@@ -7,6 +7,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
 import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
@@ -19,20 +20,29 @@ export default function CreateOrg() {
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
   const { error: slugError, setError: setSlugError, clearError } = useFormError();
+  const toast = useToast();
 
   const mutation = useMutationWithToast(
     () => orgsApi.create({ name, slug, description: description || undefined }),
     {
       successMessage: 'Organization created',
       errorMessage: '',
-      onError: (err) => setSlugError(err.message),
+      onError: (err) => {
+        if (/\bslug\b/i.test(err.message)) setSlugError(err.message);
+        else toast.error(err.message);
+      },
       onSuccess: (org) => navigate(`/${org.slug}`),
     },
   );
 
+  function handleSlugChange(value: string) {
+    setSlug(value);
+    clearError();
+  }
+
   function handleNameChange(value: string) {
     setName(value);
-    setSlug(
+    handleSlugChange(
       value
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -63,9 +73,10 @@ export default function CreateOrg() {
           id="slug"
           label="URL slug"
           value={slug}
-          onChange={(e) => setSlug(e.target.value)}
+          onChange={(e) => handleSlugChange(e.target.value)}
           placeholder="my-company"
           error={slugError || undefined}
+          aria-invalid={!!slugError}
           required
         />
         <div>
