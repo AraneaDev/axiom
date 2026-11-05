@@ -18,7 +18,7 @@ export const SCOPE_GROUPS = [
   },
   { area: 'teams', label: 'Teams', description: 'Teams and their members', readOnly: true },
   { area: 'projects', label: 'Projects', description: 'Projects themselves', readOnly: true },
-  { area: 'dashboards', label: 'Dashboards', description: 'Your dashboard', readOnly: true },
+  { area: 'dashboards', label: 'Dashboards', description: 'Saved queries and dashboards' },
   { area: 'forms', label: 'Forms', description: 'Forms and their submissions' },
   { area: 'automation', label: 'Automation', description: 'Automation rules' },
   { area: 'approvals', label: 'Approvals', description: 'Approval gates and votes' },

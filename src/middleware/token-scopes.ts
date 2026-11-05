@@ -53,7 +53,6 @@ export const INERT_SCOPES: readonly TokenScope[] = [
   'teams:write',
   'projects:write',
   'search:write',
-  'dashboards:write',
 ];
 
 /** The scopes a new token can be given. */

@@ -148,10 +148,11 @@ model Organization {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members     OrgMembership[]
-  teams       Team[]
-  inviteLinks InviteLink[]
-  invitations Invitation[]
+  members      OrgMembership[]
+  teams        Team[]
+  inviteLinks  InviteLink[]
+  invitations  Invitation[]
+  savedFilters SavedFilter[]
 
   @@map("organizations")
 }
@@ -192,10 +193,11 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members     TeamMembership[]
-  projects    Project[]
-  wikiSpaces  WikiSpace[]
-  invitations Invitation[]
+  members      TeamMembership[]
+  projects     Project[]
+  wikiSpaces   WikiSpace[]
+  invitations  Invitation[]
+  savedFilters SavedFilter[]
 
   @@unique([orgId, slug])
   @@map("teams")
@@ -728,23 +730,23 @@ model AutomationRule {
 }
 
 model Attachment {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   filename     String
   originalName String
   mimeType     String
   size         Int
   storageKey   String
   uploaderId   String
-  uploader     User     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  uploader     User      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
   issueId      String?
-  issue        Issue?   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  issue        Issue?    @relation(fields: [issueId], references: [id], onDelete: Cascade)
   pageId       String?
-  page         Page?    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  page         Page?     @relation(fields: [pageId], references: [id], onDelete: Cascade)
   commentId    String?
-  comment      Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  comment      Comment?  @relation(fields: [commentId], references: [id], onDelete: Cascade)
   /// Set while the upload has no parent yet; a body write that references it binds it
   stagedAt     DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
   @@index([uploaderId, stagedAt])
   @@index([stagedAt])
@@ -864,6 +866,12 @@ model PageTemplate {
   @@map("page_templates")
 }
 
+enum SavedVisibility {
+  PRIVATE
+  TEAM
+  ORG
+}
+
 model SavedFilter {
   id        String   @id @default(cuid())
   userId    String
@@ -874,6 +882,16 @@ model SavedFilter {
   query     Json
   createdAt DateTime @default(now())
 
+  // Sharing: PRIVATE is the creator only, TEAM needs teamId, ORG needs orgId
+  visibility  SavedVisibility @default(PRIVATE)
+  description String?
+  teamId      String?
+  team        Team?           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  orgId       String?
+  org         Organization?   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([orgId])
   @@map("saved_filters")
 }
 

@@ -25,8 +25,20 @@ const TOKEN_BLOCKED_WRITE_AREAS = new Set(['admin', 'orgs', 'teams', 'projects']
  * - item.read, POST /api/read: new in the agent layer, area search with a scope per item (R4)
  * - query.run, POST /api/query: new in plan 2, a read in area search that also needs issues:read
  *   inside the handler (P9)
+ * - savedQuery.*, /api/saved-filters: tokenAllows refused the saved filter paths to every token
+ *   (the issue list's presets). Plan 2 gives agents saved queries in area dashboards (P12), so
+ *   the scope decides now. Legacy tokens hold dashboards:read and gain no write.
  */
-const NO_LEGACY_ROUTE = new Set(['item.read', 'query.run']);
+const NO_LEGACY_ROUTE = new Set([
+  'item.read',
+  'query.run',
+  'savedQuery.list',
+  'savedQuery.get',
+  'savedQuery.create',
+  'savedQuery.update',
+  'savedQuery.delete',
+  'savedQuery.run',
+]);
 
 /**
  * Every actions file below a directory, tests excluded by their suffix.
