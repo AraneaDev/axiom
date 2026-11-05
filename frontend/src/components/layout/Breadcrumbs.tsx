@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  Bot,
   Building2,
   ChevronRight,
   FolderKanban,
@@ -113,13 +114,19 @@ export function Breadcrumbs() {
     segments.length >= 3 ? `/${segments[0]}/${segments[1]}/${thirdSeg}/board` : '';
 
   const crumbs: Crumb[] = [];
+  // Not an org and a team either: the list, and a request below it that the page itself names
+  const isAgentApprovalRoute = segments[0] === 'approvals' && segments[1] === 'agent';
+  if (isAgentApprovalRoute) {
+    crumbs.push({ label: 'Agent approvals', path: '/approvals/agent', icon: Bot });
+    if (segments[2]) crumbs.push({ label: 'Request', path: pathname });
+  }
   // Not an org and a team: the id below it says nothing, and the page names the dashboard itself
   const isDashboardRoute = segments[0] === 'dashboards' && !params.org;
   if (isDashboardRoute) {
     crumbs.push({ label: 'Dashboards', path: '/dashboards', icon: LayoutDashboard });
   }
 
-  (isDashboardRoute ? [] : segments).forEach((seg, i) => {
+  (isDashboardRoute || isAgentApprovalRoute ? [] : segments).forEach((seg, i) => {
     const path = '/' + segments.slice(0, i + 1).join('/');
 
     // Segment 0: org

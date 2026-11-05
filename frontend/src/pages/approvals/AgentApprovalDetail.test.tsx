@@ -92,6 +92,18 @@ describe('AgentApprovalDetail', () => {
     expect(await screen.findByText('The token was revoked')).toBeInTheDocument();
   });
 
+  it('does not toast Approved for a run that ended FAILED', async () => {
+    get.mockResolvedValue(request());
+    approve.mockResolvedValue(
+      request({ status: 'FAILED', error: { code: 'X', message: 'The token was revoked' } }),
+    );
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /approve/i }));
+    await screen.findByText('The token was revoked');
+    expect(screen.queryByText('Approved')).toBeNull();
+    expect(screen.getByText('Approved, but the action failed')).toBeInTheDocument();
+  });
+
   it('shows the raw token of a token create once, from the approve answer', async () => {
     get.mockResolvedValue(request({ action: 'token.create' }));
     approve.mockResolvedValue(

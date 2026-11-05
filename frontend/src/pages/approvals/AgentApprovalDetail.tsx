@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import {
   effectiveStatus,
@@ -50,6 +51,7 @@ export default function AgentApprovalDetail() {
   // The decision's own answer: only it holds a secret (a new token), and it is never refetched
   const [decided, setDecided] = useState<AgentApproval | null>(null);
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 5_000);
@@ -78,7 +80,13 @@ export default function AgentApprovalDetail() {
   };
   const approve = useMutationWithToast(() => agentApprovalsApi.approve(id), {
     ...options,
-    successMessage: 'Approved',
+    // The message follows the outcome: an approved run can still have failed
+    successMessage: null,
+    onSuccess: (row: AgentApproval) => {
+      setDecided(row);
+      if (row.status === 'FAILED') toast.error('Approved, but the action failed');
+      else toast.success('Approved');
+    },
     errorMessage: null,
   });
   const reject = useMutationWithToast(() => agentApprovalsApi.reject(id), {
@@ -110,7 +118,7 @@ export default function AgentApprovalDetail() {
   const busy = approve.isPending || reject.isPending;
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <Link
         to="/approvals/agent"
         className="mb-3 inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-text"
@@ -121,118 +129,129 @@ export default function AgentApprovalDetail() {
         <Badge variant={STATUS_VARIANTS[status]}>{STATUS_LABELS[status]}</Badge>
       </PageHeader>
 
-      <Card className="p-5 mb-4">
-        <p className="mb-3 whitespace-pre-wrap break-words text-base font-medium text-text">
-          {row.preview}
-        </p>
-        <dl className="divide-y divide-border-light">
-          <Field label="Who">
-            <span className="inline-flex items-center gap-1.5">
-              <Bot className="h-3.5 w-3.5 text-text-secondary" />
-              You, through the token {row.apiTokenName ?? 'unknown'}
-            </span>
-          </Field>
-          <Field label="Action">
-            <span className="font-mono text-xs">{row.action}</span>
-          </Field>
-          <Field label="Asked">{formatTimestamp(row.createdAt)}</Field>
-          {(open || status === 'EXPIRED') && (
-            <Field label={open ? 'Expires' : 'Expired'}>
-              {formatTimestamp(row.expiresAt)}
-              {open && (
-                <span className="ml-2 text-text-secondary">{timeLeft(row.expiresAt, now)}</span>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+        <aside className="order-last mb-4 lg:order-none lg:col-start-2 lg:row-start-1">
+          <Card className="p-5">
+            <dl className="divide-y divide-border-light">
+              <Field label="Who">
+                <span className="inline-flex items-center gap-1.5">
+                  <Bot className="h-3.5 w-3.5 text-text-secondary" />
+                  You, through the token {row.apiTokenName ?? 'unknown'}
+                </span>
+              </Field>
+              <Field label="Action">
+                <span className="font-mono text-xs">{row.action}</span>
+              </Field>
+              <Field label="Asked">{formatTimestamp(row.createdAt)}</Field>
+              {(open || status === 'EXPIRED') && (
+                <Field label={open ? 'Expires' : 'Expired'}>
+                  {formatTimestamp(row.expiresAt)}
+                  {open && (
+                    <span className="ml-2 text-text-secondary">{timeLeft(row.expiresAt, now)}</span>
+                  )}
+                </Field>
               )}
-            </Field>
+              {row.decidedAt && <Field label="Decided">{formatTimestamp(row.decidedAt)}</Field>}
+            </dl>
+          </Card>
+        </aside>
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <Card className="p-5 mb-4">
+            <p className="mb-3 whitespace-pre-wrap break-words text-base font-medium text-text">
+              {row.preview}
+            </p>
+            <dl className="divide-y divide-border-light">
+              <Field label="Exact input">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setShowInput(!showInput)}
+                  aria-expanded={showInput}
+                >
+                  {showInput ? (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  )}
+                  {showInput ? 'Hide input' : 'Show input'}
+                </Button>
+                {showInput && <Json value={row.input} />}
+              </Field>
+            </dl>
+          </Card>
+          {open && (
+            <div className="flex items-center gap-2 mb-4">
+              <Button onClick={() => approve.mutate()} disabled={busy}>
+                {approve.isPending ? <Spinner size="sm" /> : <Check className="h-4 w-4" />}
+                Approve
+              </Button>
+              <Button variant="outline" onClick={() => reject.mutate()} disabled={busy}>
+                {reject.isPending ? <Spinner size="sm" /> : <X className="h-4 w-4" />}
+                Reject
+              </Button>
+            </div>
           )}
-          {row.decidedAt && <Field label="Decided">{formatTimestamp(row.decidedAt)}</Field>}
-          <Field label="Exact input">
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => setShowInput(!showInput)}
-              aria-expanded={showInput}
+
+          {decisionError && (
+            <div
+              role="alert"
+              className="mb-4 rounded-md border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger"
             >
-              {showInput ? (
-                <ChevronDown className="h-3.5 w-3.5" />
+              {decisionError.message || 'Could not record your decision'}
+            </div>
+          )}
+
+          {status === 'EXPIRED' && (
+            <p className="mb-4 text-sm text-text-secondary">
+              This request expired before you decided. The agent has to ask again.
+            </p>
+          )}
+          {status === 'REJECTED' && (
+            <p className="mb-4 text-sm text-text-secondary">
+              You rejected this request. The action never ran.
+            </p>
+          )}
+
+          {secret && (
+            <div className="mb-4 rounded-lg border border-success/20 bg-success-light p-4">
+              <p className="mb-2 text-sm font-medium text-success">
+                Token created. Copy it now and hand it to the agent yourself: it is not stored and
+                you will not see it again.
+              </p>
+              <CopyInput value={secret} label="New token" />
+            </div>
+          )}
+
+          {status === 'EXECUTED' && (
+            <Card className="p-5 mb-4">
+              <h2 className="mb-2 text-sm font-semibold text-text">Result</h2>
+              {row.result == null ? (
+                <p className="text-sm text-text-secondary">The action ran and returned nothing.</p>
               ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
+                <Json
+                  value={
+                    secret ? { ...(row.result as object), token: '[shown above]' } : row.result
+                  }
+                />
               )}
-              {showInput ? 'Hide input' : 'Show input'}
-            </Button>
-            {showInput && <Json value={row.input} />}
-          </Field>
-        </dl>
-      </Card>
-
-      {open && (
-        <div className="flex items-center gap-2 mb-4">
-          <Button onClick={() => approve.mutate()} disabled={busy}>
-            {approve.isPending ? <Spinner size="sm" /> : <Check className="h-4 w-4" />}
-            Approve
-          </Button>
-          <Button variant="outline" onClick={() => reject.mutate()} disabled={busy}>
-            {reject.isPending ? <Spinner size="sm" /> : <X className="h-4 w-4" />}
-            Reject
-          </Button>
-        </div>
-      )}
-
-      {decisionError && (
-        <div
-          role="alert"
-          className="mb-4 rounded-md border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger"
-        >
-          {decisionError.message || 'Could not record your decision'}
-        </div>
-      )}
-
-      {status === 'EXPIRED' && (
-        <p className="mb-4 text-sm text-text-secondary">
-          This request expired before you decided. The agent has to ask again.
-        </p>
-      )}
-      {status === 'REJECTED' && (
-        <p className="mb-4 text-sm text-text-secondary">
-          You rejected this request. The action never ran.
-        </p>
-      )}
-
-      {secret && (
-        <div className="mb-4 rounded-lg border border-success/20 bg-success-light p-4">
-          <p className="mb-2 text-sm font-medium text-success">
-            Token created. Copy it now and hand it to the agent yourself: it is not stored and you
-            will not see it again.
-          </p>
-          <CopyInput value={secret} label="New token" />
-        </div>
-      )}
-
-      {status === 'EXECUTED' && (
-        <Card className="p-5 mb-4">
-          <h2 className="mb-2 text-sm font-semibold text-text">Result</h2>
-          {row.result == null ? (
-            <p className="text-sm text-text-secondary">The action ran and returned nothing.</p>
-          ) : (
-            <Json
-              value={secret ? { ...(row.result as object), token: '[shown above]' } : row.result}
-            />
+            </Card>
           )}
-        </Card>
-      )}
 
-      {status === 'FAILED' && (
-        <Card className="p-5 mb-4 border-danger/30">
-          <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-danger">
-            <AlertTriangle className="h-4 w-4" /> The action failed
-          </h2>
-          <p className="text-sm text-text">
-            {row.error?.message ?? 'The action failed without a message.'}
-          </p>
-          {row.error?.code && (
-            <p className="mt-1 text-xs font-mono text-text-tertiary">{row.error.code}</p>
+          {status === 'FAILED' && (
+            <Card className="p-5 mb-4 border-danger/30">
+              <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-danger">
+                <AlertTriangle className="h-4 w-4" /> The action failed
+              </h2>
+              <p className="text-sm text-text">
+                {row.error?.message ?? 'The action failed without a message.'}
+              </p>
+              {row.error?.code && (
+                <p className="mt-1 text-xs font-mono text-text-tertiary">{row.error.code}</p>
+              )}
+            </Card>
           )}
-        </Card>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
