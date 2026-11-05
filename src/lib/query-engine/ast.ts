@@ -47,3 +47,16 @@ export interface QueryContext {
   /** Per key as written in the query, the issue it names, or null for nothing visible */
   linkedIssues?: Map<string, string | null>;
 }
+
+export type SortDirection = 'asc' | 'desc';
+
+export interface OrderByTerm {
+  field: string;
+  dir: SortDirection;
+}
+
+export interface ParsedQuery {
+  /** Absent when the query is only an ORDER BY clause */
+  where: Expression | null;
+  orderBy: OrderByTerm[];
+}

@@ -1,5 +1,6 @@
-import type { Expression, Value, ComparisonOp } from './ast';
+import type { Expression, Value, ComparisonOp, OrderByTerm, ParsedQuery } from './ast';
 import { CUSTOM_FIELD_PREFIX } from './custom-fields';
+import { issueFieldRegistry } from './fields/issue-fields';
 import { ParseError, tokenize, TokenType } from './lexer';
 import type { Token, DurationArg } from './lexer';
 
@@ -340,4 +341,70 @@ export function parse(input: string): Expression {
 
   const parser = new Parser(tokens);
   return parser.parse();
+}
+
+/** Why a field has no place in ORDER BY: the database can't order by it cleanly */
+const UNSORTABLE_FIELDS = new Set(['label', 'blocked', 'blocks', 'linked', 'text']);
+
+/**
+ * Where the ORDER BY clause starts, outside quotes, as an exact uppercase keyword; -1 for none.
+ * @param input
+ */
+function findOrderBy(input: string): number {
+  let inQuote = false;
+  for (let i = 0; i < input.length; i++) {
+    if (input[i] === '"') inQuote = !inQuote;
+    if (inQuote || !input.startsWith('ORDER BY', i)) continue;
+    const before = i === 0 || /\s/.test(input[i - 1]);
+    const after = i + 8 >= input.length || /\s/.test(input[i + 8]);
+    if (before && after) return i;
+  }
+  return -1;
+}
+
+function parseOrderBy(input: string, start: number): OrderByTerm[] {
+  const terms: OrderByTerm[] = [];
+  const seen = new Set<string>();
+  let offset = start;
+  for (const part of input.slice(start).split(',')) {
+    const position = offset + (part.length - part.trimStart().length);
+    offset += part.length + 1;
+    const words = part.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) throw new ParseError('ORDER BY expects a field', position);
+    if (words.length > 2) {
+      throw new ParseError(`Unexpected "${words[2]}" in ORDER BY, expected "," or end`, position);
+    }
+    const field = words[0].toLowerCase();
+    const dirWord = words[1]?.toUpperCase();
+    if (dirWord !== undefined && dirWord !== 'ASC' && dirWord !== 'DESC') {
+      throw new ParseError(`ORDER BY expects ASC or DESC after "${words[0]}"`, position);
+    }
+    if (UNSORTABLE_FIELDS.has(field)) {
+      throw new ParseError(`${field} cannot be sorted`, position, field);
+    }
+    if (field.startsWith('cf.')) {
+      throw new ParseError('Custom fields cannot be sorted', position, field);
+    }
+    if (!Object.hasOwn(issueFieldRegistry, field)) {
+      throw new ParseError(`Unknown field '${words[0]}' in ORDER BY`, position, field);
+    }
+    if (seen.has(field)) throw new ParseError(`${field} is sorted twice`, position, field);
+    seen.add(field);
+    terms.push({ field, dir: dirWord === 'DESC' ? 'desc' : 'asc' });
+  }
+  return terms;
+}
+
+/**
+ * A query with an optional trailing `ORDER BY <field> [ASC|DESC] [, ...]` clause. The keywords are
+ * exact uppercase, so a lowercase "order by" stays the text it always was.
+ * @param input - The query
+ * @throws {ParseError} For a clause or a where part the grammar has no reading for
+ */
+export function parseQuery(input: string): ParsedQuery {
+  const at = findOrderBy(input);
+  if (at < 0) return { where: parse(input), orderBy: [] };
+  const head = input.slice(0, at);
+  const orderBy = parseOrderBy(input, at + 'ORDER BY'.length);
+  return { where: head.trim() === '' ? null : parse(head), orderBy };
 }

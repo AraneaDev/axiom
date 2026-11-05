@@ -1,5 +1,5 @@
-export { parse } from './parser';
-export { compileToPrisma, QueryValueError } from './compiler';
+export { parse, parseQuery } from './parser';
+export { compileOrderBy, compileToPrisma, QueryValueError } from './compiler';
 export { likeLiteral } from './query-values';
 export { assertKnownFields, evaluate, freeTextOf } from './evaluator';
 export { BLOCKED_WHERE, BLOCKS_WHERE } from './derived-fields';
@@ -9,6 +9,9 @@ export { builtinFunctions } from './functions';
 export { issueFieldRegistry, PRIORITY_ORDINALS } from './fields/issue-fields';
 export type {
   Expression,
+  OrderByTerm,
+  ParsedQuery,
+  SortDirection,
   Value,
   ComparisonOp,
   CustomFieldType,

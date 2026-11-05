@@ -1,5 +1,6 @@
 import type {
   ComparisonOp,
+  OrderByTerm,
   Expression,
   FieldDefinition,
   FieldRegistry,
@@ -416,4 +417,43 @@ export function compileToPrisma(
   context: QueryContext,
 ): Record<string, unknown> {
   return compileAt(ast, registry, context, 0);
+}
+
+/**
+ * Per sortable field, what Prisma orders by. Nulls go last in both directions on the issue's own
+ * columns; Prisma takes no null placement through a relation, so there the database's default
+ * holds (empty last ascending, first descending).
+ */
+const SORT_COLUMNS: Record<string, (dir: 'asc' | 'desc') => Record<string, unknown>> = {
+  type: (dir) => ({ type: dir }),
+  status: (dir) => ({ column: { name: dir } }),
+  // The enum is declared CRITICAL first, so the database's ascending is the ordinal's descending
+  priority: (dir) => ({ priority: dir === 'asc' ? 'desc' : 'asc' }),
+  assignee: (dir) => ({ assignee: { username: dir } }),
+  creator: (dir) => ({ creator: { username: dir } }),
+  sprint: (dir) => ({ sprint: { name: dir } }),
+  project: (dir) => ({ project: { prefix: dir } }),
+  storypoints: (dir) => ({ storyPoints: { sort: dir, nulls: 'last' } }),
+  created: (dir) => ({ createdAt: dir }),
+  updated: (dir) => ({ updatedAt: dir }),
+  duedate: (dir) => ({ dueDate: { sort: dir, nulls: 'last' } }),
+  number: (dir) => ({ number: dir }),
+  title: (dir) => ({ title: dir }),
+  done: (dir) => ({ column: { isDone: dir } }),
+  sprintstate: (dir) => ({ sprint: { status: dir } }),
+};
+
+/**
+ * Compiles an ORDER BY clause to a Prisma orderBy list, ending in id so pages never shuffle.
+ * @param orderBy - The parsed terms
+ * @throws {QueryValueError} For a field that can't be sorted
+ */
+export function compileOrderBy(orderBy: OrderByTerm[]): Record<string, unknown>[] {
+  const terms = orderBy.map((term) => {
+    if (!Object.hasOwn(SORT_COLUMNS, term.field)) {
+      throw new QueryValueError(`${term.field} cannot be sorted`);
+    }
+    return SORT_COLUMNS[term.field](term.dir);
+  });
+  return [...terms, { id: 'asc' }];
 }
