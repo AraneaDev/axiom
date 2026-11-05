@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { User, Shield, Coins, Bell } from 'lucide-react';
+import { User, Shield, Coins, Bell, Bot } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 
 import { cn } from '@/lib/utils';
@@ -9,6 +9,7 @@ const settingsNav: { to: string; icon: LucideIcon; label: string }[] = [
   { to: '/settings/security', icon: Shield, label: 'Security' },
   { to: '/settings/tokens', icon: Coins, label: 'API Tokens' },
   { to: '/settings/notifications', icon: Bell, label: 'Notifications' },
+  { to: '/settings/agent-approvals', icon: Bot, label: 'Agent approvals' },
 ];
 
 /**

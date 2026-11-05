@@ -9,6 +9,7 @@ import {
   Plus,
   ChevronDown,
   ShieldCheck,
+  Bot,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { NavLink, useParams } from 'react-router';
@@ -17,6 +18,7 @@ import { orgsApi } from '@/api/orgs.api';
 import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
 import { Button } from '@/components/ui/Button';
+import { usePendingAgentApprovals } from '@/hooks/usePendingAgentApprovals';
 import { STABLE_STALE_TIME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -95,6 +97,7 @@ function SectionHeader({
 export function Sidebar() {
   const { org, team } = useParams();
   const user = useAuthStore((s) => s.user);
+  const pendingAgentApprovals = usePendingAgentApprovals();
   const { sidebarOpen, setSidebarOpen, currentOrgId, setCurrentOrg, setCurrentTeam } = useUIStore();
   const [orgsCollapsed, setOrgsCollapsed] = useState(false);
   const [teamsCollapsed, setTeamsCollapsed] = useState(false);
@@ -197,6 +200,12 @@ export function Sidebar() {
           {currentOrg && (
             <div className="space-y-1">
               <NavItem to={`/${org}/approvals`} icon={ShieldCheck} label="My Approvals" />
+              <NavItem
+                to="/approvals/agent"
+                icon={Bot}
+                label="Agent approvals"
+                count={pendingAgentApprovals || undefined}
+              />
             </div>
           )}
 

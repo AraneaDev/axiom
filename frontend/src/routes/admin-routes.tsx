@@ -9,6 +9,10 @@ const Profile = lazy(() => import('@/pages/settings/Profile'));
 const Security = lazy(() => import('@/pages/settings/Security'));
 const ApiTokens = lazy(() => import('@/pages/settings/ApiTokens'));
 const NotificationSettings = lazy(() => import('@/pages/settings/NotificationSettings'));
+const AgentApprovals = lazy(() => import('@/pages/approvals/AgentApprovals'));
+const AgentApprovalDetail = lazy(() => import('@/pages/approvals/AgentApprovalDetail'));
+const AgentApprovalRules = lazy(() => import('@/pages/settings/AgentApprovalRules'));
+const OrgAgentApprovals = lazy(() => import('@/pages/orgs/OrgAgentApprovals'));
 const SearchResults = lazy(() => import('@/pages/search/SearchResults'));
 const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'));
 const UserManagement = lazy(() => import('@/pages/admin/UserManagement'));
@@ -34,6 +38,34 @@ export function adminRoutes() {
         }
       />
 
+      {/* Requests from agents that wait for the user */}
+      <Route
+        path="/approvals/agent"
+        element={
+          <ErrorBoundary>
+            <AgentApprovals />
+          </ErrorBoundary>
+        }
+      />
+      <Route
+        path="/approvals/agent/:id"
+        element={
+          <ErrorBoundary>
+            <AgentApprovalDetail />
+          </ErrorBoundary>
+        }
+      />
+
+      {/* The base rules of an org; only its owners change them */}
+      <Route
+        path="/:org/settings/agent-approvals"
+        element={
+          <ErrorBoundary>
+            <OrgAgentApprovals />
+          </ErrorBoundary>
+        }
+      />
+
       {/* Settings */}
       <Route
         path="/settings"
@@ -48,6 +80,7 @@ export function adminRoutes() {
         <Route path="security" element={<Security />} />
         <Route path="tokens" element={<ApiTokens />} />
         <Route path="notifications" element={<NotificationSettings />} />
+        <Route path="agent-approvals" element={<AgentApprovalRules />} />
       </Route>
 
       {/* Admin */}

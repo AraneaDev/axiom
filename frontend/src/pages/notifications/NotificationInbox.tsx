@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Bell,
+  Bot,
   Check,
   CheckCheck,
   Eye,
@@ -32,6 +33,7 @@ const PAGE_SIZE = 20;
 type FilterTab = 'all' | 'unread' | 'mentions' | 'watching';
 
 function notificationIcon(type: string) {
+  if (type === 'agent:approval') return Bot;
   if (type.includes('comment') || type.includes('mention')) return MessageSquare;
   if (type.includes('assign')) return UserCheck;
   if (type.includes('watch')) return Eye;

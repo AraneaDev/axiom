@@ -1,4 +1,4 @@
-import { Search, Menu, Moon, Sun, Settings, LogOut, User, Shield, Bell } from 'lucide-react';
+import { Search, Menu, Moon, Sun, Settings, LogOut, User, Shield, Bell, Bot } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -6,6 +6,7 @@ import { NotificationCenter } from '@/components/layout/NotificationCenter';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { usePendingAgentApprovals } from '@/hooks/usePendingAgentApprovals';
 import { useAuthStore } from '@/stores/auth.store';
 import { useUIStore } from '@/stores/ui.store';
 
@@ -17,6 +18,7 @@ export function Header() {
   const { toggleSidebar, toggleSearch } = useUIStore();
   const { isDark, toggle: toggleDark } = useDarkMode();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const pendingAgentApprovals = usePendingAgentApprovals();
 
   return (
     <header className="h-[52px] border-b border-border bg-surface/80 backdrop-blur-md flex items-center justify-between px-4 shrink-0 sticky top-0 z-30">
@@ -59,6 +61,23 @@ export function Header() {
             <Moon className="h-4 w-4 text-text-tertiary hover:text-primary" />
           )}
         </Button>
+
+        <Link
+          to="/approvals/agent"
+          className="relative rounded-md p-2 hover:bg-surface-tertiary transition-colors"
+          title="Agent approvals"
+          aria-label="Agent approvals"
+        >
+          <Bot className="h-4 w-4 text-text-tertiary" />
+          {pendingAgentApprovals > 0 && (
+            <span
+              data-testid="agent-approvals-badge"
+              className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-warning px-1 text-[10px] font-bold text-text-inverse"
+            >
+              {pendingAgentApprovals > 99 ? '99+' : pendingAgentApprovals}
+            </span>
+          )}
+        </Link>
 
         <NotificationCenter />
 

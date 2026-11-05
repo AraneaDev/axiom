@@ -1,5 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, CheckCheck, MessageSquare, UserCheck, AlertCircle, Loader2 } from 'lucide-react';
+import {
+  Bell,
+  Bot,
+  CheckCheck,
+  MessageSquare,
+  UserCheck,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router';
 
@@ -9,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { cn, formatRelative } from '@/lib/utils';
 
 function notificationIcon(type: string) {
+  if (type === 'agent:approval') return Bot;
   if (type.startsWith('issue:commented')) return MessageSquare;
   if (type.startsWith('issue:assigned')) return UserCheck;
   return AlertCircle;
