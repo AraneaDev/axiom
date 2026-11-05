@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
 import { broadcastToUser } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
@@ -97,9 +98,23 @@ export async function listNotifications(
  * Mark a single notification as read.
  * @param id - The notification ID
  * @param userId - The user ID (ownership check)
+ * @param byToken - Whether an API token asks: it may not clear agent approval lines
  * @returns Update result
  */
-export async function markRead(id: string, userId: string) {
+export async function markRead(id: string, userId: string, byToken = false) {
+  if (byToken) {
+    const row = await prisma.notification.findFirst({
+      where: { id, userId },
+      select: { type: true },
+    });
+    if (row?.type === 'agent:approval') {
+      throw new AppError(
+        403,
+        "A token can't mark an agent approval notification read: do this in the web UI",
+        'SCOPE',
+      );
+    }
+  }
   return prisma.notification.updateMany({
     where: { id, userId },
     data: { read: true },
@@ -109,11 +124,13 @@ export async function markRead(id: string, userId: string) {
 /**
  * Mark all unread notifications as read for a user.
  * @param userId - The user ID
+ * @param byToken - Whether an API token asks: it leaves agent approval lines unread
  * @returns Update result
  */
-export async function markAllRead(userId: string) {
+export async function markAllRead(userId: string, byToken = false) {
   return prisma.notification.updateMany({
-    where: { userId, read: false },
+    // A token's read-all leaves the lines that tell a person an agent is waiting
+    where: { userId, read: false, ...(byToken ? { type: { not: 'agent:approval' } } : {}) },
     data: { read: true },
   });
 }

@@ -22,13 +22,13 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
 
 export const markRead = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  await notificationsService.markRead(param(req, 'id'), userId);
+  await notificationsService.markRead(param(req, 'id'), userId, req.apiTokenId !== undefined);
   res.json({ success: true });
 });
 
 export const markAllRead = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  await notificationsService.markAllRead(userId);
+  await notificationsService.markAllRead(userId, req.apiTokenId !== undefined);
   res.json({ success: true });
 });
 

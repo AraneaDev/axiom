@@ -1442,6 +1442,40 @@ describe('agent approvals', () => {
       expect(pref).toMatchObject({ email: true, inApp: true });
     });
 
+    it('keeps a token from clearing an approval notification, one or all, and lets it clear the rest', async () => {
+      await pendingOn('kept unread');
+      const note = await prisma.notification.findFirstOrThrow({
+        where: { userId: owner.id, type: 'agent:approval', read: false },
+      });
+      const other = await prisma.notification.create({
+        data: { userId: owner.id, type: 'issue_assigned', title: 'Plain one' },
+      });
+      const one = await request(app)
+        .patch(`/api/notifications/${note.id}/read`)
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest');
+      expect(one.status).toBe(403);
+      const all = await request(app)
+        .post('/api/notifications/read-all')
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest');
+      expect(all.status).toBe(200);
+      expect((await prisma.notification.findUniqueOrThrow({ where: { id: note.id } })).read).toBe(
+        false,
+      );
+      expect((await prisma.notification.findUniqueOrThrow({ where: { id: other.id } })).read).toBe(
+        true,
+      );
+      const session = await request(app)
+        .post('/api/notifications/read-all')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .set('X-Requested-With', 'XMLHttpRequest');
+      expect(session.status).toBe(200);
+      expect((await prisma.notification.findUniqueOrThrow({ where: { id: note.id } })).read).toBe(
+        true,
+      );
+    });
+
     it('lets a token write other preferences, and a session this one', async () => {
       const other = await request(app)
         .patch('/api/notifications/preferences')
