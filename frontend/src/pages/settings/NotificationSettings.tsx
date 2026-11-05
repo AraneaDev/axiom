@@ -21,7 +21,14 @@ const EVENT_TYPE_LABELS: Record<string, { label: string; description: string }> 
     label: 'Mentions',
     description: 'When someone mentions you in a comment or description',
   },
+  'agent:approval': {
+    label: 'Agent approval requests',
+    description: 'When an agent asks for your approval. It always shows in the app',
+  },
 };
+
+/** Types that always show in the app, so only their email is a choice */
+const ALWAYS_IN_APP = new Set(['agent:approval']);
 
 /**
  *
@@ -143,7 +150,14 @@ export default function NotificationSettings() {
                 )}
               </div>
               <div className="flex justify-center">
-                <Toggle checked={pref.inApp} onChange={(val) => handleToggle(pref, 'inApp', val)} />
+                {ALWAYS_IN_APP.has(pref.eventType) ? (
+                  <span className="text-xs text-text-tertiary">Always</span>
+                ) : (
+                  <Toggle
+                    checked={pref.inApp}
+                    onChange={(val) => handleToggle(pref, 'inApp', val)}
+                  />
+                )}
               </div>
               <div className="flex justify-center">
                 <Toggle checked={pref.email} onChange={(val) => handleToggle(pref, 'email', val)} />

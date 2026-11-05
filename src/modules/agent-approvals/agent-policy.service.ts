@@ -236,10 +236,22 @@ export async function policyForCall(
   return effectivePolicy(ctx.userId, [...new Set([...named, ...declared])]);
 }
 
-/** The names a user may add with alsoRequire: actions that write and that a token may call. */
+/**
+ * Raw actions a rule may name. They can't wait (A6), so a token's call is refused (403) while a
+ * rule names them: that is how an org binds uploads, whose files attach to anything later.
+ */
+const RAW_NAMEABLE: ReadonlySet<string> = new Set(['attachment.upload']);
+
+/** The names a rule may add with alsoRequire: actions that write and that a token may call. */
 export function writeActionNames(): string[] {
   return listActions()
-    .filter((def) => def.kind === 'write' && !def.uiOnly && !def.tokenBlocked && !def.rest?.raw)
+    .filter(
+      (def) =>
+        def.kind === 'write' &&
+        !def.uiOnly &&
+        !def.tokenBlocked &&
+        (!def.rest?.raw || RAW_NAMEABLE.has(def.name)),
+    )
     .map((def) => def.name)
     .sort();
 }
@@ -342,6 +354,17 @@ export async function getPolicy(
 }
 
 /**
+ * The checks a save makes, also run by the preview so no request waits on rules that can't save.
+ * @param scope - org or user
+ * @param rules - The rules
+ * @throws {AppError} 400
+ */
+export function assertRulesAllowed(scope: PolicyScope, rules: PolicyRules): void {
+  if (scope === 'user') assertUserRulesTighten(rules);
+  else assertKnownNames(rules);
+}
+
+/**
  * Replace the rules of a scope. The caller's right to do so is the action's authorize.
  * @param userId - The caller
  * @param scope - org or user
@@ -356,8 +379,7 @@ export async function savePolicy(
   rules: PolicyRules,
 ): Promise<PolicyView> {
   if (scope === 'org' && !orgId) throw new AppError(400, 'orgId is required for scope org');
-  if (scope === 'user') assertUserRulesTighten(rules);
-  else assertKnownNames(rules);
+  assertRulesAllowed(scope, rules);
   const json = rules as Prisma.InputJsonObject;
   await (scope === 'org'
     ? prisma.agentPolicy.upsert({
@@ -401,6 +423,8 @@ export async function describePolicyChange(
   orgId: string | undefined,
   rules: PolicyRules,
 ): Promise<string> {
+  // Refuse before a request exists: one that could only fail is not made
+  assertRulesAllowed(scope, rules);
   const [org, row] = await Promise.all([
     scope === 'org' && orgId
       ? prisma.organization.findUnique({ where: { id: orgId }, select: { name: true, slug: true } })
@@ -410,29 +434,48 @@ export async function describePolicyChange(
       select: { rules: true },
     }),
   ]);
-  const stored = row ? parseRules(row.rules) : {};
+  const before = withOrgRules(row ? parseRules(row.rules) : {});
+  const after = withOrgRules(rules);
+  const minus = (left: string[], right: string[]) => left.filter((name) => !right.includes(name));
   const looser: string[] = [];
-  const exempt = (rules.neverRequire ?? []).filter((n) => !(stored.neverRequire ?? []).includes(n));
-  const dropped = (stored.alsoRequire ?? []).filter((n) => !(rules.alsoRequire ?? []).includes(n));
-  const base = DEFAULT_POLICY;
-  if (exempt.length > 0) looser.push(`no approval needed for ${exempt.length}: ${listed(exempt)}`);
-  if (rules.destructive === false && stored.destructive !== false)
-    looser.push('deletes need no approval');
-  if (rules.crossContainerMove === false && stored.crossContainerMove !== false) {
-    looser.push('moves between projects or spaces need no approval');
+  const stricter: string[] = [];
+  const flip = (label: string, was: boolean, now: boolean) => {
+    if (was && !now) looser.push(label);
+    if (!was && now) stricter.push(label);
+  };
+  flip('deletes need no approval', before.requireFor.destructive, after.requireFor.destructive);
+  flip(
+    'moves between projects or spaces need no approval',
+    before.requireFor.crossContainerMove,
+    after.requireFor.crossContainerMove,
+  );
+  const lists: Array<[string[], string[], string]> = [
+    [minus(after.neverRequire, before.neverRequire), looser, 'no approval needed for'],
+    [minus(before.alsoRequire, after.alsoRequire), looser, 'approval no longer needed for'],
+    [minus(after.alsoRequire, before.alsoRequire), stricter, 'approval needed for'],
+    [minus(before.neverRequire, after.neverRequire), stricter, 'no longer exempt:'],
+  ];
+  for (const [names, into, label] of lists) {
+    if (names.length > 0) into.push(`${label} ${names.length}: ${listed(names)}`);
   }
-  const bulkBefore = stored.bulkOver ?? base.requireFor.bulkOver;
-  const bulkAfter = rules.bulkOver ?? base.requireFor.bulkOver;
-  if (bulkAfter > bulkBefore) looser.push(`bulk threshold ${bulkBefore} to ${bulkAfter}`);
-  const expiresBefore = stored.expiresMinutes ?? base.expiresMinutes;
-  const expiresAfter = rules.expiresMinutes ?? base.expiresMinutes;
-  if (expiresAfter > expiresBefore) looser.push(`requests expire after ${expiresAfter} minutes`);
-  if (dropped.length > 0) looser.push(`approval no longer needed for ${listed(dropped)}`);
+  const { bulkOver: bulkBefore } = before.requireFor;
+  const { bulkOver: bulkAfter } = after.requireFor;
+  if (bulkAfter !== bulkBefore) {
+    (bulkAfter > bulkBefore ? looser : stricter).push(
+      `bulk threshold ${bulkBefore} to ${bulkAfter}`,
+    );
+  }
+  if (after.expiresMinutes !== before.expiresMinutes) {
+    (after.expiresMinutes > before.expiresMinutes ? looser : stricter).push(
+      `requests expire after ${after.expiresMinutes} minutes, not ${before.expiresMinutes}`,
+    );
+  }
   const whose =
     scope === 'org' ? `organization ${org?.name ?? '?'} (${org?.slug ?? '?'})` : 'your own tokens';
-  const head = `Replace the approval rules of ${whose}.`;
-  const rest = `${Object.keys(rules).length} rule fields are set afterwards.`;
-  return looser.length > 0
-    ? `${head} Looser: ${looser.join('; ')}. ${rest}`
-    : `${head} Nothing gets looser. ${rest}`;
+  const parts = [
+    `Replace all approval rules of ${whose} with these; whatever they do not set goes back to the default, as of this request.`,
+    looser.length > 0 ? `Looser: ${looser.join('; ')}.` : 'Nothing gets looser.',
+    stricter.length > 0 ? `Stricter: ${stricter.join('; ')}.` : undefined,
+  ];
+  return parts.filter((part) => part !== undefined).join(' ');
 }

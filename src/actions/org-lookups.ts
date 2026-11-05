@@ -36,6 +36,18 @@ export async function orgsOfSpaces(spaceIds: readonly string[]): Promise<string[
 }
 
 /**
+ * The org of the page a restriction is on.
+ * @param restrictionId - The restriction
+ */
+export async function orgsOfRestriction(restrictionId: string): Promise<string[]> {
+  const row = await prisma.pageRestriction.findUnique({
+    where: { id: restrictionId },
+    select: { page: { select: { space: SPACE_ORG } } },
+  });
+  return row ? [row.page.space.team.orgId] : [];
+}
+
+/**
  * The org a shared dashboard or saved query is shared with: its own org, or the one of its team
  * or project. A private one has none.
  * @param row - The record's sharing columns
@@ -97,4 +109,14 @@ export async function orgsOfAttachment(attachmentId: string): Promise<string[]> 
     row.comment?.issue?.project.team.orgId,
   ];
   return orgs.filter((orgId): orgId is string => typeof orgId === 'string');
+}
+
+/**
+ * Every org a user belongs to. For a file with no parent yet: it can attach to anything of the
+ * user's later, so every org's rules count and the strictest wins.
+ * @param userId - The user
+ */
+export async function orgsOfUser(userId: string): Promise<string[]> {
+  const rows = await prisma.orgMembership.findMany({ where: { userId }, select: { orgId: true } });
+  return rows.map((row) => row.orgId);
 }

@@ -8,7 +8,12 @@ import { z } from 'zod';
 import { pageBySlugAccess, projectAction } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { MAX_KEY_LENGTH, parseKey, resolveKey } from '../../actions/keys';
-import { orgsOfAttachment, orgsOfProjects, orgsOfSpaces } from '../../actions/org-lookups';
+import {
+  orgsOfAttachment,
+  orgsOfProjects,
+  orgsOfSpaces,
+  orgsOfUser,
+} from '../../actions/org-lookups';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
@@ -108,12 +113,13 @@ const authorizedTargets = new WeakMap<ActionContext, IssueRef | PageRef>();
 
 /**
  * The org of the issue or page a new file goes to: the ids authorize resolved, so a key counts
- * as the item it names. A staged file has none.
+ * as the item it names. A staged file has no parent yet, so it takes every org of the user.
  * @param ctx - Who runs the action
  */
 async function uploadTargetOrgs(ctx: ActionContext): Promise<string[]> {
   const target = authorizedTargets.get(ctx);
-  if (!target) return [];
+  // A staged file attaches later, wherever the user can: every org of theirs counts
+  if (!target) return orgsOfUser(ctx.userId);
   return 'projectId' in target
     ? orgsOfProjects([target.projectId])
     : orgsOfSpaces([target.spaceId]);
@@ -193,6 +199,8 @@ const multipartFields = z.object({
 const attachmentActions = [
   defineAction({
     name: 'attachment.upload',
+    // The parent is in the multipart body, read after the gate: every org of the user counts
+    orgIds: (ctx) => orgsOfUser(ctx.userId),
     area: 'files',
     kind: 'write',
     summary:

@@ -4,6 +4,7 @@ import { defineAction, type ActionContext } from '../../actions/define';
 import { orgsOfSavedQuery } from '../../actions/org-lookups';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
+import { savedQuerySharing } from '../../actions/sharing-previews';
 import { queryRunOutput } from '../search/query.actions';
 import { limitSearch, QUERY_ITEM_FIELDS, runQuery } from '../search/query.service';
 
@@ -122,6 +123,10 @@ const savedFilterActions = [
   }),
   defineAction({
     name: 'savedQuery.update',
+    permissionChange: ({ visibility, teamId, orgId }) =>
+      visibility !== undefined || teamId !== undefined || orgId !== undefined,
+    preview: (_ctx, { filterId, visibility, teamId, orgId }) =>
+      savedQuerySharing(filterId, { visibility, teamId, orgId }),
     orgIds: (_ctx, { filterId }) => orgsOfSavedQuery(filterId),
     area: 'dashboards',
     kind: 'write',

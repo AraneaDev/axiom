@@ -200,7 +200,13 @@ async function requestApproval(
   policy: EffectivePolicy,
 ): Promise<PendingApproval> {
   if (def.rest?.raw) {
-    throw new AppError(400, `Action ${def.name} can't wait for approval`, 'RAW_ACTION');
+    // Only a rule that names it gets here (registry rules keep the others out). It can't be queued
+    throw new AppError(
+      403,
+      `Action ${def.name} can't wait for approval, and an approval rule of your organization or ` +
+        `your own (alsoRequire) names it, so tokens may not run it. Do it in the web UI.`,
+      'APPROVAL_UNAVAILABLE',
+    );
   }
   const stored = storedInput(def, rawInput);
   // An action that reads its own text is past the check in runAction, and jsonb refuses NUL

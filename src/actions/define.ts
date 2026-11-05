@@ -79,6 +79,12 @@ export interface ActionDef<
    * saved query, an attachment target. An org's rules bind the call through it.
    */
   orgIds?(ctx: ActionContext, input: z.infer<I>): Promise<string[]>;
+  /**
+   * Whether this call changes who may reach something (sharing). Such a call always waits for
+   * approval when a token makes it, whatever an org's rules say, as it can take a record out of
+   * the sight of the rules that bind it.
+   */
+  permissionChange?(input: z.infer<I>): boolean;
   /** States on purpose that the action belongs to no org (a private dashboard or query) */
   noOrg?: boolean;
   /** Always waits for approval when a token calls it, whatever the policy says */

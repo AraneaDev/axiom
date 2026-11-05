@@ -173,11 +173,17 @@ function ruleViolations(def: ActionDef): string[] {
   const violations: string[] = [];
   const inputFields = fieldsOf(def.input);
 
-  if ((def.destructive || def.admin || def.bulkCount || def.crossContainer) && !def.preview) {
+  if (
+    (def.destructive || def.admin || def.permissionChange || def.bulkCount || def.crossContainer) &&
+    !def.preview
+  ) {
     violations.push(`${def.name}: what waits for approval needs a preview from the database (G8)`);
   }
 
-  if (def.rest?.raw && (def.destructive || def.admin || def.bulkCount || def.crossContainer)) {
+  if (
+    def.rest?.raw &&
+    (def.destructive || def.admin || def.permissionChange || def.bulkCount || def.crossContainer)
+  ) {
     violations.push(
       `${def.name}: a raw binding can't wait for approval, its input can't be queued (A6)`,
     );

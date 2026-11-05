@@ -23,7 +23,7 @@ import {
 import { authGet, authPut } from '../../test/helpers';
 import { tokenHeaderFor } from '../../test/mcp-client';
 
-import { describePolicyChange, effectivePolicy } from './agent-policy.service';
+import { describePolicyChange, effectivePolicy, writeActionNames } from './agent-policy.service';
 
 const runs: string[] = [];
 
@@ -351,8 +351,15 @@ describe('agent policies', () => {
         .set('Authorization', ownerToken)
         .set('X-Requested-With', 'XMLHttpRequest')
         .send({ action: 'attachment.createUploadUrl', input: file });
-      // A staged file has no parent and no org, so the org's rule does not apply
-      expect(staged.status).toBe(200);
+      // A staged file attaches later, wherever the user can, so every org of theirs binds it
+      expect(staged.status).toBe(202);
+      await prisma.agentPolicy.deleteMany({ where: { orgId: ctx.orgId } });
+      const free = await request(app)
+        .post('/api/act')
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ action: 'attachment.createUploadUrl', input: file });
+      expect(free.status).toBe(200);
     });
 
     it('binds an action named by key and one inside a batch', async () => {
@@ -400,12 +407,127 @@ describe('agent policies', () => {
     });
   });
 
+  describe('a change of sharing is a permission change', () => {
+    it('makes dashboard.update wait when it reshares, whatever the orgs say, and lets a rename pass', async () => {
+      const second = await prisma.organization.create({
+        data: { name: 'Second org', slug: `second-${Date.now()}` },
+      });
+      await prisma.orgMembership.create({
+        data: { userId: ctx.owner.id, orgId: second.id, role: 'OWNER' },
+      });
+      await setOrg(second.id, { destructive: false });
+      const board = await prisma.dashboard.create({
+        data: { name: 'Shared board', ownerId: ctx.owner.id, visibility: 'ORG', orgId: ctx.orgId },
+      });
+      // Escape 1: move it under the loose org, then delete it without approval
+      expect(
+        await waits('dashboard.update', { id: board.id, visibility: 'ORG', orgId: second.id }),
+      ).toBe(true);
+      expect(await waits('dashboard.update', { id: board.id, visibility: 'PRIVATE' })).toBe(true);
+      const unchanged = await prisma.dashboard.findUniqueOrThrow({ where: { id: board.id } });
+      expect(unchanged).toMatchObject({ visibility: 'ORG', orgId: ctx.orgId });
+      expect(await waits('dashboard.delete', { id: board.id })).toBe(true);
+      expect(await prisma.dashboard.count({ where: { id: board.id } })).toBe(1);
+      // Escape 2: out of the org that lists a widget action, add, and back
+      await setOrg(ctx.orgId, { alsoRequire: ['dashboardWidget.add'] });
+      expect(await waits('dashboard.update', { id: board.id, visibility: 'PRIVATE' })).toBe(true);
+      // A rename is no permission change
+      expect(await waits('dashboard.update', { id: board.id, name: 'Renamed' })).toBe(false);
+      await prisma.dashboard.delete({ where: { id: board.id } });
+      await prisma.organization.delete({ where: { id: second.id } });
+    });
+
+    it('does the same for savedQuery.update', async () => {
+      const saved = await prisma.savedFilter.create({
+        data: {
+          userId: ctx.owner.id,
+          name: 'Shared query',
+          query: {},
+          visibility: 'ORG',
+          orgId: ctx.orgId,
+        },
+      });
+      expect(await waits('savedQuery.update', { filterId: saved.id, visibility: 'PRIVATE' })).toBe(
+        true,
+      );
+      expect(await waits('savedQuery.update', { filterId: saved.id, orgId: otherOrg.orgId })).toBe(
+        true,
+      );
+      expect(await waits('savedQuery.update', { filterId: saved.id, name: 'Renamed' })).toBe(false);
+      await prisma.savedFilter.delete({ where: { id: saved.id } });
+    });
+  });
+
+  describe('raw actions named in a rule', () => {
+    const file = { filename: 'a.png', mimeType: 'image/png', size: 8 };
+
+    it('accepts attachment.upload in alsoRequire, and no other raw name', async () => {
+      const ok = await authPut('/api/agent-policy', ctx.owner.token, {
+        scope: 'org',
+        orgId: ctx.orgId,
+        rules: { alsoRequire: ['attachment.upload'] },
+      });
+      expect(ok.status).toBe(200);
+      const bad = await authPut('/api/agent-policy', ctx.owner.token, {
+        scope: 'org',
+        orgId: ctx.orgId,
+        rules: { alsoRequire: ['attachment.download'] },
+      });
+      expect(bad.status).toBe(400);
+    });
+
+    it('refuses a token the upload with 403 naming the rule, not a session', async () => {
+      await setOrg(ctx.orgId, { alsoRequire: ['attachment.upload'] });
+      const res = await request(app)
+        .post('/api/attachments')
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .attach('file', Buffer.from('hello'), 'hello.txt');
+      expect(res.status).toBe(403);
+      expect(res.body.error.message).toContain('alsoRequire');
+      const session = await request(app)
+        .post('/api/attachments')
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .attach('file', Buffer.from('hello'), 'hello.txt');
+      // Not refused by the rule (storing the file is the upload tests' concern)
+      expect(session.status).not.toBe(403);
+    });
+
+    it('lets a staged upload through when no rule names the upload', async () => {
+      await setOrg(ctx.orgId, { destructive: false });
+      const res = await request(app)
+        .post('/api/act')
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ action: 'attachment.createUploadUrl', input: file });
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('names are checked before a request is made', () => {
+    it('answers 400 to a token with invented names, and queues nothing', async () => {
+      const res = await request(app)
+        .put('/api/agent-policy')
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ scope: 'org', orgId: ctx.orgId, rules: { alsoRequire: ['no.such.action'] } });
+      expect(res.status).toBe(400);
+      const user = await request(app)
+        .put('/api/agent-policy')
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ scope: 'user', rules: { destructive: false } });
+      expect(user.status).toBe(400);
+      expect(await prisma.agentApproval.count({ where: { userId: ctx.owner.id } })).toBe(0);
+    });
+  });
+
   describe('names in org rules', () => {
     it('refuses a misspelt, a read, a uiOnly and a raw name, and exempting an admin action', async () => {
       for (const rules of [
         { alsoRequire: ['isue.delete'] },
         { alsoRequire: ['issue.list'] },
-        { alsoRequire: ['attachment.upload'] },
         { neverRequire: ['nope'] },
         { neverRequire: ['agentPolicy.update'] },
       ]) {
@@ -422,7 +544,7 @@ describe('agent policies', () => {
   describe('the preview of a rule change', () => {
     it('names the org, leads with what gets looser and is not moved by padding', async () => {
       const org = await prisma.organization.findUniqueOrThrow({ where: { id: ctx.orgId } });
-      const padding = Array.from({ length: 200 }, (_, i) => `padding.action${i}-${'x'.repeat(80)}`);
+      const padding = writeActionNames().filter((name) => name !== 'issue.delete');
       const text = await describePolicyChange(ctx.owner.id, 'org', ctx.orgId, {
         destructive: false,
         neverRequire: ['issue.delete'],
@@ -433,7 +555,8 @@ describe('agent policies', () => {
       expect(text.indexOf('issue.delete')).toBeGreaterThan(-1);
       expect(text.indexOf('issue.delete')).toBeLessThan(400);
       expect(text).toContain('deletes need no approval');
-      expect(text).not.toContain('padding.action');
+      expect(text).toContain('Stricter:');
+      expect(text).toContain('Replace all approval rules');
     });
 
     it('says nothing gets looser when it only tightens', async () => {
