@@ -13,10 +13,13 @@
  * - Attachments need files:<kind> here and the scope of their parent (issue or page) in the
  *   attachments router.
  * - Team activity, member profiles and team analytics are issue data.
- * - Managing orgs, teams, members, invitations, tokens, the account and anything under
- *   /api/admin is never allowed with a token, and neither is changing space permissions or
- *   page restrictions or creating, changing or deleting projects. No scope opens these, so
- *   a write scope on orgs, teams, projects or search does nothing on these paths.
+ * - Managing orgs, teams, members, invitations, tokens, anything under /api/admin, space
+ *   permissions, page restrictions, and creating, changing or deleting projects are registry
+ *   actions in area admin: admin:read or admin:write opens them, and a token's call always waits
+ *   for a person. authenticate skips tokenAllows on a registry route.
+ * - tokenAllows keeps refusing those paths for a request Express does not route to a registry
+ *   action: a legacy route added under them must not open by accident. No scope opens these, so a
+ *   write scope on orgs, teams, projects or search does nothing there. The account stays refused.
  * - A legacy route that deletes is refused whatever the scopes, as it can't wait for approval:
  *   see legacyRouteDeletes.
  */
@@ -46,11 +49,10 @@ export const TOKEN_SCOPES: readonly TokenScope[] = SCOPE_AREAS.flatMap((area): T
 
 /**
  * Scopes no action or route honours yet. A token holding one would gain that reach silently the
- * day the area gets its actions, so they can't be minted until then. Plan 3 lifts them per area.
+ * day the area gets its actions, so they can't be minted until then. Everything that manages orgs,
+ * teams and projects is in area admin, where each call waits for a person, so these stay shut.
  */
 export const INERT_SCOPES: readonly TokenScope[] = [
-  'admin:read',
-  'admin:write',
   'orgs:write',
   'teams:write',
   'projects:write',
@@ -115,6 +117,8 @@ const ACCESS_CONTROL = [
   /^\/api\/projects\/team\/[^/]+$/,
   /^\/api\/projects\/[^/]+$/,
 ];
+
+const ORG_INVITE_LINKS = /^\/api\/orgs\/[^/]+\/invites(\/|$)/;
 
 /** The areas below a project with a scope of their own. All others are issue data. */
 const PROJECT_SUBPATH_AREAS = new Map<string, ScopeArea>([
@@ -252,6 +256,8 @@ export function tokenAllows(scopes: readonly string[], method: string, path: str
   // Tokens never manage tokens, the account or admin settings
   if (path.startsWith('/api/admin')) return false;
   if (path.startsWith('/api/users/me') && write) return false;
+  // An invite link's code lets whoever holds it join, so reading one is no org read
+  if (ORG_INVITE_LINKS.test(path)) return false;
   // Nor change access control or delete what holds data: space permissions, page
   // restrictions, creating, changing or deleting projects
   if (write && ACCESS_CONTROL.some((re) => re.test(path))) return false;

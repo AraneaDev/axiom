@@ -1,7 +1,7 @@
 /**
  * The scopes a new token can be given, by area, in display order. A readOnly area has no write
- * scope a token can get. Admin isn't here: no action uses it yet (INERT_SCOPES in
- * src/middleware/token-scopes.ts, which a test keeps this list equal to).
+ * scope a token can get (INERT_SCOPES in src/middleware/token-scopes.ts, which a test keeps this
+ * list equal to).
  */
 export const SCOPE_GROUPS = [
   { area: 'search', label: 'Search', description: 'The read and search tools', readOnly: true },
@@ -25,6 +25,11 @@ export const SCOPE_GROUPS = [
     area: 'approvals',
     label: 'Approvals',
     description: 'Approval gates, votes and your agent requests',
+  },
+  {
+    area: 'admin',
+    label: 'Admin',
+    description: 'Orgs, teams, projects, access and tokens. Each call waits for your approval',
   },
 ] as const;
 

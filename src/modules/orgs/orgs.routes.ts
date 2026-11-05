@@ -9,28 +9,9 @@ const router = Router();
 
 router.use(authenticate);
 
-router.post('/', orgsController.create);
-// Reading orgs (list, get) runs through the registry. The member list has emails: members only
-router.patch('/:orgId', requireOrgPermission('org:manage'), orgsController.update);
-router.delete('/:orgId', requireOrgPermission('org:manage'), orgsController.remove);
-
-// Members
+// Orgs and their members run through the registry, but for reading the member list (members only:
+// it has emails) and invite links
 router.get('/:orgId/members', requireOrgMember(), orgsController.listMembers);
-router.post(
-  '/:orgId/members',
-  requireOrgPermission('team:manage_members'),
-  orgsController.addMember,
-);
-router.patch(
-  '/:orgId/members/:memberId',
-  requireOrgPermission('team:manage_members'),
-  orgsController.updateMemberRole,
-);
-router.delete(
-  '/:orgId/members/:memberId',
-  requireOrgPermission('team:manage_members'),
-  orgsController.removeMember,
-);
 
 // Invite Links
 router.post(

@@ -457,7 +457,7 @@ describe('token scopes per area', () => {
 
   it('refuses an inert scope in the service too, not only in the request schema', async () => {
     await expect(
-      createApiToken(ctx.owner.id, { name: 'inert', scopes: ['admin:write'] }),
+      createApiToken(ctx.owner.id, { name: 'inert', scopes: ['orgs:write'] }),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 });

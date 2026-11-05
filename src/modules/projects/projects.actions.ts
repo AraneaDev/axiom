@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
-import { projectRead, teamRead } from '../../actions/authorize';
+import { projectAction, projectRead, teamMemberWith, teamRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
+import { createProjectSchema, updateProjectSchema } from '../../utils/validation';
 
 import * as projectsService from './projects.service';
 
@@ -12,8 +14,7 @@ const record = z.looseObject({ id: z.string() });
 const teamTarget = z.object({ teamId: z.string() });
 const projectTarget = z.object({ projectId: z.string() });
 
-// Creating, changing and deleting projects stay legacy until plan 3 brings them behind approval
-// (R9). The team path comes first: it is the static one.
+// The team path comes first: it is the static one.
 registerActions([
   defineAction({
     name: 'project.list',
@@ -38,5 +39,58 @@ registerActions([
     rest: { method: 'GET', path: '/api/projects/:projectId' },
     authorize: projectRead<z.infer<typeof projectTarget>>((input) => input.projectId),
     handler: async (_ctx, { projectId }) => projectsService.getProject(projectId),
+  }),
+  defineAction({
+    name: 'project.create',
+    admin: true,
+    area: 'admin',
+    kind: 'write',
+    summary: 'Create a project in a team',
+    target: teamTarget,
+    input: teamTarget.extend(createProjectSchema.shape),
+    output: record,
+    preview: (_ctx, { teamId, name, prefix }) => previews.projectCreate(teamId, name, prefix),
+    rest: { method: 'POST', path: '/api/projects/team/:teamId' },
+    authorize: teamMemberWith<z.infer<typeof teamTarget>>(
+      'project:create',
+      (input) => input.teamId,
+    ),
+    handler: async (_ctx, { teamId, ...data }) => projectsService.createProject(teamId, data),
+  }),
+  defineAction({
+    name: 'project.update',
+    admin: true,
+    area: 'admin',
+    kind: 'write',
+    summary: "Change a project's settings",
+    target: projectTarget,
+    input: projectTarget.extend(updateProjectSchema.shape),
+    output: record,
+    preview: (_ctx, { projectId, ...fields }) => previews.projectUpdate(projectId, fields),
+    rest: { method: 'PATCH', path: '/api/projects/:projectId' },
+    authorize: projectAction<z.infer<typeof projectTarget>>(
+      'team:manage_members',
+      (input) => input.projectId,
+    ),
+    handler: async (_ctx, { projectId, ...data }) => projectsService.updateProject(projectId, data),
+  }),
+  defineAction({
+    name: 'project.delete',
+    admin: true,
+    destructive: true,
+    area: 'admin',
+    kind: 'write',
+    summary: 'Delete a project with its issues',
+    input: projectTarget,
+    output: z.void(),
+    preview: (_ctx, { projectId }) => previews.projectDelete(projectId),
+    rest: { method: 'DELETE', path: '/api/projects/:projectId' },
+    authorize: projectAction<z.infer<typeof projectTarget>>(
+      'project:delete',
+      (input) => input.projectId,
+    ),
+    handler: async (_ctx, { projectId }) => {
+      await projectsService.deleteProject(projectId);
+    },
   }),
 ]);

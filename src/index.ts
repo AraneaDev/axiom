@@ -50,6 +50,7 @@ import './modules/attachments/attachments.actions';
 import './modules/issues/issues.actions';
 import './modules/wiki/wiki.actions';
 import './modules/orgs/orgs.actions';
+import './modules/invitations/invitations.actions';
 import './modules/teams/teams.actions';
 import './modules/projects/projects.actions';
 import './modules/sprints/sprints.actions';

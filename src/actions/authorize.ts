@@ -2,14 +2,17 @@ import type { SpacePermissionLevel } from '@prisma/client';
 
 import { AppError } from '../middleware/errorHandler';
 import {
+  assertOrgPermission,
   assertPageAccess,
   assertPageAccessBySlug,
+  assertRestrictionAccess,
   checkOrgMember,
   checkTeamPermission,
   checkTeamRead,
   checkWikiSpaceOrgAccess,
 } from '../middleware/rbac';
 import { checkProjectAccess, checkProjectAction } from '../middleware/requireProjectAccess';
+import { isUserAdmin } from '../modules/admin/admin.service';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { ERR } from '../utils/error-messages';
 import type { Action } from '../utils/permissions';
@@ -192,4 +195,46 @@ export function orgMember<T>(pick: (input: T) => string): Authorizer<T> {
       throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
     }
   };
+}
+
+/**
+ * Act on an org: requireOrgPermission.
+ * @param action - The permission action
+ * @param pick - Finds the org id in the input
+ */
+export function orgPermission<T>(action: Action, pick: (input: T) => string): Authorizer<T> {
+  return (ctx, input) => assertOrgPermission(ctx.userId, pick(input), action);
+}
+
+/**
+ * Create in a team: requireTeamMember, then requireTeamPermission. Both are needed, because the
+ * permission alone passes on an org role and a team read turns away whoever is off the team.
+ * @param action - The permission action
+ * @param pick - Finds the team id in the input
+ */
+export function teamMemberWith<T>(action: Action, pick: (input: T) => string): Authorizer<T> {
+  const read = teamRead(pick);
+  const role = teamPermission(action, pick);
+  return async (ctx, input) => {
+    await read(ctx, input);
+    await role(ctx, input);
+  };
+}
+
+/**
+ * Anything under /api/admin: requireAdmin.
+ * @param ctx - Who runs the action
+ */
+export async function platformAdmin(ctx: ActionContext): Promise<void> {
+  if (!(await isUserAdmin(ctx.userId))) {
+    throw new AppError(403, 'Admin access required', 'FORBIDDEN');
+  }
+}
+
+/**
+ * Remove a page restriction by its own id: edit access to its page.
+ * @param pick - Finds the restriction id in the input
+ */
+export function restrictionAccess<T>(pick: (input: T) => string): Authorizer<T> {
+  return (ctx, input) => assertRestrictionAccess(ctx.userId, pick(input));
 }

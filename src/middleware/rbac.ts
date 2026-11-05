@@ -220,7 +220,24 @@ export function requireWikiTemplateAccess(level: SpacePermissionLevel = 'VIEW') 
 
 /**
  * Removing a page restriction needs edit access to the page, as setting them does.
- * Expects :restrictionId.
+ * @param userId - The user
+ * @param restrictionId - The restriction
+ * @throws {AppError} 404 for no such restriction, and what assertPageAccess throws
+ */
+export async function assertRestrictionAccess(
+  userId: string,
+  restrictionId: string,
+): Promise<void> {
+  const restriction = await prisma.pageRestriction.findUnique({
+    where: { id: restrictionId },
+    select: { pageId: true },
+  });
+  if (!restriction) throw new AppError(404, ERR.RESTRICTION_NOT_FOUND);
+  await assertPageAccess(userId, restriction.pageId, 'edit');
+}
+
+/**
+ * assertRestrictionAccess for :restrictionId.
  * @returns Express middleware
  */
 export function requireWikiRestrictionAccess() {
@@ -228,12 +245,7 @@ export function requireWikiRestrictionAccess() {
     try {
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-      const restriction = await prisma.pageRestriction.findUnique({
-        where: { id: param(req, 'restrictionId') },
-        select: { pageId: true },
-      });
-      if (!restriction) throw new AppError(404, ERR.RESTRICTION_NOT_FOUND);
-      await assertPageAccess(userId, restriction.pageId, 'edit');
+      await assertRestrictionAccess(userId, param(req, 'restrictionId'));
       next();
     } catch (err) {
       next(err);
@@ -287,31 +299,39 @@ export function requireOrgPermission(action: Action) {
       const orgId = param(req, 'orgId');
       const userId = req.userId;
       if (!userId) throw new AppError(401, 'Authentication required');
-
-      // Platform admins keep full rights, so they can manage any org (transfer ownership)
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { isAdmin: true },
-      });
-      if (user?.isAdmin) return next();
-
-      const membership = await prisma.orgMembership.findUnique({
-        where: { userId_orgId: { userId, orgId } },
-      });
-
-      if (!membership) {
-        throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
-      }
-
-      if (!hasOrgPermission(membership.role, action)) {
-        throw new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN');
-      }
-
+      await assertOrgPermission(userId, orgId, action);
       next();
     } catch (err) {
       next(err);
     }
   };
+}
+
+/**
+ * The check of requireOrgPermission, for a caller that has no request.
+ * @param userId - The user
+ * @param orgId - The org
+ * @param action - The permission action
+ * @throws {AppError} 403 NOT_ORG_MEMBER off the org, 403 FORBIDDEN when the role lacks the action
+ */
+export async function assertOrgPermission(
+  userId: string,
+  orgId: string,
+  action: Action,
+): Promise<void> {
+  // Platform admins keep full rights, so they can manage any org (transfer ownership)
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  if (user?.isAdmin) return;
+
+  const membership = await prisma.orgMembership.findUnique({
+    where: { userId_orgId: { userId, orgId } },
+  });
+  if (!membership) {
+    throw new AppError(403, 'Not a member of this organization', 'NOT_ORG_MEMBER');
+  }
+  if (!hasOrgPermission(membership.role, action)) {
+    throw new AppError(403, `Insufficient permissions: ${action}`, 'FORBIDDEN');
+  }
 }
 
 /**

@@ -17,7 +17,7 @@ import { ORG_INPUT_FIELDS } from '../modules/agent-approvals/agent-policy.servic
 import { defineAction, type ActionDef } from './define';
 import { listActions } from './registry';
 
-/** Writes tokens may not make until plan 3 adds approval (R9) */
+/** Writes a token can only make when each call waits for a person (R9) */
 const TOKEN_BLOCKED_WRITE_AREAS = new Set(['admin', 'orgs', 'teams', 'projects']);
 
 /**
@@ -193,21 +193,25 @@ function ruleViolations(def: ActionDef): string[] {
     def.kind === 'write' &&
     TOKEN_BLOCKED_WRITE_AREAS.has(def.area) &&
     !def.uiOnly &&
-    !def.tokenBlocked
+    !def.tokenBlocked &&
+    !def.admin
   ) {
-    violations.push(`${def.name}: a write in area ${def.area} needs uiOnly or tokenBlocked (R9)`);
+    violations.push(
+      `${def.name}: a write in area ${def.area} needs admin, uiOnly or tokenBlocked (R9)`,
+    );
   }
 
   if (
     def.rest &&
     !def.uiOnly &&
     !def.tokenBlocked &&
+    !def.admin &&
     !NO_LEGACY_ROUTE.has(def.name) &&
     alwaysBlocked(def.rest)
   ) {
     violations.push(
       `${def.name}: tokenAllows refuses ${def.rest.method} ${def.rest.path} to every token, ` +
-        'so it needs uiOnly or tokenBlocked (R7, R9)',
+        'so it needs admin, uiOnly or tokenBlocked (R7, R9)',
     );
   }
 
@@ -305,6 +309,7 @@ describe('registry rules', () => {
     // - uiOnly and tokenBlocked: refused to every token, whatever tokenAllows let through
     // - R1: attachment actions need the parent's area scope as well, so they may reach less,
     //   never more
+    // - admin: a deliberate widening (spec G1): only area admin opens it, and it always waits
     // Refused actions that tokenAllows let through, each with the reason. None so far.
     const REFUSED_ON_PURPOSE = new Set<string>();
     const isRefused = (def: ActionDef): boolean => !!def.uiOnly || !!def.tokenBlocked;
@@ -331,11 +336,14 @@ describe('registry rules', () => {
         // write in an area tokens may not write. Anything else needs a name in the allowlist.
         const alsoRefusedBefore =
           !before || (def.kind === 'write' && TOKEN_BLOCKED_WRITE_AREAS.has(def.area));
-        const fine = isRefused(def)
-          ? !after && (alsoRefusedBefore || REFUSED_ON_PURPOSE.has(def.name))
-          : isAttachment(def)
-            ? !after || before
-            : before === after;
+        const onlyAdminScope = !after || scope.startsWith('admin:');
+        const fine = def.admin
+          ? def.area === 'admin' && onlyAdminScope
+          : isRefused(def)
+            ? !after && (alsoRefusedBefore || REFUSED_ON_PURPOSE.has(def.name))
+            : isAttachment(def)
+              ? !after || before
+              : before === after;
         return fine ? [] : [`${def.name} with ${scope}: was ${before}, is ${after}`];
       });
       expect(differences).toEqual([]);

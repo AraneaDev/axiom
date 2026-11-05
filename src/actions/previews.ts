@@ -513,3 +513,557 @@ export async function pageMove(
   const under = parent ? ` under the page ${parent.slug}` : '';
   return `Move the page ${page.slug} ${quoted(page.title)} from space ${page.space.slug}${to}${under}`;
 }
+
+// Admin reach: what a person reads before an agent changes who may reach what. Each names the thing
+// by what an agent can't rename on its own (a slug, a prefix, a username) next to what it can.
+
+/**
+ * An organization as a preview names it.
+ * @param orgId - The org
+ */
+async function orgLabel(orgId: string): Promise<string> {
+  const org = await findOrThrow(
+    prisma.organization.findUnique({ where: { id: orgId }, select: { name: true, slug: true } }),
+    ERR.ORGANIZATION_NOT_FOUND,
+  );
+  return `organization ${org.slug} ${quoted(org.name)}`;
+}
+
+/**
+ * A team as a preview names it.
+ * @param teamId - The team
+ */
+async function teamLabel(teamId: string): Promise<string> {
+  const team = await findOrThrow(
+    prisma.team.findUnique({
+      where: { id: teamId },
+      select: { name: true, slug: true, org: { select: { slug: true } } },
+    }),
+    ERR.TEAM_NOT_FOUND,
+  );
+  return `team ${team.org.slug}/${team.slug} ${quoted(team.name)}`;
+}
+
+/**
+ * A wiki space as a preview names it.
+ * @param spaceId - The space
+ */
+async function spaceLabel(spaceId: string): Promise<string> {
+  const space = await findOrThrow(
+    prisma.wikiSpace.findUnique({ where: { id: spaceId }, select: { name: true, slug: true } }),
+    ERR.SPACE_NOT_FOUND,
+  );
+  return `space ${space.slug} ${quoted(space.name)}`;
+}
+
+/**
+ * A wiki page as a preview names it.
+ * @param pageId - The page
+ */
+async function pageLabel(pageId: string): Promise<string> {
+  const page = await findOrThrow(
+    prisma.page.findUnique({
+      where: { id: pageId },
+      select: { title: true, slug: true, space: { select: { slug: true } } },
+    }),
+    ERR.PAGE_NOT_FOUND,
+  );
+  return `page ${page.space.slug}/${page.slug} ${quoted(page.title)}`;
+}
+
+/**
+ * A user as a preview names them. A username can't be told from another by its look alone, so the
+ * end of the id goes with it.
+ * @param userId - The user
+ */
+async function userLabel(userId: string): Promise<string> {
+  const user = await findOrThrow(
+    prisma.user.findUnique({ where: { id: userId }, select: { username: true } }),
+    ERR.USER_NOT_FOUND,
+  );
+  return `user ${user.username} ${shortId(userId)}`;
+}
+
+/**
+ * What an update would set, as it reads in a preview. Values come from the agent, so they are data.
+ * @param fields - The fields of the input that are about to change
+ */
+function changeList(fields: Record<string, string | boolean | null | undefined>): string {
+  const parts = Object.entries(fields)
+    .filter(([, value]) => value !== undefined)
+    .map(([field, value]) => `${field} to ${typeof value === 'string' ? quoted(value) : value}`);
+  return parts.length > 0 ? parts.join(', ') : 'nothing';
+}
+
+/**
+ * @param name - The new org's name
+ * @param slug - Its slug
+ */
+export function orgCreate(name: string, slug: string): Promise<string> {
+  return Promise.resolve(`Create the organization ${slug} ${quoted(name)}, with you as its owner`);
+}
+
+/**
+ * @param orgId - The org
+ * @param fields - What changes
+ */
+export async function orgUpdate(
+  orgId: string,
+  fields: Record<string, string | undefined>,
+): Promise<string> {
+  return `In ${await orgLabel(orgId)}, set ${changeList(fields)}`;
+}
+
+/** @param orgId - The org */
+export async function orgDelete(orgId: string): Promise<string> {
+  const label = await orgLabel(orgId);
+  const [teams, members] = await Promise.all([
+    prisma.team.count({ where: { orgId } }),
+    prisma.orgMembership.count({ where: { orgId } }),
+  ]);
+  const projects = await prisma.project.count({ where: { team: { orgId } } });
+  return (
+    `Delete ${label} with everything in it. As of this request that is ` +
+    `${amount(teams, 'team')}, ${amount(projects, 'project')} and ${amount(members, 'member')}`
+  );
+}
+
+/**
+ * The role a user holds in an org.
+ * @param orgId - The org
+ * @param userId - The user
+ */
+async function orgRoleOf(orgId: string, userId: string): Promise<string> {
+  const membership = await findOrThrow(
+    prisma.orgMembership.findFirst({ where: { orgId, userId }, select: { role: true } }),
+    ERR.MEMBERSHIP_NOT_FOUND,
+  );
+  return membership.role;
+}
+
+/**
+ * @param orgId - The org
+ * @param userId - Who joins
+ * @param role - With what role
+ */
+export async function orgMemberAdd(orgId: string, userId: string, role: string): Promise<string> {
+  return `Add ${await userLabel(userId)} to ${await orgLabel(orgId)} as ${role}`;
+}
+
+/**
+ * @param orgId - The org
+ * @param memberId - The user
+ * @param role - The new role
+ */
+export async function orgMemberUpdate(
+  orgId: string,
+  memberId: string,
+  role: string,
+): Promise<string> {
+  const current = await orgRoleOf(orgId, memberId);
+  return `Change ${await userLabel(memberId)} in ${await orgLabel(orgId)} from ${current} to ${role}`;
+}
+
+/**
+ * @param orgId - The org
+ * @param memberId - The user
+ */
+export async function orgMemberRemove(orgId: string, memberId: string): Promise<string> {
+  const current = await orgRoleOf(orgId, memberId);
+  return (
+    `Remove ${await userLabel(memberId)}, now ${current}, from ${await orgLabel(orgId)}, ` +
+    'with their team places, space permissions and page access there'
+  );
+}
+
+/**
+ * @param orgId - The org
+ * @param teamId - Only this team's, if given
+ */
+export async function invitationList(orgId: string, teamId?: string): Promise<string> {
+  const only = teamId ? ` for ${await teamLabel(teamId)}` : '';
+  return `Read who is invited to ${await orgLabel(orgId)}${only}`;
+}
+
+/**
+ * @param orgId - The org
+ * @param email - Who is invited
+ * @param role - With what role
+ * @param teamId - To this team as well, if given
+ */
+export async function invitationCreate(
+  orgId: string,
+  email: string,
+  role: string,
+  teamId?: string,
+): Promise<string> {
+  const team = teamId ? ` and ${await teamLabel(teamId)}` : '';
+  return `Invite ${quoted(email)} to ${await orgLabel(orgId)}${team} as ${role}`;
+}
+
+/**
+ * @param orgId - The org in the path
+ * @param invitationId - The invitation
+ */
+export async function invitationRevoke(orgId: string, invitationId: string): Promise<string> {
+  const invitation = await findOrThrow(
+    prisma.invitation.findFirst({
+      where: { id: invitationId, orgId },
+      select: { email: true, role: true, status: true },
+    }),
+    ERR.INVITATION_NOT_FOUND,
+  );
+  return (
+    `Revoke the ${invitation.status.toLowerCase()} invitation of ${quoted(invitation.email)} ` +
+    `as ${invitation.role} to ${await orgLabel(orgId)}`
+  );
+}
+
+/**
+ * @param orgId - The org
+ * @param name - The new team's name
+ * @param slug - Its slug
+ */
+export async function teamCreate(orgId: string, name: string, slug: string): Promise<string> {
+  return `Create the team ${slug} ${quoted(name)} in ${await orgLabel(orgId)}`;
+}
+
+/**
+ * @param teamId - The team
+ * @param fields - What changes
+ */
+export async function teamUpdate(
+  teamId: string,
+  fields: Record<string, string | undefined>,
+): Promise<string> {
+  return `In ${await teamLabel(teamId)}, set ${changeList(fields)}`;
+}
+
+/** @param teamId - The team */
+export async function teamDelete(teamId: string): Promise<string> {
+  const label = await teamLabel(teamId);
+  const [projects, spaces, members] = await Promise.all([
+    prisma.project.count({ where: { teamId } }),
+    prisma.wikiSpace.count({ where: { teamId } }),
+    prisma.teamMembership.count({ where: { teamId } }),
+  ]);
+  return (
+    `Delete ${label} with everything in it. As of this request that is ` +
+    `${amount(projects, 'project')}, ${amount(spaces, 'wiki space')} and ${amount(members, 'member')}`
+  );
+}
+
+/**
+ * The role a user holds in a team.
+ * @param teamId - The team
+ * @param userId - The user
+ */
+async function teamRoleOf(teamId: string, userId: string): Promise<string> {
+  const membership = await findOrThrow(
+    prisma.teamMembership.findFirst({ where: { teamId, userId }, select: { role: true } }),
+    'Team membership not found',
+  );
+  return membership.role;
+}
+
+/**
+ * @param teamId - The team
+ * @param userId - Who joins
+ * @param role - With what role
+ */
+export async function teamMemberAdd(teamId: string, userId: string, role: string): Promise<string> {
+  return `Add ${await userLabel(userId)} to ${await teamLabel(teamId)} as ${role}`;
+}
+
+/**
+ * @param teamId - The team
+ * @param memberId - The user
+ * @param role - The new role
+ */
+export async function teamMemberUpdate(
+  teamId: string,
+  memberId: string,
+  role: string,
+): Promise<string> {
+  const current = await teamRoleOf(teamId, memberId);
+  return `Change ${await userLabel(memberId)} in ${await teamLabel(teamId)} from ${current} to ${role}`;
+}
+
+/**
+ * @param teamId - The team
+ * @param memberId - The user
+ */
+export async function teamMemberRemove(teamId: string, memberId: string): Promise<string> {
+  const current = await teamRoleOf(teamId, memberId);
+  return `Remove ${await userLabel(memberId)}, now ${current}, from ${await teamLabel(teamId)}`;
+}
+
+/**
+ * @param teamId - The team
+ * @param name - The new project's name
+ * @param prefix - Its prefix
+ */
+export async function projectCreate(teamId: string, name: string, prefix: string): Promise<string> {
+  return `Create the project ${prefix} ${quoted(name)} in ${await teamLabel(teamId)}`;
+}
+
+/**
+ * A project as a preview names it.
+ * @param projectId - The project
+ */
+async function projectLabel(projectId: string): Promise<string> {
+  const project = await findOrThrow(
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { name: true, prefix: true },
+    }),
+    ERR.PROJECT_NOT_FOUND,
+  );
+  return `project ${project.prefix} ${quoted(project.name)}`;
+}
+
+/**
+ * @param projectId - The project
+ * @param fields - What changes
+ */
+export async function projectUpdate(
+  projectId: string,
+  fields: Record<string, string | null | undefined>,
+): Promise<string> {
+  return `In ${await projectLabel(projectId)}, set ${changeList(fields)}`;
+}
+
+/** @param projectId - The project */
+export async function projectDelete(projectId: string): Promise<string> {
+  const label = await projectLabel(projectId);
+  const issues = await prisma.issue.count({ where: { projectId } });
+  return `Delete ${label} with its ${amount(issues, 'issue')}, as of this request`;
+}
+
+/**
+ * @param teamId - The team
+ * @param name - The new space's name
+ * @param slug - Its slug
+ */
+export async function spaceCreate(teamId: string, name: string, slug: string): Promise<string> {
+  return `Create the wiki space ${slug} ${quoted(name)} in ${await teamLabel(teamId)}`;
+}
+
+/**
+ * @param spaceId - The space
+ * @param fields - What changes
+ */
+export async function spaceUpdate(
+  spaceId: string,
+  fields: Record<string, string | boolean | undefined>,
+): Promise<string> {
+  return `In ${await spaceLabel(spaceId)}, set ${changeList(fields)}`;
+}
+
+/** @param spaceId - The space */
+export async function spacePermissionList(spaceId: string): Promise<string> {
+  return `Read who holds which permission on ${await spaceLabel(spaceId)}`;
+}
+
+/**
+ * @param spaceId - The space
+ * @param grant - Who gets what
+ * @param grant.userId - One user, or
+ * @param grant.teamRole - Everyone with this team role
+ * @param grant.level - The level
+ */
+export async function spacePermissionSet(
+  spaceId: string,
+  grant: { userId?: string; teamRole?: string; level: string },
+): Promise<string> {
+  const who = grant.userId ? await userLabel(grant.userId) : `every team ${grant.teamRole}`;
+  return `Give ${who} the permission ${grant.level} on ${await spaceLabel(spaceId)}`;
+}
+
+/**
+ * @param spaceId - The space in the path
+ * @param permissionId - The permission
+ */
+export async function spacePermissionRemove(
+  spaceId: string,
+  permissionId: string,
+): Promise<string> {
+  const permission = await findOrThrow(
+    prisma.spacePermission.findFirst({
+      where: { id: permissionId, spaceId },
+      select: { userId: true, teamRole: true, level: true },
+    }),
+    ERR.PERMISSION_NOT_FOUND,
+  );
+  const who = permission.userId
+    ? await userLabel(permission.userId)
+    : `every team ${permission.teamRole}`;
+  return `Take the permission ${permission.level} of ${who} off ${await spaceLabel(spaceId)}`;
+}
+
+/** @param pageId - The page */
+export async function pageRestrictionGet(pageId: string): Promise<string> {
+  return `Read who the ${await pageLabel(pageId)} is restricted to`;
+}
+
+/**
+ * @param pageId - The page
+ * @param type - VIEW or EDIT
+ * @param userIds - Who it is restricted to from now on
+ */
+export async function pageRestrictionSet(
+  pageId: string,
+  type: string,
+  userIds: string[],
+): Promise<string> {
+  const label = await pageLabel(pageId);
+  if (userIds.length === 0) return `Lift the ${type} restrictions of the ${label}`;
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { username: true },
+  });
+  const unknown = userIds.length - users.length;
+  const names = keyList(users.map((user) => user.username));
+  const note = unknown > 0 ? ` and ${amount(unknown, 'id')} that is no user` : '';
+  return `Replace the ${type} restrictions of the ${label}: only ${names}${note}`;
+}
+
+/** @param restrictionId - The restriction */
+export async function pageRestrictionRemove(restrictionId: string): Promise<string> {
+  const restriction = await findOrThrow(
+    prisma.pageRestriction.findUnique({
+      where: { id: restrictionId },
+      select: { type: true, pageId: true, userId: true, teamRoleMin: true },
+    }),
+    ERR.RESTRICTION_NOT_FOUND,
+  );
+  const who = restriction.userId
+    ? await userLabel(restriction.userId)
+    : `team role ${restriction.teamRoleMin}`;
+  return `Take ${who} off the ${restriction.type} restrictions of the ${await pageLabel(restriction.pageId)}`;
+}
+
+/**
+ * Names the reach of a new token, as a person can only judge it by that.
+ * @param name - Its name
+ * @param scopes - Its scopes
+ * @param expiresInDays - After how many days it expires, if ever
+ */
+export function tokenCreate(
+  name: string,
+  scopes: string[],
+  expiresInDays?: number,
+): Promise<string> {
+  const expiry = expiresInDays
+    ? `It expires in ${amount(expiresInDays, 'day')}`
+    : 'It never expires';
+  return Promise.resolve(
+    `Create an API token ${quoted(name)} with the scopes ${scopes.join(', ')}. ${expiry}. ` +
+      'You get the token once, here, and hand it over yourself',
+  );
+}
+
+/**
+ * Only the caller's own token: another's answers 404, as the service does.
+ * @param userId - Whose token
+ * @param tokenId - The token
+ */
+export async function tokenRevoke(userId: string, tokenId: string): Promise<string> {
+  const token = await findOrThrow(
+    prisma.apiToken.findFirst({
+      where: { id: tokenId, userId },
+      select: { name: true, prefix: true, scopes: true },
+    }),
+    'API token not found',
+  );
+  return `Revoke the API token ${token.prefix}... ${quoted(token.name)} with the scopes ${token.scopes.join(', ')}`;
+}
+
+/** The numbers of the whole installation. */
+export function adminStats(): Promise<string> {
+  return Promise.resolve('Read the totals of this installation: users, organizations, storage');
+}
+
+/** The settings of the whole installation. */
+export function adminSettings(): Promise<string> {
+  return Promise.resolve('Read the settings of this installation');
+}
+
+/** @param search - The text to look for, if any */
+export function adminUserList(search?: string): Promise<string> {
+  const only = search ? ` matching ${quoted(search)}` : '';
+  return Promise.resolve(`Read the users of this installation${only}, with their email addresses`);
+}
+
+/** @param userId - The user */
+export async function adminUserGet(userId: string): Promise<string> {
+  return `Read the account of ${await userLabel(userId)}, with their email address and memberships`;
+}
+
+/**
+ * What adminService.updateUser does with the input: only the role, and in every org at once.
+ * @param userId - The user
+ * @param role - The new role, if given
+ */
+export async function adminUserUpdate(userId: string, role?: string): Promise<string> {
+  const label = await userLabel(userId);
+  if (!role) return `Change nothing about ${label}: only a role takes effect here`;
+  const orgs = await prisma.orgMembership.count({ where: { userId } });
+  return `Make ${label} ${role} in every organization they are in: ${amount(orgs, 'organization')} as of this request`;
+}
+
+/** @param userId - The user */
+export async function adminUserDelete(userId: string): Promise<string> {
+  const label = await userLabel(userId);
+  const [orgs, tokens] = await Promise.all([
+    prisma.orgMembership.count({ where: { userId } }),
+    prisma.apiToken.count({ where: { userId } }),
+  ]);
+  return (
+    `Delete the account of ${label}. As of this request they are in ` +
+    `${amount(orgs, 'organization')} and hold ${amount(tokens, 'API token')}`
+  );
+}
+
+/** @param userId - The user */
+export async function adminUserDeactivate(userId: string): Promise<string> {
+  return `Deactivate ${await userLabel(userId)}: they can no longer sign in or use a token`;
+}
+
+/** @param userId - The user */
+export async function adminUserReactivate(userId: string): Promise<string> {
+  return `Reactivate ${await userLabel(userId)}: they can sign in again`;
+}
+
+/**
+ * @param filters - What the read is limited to
+ * @param filters.userId - Rows of this user
+ * @param filters.resourceType - Rows of this resource
+ * @param filters.action - Rows of this action
+ */
+export function auditLogList(filters: {
+  userId?: string;
+  resourceType?: string;
+  action?: string;
+}): Promise<string> {
+  const only = Object.entries(filters)
+    .filter(([, value]) => value)
+    .map(([field, value]) => `${field} ${quoted(value as string)}`);
+  return Promise.resolve(
+    `Read the audit log of this installation${only.length > 0 ? `, limited to ${only.join(', ')}` : ''}`,
+  );
+}
+
+/** @param id - The row */
+export async function auditLogGet(id: string): Promise<string> {
+  const row = await findOrThrow(
+    prisma.auditLog.findUnique({ where: { id }, select: { action: true, resource: true } }),
+    'Audit log not found',
+  );
+  return `Read the audit row ${shortId(id)}: ${quoted(row.action)} on ${quoted(row.resource)}`;
+}
+
+/** @param userId - The user */
+export async function adminUserResetPassword(userId: string): Promise<string> {
+  return `Set a new password for ${await userLabel(userId)}`;
+}

@@ -68,7 +68,7 @@ A token acts as its owner, limited to its scopes. A request its scopes don't cov
 
 Each area has an `<area>:read` and an `<area>:write` scope. Write includes read within its own area only.
 
-A scope no action uses yet can't be minted (`400`): `admin:read`, `admin:write`, `orgs:write`, `teams:write`, `projects:write` and `search:write`. A token that holds one from before gets nothing from it.
+A scope no action uses can't be minted (`400`): `orgs:write`, `teams:write`, `projects:write` and `search:write`. A token that holds one from before gets nothing from it. Managing orgs, teams, projects, access and tokens is in `admin:read` and `admin:write`: the user still needs the role, and each call answers `202` until a person approves it in the web UI.
 
 | Area         | Covers                                                                                                                                                                                                        |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

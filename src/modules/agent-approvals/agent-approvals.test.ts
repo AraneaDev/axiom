@@ -811,7 +811,7 @@ describe('agent approvals', () => {
       ]);
       const deletes = LEGACY_ROUTES.filter((route) => route.method === 'DELETE');
       expect(deleting.filter((route) => route.method === 'DELETE')).toEqual(deletes);
-      expect(deletes.length).toBeGreaterThan(20);
+      expect(deletes.length).toBeGreaterThan(10);
     });
 
     it.each(LEGACY_ROUTES.filter((route) => route.method === 'DELETE').map((r) => r.path))(

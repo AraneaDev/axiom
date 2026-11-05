@@ -160,7 +160,9 @@ function operationFor(def: ActionDef, binding: RestBinding, store: SchemaStore):
     ? 'Only for a browser session: a token or MCP is refused.'
     : def.tokenBlocked
       ? 'Refused to every token and to MCP until approvals exist.'
-      : undefined;
+      : def.admin
+        ? "A token's call always waits for a person to approve it, whatever the policy says."
+        : undefined;
 
   return {
     operationId: def.name,
@@ -176,6 +178,7 @@ function operationFor(def: ActionDef, binding: RestBinding, store: SchemaStore):
     'x-scope': `${def.area}:${def.kind}`,
     ...(def.uiOnly ? { 'x-ui-only': true } : {}),
     ...(def.tokenBlocked ? { 'x-token-blocked': true } : {}),
+    ...(def.admin ? { 'x-admin': true } : {}),
     ...(def.destructive ? { 'x-destructive': true } : {}),
   };
 }
