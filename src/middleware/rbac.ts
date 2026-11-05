@@ -116,24 +116,6 @@ export async function assertPageAccessBySlug(
 }
 
 /**
- * Page routes addressed by id. Expects :pageId in route params.
- * @param mode - 'view' (default) for reads, 'edit' for writes
- * @returns Express middleware running assertPageAccess
- */
-export function requireWikiPageAccess(mode: 'view' | 'edit' = 'view') {
-  return async (req: Request, _res: Response, next: NextFunction) => {
-    try {
-      const userId = req.userId;
-      if (!userId) throw new AppError(401, 'Authentication required');
-      await assertPageAccess(userId, param(req, 'pageId'), mode);
-      next();
-    } catch (err) {
-      next(err);
-    }
-  };
-}
-
-/**
  * Page routes addressed by space and slug, after the space checks. Expects :spaceId and
  * :pageSlug. A missing page passes through so the handler answers 404 as before.
  * @param mode - 'view' for reads, 'edit' for writes
@@ -190,25 +172,6 @@ export async function assertTemplateAccess(
   if (!(await canAccessSpace(template.spaceId, userId, level))) {
     throw new AppError(403, 'You do not have access to this space');
   }
-}
-
-/**
- * Template routes: org membership and the space permission at the given level.
- * Expects :templateId.
- * @param level - VIEW (default) for reads, EDIT for changes
- * @returns Express middleware
- */
-export function requireWikiTemplateAccess(level: SpacePermissionLevel = 'VIEW') {
-  return async (req: Request, _res: Response, next: NextFunction) => {
-    try {
-      const userId = req.userId;
-      if (!userId) throw new AppError(401, 'Authentication required');
-      await assertTemplateAccess(userId, param(req, 'templateId'), level);
-      next();
-    } catch (err) {
-      next(err);
-    }
-  };
 }
 
 /**

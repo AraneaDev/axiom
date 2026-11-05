@@ -8,9 +8,9 @@ import { attributionFields, getRequestContext } from '../lib/request-context';
 import { authenticate } from '../middleware/auth';
 import { AppError, errorHandler } from '../middleware/errorHandler';
 import {
+  assertPageAccess,
   requireTeamMember,
   requireTeamPermission,
-  requireWikiPageAccess,
   requireWikiPageBySlug,
   requireWikiSpaceAccess,
 } from '../middleware/rbac';
@@ -1039,8 +1039,14 @@ describe('authorizers', () => {
       ];
       app.get('/space/:spaceId', ...spaceChain('VIEW'));
       app.post('/space/:spaceId', ...spaceChain('EDIT'));
-      app.get('/page/:pageId', authenticate, requireWikiPageAccess('view'), ok);
-      app.post('/page/:pageId', authenticate, requireWikiPageAccess('edit'), ok);
+      // What the page routes mounted before their migration: assertPageAccess on :pageId
+      const pageChain =
+        (mode: 'view' | 'edit'): express.RequestHandler =>
+        (req, _res, next) => {
+          assertPageAccess(req.userId!, String(req.params.pageId), mode).then(() => next(), next);
+        };
+      app.get('/page/:pageId', authenticate, pageChain('view'), ok);
+      app.post('/page/:pageId', authenticate, pageChain('edit'), ok);
       app.get('/team/:teamId', authenticate, requireTeamMember(), ok);
       app.get('/teamperm/:teamId', authenticate, requireTeamPermission('wiki:view'), ok);
       app.get(
