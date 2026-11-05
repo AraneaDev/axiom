@@ -1419,18 +1419,43 @@ describe('agent approvals', () => {
       expect(note.title).toBe('owner-agent wants to: Run the test action on noticed');
     });
 
-    it('still notifies after a token opts out through the preferences', async () => {
-      const res = await request(app)
+    it('refuses a token writing agent:approval preferences, and leaves them as they were', async () => {
+      await prisma.notificationPreference.deleteMany({
+        where: { userId: owner.id, eventType: 'agent:approval' },
+      });
+      await request(app)
+        .patch('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ eventType: 'agent:approval', email: true });
+      for (const body of [{ email: false }, { inApp: false }, { inApp: false, email: false }]) {
+        const res = await request(app)
+          .patch('/api/notifications/preferences')
+          .set('Authorization', ownerToken)
+          .set('X-Requested-With', 'XMLHttpRequest')
+          .send({ eventType: 'agent:approval', ...body });
+        expect(res.status).toBe(403);
+      }
+      const pref = await prisma.notificationPreference.findUniqueOrThrow({
+        where: { userId_eventType: { userId: owner.id, eventType: 'agent:approval' } },
+      });
+      expect(pref).toMatchObject({ email: true, inApp: true });
+    });
+
+    it('lets a token write other preferences, and a session this one', async () => {
+      const other = await request(app)
         .patch('/api/notifications/preferences')
         .set('Authorization', ownerToken)
         .set('X-Requested-With', 'XMLHttpRequest')
-        .send({ eventType: 'agent:approval', inApp: false, email: false });
-      expect(res.status).toBe(200);
-      const id = await pendingOn('muted');
-      const note = await prisma.notification.findFirst({
-        where: { userId: owner.id, type: 'agent:approval', link: `/approvals/agent/${id}` },
-      });
-      expect(note).not.toBeNull();
+        .send({ eventType: 'issue_assigned', email: false });
+      expect(other.status).toBe(200);
+      const own = await request(app)
+        .patch('/api/notifications/preferences')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ eventType: 'agent:approval', email: false });
+      expect(own.status).toBe(200);
+      expect(own.body.preference.email).toBe(false);
     });
 
     it("sends a realtime event to the user's room", async () => {

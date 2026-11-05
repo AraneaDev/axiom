@@ -54,12 +54,20 @@ describe('Notification Email Enqueue Integration', () => {
     process.env.SMTP_HOST = origSmtp;
   });
 
-  describe('agent:approval (A8)', () => {
+  describe('agent:approval (A8, A22)', () => {
     const send = () =>
       createNotification(userId, 'agent:approval', 'agent wants to: Delete', undefined, '/a/1');
 
-    it('emails with no preference stored', async () => {
+    it('is in-app but sends no email by default', async () => {
       process.env.SMTP_HOST = 'localhost';
+      await send();
+      expect(mockAdd).not.toHaveBeenCalled();
+      expect(await prisma.notification.count({ where: { userId } })).toBe(1);
+    });
+
+    it('emails when the user chose that', async () => {
+      process.env.SMTP_HOST = 'localhost';
+      await updatePreference(userId, 'agent:approval', { email: true });
       await send();
       expect(mockAdd).toHaveBeenCalledWith(
         'send',
@@ -67,27 +75,12 @@ describe('Notification Email Enqueue Integration', () => {
       );
     });
 
-    it('emails after an opt-out, which a token could have made', async () => {
+    it('stays in-app after an opt-out of both', async () => {
       process.env.SMTP_HOST = 'localhost';
       await updatePreference(userId, 'agent:approval', { email: false, inApp: false });
       await send();
-      expect(mockAdd).toHaveBeenCalledTimes(1);
+      expect(mockAdd).not.toHaveBeenCalled();
       expect(await prisma.notification.count({ where: { userId } })).toBe(1);
-    });
-
-    it('still honours the opt-out of every other type', async () => {
-      process.env.SMTP_HOST = 'localhost';
-      await updatePreference(userId, 'issue_assigned', { email: false });
-      await createNotification(userId, 'issue_assigned', 'Title', 'Body', '/issues/1');
-      expect(mockAdd).not.toHaveBeenCalled();
-    });
-
-    it('sends nothing without SMTP', async () => {
-      const original = process.env.SMTP_HOST;
-      delete process.env.SMTP_HOST;
-      await send();
-      expect(mockAdd).not.toHaveBeenCalled();
-      process.env.SMTP_HOST = original;
     });
   });
 

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 
+import { AppError } from '../../middleware/errorHandler';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parsePagination } from '../../utils/pagination';
 import { param } from '../../utils/params';
@@ -46,6 +47,14 @@ export const getPreferences = asyncHandler(async (req: Request, res: Response) =
 export const updatePreference = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
   const { eventType, inApp, email } = req.body;
+  // How a person hears of an agent's request is theirs to decide, not the agent's (A22)
+  if (req.apiTokenId !== undefined && eventType === 'agent:approval') {
+    throw new AppError(
+      403,
+      "A token can't change how you hear of agent approvals: do this in the web UI",
+      'SCOPE',
+    );
+  }
   const preference = await notificationsService.updatePreference(userId, eventType, {
     inApp,
     email,
