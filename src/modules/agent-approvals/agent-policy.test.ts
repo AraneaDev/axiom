@@ -475,9 +475,21 @@ describe('agent policies', () => {
       expect(await waits('savedQuery.update', { filterId: saved.id, visibility: 'PRIVATE' })).toBe(
         true,
       );
-      expect(await waits('savedQuery.update', { filterId: saved.id, orgId: otherOrg.orgId })).toBe(
-        true,
-      );
+      // The target org is one the caller belongs to: a preview answers as a session does (A28)
+      const second = await prisma.organization.create({
+        data: { name: 'Second query org', slug: `second-q-${Date.now()}` },
+      });
+      await prisma.orgMembership.create({
+        data: { userId: ctx.owner.id, orgId: second.id, role: 'OWNER' },
+      });
+      expect(
+        await waits('savedQuery.update', {
+          filterId: saved.id,
+          visibility: 'ORG',
+          orgId: second.id,
+        }),
+      ).toBe(true);
+      await prisma.organization.delete({ where: { id: second.id } });
       expect(await waits('savedQuery.update', { filterId: saved.id, name: 'Renamed' })).toBe(false);
       await prisma.savedFilter.delete({ where: { id: saved.id } });
     });
