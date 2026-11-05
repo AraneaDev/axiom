@@ -51,6 +51,10 @@ describe('ConnectAgent', () => {
     const block = await screen.findByLabelText('~/.codex/config.toml');
     expect((block as HTMLInputElement).value).toContain('http_headers');
     expect((block as HTMLInputElement).value).toContain('Token tk_secret');
+    const lines = (block as HTMLTextAreaElement).value.split('\n');
+    expect(lines[0]).toBe('[mcp_servers.axiom]');
+    expect(lines.some((l) => l.startsWith('url = '))).toBe(true);
+    expect(lines.some((l) => l.startsWith('http_headers = '))).toBe(true);
   });
 
   it('names the token Agent for a client that is not listed, not Other', async () => {

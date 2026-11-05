@@ -27,4 +27,12 @@ describe('CopyInput', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Copy' }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('my-secret-token');
   });
+
+  it('keeps the line breaks of a multi-line value on screen and in the copy', async () => {
+    const value = '[mcp_servers.axiom]\nurl = "https://example.com/api/mcp"';
+    render(<CopyInput value={value} label="Config" />);
+    expect((screen.getByLabelText('Config') as HTMLTextAreaElement).value).toBe(value);
+    await userEvent.click(screen.getByRole('button', { name: 'Copy Config' }));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(value);
+  });
 });
