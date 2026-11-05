@@ -11,6 +11,7 @@
  */
 
 import '../src/config/load-env';
+import './refuse-in-production';
 
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
