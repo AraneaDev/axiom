@@ -3,6 +3,8 @@ import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
+import { committedIssueIds as committedIssueIdsOf, isDoneIssue } from './sprint-metrics';
+
 export interface SprintReportIssue {
   id: string;
   number: number;
@@ -101,17 +103,8 @@ export async function getSprintReport(
 
   const committedAt = new Date(sprint.committedAt);
 
-  // Determine the "committed" set: issues that were ADDED before or at committedAt
-  const committedIssueIds = new Set<string>();
-  for (const entry of sprint.issueHistory) {
-    if (new Date(entry.timestamp) <= committedAt) {
-      if (entry.action === 'ADDED') {
-        committedIssueIds.add(entry.issueId);
-      } else if (entry.action === 'REMOVED') {
-        committedIssueIds.delete(entry.issueId);
-      }
-    }
-  }
+  // The "committed" set: issues added before or at committedAt and not removed since
+  const committedIssueIds = committedIssueIdsOf(sprint.issueHistory, committedAt);
 
   // Current issues still in the sprint - split into completed vs incomplete
   const completedIssues: SprintReportIssue[] = [];
@@ -130,7 +123,7 @@ export async function getSprintReport(
       addedMidSprint,
     };
 
-    if (issue.column?.isDone) {
+    if (isDoneIssue(issue)) {
       completedIssues.push(base);
     } else {
       incompleteIssues.push(base);

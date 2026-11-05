@@ -312,4 +312,34 @@ describe('call budgets for the developer loop', () => {
     expect(search.data[0].items[0].key).toBe(pageKey(slug));
     expect(byTitle.calls()).toBe(1);
   });
+
+  it('shows the status of all active sprints and which issues are blocked in 1 call', async () => {
+    const sprint = await prisma.sprint.create({
+      data: {
+        projectId: ctx.projectId,
+        name: 'Budget sprint',
+        status: 'ACTIVE',
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 5 * 86_400_000),
+        committedAt: new Date(),
+      },
+    });
+    const waiting = await createIssue('Waiting on a fix');
+    const blocker = await createIssue('The fix');
+    await prisma.issue.update({ where: { id: waiting.id }, data: { sprintId: sprint.id } });
+    await prisma.issueLink.create({
+      data: { fromId: waiting.id, toId: blocker.id, type: 'IS_BLOCKED_BY' },
+    });
+
+    const agent = await counted(member);
+    const overview = await callTool(agent.client, 'act', { action: 'sprint.overview', input: {} });
+    expect(overview.isError).toBe(false);
+    const entry = overview.data.sprints.find((s: { id: string }) => s.id === sprint.id);
+    expect(entry.issues.total).toBe(1);
+    expect(entry.blocked[0]).toMatchObject({
+      key: waiting.key,
+      blockedBy: [{ key: blocker.key, title: 'The fix' }],
+    });
+    expect(agent.calls()).toBe(1);
+  });
 });

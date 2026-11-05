@@ -15,6 +15,7 @@ import {
 } from '../../utils/validation';
 import { hydrateBacklog } from '../issues/backlog-hydrate.service';
 
+import * as sprintProgressService from './sprint-progress.service';
 import * as sprintReportService from './sprint-report.service';
 import * as sprintsService from './sprints.service';
 
@@ -27,6 +28,8 @@ const PROJECT = '/api/projects/:projectId';
 const SPRINT = `${PROJECT}/sprints/:sprintId`;
 
 // Authorization runs on the ids alone (R10); every input extends its target (R11)
+const overviewTarget = z.object({});
+const scopeId = z.string().min(1).max(64).optional();
 const projectTarget = z.object({ projectId: z.string() });
 const sprintTarget = projectTarget.extend({ sprintId: z.string() });
 const sprintIssueTarget = sprintTarget.extend({ issueId: z.string() });
@@ -167,6 +170,33 @@ const sprintActions = [
     handler: async (_ctx, { projectId, sprintId }) => ({
       ...(await sprintReportService.getSprintReport(projectId, sprintId)),
     }),
+  }),
+  defineAction({
+    name: 'sprint.overview',
+    area: 'sprints',
+    kind: 'read',
+    summary:
+      'Progress of the active (or planning) sprints of every project you can open: issues done, ' +
+      'in progress and to do, points, days left, and the issues blocked, with what blocks them. ' +
+      'A blocker in a project you cannot open shows as hidden.',
+    target: overviewTarget,
+    input: overviewTarget.extend({
+      state: z.enum(['ACTIVE', 'PLANNING']).default('ACTIVE'),
+      scope: z.object({ orgId: scopeId, teamId: scopeId, projectId: scopeId }).optional(),
+      includeBlocked: z.boolean().default(true),
+    }),
+    output: z.looseObject({ sprints: z.array(loose) }),
+    // Only sprints of projects the viewer can open are read, so there is no id to authorize
+    authorize: async () => {},
+    // The spread turns each entry's interface into a plain object for the loose output schema
+    handler: async (ctx, { state, scope, includeBlocked }) => {
+      const { sprints } = await sprintProgressService.sprintOverview(ctx.userId, {
+        state,
+        scope,
+        includeBlocked,
+      });
+      return { sprints: sprints.map((sprint) => ({ ...sprint })) };
+    },
   }),
   defineAction({
     name: 'sprint.addIssues',

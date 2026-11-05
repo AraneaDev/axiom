@@ -15,7 +15,7 @@ export interface DerivedField {
 }
 
 /** An issue not in a done column. One outside any column is open too. */
-const OPEN_ISSUE: Where = { NOT: { column: { isDone: true } } };
+export const OPEN_ISSUE: Where = { NOT: { column: { isDone: true } } };
 
 /**
  * An issue waiting on an open issue. Links are normally stored both ways, but older or half-deleted
