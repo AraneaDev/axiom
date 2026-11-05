@@ -76,7 +76,25 @@ export async function listAuditLogs(opts: ListAuditLogsOpts) {
     prisma.auditLog.count({ where }),
   ]);
 
-  return { logs, total };
+  return { logs: await withUserNames(logs), total };
+}
+
+/**
+ * Add who did it by name. The table has no relation to users: a log outlives its user, whose
+ * name then is null and only the id remains.
+ * @param logs - The rows
+ */
+async function withUserNames<T extends { userId: string | null }>(logs: T[]) {
+  const ids = [...new Set(logs.flatMap((log) => (log.userId ? [log.userId] : [])))];
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, displayName: true },
+  });
+  const names = new Map(users.map((user) => [user.id, user.displayName]));
+  return logs.map((log) => ({
+    ...log,
+    userName: (log.userId && names.get(log.userId)) || null,
+  }));
 }
 
 /**
@@ -84,5 +102,6 @@ export async function listAuditLogs(opts: ListAuditLogsOpts) {
  * @param id
  */
 export async function getAuditLog(id: string) {
-  return prisma.auditLog.findUnique({ where: { id } });
+  const log = await prisma.auditLog.findUnique({ where: { id } });
+  return log && (await withUserNames([log]))[0];
 }

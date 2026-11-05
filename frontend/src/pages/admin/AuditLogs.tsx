@@ -85,7 +85,7 @@ function AuditLogRow({ log }: { log: AuditLogEntry }) {
         <Td>
           <span className="inline-flex items-center gap-1.5">
             <User className="h-3.5 w-3.5 text-text-tertiary" />
-            <span className="text-text font-medium">{log.userId ?? 'system'}</span>
+            <span className="text-text font-medium">{log.userName ?? log.userId ?? 'system'}</span>
             <ViaLabel via={log.via} />
           </span>
         </Td>

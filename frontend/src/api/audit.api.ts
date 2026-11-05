@@ -4,6 +4,8 @@ export interface AuditLogEntry {
   id: string;
   orgId: string;
   userId: string | null;
+  /** Null for a row without a user, and for a user who has since been removed */
+  userName: string | null;
   action: string;
   resource: string;
   details: Record<string, unknown> | null;

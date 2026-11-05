@@ -108,6 +108,22 @@ describe('Audit Logs API', () => {
       expect(res.body.logs.length).toBeGreaterThanOrEqual(3);
     });
 
+    it('names who did it, and nobody for a row without a user', async () => {
+      const system = await prisma.auditLog.create({
+        data: { orgId, action: 'system.job', resource: 'job:1' },
+      });
+      const res = await request(app)
+        .get('/api/admin/audit-logs')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+      const logs: Array<{ id: string; userId: string | null; userName: string | null }> =
+        res.body.logs;
+      const mine = logs.find((log) => log.userId === userId);
+      expect(mine?.userName).toBe(testUser.displayName);
+      expect(logs.find((log) => log.id === system.id)?.userName).toBeNull();
+      await prisma.auditLog.delete({ where: { id: system.id } });
+    });
+
     it('should filter by action', async () => {
       const res = await request(app)
         .get('/api/admin/audit-logs?action=team.create')
