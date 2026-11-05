@@ -85,9 +85,9 @@ A scope no action uses can't be minted (`400`): `orgs:write`, `teams:write`, `pr
 | `forms`      | `/api/projects/:id/forms`, `intake`                                                                                                                                                                           |
 | `automation` | `/api/projects/:id/automation-rules`                                                                                                                                                                          |
 | `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
-| `admin` | Orgs, teams, members, invitations, tokens, your account, space permissions, page restrictions, project create, update and delete, and `/api/admin`. Every call waits for approval, see [Approvals](#approvals-for-token-calls) |
+| `admin` | Orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and `/api/admin`. Every call waits for approval, see [Approvals](#approvals-for-token-calls) |
 
-Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. A token can never manage orgs, teams, members, invitations, tokens, your account or anything under `/api/admin`, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. Creating a token with any other scope name returns `400`.
+Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (profile, password, 2FA) and resetting another user's password stay closed to tokens (`403`). Creating a token with any other scope name returns `400`.
 
 Tokens created before scopes per area were rewritten by migration and reach what they always reached: the old `issues:*` and `wiki:*` scopes became the set of area scopes that covers the same paths (`LEGACY_SCOPE_MAP` in `src/middleware/token-scopes.ts`).
 
@@ -176,7 +176,7 @@ A call from an API token (REST or `/api/act`) that needs approval runs nothing a
 {
   "status": "pending_approval",
   "approvalId": "...",
-  "preview": "Delete issue AXM-42 (Fix the login redirect)",
+  "preview": "Delete AXM-42 \"Fix the login redirect\"",
   "expiresAt": "2026-11-05T17:30:00.000Z",
   "approveUrl": "/approvals/agent/...",
   "next": "Nothing ran yet: your user decides at approveUrl. Run agentApproval.wait with id ..."
@@ -196,7 +196,7 @@ Endpoints, all `approvals` area:
 | `POST /api/agent-approvals/:id/reject` | `agentApproval.reject` | Web UI only |
 | `GET`, `PUT /api/agent-policy` | `agentPolicy.get`, `agentPolicy.update` | `scope` `org` (owners write) or `user` (tighten only); update is an admin action |
 
-Statuses are `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED` and `FAILED`. Limits: 256 KB of input (`400`), 50 pending per user (`429`), expiry from 10 minutes to 24 hours (an hour by default). Tokens are refused (`403`) on legacy `DELETE` routes and other legacy routes that delete, and on legacy writes to human checks (approval gates and votes), until those are migrated. An org policy that lists an upload action in `alsoRequire` refuses it to tokens outright; list `attachment.createUploadUrl`, `attachment.fromUrl` and `attachment.upload` all three. A new token's expiry must be set and can't exceed that of the token that creates it. The [MCP server guide](axiom-mcp-server.md#approvals) has the whole picture.
+Statuses are `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED` and `FAILED`. Limits: 256 KB of input (`400`), 50 pending per user (`429`), expiry from 10 minutes to 24 hours (an hour by default). Tokens are refused (`403`) on legacy `DELETE` routes and other legacy routes that delete, and on legacy writes to human checks (approval gates and votes), until those are migrated. An org policy that lists `attachment.upload` (the multipart upload, which can't wait) in `alsoRequire` refuses it to tokens outright (`403`); `attachment.createUploadUrl` and `attachment.fromUrl` wait for approval like any other action. A token that has an expiry can only create tokens that expire by then; a token with none is free. The [MCP server guide](axiom-mcp-server.md#approvals) has the whole picture.
 
 ### Uploads
 

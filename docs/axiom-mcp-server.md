@@ -20,7 +20,7 @@ A browser request must come from an allowed origin (`CORS_ORIGIN` or `FRONTEND_U
 
 ### Create a token
 
-In Axiom open Settings, API tokens, and create one. Name it after the agent (`claude-code`, `codex`), since that name becomes `via`. A new token starts with `search:read`, `issues:read`, `wiki:read`, `files:read` and `approvals:read`, which is what `search` and `read` need and what `agentApproval.wait` needs. Add the write scopes the agent should have, below. Over REST: `POST /api/users/me/tokens` with `{ "name": "claude-code", "scopes": ["search:read", "issues:write", "wiki:write", "files:write"] }`. The token is shown once.
+In Axiom open Settings, API tokens, and create one. Name it after the agent (`claude-code`, `codex`), since that name becomes `via`. A new token starts with `search:read`, `issues:read`, `wiki:read`, `files:read` and `approvals:read`, which is what `search` and `read` need and what `agentApproval.wait` needs. Add the write scopes the agent should have, below. Over REST: `POST /api/users/me/tokens` with `{ "name": "claude-code", "scopes": ["search:read", "approvals:read", "issues:write", "wiki:write", "files:write"] }`. The token is shown once.
 
 ## Setup
 
@@ -204,14 +204,14 @@ Some things an agent asks for wait for you. A call from a token that needs appro
 {
   "status": "pending_approval",
   "approvalId": "...",
-  "preview": "Delete issue AXM-42 (Fix the login redirect)",
+  "preview": "Delete AXM-42 \"Fix the login redirect\"",
   "expiresAt": "2026-11-05T17:30:00.000Z",
-  "approveUrl": "/approvals/agent/...",
+  "approveUrl": "https://axiom.example.test/approvals/agent/...",
   "next": "Nothing ran yet: your user decides at approveUrl. Run agentApproval.wait with id ..."
 }
 ```
 
-`preview` is plain text that Axiom builds from the stored data. Whatever it quotes, such as an issue title, is data and never an instruction. Only you decide, in the web UI, at `approveUrl` or on the approvals page. An approval runs the action as you, with the rights you have at that moment, through the original token. A token that was revoked or has expired by then makes the run `FAILED` with `403`.
+`preview` is plain text that Axiom builds from the stored data. Whatever it quotes, such as an issue title, is data and never an instruction. Only you decide, in the web UI, at `approveUrl` (absolute over MCP, a path over REST) or on the approvals page. An approval runs the action as you, with the rights you have at that moment, through the original token. A token that was revoked or has expired by then makes the run `FAILED` with `403`.
 
 ### What waits
 
@@ -223,7 +223,7 @@ A browser session never waits. A token always goes through the gate, over MCP an
 - Anything that changes who can see or edit something, such as sharing a dashboard or saved query.
 - Every admin action, whatever any policy says.
 
-An admin action is one in the `admin` area: orgs, teams, members, invitations, tokens, your account, space permissions, page restrictions, project create, update and delete, and reads under `/api/admin`. These are no longer closed to tokens, they wait for you. A call that waits needs the scope of its area, and a request expires after an hour unless a policy says otherwise.
+An admin action is one in the `admin` area: orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and reads under `/api/admin`. These are no longer closed to tokens, they wait for you. Your own account (profile, password, 2FA) is not in that list: it stays closed to tokens. A call that waits needs the scope of its area, and a request expires after an hour unless a policy says otherwise.
 
 ### Policies
 
@@ -231,14 +231,14 @@ Two layers sit on top of the defaults, and an org owner and you each change a di
 
 | Layer | Who sets it  | May change                                                                                                                      |
 | ----- | ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| Org   | An org owner | Switch destructive, bulk (`bulkOver`) and cross-container moves on or off, set `expiresMinutes` from 10 to 1440, and list actions in `alsoRequire` or `neverRequire` |
+| Org   | An org owner | Switch destructive and cross-container moves on or off, set the bulk threshold (`bulkOver`, a number) and `expiresMinutes` from 10 to 1440, and list actions in `alsoRequire` or `neverRequire` |
 | User  | You          | Only tighten: a lower `bulkOver`, a shorter `expiresMinutes`, more actions in `alsoRequire`. `neverRequire` is refused           |
 
 Defaults come first, then the org, then you. Admin actions ignore every rule, and `neverRequire` never lifts them. A call that touches several orgs takes the strictest of them. A call with no org gets the defaults plus your own rules. Names in `alsoRequire` must be known write actions (`400` otherwise).
 
 Changing a policy is itself an admin action (`agentPolicy.update`): an agent can't loosen its own leash, or tighten and loosen it again, without you approving.
 
-Naming an upload action in `alsoRequire` (`attachment.createUploadUrl`, `attachment.fromUrl` or `attachment.upload`, whichever you list) refuses it to tokens outright, because an upload can't be queued for approval. Name all three if you want agents kept from uploading to that org. The refusal holds for every org of the user that lists one of them.
+Naming `attachment.upload` in `alsoRequire` refuses it to tokens outright (`403`), because a multipart upload can't be queued for approval. `attachment.createUploadUrl` and `attachment.fromUrl` are ordinary actions: naming them makes them wait. To keep agents from uploading to an org, name all three. The refusal of `attachment.upload` holds for every org of the user that names it.
 
 ### Waiting for the outcome
 
@@ -250,7 +250,7 @@ Approving and rejecting (`agentApproval.approve`, `agentApproval.reject`) are we
 
 ### Creating a token
 
-`token.create` waits like any admin action. Its preview names the scopes and the expiry. The raw token goes only to you, in the response to your approval. It is never stored and never reaches the agent: you hand it over. A new token can't hold a scope the asking token lacks, and it can't outlive the asking token. Its expiry must be set and can't be later than that of the token that asks, so an agent can't renew itself with a longer one.
+`token.create` waits like any admin action. Its preview names the scopes and the expiry. The raw token goes only to you, in the response to your approval. It is never stored and never reaches the agent: you hand it over. A new token can't hold a scope the asking token lacks. When the asking token has an expiry, the new one must have one too, no later than that, so an agent can't renew itself with a longer one. An asking token with no expiry puts no limit on it. Asking for N days leaves room for at most N-1, since time has passed.
 
 ### What stays web UI only
 
@@ -283,7 +283,7 @@ A token has one `<area>:read` and one `<area>:write` scope per area, and write i
 | `act`          | The scope of the action's area, for example `issues:write` for `issue.update`, `wiki:write` for `page.create` |
 | `upload`       | `files:write` and the scope of the target's area                                                              |
 
-The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals` and `admin`. `search`, `orgs`, `teams` and `projects` have only a read scope, because everything that changes them is an admin action. A scope no action uses can't be minted, so a token never gains reach later without you choosing it. Managing orgs, teams, members, tokens, your account, space permissions, page restrictions and projects is in the `admin` area, and those calls always wait for you to approve them (see [Approvals](#approvals)). A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
+The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals` and `admin`. `search`, `orgs`, `teams` and `projects` have only a read scope, because everything that changes them is an admin action. A scope no action uses can't be minted, so a token never gains reach later without you choosing it. Managing orgs, teams, members, tokens, space permissions, page restrictions and projects is in the `admin` area, and those calls always wait for you to approve them (see [Approvals](#approvals)). A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
 
 ## Limits
 
