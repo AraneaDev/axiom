@@ -234,6 +234,22 @@ function ruleViolations(def: ActionDef): string[] {
     }
   }
 
+  // A read scope may stand in for the scope of an action only where the action touches the
+  // caller's own state: a read, or a write that belongs to no org and does no harm (R18)
+  if (def.openToReadOf) {
+    const ownWrite = def.kind === 'write' && def.noOrg === true;
+    if (def.kind !== 'read' && !ownWrite) {
+      violations.push(
+        `${def.name}: openToReadOf is for a read or a noOrg write of the caller's own state (R18)`,
+      );
+    }
+    if (def.destructive || def.destructiveWhen || def.admin || def.permissionChange || def.uiOnly) {
+      violations.push(
+        `${def.name}: openToReadOf can't go with destructive, admin, permissionChange or uiOnly (R18)`,
+      );
+    }
+  }
+
   if (isUntyped(def.input)) {
     violations.push(`${def.name}: the whole input is z.unknown() or z.any(); type it (R16)`);
   }
@@ -377,6 +393,36 @@ describe('registry rules', () => {
       ['a read', { kind: 'read' as const }],
     ])('passes a write with %s', (_label, extra) => {
       expect(orgPathViolations(defineAction({ ...write, ...extra }))).toEqual([]);
+    });
+  });
+
+  describe('R18: openToReadOf stays on the callers own state', () => {
+    const own = {
+      ...throwaway,
+      name: 'throwaway.own',
+      area: 'issues' as const,
+      input: z.object({}),
+    };
+
+    it('passes a read, and a write that belongs to no org', () => {
+      expect(
+        ruleViolations(defineAction({ ...own, kind: 'read', openToReadOf: ['wiki'] })),
+      ).toEqual([]);
+      expect(
+        ruleViolations(
+          defineAction({ ...own, kind: 'write', noOrg: true, openToReadOf: ['wiki'] }),
+        ),
+      ).toEqual([]);
+    });
+
+    it.each([
+      ['a write that reaches an org', { kind: 'write' as const }],
+      ['a destructive write', { kind: 'write' as const, noOrg: true, destructive: true }],
+      ['an admin write', { kind: 'write' as const, noOrg: true, admin: true }],
+      ['a read that changes permissions', { kind: 'read' as const, permissionChange: () => true }],
+    ])('fails on %s', (_label, extra) => {
+      const action = defineAction({ ...own, ...extra, openToReadOf: ['wiki'] });
+      expect(ruleViolations(action).filter((v) => v.includes('R18'))).not.toEqual([]);
     });
   });
 
