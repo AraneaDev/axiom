@@ -230,7 +230,7 @@ Some things an agent asks for wait for you. A call from a token that needs appro
 
 A browser session never waits. A token always goes through the gate, over MCP and REST alike. By default these wait:
 
-- Destructive actions (deletes and removals). Some are destructive for certain inputs only (`destructiveWhen`): renaming a board column, changing which column counts as done, or a workflow rule write. An org's rules can relax these, as they can any destructive action.
+- Destructive actions (deletes and removals). Some are destructive for certain inputs only (`destructiveWhen`): renaming a board column or changing which column counts as done. Workflow rule writes (create, update, delete) are always destructive. An org's rules can relax these, as they can any destructive action.
 - Writes that change a human check: creating, changing or deleting an approval gate, and voting on an approval request. A token's call waits for you instead of being refused.
 - A bulk action over 10 items. A batch of 50 single updates doesn't count as bulk.
 - A move that crosses a project (`issue.move`) or a space (`page.move`).

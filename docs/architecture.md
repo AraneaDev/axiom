@@ -89,17 +89,22 @@ Requests pass through the following middleware in order:
 
 1. `helmet` — sets security-related HTTP headers
 2. `cors` — allows configured origins with credentials
-3. `morgan` — HTTP request logging (`dev` format in development, `combined` in production)
-4. `express.json({ limit: '5mb' })` — JSON body parsing
-5. `globalLimiter` — 300 requests/minute per IP (skipped in test env)
-6. `authLimiter` — 15 requests/minute on `/api/auth/login`, `/api/auth/refresh`, `/api/auth/register`
-7. `csrfGuard` — applied to all `/api/*` routes (see [Security Model](#security-model))
-8. `openApiRouter` — `/api/docs` and `/api/openapi.json`, public
-9. `require2fa` — 2FA enforcement for signed-in sessions
-10. `auditMiddleware` — registers a `finish` listener to log mutating API requests to `AuditLog`
-11. The action routes (`mountActions`), then `/api/act` and `/api/mcp`
-12. A catch-all `authenticate` for `/api`, then a JSON `404`: a stranger gets `401` on any unknown path, a signed-in caller or token gets `404`
-13. `errorHandler` — global error handler (must be last)
+3. `requestLogger` — structured request logging (pino) with a request id; served frontend paths are skipped
+4. `metricsCollector` — records method, path, status and duration for `/api/health/metrics`
+5. `signedUploadRouter` — `PUT /api/uploads/:uploadId`, whose signature is its credential; it sits ahead of the JSON parser, the CSRF guard and `require2fa`, with its own limiter
+6. `express.json({ limit: '5mb' })` — JSON body parsing
+7. `nulGuard` — refuses NUL in the path, query or JSON body of an `/api` request (`/api/mcp`, `/api/act` and `/api/read` check it per action)
+8. `requestContextMiddleware` — opens the per-request context that `authenticate` fills in
+9. `globalLimiter` — 300 requests/minute per IP on `/api` (skipped in test env)
+10. `authLimiter` — 15 requests/minute on `/api/auth/login`, `/api/auth/refresh`, `/api/auth/register`, `/api/auth/forgot-password`, `/api/auth/reset-password`; `searchLimiter` — 30 requests/minute on `/api/search`
+11. `csrfGuard` — applied to all `/api/*` routes (see [Security Model](#security-model))
+12. `openApiRouter` — `/api/docs` and `/api/openapi.json`, public
+13. `require2fa` — 2FA enforcement for signed-in sessions
+14. `auditMiddleware` — registers a `finish` listener to log mutating API requests to `AuditLog`
+15. The action routes (`mountActions`), then `/api/act` and `/api/mcp`
+16. A catch-all `authenticate` for `/api`, then a JSON `404`: a stranger gets `401` on any unknown path, a signed-in caller or token gets `404`
+17. The built frontend, when `NODE_ENV` is production or `STATIC_DIR` is set
+18. `errorHandler` — global error handler (must be last)
 
 ### Module System
 
@@ -587,24 +592,26 @@ All error responses share the shape `{ error: { message: string, code?: string }
 
 ### Rate Limiting
 
-`express-rate-limit` enforces two tiers (both disabled in the test environment):
+`express-rate-limit` enforces these limits per IP (all disabled in the test environment):
 
 | Limiter | Routes | Window | Limit |
 |---------|--------|--------|-------|
-| Global | All routes | 60 s | 300 requests |
-| Auth | `/api/auth/login`, `/api/auth/refresh`, `/api/auth/register` | 60 s | 15 requests |
+| Global | All `/api` routes | 60 s | 300 requests |
+| Auth | `/api/auth/login`, `/api/auth/refresh`, `/api/auth/register`, `/api/auth/forgot-password`, `/api/auth/reset-password` | 60 s | 15 requests |
+| Search | `/api/search` | 60 s | 30 requests |
+| Public forms | public form submissions and secret checks | 60 s | 20 requests |
+| Signed uploads | `PUT /api/uploads/:uploadId` | 60 s | 30 requests |
 
-Standard `RateLimit-*` response headers are sent; legacy `X-RateLimit-*` headers are disabled.
+Standard `RateLimit-*` response headers are sent by every limiter. Only the global limiter disables the legacy `X-RateLimit-*` headers; the others send those as well.
 
 ### RBAC
 
-Every mutating API route operating on an org, team, or project resource is protected by one or more guard middleware:
+There is no guard middleware on routes. Every route is an action's binding, and each action authorizes itself before its input is fully validated: its `authorize` function (built from the helpers in `src/actions/authorize.ts`) runs after `authenticate` has set `req.userId`. The helpers call the checks in `src/middleware/rbac.ts` and `src/middleware/requireProjectAccess.ts`:
 
-- `authenticate` — verifies JWT or API token, sets `req.userId`
-- `requireOrgPermission(action)` — checks `OrgMembership.role` against the permission matrix
-- `requireTeamPermission(action)` — checks `TeamMembership.role` with org-level fallback
-- `requireWikiSpaceAccess()` / `requireWikiPageAccess()` / `requireWikiCommentAccess()` / `requireWikiTemplateAccess()` — org membership checks for wiki resources
-- `requireProjectAccess` — verifies project membership
+- `assertOrgPermission` / `checkOrgMember` — `OrgMembership.role` against the permission matrix
+- `checkTeamPermission` / `checkTeamRead` — `TeamMembership.role` with org-level fallback
+- `checkWikiSpaceOrgAccess`, `assertPageAccess`, `assertPageAccessBySlug`, `assertCommentAccess`, `assertTemplateAccess`, `assertRestrictionAccess` — org membership, space permissions and page restrictions for wiki resources
+- `checkProjectAccess` / `checkProjectAction` — project membership and the role a project write needs
 
 ### HTTP Security Headers
 

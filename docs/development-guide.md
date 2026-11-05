@@ -466,7 +466,7 @@ Import the actions file above the `mountActions` call. A file that is not import
 import './modules/widgets/widgets.actions';
 ```
 
-`registry-rules.test.ts`, `parity.test.ts` and `token-reach.test.ts` check the new action. Add its scopes to `src/actions/token-reach.json` in the same commit; the test fails and says which.
+`registry-rules.test.ts`, `parity.test.ts` and `token-reach.test.ts` check the new action. Add its scopes to `src/actions/token-reach.json` in the same commit; `registry-rules.test.ts` compares the reach of every action with that file and fails until it matches.
 
 ### Step 5: Add the Prisma model
 
