@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Coins, KeyRound, Plus, Trash2, Copy, X } from 'lucide-react';
+import { AlertTriangle, Coins, KeyRound, Plug, Plus, Trash2, Copy, X } from 'lucide-react';
 import { Fragment, useState } from 'react';
+import { Link } from 'react-router';
 
 import { usersApi } from '@/api/users.api';
 import { Badge } from '@/components/ui/Badge';
@@ -101,15 +102,22 @@ export default function ApiTokens() {
         },
       ]}
       actions={
-        <Button
-          size="sm"
-          onClick={() => {
-            setShowForm(!showForm);
-            setNewToken(null);
-          }}
-        >
-          <Plus className="h-4 w-4" /> New Token
-        </Button>
+        <div className="flex gap-2">
+          <Link to="/settings/connect-agent">
+            <Button size="sm" variant="secondary">
+              <Plug className="h-4 w-4" /> Connect an agent
+            </Button>
+          </Link>
+          <Button
+            size="sm"
+            onClick={() => {
+              setShowForm(!showForm);
+              setNewToken(null);
+            }}
+          >
+            <Plus className="h-4 w-4" /> New Token
+          </Button>
+        </div>
       }
     >
       {newToken && (
@@ -221,11 +229,11 @@ export default function ApiTokens() {
           {tokens.map((t) => (
             <div key={t.id} className="flex items-center gap-3 p-4">
               <KeyRound className="h-4 w-4 text-text-secondary" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{t.name}</p>
+              <div className="w-48 shrink-0 min-w-0">
+                <p className="text-sm font-medium break-words">{t.name}</p>
                 <p className="text-xs text-text-secondary font-mono">{t.prefix}...</p>
               </div>
-              <div className="flex gap-1 flex-wrap">
+              <div className="flex flex-1 min-w-0 gap-1 flex-wrap">
                 {t.scopes.map((s) => (
                   <Badge key={s} className="text-xs">
                     {s}
