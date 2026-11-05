@@ -79,11 +79,11 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
             'SCOPE',
           );
         }
-        // A registry action waits for approval; a route that isn't one would delete with no human
+        // A registry action waits for approval; a route that isn't one would do this with no human
         if (legacyRouteDeletes(req.method, path)) {
           throw new AppError(
             403,
-            'A token can only delete through a registry action, which waits for approval. ' +
+            'A token can only do this through a registry action, which waits for approval. ' +
               'This route has none yet: do this in the web UI.',
             'NEEDS_REGISTRY_ACTION',
           );

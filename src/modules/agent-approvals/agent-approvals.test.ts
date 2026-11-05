@@ -803,6 +803,8 @@ describe('agent approvals', () => {
     it('are all the DELETE routes, the star and the reaction', () => {
       const writes = deleting.filter((route) => route.method !== 'DELETE');
       expect(writes.map((route) => `${route.method} ${route.path}`).sort()).toEqual([
+        'PATCH /api/projects/:projectId/approval-gates/:gateId',
+        'POST /api/approval-requests/:requestId/vote',
         'POST /api/wiki/comments/:commentId/reactions',
         'POST /api/wiki/pages/:pageId/star',
       ]);
@@ -837,6 +839,74 @@ describe('agent approvals', () => {
         }
       },
     );
+
+    describe('human checks (A20)', () => {
+      /** A gate between two new columns of the project. */
+      async function createGate() {
+        const stamp = Date.now();
+        const [from, to] = await Promise.all(
+          ['from', 'to'].map((part, i) =>
+            prisma.boardColumn.create({
+              data: { projectId: ctx.projectId, name: `${part}-${stamp}`, position: 100 + i },
+            }),
+          ),
+        );
+        return prisma.approvalGate.create({
+          data: { projectId: ctx.projectId, fromColumnId: from.id, toColumnId: to.id },
+        });
+      }
+
+      it.each([
+        ['enabled', { enabled: false }],
+        ['minApprovals', { minApprovals: 5 }],
+        ['allowSelfApproval', { allowSelfApproval: true }],
+      ])('refuses a token changing %s of a gate', async (_, body) => {
+        const gate = await createGate();
+        const path = `/api/projects/${ctx.projectId}/approval-gates/${gate.id}`;
+        for (const spelled of [path, `${path}/`, path.replace('/api/', '/API/')]) {
+          const res = await request(app)
+            .patch(spelled)
+            .set('Authorization', ownerToken)
+            .set('X-Requested-With', 'XMLHttpRequest')
+            .send(body);
+          expect(res.status).toBe(403);
+          expect(res.body.error.code).toBe('NEEDS_REGISTRY_ACTION');
+          expect(res.body.error.message).toContain('registry action');
+        }
+        const row = await prisma.approvalGate.findUniqueOrThrow({ where: { id: gate.id } });
+        expect(row).toMatchObject({ enabled: true, minApprovals: 1, allowSelfApproval: false });
+      });
+
+      it('lets a session change a gate', async () => {
+        const gate = await createGate();
+        const res = await request(app)
+          .patch(`/api/projects/${ctx.projectId}/approval-gates/${gate.id}`)
+          .set('Authorization', `Bearer ${owner.token}`)
+          .set('X-Requested-With', 'XMLHttpRequest')
+          .send({ enabled: false });
+        expect(res.status).toBe(200);
+      });
+
+      it('refuses a token voting on an approval request', async () => {
+        const res = await request(app)
+          .post('/api/approval-requests/probe/vote')
+          .set('Authorization', ownerToken)
+          .set('X-Requested-With', 'XMLHttpRequest')
+          .send({ decision: 'APPROVED' });
+        expect(res.status).toBe(403);
+        expect(res.body.error.code).toBe('NEEDS_REGISTRY_ACTION');
+      });
+
+      it.each([
+        ['POST', '/api/projects/probe/automation-rules/probe/toggle'],
+        ['POST', '/api/approval-requests/probe/cancel'],
+        ['POST', '/api/issues/probe/approval-requests/probe'],
+        ['POST', '/api/projects/probe/approval-gates'],
+        ['GET', '/api/projects/probe/approval-gates'],
+      ])('leaves %s %s to the scopes', (method, path) => {
+        expect(legacyRouteDeletes(method, normalizeApiPath(path))).toBe(false);
+      });
+    });
 
     it('says what is needed, and deletes nothing', async () => {
       const label = await prisma.label.create({
@@ -1020,7 +1090,8 @@ describe('agent approvals', () => {
       });
       const day = filter.createdAt.toISOString().slice(0, 10);
       expect(await previewOf('savedQuery.delete', { filterId: filter.id })).toBe(
-        `Delete the saved query "My bugs" by ${owner.username}, shared PRIVATE, made ${day}`,
+        `Delete the saved query "My bugs" #${filter.id.slice(-8)} by ${owner.username}, ` +
+          `shared PRIVATE, made ${day}`,
       );
     });
 
@@ -1033,14 +1104,30 @@ describe('agent approvals', () => {
       });
       const day = dashboard.createdAt.toISOString().slice(0, 10);
       expect(await previewOf('dashboard.delete', { id: dashboard.id })).toBe(
-        `Delete the dashboard "Team health" by ${owner.username}, shared PRIVATE, made ${day}, ` +
+        `Delete the dashboard "Team health" #${dashboard.id.slice(-8)} by ${owner.username}, ` +
+          `shared PRIVATE, made ${day}, ` +
           'with its 1 widget as of this request',
       );
       expect(
         await previewOf('dashboardWidget.remove', { id: dashboard.id, widgetId: widget.id }),
       ).toBe(
-        `Remove the COUNT widget "Open bugs" from the dashboard "Team health" by ${owner.username}`,
+        `Remove the COUNT widget "Open bugs" #${widget.id.slice(-8)} from the dashboard ` +
+          `"Team health" #${dashboard.id.slice(-8)} by ${owner.username}`,
       );
+    });
+
+    it('tells apart two items of the same name and owner', async () => {
+      const [first, second] = await Promise.all(
+        [1, 2].map(() =>
+          prisma.savedFilter.create({
+            data: { userId: owner.id, name: 'Same name', query: { text: 'type = Bug' } },
+          }),
+        ),
+      );
+      const previews = await Promise.all(
+        [first, second].map((item) => previewOf('savedQuery.delete', { filterId: item.id })),
+      );
+      expect(previews[0]).not.toBe(previews[1]);
     });
 
     it('creates no doomed request for a widget or link that does not exist', async () => {
@@ -1118,21 +1205,28 @@ describe('agent approvals', () => {
       expect(preview).toContain(key(issues[0].number));
     });
 
-    it('issue.move: the issue by key, and no name from another project', async () => {
+    it('issue.move: refuses a foreign column as moveIssue does, with no request', async () => {
       const issue = await createIssue();
       const elsewhere = await createTestContext('agent-approvals-other');
       try {
         const column = await prisma.boardColumn.create({
           data: { projectId: elsewhere.projectId, name: 'Secret column', position: 50 },
         });
-        const preview = await previewOf('issue.move', {
-          projectId: ctx.projectId,
-          issueNumber: issue.number,
-          columnId: column.id,
+        const path = `/api/projects/${ctx.projectId}/issues/${issue.number}/move`;
+        const session = await request(app)
+          .patch(path)
+          .set('Authorization', `Bearer ${owner.token}`)
+          .set('X-Requested-With', 'XMLHttpRequest')
+          .send({ columnId: column.id });
+        const res = await act(ownerToken, {
+          action: 'issue.move',
+          input: { projectId: ctx.projectId, issueNumber: issue.number, columnId: column.id },
         });
-        expect(preview).toBe(
-          `Move ${key(issue.number)} "Target issue" to a column of another project`,
-        );
+        expect(session.status).toBeGreaterThanOrEqual(400);
+        expect(res.status).toBe(session.status);
+        expect(res.body.error.message).toBe(session.body.error.message);
+        expect(JSON.stringify(res.body)).not.toContain('Secret column');
+        expect(await prisma.agentApproval.count({ where: { userId: owner.id } })).toBe(0);
       } finally {
         await cleanupTestContext(elsewhere);
       }

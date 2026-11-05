@@ -9,6 +9,7 @@
  */
 import { prisma } from '../config/database';
 import { loggableExternalUrl } from '../lib/request-path';
+import { assertIssueRefsInProject } from '../modules/issues/issue-references';
 import { ERR } from '../utils/error-messages';
 import { findOrThrow } from '../utils/find-or-throw';
 
@@ -23,6 +24,14 @@ const MAX_LISTED_KEYS = 10;
 function quoted(text: string): string {
   const line = text.replace(/\s+/g, ' ').replace(/"/g, "'").trim();
   return line.length > MAX_QUOTED_LENGTH ? `"${line.slice(0, MAX_QUOTED_LENGTH)}..."` : `"${line}"`;
+}
+
+/**
+ * The end of an id: names and owners can match, and this tells two such items apart.
+ * @param id - The id
+ */
+function shortId(id: string): string {
+  return `#${id.slice(-8)}`;
 }
 
 /**
@@ -235,7 +244,7 @@ export async function savedQueryDelete(id: string): Promise<string> {
     'Saved query not found',
   );
   return (
-    `Delete the saved query ${quoted(saved.name)} by ${saved.user.username}, ` +
+    `Delete the saved query ${quoted(saved.name)} ${shortId(id)} by ${saved.user.username}, ` +
     `shared ${saved.visibility}, made ${day(saved.createdAt)}`
   );
 }
@@ -258,7 +267,8 @@ export async function dashboardDelete(id: string): Promise<string> {
     'Dashboard not found',
   );
   return (
-    `Delete the dashboard ${quoted(dashboard.name)} by ${dashboard.owner.username}, ` +
+    `Delete the dashboard ${quoted(dashboard.name)} ${shortId(id)} by ` +
+    `${dashboard.owner.username}, ` +
     `shared ${dashboard.visibility}, made ${day(dashboard.createdAt)}, ` +
     `with its ${amount(dashboard._count.widgets, 'widget')} as of this request`
   );
@@ -284,8 +294,9 @@ export async function dashboardWidgetRemove(
     'Widget not found',
   );
   return (
-    `Remove the ${widget.type} widget ${quoted(widget.title)} from the dashboard ` +
-    `${quoted(widget.dashboard.name)} by ${widget.dashboard.owner.username}`
+    `Remove the ${widget.type} widget ${quoted(widget.title)} ${shortId(widgetId)} from the ` +
+    `dashboard ${quoted(widget.dashboard.name)} ${shortId(dashboardId)} by ` +
+    `${widget.dashboard.owner.username}`
   );
 }
 
@@ -455,16 +466,13 @@ export async function issueMove(
     }),
     ERR.ISSUE_NOT_FOUND,
   );
+  // What moveIssue refuses is refused here, with its own answer: such a request could only fail
+  await assertIssueRefsInProject(projectId, { columnId });
   const target = await findOrThrow(
-    prisma.boardColumn.findUnique({
-      where: { id: columnId },
-      select: { name: true, projectId: true },
-    }),
+    prisma.boardColumn.findUnique({ where: { id: columnId }, select: { name: true } }),
     'Column not found',
   );
   const name = `Move ${keyOf(issue)} ${quoted(issue.title)}`;
-  // The name of a column elsewhere is not the caller's to read
-  if (target.projectId !== projectId) return `${name} to a column of another project`;
   const from = issue.column ? ` from column ${quoted(issue.column.name)}, as of this request,` : '';
   return `${name}${from} to column ${quoted(target.name)}`;
 }
