@@ -35,3 +35,23 @@ describe('Breadcrumbs on the agent approval pages', () => {
     expect(screen.queryByRole('link', { name: 'Agent approvals' })).toBeNull();
   });
 });
+
+describe('Breadcrumbs on the account and admin pages', () => {
+  it.each([
+    ['/settings/connect-agent', 'Settings', 'Connect Agent'],
+    ['/admin/users', 'Admin', 'Users'],
+  ])('reads %s as a section and a page, not an org and a team', (path, section, page) => {
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={[path]}>
+          <Breadcrumbs />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const link = screen.getByRole('link', { name: section });
+    expect(link).toHaveAttribute('href', `/${path.split('/')[1]}`);
+    expect(screen.getByText(page)).toBeInTheDocument();
+    expect(container.querySelector('.lucide-building-2')).toBeNull();
+    expect(container.querySelector('.lucide-users')).toBeNull();
+  });
+});

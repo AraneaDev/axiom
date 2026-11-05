@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  Bell,
   Bot,
   Building2,
   ChevronRight,
@@ -9,6 +10,8 @@ import {
   Users,
   BookOpen,
   Search,
+  Settings,
+  Shield,
 } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
 
@@ -24,6 +27,13 @@ const SECTION_META: Record<string, { icon: React.ElementType; label: string }> =
   search: { icon: Search, label: 'Search' },
   new: { icon: FolderKanban, label: 'New' },
   create: { icon: FolderKanban, label: 'Create' },
+};
+
+/** Top-level sections that are not an org: what follows them is a page, not a team */
+const TOP_LEVEL_META: Record<string, { icon: React.ElementType; label: string }> = {
+  settings: { icon: Settings, label: 'Settings' },
+  admin: { icon: Shield, label: 'Admin' },
+  notifications: { icon: Bell, label: 'Notifications' },
 };
 
 /**
@@ -126,7 +136,18 @@ export function Breadcrumbs() {
     crumbs.push({ label: 'Dashboards', path: '/dashboards', icon: LayoutDashboard });
   }
 
-  (isDashboardRoute || isAgentApprovalRoute ? [] : segments).forEach((seg, i) => {
+  const topLevel = isAgentApprovalRoute ? undefined : TOP_LEVEL_META[segments[0]];
+  if (topLevel) {
+    crumbs.push({ label: topLevel.label, path: `/${segments[0]}`, icon: topLevel.icon });
+    segments.slice(1).forEach((seg, i) => {
+      crumbs.push({
+        label: deSlugify(decodeURIComponent(seg)),
+        path: '/' + segments.slice(0, i + 2).join('/'),
+      });
+    });
+  }
+
+  (isDashboardRoute || isAgentApprovalRoute || topLevel ? [] : segments).forEach((seg, i) => {
     const path = '/' + segments.slice(0, i + 1).join('/');
 
     // Segment 0: org
