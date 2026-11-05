@@ -57,8 +57,11 @@ const condition = z.object({
   values: z.array(z.string().max(1000)).max(MAX_LIST).optional(),
 });
 
-/** An action keeps the fields it was sent: each type reads its own (see AutomationAction) */
-const action = z.looseObject({
+/**
+ * Each type reads its own fields (see AutomationAction). A key none of them reads is refused,
+ * so a misspelled field answers 400 instead of storing an action that does nothing.
+ */
+const action = z.strictObject({
   type: z.enum(ACTION_TYPES),
   columnId: z.string().max(64).optional(),
   userId: z.string().max(64).optional(),

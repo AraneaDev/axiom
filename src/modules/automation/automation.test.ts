@@ -197,6 +197,22 @@ describe('Automation API', () => {
     expect(res.body.error?.message ?? res.body.message).toBeTruthy();
   });
 
+  it('10b. refuses an action with a key no action type reads, and stores no rule', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/automation-rules`)
+      .set('Authorization', `Bearer ${token}`)
+      .set(XHR)
+      .send({
+        name: 'Misspelled action',
+        trigger: 'issue:created',
+        actions: [{ type: 'add_label', config: { label: 'bug' } }],
+      });
+    expect(res.status).toBe(400);
+    expect(
+      await prisma.automationRule.count({ where: { projectId, name: 'Misspelled action' } }),
+    ).toBe(0);
+  });
+
   it('11. should create rule with set_field action type', async () => {
     const res = await request(app)
       .post(`/api/projects/${projectId}/automation-rules`)

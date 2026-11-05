@@ -1896,7 +1896,7 @@ Create an automation rule.
 }
 ```
 
-The body is bounded and typed. An unknown trigger or action type answers `400`, and so does a field over its length.
+The body is bounded and typed. An unknown trigger or action type answers `400`, and so does a field over its length or an action key no action type reads.
 
 | Field        | Type    | Description                                                                                                                                  |
 | ------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
