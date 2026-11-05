@@ -27,14 +27,10 @@ import { globalLimiter, authLimiter, searchLimiter } from './middleware/rate-lim
 import { requestLogger } from './middleware/requestLogger';
 import { require2fa } from './middleware/require2fa';
 import { mountStaticFrontend, resolveStaticDir } from './middleware/static-frontend';
-import activityRoutes from './modules/activity/activity.routes';
-import analyticsRoutes from './modules/analytics/analytics.routes';
-import approvalActionRoutes from './modules/approvals/approvals-actions.routes';
 import { signedUploadRouter } from './modules/attachments/attachments.routes';
 import authRoutes from './modules/auth/auth.routes';
 import { parseTrustProxy } from './modules/forms/client-ip';
 import healthRoutes from './modules/health/health.routes';
-import invitationsRoutes from './modules/invitations/invitations.routes';
 import './actions/read.actions';
 import './modules/attachments/attachments.actions';
 import './modules/issues/issues.actions';
@@ -64,13 +60,11 @@ import './modules/approvals/approvals.actions';
 import './modules/forms/forms.actions';
 import './modules/forms/public-forms.actions';
 import './modules/admin/admin.actions';
-import linksRoutes from './modules/links/links.routes';
-import notificationsRoutes from './modules/notifications/notifications.routes';
-import orgsRoutes from './modules/orgs/orgs.routes';
-import projectsRoutes from './modules/projects/projects.routes';
+import './modules/notifications/notifications.actions';
+import './modules/activity/activity.actions';
+import './modules/analytics/analytics.actions';
+import './modules/links/links.actions';
 import siteSettingsRoutes from './modules/site-settings/site-settings.routes';
-import teamsRoutes from './modules/teams/teams.routes';
-import usersRoutes from './modules/users/users.routes';
 import { createWebSocketServer } from './realtime/ws-server';
 import { logger } from './utils/logger';
 
@@ -167,16 +161,11 @@ app.delete('/api/mcp', mcpAccess, refuseMcpStream);
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/orgs', orgsRoutes);
-app.use('/api', invitationsRoutes);
-app.use('/api/teams', teamsRoutes);
-app.use('/api/projects', projectsRoutes);
-app.use('/api/projects', activityRoutes);
-app.use('/api', approvalActionRoutes);
-app.use('/api/links', linksRoutes);
-app.use('/api/notifications', notificationsRoutes);
-app.use('/api', analyticsRoutes);
+
+// Whatever no route above served asks for credentials, and a token's scope, before the 404 below,
+// as the legacy routers did when they all sat here: a legacy route added later is guarded by the
+// same rule, and an unknown path tells a stranger nothing. Task 6 reviews this with tokenAllows.
+app.use('/api', authenticate);
 
 // Unknown /api routes get a JSON 404, never the SPA index.html
 app.use('/api', (_req, res) => {

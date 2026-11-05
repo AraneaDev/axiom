@@ -4,7 +4,12 @@ import { orgMember, orgPermission } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
-import { addOrgMemberSchema, createOrgSchema, updateOrgSchema } from '../../utils/validation';
+import {
+  addOrgMemberSchema,
+  createInviteLinkSchema,
+  createOrgSchema,
+  updateOrgSchema,
+} from '../../utils/validation';
 
 import * as orgsService from './orgs.service';
 
@@ -22,7 +27,8 @@ const manageMembers = orgPermission<z.infer<typeof orgTarget>>(
   (input) => input.orgId,
 );
 
-// Invite links stay legacy, and refused to tokens, until plan 4. All that is admin waits for a person
+// Invite links are refused to every token: their code lets whoever holds it join. All that is
+// admin waits for a person
 registerActions([
   defineAction({
     name: 'org.list',
@@ -92,6 +98,62 @@ registerActions([
     authorize: manageOrg,
     handler: async (_ctx, { orgId }) => {
       await orgsService.deleteOrg(orgId);
+    },
+  }),
+  defineAction({
+    name: 'orgMember.list',
+    area: 'orgs',
+    kind: 'read',
+    summary: 'List the members of an organization with their roles; members only, as it has emails',
+    target: orgTarget,
+    input: orgTarget,
+    output: z.array(record),
+    rest: { method: 'GET', path: '/api/orgs/:orgId/members' },
+    authorize: orgMember<z.infer<typeof orgTarget>>((input) => input.orgId),
+    handler: async (_ctx, { orgId }) => orgsService.listOrgMembers(orgId),
+  }),
+  defineAction({
+    name: 'inviteLink.list',
+    tokenBlocked: true,
+    area: 'orgs',
+    kind: 'read',
+    summary: 'List the invite links of an organization',
+    target: orgTarget,
+    input: orgTarget,
+    output: z.array(record),
+    rest: { method: 'GET', path: '/api/orgs/:orgId/invites' },
+    authorize: manageMembers,
+    handler: async (_ctx, { orgId }) => orgsService.listInviteLinks(orgId),
+  }),
+  defineAction({
+    name: 'inviteLink.create',
+    tokenBlocked: true,
+    area: 'orgs',
+    kind: 'write',
+    summary:
+      'Create a link that lets someone join an organization in a role no higher than your own',
+    target: orgTarget,
+    input: orgTarget.extend(createInviteLinkSchema.shape),
+    output: record,
+    rest: { method: 'POST', path: '/api/orgs/:orgId/invites' },
+    authorize: manageMembers,
+    handler: async (ctx, { orgId, ...data }) =>
+      orgsService.createInviteLink(orgId, ctx.userId, data),
+  }),
+  defineAction({
+    name: 'inviteLink.delete',
+    tokenBlocked: true,
+    destructive: true,
+    area: 'orgs',
+    kind: 'write',
+    summary: 'Delete an invite link of an organization',
+    input: orgTarget.extend({ inviteId: z.string() }),
+    output: nothing,
+    preview: (_ctx, { orgId, inviteId }) => previews.inviteLinkDelete(orgId, inviteId),
+    rest: { method: 'DELETE', path: '/api/orgs/:orgId/invites/:inviteId' },
+    authorize: manageMembers,
+    handler: async (_ctx, { orgId, inviteId }) => {
+      await orgsService.deleteInviteLink(orgId, inviteId);
     },
   }),
   defineAction({

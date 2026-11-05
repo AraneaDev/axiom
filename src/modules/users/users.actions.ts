@@ -7,7 +7,12 @@ import { registerActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { scopeAllows, type ScopeArea } from '../../middleware/token-scopes';
-import { createApiTokenSchema } from '../../utils/validation';
+import {
+  createApiTokenSchema,
+  firstQueryText,
+  queryText,
+  updateProfileSchema,
+} from '../../utils/validation';
 
 import * as usersService from './users.service';
 
@@ -68,8 +73,79 @@ async function withinOwnReach(
   await withinOwnExpiry(ctx, expiresInDays);
 }
 
-// Your own tokens only, so no org's rules bind these. Listing them stays legacy until plan 4
+// The user's own state is open to a token that reads issues or wiki, as it always was
+const OWN_STATE = ['issues', 'wiki'] as const;
+const noTarget = z.object({});
+const person = z.looseObject({ id: z.string() });
+
+// Your own tokens only, so no org's rules bind these
 registerActions([
+  defineAction({
+    name: 'user.search',
+    area: 'issues',
+    kind: 'read',
+    openToReadOf: OWN_STATE,
+    summary: 'Search the people you share an organization with, by username or display name',
+    target: noTarget,
+    input: noTarget.extend({ q: queryText }),
+    output: z.array(person),
+    rest: { method: 'GET', path: '/api/users/search' },
+    // Only people the searcher shares an org with come back
+    authorize: async () => {},
+    handler: async (ctx, { q }) => usersService.searchUsers(firstQueryText(q) ?? '', ctx.userId),
+  }),
+  defineAction({
+    name: 'user.me',
+    area: 'issues',
+    kind: 'read',
+    openToReadOf: OWN_STATE,
+    summary: 'Read your own profile',
+    input: noTarget,
+    output: person,
+    rest: { method: 'GET', path: '/api/users/me' },
+    authorize: async () => {},
+    handler: async (ctx) => usersService.getProfile(ctx.userId),
+  }),
+  defineAction({
+    name: 'user.updateMe',
+    // The account is for a person: a token never changes it
+    tokenBlocked: true,
+    noOrg: true,
+    area: 'issues',
+    kind: 'write',
+    summary: 'Change your own display name or avatar',
+    target: noTarget,
+    input: noTarget.extend(updateProfileSchema.shape),
+    output: person,
+    rest: { method: 'PATCH', path: '/api/users/me' },
+    authorize: async () => {},
+    handler: async (ctx, data) => usersService.updateProfile(ctx.userId, data),
+  }),
+  defineAction({
+    name: 'user.dashboard',
+    area: 'dashboards',
+    kind: 'read',
+    // Issue data as well, so a token that reads issues opens it too
+    openToReadOf: ['dashboards', 'issues'],
+    summary: 'Read your own dashboard: assigned issues, recent activity and what is due',
+    input: noTarget,
+    output: z.looseObject({}),
+    rest: { method: 'GET', path: '/api/users/me/dashboard' },
+    authorize: async () => {},
+    handler: async (ctx) => usersService.getDashboard(ctx.userId),
+  }),
+  defineAction({
+    name: 'token.list',
+    area: 'issues',
+    kind: 'read',
+    openToReadOf: OWN_STATE,
+    summary: 'List your own API tokens, without their secrets',
+    input: noTarget,
+    output: z.array(person),
+    rest: { method: 'GET', path: '/api/users/me/tokens' },
+    authorize: async () => {},
+    handler: async (ctx) => usersService.listApiTokens(ctx.userId),
+  }),
   defineAction({
     name: 'token.create',
     admin: true,

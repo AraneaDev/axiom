@@ -12,6 +12,19 @@ export const createApiTokenSchema = z.object({
   expiresInDays: z.number().int().min(1).max(365).optional(),
 });
 
+// ─── Profile ────────────────────────────────────────────────
+
+/** What a person may change about themselves: nothing else of the user row is theirs to set */
+export const updateProfileSchema = z.object({
+  displayName: z.string().min(1).max(100).optional(),
+  avatarUrl: z
+    .string()
+    .max(2048)
+    .regex(/^https?:\/\//i, 'must be an http or https URL')
+    .nullable()
+    .optional(),
+});
+
 // ─── Wiki ───────────────────────────────────────────────────
 
 export const createWikiSpaceSchema = z.object({

@@ -28,8 +28,24 @@ function withoutToken({ token: _token, ...rest }: Record<string, unknown>) {
   return rest;
 }
 
-// Accepting an invitation stays legacy until plan 4. Everyone who may manage members reads these
+// Everyone who may manage members reads these; accepting is for the person invited
 registerActions([
+  defineAction({
+    name: 'invitation.accept',
+    // The code in the path lets whoever holds it join: a person does that, never a token
+    tokenBlocked: true,
+    // The invitation names the org, and the caller is not a member of it yet
+    noOrg: true,
+    area: 'orgs',
+    kind: 'write',
+    summary: 'Accept an invitation by its code and join the organization it names',
+    input: z.object({ token: z.string().min(1).max(200) }),
+    output: z.looseObject({}),
+    rest: { method: 'POST', path: '/api/invitations/:token/accept', status: 200 },
+    // The code is the authorization; the service matches it to the invitation
+    authorize: async () => {},
+    handler: async (ctx, { token }) => invitationsService.acceptInvitation(token, ctx.userId),
+  }),
   defineAction({
     name: 'invitation.list',
     admin: true,

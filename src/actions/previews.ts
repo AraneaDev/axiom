@@ -803,6 +803,24 @@ export async function invitationRevoke(orgId: string, invitationId: string): Pro
 }
 
 /**
+ * @param orgId - The org in the path
+ * @param inviteId - The invite link
+ */
+export async function inviteLinkDelete(orgId: string, inviteId: string): Promise<string> {
+  const link = await findOrThrow(
+    prisma.inviteLink.findFirst({
+      where: { id: inviteId, orgId },
+      select: { role: true, uses: true, maxUses: true },
+    }),
+    'Invite link not found',
+  );
+  return (
+    `Delete the invite link to ${await orgLabel(orgId)} as ${link.role}, ` +
+    `used ${link.uses} of ${link.maxUses} times`
+  );
+}
+
+/**
  * @param orgId - The org
  * @param name - The new team's name
  * @param slug - Its slug

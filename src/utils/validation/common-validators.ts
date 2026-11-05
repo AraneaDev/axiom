@@ -296,6 +296,11 @@ export const queryCount = z
   .optional();
 
 /**
+ * A text value in a query, possibly repeated. Handlers narrow it with `firstQueryText`.
+ */
+export const queryText = z.union([z.string(), z.array(z.string())]).optional();
+
+/**
  * The text of a query value: a number as its digits, a repeated value as its first.
  * So 0 and "0" read alike.
  * @param value - A parsed queryCount

@@ -156,8 +156,8 @@ registerActions([
   // The legacy table refuses every token on /api/admin, and lets wiki scopes through on /api/wiki
   reader('rest.legacyRefuses', 'issues', '/api/admin/rest-test'),
   reader('rest.legacyAllows', 'issues', '/api/wiki/rest-test'),
-  // A path a legacy router owns: its router.use(authenticate) and requireTeamMember must not run
-  reader('rest.shadowsLegacy', 'issues', '/api/teams/:teamId/members'),
+  // A path under a prefix a legacy router still owns: its middleware must not run on it
+  reader('rest.shadowsLegacy', 'issues', '/api/site-settings/:section/rest-shadow'),
   // /api/admin/rest-guard%2Fx routes to the legacy admin router, and normalizes to this
   defineAction({
     name: 'rest.guard',
@@ -356,9 +356,9 @@ describe('REST adapter', () => {
     });
 
     it('runs ahead of legacy routers, so their middleware never sees a migrated path', async () => {
-      // The legacy route answers 404 for a team that doesn't exist
+      // The legacy router answers 404 for a path it does not know
       const res = await request(app)
-        .get('/api/teams/no-such-team/members')
+        .get('/api/site-settings/no-such/rest-shadow')
         .set('Authorization', jwtHeader);
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ action: 'rest.shadowsLegacy' });

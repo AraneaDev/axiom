@@ -150,6 +150,20 @@ registerActions([
     handler: async (_ctx, { projectId }) => approvalsService.listPendingForProject(projectId),
   }),
   defineAction({
+    name: 'approvalRequest.listMine',
+    // Under /api/users/me, so a token that reads issues or wiki reaches it, as it always did
+    area: 'issues',
+    kind: 'read',
+    openToReadOf: ['issues', 'wiki'],
+    summary: 'List the approval requests on your teams that still wait for your vote',
+    input: z.object({}),
+    output: z.array(record),
+    rest: { method: 'GET', path: '/api/users/me/pending-approvals' },
+    // Only requests on the teams of the caller come back
+    authorize: async () => {},
+    handler: async (ctx) => approvalsService.getPendingApprovalsForUser(ctx.userId),
+  }),
+  defineAction({
     name: 'approvalRequest.listForIssue',
     area: 'issues',
     kind: 'read',

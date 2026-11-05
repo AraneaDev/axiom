@@ -475,15 +475,7 @@ const DOMAIN_EXEMPTIONS: Array<{
   plan: 3 | 4;
   task: string;
   reason: string;
-}> = [
-  {
-    method: 'GET',
-    path: '/api/projects/:projectId/issues/:issueNumber/activity',
-    plan: 4,
-    task: 'plan 4, Task 4 (people and notifications: activity)',
-    reason: 'The activity feed belongs to the activity module, not to the issue actions',
-  },
-];
+}> = [];
 
 describe('frontend and registry parity', () => {
   let scan: ReturnType<typeof scanFrontend>;

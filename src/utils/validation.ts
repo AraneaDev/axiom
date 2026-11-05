@@ -34,6 +34,7 @@ export {
   updateMilestoneSchema,
   queryCount,
   firstQueryText,
+  queryText,
   dbInt,
   listPosition,
   MAX_DB_INT,
@@ -54,6 +55,7 @@ export {
 
 export {
   createApiTokenSchema,
+  updateProfileSchema,
   createWikiSpaceSchema,
   createPageSchema,
   updatePageSchema,

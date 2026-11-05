@@ -49,7 +49,7 @@ export async function getProfile(userId: string) {
  */
 export async function updateProfile(
   userId: string,
-  data: { displayName?: string; avatarUrl?: string },
+  data: { displayName?: string; avatarUrl?: string | null },
 ) {
   return prisma.user.update({
     where: { id: userId },

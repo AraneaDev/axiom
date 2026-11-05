@@ -6,15 +6,11 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { jsonSchema } from '../lib/openapi/json-schema';
-import {
-  normalizeApiPath,
-  scopeAllows,
-  TOKEN_SCOPES,
-  tokenAllows,
-} from '../middleware/token-scopes';
+import { normalizeApiPath, TOKEN_SCOPES, tokenAllows } from '../middleware/token-scopes';
 import { ORG_INPUT_FIELDS } from '../modules/agent-approvals/agent-policy.service';
 
 import { defineAction, type ActionDef } from './define';
+import { scopesCoverAction } from './execute';
 import { listActions } from './registry';
 
 /** Writes a token can only make when each call waits for a person (R9) */
@@ -333,7 +329,7 @@ describe('registry rules', () => {
         const concrete = pattern.replace(/:[A-Za-z]+/g, 'x');
         const before = tokenAllows([scope], method, concrete);
         // What the registry lets this scope do: nothing for a refused action
-        const after = !isRefused(def) && scopeAllows([scope], def.area, def.kind);
+        const after = !isRefused(def) && scopesCoverAction([scope], def);
         // A refused action is fine where tokenAllows refused it too: for every scope, or as a
         // write in an area tokens may not write. Anything else needs a name in the allowlist.
         const alsoRefusedBefore =

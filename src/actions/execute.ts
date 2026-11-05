@@ -31,6 +31,18 @@ function assertOutputShape(def: ActionDef, result: unknown): void {
 }
 
 /**
+ * Whether a token's scopes cover an action: its area and kind, or any of the areas it is open to
+ * for a token's own state.
+ * @param scopes - The token's scopes
+ * @param def - The action
+ */
+export function scopesCoverAction(scopes: readonly string[], def: ActionDef): boolean {
+  return def.openToReadOf
+    ? def.openToReadOf.some((area) => scopeAllows(scopes, area, 'read'))
+    : scopeAllows(scopes, def.area, def.kind);
+}
+
+/**
  * Why this caller can't run this action at all, whatever its input: the checks before any id is
  * read. Describe uses this to list what a caller can run, and a key is only resolved after it.
  * @param def - The action
@@ -48,7 +60,7 @@ export function actionRefusal(def: ActionDef, ctx: ActionContext): AppError | un
       'RAW_ACTION',
     );
   }
-  if (token && !scopeAllows(ctx.scopes ?? [], def.area, def.kind)) return scopeRefusal();
+  if (token && !scopesCoverAction(ctx.scopes ?? [], def)) return scopeRefusal();
   return undefined;
 }
 

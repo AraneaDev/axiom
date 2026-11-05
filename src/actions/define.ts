@@ -100,6 +100,12 @@ export interface ActionDef<
   permissionChange?(input: z.infer<I>): boolean;
   /** States on purpose that the action belongs to no org (a private dashboard or query) */
   noOrg?: boolean;
+  /**
+   * For what is the user's own state (profile, notifications, the dashboard): a token that holds
+   * read or write on any of these areas runs it, whatever its kind, in place of the scope of
+   * `area` and `kind`. These two still name the action in the docs and the audit log.
+   */
+  openToReadOf?: readonly ScopeArea[];
   /** Always waits for approval when a token calls it, whatever the policy says */
   admin?: boolean;
   /**
