@@ -1,15 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockSearch = vi.fn();
+const mockSaved = vi.fn(() => Promise.resolve([] as unknown[]));
 
 vi.mock('@/api/search.api', () => ({
   searchApi: {
     search: (...args: unknown[]) => mockSearch(...args),
     getAccessibleSpaces: () => Promise.resolve([]),
-    getSavedSearches: () => Promise.resolve([]),
+    getSavedSearches: () => mockSaved(),
     createSavedSearch: vi.fn(),
     deleteSavedSearch: vi.fn(),
   },
@@ -51,5 +52,20 @@ describe('SearchResults type param', () => {
     renderAt('/search?q=hello&type=wiki');
     await waitFor(() => expect(mockSearch).toHaveBeenCalled());
     expect(mockSearch).toHaveBeenCalledWith('hello', 'wiki', {});
+  });
+});
+
+describe('SearchResults saved searches', () => {
+  it('lists only saved searches that have a q', async () => {
+    mockSearch.mockResolvedValue([]);
+    mockSaved.mockResolvedValue([
+      { id: 's1', name: 'Real search', query: { q: 'hello' } },
+      { id: 's2', name: 'Text query row', query: { kind: 'query', text: 'type = BUG' } },
+    ]);
+    renderAt('/search?q=hello');
+    await waitFor(() => expect(mockSaved).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /Saved/ }));
+    expect(await screen.findByText('Real search')).toBeTruthy();
+    expect(screen.queryByText('Text query row')).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { ParseError, parseQuery } from '../../lib/query-engine';
 import {
   assertAccess,
   canEdit,
+  editRightsOf,
   resolveSharing,
   sharedWith,
   type SharingInput,
@@ -13,6 +14,8 @@ import { AppError } from '../../middleware/errorHandler';
 
 const WHAT = 'Saved query';
 const LIST_LIMIT = 100;
+/** Marks a stored query as text, so a UI preset that has a key called text is not mistaken for one */
+const QUERY_KIND = 'query';
 
 /** What a client sends to store: a UI filter record, or the text of a query */
 export interface QueryBody {
@@ -30,8 +33,12 @@ export type SavedQueryRecord = SavedFilter & { canEdit: boolean };
  */
 function storedText(query: Prisma.JsonValue): string | null {
   if (query === null || typeof query !== 'object' || Array.isArray(query)) return null;
-  const keys = Object.keys(query);
-  return keys.length === 1 && keys[0] === 'text' && typeof query.text === 'string'
+  const keys = Object.keys(query).sort();
+  return keys.length === 2 &&
+    keys[0] === 'kind' &&
+    keys[1] === 'text' &&
+    query.kind === QUERY_KIND &&
+    typeof query.text === 'string'
     ? query.text
     : null;
 }
@@ -88,7 +95,7 @@ function toStored(body: QueryBody): Prisma.InputJsonValue {
   }
   if (body.text !== undefined) {
     assertParses(body.text);
-    return { text: body.text };
+    return { kind: QUERY_KIND, text: body.text };
   }
   return body.query as Prisma.InputJsonValue;
 }
@@ -154,12 +161,23 @@ export async function create(
  * @param projectId - Optional project to narrow to
  */
 export async function list(userId: string, projectId?: string): Promise<SavedQueryRecord[]> {
-  const rows = await prisma.savedFilter.findMany({
-    where: { AND: [sharedWith(userId), projectId ? { projectId } : {}] },
+  const narrow = projectId ? { projectId } : {};
+  // The user's own come first, so shared ones can never push them out of the page
+  const own = await prisma.savedFilter.findMany({
+    where: { userId, ...narrow },
     orderBy: { createdAt: 'desc' },
     take: LIST_LIMIT,
   });
-  return Promise.all(rows.map((row) => withEdit(userId, row)));
+  const shared =
+    own.length < LIST_LIMIT
+      ? await prisma.savedFilter.findMany({
+          where: { AND: [sharedWith(userId), { userId: { not: userId } }, narrow] },
+          orderBy: { createdAt: 'desc' },
+          take: LIST_LIMIT - own.length,
+        })
+      : [];
+  const mayEdit = await editRightsOf(userId);
+  return [...own, ...shared].map((row) => ({ ...row, canEdit: mayEdit(row, row.userId) }));
 }
 
 /**
@@ -195,6 +213,9 @@ export async function update(
   },
 ): Promise<SavedQueryRecord> {
   const current = await loadFor(userId, id, 'edit');
+  if (!data.sharing.visibility && (data.sharing.teamId || data.sharing.orgId)) {
+    throw new AppError(400, 'teamId and orgId need a visibility to go with');
+  }
   const changesQuery = data.body.query !== undefined || data.body.text !== undefined;
   const { visibility, teamId, orgId } = data.sharing;
   const sharing = visibility

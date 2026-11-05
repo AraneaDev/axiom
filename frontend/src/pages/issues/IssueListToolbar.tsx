@@ -18,6 +18,7 @@ interface SavedFilter {
   id: string;
   name: string;
   query: Record<string, string>;
+  canEdit?: boolean;
 }
 
 interface IssueListToolbarProps {
@@ -97,6 +98,9 @@ export function IssueListToolbar({
   onSaveFilter,
   canSaveFilter,
 }: IssueListToolbarProps) {
+  // Saved text queries (made by agents) have no equivalent in these filters, so they are not offered
+  const presets = savedFilters.filter((sf) => sf.query.kind !== 'query');
+
   return (
     <div className="flex items-center gap-2 mb-4 bg-surface rounded-lg border border-border p-2">
       <div className="relative w-64">
@@ -162,18 +166,18 @@ export function IssueListToolbar({
         trigger={
           <Button variant="secondary" size="sm">
             <BookmarkCheck className="h-3.5 w-3.5" /> Saved
-            {savedFilters.length > 0 && (
+            {presets.length > 0 && (
               <span className="ml-1 bg-surface-tertiary text-text-secondary text-[10px] rounded-full px-1.5 py-0.5">
-                {savedFilters.length}
+                {presets.length}
               </span>
             )}
           </Button>
         }
       >
-        {savedFilters.length === 0 ? (
+        {presets.length === 0 ? (
           <p className="px-3 py-2 text-xs text-text-tertiary">No saved filters</p>
         ) : (
-          savedFilters.map((sf) => (
+          presets.map((sf) => (
             <div key={sf.id} className="flex items-center group">
               <DropdownItem
                 onClick={() => onApplySavedFilter(sf.query as Record<string, string>)}
@@ -182,18 +186,20 @@ export function IssueListToolbar({
                 <Bookmark className="h-3 w-3 text-primary shrink-0" />
                 <span className="truncate">{sf.name}</span>
               </DropdownItem>
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteSavedFilter(sf.id);
-                }}
-                className="px-2 py-1 text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Delete saved filter"
-              >
-                <X className="h-3 w-3" />
-              </Button>
+              {sf.canEdit && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteSavedFilter(sf.id);
+                  }}
+                  className="px-2 py-1 text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Delete saved filter"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
             </div>
           ))
         )}

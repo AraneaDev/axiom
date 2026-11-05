@@ -175,7 +175,7 @@ export default function SearchResults() {
         onSearch={handleSearch}
         query={query}
         onSaveSearch={handleSaveSearch}
-        savedSearches={savedSearches}
+        savedSearches={savedSearches?.filter((s) => typeof s.query?.q === 'string')}
         onLoadSavedSearch={loadSavedSearch}
         onDeleteSavedSearch={(id) => deleteSavedMutation.mutate(id)}
       />

@@ -6,6 +6,9 @@ export interface SavedFilter {
   projectId: string | null;
   name: string;
   query: Record<string, string>;
+  visibility?: 'PRIVATE' | 'TEAM' | 'ORG';
+  /** Whether the current user may change or delete it */
+  canEdit?: boolean;
   createdAt: string;
 }
 

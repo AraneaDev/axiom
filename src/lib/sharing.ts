@@ -108,6 +108,30 @@ export async function canEdit(userId: string, row: SharedRow, ownerId: string): 
 }
 
 /**
+ * What decides edit rights for many rows at once: the user's roles loaded once, so a list does not
+ * look them up per row. The returned function answers as canEdit does.
+ * @param userId - The user
+ */
+export async function editRightsOf(
+  userId: string,
+): Promise<(row: SharedRow, ownerId: string) => boolean> {
+  const [admin, teams, orgs] = await Promise.all([
+    isPlatformAdmin(userId),
+    prisma.teamMembership.findMany({ where: { userId }, select: { teamId: true, role: true } }),
+    prisma.orgMembership.findMany({ where: { userId }, select: { orgId: true, role: true } }),
+  ]);
+  const teamAdmin = new Set(teams.filter((t) => t.role === 'ADMIN').map((t) => t.teamId));
+  const orgAdmin = new Set(
+    orgs.filter((o) => o.role === 'OWNER' || o.role === 'ADMIN').map((o) => o.orgId),
+  );
+  return (row, ownerId) =>
+    admin ||
+    ownerId === userId ||
+    (row.visibility === 'TEAM' && !!row.teamId && teamAdmin.has(row.teamId)) ||
+    (row.visibility === 'ORG' && !!row.orgId && orgAdmin.has(row.orgId));
+}
+
+/**
  * Throw the 404 for an item the user may not open, and the 403 for one they may open and not
  * change.
  * @param userId - The user

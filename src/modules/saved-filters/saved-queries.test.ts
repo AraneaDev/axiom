@@ -374,4 +374,46 @@ describe('saved queries', () => {
     });
     expect(typeof res.body.createdAt).toBe('string');
   });
+
+  describe('review fixes', () => {
+    it('does not read a UI preset that has a text key as query text', async () => {
+      const id = await create({ name: 'Preset', query: { text: `title ~ ${MARK}` } });
+      const res = await authPost(`/api/saved-filters/${id}/run`, creator.token);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('LEGACY_FILTER');
+    });
+
+    it('refuses teamId or orgId without a visibility on update', async () => {
+      const id = await create({ name: 'NoVis', text });
+      const res = await authPatch(`/api/saved-filters/${id}`, creator.token, { teamId: a.teamId });
+      expect(res.status).toBe(400);
+    });
+
+    it('lists the own queries first, so shared ones cannot push them out', async () => {
+      const user = await createTestUser();
+      await prisma.teamMembership.create({
+        data: { teamId: a.teamId, userId: user.id, role: 'MEMBER' },
+      });
+      const mine = await create({ name: 'Old mine', text }, user);
+      await prisma.savedFilter.update({
+        where: { id: mine },
+        data: { createdAt: new Date('2020-01-01') },
+      });
+      await prisma.savedFilter.createMany({
+        data: Array.from({ length: 100 }, (_, i) => ({
+          userId: creator.id,
+          name: `Shared ${i}`,
+          query: { kind: 'query', text },
+          visibility: 'TEAM' as const,
+          teamId: a.teamId,
+        })),
+      });
+      const list = await authGet('/api/saved-filters', user.token);
+      expect(list.body).toHaveLength(100);
+      expect(list.body[0].id).toBe(mine);
+      expect(list.body[0].canEdit).toBe(true);
+      expect(list.body[1].canEdit).toBe(false);
+      await prisma.user.delete({ where: { id: user.id } });
+    });
+  });
 });

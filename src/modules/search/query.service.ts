@@ -157,7 +157,7 @@ function withTextConditions(ast: Expression): Expression {
  * Do a step of reading a query, answering 400 for what the language has no reading of.
  * @param step - The step
  */
-export async function asQueryError<T>(step: () => T | Promise<T>): Promise<T> {
+async function asQueryError<T>(step: () => T | Promise<T>): Promise<T> {
   try {
     return await step();
   } catch (err) {
