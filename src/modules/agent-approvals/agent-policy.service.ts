@@ -129,7 +129,9 @@ export async function effectivePolicy(
     select: { orgId: true, userId: true, rules: true },
   });
   const byOrg = new Map(rows.filter((row) => row.orgId).map((row) => [row.orgId, row.rules]));
-  const orgLayers = [...new Set(orgIds)].map((orgId) => withOrgRules(parseRules(byOrg.get(orgId))));
+  const orgLayers = [...new Set(orgIds)].map((orgId) =>
+    withOrgRules(parseRules(byOrg.get(orgId) ?? {})),
+  );
   const base = orgLayers.length > 0 ? strictest(orgLayers) : BASE;
   const own = rows.find((row) => row.userId === userId);
   return own ? withUserRules(base, parseRules(own.rules)) : base;

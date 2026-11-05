@@ -3,7 +3,7 @@
  * only tighten, an admin action always waits, and only an org owner changes the org's rules.
  */
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { PendingApproval } from '../../actions/approval-policy';
@@ -23,6 +23,7 @@ import {
 } from '../../test/factory';
 import { authGet, authPut } from '../../test/helpers';
 import { tokenHeaderFor } from '../../test/mcp-client';
+import { logger } from '../../utils/logger';
 
 import { describePolicyChange, effectivePolicy, writeActionNames } from './agent-policy.service';
 
@@ -158,6 +159,29 @@ describe('agent policies', () => {
     prisma.agentPolicy.upsert({ where: { userId }, create: { userId, rules }, update: { rules } });
 
   describe('layers', () => {
+    it('logs nothing for an org that has no policy row', async () => {
+      const spy = vi.spyOn(logger, 'error');
+      try {
+        await prisma.agentPolicy.deleteMany({ where: { orgId: ctx.orgId } });
+        await effectivePolicy(ctx.owner.id, [ctx.orgId]);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('still logs a row that no longer fits the schema', async () => {
+      const spy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      try {
+        await setOrg(ctx.orgId, { requireFor: 'nonsense' });
+        await effectivePolicy(ctx.owner.id, [ctx.orgId]);
+        expect(spy).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+        await prisma.agentPolicy.deleteMany({ where: { orgId: ctx.orgId } });
+      }
+    });
+
     it('holds the defaults when nothing is set', async () => {
       const policy = await effectivePolicy(ctx.owner.id, [ctx.orgId]);
       expect(policy.requireFor).toEqual({
