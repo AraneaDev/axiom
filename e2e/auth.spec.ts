@@ -5,7 +5,7 @@ test.describe('Authentication', () => {
   test('login with valid credentials redirects to dashboard', async ({ page }) => {
     await login(page);
     await expect(page).toHaveURL('/dashboard');
-    await expect(page.getByText('Admin User')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Admin User/ })).toBeVisible();
   });
 
   test('login with wrong password shows error', async ({ page }) => {
