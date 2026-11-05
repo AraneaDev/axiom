@@ -23,6 +23,7 @@ import { logActivity } from '../activity/activity.service';
 import { bindStagedAttachments } from '../attachments/upload-intents.service';
 import { AUTOMATION_ISSUE_INCLUDE, evaluateRules } from '../automation/automation.service';
 import { createNotification } from '../notifications/notifications.service';
+import { resolveQueryFields } from '../search/query-fields.service';
 
 import {
   assertAssignable,
@@ -258,6 +259,7 @@ function applyPlainTextSearch(where: Prisma.IssueWhereInput, q: string): void {
  * @param filters.label
  * @param filters.limit
  * @param filters.offset
+ * @param filters.currentUserId
  * @param filters.sprintId
  * @returns Paginated list of issues with computed keys and total count
  * @throws {AppError} 404 if project not found
@@ -274,6 +276,8 @@ export async function listIssues(
     label?: string;
     limit?: number;
     offset?: number;
+    /** Who asks, for what a structured q says about them: currentUser(), visible issue keys */
+    currentUserId?: string;
   },
 ) {
   const project = await findOrThrow(
@@ -281,12 +285,13 @@ export async function listIssues(
     ERR.PROJECT_NOT_FOUND,
   );
 
-  // Everything that shapes the answer. Nothing in it varies by viewer: the caller was authorized on
-  // the project. JSON, so that text in one filter can't pass for another
+  // Everything that shapes the answer. The caller was authorized on the project, so only a q varies
+  // by viewer. JSON, so that text in one filter can't pass for another
   const cacheKey = `issues:${projectId}:${JSON.stringify([
     filters?.limit ?? null,
     filters?.offset ?? 0,
     filters?.q || '',
+    filters?.q ? (filters.currentUserId ?? '') : '',
     filters?.type || '',
     filters?.priority || '',
     filters?.assigneeId || '',
@@ -302,7 +307,13 @@ export async function listIssues(
       // Structured query: parse through the query engine
       try {
         const ast = parse(filters.q);
-        const engineWhere = compileToPrisma(ast, issueFieldRegistry, { projectId });
+        const currentUserId = filters.currentUserId;
+        const scope = currentUserId ? { userId: currentUserId, projectId } : { projectId };
+        const engineWhere = compileToPrisma(ast, issueFieldRegistry, {
+          projectId,
+          currentUserId,
+          ...(await resolveQueryFields(ast, scope)),
+        });
         // In AND, so that no query can replace the project this list was authorized on
         where.AND = [engineWhere as Prisma.IssueWhereInput];
         const text = freeTextOf(ast);

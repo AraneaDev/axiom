@@ -82,7 +82,7 @@ These are enforced across the entire codebase. See [Design Patterns](docs/design
 - `registry-rules.test.ts` and `parity.test.ts` enforce these, and `frontend-calls.test.ts` ties every frontend call to a registry action or a tracked legacy route. Keep them green.
 - `act` takes a `key` for an issue, page, space or project (`src/actions/keys.ts`): unseen and missing answer alike (`404`).
 
-**Query Engine:** `src/lib/query-engine/` -- shared lexer/parser/AST pipeline powering issue search, automation conditions, and template variables. Two backends: AST-to-Prisma compiler (search) and AST-to-Boolean evaluator (automation). Extend by adding fields to `issueFieldRegistry` in `fields/issue-fields.ts`. Tests: `cd src/lib/query-engine && npx vitest run --config vitest.config.ts` (no DB needed).
+**Query Engine:** `src/lib/query-engine/` -- shared lexer/parser/AST pipeline powering issue search, automation conditions, and template variables. Two backends: AST-to-Prisma compiler (search) and AST-to-Boolean evaluator (automation). Extend by adding fields to `issueFieldRegistry` in `fields/issue-fields.ts`. A caller of `compileToPrisma` or `evaluate` first calls `resolveQueryFields` (`src/modules/search/query-fields.service.ts`) for `cf.Name` and `linked`; automation issues must hydrate `AUTOMATION_ISSUE_INCLUDE`, the evaluator throws on what is missing. Tests: `cd src/lib/query-engine && npx vitest run --config vitest.config.ts` (no DB needed).
 
 **Frontend:** `frontend/src/pages/` (route components, lazy loaded), `frontend/src/components/` (shared UI + layout), `frontend/src/api/` (API client helpers). All API calls through `api/client.ts` (`get`/`post`/`patch`/`del`).
 

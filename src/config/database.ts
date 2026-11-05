@@ -18,4 +18,6 @@ const adapter = new PrismaPg(pool);
 export const prisma = new PrismaClient({
   adapter,
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  // Only queries read these: a value keeps its one form, the text, on every way out
+  omit: { customFieldValue: { numberValue: true, dateValue: true } },
 });

@@ -12,6 +12,7 @@ import {
   assertIssueRefsInProject,
 } from '../issues/issue-references';
 import * as issuesService from '../issues/issues.service';
+import { resolveQueryFields } from '../search/query-fields.service';
 
 import { applySetField, assertSettableField } from './set-field';
 import { executeWebhook, isWebhookMethod } from './webhook';
@@ -104,6 +105,22 @@ async function assertActionsInProject(projectId: string, actions: AutomationActi
 }
 
 /**
+ * A rule's condition must be able to decide something in its project.
+ * @param condition - The condition
+ * @param projectId - The rule's project
+ * @throws {AppError} 400 saying what is wrong
+ */
+async function assertValidCondition(condition: string, projectId: string) {
+  try {
+    const ast = parse(condition);
+    assertKnownFields(ast, issueFieldRegistry);
+    await resolveQueryFields(ast, { projectId });
+  } catch (e: unknown) {
+    throw new AppError(400, `Invalid condition: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/**
  * Create an automation rule for a project.
  * @param projectId
  * @param data
@@ -112,13 +129,7 @@ export async function createRule(projectId: string, data: CreateRuleData) {
   await findOrThrow(prisma.project.findUnique({ where: { id: projectId } }), ERR.PROJECT_NOT_FOUND);
   await assertActionsInProject(projectId, data.actions);
 
-  if (data.condition) {
-    try {
-      assertKnownFields(parse(data.condition), issueFieldRegistry);
-    } catch (e: unknown) {
-      throw new AppError(400, `Invalid condition: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
+  if (data.condition) await assertValidCondition(data.condition, projectId);
 
   return prisma.automationRule.create({
     data: {
@@ -156,13 +167,7 @@ export async function updateRule(ruleId: string, data: Partial<CreateRuleData>) 
   );
   await assertActionsInProject(existing.projectId, data.actions);
 
-  if (data.condition) {
-    try {
-      assertKnownFields(parse(data.condition), issueFieldRegistry);
-    } catch (e: unknown) {
-      throw new AppError(400, `Invalid condition: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
+  if (data.condition) await assertValidCondition(data.condition, existing.projectId);
 
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
@@ -231,7 +236,7 @@ export async function evaluateRules(
     // A condition that can't be evaluated stops its own rule, not the rest of this event's
     let matches = false;
     try {
-      matches = matchesCondition(rule, context);
+      matches = await matchesCondition(rule, context);
     } catch (err) {
       logger.warn('automation rule condition failed', { ruleId: rule.id }, err as Error);
     }
@@ -242,10 +247,10 @@ export async function evaluateRules(
   }
 }
 
-function matchesCondition(
+async function matchesCondition(
   rule: { condition?: string | null; conditions?: unknown },
   context: AutomationContext,
-): boolean {
+): Promise<boolean> {
   if (rule.condition) {
     const ast = parse(rule.condition);
     // A condition stored before these were refused: the caller logs it and the rule doesn't run
@@ -253,6 +258,7 @@ function matchesCondition(
     return evaluate(ast, context.issue, issueFieldRegistry, {
       currentUserId: context.actorId,
       projectId: context.issue.projectId,
+      ...(await resolveQueryFields(ast, { projectId: context.issue.projectId })),
     });
   }
   if (rule.conditions) {
@@ -294,11 +300,14 @@ function matchesConditionsLegacy(
 }
 
 /**
- * Drop email from the user objects on an issue, whatever the caller hydrated.
+ * An issue as templates and webhooks see it: no email on its user objects, whatever the caller
+ * hydrated, and nothing that is only there for conditions.
  * @param issue
  */
 function withoutEmails<T extends Record<string, unknown>>(issue: T): T {
   const copy: Record<string, unknown> = { ...issue };
+  // Hydrated for conditions, and no part of what a template or webhook gets
+  for (const key of ['linksFrom', 'linksTo', 'customFieldValues']) delete copy[key];
   for (const key of ['assignee', 'creator', 'reporter']) {
     const user = copy[key];
     if (user && typeof user === 'object') {

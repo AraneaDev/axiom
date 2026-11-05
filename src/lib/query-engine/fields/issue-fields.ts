@@ -20,6 +20,16 @@ export const issueFieldRegistry: FieldRegistry = {
   duedate: { column: 'dueDate', type: 'date', nullable: true },
   number: { column: 'number', type: 'number' },
   title: { column: 'title', type: 'string' },
+  blocked: { column: 'links', type: 'derived' },
+  blocks: { column: 'links', type: 'derived' },
+  linked: { column: 'links', type: 'derived' },
+  text: { column: 'title,body', type: 'derived' },
+  done: { column: 'column.isDone', type: 'derived' },
+  sprintstate: {
+    column: 'sprint.status',
+    type: 'derived',
+    values: ['PLANNING', 'ACTIVE', 'COMPLETED'],
+  },
 };
 
 export const PRIORITY_ORDINALS: Record<string, number> = {

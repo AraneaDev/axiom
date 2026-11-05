@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { typedCustomFieldValue } from '../../lib/query-engine';
 import { AppError } from '../../middleware/errorHandler';
 import { findOrThrow } from '../../utils/find-or-throw';
 
@@ -149,8 +150,8 @@ export async function setFieldValue(issueId: string, fieldDefinitionId: string, 
     where: {
       issueId_fieldDefinitionId: { issueId, fieldDefinitionId },
     },
-    create: { issueId, fieldDefinitionId, value },
-    update: { value },
+    create: { issueId, fieldDefinitionId, ...typedCustomFieldValue(value) },
+    update: typedCustomFieldValue(value),
     include: { fieldDefinition: true },
   });
 }

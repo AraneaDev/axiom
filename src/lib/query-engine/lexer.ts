@@ -14,6 +14,19 @@ export enum TokenType {
   FIELD_VALUE = 'FIELD_VALUE',
   FUNCTION = 'FUNCTION',
   FREETEXT = 'FREETEXT',
+  CUSTOM_FIELD = 'CUSTOM_FIELD',
+}
+
+/** Input the grammar has no reading for. */
+export class ParseError extends Error {
+  position: number;
+  token?: string;
+
+  constructor(message: string, position: number, token?: string) {
+    super(message);
+    this.position = position;
+    this.token = token;
+  }
 }
 
 export type DurationArg = { type: 'duration'; value: number; unit: string };
@@ -33,7 +46,15 @@ export type Token =
   | { type: TokenType.COMMA; position: number }
   | { type: TokenType.FIELD_VALUE; field: string; value: string; position: number }
   | { type: TokenType.FUNCTION; name: string; args: DurationArg[]; position: number }
-  | { type: TokenType.FREETEXT; value: string; position: number };
+  | { type: TokenType.FREETEXT; value: string; position: number }
+  | { type: TokenType.CUSTOM_FIELD; name: string; position: number };
+
+/** An issue key, as a whole word */
+const ISSUE_KEY_WORD = /^[A-Z][A-Z0-9]*-\d+(?![A-Za-z0-9_@-])/;
+/** cf.Name or cf."Name with spaces" */
+const CUSTOM_FIELD_WORD = /^cf\.(?:"([^"]*)"|([A-Za-z0-9_]+))/i;
+/** A number, with the minus a value may start with */
+const SIGNED_NUMBER = /^(-\s*)?(\d+(?:\.\d+)?)/;
 
 function isComplexMode(input: string): boolean {
   // Has explicit operators or keywords that indicate complex (SQL-like) mode
@@ -42,16 +63,16 @@ function isComplexMode(input: string): boolean {
   return operatorPattern.test(input) || keywordPattern.test(input);
 }
 
-function parseFunctionArgs(argsStr: string): DurationArg[] {
+function parseFunctionArgs(name: string, argsStr: string, position: number): DurationArg[] {
   const trimmed = argsStr.trim();
   if (!trimmed) return [];
 
-  const durationMatch = trimmed.match(/^(-?\d+)([mhdw])$/);
+  const durationMatch = trimmed.match(/^([+-]?\d+)([mhdw])$/);
   if (durationMatch) {
     return [{ type: 'duration', value: parseInt(durationMatch[1], 10), unit: durationMatch[2] }];
   }
 
-  return [];
+  throw new ParseError(`${name}() can't take "${trimmed}" as its argument`, position);
 }
 
 /**
@@ -176,13 +197,41 @@ function tokenizeComplex(input: string): Token[] {
       continue;
     }
 
-    // Number
-    if (/\d/.test(input[i])) {
-      let num = '';
-      while (i < input.length && /\d/.test(input[i])) {
-        num += input[i++];
+    // Number. A minus counts only where a value starts, so that 1-2 isn't read as two numbers
+    const previous = tokens[tokens.length - 1]?.type;
+    const valueStarts =
+      previous === TokenType.OPERATOR ||
+      previous === TokenType.COMMA ||
+      previous === TokenType.LPAREN;
+    if (/\d/.test(input[i]) || (input[i] === '-' && valueStarts)) {
+      const numberMatch = input.slice(i).match(SIGNED_NUMBER);
+      if (numberMatch) {
+        const magnitude = Number(numberMatch[2]);
+        tokens.push({
+          type: TokenType.NUMBER,
+          value: numberMatch[1] ? -magnitude : magnitude,
+          position: start,
+        });
+        i += numberMatch[0].length;
+        continue;
       }
-      tokens.push({ type: TokenType.NUMBER, value: parseInt(num, 10), position: start });
+    }
+
+    // Issue key: one value, which the word below would break at its hyphen
+    const issueKeyMatch = input.slice(i).match(ISSUE_KEY_WORD);
+    if (issueKeyMatch) {
+      tokens.push({ type: TokenType.STRING, value: issueKeyMatch[0], position: start });
+      i += issueKeyMatch[0].length;
+      continue;
+    }
+
+    // Custom field: its name keeps its case and may be quoted
+    const customFieldMatch = input.slice(i).match(CUSTOM_FIELD_WORD);
+    if (customFieldMatch) {
+      const name = customFieldMatch[1] ?? customFieldMatch[2];
+      if (!name) throw new ParseError('A custom field needs a name', start);
+      tokens.push({ type: TokenType.CUSTOM_FIELD, name, position: start });
+      i += customFieldMatch[0].length;
       continue;
     }
 
@@ -240,8 +289,9 @@ function tokenizeComplex(input: string): Token[] {
           else break;
         }
         const argsStr = input.slice(argsStart, k);
-        const args = parseFunctionArgs(argsStr);
-        tokens.push({ type: TokenType.FUNCTION, name: word.toLowerCase(), args, position: start });
+        const name = word.toLowerCase();
+        const args = parseFunctionArgs(name, argsStr, start);
+        tokens.push({ type: TokenType.FUNCTION, name, args, position: start });
         i = k + 1;
         continue;
       }

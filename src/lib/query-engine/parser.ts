@@ -1,17 +1,20 @@
 import type { Expression, Value, ComparisonOp } from './ast';
-import { tokenize, TokenType } from './lexer';
+import { CUSTOM_FIELD_PREFIX } from './custom-fields';
+import { ParseError, tokenize, TokenType } from './lexer';
 import type { Token, DurationArg } from './lexer';
 
-class ParseError extends Error {
-  position: number;
-  token?: string;
-
-  constructor(message: string, position: number, token?: string) {
-    super(message);
-    this.position = position;
-    this.token = token;
-  }
-}
+/**
+ * Fields that only a structured comparison can ask about. These words came after the key:value form
+ * was in use, so `done:x` stays the text it always was.
+ */
+const NOT_KEY_VALUE_FIELDS = new Set([
+  'blocked',
+  'blocks',
+  'linked',
+  'text',
+  'done',
+  'sprintstate',
+]);
 
 function isSimpleMode(tokens: Token[]): boolean {
   for (const tok of tokens) {
@@ -42,7 +45,9 @@ function parseSimple(tokens: Token[]): Expression {
   const freetextParts: string[] = [];
 
   for (const tok of tokens) {
-    if (tok.type === TokenType.FIELD_VALUE) {
+    if (tok.type === TokenType.FIELD_VALUE && NOT_KEY_VALUE_FIELDS.has(tok.field.toLowerCase())) {
+      freetextParts.push(`${tok.field}:${tok.value}`);
+    } else if (tok.type === TokenType.FIELD_VALUE) {
       // Flush freetext if any
       if (freetextParts.length > 0) {
         expressions.push({ type: 'freetext', value: freetextParts.join(' ') });
@@ -129,12 +134,38 @@ class Parser {
   }
 
   parse(): Expression {
-    const expr = this.parseOr();
+    // Text around a comparison searches, as it does around key:value
+    const before = this.takeWords();
+    let expr = this.parseOr();
+    const after = this.takeWords();
     if (this.peek()) {
       const tok = this.peek()!;
       throw new ParseError(`Unexpected token: ${JSON.stringify(tok)}`, tok.position);
     }
-    return expr;
+    if (before) expr = { type: 'and', left: before, right: expr };
+    return after ? { type: 'and', left: expr, right: after } : expr;
+  }
+
+  /** The bare words from here on, up to the next thing that isn't one, as one text node. */
+  private takeWords(): Expression | null {
+    const words: string[] = [];
+    while (true) {
+      const tok = this.peek();
+      const next = this.tokens[this.pos + 1]?.type;
+      const startsComparison =
+        next === TokenType.OPERATOR || next === TokenType.IN || next === TokenType.NOT_IN;
+      if (!tok || startsComparison) break;
+      if (
+        tok.type !== TokenType.IDENTIFIER &&
+        tok.type !== TokenType.STRING &&
+        tok.type !== TokenType.NUMBER
+      ) {
+        break;
+      }
+      words.push(String(tok.value));
+      this.pos++;
+    }
+    return words.length > 0 ? { type: 'freetext', value: words.join(' ') } : null;
   }
 
   private parseOr(): Expression {
@@ -184,10 +215,13 @@ class Parser {
       return expr;
     }
 
-    // IDENTIFIER followed by operator, IN, or NOT_IN
-    if (tok.type === TokenType.IDENTIFIER) {
+    // A field followed by operator, IN, or NOT_IN
+    if (tok.type === TokenType.IDENTIFIER || tok.type === TokenType.CUSTOM_FIELD) {
       this.consume();
-      const field = tok.value.toLowerCase();
+      const field =
+        tok.type === TokenType.CUSTOM_FIELD
+          ? `${CUSTOM_FIELD_PREFIX}${tok.name}`
+          : tok.value.toLowerCase();
 
       const next = this.peek();
       if (!next) {
@@ -281,7 +315,8 @@ class Parser {
 
     if (tok.type === TokenType.IDENTIFIER) {
       this.consume();
-      return { type: 'string', value: tok.value.toLowerCase() };
+      const word = tok.value.toLowerCase();
+      return word === 'null' ? { type: 'null' } : { type: 'string', value: word };
     }
 
     throw new ParseError(`Unexpected token: ${tok.type}`, tok.position, String(tok.type));

@@ -92,7 +92,7 @@ const issueActions = [
     output: z.looseObject({ issues: z.array(loose), total: z.number() }),
     rest: { method: 'GET', path: `${PROJECT}/issues` },
     authorize: read,
-    handler: async (_ctx, { projectId, ...query }) => {
+    handler: async (ctx, { projectId, ...query }) => {
       const { take, skip } = parseServicePagination(
         { limit: query.limit, offset: query.offset },
         25,
@@ -107,6 +107,7 @@ const issueActions = [
         label: query.label,
         limit: take,
         offset: skip,
+        currentUserId: ctx.userId,
       });
       return { ...result, limit: take, offset: skip };
     },

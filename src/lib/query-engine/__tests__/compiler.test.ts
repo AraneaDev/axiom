@@ -119,8 +119,7 @@ describe('compiler', () => {
     expect(compile).toThrow(message);
   });
 
-  // The grammar has no null or sign or fraction of its own (`-5` reads 5, `null` reads as text),
-  // so these values only come as an AST
+  // The same refusals when a value comes as an AST
   it.each([
     ['number', '=', { type: 'null' }, 'null'],
     ['storyPoints', '>', { type: 'null' }, 'null'],

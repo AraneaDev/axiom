@@ -6,6 +6,7 @@
  * assignee changes go through set_status and set_assignee, which carry their checks.
  */
 import { prisma } from '../../config/database';
+import { typedCustomFieldValue } from '../../lib/query-engine';
 import { AppError } from '../../middleware/errorHandler';
 import { assertCustomFieldValue } from '../custom-fields/custom-field-values';
 
@@ -123,8 +124,8 @@ export async function applySetField(
     await assertCustomFieldValue({ type: definition.type, projectId }, value);
     await prisma.customFieldValue.upsert({
       where: { issueId_fieldDefinitionId: { issueId, fieldDefinitionId: definition.id } },
-      create: { issueId, fieldDefinitionId: definition.id, value },
-      update: { value },
+      create: { issueId, fieldDefinitionId: definition.id, ...typedCustomFieldValue(value) },
+      update: typedCustomFieldValue(value),
     });
     return;
   }

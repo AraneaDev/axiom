@@ -2471,6 +2471,29 @@ status != Done AND assignee = currentUser() AND created >= now(-7d)
 | `dueDate`     | date   | Due date                                         |
 | `number`      | number | Issue number within the project                  |
 | `title`       | string | Issue title (use `~` for contains)               |
+| `blocked`     | boolean | Waits on an issue that isn't in a done column: an own `IS_BLOCKED_BY` link to it, or a `BLOCKS` link from it. `= true` or `= false` |
+| `blocks`      | boolean | The mirror of `blocked`: an own `BLOCKS` link to an open issue, or an `IS_BLOCKED_BY` link from one |
+| `linked`      | issue key | Any link to that issue, either way: `linked = AXM-12`. A key you can't see matches nothing, as a missing one does. `linked = null` asks for no links at all. A key with org and team is quoted: `linked = "org/team/AXM-12"` |
+| `text`        | string | Title or body, with `~` only: `text ~ "login"` |
+| `done`        | boolean | The issue's column is a done column. An issue outside any column is not done |
+| `sprintstate` | enum   | `PLANNING`, `ACTIVE` or `COMPLETED`. `= null` asks for no sprint; `!=` includes issues without one |
+| `cf.Name`     | by definition | A custom field, `cf.Name` or `cf."Name with spaces"`, see below |
+
+The fields `blocked`, `blocks`, `linked`, `text`, `done` and `sprintstate` only work in complex mode. In simple mode `done:true` stays plain text.
+
+### Custom fields
+
+The name is case-insensitive. A name that no project in your view has is a 400 naming the field, and a field in a project you can't see answers exactly like that. When projects define one name with different types, each compares by its own type.
+
+| Definition type | Operators | Compares |
+| --------------- | --------- | -------- |
+| `TEXT`, `SELECT` | `=`, `!=`, `~` | Text, case-insensitive |
+| `NUMBER` | `=`, `!=`, `>`, `<`, `>=`, `<=` | By value, so `10 > 9`; `"1.5"` and `1.5` are the same |
+| `DATE` | `=`, `!=`, `>`, `<`, `>=`, `<=` | By value; dates like `"2026-03-01"` and functions like `now(-7d)` |
+| `USER` | `=`, `!=` | The user id, or `currentUser()` |
+| `MULTI_SELECT` | `=`, `!=` | Membership: `cf.Areas = Web` matches `Api,Web` |
+
+A value that can't be read as the definition's type matches nothing, and so does a stored value that doesn't read as its type. `!=` also holds for an issue with no value, in a project that has the field; in other projects no comparison on the field holds. `= null` asks for no value or a cleared one, `!= null` for a filled one. `IN` and `NOT IN` work as a list of `=` and `!=`.
 
 ### Operator Reference
 
@@ -2488,18 +2511,22 @@ status != Done AND assignee = currentUser() AND created >= now(-7d)
 
 Operators are case-insensitive (`IN`, `in`, and `In` are all valid).
 
+`null` (without quotes) is the empty value, as `empty()` is: `assignee = null`. `"null"` is the text. Numbers may be negative and have a fraction: `cf.Cost > -1.5`.
+
+Text next to a comparison searches for that text, as with `type:bug login`: `type = Bug login page`.
+
 ### Function Reference
 
 | Function          | Description                                      | Example                    |
 | ----------------- | ------------------------------------------------ | -------------------------- |
-| `currentUser()`   | Resolves to the authenticated user. Alias: `@me` | `assignee = currentUser()` |
-| `currentSprint()` | Resolves to the active sprint in the project     | `sprint = currentSprint()` |
+| `currentUser()`   | Resolves to the authenticated user. Alias: `@me`. Without a user it equals nothing | `assignee = currentUser()` |
+| `currentSprint()` | Issues in an active sprint, on `sprint` with `=` or `!=` | `sprint = currentSprint()` |
 | `now()`           | Current timestamp, with optional offset          | `created >= now(-7d)`      |
 | `startOfDay()`    | Midnight of the current day                      | `created >= startOfDay()`  |
 | `startOfWeek()`   | Midnight of the first day of the current week    | `updated >= startOfWeek()` |
 | `empty()`         | Matches null / unset fields                      | `assignee = empty()`       |
 
-**`now()` offset syntax:** `now(-Nd)` subtracts N days; `now(+Nd)` adds N days. Unit `d` (days) is the only supported unit.
+**`now()` offset syntax:** `now(-Nd)` subtracts N days; `now(+Nd)` adds N days. The units are `m`, `h`, `d` and `w`. An argument of another form is a parse error.
 
 ### Examples
 
@@ -2518,6 +2545,12 @@ sprint = currentSprint() AND storyPoints >= 8
 
 # Title contains "auth" created this week
 title ~ "auth" AND created >= startOfWeek()
+
+# Open work that waits on something, in an active sprint
+blocked = true AND done = false AND sprintstate = ACTIVE
+
+# Expensive items by custom field
+cf.Severity = High AND cf."Estimated cost" > 1000
 ```
 
 **Response 200:** Updated preferences array.

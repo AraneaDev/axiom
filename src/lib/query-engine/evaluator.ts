@@ -1,6 +1,16 @@
-import type { Expression, Value, FieldDefinition, FieldRegistry, QueryContext } from './ast';
+import type {
+  ComparisonOp,
+  Expression,
+  Value,
+  FieldDefinition,
+  FieldRegistry,
+  QueryContext,
+} from './ast';
+import { customFieldName, evaluateCustomField } from './custom-fields';
+import { derivedField } from './derived-fields';
 import { PRIORITY_ORDINALS } from './fields/issue-fields';
 import { builtinFunctions } from './functions';
+import { hydrated, NO_USER } from './query-values';
 
 /**
  * A field of the registry. Only its own names: `constructor` is no field.
@@ -21,6 +31,7 @@ function resolveValue(value: Value, context: QueryContext): unknown {
   if (value.type === 'function') {
     const name = value.name.toLowerCase();
     if (!Object.hasOwn(builtinFunctions, name)) throw new Error(`Unknown function: ${value.name}`);
+    if (name === 'currentuser' && !context.currentUserId) return NO_USER;
     const fn = builtinFunctions[name];
     return fn(value.args, context);
   }
@@ -113,7 +124,8 @@ function compareValues(
     if (operator === '<=') return at <= et;
   }
 
-  // Default string equality
+  // Default string equality. An empty column is no text, not even the text "null"
+  if (actual == null) return operator === '!=';
   if (operator === '=') return String(actual) === String(expected);
   if (operator === '!=') return String(actual) !== String(expected);
 
@@ -128,14 +140,40 @@ function evaluateComparison(
   registry: FieldRegistry,
   context: QueryContext,
 ): boolean {
-  const fieldDef = lookupField(field, registry);
+  const customName = customFieldName(field);
+  const fieldDef = customName === null ? lookupField(field, registry) : null;
 
   const resolved = resolveValue(value, context);
+
+  // currentUser() without a user: nobody, so equal to nothing and different from everything
+  if (resolved === NO_USER) return operator === '!=';
+  if (customName !== null) {
+    return evaluateCustomField(customName, operator as ComparisonOp, resolved, obj, context);
+  }
+  if (fieldDef === null) throw new Error(`Unknown field '${field}'`);
+  const derived = derivedField(field.toLowerCase());
+  if (derived) return derived.evaluate(operator as ComparisonOp, resolved, obj, context);
+
+  if (
+    field.toLowerCase() === 'sprint' &&
+    value.type === 'function' &&
+    value.name.toLowerCase() === 'currentsprint' &&
+    (operator === '=' || operator === '!=')
+  ) {
+    const sprint = hydrated(obj, 'sprint', 'currentSprint()') as Record<string, unknown> | null;
+    const active = sprint !== null && hydrated(sprint, 'status', 'currentSprint()') === 'ACTIVE';
+    return active === (operator === '=');
+  }
 
   // Many-relation (e.g. labels)
   if (fieldDef.type === 'relation' && fieldDef.many) {
     const arr = getByPath(obj, fieldDef.join!) as Array<Record<string, unknown>> | null | undefined;
     if (!Array.isArray(arr)) return false;
+    if (resolved === null) {
+      if (operator === '=') return arr.length === 0;
+      if (operator === '!=') return arr.length > 0;
+      return false;
+    }
     const expectedStr = resolved != null ? String(resolved).toLowerCase() : '';
     // Extract sub-field name from column (e.g. "labels.name" -> "name")
     const parts = fieldDef.column.split('.');
@@ -163,7 +201,8 @@ function evaluateComparison(
       if (operator === '!=') return actual !== resolved;
       return false;
     }
-    // String value - compare with column (id)
+    // String value - compare with column (id). An empty column is no text, not even "null"
+    if (actual == null) return operator === '!=';
     if (operator === '=') return String(actual) === String(resolved);
     if (operator === '!=') return String(actual) !== String(resolved);
     return false;
@@ -181,9 +220,22 @@ function evaluateIn(
   registry: FieldRegistry,
   context: QueryContext,
 ): boolean {
-  const fieldDef = lookupField(field, registry);
+  const customName = customFieldName(field);
+  const fieldDef = customName === null ? lookupField(field, registry) : null;
 
-  const resolvedValues = values.map((v) => resolveValue(v, context));
+  // currentUser() without a user is nobody, so no value the list can hold
+  const resolvedValues = values.map((v) => resolveValue(v, context)).filter((v) => v !== NO_USER);
+
+  const derived = customName === null ? derivedField(field.toLowerCase()) : undefined;
+  if (customName !== null || derived) {
+    const found = resolvedValues.some((value) =>
+      customName !== null
+        ? evaluateCustomField(customName, '=', value, obj, context)
+        : (derived as NonNullable<typeof derived>).evaluate('=', value, obj, context),
+    );
+    return negated ? !found : found;
+  }
+  if (fieldDef === null) throw new Error(`Unknown field '${field}'`);
 
   // Many-relation (e.g. labels): any of its rows, as = reads it
   if (fieldDef.type === 'relation' && fieldDef.many) {
@@ -237,10 +289,10 @@ export function assertKnownFields(ast: Expression, registry: FieldRegistry): voi
   while (pending.length > 0) {
     const node = pending.pop() as Expression;
     if (node.type === 'comparison') {
-      lookupField(node.field, registry);
+      if (customFieldName(node.field) === null) lookupField(node.field, registry);
       assertKnownFunctions(node.value);
     } else if (node.type === 'in') {
-      lookupField(node.field, registry);
+      if (customFieldName(node.field) === null) lookupField(node.field, registry);
       node.values.forEach(assertKnownFunctions);
     } else if (node.type === 'and' || node.type === 'or') {
       pending.push(node.left, node.right);

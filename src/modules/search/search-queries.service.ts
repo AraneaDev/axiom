@@ -11,6 +11,7 @@ import {
   USER_WITH_AVATAR_SELECT,
 } from '../../utils/prisma-selects';
 
+import { resolveQueryFields } from './query-fields.service';
 import {
   viewableIssuesWhere,
   viewablePageIdFilter,
@@ -134,6 +135,8 @@ export async function searchIssues(
       const ast = parse(rawQuery);
       const engineWhere = compileToPrisma(ast, issueFieldRegistry, {
         projectId: params.projectId,
+        currentUserId: params.userId,
+        ...(await resolveQueryFields(ast, { userId: params.userId, projectId: params.projectId })),
       });
       // Merge engine-generated clauses into AND
       if (Object.keys(engineWhere).length > 0) {

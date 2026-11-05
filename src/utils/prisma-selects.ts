@@ -76,13 +76,27 @@ export const ISSUE_WITH_COLUMN_INCLUDE = {
 
 /**
  * Hydrated issue include for automation rule evaluation. No emails: templates can write
- * into comments and titles the whole team reads, and emails are for admins only.
+ * into comments and titles the whole team reads, and emails are for admins only. The links and
+ * custom field values are for conditions alone: templates and webhooks don't get them.
  */
 export const AUTOMATION_ISSUE_INCLUDE = {
   assignee: { select: { id: true, username: true, displayName: true } },
   creator: { select: { id: true, username: true, displayName: true } },
   labels: { select: { name: true } },
-  sprint: { select: { id: true, name: true, goal: true } },
-  column: { select: { id: true, name: true } },
+  sprint: { select: { id: true, name: true, goal: true, status: true } },
+  column: { select: { id: true, name: true, isDone: true } },
   project: { select: { id: true, name: true, prefix: true } },
+  linksFrom: {
+    select: { type: true, toId: true, to: { select: { column: { select: { isDone: true } } } } },
+  },
+  linksTo: {
+    select: {
+      type: true,
+      fromId: true,
+      from: { select: { column: { select: { isDone: true } } } },
+    },
+  },
+  customFieldValues: {
+    select: { value: true, fieldDefinition: { select: { name: true, type: true } } },
+  },
 } as const;

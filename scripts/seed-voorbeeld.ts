@@ -18,6 +18,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
+import { typedCustomFieldValue } from '../src/lib/query-engine';
+
 import { seedPageMentions } from './seed-page-mentions';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -1039,8 +1041,8 @@ async function main() {
       const val = omgevingOptions[seed % omgevingOptions.length];
       await prisma.customFieldValue.upsert({
         where: { issueId_fieldDefinitionId: { issueId: issue.id, fieldDefinitionId: omgevingFieldId } },
-        update: { value: val },
-        create: { issueId: issue.id, fieldDefinitionId: omgevingFieldId, value: val },
+        update: typedCustomFieldValue(val),
+        create: { issueId: issue.id, fieldDefinitionId: omgevingFieldId, ...typedCustomFieldValue(val) },
       });
       cfvCount++;
     }
@@ -1051,8 +1053,8 @@ async function main() {
       const val = klantImpactOptions[(seed * 3) % klantImpactOptions.length];
       await prisma.customFieldValue.upsert({
         where: { issueId_fieldDefinitionId: { issueId: issue.id, fieldDefinitionId: impactFieldId } },
-        update: { value: val },
-        create: { issueId: issue.id, fieldDefinitionId: impactFieldId, value: val },
+        update: typedCustomFieldValue(val),
+        create: { issueId: issue.id, fieldDefinitionId: impactFieldId, ...typedCustomFieldValue(val) },
       });
       cfvCount++;
     }
@@ -1063,8 +1065,8 @@ async function main() {
       const val = modelVersions[seed % modelVersions.length];
       await prisma.customFieldValue.upsert({
         where: { issueId_fieldDefinitionId: { issueId: issue.id, fieldDefinitionId: customFieldDefs['ai-assistent:Model Versie'] } },
-        update: { value: val },
-        create: { issueId: issue.id, fieldDefinitionId: customFieldDefs['ai-assistent:Model Versie'], value: val },
+        update: typedCustomFieldValue(val),
+        create: { issueId: issue.id, fieldDefinitionId: customFieldDefs['ai-assistent:Model Versie'], ...typedCustomFieldValue(val) },
       });
       cfvCount++;
     }
@@ -1073,8 +1075,8 @@ async function main() {
       const val = String(75 + (seed % 24));
       await prisma.customFieldValue.upsert({
         where: { issueId_fieldDefinitionId: { issueId: issue.id, fieldDefinitionId: customFieldDefs['documentherkenning:Nauwkeurigheid %'] } },
-        update: { value: val },
-        create: { issueId: issue.id, fieldDefinitionId: customFieldDefs['documentherkenning:Nauwkeurigheid %'], value: val },
+        update: typedCustomFieldValue(val),
+        create: { issueId: issue.id, fieldDefinitionId: customFieldDefs['documentherkenning:Nauwkeurigheid %'], ...typedCustomFieldValue(val) },
       });
       cfvCount++;
     }

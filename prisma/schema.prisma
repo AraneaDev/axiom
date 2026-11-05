@@ -688,6 +688,10 @@ model CustomFieldValue {
   fieldDefinitionId String
   fieldDefinition   CustomFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
   value             String
+  /// The value as a number, when it reads as one. Written with it, see typedCustomFieldValue
+  numberValue       Float?
+  /// The value as a date, when it reads as one. Written with it, see typedCustomFieldValue
+  dateValue         DateTime?
 
   @@unique([issueId, fieldDefinitionId])
   @@map("custom_field_values")

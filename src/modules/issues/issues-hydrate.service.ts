@@ -82,6 +82,7 @@ export async function hydrateIssuesList(
     label?: string;
     limit?: number;
     offset?: number;
+    currentUserId?: string;
   } = {};
 
   if (filters.q) issueFilters.q = filters.q;
@@ -97,6 +98,7 @@ export async function hydrateIssuesList(
   );
   issueFilters.limit = take;
   issueFilters.offset = skip;
+  issueFilters.currentUserId = userId;
 
   const results = await Promise.allSettled([
     listIssues(projectId, issueFilters),

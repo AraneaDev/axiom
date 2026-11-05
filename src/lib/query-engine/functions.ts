@@ -40,6 +40,15 @@ export const builtinFunctions: Record<string, FunctionResolver> = {
         base + parseDuration(first as { type: 'duration'; value: number; unit: string }),
       );
     }
+    // The parser hands a duration over as a string value, such as "-7d"
+    const written =
+      first && typeof first === 'object' ? (first as { value?: unknown }).value : null;
+    const match = typeof written === 'string' ? /^([+-]?\d+)([mhdw])$/.exec(written) : null;
+    if (match) {
+      return new Date(
+        base + parseDuration({ type: 'duration', value: parseInt(match[1], 10), unit: match[2] }),
+      );
+    }
     return new Date(base);
   },
 

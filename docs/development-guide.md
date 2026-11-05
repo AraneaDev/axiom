@@ -594,6 +594,9 @@ export const issueFieldRegistry: FieldRegistry = {
 | `date` | Date/datetime fields |
 | `relation` | Foreign key fields resolved via a join |
 | `user` | User assignment fields (assignee, reporter) |
+| `derived` | No single column answers it (blocked, text, sprintstate): compiled and evaluated side by side in `derived-fields.ts` |
+
+Custom fields (`cf.Name`) aren't in the registry. `src/modules/search/query-fields.service.ts` resolves their names and `linked` keys for the query's scope before compiling or evaluating, and hands the answers over in the `QueryContext`. Any new caller of `compileToPrisma` or `evaluate` must call `resolveQueryFields` first. Write a custom field value with `typedCustomFieldValue`: number and date comparisons run on its typed columns. `src/modules/search/query-fields.test.ts` fails on a write that doesn't.
 
 **Field options:**
 

@@ -1,6 +1,18 @@
-import type { Expression, FieldDefinition, FieldRegistry, QueryContext, Value } from './ast';
+import type {
+  ComparisonOp,
+  Expression,
+  FieldDefinition,
+  FieldRegistry,
+  QueryContext,
+  Value,
+} from './ast';
+import { compileCustomField, customFieldName } from './custom-fields';
+import { CURRENT_SPRINT_WHERE, derivedField } from './derived-fields';
 import { PRIORITY_ORDINALS } from './fields/issue-fields';
 import { builtinFunctions } from './functions';
+import { likeLiteral, MATCH_NOTHING, NO_USER, QueryValueError } from './query-values';
+
+export { QueryValueError };
 
 /** The range of an integer column. */
 const MIN_INT = -2147483648;
@@ -8,17 +20,6 @@ const MAX_INT = 2147483647;
 
 /** How deep parentheses and NOT may nest. Past some depth Prisma refuses a where clause outright. */
 const MAX_DEPTH = 20;
-
-/**
- * A query that parses and names real fields, but holds a value its field can't be compared with.
- * Callers answer this as a bad query. It must never reach the database as a failed query.
- */
-export class QueryValueError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'QueryValueError';
-  }
-}
 
 /**
  * A value as its column takes it.
@@ -80,6 +81,7 @@ function resolveValue(value: Value, context: QueryContext): unknown {
   if (value.type === 'function') {
     const name = value.name.toLowerCase();
     if (!Object.hasOwn(builtinFunctions, name)) throw new Error(`Unknown function: ${value.name}`);
+    if (name === 'currentuser' && !context.currentUserId) return NO_USER;
     const fn = builtinFunctions[name];
     return fn(value.args, context);
   }
@@ -133,17 +135,48 @@ function compileComparison(
   registry: FieldRegistry,
   context: QueryContext,
 ): Record<string, unknown> {
-  const fieldDef = lookupField(field, registry);
+  const customName = customFieldName(field);
+  const fieldDef = customName === null ? lookupField(field, registry) : null;
 
   const resolved = resolveValue(value, context);
+
+  // currentUser() without a user: nobody, so equal to nothing and different from everything
+  if (resolved === NO_USER) {
+    if (operator === '=') return MATCH_NOTHING;
+    if (operator === '!=') return {};
+    throw new QueryValueError(`'${field}' can't be compared with currentUser() here`);
+  }
+  if (customName !== null) {
+    return compileCustomField(customName, operator as ComparisonOp, resolved, context);
+  }
+  if (fieldDef === null) throw new Error(`Unknown field '${field}'`);
+  const derived = derivedField(field.toLowerCase());
+  if (derived) return derived.compile(operator as ComparisonOp, resolved, context);
+
+  if (
+    field.toLowerCase() === 'sprint' &&
+    value.type === 'function' &&
+    value.name.toLowerCase() === 'currentsprint' &&
+    (operator === '=' || operator === '!=')
+  ) {
+    return operator === '=' ? CURRENT_SPRINT_WHERE : { NOT: CURRENT_SPRINT_WHERE };
+  }
 
   // Relation fields (join-based): status, label
   if (fieldDef.type === 'relation' && fieldDef.join) {
     const joinName = fieldDef.join;
+    if (resolved === null) {
+      if (operator !== '=' && operator !== '!=') {
+        throw new QueryValueError(`'${field}' can't be compared with null here`);
+      }
+      const empty = operator === '=';
+      if (fieldDef.many) return { [joinName]: empty ? { none: {} } : { some: {} } };
+      return empty ? { [joinName]: null } : { NOT: { [joinName]: null } };
+    }
     // Extract the sub-field name from column (e.g. "column.name" -> "name", "labels.name" -> "name")
     const parts = fieldDef.column.split('.');
     const subField = parts.length > 1 ? parts[parts.length - 1] : 'name';
-    const strVal = String(resolved).toLowerCase();
+    const strVal = likeLiteral(String(resolved).toLowerCase());
     const isNegated = operator === '!=' || operator === 'NOT';
     const prismaOp = isNegated ? 'not' : 'equals';
     const condition = { [subField]: { [prismaOp]: strVal, mode: 'insensitive' } };
@@ -186,9 +219,8 @@ function compileComparison(
     if (fieldDef.type === 'number' || fieldDef.type === 'date') {
       throw new QueryValueError(`'${field}' can't be used with ~`);
     }
-    return {
-      [column]: { contains: columnValue(field, fieldDef, resolved, false), mode: 'insensitive' },
-    };
+    const contains = likeLiteral(String(columnValue(field, fieldDef, resolved, false)));
+    return { [column]: { contains, mode: 'insensitive' } };
   }
 
   // Only = and != can ask whether a column is empty
@@ -218,10 +250,28 @@ function compileIn(
   registry: FieldRegistry,
   context: QueryContext,
 ): Record<string, unknown> {
-  const fieldDef = lookupField(field, registry);
+  const customName = customFieldName(field);
+  const fieldDef = customName === null ? lookupField(field, registry) : null;
+  const all = values.map((v) => resolveValue(v, context));
+  // currentUser() without a user is nobody, so no value the list can hold
+  const resolved = all.filter((v) => v !== NO_USER);
+  if (resolved.length === 0 && all.length > 0) return negated ? {} : MATCH_NOTHING;
+
+  const derived = customName === null ? derivedField(field.toLowerCase()) : undefined;
+  if (customName !== null || derived) {
+    const one = (operator: ComparisonOp, value: unknown) => {
+      if (value === null) throw new QueryValueError(`'${field}' can't hold null in a list`);
+      return customName !== null
+        ? compileCustomField(customName, operator, value, context)
+        : (derived as NonNullable<typeof derived>).compile(operator, value, context);
+    };
+    return negated
+      ? { AND: resolved.map((value) => one('!=', value)) }
+      : { OR: resolved.map((value) => one('=', value)) };
+  }
+  if (fieldDef === null) throw new Error(`Unknown field '${field}'`);
 
   const column = fieldDef.column;
-  const resolved = values.map((v) => resolveValue(v, context));
 
   if (fieldDef.type === 'enum') {
     const enumValues = fieldDef.values ?? [];
