@@ -3,25 +3,11 @@
  * covered by one of them. Session (JWT) requests are not scoped.
  *
  * There is one <area>:read and one <area>:write per area, and write includes read within its
- * own area only. Which area a path belongs to is decided by areaOf below.
+ * own area only. Every request a token makes runs a registry action, and the action's area and
+ * kind say which scope covers it (src/actions/execute.ts). An unknown path answers 404.
  *
- * Some requests have no area scope of their own or are never open to a token:
- * - Reading the user's own profile, the user search and notifications needs read on issues
- *   or wiki; so does changing the user's notification state.
- * - Search returns only the areas the token covers: it needs search:read, then issues:read or
- *   wiki:read per section.
- * - Attachments need files:<kind> here and the scope of their parent (issue or page) in the
- *   attachments router.
- * - Team activity, member profiles and team analytics are issue data.
- * - Managing orgs, teams, members, invitations, tokens, anything under /api/admin, space
- *   permissions, page restrictions, and creating, changing or deleting projects are registry
- *   actions in area admin: admin:read or admin:write opens them, and a token's call always waits
- *   for a person. authenticate skips tokenAllows on a registry route.
- * - tokenAllows keeps refusing those paths for a request Express does not route to a registry
- *   action: a legacy route added under them must not open by accident. No scope opens these, so a
- *   write scope on orgs, teams, projects or search does nothing there. The account stays refused.
- * - A legacy route that deletes is refused whatever the scopes, as it can't wait for approval:
- *   see legacyRouteDeletes.
+ * Some actions are never open to a token (uiOnly, tokenBlocked), and every admin action waits
+ * for a person. Attachments need files:<kind> and the scope of their parent (issue or page).
  */
 export const SCOPE_AREAS = [
   'issues',
@@ -107,31 +93,6 @@ export const LEGACY_SCOPE_MAP: Record<
   'wiki:write': ['wiki:write', 'files:write', 'search:read', 'orgs:read', 'teams:read'],
 };
 
-const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
-
-/** Writes a token may never make, whatever its scopes */
-const ACCESS_CONTROL = [
-  /^\/api\/wiki\/spaces\/[^/]+\/permissions(\/|$)/,
-  /^\/api\/wiki\/pages\/[^/]+\/restrictions$/,
-  /^\/api\/wiki\/restrictions\//,
-  /^\/api\/projects\/team\/[^/]+$/,
-  /^\/api\/projects\/[^/]+$/,
-];
-
-const ORG_INVITE_LINKS = /^\/api\/orgs\/[^/]+\/invites(\/|$)/;
-
-/** The areas below a project with a scope of their own. All others are issue data. */
-const PROJECT_SUBPATH_AREAS = new Map<string, ScopeArea>([
-  ['sprints', 'sprints'],
-  ['velocity', 'sprints'],
-  ['backlog', 'sprints'],
-  ['board', 'boards'],
-  ['forms', 'forms'],
-  ['intake', 'forms'],
-  ['automation-rules', 'automation'],
-  ['approval-gates', 'approvals'],
-]);
-
 /**
  * Whether the scopes cover reading (or writing) one area. Write includes read for the same
  * area, and for no other.
@@ -145,26 +106,6 @@ export function scopeAllows(
   kind: 'read' | 'write',
 ): boolean {
   return scopes.includes(`${area}:write`) || (kind === 'read' && scopes.includes(`${area}:read`));
-}
-
-/**
- * The legacy writes that have the effect of a delete without being a DELETE. None are left: the
- * toggles that remove what is there (A19) and what takes a person out of an issue approval (a
- * gate change, a vote) are registry actions now, and wait for approval. Task 6 removes this.
- */
-const LEGACY_WRITES_THAT_DELETE: RegExp[] = [];
-
-/**
- * Whether this request deletes through a legacy route or takes a person out of a check, for a
- * request Express did not route to a registry action. Only registry actions can wait for approval,
- * so a token has no way to these until plan 4 migrates them (A19). Apart from tokenAllows, which
- * says what a scope reaches and which tests compare registry bindings with.
- * @param method - HTTP method
- * @param path - The request path, normalized
- */
-export function legacyRouteDeletes(method: string, path: string): boolean {
-  if (method.toUpperCase() === 'DELETE') return true;
-  return !SAFE.has(method) && LEGACY_WRITES_THAT_DELETE.some((route) => route.test(path));
 }
 
 /**
@@ -188,84 +129,6 @@ export function scopesCover(
   write: boolean,
 ): boolean {
   return scopeAllows(scopes, area, write ? 'write' : 'read');
-}
-
-/**
- * The area of a path under /api/projects. Everything that isn't the project itself or has no
- * area of its own (labels, milestones, workflows, custom fields, ...) is issue data, which
- * also keeps those writes out of projects:write.
- * @param path - The request path, starting with /api/projects
- */
-function projectAreaOf(path: string): ScopeArea {
-  if (/^\/api\/projects\/team\/[^/]+$/.test(path) || /^\/api\/projects\/[^/]+$/.test(path)) {
-    return 'projects';
-  }
-  return PROJECT_SUBPATH_AREAS.get(path.split('/')[4]) ?? 'issues';
-}
-
-/**
- * Which area an API path belongs to. Anything not listed is token-forbidden.
- * - personal: the user's own profile and notifications, and the user search
- * @param path - The request path, starting with /api
- */
-function areaOf(path: string): ScopeArea | 'personal' | 'none' {
-  if (path.startsWith('/api/wiki')) return 'wiki';
-  if (path.startsWith('/api/projects')) return projectAreaOf(path);
-  if (path.startsWith('/api/approval-requests')) return 'approvals';
-  if (
-    path.startsWith('/api/issues') ||
-    path.startsWith('/api/custom-fields') ||
-    path.startsWith('/api/links') ||
-    // Team views made of issue data: roadmap, analytics, activity and member profiles
-    /^\/api\/teams\/[^/]+\/(roadmap\/timeline|analytics|activity)$/.test(path) ||
-    /^\/api\/teams\/[^/]+\/members\/profile\/[^/]+$/.test(path)
-  ) {
-    return 'issues';
-  }
-  if (path === '/api/users/me/dashboard') return 'dashboards';
-  if (path.startsWith('/api/attachments')) return 'files';
-  if (path.startsWith('/api/search')) return 'search';
-  if (path.startsWith('/api/orgs')) return 'orgs';
-  if (path.startsWith('/api/teams')) return 'teams';
-  if (
-    path.startsWith('/api/users/me') ||
-    path.startsWith('/api/users/search') ||
-    path.startsWith('/api/notifications')
-  ) {
-    return 'personal';
-  }
-  return 'none';
-}
-
-/**
- * Whether a token with these scopes may make this request.
- * @param scopes - The token's scopes
- * @param method - HTTP method
- * @param path - The request path, starting with /api
- */
-export function tokenAllows(scopes: readonly string[], method: string, path: string): boolean {
-  const write = !SAFE.has(method);
-  const kind = write ? 'write' : 'read';
-  // Off a registry action, nothing under admin opens to a token, nor a write on the account
-  if (path.startsWith('/api/admin')) return false;
-  if (path.startsWith('/api/users/me') && write) return false;
-  // An invite link's code lets whoever holds it join, so reading one is no org read
-  if (ORG_INVITE_LINKS.test(path)) return false;
-  // Nor change access control or delete what holds data: space permissions, page
-  // restrictions, creating, changing or deleting projects
-  if (write && ACCESS_CONTROL.some((re) => re.test(path))) return false;
-  const area = areaOf(path);
-  if (area === 'none') return false;
-  // Notification state may be written with a read scope; it only touches the user's own
-  if (area === 'personal') {
-    if (write && !path.startsWith('/api/notifications')) return false;
-    return scopeAllows(scopes, 'issues', 'read') || scopeAllows(scopes, 'wiki', 'read');
-  }
-  // Org, team and search reads only; managing them is not for tokens
-  if (write && (area === 'orgs' || area === 'teams' || area === 'search')) return false;
-  // The dashboard is issue data, so issues:read opens it as well
-  if (area === 'dashboards' && scopeAllows(scopes, 'issues', 'read')) return true;
-  return scopeAllows(scopes, area, kind);
 }
 
 /**

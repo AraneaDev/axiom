@@ -16,12 +16,10 @@ import { z } from 'zod';
 
 import { defineAction } from '../../actions/define';
 import { executeAction } from '../../actions/execute';
-import { LEGACY_ROUTES } from '../../actions/legacy-routes';
 import { registerActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import app from '../../index';
 import { createAgentServer } from '../../mcp/agent-server';
-import { legacyRouteDeletes, normalizeApiPath } from '../../middleware/token-scopes';
 import { createWebSocketServer } from '../../realtime/ws-server';
 import { tokenFor, waitFor } from '../../test/collab-client';
 import {
@@ -849,16 +847,7 @@ describe('agent approvals', () => {
     });
   });
 
-  describe('legacy routes that delete', () => {
-    const concrete = (path: string) => path.replace(/:[^/]+/g, 'probe');
-    const deleting = LEGACY_ROUTES.filter((route) =>
-      legacyRouteDeletes(route.method, normalizeApiPath(concrete(route.path))),
-    );
-
-    it('are none: every route that deletes or takes a person out of a check is a registry action', () => {
-      expect(deleting).toEqual([]);
-    });
-
+  describe('routes that delete', () => {
     describe('human checks (A20)', () => {
       /** A gate between two new columns of the project. */
       async function createGate() {
@@ -951,24 +940,14 @@ describe('agent approvals', () => {
           0,
         );
       });
-
-      it.each([
-        ['POST', '/api/projects/probe/automation-rules/probe/toggle'],
-        ['POST', '/api/approval-requests/probe/cancel'],
-        ['POST', '/api/issues/probe/approval-requests/probe'],
-        ['GET', '/api/projects/probe/approval-gates'],
-      ])('leaves %s %s to the scopes', (method, path) => {
-        expect(legacyRouteDeletes(method, normalizeApiPath(path))).toBe(false);
-      });
     });
 
-    it('still refuses a token a DELETE that no registry action serves, and says what is needed', async () => {
+    it('answers a token 404 on a DELETE that no action serves, and holds nothing', async () => {
       const res = await request(app)
         .delete('/api/notifications/probe')
         .set('Authorization', ownerToken)
         .set('X-Requested-With', 'XMLHttpRequest');
-      expect(res.status).toBe(403);
-      expect(res.body.error.message).toContain('registry action');
+      expect(res.status).toBe(404);
       expect(await prisma.agentApproval.count({ where: { userId: owner.id } })).toBe(0);
     });
 

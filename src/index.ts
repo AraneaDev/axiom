@@ -6,7 +6,7 @@ import helmet from 'helmet';
 
 import { handleAct } from './actions/batch';
 import { listActions } from './actions/registry';
-import { markRegistryRoute, mountActions } from './actions/rest';
+import { mountActions } from './actions/rest';
 import { prisma } from './config/database';
 import { env } from './config/env';
 import { openApiRouter } from './lib/openapi';
@@ -125,8 +125,8 @@ app.use('/api/search', searchLimiter);
 // CSRF protection: require X-Requested-With header on state-changing requests
 app.use('/api', csrfGuard);
 
-// OpenAPI spec + Scalar docs UI (public, no auth required). Ahead of the routers below: several
-// of them run router.use(authenticate) on all of /api, which would answer these with a 401.
+// OpenAPI spec + Scalar docs UI (public, no auth required). Ahead of the catch-all below, which
+// would answer these with a 401.
 app.use('/api', openApiRouter);
 
 // 2FA enforcement — after auth, before feature routes
@@ -138,24 +138,21 @@ app.get('/health', (_req, res) => {
 // Audit middleware: registers finish listener to log mutating API requests
 app.use('/api', auditMiddleware);
 
-// Registry actions come ahead of the legacy routers, so that their router.use middleware never
-// runs on a migrated path. An actions file must be imported above to be in this list.
+// Every action's REST binding. An actions file must be imported above to be in this list.
 const actionsRouter = express.Router();
 mountActions(actionsRouter, listActions());
 app.use(actionsRouter);
 
-// Actions by name, and the MCP server. Each action checks the token's scope, so these are registry
-// routes, and they sit ahead of the legacy routers whose router.use(authenticate) would ask
-// tokenAllows.
-app.post('/api/act', markRegistryRoute, authenticate, handleAct);
-const mcpAccess = [checkMcpOrigin, markRegistryRoute, authenticate, requireApiToken];
+// Actions by name, and the MCP server. Each action checks the token's scope.
+app.post('/api/act', authenticate, handleAct);
+const mcpAccess = [checkMcpOrigin, authenticate, requireApiToken];
 app.post('/api/mcp', mcpAccess, handleMcpPost);
 app.get('/api/mcp', mcpAccess, refuseMcpStream);
 app.delete('/api/mcp', mcpAccess, refuseMcpStream);
 
-// Whatever no route above served asks for credentials, and a token's scope, before the 404 below,
-// as the legacy routers did when they all sat here: a legacy route added later is guarded by the
-// same rule, and an unknown path tells a stranger nothing. Task 6 reviews this with tokenAllows.
+// Whatever no route above served asks for credentials before the 404 below. A stranger gets the
+// same 401 on an unknown path as on a real one, so the API can't be mapped without signing in,
+// and a token and a session then get the same 404: neither learns more than "not found".
 app.use('/api', authenticate);
 
 // Unknown /api routes get a JSON 404, never the SPA index.html

@@ -21,7 +21,6 @@ import {
 import { authGet, authPatch, authPost } from '../test/helpers';
 import { callTool, connectMcp, serveApp } from '../test/mcp-client';
 
-import { LEGACY_ROUTES } from './legacy-routes';
 import { getAction } from './registry';
 
 type Method = 'get' | 'post' | 'patch' | 'put' | 'delete';
@@ -273,10 +272,6 @@ describe('admin reach', () => {
         return !def?.admin || def.area !== 'admin' || !def.preview || !def.rest;
       });
       expect(wrong).toEqual([]);
-    });
-
-    it('leaves no route tagged plan 3 on the legacy list', () => {
-      expect(LEGACY_ROUTES.filter((route) => route.plan === 3)).toEqual([]);
     });
 
     it('lets a token be minted with the admin scopes, and no scope that still does nothing', () => {

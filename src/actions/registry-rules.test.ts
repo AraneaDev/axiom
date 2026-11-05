@@ -6,54 +6,30 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { jsonSchema } from '../lib/openapi/json-schema';
-import { normalizeApiPath, TOKEN_SCOPES, tokenAllows } from '../middleware/token-scopes';
+import { TOKEN_SCOPES } from '../middleware/token-scopes';
 import { ORG_INPUT_FIELDS } from '../modules/agent-approvals/agent-policy.service';
 
-import { defineAction, type ActionDef } from './define';
-import { scopesCoverAction } from './execute';
+import { defineAction, type ActionContext, type ActionDef } from './define';
+import { actionRefusal } from './execute';
 import { listActions } from './registry';
+import FROZEN_REACH from './token-reach.json';
 
 /** Writes a token can only make when each call waits for a person (R9) */
 const TOKEN_BLOCKED_WRITE_AREAS = new Set(['admin', 'orgs', 'teams', 'projects']);
 
 /**
- * Actions on a route that only exists in the registry, so tokenAllows has no rule to compare with
- * and answers "forbidden" for an unknown path. Each with the reason:
- * - item.read, POST /api/read: new in the agent layer, area search with a scope per item (R4)
- * - query.run, POST /api/query: new in plan 2, a read in area search that also needs issues:read
- *   inside the handler (P9)
- * - savedQuery.*, /api/saved-filters: tokenAllows refused the saved filter paths to every token
- *   (the issue list's presets). Plan 2 gives agents saved queries in area dashboards (P12), so
- *   the scope decides now. Legacy tokens hold dashboards:read and gain no write.
- * - dashboard.*, dashboardWidget.*, /api/dashboards: new in plan 2, area dashboards (P12)
- * - agentApproval.*, agentPolicy.*: new in plan 3, area approvals
+ * A token's call over REST, as actionRefusal sees it.
+ * @param scopes - The token's scopes
  */
-const NO_LEGACY_ROUTE = new Set([
-  'agentApproval.list',
-  'agentApproval.get',
-  'agentApproval.wait',
-  'agentPolicy.get',
-  'agentPolicy.update',
-  'item.read',
-  'query.run',
-  'savedQuery.list',
-  'savedQuery.get',
-  'savedQuery.create',
-  'savedQuery.update',
-  'savedQuery.delete',
-  'savedQuery.run',
-  'dashboard.list',
-  'dashboard.get',
-  'dashboard.create',
-  'dashboard.update',
-  'dashboard.delete',
-  'dashboard.render',
-  'dashboard.renderEmbedded',
-  'dashboardWidget.add',
-  'dashboardWidget.update',
-  'dashboardWidget.remove',
-  'dashboardWidget.reorder',
-]);
+function tokenCtx(scopes: string[]): ActionContext {
+  return {
+    userId: 'probe',
+    apiTokenId: 'probe',
+    scopes,
+    channel: 'rest-token',
+    http: {} as NonNullable<ActionContext['http']>,
+  };
+}
 
 /**
  * Every actions file below a directory, tests excluded by their suffix.
@@ -83,8 +59,8 @@ async function loadActionFiles(files: string[]): Promise<void> {
 }
 
 /**
- * The actions files the app does not import, whose routes would silently stay on the legacy
- * routers and whose actions would be missing from describe.
+ * The actions files the app does not import, whose routes would answer 404 and whose actions
+ * would be missing from describe.
  * @param files - Absolute paths
  * @param root - The directory the entry file is in
  * @param entrySource - The source of the entry file
@@ -123,18 +99,6 @@ function paramsOf(restPath: string): string[] {
  */
 function hasCatchall(schema: z.ZodType): boolean {
   return schema instanceof z.ZodObject && schema.def.catchall !== undefined;
-}
-
-/**
- * Whether the legacy table refuses this binding to a token holding every scope. Those are the
- * always-blocked rules, which skip the table on a registry route and so must become a flag.
- * @param binding - The binding
- * @param binding.method - Its method
- * @param binding.path - Its path
- */
-function alwaysBlocked(binding: NonNullable<ActionDef['rest']>): boolean {
-  const concrete = binding.path.replace(/:[^/]+/g, 'probe');
-  return !tokenAllows(TOKEN_SCOPES, binding.method, normalizeApiPath(concrete));
 }
 
 const ORG_FIELDS = ORG_INPUT_FIELDS;
@@ -206,20 +170,6 @@ function ruleViolations(def: ActionDef): string[] {
   ) {
     violations.push(
       `${def.name}: a write in area ${def.area} needs admin, uiOnly or tokenBlocked (R9)`,
-    );
-  }
-
-  if (
-    def.rest &&
-    !def.uiOnly &&
-    !def.tokenBlocked &&
-    !def.admin &&
-    !NO_LEGACY_ROUTE.has(def.name) &&
-    alwaysBlocked(def.rest)
-  ) {
-    violations.push(
-      `${def.name}: tokenAllows refuses ${def.rest.method} ${def.rest.path} to every token, ` +
-        'so it needs admin, uiOnly or tokenBlocked (R7, R9)',
     );
   }
 
@@ -328,49 +278,19 @@ describe('registry rules', () => {
   });
 
   describe('token reach', () => {
-    // Every binding is compared with what tokenAllows gave its route, for each single scope.
-    // Intended differences keep their rows, with a weaker comparison:
-    // - uiOnly and tokenBlocked: refused to every token, whatever tokenAllows let through
-    // - R1: attachment actions need the parent's area scope as well, so they may reach less,
-    //   never more
-    // - admin: a deliberate widening (spec G1): only area admin opens it, and it always waits
-    // Refused actions that tokenAllows let through, each with the reason. None so far.
-    const REFUSED_ON_PURPOSE = new Set<string>();
-    const isRefused = (def: ActionDef): boolean => !!def.uiOnly || !!def.tokenBlocked;
-    const isAttachment = (def: ActionDef): boolean => def.name.startsWith('attachment.');
-
-    // Read when the tests run: the actions files load in beforeAll
-    const tableRows = () =>
-      listActions()
-        .filter((def) => def.rest && !NO_LEGACY_ROUTE.has(def.name))
-        .flatMap((def) => TOKEN_SCOPES.map((scope) => ({ def, scope })));
-
-    it('has rows to compare', () => {
-      expect(tableRows().length).toBeGreaterThan(0);
-    });
-
-    it('gives each single scope the reach tokenAllows gave the route', () => {
-      const differences = tableRows().flatMap(({ def, scope }) => {
-        const { method, path: pattern } = def.rest!;
-        const concrete = pattern.replace(/:[A-Za-z]+/g, 'x');
-        const before = tokenAllows([scope], method, concrete);
-        // What the registry lets this scope do: nothing for a refused action
-        const after = !isRefused(def) && scopesCoverAction([scope], def);
-        // A refused action is fine where tokenAllows refused it too: for every scope, or as a
-        // write in an area tokens may not write. Anything else needs a name in the allowlist.
-        const alsoRefusedBefore =
-          !before || (def.kind === 'write' && TOKEN_BLOCKED_WRITE_AREAS.has(def.area));
-        const onlyAdminScope = !after || scope.startsWith('admin:');
-        const fine = def.admin
-          ? def.area === 'admin' && onlyAdminScope
-          : isRefused(def)
-            ? !after && (alsoRefusedBefore || REFUSED_ON_PURPOSE.has(def.name))
-            : isAttachment(def)
-              ? !after || before
-              : before === after;
-        return fine ? [] : [`${def.name} with ${scope}: was ${before}, is ${after}`];
-      });
-      expect(differences).toEqual([]);
+    // What each single scope reaches of every action, frozen when the path rules went (plan 4,
+    // Task 6), at the reach they had been checked against. A change here widens or narrows what
+    // tokens can do: make it in the same commit as the action, on purpose and reviewed.
+    it('gives each action the reach of the frozen table', () => {
+      const reach = Object.fromEntries(
+        listActions()
+          .map((def): [string, string[]] => [
+            def.name,
+            TOKEN_SCOPES.filter((scope) => !actionRefusal(def, tokenCtx([scope]))),
+          ])
+          .sort(([a], [b]) => a.localeCompare(b)),
+      );
+      expect(reach).toEqual(FROZEN_REACH);
     });
   });
 
@@ -527,27 +447,6 @@ describe('registry rules', () => {
       );
       expect(ruleViolations(defineAction({ ...base, area: 'orgs', kind: 'read' }))).toEqual([]);
       expect(ruleViolations(defineAction({ ...write, area: 'issues' }))).toEqual([]);
-    });
-
-    it.each([
-      ['PATCH', '/api/projects/:projectId'],
-      ['DELETE', '/api/projects/:projectId'],
-      ['PUT', '/api/wiki/pages/:pageId/restrictions'],
-      ['GET', '/api/admin/users'],
-      ['PATCH', '/api/users/me'],
-    ] as const)('fails on %s %s in an open area, which tokenAllows always blocks', (method, p) => {
-      const params = Object.fromEntries(paramsOf(p).map((name) => [name, z.string()]));
-      const base = {
-        ...throwaway,
-        name: 'throwaway.blockedPath',
-        area: 'issues' as const,
-        kind: 'write' as const,
-        input: z.object(params),
-        rest: { method, path: p },
-      };
-      expect(ruleViolations(defineAction(base))).toEqual([expect.stringContaining('R7, R9')]);
-      expect(ruleViolations(defineAction({ ...base, tokenBlocked: true }))).toEqual([]);
-      expect(ruleViolations(defineAction({ ...base, uiOnly: true }))).toEqual([]);
     });
   });
 

@@ -48,19 +48,6 @@ function captures(earlier: string[], later: string[]): boolean {
 }
 
 /**
- * Tell authenticate that Express routed this request to a registry binding, so the action checks
- * the token's scope. A binding answers every request it gets, so the mark never reaches a legacy
- * route.
- * @param req - The request
- * @param _res - Unused
- * @param next - Continues to authenticate
- */
-export const markRegistryRoute: RequestHandler = (req, _res, next) => {
-  req.registryRoute = true;
-  next();
-};
-
-/**
  * Who runs an action, from what authenticate left on the request.
  * @param req - An authenticated request
  * @param open - Whether the route is public: no user is expected
@@ -104,8 +91,8 @@ function sendResult(res: Response, binding: RestBinding, result: unknown): void 
 
 /**
  * Mount each action's REST binding, in array order: Express takes the first match, so a static
- * path goes before the param path that would capture it. Authentication is per route, because
- * this router sits in front of the legacy routers and must let their paths through untouched.
+ * path goes before the param path that would capture it. Authentication is per route, as a
+ * public binding has none.
  * @param router - The router to mount on, at the root: binding paths are complete
  * @param defs - The actions; those without a binding are skipped
  * @throws {Error} At startup, on a path that an earlier one leaves unreachable
@@ -129,7 +116,6 @@ export function mountActions(router: Router, defs: ActionDef[]): void {
 
     const route = router[ROUTER_METHOD[binding.method]].bind(router);
     const chain: RequestHandler[] = [
-      markRegistryRoute,
       ...(binding.rateLimit ? [binding.rateLimit] : []),
       ...(binding.public ? [] : [authenticate]),
       ...(binding.middleware ?? []),

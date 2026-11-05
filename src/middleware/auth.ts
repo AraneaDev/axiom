@@ -4,10 +4,8 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { getRequestContext } from '../lib/request-context';
-import { requestPathname } from '../lib/request-path';
 
 import { AppError } from './errorHandler';
-import { legacyRouteDeletes, normalizeApiPath, tokenAllows } from './token-scopes';
 
 export interface AuthPayload {
   userId: string;
@@ -23,8 +21,6 @@ declare global {
       /** Set when the request authenticated with an API token: the token's id and name */
       apiTokenId?: string;
       apiTokenName?: string;
-      /** Set by a registry binding's own route: the action checks the token's scope */
-      registryRoute?: boolean;
     }
   }
 }
@@ -68,28 +64,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
         throw new AppError(403, 'Account has been deactivated', 'ACCOUNT_DEACTIVATED');
       }
 
-      // A token only reaches what its scopes cover (see token-scopes.ts)
-      // Every spelling Express routes to the same handler meets the same rule
-      if (!req.registryRoute) {
-        const path = normalizeApiPath(requestPathname(req));
-        if (!tokenAllows(apiToken.scopes, req.method, path)) {
-          throw new AppError(
-            403,
-            'This API token does not have the scope for this request',
-            'SCOPE',
-          );
-        }
-        // A registry action waits for approval; a route that isn't one would do this with no human
-        if (legacyRouteDeletes(req.method, path)) {
-          throw new AppError(
-            403,
-            'A token can only do this through a registry action, which waits for approval. ' +
-              'This route has none yet: do this in the web UI.',
-            'NEEDS_REGISTRY_ACTION',
-          );
-        }
-      }
-
+      // The action this request reaches checks the token's scopes (src/actions/execute.ts)
       req.userId = apiToken.userId;
       req.tokenScopes = apiToken.scopes;
       req.apiTokenId = apiToken.id;

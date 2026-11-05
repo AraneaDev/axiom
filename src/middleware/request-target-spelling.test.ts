@@ -102,20 +102,36 @@ describe('a fragment in the request target', () => {
   });
 
   describe('under /api/admin', () => {
-    it.each(['PATCH', 'DELETE', 'HEAD'])('refuses %s to a token holding every scope', async (m) => {
+    it('refuses HEAD to a token holding every scope', async () => {
       const token = await tokenWith([...TOKEN_SCOPES]);
-      const res = await rawRequest(server, m, '/api/admin/users#/x', token);
+      const res = await rawRequest(server, 'HEAD', '/api/admin/users#/x', token);
       expect(res.status).toBe(403);
-      if (m !== 'HEAD') expect(res.body.error?.code).toBe('SCOPE');
     });
+
+    // No action serves these methods on the path the fragment leaves
+    it.each(['PATCH', 'DELETE'])(
+      'answers %s with 404 to a token holding every scope',
+      async (m) => {
+        const token = await tokenWith([...TOKEN_SCOPES]);
+        const res = await rawRequest(server, m, '/api/admin/users#/x', token);
+        expect(res.status).toBe(404);
+      },
+    );
   });
 
   describe('on page restrictions', () => {
-    it.each(['PUT', 'PATCH', 'DELETE'])('refuses %s to a wiki token', async (m) => {
+    it('refuses PUT to a wiki token', async () => {
       const token = await tokenWith(['wiki:write']);
-      const res = await rawRequest(server, m, '/api/wiki/pages/P/restrictions#', token);
+      const res = await rawRequest(server, 'PUT', '/api/wiki/pages/P/restrictions#', token);
       expect(res.status).toBe(403);
       expect(res.body.error?.code).toBe('SCOPE');
+    });
+
+    // No action serves these methods on the path the fragment leaves
+    it.each(['PATCH', 'DELETE'])('answers %s with 404 to a wiki token', async (m) => {
+      const token = await tokenWith(['wiki:write']);
+      const res = await rawRequest(server, m, '/api/wiki/pages/P/restrictions#', token);
+      expect(res.status).toBe(404);
     });
 
     it('refuses HEAD to a token without a wiki scope', async () => {

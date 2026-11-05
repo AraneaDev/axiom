@@ -281,7 +281,7 @@ describe('executeAction', () => {
 
   it('refuses uiOnly actions to tokens', async () => {
     uiOnlyHandler.mockClear();
-    // No scope opens these, not even a token holding all of them. Same answer as tokenAllows.
+    // No scope opens these, not even a token holding all of them
     const allScopes = [...TOKEN_SCOPES];
     for (const channel of ['rest-token', 'mcp'] as const) {
       const err = await refusal(

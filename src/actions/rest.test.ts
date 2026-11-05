@@ -153,29 +153,27 @@ registerActions([
       ctx.http?.res.status(201).end();
     },
   }),
-  // The legacy table refuses every token on /api/admin, and lets wiki scopes through on /api/wiki
-  reader('rest.legacyRefuses', 'issues', '/api/admin/rest-test'),
-  reader('rest.legacyAllows', 'issues', '/api/wiki/rest-test'),
-  // A path under a prefix a legacy router still owns: its middleware must not run on it
-  reader('rest.shadowsLegacy', 'issues', '/api/site-settings/:section/rest-shadow'),
-  // /api/admin/rest-guard%2Fx routes to the legacy admin router, and normalizes to this
+  // Paths under /api/admin and /api/wiki in area issues: the action decides the scope, not the path
+  reader('rest.adminPath', 'issues', '/api/admin/rest-test'),
+  reader('rest.wikiPath', 'issues', '/api/wiki/rest-test'),
+  // /api/admin/rest-guard%2Fx normalizes to this pattern, but Express routes it to no binding
   defineAction({
     name: 'rest.guard',
     area: 'issues',
     kind: 'write',
-    summary: 'A pattern a respelled legacy path normalizes into',
+    summary: 'A pattern a respelled path normalizes into',
     input: z.looseObject({}),
     output,
     rest: { method: 'PATCH', path: '/api/admin/rest-guard/:id' },
     authorize: noAuthorize,
     handler: async () => ({ ok: true }),
   }),
-  // Beside the legacy PATCH /api/projects/:projectId, which a fragment can reach
+  // Beside PATCH /api/projects/:projectId (project.update), which a fragment can reach
   defineAction({
     name: 'rest.probe',
     area: 'issues',
     kind: 'write',
-    summary: 'A binding that the spelling of a legacy path normalizes into',
+    summary: 'A binding that the spelling of another path normalizes into',
     input: z.looseObject({}),
     output,
     rest: { method: 'PATCH', path: '/api/projects/:projectId/probe-labels' },
@@ -355,16 +353,7 @@ describe('REST adapter', () => {
       expect(byId.body).toEqual({ action: 'rest.byId' });
     });
 
-    it('runs ahead of legacy routers, so their middleware never sees a migrated path', async () => {
-      // The legacy router answers 404 for a path it does not know
-      const res = await request(app)
-        .get('/api/site-settings/no-such/rest-shadow')
-        .set('Authorization', jwtHeader);
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual({ action: 'rest.shadowsLegacy' });
-    });
-
-    it('leaves paths without a binding to the legacy routers', async () => {
+    it('answers 404 on a path without a binding', async () => {
       const res = await request(app)
         .get('/api/teams/no-such-team/activity')
         .set('Authorization', jwtHeader);
@@ -416,26 +405,25 @@ describe('REST adapter', () => {
   });
 
   describe('token scope on registry routes', () => {
-    it('lets the adapter, not the legacy path table, decide token scope on registry routes', async () => {
+    it('lets the action, not the path, decide token scope', async () => {
       const issues = await tokenWith(['issues:read']);
       const wiki = await tokenWith(['wiki:read']);
 
-      // The legacy table refuses every token on /api/admin; issues:read is what the action asks
+      // A path under /api/admin; issues:read is what the action asks
       const passes = await request(app).get('/api/admin/rest-test').set('Authorization', issues);
       expect(passes.status).toBe(200);
-      expect(passes.body).toEqual({ action: 'rest.legacyRefuses' });
+      expect(passes.body).toEqual({ action: 'rest.adminPath' });
 
-      // The legacy table lets wiki:read through on /api/wiki; the action is in area issues
+      // A path under /api/wiki; the action is in area issues
       const refused = await request(app).get('/api/wiki/rest-test').set('Authorization', wiki);
       expect(refused.status).toBe(403);
       expect(refused.body.error.code).toBe('SCOPE');
     });
 
-    it('still refuses a token the legacy table refuses on a path without a binding', async () => {
+    it('answers 404 to a token with every scope on a path without a binding', async () => {
       const token = await tokenWith([...TOKEN_SCOPES]);
       const res = await request(app).get('/api/admin/no-binding').set('Authorization', token);
-      expect(res.status).toBe(403);
-      expect(res.body.error.code).toBe('SCOPE');
+      expect(res.status).toBe(404);
     });
 
     it.each([
@@ -443,12 +431,12 @@ describe('REST adapter', () => {
       ['a doubled slash', '/api/admin/rest-guard//x'],
       ['an encoded static segment', '/api/%61dmin/rest-guard/x'],
     ])(
-      'does not skip the legacy table for %s, which Express routes elsewhere',
+      'does not reach the binding with %s, which Express routes elsewhere',
       async (_name, path) => {
         const token = await tokenWith(['issues:write']);
         const res = await request(app).patch(path).set(CSRF).set('Authorization', token);
-        expect(res.status).toBe(403);
-        expect(res.body.error.code).toBe('SCOPE');
+        expect(res.status).toBe(404);
+        expect(res.body).toEqual({ error: { message: 'Not found' } });
       },
     );
 
@@ -479,7 +467,7 @@ describe('REST adapter', () => {
         await cleanup();
       });
 
-      it('does not skip the legacy table when the fragment spells a binding', async () => {
+      it('runs the action Express routes to when the fragment spells a binding', async () => {
         const token = await tokenWith(['issues:write']);
         const res = await rawRequest(
           server,
@@ -534,7 +522,7 @@ describe('REST adapter', () => {
       guardedHandler.mockClear();
       const wikiOnly = await tokenWith(['wiki:read', 'wiki:write']);
 
-      // The legacy table would let this token through on /api/wiki
+      // A path under /api/wiki, in area issues
       const refused = await request(app)
         .post('/api/wiki/rest-scope-path')
         .set(CSRF)

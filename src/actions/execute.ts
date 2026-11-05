@@ -10,7 +10,7 @@ import { auditAction } from './audit';
 import type { ActionContext, ActionDef } from './define';
 import { getAction } from './registry';
 
-/** The refusal authenticate gives a token today, so migrated routes keep their answer. */
+/** The refusal a token gets when its scopes do not cover the action. */
 function scopeRefusal(): AppError {
   return new AppError(403, 'This API token does not have the scope for this request', 'SCOPE');
 }

@@ -1,6 +1,7 @@
 /**
- * Token scopes per area. Stored tokens were rewritten from the four old scope names, and
- * each must reach exactly what it reached under the old path rules, no more and no less.
+ * Token scopes per area. Stored tokens were rewritten from the four old scope names by a
+ * migration, which maps each to the scopes of LEGACY_SCOPE_MAP. What a scope reaches is the
+ * registry's to decide, pinned in src/actions/registry-rules.test.ts and token-reach.test.ts.
  */
 import crypto from 'crypto';
 import { readdirSync, readFileSync } from 'fs';
@@ -15,198 +16,12 @@ import { authPost } from '../test/helpers';
 
 import {
   LEGACY_SCOPE_MAP,
-  normalizeApiPath,
   SCOPE_AREAS,
   scopeAllows,
   INERT_SCOPES,
   MINTABLE_SCOPES,
   TOKEN_SCOPES,
-  tokenAllows,
 } from './token-scopes';
-
-// ─── Frozen copy of the path rules before scopes per area. Do not update. ───
-
-const OLD_SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
-const OLD_ACCESS_CONTROL = [
-  /^\/api\/wiki\/spaces\/[^/]+\/permissions(\/|$)/,
-  /^\/api\/wiki\/pages\/[^/]+\/restrictions$/,
-  /^\/api\/wiki\/restrictions\//,
-  /^\/api\/projects\/team\/[^/]+$/,
-  /^\/api\/projects\/[^/]+$/,
-];
-function oldHas(scopes: readonly string[], area: 'issues' | 'wiki', write: boolean): boolean {
-  return write
-    ? scopes.includes(`${area}:write`)
-    : scopes.includes(`${area}:read`) || scopes.includes(`${area}:write`);
-}
-function oldAreaOf(path: string): 'issues' | 'wiki' | 'any' | 'none' {
-  if (path.startsWith('/api/wiki')) return 'wiki';
-  if (
-    path.startsWith('/api/projects') ||
-    path.startsWith('/api/issues') ||
-    path.startsWith('/api/approval-requests') ||
-    path.startsWith('/api/custom-fields') ||
-    path.startsWith('/api/links') ||
-    /^\/api\/teams\/[^/]+\/(roadmap\/timeline|analytics|activity)$/.test(path) ||
-    /^\/api\/teams\/[^/]+\/members\/profile\/[^/]+$/.test(path) ||
-    path === '/api/users/me/dashboard'
-  ) {
-    return 'issues';
-  }
-  if (path.startsWith('/api/attachments')) return 'any';
-  if (
-    path.startsWith('/api/search') ||
-    path.startsWith('/api/orgs') ||
-    path.startsWith('/api/teams') ||
-    path.startsWith('/api/users/me') ||
-    path.startsWith('/api/users/search') ||
-    path.startsWith('/api/notifications')
-  ) {
-    return 'any';
-  }
-  return 'none';
-}
-function oldTokenAllows(scopes: readonly string[], method: string, path: string): boolean {
-  const write = !OLD_SAFE.has(method);
-  if (path.startsWith('/api/admin')) return false;
-  if (path.startsWith('/api/users/me') && write) return false;
-  if (write && OLD_ACCESS_CONTROL.some((re) => re.test(path))) return false;
-  const area = oldAreaOf(path);
-  if (area === 'issues' || area === 'wiki') return oldHas(scopes, area, write);
-  if (area === 'any') {
-    if (path.startsWith('/api/attachments')) {
-      return write
-        ? oldHas(scopes, 'issues', true) || oldHas(scopes, 'wiki', true)
-        : oldHas(scopes, 'issues', false) || oldHas(scopes, 'wiki', false);
-    }
-    if (write && !path.startsWith('/api/notifications')) return false;
-    return oldHas(scopes, 'issues', false) || oldHas(scopes, 'wiki', false);
-  }
-  return false;
-}
-
-// ─── Samples ────────────────────────────────────────────────
-
-const METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
-
-/** The (method, path) samples of token-scopes-paths.test.ts */
-const PATH_FIXTURES: Array<[string, string]> = [
-  ['DELETE', '/api/projects/abc'],
-  ['PATCH', '/api/projects/abc'],
-  ['POST', '/api/projects/team/t1'],
-  ['PUT', '/api/wiki/spaces/s1/permissions'],
-  ['DELETE', '/api/wiki/spaces/s1/permissions/p1'],
-  ['PUT', '/api/wiki/pages/p1/restrictions'],
-  ['DELETE', '/api/wiki/restrictions/r1'],
-  ['POST', '/api/users/me/tokens'],
-  ['GET', '/api/admin/users'],
-  ['PATCH', '/api/orgs/o1'],
-  ['GET', '/api/projects/p1/issues'],
-  ['POST', '/api/projects/p1/issues'],
-  ['GET', '/api/wiki/spaces/s1/tree'],
-  ['POST', '/api/wiki/spaces/s1/pages'],
-  ['GET', '/api/teams/t1/activity'],
-  ['GET', '/api/teams/t1/roadmap/timeline'],
-  ['GET', '/api/teams/t1/members/profile/bob'],
-  ['GET', '/api/users/me/dashboard'],
-  ['GET', '/api/issues/i1/approval-requests'],
-];
-
-/** One path per mounted route family, tried with every method */
-const ROUTE_PATHS = [
-  '/api/projects',
-  '/api/projects/p1',
-  '/api/projects/team/t1',
-  '/api/projects/team/t1/extra',
-  '/api/projects/p1/analytics',
-  '/api/projects/p1/issues',
-  '/api/projects/p1/issues/1',
-  '/api/projects/p1/issues/bulk',
-  '/api/projects/p1/issues/1/comments',
-  '/api/projects/p1/comments/c1',
-  '/api/projects/p1/activity',
-  '/api/projects/p1/time-report',
-  '/api/projects/p1/sprints',
-  '/api/projects/p1/sprints/s1/start',
-  '/api/projects/p1/velocity',
-  '/api/projects/p1/backlog',
-  '/api/projects/p1/board',
-  '/api/projects/p1/board/columns/c1',
-  '/api/projects/p1/forms',
-  '/api/projects/p1/forms/f1',
-  '/api/projects/p1/intake',
-  '/api/projects/p1/intake/s1',
-  '/api/projects/p1/automation-rules',
-  '/api/projects/p1/automation-rules/r1/toggle',
-  '/api/projects/p1/approval-gates',
-  '/api/projects/p1/workflow-rules/r1',
-  '/api/projects/p1/custom-fields',
-  '/api/projects/p1/labels/bug',
-  '/api/projects/p1/issue-templates/t1',
-  '/api/projects/p1/milestones',
-  '/api/projects/p1/roadmap/buckets',
-  '/api/projects/p1/constructor',
-  '/api/projectsx/p1',
-  '/api/issues/i1/custom-fields',
-  '/api/issues/i1/approval-requests',
-  '/api/approval-requests/r1/vote',
-  '/api/custom-fields/f1',
-  '/api/links/resolve-link',
-  '/api/wiki/team/t1/spaces',
-  '/api/wiki/spaces/s1',
-  '/api/wiki/spaces/s1/tree',
-  '/api/wiki/spaces/s1/permissions',
-  '/api/wiki/spaces/s1/permissions/p1',
-  '/api/wiki/pages/p1',
-  '/api/wiki/pages/p1/restrictions',
-  '/api/wiki/pages/p1/comments',
-  '/api/wiki/restrictions/r1',
-  '/api/wiki/resolve-template',
-  '/api/attachments',
-  '/api/attachments/a1',
-  '/api/attachments/a1/meta',
-  '/api/search',
-  '/api/search/spaces',
-  '/api/search/saved',
-  '/api/search/saved/s1',
-  '/api/orgs',
-  '/api/orgs/o1',
-  '/api/orgs/o1/members',
-  '/api/teams/org/o1',
-  '/api/teams/t1',
-  '/api/teams/t1/members',
-  '/api/teams/t1/activity',
-  '/api/teams/t1/analytics',
-  '/api/teams/t1/roadmap/timeline',
-  '/api/teams/t1/members/profile/bob',
-  '/api/teams/roadmap',
-  '/api/users/me',
-  '/api/users/me/dashboard',
-  '/api/users/me/tokens',
-  '/api/users/me/tokens/t1',
-  '/api/users/me/pending-approvals',
-  '/api/users/search',
-  '/api/users/u1',
-  '/api/notifications',
-  '/api/notifications/unread-count',
-  '/api/notifications/n1/read',
-  '/api/notifications/read-all',
-  '/api/notifications/preferences',
-  '/api/admin',
-  '/api/admin/users',
-  '/api/admin/audit-logs',
-  '/api/saved-filters',
-  '/api/saved-filters/f1',
-  '/api/invitations/abc/accept',
-  '/api/auth/2fa/enable',
-  '/api/site-settings',
-  '/api/nothing-here',
-];
-
-const SAMPLES: Array<[string, string]> = [
-  ...PATH_FIXTURES,
-  ...ROUTE_PATHS.flatMap((path) => METHODS.map((m): [string, string] => [m, path])),
-];
 
 const LEGACY = ['issues:read', 'issues:write', 'wiki:read', 'wiki:write'] as const;
 
@@ -268,43 +83,6 @@ describe('token scopes per area', () => {
     }
   });
 
-  it('maps every legacy scope so it reaches exactly the same REST paths', () => {
-    for (const legacy of LEGACY) {
-      for (const [method, path] of SAMPLES) {
-        expect(
-          tokenAllows(LEGACY_SCOPE_MAP[legacy], method, path),
-          `${legacy} ${method} ${path}`,
-        ).toBe(oldTokenAllows([legacy], method, path));
-      }
-    }
-  });
-
-  it('keeps the reach of a token that held several legacy scopes', () => {
-    for (let bits = 1; bits < 2 ** LEGACY.length; bits++) {
-      const held = LEGACY.filter((_, i) => bits & (1 << i));
-      const mapped = held.flatMap((legacy) => LEGACY_SCOPE_MAP[legacy]);
-      for (const [method, path] of SAMPLES) {
-        expect(tokenAllows(mapped, method, path), `${held.join()} ${method} ${path}`).toBe(
-          oldTokenAllows(held, method, path),
-        );
-      }
-    }
-  });
-
-  it('holds the same reach for the spellings Express routes alike', () => {
-    for (const legacy of LEGACY) {
-      for (const [method, path] of SAMPLES) {
-        for (const raw of [`${path}/`, path.toUpperCase(), path.replace('/api/', '/api//')]) {
-          const normal = normalizeApiPath(raw);
-          expect(
-            tokenAllows(LEGACY_SCOPE_MAP[legacy], method, normal),
-            `${legacy} ${method} ${raw}`,
-          ).toBe(oldTokenAllows([legacy], method, normal));
-        }
-      }
-    }
-  });
-
   it('gives legacy tokens no write scope in an area they could never write', () => {
     const everything = Object.values(LEGACY_SCOPE_MAP).flat();
     for (const never of [
@@ -338,65 +116,6 @@ describe('token scopes per area', () => {
           false,
         );
       }
-    }
-  });
-
-  it('never allows the always-blocked requests, whatever the scopes', () => {
-    const blocked: Array<[string, string]> = [
-      ['GET', '/api/admin/users'],
-      ['POST', '/api/admin/users/u1/deactivate'],
-      ['PATCH', '/api/users/me'],
-      ['POST', '/api/users/me/tokens'],
-      ['DELETE', '/api/users/me/tokens/t1'],
-      ['PUT', '/api/wiki/spaces/s1/permissions'],
-      ['DELETE', '/api/wiki/spaces/s1/permissions/p1'],
-      ['PUT', '/api/wiki/pages/p1/restrictions'],
-      ['DELETE', '/api/wiki/restrictions/r1'],
-      ['POST', '/api/projects/team/t1'],
-      ['PATCH', '/api/projects/p1'],
-      ['DELETE', '/api/projects/p1'],
-      ['POST', '/api/orgs'],
-      ['PATCH', '/api/orgs/o1'],
-      ['POST', '/api/teams/org/o1'],
-      ['PATCH', '/api/teams/t1'],
-      ['DELETE', '/api/teams/t1'],
-      ['POST', '/api/search/saved'],
-      ['GET', '/api/saved-filters'],
-      ['POST', '/api/invitations/abc/accept'],
-    ];
-    for (const [method, path] of blocked) {
-      expect(tokenAllows(TOKEN_SCOPES, method, path), `${method} ${path}`).toBe(false);
-    }
-  });
-
-  it('requires the scope of the area a path belongs to', () => {
-    const cases: Array<[string, string, string]> = [
-      ['GET', '/api/projects/p1/sprints', 'sprints:read'],
-      ['POST', '/api/projects/p1/sprints', 'sprints:write'],
-      ['GET', '/api/projects/p1/board', 'boards:read'],
-      ['PATCH', '/api/projects/p1/board/columns/c1', 'boards:write'],
-      ['GET', '/api/projects/p1/forms', 'forms:read'],
-      ['GET', '/api/projects/p1/automation-rules', 'automation:read'],
-      ['POST', '/api/projects/p1/approval-gates', 'approvals:write'],
-      ['POST', '/api/approval-requests/r1/vote', 'approvals:write'],
-      ['GET', '/api/projects/p1', 'projects:read'],
-      ['GET', '/api/projects/team/t1', 'projects:read'],
-      ['GET', '/api/attachments/a1', 'files:read'],
-      ['POST', '/api/attachments', 'files:write'],
-      ['GET', '/api/search', 'search:read'],
-      ['GET', '/api/orgs/o1', 'orgs:read'],
-      ['GET', '/api/teams/t1', 'teams:read'],
-      ['GET', '/api/users/me/dashboard', 'dashboards:read'],
-    ];
-    for (const [method, path, scope] of cases) {
-      expect(tokenAllows([scope], method, path), `${scope} ${method} ${path}`).toBe(true);
-      const others = TOKEN_SCOPES.filter(
-        (s) =>
-          s.split(':')[0] !== scope.split(':')[0] &&
-          // These two read the same data the dashboard is made of
-          !(path === '/api/users/me/dashboard' && s.startsWith('issues:')),
-      );
-      expect(tokenAllows(others, method, path), `others ${method} ${path}`).toBe(false);
     }
   });
 

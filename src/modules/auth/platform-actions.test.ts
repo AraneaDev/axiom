@@ -6,7 +6,6 @@ import express from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { LEGACY_ROUTES } from '../../actions/legacy-routes';
 import { listActions } from '../../actions/registry';
 import { mountActions } from '../../actions/rest';
 import app from '../../index';
@@ -50,10 +49,6 @@ describe('the route table of the platform group', () => {
 
   it('mounts static paths ahead of the param paths that would capture them', () => {
     expect(() => mountActions(express.Router(), listActions())).not.toThrow();
-  });
-
-  it('leaves no legacy route behind', () => {
-    expect(LEGACY_ROUTES).toEqual([]);
   });
 
   it('keeps every one of them out of reach of a token', () => {

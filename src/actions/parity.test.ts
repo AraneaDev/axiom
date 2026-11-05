@@ -5,7 +5,6 @@ import type { Express } from 'express';
 import ts from 'typescript';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { LEGACY_ROUTES, type LegacyRoute } from './legacy-routes';
 import { listActions } from './registry';
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -386,14 +385,6 @@ function served(
   );
 }
 
-/**
- * A legacy route as the request path a frontend call would make.
- * @param route - The legacy route
- */
-function asRequestPath(route: LegacyRoute): string {
-  return route.path.replace(/:[a-zA-Z_]+/g, ':param');
-}
-
 /** The registry's routes: every action binding, and the by-name endpoint */
 function registryRoutes(): Array<{ method: string; path: string }> {
   const bindings = listActions().flatMap((action) => (action.rest ? [action.rest] : []));
@@ -423,59 +414,6 @@ function stackServes(stack: RouterLayer[], method: string, requestPath: string):
     return stackServes(layer.handle.stack, method, rest);
   });
 }
-
-/**
- * Domains the registry owns after plan 1, so that no legacy route may sit in them. A legacy
- * route in a domain needs an exemption below, with the reason.
- */
-const MIGRATED_DOMAINS: Array<{ domain: string; matches(route: LegacyRoute): boolean }> = [
-  { domain: 'issue', matches: (r) => /^\/api\/projects\/:\w+\/issues(\/|$)/.test(r.path) },
-  { domain: 'comment', matches: (r) => /^\/api\/projects\/:\w+\/comments(\/|$)/.test(r.path) },
-  {
-    domain: 'worklog',
-    matches: (r) => /^\/api\/projects\/:\w+\/(issues\/:\w+\/worklogs|time-report)/.test(r.path),
-  },
-  {
-    domain: 'link',
-    matches: (r) => /^\/api\/projects\/:\w+\/issues\/:\w+\/(web-)?links/.test(r.path),
-  },
-  { domain: 'attachment', matches: (r) => /^\/api\/attachments(\/|$)/.test(r.path) },
-  {
-    domain: 'page',
-    matches: (r) =>
-      /^\/api\/wiki\/spaces\/:\w+\/pages(\/|$)/.test(r.path) ||
-      /^\/api\/wiki\/pages\/:\w+\/(copy|move|reorder|linked-issues)/.test(r.path),
-  },
-  {
-    domain: 'sprint',
-    matches: (r) => /^\/api\/projects\/:\w+\/(sprints|backlog|velocity)(\/|$)/.test(r.path),
-  },
-  {
-    domain: 'org, team or project read',
-    matches: (r) =>
-      r.method === 'GET' &&
-      /^\/api\/(orgs|orgs\/:\w+|teams\/:\w+|teams\/org\/:\w+|projects\/:\w+|projects\/team\/:\w+)$/.test(
-        r.path,
-      ),
-  },
-  {
-    domain: 'space read',
-    matches: (r) =>
-      r.method === 'GET' && /^\/api\/wiki\/(spaces\/:\w+|team\/:\w+\/spaces)$/.test(r.path),
-  },
-];
-
-/**
- * Legacy routes that a domain's pattern catches by name but plan 1 does not migrate. Each names
- * the plan task that takes it, in .superpowers' plans/2026-10-30-agent-layer-<plan>-*.md.
- */
-const DOMAIN_EXEMPTIONS: Array<{
-  method: string;
-  path: string;
-  plan: 3 | 4;
-  task: string;
-  reason: string;
-}> = [];
 
 describe('frontend and registry parity', () => {
   let scan: ReturnType<typeof scanFrontend>;
@@ -509,50 +447,16 @@ describe('frontend and registry parity', () => {
     expect(unused.map((allowed) => allowed.file)).toEqual([]);
   });
 
-  it('serves every frontend call from the registry or a tracked legacy route', () => {
+  it('serves every frontend call from a registry action', () => {
     const registry = registryRoutes();
-    const legacy = LEGACY_ROUTES.map((route) => ({ method: route.method, path: route.path }));
     const broken = BROKEN_FRONTEND_CALLS.map(({ method, path }) => ({ method, path }));
     const unmatched = scan.calls
       .filter(
         (call) =>
-          !served(registry, call.method, call.path) &&
-          !served(legacy, call.method, call.path) &&
-          !served(broken, call.method, call.path),
+          !served(registry, call.method, call.path) && !served(broken, call.method, call.path),
       )
       .map((call) => `${call.method} ${call.path}  (${call.where})`);
     expect([...new Set(unmatched)].sort()).toEqual([]);
-  });
-
-  it('lists no legacy route that a registry route serves', () => {
-    const registry = registryRoutes();
-    const stale = LEGACY_ROUTES.filter((route) =>
-      served(registry, route.method, asRequestPath(route)),
-    );
-    expect(stale.map((route) => `${route.method} ${route.path}`)).toEqual([]);
-  });
-
-  it('lists no legacy route twice', () => {
-    const keys = LEGACY_ROUTES.map((route) => `${route.method} ${route.path}`);
-    expect(keys.filter((key, i) => keys.indexOf(key) !== i)).toEqual([]);
-  });
-
-  it('lists no legacy route that no frontend call reaches', () => {
-    const unused = LEGACY_ROUTES.filter(
-      (route) =>
-        !scan.calls.some((call) =>
-          served([{ method: route.method, path: route.path }], call.method, call.path),
-        ),
-    );
-    expect(unused.map((route) => `${route.method} ${route.path}`)).toEqual([]);
-  });
-
-  it('lists only routes that exist in Express', () => {
-    const stack = (app.router as unknown as { stack: RouterLayer[] }).stack;
-    const missing = LEGACY_ROUTES.filter(
-      (route) => !stackServes(stack, route.method, route.path.replace(/:[a-zA-Z_]+/g, 'x')),
-    );
-    expect(missing.map((route) => `${route.method} ${route.path}`)).toEqual([]);
   });
 
   it('reaches an Express route with every frontend call', () => {
@@ -563,14 +467,6 @@ describe('frontend and registry parity', () => {
       .filter((call) => !stackServes(stack, call.method, call.path.replace(/:param/g, 'x')))
       .map((call) => `${call.method} ${call.path}  (${call.where})`);
     expect([...new Set(lost)].sort()).toEqual([]);
-  });
-
-  it('checks each domain exemption against its plan', () => {
-    const wrong = DOMAIN_EXEMPTIONS.filter((entry) => {
-      const route = LEGACY_ROUTES.find((r) => r.method === entry.method && r.path === entry.path);
-      return route?.plan !== entry.plan || !entry.task.includes(`plan ${entry.plan}`);
-    });
-    expect(wrong.map((entry) => `${entry.method} ${entry.path}`)).toEqual([]);
   });
 
   it('has no frontend call without a route', () => {
@@ -592,27 +488,5 @@ describe('frontend and registry parity', () => {
         ),
     );
     expect(called.map((call) => `${call.method} ${call.path}`)).toEqual([]);
-  });
-
-  it('tags every legacy route with the plan that migrates it', () => {
-    expect(LEGACY_ROUTES.filter((route) => route.plan !== 3 && route.plan !== 4)).toEqual([]);
-  });
-
-  it('keeps issue, comment, worklog, link, attachment, page, sprint and org, team, project reads out of the list', () => {
-    const exempt = (route: LegacyRoute) =>
-      DOMAIN_EXEMPTIONS.some((entry) => entry.method === route.method && entry.path === route.path);
-    const strays = LEGACY_ROUTES.flatMap((route) =>
-      MIGRATED_DOMAINS.filter((d) => d.matches(route) && !exempt(route)).map(
-        (d) => `${d.domain}: ${route.method} ${route.path}`,
-      ),
-    );
-    expect(strays).toEqual([]);
-  });
-
-  it('has no domain exemption that names a route outside the list', () => {
-    const listed = new Set(LEGACY_ROUTES.map((route) => `${route.method} ${route.path}`));
-    expect(
-      DOMAIN_EXEMPTIONS.filter((entry) => !listed.has(`${entry.method} ${entry.path}`)),
-    ).toEqual([]);
   });
 });
