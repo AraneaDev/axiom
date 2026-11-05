@@ -4,8 +4,9 @@ ALTER TABLE "custom_field_values" ADD COLUMN "numberValue" DOUBLE PRECISION;
 ALTER TABLE "custom_field_values" ADD COLUMN "dateValue" TIMESTAMP(3);
 
 -- The same reading as typedCustomFieldValue in src/lib/query-engine/custom-fields.ts. One bad value
--- must not stop the migration, so the casts catch their own failures.
-SET LOCAL TIME ZONE 'UTC';
+-- must not stop the migration, so the casts catch their own failures. A date without a zone means
+-- UTC there, so cf_date carries that zone itself: it may not read the session's, which is the
+-- installer's, and a SET in this file does not reach the statements after it under migrate deploy.
 
 CREATE FUNCTION pg_temp.cf_number(input TEXT) RETURNS DOUBLE PRECISION AS $$
 DECLARE
@@ -29,7 +30,7 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET timezone = 'UTC';
 
 UPDATE "custom_field_values"
 SET "numberValue" = pg_temp.cf_number("value"),
