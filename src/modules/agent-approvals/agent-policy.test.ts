@@ -494,6 +494,45 @@ describe('agent policies', () => {
       expect(session.status).not.toBe(403);
     });
 
+    it('binds a multipart upload by the org of its parent, and a staged one by every org', async () => {
+      await setOrg(ctx.orgId, { alsoRequire: ['attachment.upload'] });
+      const mine = await prisma.issue.create({
+        data: {
+          projectId: ctx.projectId,
+          number: 4300,
+          title: 'Mine',
+          body: '',
+          creatorId: ctx.owner.id,
+        },
+      });
+      const elsewhere = await prisma.issue.create({
+        data: {
+          projectId: otherOrg.projectId,
+          number: 4301,
+          title: 'Elsewhere',
+          body: '',
+          creatorId: otherOrg.owner.id,
+        },
+      });
+      const post = (fields: Record<string, string>) => {
+        const req = request(app)
+          .post('/api/attachments')
+          .set('Authorization', ownerToken)
+          .set('X-Requested-With', 'XMLHttpRequest');
+        for (const [key, value] of Object.entries(fields)) req.field(key, value);
+        return req.attach('file', Buffer.from('hello'), 'hello.txt');
+      };
+      const bound = await post({ issueId: mine.id });
+      expect(bound.status).toBe(403);
+      expect(bound.body.error.message).toContain('alsoRequire');
+      const staged = await post({});
+      expect(staged.status).toBe(403);
+      expect(staged.body.error.message).toContain('alsoRequire');
+      // An issue of an org without the rule is not bound by this org's rule
+      const other = await post({ issueId: elsewhere.id });
+      expect(other.body.error?.message ?? '').not.toContain('alsoRequire');
+    });
+
     it('lets a staged upload through when no rule names the upload', async () => {
       await setOrg(ctx.orgId, { destructive: false });
       const res = await request(app)
@@ -502,6 +541,61 @@ describe('agent policies', () => {
         .set('X-Requested-With', 'XMLHttpRequest')
         .send({ action: 'attachment.createUploadUrl', input: file });
       expect(res.status).toBe(200);
+    });
+  });
+
+  describe('what a waiting update says', () => {
+    it('names each field a rename or query change sets and speaks of sharing only when it changes', async () => {
+      const board = await prisma.dashboard.create({
+        data: { name: 'Plain board', ownerId: ctx.owner.id, visibility: 'ORG', orgId: ctx.orgId },
+      });
+      const saved = await prisma.savedFilter.create({
+        data: {
+          userId: ctx.owner.id,
+          name: 'Plain query',
+          query: {},
+          visibility: 'ORG',
+          orgId: ctx.orgId,
+        },
+      });
+      await setOrg(ctx.orgId, { alsoRequire: ['dashboard.update', 'savedQuery.update'] });
+      const previewOf = async (name: string, input: object) => {
+        const result = await executeAction(name, input, tokenCtx);
+        expect(result).toBeInstanceOf(PendingApproval);
+        return (result as PendingApproval).body.preview;
+      };
+      const rename = await previewOf('dashboard.update', {
+        id: board.id,
+        name: 'Ransom',
+        description: 'x',
+      });
+      expect(rename).toContain('the name to "Ransom"');
+      expect(rename).toContain('the description to "x"');
+      expect(rename).not.toContain('unchanged');
+      expect(rename).not.toContain('who can open it');
+      const both = await previewOf('dashboard.update', {
+        id: board.id,
+        name: 'Ransom',
+        visibility: 'PRIVATE',
+      });
+      expect(both).toContain('the name to "Ransom"');
+      expect(both).toContain('who can open it');
+      const query = await previewOf('savedQuery.update', {
+        filterId: saved.id,
+        text: 'type = Task',
+      });
+      expect(query).toContain('the query to "type = Task"');
+      expect(query).not.toContain('who can open it');
+      await prisma.dashboard.delete({ where: { id: board.id } });
+      await prisma.savedFilter.delete({ where: { id: saved.id } });
+    });
+
+    it('says a flag turned back on is stricter', async () => {
+      await setOrg(ctx.orgId, { destructive: false, crossContainerMove: false });
+      const text = await describePolicyChange(ctx.owner.id, 'org', ctx.orgId, {});
+      expect(text).toContain('Stricter: deletes need approval again');
+      expect(text).toContain('moves between projects or spaces need approval again');
+      expect(text).not.toContain('Stricter: deletes need no approval');
     });
   });
 

@@ -20,7 +20,7 @@ import { logger } from '../../utils/logger';
 import { createNotification } from '../notifications/notifications.service';
 
 import { OUTCOME_UNKNOWN } from './agent-approvals.cleanup';
-import { policyForCall } from './agent-policy.service';
+import { policyForCall, rawNamedRefusal } from './agent-policy.service';
 
 const MAX_INPUT_BYTES = 256 * 1024;
 const MAX_RESULT_BYTES = 1024 * 1024;
@@ -201,12 +201,7 @@ async function requestApproval(
 ): Promise<PendingApproval> {
   if (def.rest?.raw) {
     // Only a rule that names it gets here (registry rules keep the others out). It can't be queued
-    throw new AppError(
-      403,
-      `Action ${def.name} can't wait for approval, and an approval rule of your organization or ` +
-        `your own (alsoRequire) names it, so tokens may not run it. Do it in the web UI.`,
-      'APPROVAL_UNAVAILABLE',
-    );
+    throw rawNamedRefusal(def.name);
   }
   const stored = storedInput(def, rawInput);
   // An action that reads its own text is past the check in runAction, and jsonb refuses NUL

@@ -56,6 +56,11 @@ export default function AgentApprovalRules() {
             'Your org sets the base rules. Yours add to them: a shorter expiry, a lower bulk threshold, more actions that wait. They never lift one.',
         },
         {
+          title: 'Binding uploads takes three names',
+          description:
+            'Files come in three ways: attachment.upload (multipart), attachment.createUploadUrl and attachment.fromUrl. Add all three to make every upload wait or be refused.',
+        },
+        {
           title: 'Only you approve',
           description:
             'An agent asks, you decide in the web UI. Tokens and MCP clients never approve anything, and neither can they change these rules without your approval.',

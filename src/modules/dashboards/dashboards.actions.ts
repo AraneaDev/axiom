@@ -4,7 +4,7 @@ import { defineAction, type ActionContext } from '../../actions/define';
 import { orgsOfDashboard } from '../../actions/org-lookups';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
-import { dashboardSharing } from '../../actions/sharing-previews';
+import { dashboardUpdate } from '../../actions/sharing-previews';
 import { queryRunOutput } from '../search/query.actions';
 
 import * as dashboardsService from './dashboards.service';
@@ -128,8 +128,7 @@ const dashboardActions = [
     name: 'dashboard.update',
     permissionChange: ({ visibility, teamId, orgId }) =>
       visibility !== undefined || teamId !== undefined || orgId !== undefined,
-    preview: (_ctx, { id, visibility, teamId, orgId }) =>
-      dashboardSharing(id, { visibility, teamId, orgId }),
+    preview: (_ctx, { id, ...rest }) => dashboardUpdate(id, rest),
     orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',

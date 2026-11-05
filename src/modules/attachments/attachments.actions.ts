@@ -10,6 +10,7 @@ import { defineAction, type ActionContext } from '../../actions/define';
 import { MAX_KEY_LENGTH, parseKey, resolveKey } from '../../actions/keys';
 import {
   orgsOfAttachment,
+  orgsOfComments,
   orgsOfProjects,
   orgsOfSpaces,
   orgsOfUser,
@@ -19,6 +20,7 @@ import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { MAX_DB_INT, validate } from '../../utils/validation/common-validators';
+import { assertRawNotNamed, orgIdsOfInput } from '../agent-approvals/agent-policy.service';
 
 import { receiveMultipart } from './attachments.routes';
 import * as attachmentsService from './attachments.service';
@@ -112,6 +114,26 @@ async function targetIds(target: UploadTargetInput, userId: string): Promise<Iss
 const authorizedTargets = new WeakMap<ActionContext, IssueRef | PageRef>();
 
 /**
+ * The orgs of the parent a multipart upload names, or undefined when it names none (staged).
+ * @param fields - The validated multipart fields
+ * @param fields.issueId
+ * @param fields.pageId
+ * @param fields.commentId
+ */
+async function orgsOfParent(fields: {
+  issueId?: string;
+  pageId?: string;
+  commentId?: string;
+}): Promise<string[] | undefined> {
+  if (!fields.issueId && !fields.pageId && !fields.commentId) return undefined;
+  const [named, comments] = await Promise.all([
+    orgIdsOfInput({ issueId: fields.issueId, pageId: fields.pageId }),
+    orgsOfComments(fields.commentId ? [fields.commentId] : []),
+  ]);
+  return [...named, ...comments];
+}
+
+/**
  * The org of the issue or page a new file goes to: the ids authorize resolved, so a key counts
  * as the item it names. A staged file has no parent yet, so it takes every org of the user.
  * @param ctx - Who runs the action
@@ -199,8 +221,8 @@ const multipartFields = z.object({
 const attachmentActions = [
   defineAction({
     name: 'attachment.upload',
-    // The parent is in the multipart body, read after the gate: every org of the user counts
-    orgIds: (ctx) => orgsOfUser(ctx.userId),
+    // The parent is in the multipart body, read after the gate: the handler checks the org rules
+    // that name this action once it knows the parent (assertRawNotNamed)
     area: 'files',
     kind: 'write',
     summary:
@@ -220,6 +242,13 @@ const attachmentActions = [
       try {
         const fields = validate(multipartFields, req.body ?? {});
         attachmentsService.assertParentScope(ctx.scopes, fields, true);
+        // A rule that names this action binds it per parent; a staged file takes every org
+        const parentOrgs = await orgsOfParent(fields);
+        await assertRawNotNamed(
+          ctx,
+          'attachment.upload',
+          parentOrgs ?? (await orgsOfUser(ctx.userId)),
+        );
         if (!file) throw new AppError(400, 'No file provided', 'MISSING_FILE');
         if (file.originalname.includes('\u0000')) {
           throw new AppError(400, 'The file name may not contain a NUL character', 'INVALID_TEXT');

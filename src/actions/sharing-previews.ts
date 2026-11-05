@@ -1,6 +1,6 @@
 /**
- * What an approver reads before a dashboard or saved query is shared differently: who sees it
- * now, who will, built from the database. Names are data, quoted and bounded.
+ * What an approver reads before a dashboard or saved query is changed, and above all before it is
+ * shared differently: each field the call sets, and who sees it now and who will, from the database. Names are data, quoted and bounded.
  */
 import { prisma } from '../config/database';
 import { findOrThrow } from '../utils/find-or-throw';
@@ -74,11 +74,66 @@ const SHARING_SELECT = {
   org: { select: { name: true, slug: true } },
 } as const;
 
+interface UpdateInput extends Sharing {
+  name?: string;
+  description?: string | null;
+  layout?: unknown;
+  query?: Record<string, string>;
+  text?: string;
+}
+
+/**
+ * What an update sets besides sharing, one phrase per field the call names.
+ * @param input - The update's input
+ */
+function fieldsSet(input: UpdateInput): string[] {
+  const set: string[] = [];
+  if (input.name !== undefined) set.push(`the name to ${quoted(input.name)}`);
+  if (input.description !== undefined) {
+    set.push(
+      input.description === null
+        ? 'the description (cleared)'
+        : `the description to ${quoted(input.description)}`,
+    );
+  }
+  if (input.layout !== undefined) set.push('the layout');
+  if (input.text !== undefined) set.push(`the query to ${quoted(input.text)}`);
+  if (input.query !== undefined) set.push(`the query to ${quoted(JSON.stringify(input.query))}`);
+  return set;
+}
+
+/**
+ * The sentence of an update: each field it sets, and sharing only when it changes.
+ * @param what - dashboard or saved query
+ * @param row - The record as it is now
+ * @param row.name
+ * @param row.who
+ * @param id - Its id
+ * @param input - The update's input
+ * @param sharing - The current sharing, as words
+ */
+async function updateSentence(
+  what: string,
+  row: { name: string; who: string },
+  id: string,
+  input: UpdateInput,
+  sharing: string,
+): Promise<string> {
+  const parts = fieldsSet(input);
+  const { visibility, teamId, orgId } = input;
+  if (visibility !== undefined || teamId !== undefined || orgId !== undefined) {
+    parts.push(
+      `who can open it: shared with ${sharing} as of this request, to ${await nextSharing(input)}`,
+    );
+  }
+  return `Change the ${what} ${quoted(row.name)} #${id.slice(-8)} by ${row.who}: set ${parts.join('; ')}`;
+}
+
 /**
  * @param id - The dashboard
- * @param next - The sharing in the input
+ * @param input - The update's input
  */
-export async function dashboardSharing(id: string, next: Sharing): Promise<string> {
+export async function dashboardUpdate(id: string, input: UpdateInput): Promise<string> {
   const row = await findOrThrow(
     prisma.dashboard.findUnique({
       where: { id },
@@ -86,18 +141,20 @@ export async function dashboardSharing(id: string, next: Sharing): Promise<strin
     }),
     'Dashboard not found',
   );
-  return (
-    `Change who can open the dashboard ${quoted(row.name)} #${id.slice(-8)} by ` +
-    `${row.owner.username}: shared with ${sharedWith(row)} as of this request, ` +
-    `to ${await nextSharing(next)}`
+  return updateSentence(
+    'dashboard',
+    { name: row.name, who: row.owner.username },
+    id,
+    input,
+    sharedWith(row),
   );
 }
 
 /**
  * @param id - The saved query
- * @param next - The sharing in the input
+ * @param input - The update's input
  */
-export async function savedQuerySharing(id: string, next: Sharing): Promise<string> {
+export async function savedQueryUpdate(id: string, input: UpdateInput): Promise<string> {
   const row = await findOrThrow(
     prisma.savedFilter.findUnique({
       where: { id },
@@ -105,9 +162,11 @@ export async function savedQuerySharing(id: string, next: Sharing): Promise<stri
     }),
     'Saved query not found',
   );
-  return (
-    `Change who can open the saved query ${quoted(row.name)} #${id.slice(-8)} by ` +
-    `${row.user.username}: shared with ${sharedWith(row)} as of this request, ` +
-    `to ${await nextSharing(next)}`
+  return updateSentence(
+    'saved query',
+    { name: row.name, who: row.user.username },
+    id,
+    input,
+    sharedWith(row),
   );
 }

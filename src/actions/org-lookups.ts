@@ -120,3 +120,16 @@ export async function orgsOfUser(userId: string): Promise<string[]> {
   const rows = await prisma.orgMembership.findMany({ where: { userId }, select: { orgId: true } });
   return rows.map((row) => row.orgId);
 }
+
+/**
+ * The orgs of the issues that comments belong to.
+ * @param commentIds - Comment ids
+ */
+export async function orgsOfComments(commentIds: readonly string[]): Promise<string[]> {
+  if (commentIds.length === 0) return [];
+  const rows = await prisma.comment.findMany({
+    where: { id: { in: [...commentIds] } },
+    select: { issue: { select: { project: PROJECT_ORG } } },
+  });
+  return rows.map((row) => row.issue.project.team.orgId);
+}

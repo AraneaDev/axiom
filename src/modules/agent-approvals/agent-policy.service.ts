@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
-import { DEFAULT_POLICY, type EffectivePolicy } from '../../actions/approval-policy';
+import { DEFAULT_POLICY, isToken, type EffectivePolicy } from '../../actions/approval-policy';
 import type { ActionContext, ActionDef } from '../../actions/define';
 import { listActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
@@ -215,6 +215,38 @@ export async function orgIdsOfInput(input: unknown): Promise<string[]> {
   for (const row of [...issues, ...sprints]) orgs.add(row.project.team.orgId);
   for (const row of pages) orgs.add(row.space.team.orgId);
   return [...orgs];
+}
+
+/**
+ * What a token reads when it runs a raw action that a rule names: such an action can't wait for
+ * approval, so it is refused.
+ * @param name - The action
+ */
+export function rawNamedRefusal(name: string): AppError {
+  return new AppError(
+    403,
+    `Action ${name} can't wait for approval, and an approval rule of your organization or ` +
+      `your own (alsoRequire) names it, so tokens may not run it. Do it in the web UI.`,
+    'APPROVAL_UNAVAILABLE',
+  );
+}
+
+/**
+ * Refuse a token's raw action that a rule names, once the orgs it touches are known: a multipart
+ * body is only read after the gate. A session is never refused.
+ * @param ctx - Who runs it
+ * @param name - The action
+ * @param orgIds - The orgs it touches
+ * @throws {AppError} 403
+ */
+export async function assertRawNotNamed(
+  ctx: ActionContext,
+  name: string,
+  orgIds: readonly string[],
+): Promise<void> {
+  if (!isToken(ctx)) return;
+  const policy = await effectivePolicy(ctx.userId, orgIds);
+  if (policy.alsoRequire.includes(name)) throw rawNamedRefusal(name);
 }
 
 /**
@@ -439,13 +471,19 @@ export async function describePolicyChange(
   const minus = (left: string[], right: string[]) => left.filter((name) => !right.includes(name));
   const looser: string[] = [];
   const stricter: string[] = [];
-  const flip = (label: string, was: boolean, now: boolean) => {
-    if (was && !now) looser.push(label);
-    if (!was && now) stricter.push(label);
+  const flip = (off: string, on: string, was: boolean, now: boolean) => {
+    if (was && !now) looser.push(off);
+    if (!was && now) stricter.push(on);
   };
-  flip('deletes need no approval', before.requireFor.destructive, after.requireFor.destructive);
+  flip(
+    'deletes need no approval',
+    'deletes need approval again',
+    before.requireFor.destructive,
+    after.requireFor.destructive,
+  );
   flip(
     'moves between projects or spaces need no approval',
+    'moves between projects or spaces need approval again',
     before.requireFor.crossContainerMove,
     after.requireFor.crossContainerMove,
   );
