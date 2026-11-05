@@ -834,8 +834,9 @@ describe('authorizers', () => {
 
     const onProject = [403, 403, 403, 403, 403, 200, 200, 200];
     const onProjectWrite = [403, 403, 403, 403, 403, 403, 200, 200];
-    const onSpace = [403, 403, 403, 403, 200, 200, 200, 403];
-    const onSpaceEdit = [403, 403, 403, 403, 200, 403, 200, 403];
+    // Platform admins reach spaces outside their org (Tim's decision); page restrictions still bind
+    const onSpace = [403, 403, 403, 403, 200, 200, 200, 200];
+    const onSpaceEdit = [403, 403, 403, 403, 200, 403, 200, 200];
     const allMissing = [404, 404, 404, 404, 404, 404, 404, 404];
 
     const projectReadCase = (projectId: () => string) => () => ({
