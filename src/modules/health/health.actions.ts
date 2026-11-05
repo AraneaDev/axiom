@@ -19,7 +19,7 @@ registerActions([
   definePublicAction({
     name: 'health.check',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'read',
     summary: 'Check the database and Redis, for the container check and the admin dashboard',
     input: noTarget,
@@ -36,7 +36,7 @@ registerActions([
   definePublicAction({
     name: 'health.metrics',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'read',
     summary: 'Read the request counters since the server started',
     input: noTarget,

@@ -92,9 +92,11 @@ describe('action flags', () => {
     expect(unflagged([fake('x.revoke', true), fake('sprint.removeIssues')])).toEqual([]);
   });
 
-  it('flags every action in area admin as admin', () => {
+  it('flags every action in area admin as admin, or as uiOnly when no token can reach it', () => {
+    // Sign-in, health and the site settings sit in area admin because they are the platform's
+    // own. Being uiOnly they open to no token, so they need no approval flag
     const missing = listActions()
-      .filter((def) => def.area === 'admin' && !def.admin)
+      .filter((def) => def.area === 'admin' && !def.admin && !def.uiOnly)
       .map((def) => def.name);
     expect(missing).toEqual([]);
   });

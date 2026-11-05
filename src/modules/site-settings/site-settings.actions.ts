@@ -24,7 +24,7 @@ registerActions([
     name: 'siteSettings.get',
     // Public: the landing page and the sign-in page read it before anyone signs in
     uiOnly: true,
-    area: 'orgs',
+    area: 'admin',
     kind: 'read',
     summary: 'Read the landing page text and the sign-up mode',
     input: noTarget,
@@ -37,7 +37,7 @@ registerActions([
     name: 'siteSettings.update',
     // How people sign up and whether 2FA is required: a platform admin at the web UI
     uiOnly: true,
-    area: 'orgs',
+    area: 'admin',
     kind: 'write',
     summary: 'Change the landing page text, the sign-up mode or the 2FA requirement',
     target: noTarget,

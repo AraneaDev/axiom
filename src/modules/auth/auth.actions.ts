@@ -28,7 +28,7 @@ registerActions([
   definePublicAction({
     name: 'auth.register',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'write',
     summary: 'Create an account, with an invite code where the installation asks for one',
     target: noTarget,
@@ -41,7 +41,7 @@ registerActions([
   definePublicAction({
     name: 'auth.login',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'write',
     summary: 'Sign in with an email or username and a password, and a 2FA code where it is on',
     target: noTarget,
@@ -54,7 +54,7 @@ registerActions([
   definePublicAction({
     name: 'auth.refresh',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'write',
     summary: 'Swap a refresh token for a new access token',
     target: noTarget,
@@ -67,7 +67,7 @@ registerActions([
   defineAction({
     name: 'auth.logout',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'write',
     summary: 'End your session, and drop the refresh token that comes with the request',
     target: noTarget,
@@ -83,7 +83,7 @@ registerActions([
   definePublicAction({
     name: 'auth.forgotPassword',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'write',
     summary: 'Ask for a password reset mail',
     target: noTarget,
@@ -96,7 +96,7 @@ registerActions([
   definePublicAction({
     name: 'auth.resetPassword',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'write',
     summary: 'Set a new password with the token from the reset mail',
     target: noTarget,
@@ -109,7 +109,7 @@ registerActions([
   defineAction({
     name: 'auth.twoFactorEnable',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'write',
     summary: 'Start two-factor setup: a new secret for your authenticator app',
     target: noTarget,
@@ -122,7 +122,7 @@ registerActions([
   defineAction({
     name: 'auth.twoFactorVerify',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'write',
     summary: 'Switch two-factor on with a code from your authenticator app',
     target: noTarget,
@@ -135,7 +135,7 @@ registerActions([
   defineAction({
     name: 'auth.twoFactorDisable',
     uiOnly: true,
-    area: 'issues',
+    area: 'admin',
     kind: 'write',
     summary: 'Switch two-factor off with a code from your authenticator app',
     target: noTarget,
