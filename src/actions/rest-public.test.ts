@@ -237,7 +237,7 @@ describe('REST adapter, public actions, limiters and route middleware', () => {
       expect(order).toEqual([]);
     });
 
-    it('keeps require2fa enforced on an action that names it', async () => {
+    it('keeps the app-level require2fa on a route whose action also names it (the 418 test pins the slot)', async () => {
       await updateSiteSettings({ enforce2fa: true });
       const res = await request(app)
         .get('/api/rest-public-test/needs-2fa')
