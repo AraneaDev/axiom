@@ -68,7 +68,7 @@ export async function needsApproval(
   if (policy.alsoRequire?.includes(def.name)) return true;
   if (policy.neverRequire?.includes(def.name)) return false;
   const { requireFor } = policy;
-  if (def.destructive && requireFor.destructive) return true;
+  if ((def.destructive || def.destructiveWhen?.(input)) && requireFor.destructive) return true;
   if (def.bulkCount && def.bulkCount(input) > requireFor.bulkOver) return true;
   if (def.crossContainer && requireFor.crossContainerMove) {
     return def.crossContainer(ctx, input);

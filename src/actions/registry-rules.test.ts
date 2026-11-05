@@ -170,7 +170,12 @@ function ruleViolations(def: ActionDef): string[] {
   const inputFields = fieldsOf(def.input);
 
   if (
-    (def.destructive || def.admin || def.permissionChange || def.bulkCount || def.crossContainer) &&
+    (def.destructive ||
+      def.destructiveWhen ||
+      def.admin ||
+      def.permissionChange ||
+      def.bulkCount ||
+      def.crossContainer) &&
     !def.preview &&
     // Never reaches the gate
     !def.uiOnly
@@ -180,7 +185,12 @@ function ruleViolations(def: ActionDef): string[] {
 
   if (
     def.rest?.raw &&
-    (def.destructive || def.admin || def.permissionChange || def.bulkCount || def.crossContainer)
+    (def.destructive ||
+      def.destructiveWhen ||
+      def.admin ||
+      def.permissionChange ||
+      def.bulkCount ||
+      def.crossContainer)
   ) {
     violations.push(
       `${def.name}: a raw binding can't wait for approval, its input can't be queued (A6)`,

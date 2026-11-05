@@ -87,6 +87,11 @@ export interface ActionDef<
   /** Deletes data or changes who may reach it: a token's call waits for approval by default */
   destructive?: boolean;
   /**
+   * Destructive for some inputs only (a rename that changes what a workflow means). Counts as
+   * `destructive` for those calls, so an org's rules can relax it, unlike `permissionChange`.
+   */
+  destructiveWhen?(input: z.infer<I>): boolean;
+  /**
    * The orgs this call touches, read from the database rather than from what the agent sent. For
    * an action whose input names no project, team, space, issue, page or sprint: a dashboard, a
    * saved query, an attachment target. An org's rules bind the call through it.

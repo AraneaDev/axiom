@@ -6,10 +6,10 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { PendingApproval } from '../../actions/approval-policy';
+import { DEFAULT_POLICY, needsApproval, PendingApproval } from '../../actions/approval-policy';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { executeAction } from '../../actions/execute';
-import { registerActions } from '../../actions/registry';
+import { getAction, registerActions } from '../../actions/registry';
 import { dashboardUpdate } from '../../actions/sharing-previews';
 import { prisma } from '../../config/database';
 import app from '../../index';
@@ -505,6 +505,19 @@ describe('agent policies', () => {
       expect(await waits('boardColumn.update', { ...base, name: 'Renamed' }, boards)).toBe(true);
       expect(await waits('boardColumn.update', { ...base, isDone: true }, boards)).toBe(true);
       expect(await waits('boardColumn.update', { ...base, wipLimit: 3 }, boards)).toBe(false);
+      // Destructive in class (B13): an org's rules can relax it, which a permission change never allows
+      const def = getAction('boardColumn.update');
+      if (!def) throw new Error('boardColumn.update is not registered');
+      const rename = { ...base, name: 'Renamed' };
+      const relaxed = [
+        { ...DEFAULT_POLICY, neverRequire: ['boardColumn.update'] },
+        { ...DEFAULT_POLICY, requireFor: { ...DEFAULT_POLICY.requireFor, destructive: false } },
+      ];
+      for (const policy of relaxed) {
+        expect(await needsApproval(def, rename, boards, policy)).toBe(false);
+        expect(await needsApproval(def, { ...base, isDone: true }, boards, policy)).toBe(false);
+      }
+      expect(await needsApproval(def, rename, boards, DEFAULT_POLICY)).toBe(true);
       const kept = await prisma.boardColumn.findUniqueOrThrow({ where: { id: column.id } });
       expect(kept).toMatchObject({ name: column.name, isDone: false, wipLimit: 3 });
       await prisma.boardColumn.delete({ where: { id: column.id } });

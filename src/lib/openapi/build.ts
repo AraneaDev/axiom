@@ -179,7 +179,7 @@ function operationFor(def: ActionDef, binding: RestBinding, store: SchemaStore):
     ...(def.uiOnly ? { 'x-ui-only': true } : {}),
     ...(def.tokenBlocked ? { 'x-token-blocked': true } : {}),
     ...(def.admin ? { 'x-admin': true } : {}),
-    ...(def.destructive ? { 'x-destructive': true } : {}),
+    ...(def.destructive || def.destructiveWhen ? { 'x-destructive': true } : {}),
   };
 }
 
