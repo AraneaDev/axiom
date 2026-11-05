@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { defineAction } from '../../actions/define';
+import { defineAction, definePublicAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
 import {
   forgotPasswordSchema,
@@ -25,7 +25,7 @@ const nothing = z.void();
 const codeInput = noTarget.extend({ code: z.string() });
 
 registerActions([
-  defineAction({
+  definePublicAction({
     name: 'auth.register',
     uiOnly: true,
     area: 'issues',
@@ -38,7 +38,7 @@ registerActions([
     authorize: async () => {},
     handler: async (_ctx, data) => authService.register(data),
   }),
-  defineAction({
+  definePublicAction({
     name: 'auth.login',
     uiOnly: true,
     area: 'issues',
@@ -51,7 +51,7 @@ registerActions([
     authorize: async () => {},
     handler: async (_ctx, data) => authService.login(data),
   }),
-  defineAction({
+  definePublicAction({
     name: 'auth.refresh',
     uiOnly: true,
     area: 'issues',
@@ -80,7 +80,7 @@ registerActions([
       await authService.logout(ctx.userId, refreshToken);
     },
   }),
-  defineAction({
+  definePublicAction({
     name: 'auth.forgotPassword',
     uiOnly: true,
     area: 'issues',
@@ -93,7 +93,7 @@ registerActions([
     authorize: async () => {},
     handler: async (_ctx, { email }) => authService.requestPasswordReset(email),
   }),
-  defineAction({
+  definePublicAction({
     name: 'auth.resetPassword',
     uiOnly: true,
     area: 'issues',

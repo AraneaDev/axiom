@@ -10,7 +10,7 @@ import {
   updateSiteSettings,
 } from '../modules/site-settings/site-settings.service';
 
-import { defineAction } from './define';
+import { defineAction, definePublicAction } from './define';
 import { registerActions } from './registry';
 
 const output = z.looseObject({});
@@ -28,7 +28,7 @@ const twoPerMinute = rateLimit({
 
 // Registered before src/index.ts loads, so these run behind the real mount and middleware
 registerActions([
-  defineAction({
+  definePublicAction({
     name: 'restPublic.open',
     area: 'issues',
     kind: 'read',
@@ -42,7 +42,7 @@ registerActions([
       return { open: true };
     },
   }),
-  defineAction({
+  definePublicAction({
     name: 'restPublic.submit',
     area: 'issues',
     kind: 'write',
@@ -65,7 +65,7 @@ registerActions([
     authorize: async () => {},
     handler: async () => ({ closed: true }),
   }),
-  defineAction({
+  definePublicAction({
     name: 'restPublic.limited',
     area: 'issues',
     kind: 'read',
@@ -119,6 +119,34 @@ registerActions([
     handler: async () => ({ ran: true }),
   }),
 ]);
+
+// The compiler holds a public action to B9: it has no user to read, and defineAction refuses `public`
+definePublicAction({
+  name: 'restPublic.typed',
+  area: 'issues',
+  kind: 'read',
+  summary: 'Never registered',
+  input: z.looseObject({}),
+  output,
+  rest: { method: 'GET', path: '/api/rest-public-test/typed', public: true },
+  authorize: async (ctx) => {
+    // @ts-expect-error a public context has no user id to read
+    void ctx.userId.length;
+  },
+  handler: async () => ({}),
+});
+defineAction({
+  name: 'restPublic.untyped',
+  area: 'issues',
+  kind: 'read',
+  summary: 'Never registered',
+  input: z.looseObject({}),
+  output,
+  // @ts-expect-error a public route is declared with definePublicAction
+  rest: { method: 'GET', path: '/api/rest-public-test/untyped', public: true },
+  authorize: async () => {},
+  handler: async () => ({}),
+});
 
 describe('REST adapter, public actions, limiters and route middleware', () => {
   let app: Awaited<typeof import('../index')>['default'];

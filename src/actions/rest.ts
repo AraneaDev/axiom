@@ -68,7 +68,7 @@ export const markRegistryRoute: RequestHandler = (req, _res, next) => {
  */
 export function actionContextFromRequest(req: Request, open = false): ActionContext {
   // A public route runs with no user. The type says string for every other action; a public one
-  // must not read it (its authorize and handler are written for that)
+  // is declared with definePublicAction, whose context leaves userId out
   if (open) return { userId: undefined as unknown as string, channel: 'ui' };
   if (!req.userId) throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
   if (req.apiTokenId === undefined) return { userId: req.userId, channel: 'ui' };

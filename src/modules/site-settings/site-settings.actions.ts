@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { platformAdmin } from '../../actions/authorize';
-import { defineAction } from '../../actions/define';
+import { defineAction, definePublicAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
 
 import * as siteSettingsService from './site-settings.service';
@@ -20,7 +20,7 @@ const updateSiteSettingsSchema = z.object({
 });
 
 registerActions([
-  defineAction({
+  definePublicAction({
     name: 'siteSettings.get',
     // Public: the landing page and the sign-in page read it before anyone signs in
     uiOnly: true,

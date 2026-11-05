@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 
-import { defineAction, type ActionContext } from '../../actions/define';
+import { definePublicAction, type PublicActionContext } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { publicFormLimiter } from '../../middleware/rate-limit';
@@ -37,10 +37,10 @@ const limitSecretGuesses: RequestHandler = (req, res, next) => {
  * The sender's IP, as the per-IP form limits key it.
  * @param ctx - The context, which holds the request's IP
  */
-const clientIp = (ctx: ActionContext): string => clientKey(ctx.ipAddress || 'unknown');
+const clientIp = (ctx: PublicActionContext): string => clientKey(ctx.ipAddress || 'unknown');
 
 registerActions([
-  defineAction({
+  definePublicAction({
     name: 'publicForm.get',
     uiOnly: true,
     area: 'forms',
@@ -97,7 +97,7 @@ registerActions([
       res.json({ ...publicForm, authMode: form.authMode });
     },
   }),
-  defineAction({
+  definePublicAction({
     name: 'publicForm.submit',
     uiOnly: true,
     area: 'forms',
@@ -126,7 +126,7 @@ registerActions([
       return { id: submission.id, status: submission.status };
     },
   }),
-  defineAction({
+  definePublicAction({
     name: 'publicForm.verify',
     uiOnly: true,
     area: 'forms',

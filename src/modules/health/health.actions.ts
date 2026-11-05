@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { defineAction } from '../../actions/define';
+import { definePublicAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 
@@ -16,7 +16,7 @@ const noTarget = z.object({});
 const nothing = z.void();
 
 registerActions([
-  defineAction({
+  definePublicAction({
     name: 'health.check',
     uiOnly: true,
     area: 'issues',
@@ -33,7 +33,7 @@ registerActions([
       ctx.http.res.status(report.status === 'unhealthy' ? 503 : 200).json(report);
     },
   }),
-  defineAction({
+  definePublicAction({
     name: 'health.metrics',
     uiOnly: true,
     area: 'issues',

@@ -33,6 +33,12 @@ export interface ActionContext {
   approvalRunId?: string;
 }
 
+/**
+ * The context of a public action: nobody signed in, so there is no user to read. Typing it so
+ * keeps a public action from acting for someone it never authenticated (ruling B9).
+ */
+export type PublicActionContext = Omit<ActionContext, 'userId'> & { userId?: undefined };
+
 /** Where the REST adapter mounts an action. */
 export interface RestBinding {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -46,7 +52,8 @@ export interface RestBinding {
   optionalBody?: boolean;
   /**
    * No authentication: anyone may call it, and a credential that comes along is not read. The
-   * context holds no user (`ctx.userId` is undefined at runtime), so the action must not use it.
+   * context holds no user (`ctx.userId` is undefined at runtime): declare the action with
+   * `definePublicAction`, whose context types it so.
    * For what is open today (public forms, health), nothing else.
    */
   public?: boolean;
@@ -154,16 +161,48 @@ export interface ActionDef<
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
- * Declare an action. Returns it unchanged; this exists so that TypeScript infers the handler's
+ * Declare an action. A public one (no sign-in) is declared with `definePublicAction` instead.
+ * Returns it unchanged; this exists so that TypeScript infers the handler's
  * input and output from the schemas, and authorize's input from the target or the full input.
  * @param def - The action
  */
 export function defineAction<I extends z.ZodType, O extends z.ZodType>(
-  def: ActionDef<I, O, undefined> & { target?: undefined },
+  def: ActionDef<I, O, undefined> & { target?: undefined; rest?: { public?: false } },
 ): ActionDef<I, O, undefined>;
 export function defineAction<I extends z.ZodType, O extends z.ZodType, T extends z.ZodType>(
-  def: ActionDef<I, O, T> & { target: T },
+  def: ActionDef<I, O, T> & { target: T; rest?: { public?: false } },
 ): ActionDef<I, O, T>;
 export function defineAction(def: ActionDef): ActionDef {
   return def;
 }
+
+/** The parts of an action that run with a context, for a public one. */
+type ContextFree = 'authorize' | 'handler' | 'rest' | 'orgIds' | 'preview' | 'crossContainer';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type PublicDef<I extends z.ZodType, O extends z.ZodType, T extends z.ZodType | undefined> = Omit<
+  ActionDef<I, O, T>,
+  ContextFree
+> & {
+  rest: RestBinding & { public: true };
+  authorize(ctx: PublicActionContext, target: AuthorizeInput<I, T>): Promise<void>;
+  handler(ctx: PublicActionContext, input: z.infer<I>): Promise<z.infer<O>>;
+};
+
+/**
+ * Declare an action that anyone may call, with no user: its `authorize` and `handler` get a
+ * context whose `userId` is `undefined`, so reading it does not compile. Needs a `rest` binding
+ * with `public: true`, which the REST adapter runs with no authentication.
+ * @param def - The action
+ */
+export function definePublicAction<I extends z.ZodType, O extends z.ZodType>(
+  def: PublicDef<I, O, undefined> & { target?: undefined },
+): ActionDef<I, O, undefined>;
+export function definePublicAction<I extends z.ZodType, O extends z.ZodType, T extends z.ZodType>(
+  def: PublicDef<I, O, T> & { target: T },
+): ActionDef<I, O, T>;
+export function definePublicAction(def: PublicDef<any, any, any>): ActionDef {
+  // The context is the same object; only what the handler may read of it is narrower
+  return def as unknown as ActionDef;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
