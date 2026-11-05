@@ -28,7 +28,8 @@ export async function viewableIssuesWhere(userId: string): Promise<Prisma.IssueW
 }
 
 /**
- * Spaces the user can view: in one of their orgs and passing canAccessSpace at VIEW.
+ * Spaces the user can view: in one of their orgs, or any for a platform admin, and passing
+ * canAccessSpace at VIEW.
  * @param userId - The searcher
  * @param opts - includeArchived for searching, false for the filter list
  * @param opts.includeArchived
@@ -37,9 +38,11 @@ export async function viewableSpaces(
   userId: string,
   opts: { includeArchived: boolean },
 ): Promise<Array<{ id: string; name: string; slug: string }>> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
   const spaces = await prisma.wikiSpace.findMany({
     where: {
-      team: { org: { members: { some: { userId } } } },
+      // Platform admins aren't limited to their orgs, as in checkWikiSpaceOrgAccess
+      ...(user?.isAdmin ? {} : { team: { org: { members: { some: { userId } } } } }),
       ...(opts.includeArchived ? {} : { isArchived: false }),
     },
     select: { id: true, name: true, slug: true },
