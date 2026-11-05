@@ -85,7 +85,7 @@ A scope no action uses can't be minted (`400`): `orgs:write`, `teams:write`, `pr
 | `forms`      | `/api/projects/:id/forms`, `intake`                                                                                                                                                                           |
 | `automation` | `/api/projects/:id/automation-rules`                                                                                                                                                                          |
 | `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
-| `admin`      | Reserved, `/api/admin` stays closed to tokens                                                                                                                                                                 |
+| `admin` | Orgs, teams, members, invitations, tokens, your account, space permissions, page restrictions, project create, update and delete, and `/api/admin`. Every call waits for approval, see [Approvals](#approvals-for-token-calls) |
 
 Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. A token can never manage orgs, teams, members, invitations, tokens, your account or anything under `/api/admin`, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. Creating a token with any other scope name returns `400`.
 
@@ -167,6 +167,36 @@ Run one action, or a batch of up to 25 in order. Takes a session or an API token
 **Limits:** 300 items per minute per user, a batch counting each item (`429 RATE_LIMITED`). Input is strict: an unknown field is a `400`.
 
 An action that needs a raw request (multipart upload, file download, CSV export) is not available through `act`.
+
+### Approvals for token calls
+
+A call from an API token (REST or `/api/act`) that needs approval runs nothing and answers `202`:
+
+```json
+{
+  "status": "pending_approval",
+  "approvalId": "...",
+  "preview": "Delete issue AXM-42 (Fix the login redirect)",
+  "expiresAt": "2026-11-05T17:30:00.000Z",
+  "approveUrl": "/approvals/agent/...",
+  "next": "Nothing ran yet: your user decides at approveUrl. Run agentApproval.wait with id ..."
+}
+```
+
+A browser session never gets this. Destructive actions, bulk actions over 10 items, moves across a project or space, permission changes and every admin action wait by default; org and user policies change that, except for admin. An approval runs the action as the requesting user with their rights at approval time. The result of `token.create` has its `token` removed from what the agent reads: the raw token is in the response to the approval only.
+
+Endpoints, all `approvals` area:
+
+| Method and path | Action | Notes |
+| --- | --- | --- |
+| `GET /api/agent-approvals` | `agentApproval.list` | `status`, `limit` (100 at most), `offset`; your own requests |
+| `GET /api/agent-approvals/:id` | `agentApproval.get` | One request with input and outcome |
+| `GET /api/agent-approvals/:id/wait` | `agentApproval.wait` | Waits up to 25 seconds (`seconds`), two at once per user (`429`) |
+| `POST /api/agent-approvals/:id/approve` | `agentApproval.approve` | Web UI only |
+| `POST /api/agent-approvals/:id/reject` | `agentApproval.reject` | Web UI only |
+| `GET`, `PUT /api/agent-policy` | `agentPolicy.get`, `agentPolicy.update` | `scope` `org` (owners write) or `user` (tighten only); update is an admin action |
+
+Statuses are `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED` and `FAILED`. Limits: 256 KB of input (`400`), 50 pending per user (`429`), expiry from 10 minutes to 24 hours (an hour by default). Tokens are refused (`403`) on legacy `DELETE` routes and other legacy routes that delete, and on legacy writes to human checks (approval gates and votes), until those are migrated. An org policy that lists an upload action in `alsoRequire` refuses it to tokens outright; list `attachment.createUploadUrl`, `attachment.fromUrl` and `attachment.upload` all three. A new token's expiry must be set and can't exceed that of the token that creates it. The [MCP server guide](axiom-mcp-server.md#approvals) has the whole picture.
 
 ### Uploads
 

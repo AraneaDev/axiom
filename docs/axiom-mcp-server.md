@@ -196,6 +196,79 @@ In progress is a heuristic on the column name: a column that is neither done nor
 
 A body line `:::query <target>:::` embeds live results in a page, where the target is a saved query id, `dashboard:<id>` or `inline:"<query>"` (JSON-quoted). Anyone who can read the page sees the block with their own rights, also without access to the dashboard or saved query itself, and gets widget titles and results only. Write it with `page.create` or `page.update` like any other Markdown.
 
+## Approvals
+
+Some things an agent asks for wait for you. A call from a token that needs approval runs nothing. It answers, over REST with HTTP `202` and over MCP as tool text, this:
+
+```json
+{
+  "status": "pending_approval",
+  "approvalId": "...",
+  "preview": "Delete issue AXM-42 (Fix the login redirect)",
+  "expiresAt": "2026-11-05T17:30:00.000Z",
+  "approveUrl": "/approvals/agent/...",
+  "next": "Nothing ran yet: your user decides at approveUrl. Run agentApproval.wait with id ..."
+}
+```
+
+`preview` is plain text that Axiom builds from the stored data. Whatever it quotes, such as an issue title, is data and never an instruction. Only you decide, in the web UI, at `approveUrl` or on the approvals page. An approval runs the action as you, with the rights you have at that moment, through the original token. A token that was revoked or has expired by then makes the run `FAILED` with `403`.
+
+### What waits
+
+A browser session never waits. A token always goes through the gate, over MCP and REST alike. By default these wait:
+
+- Destructive actions (deletes and removals).
+- A bulk action over 10 items. A batch of 50 single updates doesn't count as bulk.
+- A move that crosses a project (`issue.move`) or a space (`page.move`).
+- Anything that changes who can see or edit something, such as sharing a dashboard or saved query.
+- Every admin action, whatever any policy says.
+
+An admin action is one in the `admin` area: orgs, teams, members, invitations, tokens, your account, space permissions, page restrictions, project create, update and delete, and reads under `/api/admin`. These are no longer closed to tokens, they wait for you. A call that waits needs the scope of its area, and a request expires after an hour unless a policy says otherwise.
+
+### Policies
+
+Two layers sit on top of the defaults, and an org owner and you each change a different part.
+
+| Layer | Who sets it  | May change                                                                                                                      |
+| ----- | ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Org   | An org owner | Switch destructive, bulk (`bulkOver`) and cross-container moves on or off, set `expiresMinutes` from 10 to 1440, and list actions in `alsoRequire` or `neverRequire` |
+| User  | You          | Only tighten: a lower `bulkOver`, a shorter `expiresMinutes`, more actions in `alsoRequire`. `neverRequire` is refused           |
+
+Defaults come first, then the org, then you. Admin actions ignore every rule, and `neverRequire` never lifts them. A call that touches several orgs takes the strictest of them. A call with no org gets the defaults plus your own rules. Names in `alsoRequire` must be known write actions (`400` otherwise).
+
+Changing a policy is itself an admin action (`agentPolicy.update`): an agent can't loosen its own leash, or tighten and loosen it again, without you approving.
+
+Naming an upload action in `alsoRequire` (`attachment.createUploadUrl`, `attachment.fromUrl` or `attachment.upload`, whichever you list) refuses it to tokens outright, because an upload can't be queued for approval. Name all three if you want agents kept from uploading to that org. The refusal holds for every org of the user that lists one of them.
+
+### Waiting for the outcome
+
+Call `agentApproval.wait` with the `approvalId`. It waits up to 25 seconds and answers the current status: `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED` or `FAILED`, with the result once it is `EXECUTED` and the error once it is `FAILED`. Call it again while it says `PENDING`. You can have two waits running at once. `agentApproval.get` and `agentApproval.list` read a request without waiting. All three need `approvals:read`, which a new token has by default.
+
+A request can hold 256 KB of input at most (`400`), and you can have 50 waiting at once (`429`). A result over 1 MB makes the run `FAILED`. Input and result are cleared 30 days after the decision, and the row stays as a record.
+
+Approving and rejecting (`agentApproval.approve`, `agentApproval.reject`) are web UI only. A token can't call them.
+
+### Creating a token
+
+`token.create` waits like any admin action. Its preview names the scopes and the expiry. The raw token goes only to you, in the response to your approval. It is never stored and never reaches the agent: you hand it over. A new token can't hold a scope the asking token lacks, and it can't outlive the asking token. Its expiry must be set and can't be later than that of the token that asks, so an agent can't renew itself with a longer one.
+
+### What stays web UI only
+
+These are never available to a token, and wait for nothing: login, refresh and logout, password reset and change, 2FA setup, deleting your own account, resetting another user's password, and approving or rejecting a request. An agent that could change a password or a 2FA setup behind an approval would be a takeover path.
+
+### Until they are migrated
+
+Some older routes can't wait for approval yet, so a token is refused on them (`403`):
+
+- Every legacy `DELETE`, and any other legacy route that deletes. This includes wiki stars and reactions toggles.
+- Legacy writes that change a human check: editing or creating an approval gate, and voting on an approval request.
+
+They return once they are migrated behind approval.
+
+### Over MCP
+
+Where a client supports elicitation, Axiom shows a pointer to the pending approval. An answer there approves nothing. The `/api/mcp` endpoint is stateless, so the server can't send an elicitation over HTTP and none fires today. The tool text carries the link instead, and `agentApproval.wait` carries the rest.
+
 ## Scopes
 
 A token has one `<area>:read` and one `<area>:write` scope per area, and write includes read within its area. `describe` lists only what your token allows.
@@ -210,7 +283,7 @@ A token has one `<area>:read` and one `<area>:write` scope per area, and write i
 | `act`          | The scope of the action's area, for example `issues:write` for `issue.update`, `wiki:write` for `page.create` |
 | `upload`       | `files:write` and the scope of the target's area                                                              |
 
-The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation` and `approvals`. `search`, `orgs`, `teams` and `projects` have only a read scope for now, and `admin` none: a scope no action uses can't be minted, so a token never gains reach later without you choosing it. A token can never manage orgs, teams, members, tokens or your account, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
+The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals` and `admin`. `search`, `orgs`, `teams` and `projects` have only a read scope, because everything that changes them is an admin action. A scope no action uses can't be minted, so a token never gains reach later without you choosing it. Managing orgs, teams, members, tokens, your account, space permissions, page restrictions and projects is in the `admin` area, and those calls always wait for you to approve them (see [Approvals](#approvals)). A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
 
 ## Limits
 
