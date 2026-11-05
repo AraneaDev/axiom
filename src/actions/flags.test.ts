@@ -4,7 +4,7 @@ import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { DEFAULT_POLICY, needsApproval } from './approval-policy';
-import type { ActionContext } from './define';
+import type { ActionContext, ActionDef } from './define';
 import { listActions } from './registry';
 
 /**
@@ -40,6 +40,19 @@ const token: ActionContext = {
   scopes: ['issues:write', 'sprints:write'],
 };
 
+const DESTRUCTIVE_NAME = /\.(delete|remove|revoke|purge|setRole|grant)$/;
+
+/**
+ * The actions whose name says they destroy data or change access but are not flagged.
+ * @param defs - The actions
+ */
+function unflagged(defs: ActionDef[]): string[] {
+  return defs
+    .filter((def) => DESTRUCTIVE_NAME.test(def.name) && !(def.name in NOT_DESTRUCTIVE))
+    .filter((def) => !def.destructive)
+    .map((def) => def.name);
+}
+
 beforeAll(async () => {
   const root = path.resolve(__dirname, '..');
   const files = readdirSync(root, { recursive: true, encoding: 'utf8' }).filter(
@@ -67,12 +80,16 @@ describe('action flags', () => {
     expect(await needsApproval(def!, ids(11), token, DEFAULT_POLICY)).toBe(true);
   });
 
-  it('flags every delete and remove action destructive', () => {
-    const missing = listActions()
-      .filter((def) => /\.(delete|remove)$/.test(def.name) && !(def.name in NOT_DESTRUCTIVE))
-      .filter((def) => !def.destructive)
-      .map((def) => def.name);
-    expect(missing).toEqual([]);
+  it('flags every delete, remove, revoke, purge, setRole and grant action destructive', () => {
+    expect(unflagged(listActions())).toEqual([]);
+  });
+
+  it('names an unflagged revoke, and passes one that is flagged', () => {
+    const fake = (name: string, destructive?: boolean) => ({ name, destructive }) as ActionDef;
+    expect(
+      unflagged([fake('x.revoke'), fake('x.purge'), fake('x.setRole'), fake('x.grant')]),
+    ).toEqual(['x.revoke', 'x.purge', 'x.setRole', 'x.grant']);
+    expect(unflagged([fake('x.revoke', true), fake('sprint.removeIssues')])).toEqual([]);
   });
 
   it('flags every action in area admin as admin', () => {
