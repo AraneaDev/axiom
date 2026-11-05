@@ -3,6 +3,8 @@ import path from 'path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { DEFAULT_POLICY, needsApproval } from './approval-policy';
+import type { ActionContext } from './define';
 import { listActions } from './registry';
 
 /**
@@ -14,6 +16,30 @@ const NOT_DESTRUCTIVE: Record<string, string> = {
   'sprint.removeIssues': 'puts the issues back in the backlog, nothing is deleted',
 };
 
+/** Actions that must stay destructive: a dropped flag fails here by name. */
+const MUST_BE_DESTRUCTIVE = [
+  'attachment.delete',
+  'dashboard.delete',
+  'dashboardWidget.remove',
+  'issue.delete',
+  'comment.delete',
+  'issueLink.delete',
+  'issueWebLink.delete',
+  'savedQuery.delete',
+  'page.delete',
+  'pageIssueLink.remove',
+];
+
+/** Actions that take a list of ids and must count it against the bulk threshold. */
+const MUST_COUNT_BULK = ['issue.bulkUpdate', 'sprint.addIssues'];
+
+const token: ActionContext = {
+  userId: 'u1',
+  channel: 'rest-token',
+  apiTokenId: 't1',
+  scopes: ['issues:write', 'sprints:write'],
+};
+
 beforeAll(async () => {
   const root = path.resolve(__dirname, '..');
   const files = readdirSync(root, { recursive: true, encoding: 'utf8' }).filter(
@@ -23,6 +49,24 @@ beforeAll(async () => {
 });
 
 describe('action flags', () => {
+  it('sees the whole registry', () => {
+    expect(listActions().length).toBeGreaterThan(90);
+  });
+
+  it('keeps the named destructive actions flagged', () => {
+    const byName = new Map(listActions().map((def) => [def.name, def]));
+    const dropped = MUST_BE_DESTRUCTIVE.filter((name) => byName.get(name)?.destructive !== true);
+    expect(dropped).toEqual([]);
+  });
+
+  it.each(MUST_COUNT_BULK)('%s asks for approval over 10 ids and not at 10', async (name) => {
+    const def = listActions().find((d) => d.name === name);
+    expect(def?.bulkCount).toBeTypeOf('function');
+    const ids = (n: number) => ({ issueIds: Array.from({ length: n }, (_, i) => `i${i}`) });
+    expect(await needsApproval(def!, ids(10), token, DEFAULT_POLICY)).toBe(false);
+    expect(await needsApproval(def!, ids(11), token, DEFAULT_POLICY)).toBe(true);
+  });
+
   it('flags every delete and remove action destructive', () => {
     const missing = listActions()
       .filter((def) => /\.(delete|remove)$/.test(def.name) && !(def.name in NOT_DESTRUCTIVE))

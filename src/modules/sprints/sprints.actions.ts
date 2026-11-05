@@ -212,6 +212,7 @@ const sprintActions = [
     auditFields: { input: ['issueIds'] },
     output: record,
     rest: { method: 'POST', path: `${SPRINT}/issues`, status: 200 },
+    bulkCount: ({ issueIds }) => issueIds.length,
     authorize: writeSprint,
     handler: async (_ctx, { sprintId, issueIds }) =>
       sprintsService.addIssuesToSprint(sprintId, issueIds),
