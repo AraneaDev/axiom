@@ -157,8 +157,6 @@ export function scopeAllows(
 const LEGACY_WRITES_THAT_DELETE = [
   /^\/api\/projects\/[^/]+\/approval-gates(\/[^/]+)?$/,
   /^\/api\/approval-requests\/[^/]+\/vote$/,
-  /^\/api\/wiki\/pages\/[^/]+\/star$/,
-  /^\/api\/wiki\/comments\/[^/]+\/reactions$/,
 ];
 
 /**

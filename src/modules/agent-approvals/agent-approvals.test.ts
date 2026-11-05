@@ -861,8 +861,6 @@ describe('agent approvals', () => {
         'PATCH /api/projects/:projectId/approval-gates/:gateId',
         'POST /api/approval-requests/:requestId/vote',
         'POST /api/projects/:projectId/approval-gates',
-        'POST /api/wiki/comments/:commentId/reactions',
-        'POST /api/wiki/pages/:pageId/star',
       ]);
       const deletes = LEGACY_ROUTES.filter((route) => route.method === 'DELETE');
       expect(deleting.filter((route) => route.method === 'DELETE')).toEqual(deletes);
@@ -878,21 +876,6 @@ describe('agent approvals', () => {
           .set('X-Requested-With', 'XMLHttpRequest');
         expect(res.status).toBe(403);
         expect(['NEEDS_REGISTRY_ACTION', 'SCOPE']).toContain(res.body.error.code);
-      },
-    );
-
-    it.each(['/api/wiki/comments/probe/reactions', '/api/wiki/pages/probe/star'])(
-      'refuses a token on POST %s, also spelled otherwise',
-      async (path) => {
-        for (const spelled of [path, `${path}/`, path.toUpperCase().replace('/API/', '/api/')]) {
-          const res = await request(app)
-            .post(spelled)
-            .set('Authorization', ownerToken)
-            .set('X-Requested-With', 'XMLHttpRequest')
-            .send({ emoji: 'thumbsup' });
-          expect(res.status).toBe(403);
-          expect(res.body.error.code).toBe('NEEDS_REGISTRY_ACTION');
-        }
       },
     );
 

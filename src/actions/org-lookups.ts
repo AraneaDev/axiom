@@ -148,3 +148,27 @@ export async function orgsOfComments(commentIds: readonly string[]): Promise<str
   });
   return rows.map((row) => row.issue.project.team.orgId);
 }
+
+/**
+ * The orgs of the wiki pages that comments belong to.
+ * @param commentId - A page comment
+ */
+export async function orgsOfPageComment(commentId: string): Promise<string[]> {
+  const row = await prisma.pageComment.findUnique({
+    where: { id: commentId },
+    select: { page: { select: { space: SPACE_ORG } } },
+  });
+  return row ? [row.page.space.team.orgId] : [];
+}
+
+/**
+ * The org of the space a page template is in.
+ * @param templateId - The template
+ */
+export async function orgsOfPageTemplate(templateId: string): Promise<string[]> {
+  const row = await prisma.pageTemplate.findUnique({
+    where: { id: templateId },
+    select: { space: SPACE_ORG },
+  });
+  return row ? [row.space.team.orgId] : [];
+}

@@ -3,13 +3,21 @@ import { z } from 'zod';
 import {
   pageAccess,
   pageBySlugAccess,
+  pageCommentAccess,
   restrictionAccess,
   spaceAccess,
   teamMemberWith,
   teamPermission,
+  templateAccess,
 } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
-import { orgsOfProjects, orgsOfRestriction, orgsOfSpaces } from '../../actions/org-lookups';
+import {
+  orgsOfPageComment,
+  orgsOfPageTemplate,
+  orgsOfProjects,
+  orgsOfRestriction,
+  orgsOfSpaces,
+} from '../../actions/org-lookups';
 import { listWindow, pagedList } from '../../actions/paging';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
@@ -18,9 +26,12 @@ import { checkWikiSpaceOrgAccess } from '../../middleware/rbac';
 import { checkProjectAccess } from '../../middleware/requireProjectAccess';
 import { ERR } from '../../utils/error-messages';
 import {
+  addPageLabelSchema,
   applyMergeSchema,
   copyPageSchema,
+  createPageCommentSchema,
   createPageSchema,
+  createPageTemplateSchema,
   createWikiSpaceSchema,
   firstQueryText,
   flushPageSessionSchema,
@@ -38,11 +49,17 @@ import { ONE_SPACE_GRANT } from '../../utils/validation/user-validators';
 import { assertPageDestinationWritable } from './page-destination';
 import * as spacePermissions from './space-permissions.service';
 import { canAccessSpace } from './space-permissions.service';
+import * as analyticsService from './wiki-analytics.service';
+import * as commentsService from './wiki-comments.service';
+import * as exportService from './wiki-export.service';
 import { hydrateWikiPage } from './wiki-hydrate.service';
 import * as linkService from './wiki-issue-links.service';
+import * as labelsService from './wiki-labels.service';
 import * as pagePermissions from './wiki-permissions.service';
 import { hiddenPageIds, pruneHiddenPages } from './wiki-permissions.service';
+import * as starsService from './wiki-stars.service';
 import { bodyFromTemplate, resolveWikiTemplate } from './wiki-template-resolver.service';
+import * as templatesService from './wiki-templates.service';
 import * as wikiService from './wiki.service';
 
 // Responses keep the shape the REST routes always had (R3): the output schemas name the key
@@ -621,10 +638,303 @@ const linkActions = [
   }),
 ];
 
+const commentTarget = z.object({ commentId: z.string() });
+const templateTarget = z.object({ templateId: z.string() });
+type CommentInput = z.infer<typeof commentTarget>;
+type TemplateInput = z.infer<typeof templateTarget>;
+const onComment = pageCommentAccess<CommentInput>((i) => i.commentId);
+const viewTemplate = templateAccess<TemplateInput>('VIEW', (i) => i.templateId);
+const editTemplate = templateAccess<TemplateInput>('EDIT', (i) => i.templateId);
+
+/**
+ * Whoever comes through the REST adapter on a raw binding has the response in the context.
+ * @param ctx - Who runs the action
+ */
+function responseOf(ctx: ActionContext) {
+  if (!ctx.http) throw new AppError(400, 'This action is only available over REST', 'RAW_ACTION');
+  return ctx.http.res;
+}
+
+const exportActions = [
+  // Static paths come ahead of the param routes they share a prefix with
+  defineAction({
+    name: 'page.export',
+    area: 'wiki',
+    kind: 'read',
+    summary: 'Export a wiki page as html, md, docx, epub, pdf, latex or plain text',
+    target: slugTarget,
+    input: slugTarget.extend({ format: z.string().optional().catch(undefined) }),
+    output: nothing,
+    rest: { method: 'GET', path: `${PAGE}/export`, raw: true },
+    rawAlternative: 'page.get, whose body is the Markdown of the page',
+    authorize: viewBySlug,
+    handler: async (ctx, { spaceId, pageSlug, format }) => {
+      await exportService.exportPage(spaceId, pageSlug, format || 'html', responseOf(ctx));
+    },
+  }),
+];
+
+const pageTemplateActions = [
+  defineAction({
+    name: 'pageTemplate.create',
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Save a page template in a space',
+    target: spaceTarget,
+    input: spaceTarget.extend(createPageTemplateSchema.shape),
+    output: record,
+    rest: { method: 'POST', path: `${SPACE}/templates` },
+    authorize: editSpace,
+    handler: async (_ctx, { spaceId, ...data }) => templatesService.createTemplate(spaceId, data),
+  }),
+  defineAction({
+    name: 'pageTemplate.list',
+    area: 'wiki',
+    kind: 'read',
+    summary: 'List the page templates of a space',
+    target: spaceTarget,
+    input: spaceTarget,
+    output: list,
+    rest: { method: 'GET', path: `${SPACE}/templates` },
+    authorize: viewSpace,
+    handler: async (_ctx, { spaceId }) => templatesService.listTemplates(spaceId),
+  }),
+  defineAction({
+    name: 'pageTemplate.get',
+    area: 'wiki',
+    kind: 'read',
+    summary: 'Read one page template',
+    input: templateTarget,
+    output: record,
+    rest: { method: 'GET', path: `${WIKI}/templates/:templateId` },
+    authorize: viewTemplate,
+    handler: async (_ctx, { templateId }) => templatesService.getTemplate(templateId),
+  }),
+  defineAction({
+    name: 'pageTemplate.delete',
+    destructive: true,
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Delete a page template',
+    input: templateTarget,
+    output: nothing,
+    orgIds: (_ctx, { templateId }) => orgsOfPageTemplate(templateId),
+    preview: (_ctx, { templateId }) => previews.pageTemplateDelete(templateId),
+    rest: { method: 'DELETE', path: `${WIKI}/templates/:templateId` },
+    authorize: editTemplate,
+    handler: async (_ctx, { templateId }) => templatesService.deleteTemplate(templateId),
+  }),
+];
+
+const commentActions = [
+  defineAction({
+    name: 'pageComment.add',
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Comment on a wiki page',
+    target: pageTarget,
+    input: pageTarget.extend(createPageCommentSchema.shape),
+    output: record,
+    rest: { method: 'POST', path: `${PAGE_BY_ID}/comments` },
+    authorize: viewPage,
+    handler: async (ctx, { pageId, body, anchorText }) =>
+      commentsService.addPageComment(pageId, ctx.userId, body, anchorText),
+  }),
+  defineAction({
+    name: 'pageComment.list',
+    area: 'wiki',
+    kind: 'read',
+    summary: 'List the comments on a wiki page',
+    input: pageTarget,
+    output: list,
+    rest: { method: 'GET', path: `${PAGE_BY_ID}/comments` },
+    authorize: viewPage,
+    handler: async (_ctx, { pageId }) => commentsService.listPageComments(pageId),
+  }),
+  defineAction({
+    name: 'pageComment.update',
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Edit a page comment, or without a body toggle whether it is resolved',
+    target: commentTarget,
+    // Any body that is not a non-empty string reads as a resolve, as the route always did
+    input: commentTarget.extend({ body: z.string().optional().catch(undefined) }),
+    output: loose,
+    orgIds: (_ctx, { commentId }) => orgsOfPageComment(commentId),
+    rest: { method: 'PATCH', path: `${WIKI}/comments/:commentId` },
+    authorize: onComment,
+    handler: async (ctx, { commentId, body }) =>
+      body && typeof body === 'string'
+        ? commentsService.updatePageComment(commentId, ctx.userId, body)
+        : commentsService.resolveComment(commentId, ctx.userId),
+  }),
+  defineAction({
+    name: 'pageComment.delete',
+    destructive: true,
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Delete a page comment',
+    input: commentTarget,
+    output: nothing,
+    orgIds: (_ctx, { commentId }) => orgsOfPageComment(commentId),
+    preview: (_ctx, { commentId }) => previews.pageCommentDelete(commentId),
+    rest: { method: 'DELETE', path: `${WIKI}/comments/:commentId` },
+    authorize: onComment,
+    handler: async (ctx, { commentId }) => commentsService.deletePageComment(commentId, ctx.userId),
+  }),
+  defineAction({
+    name: 'pageComment.react',
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Add your reaction to a page comment, or take it off again',
+    target: commentTarget,
+    input: commentTarget.extend({ reactionType: z.string().optional().catch(undefined) }),
+    output: loose,
+    orgIds: (_ctx, { commentId }) => orgsOfPageComment(commentId),
+    rest: { method: 'POST', path: `${WIKI}/comments/:commentId/reactions`, status: 200 },
+    authorize: onComment,
+    handler: async (ctx, { commentId, reactionType }) => {
+      if (!reactionType || typeof reactionType !== 'string') {
+        throw new AppError(400, 'reactionType is required');
+      }
+      return commentsService.toggleReaction(commentId, ctx.userId, reactionType);
+    },
+  }),
+];
+
+const labelActions = [
+  defineAction({
+    name: 'pageLabel.list',
+    area: 'wiki',
+    kind: 'read',
+    summary: 'List the labels of a wiki page',
+    input: pageTarget,
+    output: list,
+    rest: { method: 'GET', path: `${PAGE_BY_ID}/labels` },
+    authorize: viewPage,
+    handler: async (_ctx, { pageId }) => labelsService.listPageLabels(pageId),
+  }),
+  defineAction({
+    name: 'pageLabel.add',
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Label a wiki page',
+    target: pageTarget,
+    input: pageTarget.extend(addPageLabelSchema.shape),
+    output: record,
+    rest: { method: 'POST', path: `${PAGE_BY_ID}/labels` },
+    authorize: editPage,
+    handler: async (_ctx, { pageId, label }) => labelsService.addLabel(pageId, label),
+  }),
+  defineAction({
+    name: 'pageLabel.remove',
+    destructive: true,
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Take a label off a wiki page',
+    input: pageTarget.extend({ label: z.string() }),
+    output: nothing,
+    // The route decoded the path value once more itself
+    preview: (_ctx, { pageId, label }) =>
+      previews.pageLabelRemove(pageId, decodeURIComponent(label)),
+    rest: { method: 'DELETE', path: `${PAGE_BY_ID}/labels/:label` },
+    authorize: editPage,
+    handler: async (_ctx, { pageId, label }) =>
+      labelsService.removeLabel(pageId, decodeURIComponent(label)),
+  }),
+  defineAction({
+    name: 'pageLabel.search',
+    area: 'wiki',
+    kind: 'read',
+    summary: 'The pages of a space that carry a label',
+    target: spaceTarget,
+    input: spaceTarget.extend({
+      label: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .catch(undefined),
+    }),
+    output: list,
+    rest: { method: 'GET', path: `${SPACE}/labels` },
+    authorize: viewSpace,
+    handler: async (ctx, { spaceId, label }) => {
+      const text = Array.isArray(label) ? label[0] : label;
+      if (!text) throw new AppError(400, 'label query parameter required');
+      return labelsService.searchPagesByLabel(spaceId, text, ctx.userId);
+    },
+  }),
+];
+
+const engagementActions = [
+  // /starred has no param to be captured by
+  defineAction({
+    name: 'pageStar.list',
+    area: 'wiki',
+    kind: 'read',
+    summary: 'The pages you starred',
+    input: z.object({}),
+    output: list,
+    rest: { method: 'GET', path: `${WIKI}/starred` },
+    authorize: async () => {},
+    handler: async (ctx) => starsService.getStarredPages(ctx.userId),
+  }),
+  defineAction({
+    name: 'pageStar.toggle',
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Star a wiki page, or take your star off again',
+    input: pageTarget,
+    output: loose,
+    rest: { method: 'POST', path: `${PAGE_BY_ID}/star`, status: 200, emptyBody: true },
+    authorize: viewPage,
+    handler: async (ctx, { pageId }) => starsService.toggleStar(ctx.userId, pageId),
+  }),
+  defineAction({
+    name: 'pageStar.get',
+    area: 'wiki',
+    kind: 'read',
+    summary: 'Whether you starred a wiki page',
+    input: pageTarget,
+    output: loose,
+    rest: { method: 'GET', path: `${PAGE_BY_ID}/star` },
+    authorize: viewPage,
+    handler: async (ctx, { pageId }) => ({
+      starred: await starsService.isStarred(ctx.userId, pageId),
+    }),
+  }),
+  defineAction({
+    name: 'pageView.record',
+    area: 'wiki',
+    kind: 'write',
+    summary: 'Count your view of a wiki page',
+    input: pageTarget,
+    output: nothing,
+    rest: { method: 'POST', path: `${PAGE_BY_ID}/view`, status: 204, emptyBody: true },
+    authorize: viewPage,
+    handler: async (ctx, { pageId }) => analyticsService.recordView(pageId, ctx.userId),
+  }),
+  defineAction({
+    name: 'pageView.analytics',
+    area: 'wiki',
+    kind: 'read',
+    summary: 'The views of a wiki page',
+    input: pageTarget,
+    output: loose,
+    rest: { method: 'GET', path: `${PAGE_BY_ID}/analytics` },
+    authorize: viewPage,
+    handler: async (_ctx, { pageId }) => analyticsService.getPageAnalytics(pageId),
+  }),
+];
+
 registerActions([
   ...templateActions,
   ...accessActions,
   ...spaceActions,
   ...pageActions,
   ...linkActions,
+  ...exportActions,
+  ...pageTemplateActions,
+  ...commentActions,
+  ...labelActions,
+  ...engagementActions,
 ]);

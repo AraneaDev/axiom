@@ -483,13 +483,6 @@ const DOMAIN_EXEMPTIONS: Array<{
     task: 'plan 4, Task 4 (people and notifications: activity)',
     reason: 'The activity feed belongs to the activity module, not to the issue actions',
   },
-  {
-    method: 'GET',
-    path: '/api/wiki/spaces/:spaceId/pages/:pageSlug/export',
-    plan: 4,
-    task: 'plan 4, Task 2 (wiki rest: export)',
-    reason: 'Page export is a raw download, which plan 4 gives its own handling',
-  },
 ];
 
 describe('frontend and registry parity', () => {

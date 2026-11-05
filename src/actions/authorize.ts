@@ -1,11 +1,13 @@
 import type { SpacePermissionLevel } from '@prisma/client';
 
+import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import {
   assertOrgPermission,
   assertPageAccess,
   assertPageAccessBySlug,
   assertRestrictionAccess,
+  assertTemplateAccess,
   checkOrgMember,
   checkTeamPermission,
   checkTeamRead,
@@ -237,4 +239,31 @@ export async function platformAdmin(ctx: ActionContext): Promise<void> {
  */
 export function restrictionAccess<T>(pick: (input: T) => string): Authorizer<T> {
   return (ctx, input) => assertRestrictionAccess(ctx.userId, pick(input));
+}
+
+/**
+ * Reach a wiki page comment: view access to the page it is on (requireWikiCommentAccess).
+ * @param pick - Finds the comment id in the input
+ */
+export function pageCommentAccess<T>(pick: (input: T) => string): Authorizer<T> {
+  return async (ctx, input) => {
+    const comment = await prisma.pageComment.findUnique({
+      where: { id: pick(input) },
+      select: { pageId: true },
+    });
+    if (!comment) throw new AppError(404, ERR.COMMENT_NOT_FOUND);
+    await assertPageAccess(ctx.userId, comment.pageId, 'view');
+  };
+}
+
+/**
+ * Reach a page template: the org and the space permission at the given level.
+ * @param level - The minimum level on its space
+ * @param pick - Finds the template id in the input
+ */
+export function templateAccess<T>(
+  level: SpacePermissionLevel,
+  pick: (input: T) => string,
+): Authorizer<T> {
+  return (ctx, input) => assertTemplateAccess(ctx.userId, pick(input), level);
 }

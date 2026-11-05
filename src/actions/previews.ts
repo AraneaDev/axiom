@@ -1200,3 +1200,54 @@ export async function auditLogGet(id: string): Promise<string> {
   );
   return `Read the audit row ${shortId(id)}`;
 }
+
+/**
+ * @param commentId - The comment on a wiki page
+ */
+export async function pageCommentDelete(commentId: string): Promise<string> {
+  const comment = await findOrThrow(
+    prisma.pageComment.findUnique({
+      where: { id: commentId },
+      select: {
+        body: true,
+        createdAt: true,
+        user: { select: { username: true } },
+        page: { select: { slug: true, space: { select: { slug: true } } } },
+      },
+    }),
+    ERR.COMMENT_NOT_FOUND,
+  );
+  return (
+    `Delete the comment by ${comment.user.username} on the page ${comment.page.slug} in space ` +
+    `${comment.page.space.slug} of ${day(comment.createdAt)}: ${quoted(comment.body)}`
+  );
+}
+
+/**
+ * @param pageId - The page
+ * @param label - The label as the path gave it
+ */
+export async function pageLabelRemove(pageId: string, label: string): Promise<string> {
+  const page = await findOrThrow(
+    prisma.page.findUnique({
+      where: { id: pageId },
+      select: { slug: true, space: { select: { slug: true } } },
+    }),
+    ERR.PAGE_NOT_FOUND,
+  );
+  return `Remove the label ${quoted(label)} from the page ${page.slug} in space ${page.space.slug}`;
+}
+
+/**
+ * @param templateId - The page template
+ */
+export async function pageTemplateDelete(templateId: string): Promise<string> {
+  const template = await findOrThrow(
+    prisma.pageTemplate.findUnique({
+      where: { id: templateId },
+      select: { name: true, isBuiltIn: true, space: { select: { slug: true } } },
+    }),
+    ERR.TEMPLATE_NOT_FOUND,
+  );
+  return `Delete the page template ${quoted(template.name)} in space ${template.space.slug}`;
+}
