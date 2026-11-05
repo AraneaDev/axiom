@@ -1,12 +1,12 @@
 import type { SpacePermissionLevel } from '@prisma/client';
 
-import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import {
   assertOrgPermission,
   assertPageAccess,
   assertPageAccessBySlug,
   assertRestrictionAccess,
+  assertCommentAccess,
   assertTemplateAccess,
   checkOrgMember,
   checkTeamPermission,
@@ -242,18 +242,11 @@ export function restrictionAccess<T>(pick: (input: T) => string): Authorizer<T> 
 }
 
 /**
- * Reach a wiki page comment: view access to the page it is on (requireWikiCommentAccess).
+ * Reach a wiki page comment: view access to the page it is on.
  * @param pick - Finds the comment id in the input
  */
 export function pageCommentAccess<T>(pick: (input: T) => string): Authorizer<T> {
-  return async (ctx, input) => {
-    const comment = await prisma.pageComment.findUnique({
-      where: { id: pick(input) },
-      select: { pageId: true },
-    });
-    if (!comment) throw new AppError(404, ERR.COMMENT_NOT_FOUND);
-    await assertPageAccess(ctx.userId, comment.pageId, 'view');
-  };
+  return (ctx, input) => assertCommentAccess(ctx.userId, pick(input));
 }
 
 /**

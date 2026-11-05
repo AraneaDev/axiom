@@ -153,25 +153,18 @@ export function requireWikiPageBySlug(mode: 'view' | 'edit') {
 }
 
 /**
- * Comment routes: the user needs view access to the comment's page. Expects :commentId.
- * @returns Express middleware
+ * Whether a user may reach a page comment: view access to the page it is on.
+ * @param userId - The user
+ * @param commentId - The comment
+ * @throws {AppError} 404 for no such comment, and what assertPageAccess throws
  */
-export function requireWikiCommentAccess() {
-  return async (req: Request, _res: Response, next: NextFunction) => {
-    try {
-      const userId = req.userId;
-      if (!userId) throw new AppError(401, 'Authentication required');
-      const comment = await prisma.pageComment.findUnique({
-        where: { id: param(req, 'commentId') },
-        select: { pageId: true },
-      });
-      if (!comment) throw new AppError(404, ERR.COMMENT_NOT_FOUND);
-      await assertPageAccess(userId, comment.pageId, 'view');
-      next();
-    } catch (err) {
-      next(err);
-    }
-  };
+export async function assertCommentAccess(userId: string, commentId: string): Promise<void> {
+  const comment = await prisma.pageComment.findUnique({
+    where: { id: commentId },
+    select: { pageId: true },
+  });
+  if (!comment) throw new AppError(404, ERR.COMMENT_NOT_FOUND);
+  await assertPageAccess(userId, comment.pageId, 'view');
 }
 
 /**

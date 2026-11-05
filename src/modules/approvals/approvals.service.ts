@@ -17,6 +17,18 @@ import type { updateGateSchema, createGateSchema, castVoteSchema } from './appro
 // ─── Gate CRUD ──────────────────────────────────────────────────────────────
 
 /**
+ * The project an approval request belongs to, through its issue.
+ * @param requestId - The approval request
+ */
+export async function requestProjectId(requestId: string): Promise<string | undefined> {
+  const request = await prisma.approvalRequest.findUnique({
+    where: { id: requestId },
+    select: { issue: { select: { projectId: true } } },
+  });
+  return request?.issue.projectId;
+}
+
+/**
  * List all approval gates for a project.
  * @param projectId
  */

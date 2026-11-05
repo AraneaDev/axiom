@@ -5,7 +5,7 @@ import { defineAction } from '../../actions/define';
 import { orgsOfApprovalRequest } from '../../actions/org-lookups';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
-import { prisma } from '../../config/database';
+import { projectOf } from '../../middleware/requireProjectAccess';
 import { ERR } from '../../utils/error-messages';
 
 import * as approvalsService from './approvals.service';
@@ -41,14 +41,8 @@ const read = projectRead<ProjectInput>((input) => input.projectId);
 // Approval gates are project settings: team ADMINs, org OWNERs/ADMINs and platform admins only
 const settings = projectAction<ProjectInput>('team:manage_members', (input) => input.projectId);
 
-/**
- * The project of an issue, for routes that name only the issue.
- * @param id - The issue
- */
-const issueProject = async (id: string) =>
-  (await prisma.issue.findUnique({ where: { id }, select: { projectId: true } }))?.projectId;
-
 // Approval requests belong to an issue: the user needs access to its project
+const issueProject = async (id: string) => (await projectOf.issue(id))[0];
 const readIssue = recordInProject<IssueInput>(issueProject, ERR.ISSUE_NOT_FOUND, (i) => i.issueId);
 // Requesting an approval moves an issue: it needs issue:edit by role, like other writes
 const writeIssue = recordInProject<IssueInput>(
@@ -58,13 +52,7 @@ const writeIssue = recordInProject<IssueInput>(
   ['issue:edit'],
 );
 const ownRequest = recordInProject<RequestInput>(
-  async (id) =>
-    (
-      await prisma.approvalRequest.findUnique({
-        where: { id },
-        select: { issue: { select: { projectId: true } } },
-      })
-    )?.issue.projectId,
+  approvalsService.requestProjectId,
   'Approval request not found',
   (i) => i.requestId,
 );
