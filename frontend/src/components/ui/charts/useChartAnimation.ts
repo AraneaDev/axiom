@@ -9,13 +9,13 @@ export function useChartAnimation(duration = 500): number {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    const start = performance.now();
+    // From the first frame: its timestamp is on the frame's clock, which can be behind this one
+    let start: number | null = null;
     let rafId: number;
 
     function tick(now: number) {
-      const elapsed = now - start;
-      // The first frame's timestamp can be earlier than the effect that asked for it
-      const t = Math.max(0, Math.min(1, elapsed / duration));
+      start ??= now;
+      const t = Math.min(1, (now - start) / duration);
       // ease-out cubic
       const eased = 1 - Math.pow(1 - t, 3);
       setProgress(eased);
