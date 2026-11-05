@@ -68,12 +68,12 @@ A token acts as its owner, limited to its scopes. A request its scopes don't cov
 
 Each area has an `<area>:read` and an `<area>:write` scope. Write includes read within its own area only.
 
-A scope no action uses yet can't be minted (`400`): `admin:read`, `admin:write`, `orgs:write`, `teams:write`, `projects:write`, `search:write` and `dashboards:write`. A token that holds one from before gets nothing from it.
+A scope no action uses yet can't be minted (`400`): `admin:read`, `admin:write`, `orgs:write`, `teams:write`, `projects:write` and `search:write`. A token that holds one from before gets nothing from it.
 
 | Area         | Covers                                                                                                                                                                                                        |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `issues`     | Issues, comments, labels, milestones, templates, workflows, custom fields, links, team roadmap, activity and analytics (`/api/issues`, `/api/custom-fields`, `/api/links`, the rest of `/api/projects/:id/*`) |
-| `sprints`    | `/api/projects/:id/sprints`, `velocity`, `backlog`                                                                                                                                                            |
+| `sprints`    | `/api/projects/:id/sprints`, `velocity`, `backlog`, and the action `sprint.overview`                                                                                                                          |
 | `boards`     | `/api/projects/:id/board`                                                                                                                                                                                     |
 | `wiki`       | `/api/wiki`                                                                                                                                                                                                   |
 | `files`      | `/api/attachments`, together with the scope of the parent (below)                                                                                                                                             |
@@ -81,7 +81,7 @@ A scope no action uses yet can't be minted (`400`): `admin:read`, `admin:write`,
 | `orgs`       | `/api/orgs`, reads only                                                                                                                                                                                       |
 | `teams`      | `/api/teams`, reads only                                                                                                                                                                                      |
 | `projects`   | `/api/projects/:id` and `/api/projects/team/:teamId`, reads only                                                                                                                                              |
-| `dashboards` | Your dashboard (`issues:read` opens it too)                                                                                                                                                                   |
+| `dashboards` | Your dashboard (`issues:read` opens it too), and the actions `savedQuery.*` and `dashboard.*`, read and write. A token from before that held `dashboards:read` can read your saved queries and dashboards. Running a query also needs `issues:read` |
 | `forms`      | `/api/projects/:id/forms`, `intake`                                                                                                                                                                           |
 | `automation` | `/api/projects/:id/automation-rules`                                                                                                                                                                          |
 | `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
@@ -2426,6 +2426,7 @@ The query engine is used in two places:
 
 - The `q` parameter on `GET /api/projects/:projectId/issues` for structured issue filtering.
 - The `condition` field on automation rules for conditional execution.
+- The `query` of `query.run`, saved queries and dashboard widgets, which add the clauses under [Clauses](#clauses).
 
 ### Simple Mode
 
@@ -2554,6 +2555,105 @@ blocked = true AND done = false AND sprintstate = ACTIVE
 # Expensive items by custom field
 cf.Severity = High AND cf."Estimated cost" > 1000
 ```
+
+### Clauses
+
+`query.run`, saved queries, dashboard widgets and `search.run` (when the query contains a clause) take a query with optional clauses around the condition:
+
+```
+[SELECT COUNT, SUM(storypoints), AVG(storypoints)] [WHERE] condition [GROUP BY field, field] [ORDER BY field [ASC|DESC], ...]
+```
+
+The keywords are exact uppercase, as whole words, outside double quotes. `order by` in lower case stays text, which is why `where is login` is still a text search. The clauses come in the order shown, each at most once. A query that starts with `SELECT` needs `WHERE` before its condition. Without `SELECT`, `WHERE` is optional: `type = Bug ORDER BY created DESC`. A query with only `ORDER BY` or `GROUP BY` and no condition covers every issue you can see.
+
+`GET /api/projects/:projectId/issues?q=` and automation conditions do not read clauses. They keep parsing what they always did.
+
+**ORDER BY.** `ASC` is the default. These fields can be sorted: `type`, `status`, `priority`, `assignee`, `creator`, `sprint`, `project`, `storypoints`, `created`, `updated`, `duedate`, `number`, `title`, `done` and `sprintstate`. `label`, `blocked`, `blocks`, `linked`, `text` and custom fields (`cf.*`) cannot be sorted and answer `400`. Without `ORDER BY`, items come most recently updated first. Every sort ends in the issue id, so pages never shuffle.
+
+- `priority` sorts by rank: `DESC` gives `CRITICAL` first.
+- `status` sorts by column name, alphabetically, not along the board's workflow.
+- Empty values: `storypoints` and `duedate` put issues without a value last in both directions. `assignee`, `creator`, `sprint` and `sprintstate` follow the database default, so an empty value is last ascending and first descending. In a grouped query an empty key follows that same rule.
+
+**SELECT.** `COUNT` (or `COUNT(*)`), `SUM(storypoints)` and `AVG(storypoints)`. No other field can be summed or averaged. An issue without points adds nothing to a sum and is left out of an average (`avg` is `null` when no issue in the group has points). `SELECT` without `GROUP BY` gives one group with an empty key.
+
+**GROUP BY.** One or two of `type`, `status`, `priority`, `assignee`, `creator`, `sprint`, `project`, `done` and `sprintstate`. `label`, custom fields, dates, `title`, `number`, `text`, `blocked`, `blocks` and `linked` cannot be grouped and answer `400`. `status` groups by column name across projects, so `Done` in two projects is one group. Groups come sorted by count, largest first, unless an `ORDER BY` says otherwise.
+
+In a grouped query `ORDER BY` takes only fields from `GROUP BY`. It cannot order by `count`, `sum` or `avg`. A query that needs more than 5000 rows of database groups is refused with `400`; narrow it with a condition.
+
+**Free text.** Text next to a comparison in a clause query (`type = Bug login`) is a substring match on title and body, like `text ~ "login"`. It is not the ranked search of `search.run` without clauses, which orders by relevance and puts a page titled exactly like the query first.
+
+**Access.** Your access filter is applied before any limit, sort, group, count, sum or average, so a group key or a total never includes an issue you cannot open.
+
+### POST /api/query
+
+The REST binding of the action `query.run`.
+
+| Field    | Type     | Description                                                                                   |
+| -------- | -------- | --------------------------------------------------------------------------------------------- |
+| `query`  | string   | Required, at most 1000 characters                                                             |
+| `limit`  | integer  | Items per page or groups returned, 1 to 500, default 50                                       |
+| `cursor` | string   | `nextCursor` of the previous page. Not accepted for a grouped query                           |
+| `fields` | string[] | Item fields to return. Default: `fullKey`, `url`, `title`, `type`, `priority`, `status`, `assignee`, `sprint`, `project`, `storyPoints`, `dueDate`, `updatedAt`. Also `number`, `creator`, `labels`, `startDate`, `timeEstimate`, `timeSpent`, `createdAt` |
+| `scope`  | object   | `{ orgId, teamId, projectId }` narrows the query. Something you cannot see gives an empty result |
+
+**Response 200, items:** `{ "kind": "items", "items": [...], "nextCursor": "..." }`. `nextCursor` is there when more follow.
+
+**Response 200, groups:** `{ "kind": "groups", "groups": [{ "key": { "status": "Done" }, "count": 4, "sum": 21, "avg": 5.25 }], "total": 9, "truncated": true }`. `total` counts the issues in all groups, also those past `limit`; `truncated` is present when `limit` cut groups off. `sum` and `avg` appear when selected.
+
+A token needs `search:read` and `issues:read`. Past 30 requests per minute per user (shared with `search.run`) the answer is `429`. A bad query is `400 INVALID_QUERY`, a bad cursor `400 INVALID_CURSOR`.
+
+`search.run` hands a query to `query.run` when it starts with `SELECT`, or contains `WHERE`, `GROUP BY` followed by a field, or `ORDER BY` followed by a field, in capitals. The answer is then the answer of `query.run`, issues only: wiki pages are not searched, also for `type: all`. With `type: wiki` the text search runs as before.
+
+### Sprint overview
+
+The action `sprint.overview` (MCP and `POST /api/act`) shows the progress of active sprints, or of planning sprints with `state: "PLANNING"`, in every project you can open. Narrow it with `scope` (`orgId`, `teamId`, `projectId`). A token needs `sprints:read` and nothing more.
+
+Per sprint: `id`, `name`, `goal`, `project` (`key`, `name`), `startDate`, `endDate`, `daysLeft` (whole days, negative past the end date), `issues` (`total`, `done`, `inProgress`, `todo`), `points` (`committed`, `done`) and `blocked`. `includeBlocked: false` leaves `blocked` empty. Each blocked issue lists `key`, `title`, `assignee` and `blockedBy`; a blocker in a project you cannot open shows as `{ "hidden": true }`.
+
+Two definitions to know. In progress is a heuristic on the column name, the one the sprint report uses: a column that is not done and not the default one counts as in progress when its name contains "progress", "review", "ontwikkeling" or "testen". Every other column, custom names included, counts as to do. And a sprint in `PLANNING` has no commitment yet, so its whole scope counts as committed. For an active sprint, committed points are those of the issues the sprint started with.
+
+### Saved queries
+
+Actions `savedQuery.list`, `get`, `create`, `update`, `delete` and `run`, also on REST under `/api/saved-filters` with the paths the UI filters use. `create` takes `name`, `text` (a query as `query.run` takes it), an optional `description` and `projectId`, and sharing. `run` takes `limit`, `cursor` and `fields`, and answers as `query.run`.
+
+Filters the UI saved before are stored as they were. `savedQuery.run` converts one when that loses nothing, and answers `400` with the reason when it does not. Such a filter still opens in the UI.
+
+**Sharing** (saved queries and dashboards alike): `visibility` is `PRIVATE` (default, only you), `TEAM` (with `teamId`) or `ORG` (with `orgId`). You can share with a team or org you belong to. Who sees it: the creator, members of that team or org, and platform admins. Something you cannot see answers `404`. Who may change or delete it: the creator; for `TEAM` also that team's admins; for `ORG` also the org's owners and admins; platform admins always.
+
+A shared query always runs with the rights of whoever runs it, never those of its creator. Someone with less access sees fewer issues, and no count, sum or group key includes an issue they cannot open.
+
+Scopes: `dashboards:read` and `dashboards:write`. Running a saved query also needs `issues:read`.
+
+### Dashboards
+
+Actions `dashboard.list`, `get`, `create`, `update`, `delete`, `render` and `renderEmbedded`, and `dashboardWidget.add`, `update`, `remove` and `reorder`. REST paths start at `/api/dashboards`: `/api/dashboards/:id/render`, `/api/dashboards/:id/widgets`, `PUT /api/dashboards/:id/widgets/order` and `POST /api/dashboards/embedded`. In the UI they live at `/dashboards` and `/dashboards/:id`; the personal page at `/dashboard` is a different thing. Sharing works as for saved queries. `layout` is `{ "columns": 1 to 4 }`.
+
+A widget has a `type`, a `title`, a source and `options`:
+
+| Type              | Source                    | Shows                                                                    |
+| ----------------- | ------------------------- | ------------------------------------------------------------------------ |
+| `COUNT`           | `savedQueryId` or `query` | The number of matching issues. A grouped query shows its groups          |
+| `TABLE`, `LIST`   | `savedQueryId` or `query` | Items, or groups when the query has `GROUP BY` or `SELECT`               |
+| `BAR`             | `savedQueryId` or `query` | A bar chart. The query needs `GROUP BY`, else the widget has an error    |
+| `SPRINT_OVERVIEW` | none                      | The result of `sprint.overview`                                          |
+
+`options`: `limit` (1 to 100, default 25), `state` (`ACTIVE` or `PLANNING`, for the sprint overview) and `scope` (`orgId`, `teamId`, `projectId`). To change a widget's source, give the new one and `null` for the other.
+
+**Limits.** At most 24 widgets per dashboard (`400` beyond). A render runs at most 4 widgets at once, takes one read slot, and is limited to 60 per minute per user. A widget that fails, or needs a scope the token lacks (`issues:read` for query widgets, `sprints:read` for sprint overviews), has `{ "error": { "message", "code" } }` as its result and the others still render. `dashboard.render` also returns `projectIds`, the visible projects it reads, at most 50.
+
+**Live updates.** The dashboard view joins the rooms of those projects and refetches the render after `issue:created`, `issue:updated`, `board:moved` or `sprint:updated`. The first event starts a 2 second wait and later events do not extend it. A hidden tab refetches nothing and catches up once when it is visible again, as it does after a socket reconnect. Past 50 projects the render stays correct but live updates can miss projects.
+
+### Live blocks in wiki pages
+
+A line of its own in a page body, `:::query <target>:::`, shows live results in the page. The target is the text as written:
+
+| Target             | Shows                                                               |
+| ------------------ | ------------------------------------------------------------------- |
+| `<savedQueryId>`   | A saved query                                                       |
+| `dashboard:<id>`   | The widgets of a dashboard                                          |
+| `inline:"<query>"` | A query written in the block, JSON-quoted so `"` and `:::` survive  |
+
+The page editor inserts one from the slash menu and edits it in a form, and view mode renders it too. A block inside a code block is plain text. The action `dashboard.renderEmbedded` (`pageId` and `embedId`, the target as written) renders one. Whoever can read the page sees the block, evaluated with their own rights, also when they cannot open the dashboard or saved query itself, because the author of the page chose to show it to its readers. What comes back is widget titles and results, never query text or sharing. A token needs `wiki:read` and, per widget, the scope of its data.
 
 **Response 200:** Updated preferences array.
 

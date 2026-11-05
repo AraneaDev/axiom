@@ -146,6 +146,56 @@ The `Content-Type` must be the `mimeType` you gave. The URL works once, for 10 m
 
 The URL in the answer is built from `FRONTEND_URL` when it is set, so set it when you reach Axiom through a tunnel or proxy, and set `TRUST_PROXY` to match.
 
+## Queries, sprints and dashboards
+
+Four groups of actions answer questions about your work. Run `describe` for the exact input of each; the full syntax is in the [API reference](api-reference.md#clauses).
+
+### query.run
+
+`act` with `query.run` runs a query over every issue you can see and returns items, or groups with counts and sums:
+
+```json
+{
+  "action": "query.run",
+  "input": {
+    "query": "SELECT COUNT, SUM(storypoints) WHERE type = Bug AND done = false GROUP BY status ORDER BY status"
+  }
+}
+```
+
+```
+[SELECT COUNT, SUM(storypoints), AVG(storypoints)] [WHERE] condition [GROUP BY field, field] [ORDER BY field [ASC|DESC], ...]
+```
+
+- Clause keywords are exact uppercase. `order by` in lower case is text.
+- New fields in the condition: `blocked`, `blocks`, `linked = AXM-12`, `text ~ "login"`, `done`, `sprintstate` and custom fields as `cf.Name` or `cf."Name with spaces"`. `assignee`, `creator`, `sprint` and `project` also match a username, sprint name or project prefix.
+- Sort by `type`, `status`, `priority`, `assignee`, `creator`, `sprint`, `project`, `storypoints`, `created`, `updated`, `duedate`, `number`, `title`, `done` or `sprintstate`. Not by `label`, `blocked`, `blocks`, `linked`, `text` or custom fields. Status sorts by column name. Priority sorts by rank, so `DESC` gives `CRITICAL` first. Without `ORDER BY`, the last updated come first.
+- Empty values: `storypoints` and `duedate` sort last in both directions. For `assignee`, `creator`, `sprint` and `sprintstate` the database default holds: last ascending, first descending.
+- Group by one or two of `type`, `status`, `priority`, `assignee`, `creator`, `sprint`, `project`, `done` and `sprintstate`. `status` groups by column name, across projects. Sum and average take `storypoints` only. A grouped query can order only by its grouped fields, not by `count`, `sum` or `avg`; groups come largest first.
+- Text next to a comparison (`type = Bug login`) is a substring match on title and body. That differs from `search.run`, which ranks by relevance.
+- Items come in pages: `limit` (up to 500), `nextCursor` and `cursor`. A grouped query answers in one page, `total` counts every issue in the groups and `truncated` says `limit` cut some off. `fields` narrows the items, and `scope` (`orgId`, `teamId`, `projectId`) narrows the query.
+- Your access applies before any sort, group or total. Needs `search:read` and `issues:read`.
+
+`search.run` with a clause query (`SELECT`, `WHERE`, `GROUP BY` or `ORDER BY` in capitals) answers as `query.run`. It returns issues only: wiki pages are not searched, also with `type: all`.
+
+### sprint.overview
+
+`sprint.overview` shows the active sprints of every project you can open, or the planning ones with `state: "PLANNING"`: issues total, done, in progress and to do, points committed and done, days left, and the issues that are blocked with what blocks them (a blocker you cannot open shows as hidden). It needs `sprints:read`.
+
+In progress is a heuristic on the column name: a column that is neither done nor the default counts when its name contains "progress", "review", "ontwikkeling" or "testen". Custom names land in to do. A sprint that is still `PLANNING` has no commitment, so its whole scope counts as committed.
+
+### Saved queries
+
+`savedQuery.create` stores a query under a name (`text`, with `projectId` optional), and `savedQuery.list`, `get`, `update`, `delete` and `run` manage and use it. A query is private unless you give `visibility` `TEAM` (with `teamId`) or `ORG` (with `orgId`) and belong to that team or org. The creator may change or delete it; for `TEAM` also the team's admins, for `ORG` the org's owners and admins. Whoever opens a shared query runs it with their own rights, so it can show them less than it showed you. One you cannot see answers `404`. It needs `dashboards:read` or `dashboards:write`, and `issues:read` to run.
+
+### Dashboards
+
+`dashboard.create` makes a dashboard, shared like a saved query, and `dashboardWidget.add` fills it: `COUNT`, `TABLE`, `LIST`, `BAR` (a query with `GROUP BY`) or `SPRINT_OVERVIEW`, each with `savedQueryId` or `query`. A dashboard holds at most 24 widgets. `dashboard.render` returns every widget with its result, evaluated with your own rights. A widget that fails has `{ error }` and the others still render. A render runs 4 widgets at once and is limited to 60 per minute. In the UI an open dashboard updates itself after changes in the projects it reads.
+
+### Wiki blocks
+
+A body line `:::query <target>:::` embeds live results in a page, where the target is a saved query id, `dashboard:<id>` or `inline:"<query>"` (JSON-quoted). Anyone who can read the page sees the block with their own rights, also without access to the dashboard or saved query itself, and gets widget titles and results only. Write it with `page.create` or `page.update` like any other Markdown.
+
 ## Scopes
 
 A token has one `<area>:read` and one `<area>:write` scope per area, and write includes read within its area. `describe` lists only what your token allows.
@@ -153,11 +203,14 @@ A token has one `<area>:read` and one `<area>:write` scope per area, and write i
 | Tool or action | Needs                                                                                                         |
 | -------------- | ------------------------------------------------------------------------------------------------------------- |
 | `search`       | `search:read`, and `issues:read` or `wiki:read` for each section it should show                               |
+| `query.run` | `search:read` and `issues:read` |
+| `sprint.overview` | `sprints:read` |
+| `savedQuery.*`, `dashboard.*` | `dashboards:read` or `dashboards:write`; running one also needs `issues:read`, a sprint overview widget `sprints:read` |
 | `read`         | `search:read`, plus `issues:read` or `wiki:read` per item. Some includes need `files:read`                    |
 | `act`          | The scope of the action's area, for example `issues:write` for `issue.update`, `wiki:write` for `page.create` |
 | `upload`       | `files:write` and the scope of the target's area                                                              |
 
-The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation` and `approvals`. `search`, `orgs`, `teams`, `projects` and `dashboards` have only a read scope for now, and `admin` none: a scope no action uses can't be minted, so a token never gains reach later without you choosing it. A token can never manage orgs, teams, members, tokens or your account, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
+The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation` and `approvals`. `search`, `orgs`, `teams` and `projects` have only a read scope for now, and `admin` none: a scope no action uses can't be minted, so a token never gains reach later without you choosing it. A token can never manage orgs, teams, members, tokens or your account, change space permissions or page restrictions, or create, change or delete projects, whatever its scopes. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
 
 ## Limits
 
@@ -165,7 +218,8 @@ The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, 
 | ------------ | ---------------------------------------------------------------------------------------------------- |
 | `read`       | 300 keys per minute per user, over REST and MCP; 10 MB per call; 4 calls at once per user, 16 in all |
 | `act`        | 300 items per minute per user (a batch counts each item), 25 items per batch                         |
-| `search`     | 30 per minute per user                                                                               |
+| `search`, `query.run` | 30 per minute per user, shared |
+| `dashboard.render` | 60 per minute per user, 4 widgets at once |
 | Files        | 25 MB each; 100 staged at once; 4 signed uploads running per user                                    |
 | Public forms | Wrong access codes lock out the sending IP after 20 tries for 15 minutes                             |
 
