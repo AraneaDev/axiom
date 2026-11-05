@@ -4,7 +4,7 @@ import { projectAction, projectRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
-import { dbInt, listPosition } from '../../utils/validation';
+import { dbInt, listPosition, MAX_REORDER } from '../../utils/validation';
 
 import * as boardColumnsService from './board-columns.service';
 import * as issuesService from './issues.service';
@@ -81,7 +81,7 @@ registerActions([
     summary: 'Set the positions of the columns of a board',
     target: projectTarget,
     input: projectTarget.extend({
-      positions: z.array(z.object({ id: z.string(), position: listPosition })),
+      positions: z.array(z.object({ id: z.string(), position: listPosition })).max(MAX_REORDER),
     }),
     output: z.array(loose),
     rest: { method: 'PATCH', path: `${COLUMNS}/reorder` },

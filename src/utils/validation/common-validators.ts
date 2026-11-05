@@ -31,6 +31,9 @@ export const dbInt = z.number().int().min(MIN_DB_INT).max(MAX_DB_INT);
  * A position in an ordered list (columns, buckets, fields). Capped well below the column, because a
  * new item lands one past the last, and a last one at the top would overflow the next.
  */
+/** The most items one reorder call may carry; each becomes an update in one transaction */
+export const MAX_REORDER = 500;
+
 export const listPosition = z.number().int().min(0).max(100_000);
 
 /**

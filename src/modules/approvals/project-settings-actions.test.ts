@@ -286,6 +286,51 @@ describe('project settings as registry actions', () => {
     });
   });
 
+  describe('reorder lists', () => {
+    it.each([
+      [
+        'columns',
+        'patch',
+        () => `${P}/board/columns/reorder`,
+        (ids: string[]) => ({ positions: ids.map((id, position) => ({ id, position })) }),
+      ],
+      [
+        'roadmap buckets',
+        'post',
+        () => `${P}/roadmap/buckets/reorder`,
+        (ids: string[]) => ({ bucketIds: ids }),
+      ],
+      [
+        'form pages',
+        'post',
+        (formId: string) => `${P}/forms/${formId}/pages/reorder`,
+        (ids: string[]) => ({ pageIds: ids }),
+      ],
+      [
+        'form fields',
+        'post',
+        (formId: string) => `${P}/forms/${formId}/fields/reorder`,
+        (ids: string[]) => ({ fieldIds: ids }),
+      ],
+    ] as const)('refuse more than 500 %s in one call', async (_name, method, pathFor, body) => {
+      const form = await prisma.form.create({
+        data: {
+          projectId: ctx.projectId,
+          name: 'Reorder',
+          slug: `reorder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          createdById: ctx.owner.id,
+        },
+      });
+      const ids = Array.from({ length: 501 }, (_, i) => `id-${i}`);
+      const call = request(app)[method](pathFor(form.id));
+      const res = await call
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .set(XHR)
+        .send(body(ids));
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('the public form pages', () => {
     let enforced: boolean;
     const slug = `public-3b-${Date.now()}`;

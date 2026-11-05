@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { listPosition } from '../../utils/validation';
+import { listPosition, MAX_REORDER } from '../../utils/validation';
 
 export const createBucketSchema = z.object({
   name: z.string().min(1).max(100),
@@ -15,7 +15,7 @@ export const updateBucketSchema = z.object({
 });
 
 export const reorderBucketsSchema = z.object({
-  bucketIds: z.array(z.string()).min(1),
+  bucketIds: z.array(z.string()).min(1).max(MAX_REORDER),
 });
 
 export const setIssueBucketSchema = z.object({

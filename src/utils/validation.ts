@@ -37,6 +37,7 @@ export {
   queryText,
   dbInt,
   listPosition,
+  MAX_REORDER,
   MAX_DB_INT,
 } from './validation/common-validators';
 

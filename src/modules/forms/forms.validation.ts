@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { MAX_REORDER } from '../../utils/validation';
+
 // ─── Form CRUD ──────────────────────────────────────────────
 
 const formFields = {
@@ -47,7 +49,7 @@ export const createPageSchema = z.object({
 export const updatePageSchema = createPageSchema.partial();
 
 export const reorderPagesSchema = z.object({
-  pageIds: z.array(z.string()).min(1),
+  pageIds: z.array(z.string()).min(1).max(MAX_REORDER),
 });
 
 // ─── Fields ─────────────────────────────────────────────────
@@ -94,7 +96,7 @@ export const updateFieldSchema = createFieldSchema
   .extend({ required: z.boolean().optional() });
 
 export const reorderFieldsSchema = z.object({
-  fieldIds: z.array(z.string()).min(1),
+  fieldIds: z.array(z.string()).min(1).max(MAX_REORDER),
 });
 
 // ─── Submissions ─────────────────────────────────────────────
