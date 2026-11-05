@@ -21,6 +21,9 @@ const Setup2FA = lazy(() => import('@/pages/auth/Setup2FA'));
 const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const Dashboard = lazy(() => import('@/pages/dashboard/Dashboard'));
+const DashboardList = lazy(() => import('@/pages/dashboards/DashboardList'));
+const DashboardView = lazy(() => import('@/pages/dashboards/DashboardView'));
+const DashboardEdit = lazy(() => import('@/pages/dashboards/DashboardEdit'));
 const CreateOrg = lazy(() => import('@/pages/orgs/CreateOrg'));
 const TeamList = lazy(() => import('@/pages/teams/TeamList'));
 const CreateTeam = lazy(() => import('@/pages/teams/CreateTeam'));
@@ -93,6 +96,30 @@ function AppWithKeyboard() {
               element={
                 <ErrorBoundary>
                   <Dashboard />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/dashboards"
+              element={
+                <ErrorBoundary>
+                  <DashboardList />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/dashboards/:id"
+              element={
+                <ErrorBoundary>
+                  <DashboardView />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/dashboards/:id/edit"
+              element={
+                <ErrorBoundary>
+                  <DashboardEdit />
                 </ErrorBoundary>
               }
             />

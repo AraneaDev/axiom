@@ -5,6 +5,7 @@ import {
   FolderKanban,
   BookOpen,
   CalendarRange,
+  LayoutDashboard,
   Plus,
   ChevronDown,
   ShieldCheck,
@@ -145,6 +146,10 @@ export function Sidebar() {
       >
         {/* Sections wrapper */}
         <div className="flex flex-col gap-6 p-3">
+          <div className="space-y-1">
+            <NavItem to="/dashboards" icon={LayoutDashboard} label="Dashboards" />
+          </div>
+
           {/* Org section */}
           <div className="space-y-1">
             <SectionHeader

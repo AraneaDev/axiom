@@ -119,5 +119,13 @@ export async function issuesApi(request: APIRequestContext, user = DEMO_USERS.ad
         await request.get(`/api/projects/${projectId}/issues/${number}`, { headers: h })
       ).json();
     },
+    async update(number: number, data: Record<string, unknown>) {
+      const res = await request.patch(`/api/projects/${projectId}/issues/${number}`, {
+        headers: h,
+        data,
+      });
+      if (!res.ok()) throw new Error(`update issue failed: ${res.status()}`);
+      return res.json();
+    },
   };
 }

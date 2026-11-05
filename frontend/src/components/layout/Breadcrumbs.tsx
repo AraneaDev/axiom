@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { Building2, ChevronRight, FolderKanban, Home, Users, BookOpen, Search } from 'lucide-react';
+import {
+  Building2,
+  ChevronRight,
+  FolderKanban,
+  Home,
+  LayoutDashboard,
+  Users,
+  BookOpen,
+  Search,
+} from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
 
 import { orgsApi } from '@/api/orgs.api';
@@ -104,8 +113,13 @@ export function Breadcrumbs() {
     segments.length >= 3 ? `/${segments[0]}/${segments[1]}/${thirdSeg}/board` : '';
 
   const crumbs: Crumb[] = [];
+  // Not an org and a team: the id below it says nothing, and the page names the dashboard itself
+  const isDashboardRoute = segments[0] === 'dashboards' && !params.org;
+  if (isDashboardRoute) {
+    crumbs.push({ label: 'Dashboards', path: '/dashboards', icon: LayoutDashboard });
+  }
 
-  segments.forEach((seg, i) => {
+  (isDashboardRoute ? [] : segments).forEach((seg, i) => {
     const path = '/' + segments.slice(0, i + 1).join('/');
 
     // Segment 0: org
