@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
@@ -149,6 +149,19 @@ describe('seed-demo', () => {
       expect(page.wikiIssueLinks).toContainEqual({ issueId: issue.id, linkType: 'MENTION' });
     }
   });
+
+  it('refuses to run in production, before it touches anything', async () => {
+    const users = await prisma.user.count();
+    const run = spawnSync('npx', ['tsx', 'scripts/seed-demo.ts'], {
+      cwd: process.cwd(),
+      encoding: 'utf-8',
+      timeout: 60_000,
+      env: { ...process.env, NODE_ENV: 'production' },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('db:seed:prod');
+    expect(await prisma.user.count()).toBe(users);
+  }, 90_000);
 
   it('is idempotent on re-run', async () => {
     const beforeUsers = await prisma.user.count();

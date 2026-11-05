@@ -10,6 +10,7 @@
  */
 
 import '../src/config/load-env';
+import './refuse-in-production';
 
 import fs from 'fs';
 import path from 'path';

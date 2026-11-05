@@ -111,18 +111,15 @@ systemctl reload apache2
 
 ---
 
-## 5. Seeding Demo Data (Optional)
+## 5. Seeding a First Admin (Optional)
 
 ```bash
-docker compose exec api npm run db:seed
+docker compose exec -e ADMIN_PASSWORD=your-secure-password api npm run db:seed:prod
 ```
 
-This creates:
+This creates the admin user `tim` with that password, the Aranea.Dev org, the Axiom team and the Axiom MVP project. It is idempotent and safe to re-run.
 
-- **Users:** `tim / password123` (OWNER), `test / password123` (MEMBER)
-- **Org:** Aranea.Dev > **Team:** Axiom > **Project:** Axiom MVP (prefix: AXM)
-
-The seed script is idempotent and safe to re-run.
+`npm run db:seed` is for development only. Its demo accounts have a published password, so in production it stops with an error and writes nothing.
 
 ---
 
