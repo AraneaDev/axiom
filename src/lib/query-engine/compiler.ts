@@ -190,6 +190,13 @@ function compileComparison(
     return operator === '=' ? CURRENT_SPRINT_WHERE : { NOT: CURRENT_SPRINT_WHERE };
   }
 
+  // Part of a name: an id has no parts worth asking about
+  if (fieldDef.aliasField && resolved !== null && operator === '~') {
+    const [relation, name] = fieldDef.aliasField.split('.');
+    const contains = likeLiteral(String(resolved));
+    return { [relation]: { [name]: { contains, mode: 'insensitive' } } };
+  }
+
   // Fields that take a name as well as an id. A function's value is an id, or no name at all
   if (fieldDef.aliasField && resolved !== null && (operator === '=' || operator === '!=')) {
     if (value.type !== 'function') {

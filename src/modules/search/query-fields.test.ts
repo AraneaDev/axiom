@@ -568,6 +568,20 @@ describe('query fields', () => {
       expect(after.labels.map((l) => l.name)).toContain('fired-by-name');
     });
 
+    it('matches ~ on the name of an assignee, creator, sprint and project', async () => {
+      expect(await found(`assignee ~ "${member.username.slice(1, -1)}"`)).toEqual(
+        await found(`assignee = "${member.username}"`),
+      );
+      expect(await found(`assignee = "${member.username}"`)).not.toEqual([]);
+      expect(await found('sprint ~ "NAMED"')).toEqual(['named']);
+      expect(await found(`project ~ "${ctx.projectPrefix.slice(1)}"`)).toEqual(
+        await found(`project = ${ctx.projectPrefix}`),
+      );
+      expect(await found(`creator ~ "${ctx.owner.username.slice(1, -1)}"`)).toEqual(
+        await found(`creator = "${ctx.owner.username}"`),
+      );
+    });
+
     it('agrees with the evaluator', async () => {
       const queries = [
         `assignee = "${member.username}"`,
@@ -587,6 +601,18 @@ describe('query fields', () => {
         `project != ${ctx.projectPrefix}`,
         `project = "${ctx.projectId}"`,
         `project NOT IN (${ctx.projectPrefix})`,
+        `assignee ~ "${member.username.slice(1, -1).toUpperCase()}"`,
+        `NOT assignee ~ "${member.username.slice(1, -1)}"`,
+        'assignee ~ "no-such-person"',
+        'assignee ~ currentUser()',
+        `creator ~ "${ctx.owner.username.slice(1, -1)}"`,
+        'sprint ~ "named"',
+        'NOT sprint ~ "named"',
+        'sprint ~ "no-such-sprint"',
+        `project ~ "${ctx.projectPrefix.slice(1).toLowerCase()}"`,
+        `NOT project ~ "${ctx.projectPrefix.slice(1)}"`,
+        'project ~ "no-such-project"',
+        'project ~ "%"',
         `cf.Owner = "${member.username}"`,
         `cf.Owner != "${member.username}"`,
         `cf.Owner IN ("${member.username}", "${ctx.owner.username}")`,
