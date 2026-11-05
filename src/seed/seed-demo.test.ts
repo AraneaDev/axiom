@@ -126,16 +126,28 @@ describe('seed-demo', () => {
   // ── Idempotency ────────────────────────────────────────────
 
   it('links seeded pages to the issues they name', async () => {
+    const issues = await prisma.issue.findMany({
+      where: { project: { prefix: 'AXM' } },
+      select: { id: true, number: true },
+    });
     const pages = await prisma.page.findMany({
       where: { space: { team: { org: { slug: 'aranea-dev' } } }, body: { contains: 'AXM-' } },
-      select: { id: true },
+      select: {
+        id: true,
+        body: true,
+        wikiIssueLinks: { select: { issueId: true, linkType: true } },
+      },
     });
-    expect(pages.length).toBeGreaterThan(0);
-    const links = await prisma.wikiPageIssueLink.findMany({
-      where: { pageId: { in: pages.map((page) => page.id) }, linkType: 'MENTION' },
-      select: { pageId: true },
-    });
-    expect(new Set(links.map((link) => link.pageId)).size).toBe(pages.length);
+    // The docs also use AXM-42 as an example, an issue the seed doesn't have
+    const named = pages.flatMap((page) =>
+      issues
+        .filter((issue) => new RegExp(`\\bAXM-${issue.number}\\b`).test(page.body))
+        .map((issue) => ({ page, issue })),
+    );
+    expect(named.length).toBeGreaterThan(0);
+    for (const { page, issue } of named) {
+      expect(page.wikiIssueLinks).toContainEqual({ issueId: issue.id, linkType: 'MENTION' });
+    }
   });
 
   it('is idempotent on re-run', async () => {
