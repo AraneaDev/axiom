@@ -172,3 +172,27 @@ export async function orgsOfPageTemplate(templateId: string): Promise<string[]> 
   });
   return row ? [row.space.team.orgId] : [];
 }
+
+/**
+ * The org of the project a milestone belongs to.
+ * @param milestoneId - The milestone
+ */
+export async function orgsOfMilestone(milestoneId: string): Promise<string[]> {
+  const row = await prisma.milestone.findUnique({
+    where: { id: milestoneId },
+    select: { project: PROJECT_ORG },
+  });
+  return row ? [row.project.team.orgId] : [];
+}
+
+/**
+ * The org of the project a custom field definition belongs to.
+ * @param fieldId - The definition
+ */
+export async function orgsOfCustomField(fieldId: string): Promise<string[]> {
+  const row = await prisma.customFieldDefinition.findUnique({
+    where: { id: fieldId },
+    select: { project: PROJECT_ORG },
+  });
+  return row ? [row.project.team.orgId] : [];
+}

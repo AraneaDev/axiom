@@ -864,7 +864,7 @@ describe('agent approvals', () => {
       ]);
       const deletes = LEGACY_ROUTES.filter((route) => route.method === 'DELETE');
       expect(deleting.filter((route) => route.method === 'DELETE')).toEqual(deletes);
-      expect(deletes.length).toBeGreaterThan(10);
+      expect(deletes.length).toBeGreaterThan(0);
     });
 
     it.each(LEGACY_ROUTES.filter((route) => route.method === 'DELETE').map((r) => r.path))(
@@ -970,18 +970,26 @@ describe('agent approvals', () => {
     });
 
     it('says what is needed, and deletes nothing', async () => {
-      const label = await prisma.label.create({
-        data: { projectId: ctx.projectId, name: `legacy-${Date.now()}`, color: '#000000' },
+      const stamp = Date.now();
+      const [from, to] = await Promise.all(
+        ['from', 'to'].map((name, position) =>
+          prisma.boardColumn.create({
+            data: { projectId: ctx.projectId, name: `${name}-${stamp}`, position: 900 + position },
+          }),
+        ),
+      );
+      const rule = await prisma.workflowRule.create({
+        data: { projectId: ctx.projectId, fromColumnId: from.id, toColumnId: to.id },
       });
-      const path = `/api/projects/${ctx.projectId}/labels/${label.name}`;
       const res = await request(app)
-        .delete(path)
+        .delete(`/api/projects/${ctx.projectId}/workflow-rules/${rule.id}`)
         .set('Authorization', ownerToken)
         .set('X-Requested-With', 'XMLHttpRequest');
       expect(res.status).toBe(403);
       expect(res.body.error.message).toContain('registry action');
-      expect(await prisma.label.findUnique({ where: { id: label.id } })).not.toBeNull();
+      expect(await prisma.workflowRule.findUnique({ where: { id: rule.id } })).not.toBeNull();
       expect(await prisma.agentApproval.count({ where: { userId: owner.id } })).toBe(0);
+      await prisma.boardColumn.deleteMany({ where: { id: { in: [from.id, to.id] } } });
     });
 
     it('still lets a browser session delete there', async () => {

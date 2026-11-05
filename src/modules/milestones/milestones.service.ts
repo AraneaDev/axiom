@@ -96,3 +96,15 @@ export async function updateMilestone(
 export async function deleteMilestone(milestoneId: string) {
   await prisma.milestone.delete({ where: { id: milestoneId } });
 }
+
+/**
+ * The project a milestone belongs to, for the checks that address it by its own id.
+ * @param milestoneId - The milestone
+ */
+export async function milestoneProjectId(milestoneId: string): Promise<string | undefined> {
+  const row = await prisma.milestone.findUnique({
+    where: { id: milestoneId },
+    select: { projectId: true },
+  });
+  return row?.projectId;
+}

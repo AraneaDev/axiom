@@ -3,7 +3,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
-export interface IssueTemplate {
+export type IssueTemplate = {
   id: string;
   name: string;
   type: 'TASK' | 'BUG' | 'STORY' | 'EPIC';
@@ -11,7 +11,7 @@ export interface IssueTemplate {
   body: string;
   labels: string[];
   assigneeId?: string;
-}
+};
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 11) + Date.now().toString(36);

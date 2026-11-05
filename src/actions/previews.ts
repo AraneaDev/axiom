@@ -9,6 +9,7 @@
  */
 import { prisma } from '../config/database';
 import { loggableExternalUrl } from '../lib/request-path';
+import { AppError } from '../middleware/errorHandler';
 import { assertIssueRefsInProject } from '../modules/issues/issue-references';
 import { ERR } from '../utils/error-messages';
 import { findOrThrow } from '../utils/find-or-throw';
@@ -1250,4 +1251,174 @@ export async function pageTemplateDelete(templateId: string): Promise<string> {
     ERR.TEMPLATE_NOT_FOUND,
   );
   return `Delete the page template ${quoted(template.name)} in space ${template.space.slug}`;
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param labelName - The label as the path gave it
+ */
+export async function labelDelete(projectId: string, labelName: string): Promise<string> {
+  const label = await findOrThrow(
+    prisma.label.findUnique({
+      where: { projectId_name: { projectId, name: decodeURIComponent(labelName) } },
+      select: {
+        name: true,
+        project: { select: { prefix: true } },
+        _count: { select: { issues: true } },
+      },
+    }),
+    ERR.LABEL_NOT_FOUND,
+  );
+  return (
+    `Delete the label ${quoted(label.name)} of project ${label.project.prefix}, ` +
+    `on ${amount(label._count.issues, 'issue')} as of this request`
+  );
+}
+
+/**
+ * @param milestoneId - The milestone
+ */
+export async function milestoneDelete(milestoneId: string): Promise<string> {
+  const milestone = await findOrThrow(
+    prisma.milestone.findUnique({
+      where: { id: milestoneId },
+      select: {
+        title: true,
+        status: true,
+        project: { select: { prefix: true } },
+        _count: { select: { issues: true } },
+      },
+    }),
+    ERR.MILESTONE_NOT_FOUND,
+  );
+  return (
+    `Delete the ${milestone.status.toLowerCase()} milestone ${quoted(milestone.title)} of ` +
+    `project ${milestone.project.prefix}, with ${amount(milestone._count.issues, 'issue')} ` +
+    `as of this request`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param templateId - The template inside the project's settings
+ */
+export async function issueTemplateDelete(projectId: string, templateId: string): Promise<string> {
+  const project = await findOrThrow(
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { prefix: true, issueTemplates: true },
+    }),
+    ERR.PROJECT_NOT_FOUND,
+  );
+  const templates = Array.isArray(project.issueTemplates)
+    ? (project.issueTemplates as Array<{ id?: unknown; name?: unknown }>)
+    : [];
+  const template = templates.find((entry) => entry.id === templateId);
+  if (!template) throw new AppError(404, ERR.TEMPLATE_NOT_FOUND);
+  return `Delete the issue template ${quoted(String(template.name))} of project ${project.prefix}`;
+}
+
+/**
+ * @param fieldId - The custom field definition
+ */
+export async function customFieldDelete(fieldId: string): Promise<string> {
+  const field = await findOrThrow(
+    prisma.customFieldDefinition.findUnique({
+      where: { id: fieldId },
+      select: {
+        name: true,
+        type: true,
+        project: { select: { prefix: true } },
+        _count: { select: { values: true } },
+      },
+    }),
+    'Custom field definition not found',
+  );
+  return (
+    `Delete the ${field.type} custom field ${quoted(field.name)} of project ` +
+    `${field.project.prefix}, with its ${amount(field._count.values, 'stored value')} as of ` +
+    `this request`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param columnId - The column
+ */
+export async function boardColumnDelete(projectId: string, columnId: string): Promise<string> {
+  const column = await findOrThrow(
+    prisma.boardColumn.findFirst({
+      where: { id: columnId, projectId },
+      select: {
+        name: true,
+        isDone: true,
+        project: { select: { prefix: true } },
+        _count: { select: { issues: true } },
+      },
+    }),
+    ERR.COLUMN_NOT_FOUND,
+  );
+  return (
+    `Delete the board column ${quoted(column.name)} of project ${column.project.prefix}` +
+    `${column.isDone ? ' (a done column)' : ''}, now holding ` +
+    `${amount(column._count.issues, 'issue')}`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param columnId - The column
+ * @param fields - What the call would change
+ * @param fields.name - A new name
+ * @param fields.isDone - A new done state
+ * @param fields.wipLimit - A new work in progress limit
+ */
+export async function boardColumnUpdate(
+  projectId: string,
+  columnId: string,
+  fields: { name?: string; isDone?: boolean; wipLimit?: number | null },
+): Promise<string> {
+  const column = await findOrThrow(
+    prisma.boardColumn.findFirst({
+      where: { id: columnId, projectId },
+      select: { name: true, isDone: true, project: { select: { prefix: true } } },
+    }),
+    ERR.COLUMN_NOT_FOUND,
+  );
+  const changes: string[] = [];
+  if (fields.name !== undefined) changes.push(`rename it to ${quoted(fields.name)}`);
+  if (fields.isDone !== undefined) {
+    changes.push(`${fields.isDone ? 'mark' : 'unmark'} it as a done column`);
+  }
+  if (fields.wipLimit !== undefined) {
+    changes.push(
+      fields.wipLimit === null ? 'clear its limit' : `set its limit to ${fields.wipLimit}`,
+    );
+  }
+  return (
+    `Change the board column ${quoted(column.name)} of project ${column.project.prefix}` +
+    `${column.isDone ? ' (a done column)' : ''}: ${changes.join(', ') || 'no change'}`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param bucketId - The roadmap bucket
+ */
+export async function roadmapBucketDelete(projectId: string, bucketId: string): Promise<string> {
+  const bucket = await findOrThrow(
+    prisma.roadmapBucket.findFirst({
+      where: { id: bucketId, projectId },
+      select: {
+        name: true,
+        project: { select: { prefix: true } },
+        _count: { select: { issues: true } },
+      },
+    }),
+    'Roadmap bucket not found',
+  );
+  return (
+    `Delete the roadmap bucket ${quoted(bucket.name)} of project ${bucket.project.prefix}, ` +
+    `leaving ${amount(bucket._count.issues, 'issue')} without a bucket as of this request`
+  );
 }

@@ -1,15 +1,17 @@
 import { z } from 'zod';
 
+import { listPosition } from '../../utils/validation';
+
 export const createBucketSchema = z.object({
   name: z.string().min(1).max(100),
   color: z.string().max(50).optional(),
-  position: z.number().int().min(0).optional(),
+  position: listPosition.optional(),
 });
 
 export const updateBucketSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   color: z.string().max(50).nullable().optional(),
-  position: z.number().int().min(0).optional(),
+  position: listPosition.optional(),
 });
 
 export const reorderBucketsSchema = z.object({

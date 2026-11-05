@@ -267,3 +267,28 @@ export function templateAccess<T>(
 ): Authorizer<T> {
   return (ctx, input) => assertTemplateAccess(ctx.userId, pick(input), level);
 }
+
+/**
+ * A record addressed by its own id, without the project in the path: requireProjectAccessVia on
+ * the project it belongs to, then the role check of requireProjectWriteVia for each given action,
+ * in order. A record that does not exist answers 404 with the route's message.
+ * @param resolve - Returns the record's project id, or nothing when it does not exist
+ * @param notFound - The 404 message
+ * @param pick - Finds the record id in the input
+ * @param actions - The permission actions a write needs, left out for reads
+ */
+export function recordInProject<T>(
+  resolve: (id: string) => Promise<string | null | undefined>,
+  notFound: string,
+  pick: (input: T) => string,
+  actions: readonly Action[] = [],
+): Authorizer<T> {
+  return async (ctx, input) => {
+    const projectId = await resolve(pick(input));
+    if (!projectId) throw new AppError(404, notFound);
+    const access = await checkProjectAccess(ctx.userId, projectId);
+    if (access === 'not_found') throw new AppError(404, notFound);
+    if (access === 'forbidden') throw new AppError(403, ERR.ACCESS_DENIED, 'FORBIDDEN');
+    for (const action of actions) await assertProjectRole(ctx.userId, projectId, action);
+  };
+}

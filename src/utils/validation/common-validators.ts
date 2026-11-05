@@ -28,6 +28,12 @@ export const MIN_DB_INT = -2147483648;
 export const dbInt = z.number().int().min(MIN_DB_INT).max(MAX_DB_INT);
 
 /**
+ * A position in an ordered list (columns, buckets, fields). Capped well below the column, because a
+ * new item lands one past the last, and a last one at the top would overflow the next.
+ */
+export const listPosition = z.number().int().min(0).max(100_000);
+
+/**
  * A whole number from a number or from digits only. `z.coerce.number()` also takes `''`, `' 5 '`
  * and `0x10`, and `parseInt` reads `5abc` as 5, so ids that come from a path or a body use this.
  */

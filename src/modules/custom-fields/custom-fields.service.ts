@@ -177,3 +177,15 @@ export async function getFieldValuesForIssues(issueIds: string[]) {
     include: { fieldDefinition: true },
   });
 }
+
+/**
+ * The project a field definition belongs to, for the checks that address it by its own id.
+ * @param fieldId - The definition
+ */
+export async function fieldProjectId(fieldId: string): Promise<string | undefined> {
+  const row = await prisma.customFieldDefinition.findUnique({
+    where: { id: fieldId },
+    select: { projectId: true },
+  });
+  return row?.projectId;
+}
