@@ -3,6 +3,7 @@
  * shared differently: each field the call sets, and who sees it now and who will, from the database. Names are data, quoted and bounded.
  */
 import { prisma } from '../config/database';
+import { resolveSharingChange, type SharedRow } from '../lib/sharing';
 import { findOrThrow } from '../utils/find-or-throw';
 
 const MAX_NAME_LENGTH = 80;
@@ -70,6 +71,8 @@ async function nextSharing(next: Sharing): Promise<string> {
 
 const SHARING_SELECT = {
   visibility: true,
+  teamId: true,
+  orgId: true,
   team: { select: { name: true, org: { select: { slug: true } } } },
   org: { select: { name: true, slug: true } },
 } as const;
@@ -104,17 +107,20 @@ function fieldsSet(input: UpdateInput): string[] {
 
 /**
  * The sentence of an update: each field it sets, and sharing only when it changes.
+ * @param userId - The caller: a team or org they may not share with answers 404, as a session's does
  * @param what - dashboard or saved query
  * @param row - The record as it is now
  * @param row.name
  * @param row.who
+ * @param row.current
  * @param id - Its id
  * @param input - The update's input
  * @param sharing - The current sharing, as words
  */
 async function updateSentence(
+  userId: string,
   what: string,
-  row: { name: string; who: string },
+  row: { name: string; who: string; current: SharedRow },
   id: string,
   input: UpdateInput,
   sharing: string,
@@ -122,6 +128,8 @@ async function updateSentence(
   const parts = fieldsSet(input);
   const { visibility, teamId, orgId } = input;
   if (visibility !== undefined || teamId !== undefined || orgId !== undefined) {
+    // The service's own check, so the preview names only what the caller could name in a session
+    await resolveSharingChange(userId, row.current, { visibility, teamId, orgId });
     parts.push(
       `who can open it: shared with ${sharing} as of this request, to ${await nextSharing(input)}`,
     );
@@ -133,10 +141,15 @@ async function updateSentence(
 }
 
 /**
+ * @param userId - The caller
  * @param id - The dashboard
  * @param input - The update's input
  */
-export async function dashboardUpdate(id: string, input: UpdateInput): Promise<string> {
+export async function dashboardUpdate(
+  userId: string,
+  id: string,
+  input: UpdateInput,
+): Promise<string> {
   const row = await findOrThrow(
     prisma.dashboard.findUnique({
       where: { id },
@@ -145,8 +158,9 @@ export async function dashboardUpdate(id: string, input: UpdateInput): Promise<s
     'Dashboard not found',
   );
   return updateSentence(
+    userId,
     'dashboard',
-    { name: row.name, who: row.owner.username },
+    { name: row.name, who: row.owner.username, current: row },
     id,
     input,
     sharedWith(row),
@@ -154,10 +168,15 @@ export async function dashboardUpdate(id: string, input: UpdateInput): Promise<s
 }
 
 /**
+ * @param userId - The caller
  * @param id - The saved query
  * @param input - The update's input
  */
-export async function savedQueryUpdate(id: string, input: UpdateInput): Promise<string> {
+export async function savedQueryUpdate(
+  userId: string,
+  id: string,
+  input: UpdateInput,
+): Promise<string> {
   const row = await findOrThrow(
     prisma.savedFilter.findUnique({
       where: { id },
@@ -166,8 +185,9 @@ export async function savedQueryUpdate(id: string, input: UpdateInput): Promise<
     'Saved query not found',
   );
   return updateSentence(
+    userId,
     'saved query',
-    { name: row.name, who: row.user.username },
+    { name: row.name, who: row.user.username, current: row },
     id,
     input,
     sharedWith(row),

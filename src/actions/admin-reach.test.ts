@@ -720,6 +720,74 @@ describe('admin reach', () => {
       expect(await prisma.agentApproval.count({ where: { userId: ctx.owner.id } })).toBe(0);
     });
 
+    describe('sharing a dashboard or saved query (A28)', () => {
+      let sharer: { id: string; raw: string };
+      let dashboardId: string;
+      let filterId: string;
+
+      beforeAll(async () => {
+        sharer = await tokenOf(ctx.owner.id, ['dashboards:write'], 'Sharing agent');
+        const dash = await authPost('/api/dashboards', ctx.owner.token, { name: 'Mine alone' });
+        dashboardId = dash.body.id;
+        const saved = await authPost('/api/saved-filters', ctx.owner.token, {
+          name: 'Mine alone',
+          text: 'type = Bug',
+        });
+        filterId = saved.body.id;
+      });
+
+      const calls = (): Array<[string, string, (body: object) => object]> => [
+        ['dashboard.update', `/api/dashboards/${dashboardId}`, (body) => body],
+        ['savedQuery.update', `/api/saved-filters/${filterId}`, (body) => body],
+      ];
+
+      it.each([
+        ['a team of another org', () => ({ visibility: 'TEAM', teamId: other.teamId })],
+        ['an org the caller is not in', () => ({ visibility: 'ORG', orgId: other.orgId })],
+      ])('answers %s as a session does, before any request exists', async (_what, body) => {
+        for (const [name, path, shape] of calls()) {
+          const agent = await asToken(sharer.raw, 'patch', path, shape(body()));
+          const session = await authPatch(path, ctx.owner.token, shape(body()));
+          expect(session.status, name).toBe(404);
+          expect(agent.status, name).toBe(404);
+          expect(agent.body, name).toEqual(session.body);
+        }
+        expect(await prisma.agentApproval.count({ where: { userId: ctx.owner.id } })).toBe(0);
+      });
+
+      it('answers an absent team as it answers a hidden one', async () => {
+        for (const [name, path, shape] of calls()) {
+          const hidden = await asToken(
+            sharer.raw,
+            'patch',
+            path,
+            shape({ visibility: 'TEAM', teamId: other.teamId }),
+          );
+          const absent = await asToken(
+            sharer.raw,
+            'patch',
+            path,
+            shape({ visibility: 'TEAM', teamId: absentId }),
+          );
+          expect(absent.status, name).toBe(404);
+          expect(absent.body, name).toEqual(hidden.body);
+        }
+      });
+
+      it('still names a team of its own org', async () => {
+        for (const [name, path, shape] of calls()) {
+          const res = await asToken(
+            sharer.raw,
+            'patch',
+            path,
+            shape({ visibility: 'TEAM', teamId: ctx.teamId }),
+          );
+          expect(res.status, name).toBe(202);
+          expect(res.body.preview, name).toContain('Test Team');
+        }
+      });
+    });
+
     it('invitation.list still names a team of its own org', async () => {
       const res = await asToken(
         ownerAgent.raw,

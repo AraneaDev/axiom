@@ -502,7 +502,7 @@ describe('agent policies', () => {
         .set('X-Requested-With', 'XMLHttpRequest')
         .send({ name: 'Nothing to set' });
       expect(made.status).toBe(201);
-      const text = await dashboardUpdate(made.body.id, {});
+      const text = await dashboardUpdate(ctx.owner.id, made.body.id, {});
       expect(text).toContain('Nothing to set');
       expect(text).toMatch(/nothing/i);
       expect(text).not.toMatch(/set $/);

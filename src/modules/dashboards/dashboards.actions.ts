@@ -128,7 +128,7 @@ const dashboardActions = [
     name: 'dashboard.update',
     permissionChange: ({ visibility, teamId, orgId }) =>
       visibility !== undefined || teamId !== undefined || orgId !== undefined,
-    preview: (_ctx, { id, ...rest }) => dashboardUpdate(id, rest),
+    preview: (ctx, { id, ...rest }) => dashboardUpdate(ctx.userId, id, rest),
     orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',

@@ -125,7 +125,7 @@ const savedFilterActions = [
     name: 'savedQuery.update',
     permissionChange: ({ visibility, teamId, orgId }) =>
       visibility !== undefined || teamId !== undefined || orgId !== undefined,
-    preview: (_ctx, { filterId, ...rest }) => savedQueryUpdate(filterId, rest),
+    preview: (ctx, { filterId, ...rest }) => savedQueryUpdate(ctx.userId, filterId, rest),
     orgIds: (_ctx, { filterId }) => orgsOfSavedQuery(filterId),
     area: 'dashboards',
     kind: 'write',
