@@ -12,3 +12,4 @@ test-results/
 /dist-editor-core/
 /.claude/settings.local.json
 /.claude/scheduled_tasks.lock
+/.momus/
