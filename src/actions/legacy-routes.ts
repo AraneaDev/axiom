@@ -12,17 +12,4 @@ export interface LegacyRoute {
 }
 
 /** Plan 4 migrates what is left; plan 3 brought the admin reach of tokens behind approval. */
-export const LEGACY_ROUTES: LegacyRoute[] = [
-  { method: 'POST', path: '/api/auth/logout', plan: 4 },
-  { method: 'POST', path: '/api/auth/2fa/disable', plan: 4 },
-  { method: 'POST', path: '/api/auth/2fa/enable', plan: 4 },
-  { method: 'POST', path: '/api/auth/2fa/verify', plan: 4 },
-  { method: 'POST', path: '/api/auth/forgot-password', plan: 4 },
-  { method: 'POST', path: '/api/auth/login', plan: 4 },
-  { method: 'POST', path: '/api/auth/refresh', plan: 4 },
-  { method: 'POST', path: '/api/auth/register', plan: 4 },
-  { method: 'POST', path: '/api/auth/reset-password', plan: 4 },
-  { method: 'GET', path: '/api/health', plan: 4 },
-  { method: 'GET', path: '/api/site-settings', plan: 4 },
-  { method: 'PUT', path: '/api/site-settings', plan: 4 },
-];
+export const LEGACY_ROUTES: LegacyRoute[] = [];

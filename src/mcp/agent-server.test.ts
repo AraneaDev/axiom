@@ -227,9 +227,11 @@ describe('MCP server', () => {
       expect(names).toContain('page.get');
       expect(names).not.toContain('issue.update');
       expect(names).not.toContain('page.update');
+      // Wiki, and the own-state actions (profile, notifications) that a wiki read opens as well
       expect(new Set((data as Array<{ area: string }>).map((a) => a.area))).toEqual(
-        new Set(['wiki']),
+        new Set(['wiki', 'issues']),
       );
+      expect(names).not.toContain('issue.get');
 
       expectRefused(await callTool(c, 'describe', { action: 'issue.update' }), 403, 'SCOPE');
     });

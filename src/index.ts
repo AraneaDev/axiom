@@ -28,9 +28,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { require2fa } from './middleware/require2fa';
 import { mountStaticFrontend, resolveStaticDir } from './middleware/static-frontend';
 import { signedUploadRouter } from './modules/attachments/attachments.routes';
-import authRoutes from './modules/auth/auth.routes';
 import { parseTrustProxy } from './modules/forms/client-ip';
-import healthRoutes from './modules/health/health.routes';
 import './actions/read.actions';
 import './modules/attachments/attachments.actions';
 import './modules/issues/issues.actions';
@@ -64,7 +62,9 @@ import './modules/notifications/notifications.actions';
 import './modules/activity/activity.actions';
 import './modules/analytics/analytics.actions';
 import './modules/links/links.actions';
-import siteSettingsRoutes from './modules/site-settings/site-settings.routes';
+import './modules/auth/auth.actions';
+import './modules/health/health.actions';
+import './modules/site-settings/site-settings.actions';
 import { createWebSocketServer } from './realtime/ws-server';
 import { logger } from './utils/logger';
 
@@ -125,15 +125,9 @@ app.use('/api/search', searchLimiter);
 // CSRF protection: require X-Requested-With header on state-changing requests
 app.use('/api', csrfGuard);
 
-// Health check (public, no auth required)
-app.use('/api/health', healthRoutes);
-
 // OpenAPI spec + Scalar docs UI (public, no auth required). Ahead of the routers below: several
 // of them run router.use(authenticate) on all of /api, which would answer these with a 401.
 app.use('/api', openApiRouter);
-
-// Site settings (public GET, admin PUT — must be before catch-all auth routes)
-app.use('/api/site-settings', siteSettingsRoutes);
 
 // 2FA enforcement — after auth, before feature routes
 app.use('/api', require2fa);
@@ -158,9 +152,6 @@ const mcpAccess = [checkMcpOrigin, markRegistryRoute, authenticate, requireApiTo
 app.post('/api/mcp', mcpAccess, handleMcpPost);
 app.get('/api/mcp', mcpAccess, refuseMcpStream);
 app.delete('/api/mcp', mcpAccess, refuseMcpStream);
-
-// API routes
-app.use('/api/auth', authRoutes);
 
 // Whatever no route above served asks for credentials, and a token's scope, before the 404 below,
 // as the legacy routers did when they all sat here: a legacy route added later is guarded by the
