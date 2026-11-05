@@ -81,7 +81,7 @@ These are enforced across the entire codebase. See [Design Patterns](docs/design
 - Authorization runs before full input validation. Declare `target` (only the ids authorize needs) whenever the input has more than the path params, and build `input` from it with `target.extend({...})` so both read the same ids.
 - Ids use `strictInt` from `common-validators.ts`. No top-level input is `z.unknown()` or `z.any()`; a repeatable query value uses `queryValue`. Writes read body and path params, GET and HEAD read query and path params only.
 - Output keeps the old REST shape, as a loose object naming the key fields.
-- `registry-rules.test.ts` and `parity.test.ts` enforce these, `frontend-calls.test.ts` ties every frontend call to a registry action, and `no-legacy.test.ts` fails on any `/api` route that is no binding. It reads routes and nested routers only, so a handler added with `app.use` is invisible to it. Keep them green.
+- `registry-rules.test.ts` and `parity.test.ts` enforce these, `frontend-calls.test.ts` ties every frontend call to a registry action, and `no-legacy.test.ts` fails on any `/api` route that is no binding. It also compares the function middleware on `/api` paths with a named list, so a handler added with `app.use` fails it until it is named there. Keep them green.
 - `act` takes a `key` for an issue, page, space or project (`src/actions/keys.ts`): unseen and missing answer alike (`404`).
 
 **Connecting an agent:** Settings, Connect an agent (`/settings/connect-agent`) creates a 90 day token without `admin` and shows the Claude Code command and the Codex `~/.codex/config.toml` block (`http_headers`) with it filled in. The snippets live in `frontend/src/lib/agent-snippets.ts`.
