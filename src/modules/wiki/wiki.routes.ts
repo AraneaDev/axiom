@@ -2,22 +2,17 @@ import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import {
-  requireTeamMember,
-  requireTeamPermission,
   requireWikiSpaceAccess,
   requireWikiPageAccess,
   requireWikiPageBySlug,
   requireWikiCommentAccess,
   requireWikiTemplateAccess,
-  requireWikiRestrictionAccess,
 } from '../../middleware/rbac';
 
-import * as spacePermController from './space-permissions.controller';
 import { requireSpacePermission } from './space-permissions.middleware';
 import * as analyticsController from './wiki-analytics.controller';
 import * as commentsController from './wiki-comments.controller';
 import * as labelsController from './wiki-labels.controller';
-import * as permController from './wiki-permissions.controller';
 import * as starsController from './wiki-stars.controller';
 import * as templatesController from './wiki-templates.controller';
 import * as wikiController from './wiki.controller';
@@ -25,43 +20,6 @@ import * as wikiController from './wiki.controller';
 const router = Router();
 
 router.use(authenticate);
-
-// Wiki spaces (scoped to team)
-router.post(
-  '/team/:teamId/spaces',
-  // Creating in a team needs what reading it needs (team membership), then the role
-  requireTeamMember(),
-  requireTeamPermission('wiki:create_space'),
-  wikiController.createSpace,
-);
-
-// Space operations (require org membership via space lookup + space permissions)
-router.patch(
-  '/spaces/:spaceId',
-  requireWikiSpaceAccess(),
-  requireSpacePermission('ADMIN'),
-  wikiController.updateSpace,
-);
-
-// Space permission management (require ADMIN level)
-router.get(
-  '/spaces/:spaceId/permissions',
-  requireWikiSpaceAccess(),
-  requireSpacePermission('ADMIN'),
-  spacePermController.listPermissions,
-);
-router.put(
-  '/spaces/:spaceId/permissions',
-  requireWikiSpaceAccess(),
-  requireSpacePermission('ADMIN'),
-  spacePermController.upsertPermission,
-);
-router.delete(
-  '/spaces/:spaceId/permissions/:permissionId',
-  requireWikiSpaceAccess(),
-  requireSpacePermission('ADMIN'),
-  spacePermController.deletePermission,
-);
 
 // Pages (require org membership via space lookup + space permissions)
 router.get(
@@ -124,19 +82,6 @@ router.get(
   requireWikiSpaceAccess(),
   requireSpacePermission('VIEW'),
   labelsController.searchByLabel,
-);
-
-// Page restrictions (require org membership via page lookup)
-router.get('/pages/:pageId/restrictions', requireWikiPageAccess(), permController.getRestrictions);
-router.put(
-  '/pages/:pageId/restrictions',
-  requireWikiPageAccess('edit'),
-  permController.setRestrictions,
-);
-router.delete(
-  '/restrictions/:restrictionId',
-  requireWikiRestrictionAccess(),
-  permController.removeRestriction,
 );
 
 // Starred pages

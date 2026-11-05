@@ -1,8 +1,15 @@
 import { z } from 'zod';
 
-import { pageAccess, pageBySlugAccess, spaceAccess, teamPermission } from '../../actions/authorize';
+import {
+  pageAccess,
+  pageBySlugAccess,
+  restrictionAccess,
+  spaceAccess,
+  teamMemberWith,
+  teamPermission,
+} from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
-import { orgsOfProjects, orgsOfSpaces } from '../../actions/org-lookups';
+import { orgsOfProjects, orgsOfRestriction, orgsOfSpaces } from '../../actions/org-lookups';
 import { listWindow, pagedList } from '../../actions/paging';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
@@ -14,6 +21,7 @@ import {
   applyMergeSchema,
   copyPageSchema,
   createPageSchema,
+  createWikiSpaceSchema,
   firstQueryText,
   flushPageSessionSchema,
   MAX_DB_INT,
@@ -21,13 +29,18 @@ import {
   queryCount,
   reorderPageSchema,
   restoreVersionSchema,
+  setRestrictionsSchema,
+  setSpacePermissionSchema,
   updatePageSchema,
 } from '../../utils/validation';
+import { ONE_SPACE_GRANT } from '../../utils/validation/user-validators';
 
 import { assertPageDestinationWritable } from './page-destination';
+import * as spacePermissions from './space-permissions.service';
 import { canAccessSpace } from './space-permissions.service';
 import { hydrateWikiPage } from './wiki-hydrate.service';
 import * as linkService from './wiki-issue-links.service';
+import * as pagePermissions from './wiki-permissions.service';
 import { hiddenPageIds, pruneHiddenPages } from './wiki-permissions.service';
 import { bodyFromTemplate, resolveWikiTemplate } from './wiki-template-resolver.service';
 import * as wikiService from './wiki.service';
@@ -142,6 +155,141 @@ const templateActions = [
         userId: ctx.userId,
       }),
     }),
+  }),
+];
+
+const manageSpace = spaceAccess<z.infer<typeof spaceTarget>>('ADMIN', (i) => i.spaceId);
+
+/**
+ * Who may reach a space and a page. Each waits for a person when a token asks, reads too (A14): a
+ * list of who holds what says where a page can be reached from.
+ */
+const accessActions = [
+  defineAction({
+    name: 'space.create',
+    admin: true,
+    area: 'admin',
+    kind: 'write',
+    summary: 'Create a wiki space in a team',
+    target: teamTarget,
+    input: teamTarget.extend(createWikiSpaceSchema.shape),
+    output: record,
+    preview: (_ctx, { teamId, name, slug }) => previews.spaceCreate(teamId, name, slug),
+    rest: { method: 'POST', path: `${WIKI}/team/:teamId/spaces` },
+    authorize: teamMemberWith<z.infer<typeof teamTarget>>('wiki:create_space', (i) => i.teamId),
+    handler: async (_ctx, { teamId, ...data }) => wikiService.createSpace(teamId, data),
+  }),
+  defineAction({
+    name: 'space.update',
+    admin: true,
+    area: 'admin',
+    kind: 'write',
+    summary: 'Change the name or description of a wiki space, or archive it',
+    target: spaceTarget,
+    // Named fields: this route once passed its whole body on to the database
+    input: spaceTarget.extend({
+      name: createWikiSpaceSchema.shape.name.optional(),
+      description: createWikiSpaceSchema.shape.description,
+      isArchived: z.boolean().optional(),
+    }),
+    output: record,
+    preview: (_ctx, { spaceId, ...fields }) => previews.spaceUpdate(spaceId, fields),
+    rest: { method: 'PATCH', path: SPACE },
+    authorize: manageSpace,
+    handler: async (_ctx, { spaceId, ...data }) => wikiService.updateSpace(spaceId, data),
+  }),
+  defineAction({
+    name: 'spacePermission.list',
+    admin: true,
+    area: 'admin',
+    kind: 'read',
+    summary: 'List who holds which permission on a wiki space',
+    target: spaceTarget,
+    input: spaceTarget,
+    output: list,
+    preview: (_ctx, { spaceId }) => previews.spacePermissionList(spaceId),
+    rest: { method: 'GET', path: `${SPACE}/permissions` },
+    authorize: manageSpace,
+    handler: async (_ctx, { spaceId }) => spacePermissions.getSpacePermissions(spaceId),
+  }),
+  defineAction({
+    name: 'spacePermission.set',
+    admin: true,
+    area: 'admin',
+    kind: 'write',
+    summary: 'Give one user, or everyone with a team role, a permission on a wiki space',
+    target: spaceTarget,
+    input: spaceTarget
+      .extend(setSpacePermissionSchema.shape)
+      .refine(ONE_SPACE_GRANT.check, { message: ONE_SPACE_GRANT.message }),
+    output: record,
+    preview: (_ctx, { spaceId, ...grant }) => previews.spacePermissionSet(spaceId, grant),
+    rest: { method: 'PUT', path: `${SPACE}/permissions` },
+    authorize: manageSpace,
+    handler: async (_ctx, { spaceId, ...grant }) =>
+      spacePermissions.setSpacePermission(spaceId, grant),
+  }),
+  defineAction({
+    name: 'spacePermission.remove',
+    admin: true,
+    destructive: true,
+    area: 'admin',
+    kind: 'write',
+    summary: 'Take a permission off a wiki space',
+    input: spaceTarget.extend({ permissionId: z.string() }),
+    output: nothing,
+    preview: (_ctx, { spaceId, permissionId }) =>
+      previews.spacePermissionRemove(spaceId, permissionId),
+    rest: { method: 'DELETE', path: `${SPACE}/permissions/:permissionId` },
+    authorize: manageSpace,
+    handler: async (_ctx, { spaceId, permissionId }) =>
+      spacePermissions.removeSpacePermission(spaceId, permissionId),
+  }),
+  defineAction({
+    name: 'pageRestriction.get',
+    admin: true,
+    area: 'admin',
+    kind: 'read',
+    summary: 'List who a wiki page is restricted to',
+    input: pageTarget,
+    output: list,
+    preview: (_ctx, { pageId }) => previews.pageRestrictionGet(pageId),
+    rest: { method: 'GET', path: `${PAGE_BY_ID}/restrictions` },
+    authorize: pageAccess<z.infer<typeof pageTarget>>('view', (i) => i.pageId),
+    handler: async (_ctx, { pageId }) => pagePermissions.getRestrictions(pageId),
+  }),
+  defineAction({
+    name: 'pageRestriction.set',
+    admin: true,
+    area: 'admin',
+    kind: 'write',
+    summary: 'Replace the view or edit restrictions of a wiki page; an empty list lifts them',
+    target: pageTarget,
+    input: pageTarget.extend(setRestrictionsSchema.shape),
+    output: list,
+    preview: (_ctx, { pageId, type, userIds }) =>
+      previews.pageRestrictionSet(pageId, type, userIds),
+    rest: { method: 'PUT', path: `${PAGE_BY_ID}/restrictions` },
+    authorize: pageAccess<z.infer<typeof pageTarget>>('edit', (i) => i.pageId),
+    handler: async (_ctx, { pageId, type, userIds }) => {
+      await pagePermissions.setRestrictions(pageId, type, userIds);
+      return pagePermissions.getRestrictions(pageId);
+    },
+  }),
+  defineAction({
+    name: 'pageRestriction.remove',
+    admin: true,
+    destructive: true,
+    area: 'admin',
+    kind: 'write',
+    summary: 'Remove one restriction of a wiki page',
+    input: z.object({ restrictionId: z.string() }),
+    output: nothing,
+    orgIds: (_ctx, { restrictionId }) => orgsOfRestriction(restrictionId),
+    preview: (_ctx, { restrictionId }) => previews.pageRestrictionRemove(restrictionId),
+    rest: { method: 'DELETE', path: `${WIKI}/restrictions/:restrictionId` },
+    authorize: restrictionAccess<{ restrictionId: string }>((i) => i.restrictionId),
+    handler: async (_ctx, { restrictionId }) => pagePermissions.removeRestriction(restrictionId),
   }),
 ];
 
@@ -470,4 +618,10 @@ const linkActions = [
   }),
 ];
 
-registerActions([...templateActions, ...spaceActions, ...pageActions, ...linkActions]);
+registerActions([
+  ...templateActions,
+  ...accessActions,
+  ...spaceActions,
+  ...pageActions,
+  ...linkActions,
+]);

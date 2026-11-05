@@ -237,23 +237,6 @@ export async function assertRestrictionAccess(
 }
 
 /**
- * assertRestrictionAccess for :restrictionId.
- * @returns Express middleware
- */
-export function requireWikiRestrictionAccess() {
-  return async (req: Request, _res: Response, next: NextFunction) => {
-    try {
-      const userId = req.userId;
-      if (!userId) throw new AppError(401, 'Authentication required');
-      await assertRestrictionAccess(userId, param(req, 'restrictionId'));
-      next();
-    } catch (err) {
-      next(err);
-    }
-  };
-}
-
-/**
  * Whether a user belongs to an org: a membership, or platform admin.
  * @param userId - The user
  * @param orgId - The org

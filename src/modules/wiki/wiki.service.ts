@@ -105,11 +105,16 @@ export async function listSpaces(teamId: string, includeArchived = false, userId
  * Update wiki space properties (e.g., archive/unarchive).
  * @param spaceId - The wiki space ID
  * @param data - Update payload
+ * @param data.name - The new name
+ * @param data.description - The new description
  * @param data.isArchived - Whether to archive or unarchive
  * @returns The updated wiki space record
  * @throws {AppError} 404 if wiki space not found
  */
-export async function updateSpace(spaceId: string, data: { isArchived?: boolean }) {
+export async function updateSpace(
+  spaceId: string,
+  data: { name?: string; description?: string; isArchived?: boolean },
+) {
   const space = await findOrThrow(
     prisma.wikiSpace.findUnique({ where: { id: spaceId } }),
     'Wiki space not found',

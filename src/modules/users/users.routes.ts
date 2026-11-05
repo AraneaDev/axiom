@@ -18,9 +18,7 @@ router.patch('/me', usersController.updateMe);
 // Dashboard
 router.get('/me/dashboard', usersController.getDashboard);
 
-// API Tokens
+// API Tokens: creating and revoking run through the registry
 router.get('/me/tokens', usersController.listApiTokens);
-router.post('/me/tokens', usersController.createApiToken);
-router.delete('/me/tokens/:tokenId', usersController.deleteApiToken);
 
 export default router;

@@ -105,6 +105,17 @@ describe('AgentApprovalDetail', () => {
     expect(screen.queryByText(/axm_secret_value/)).toBeNull();
   });
 
+  it('does not call an invitation result a new API token', async () => {
+    get.mockResolvedValue(request({ action: 'invitation.create' }));
+    approve.mockResolvedValue(
+      request({ status: 'EXECUTED', result: { id: 'i1', token: 'invite_value' } }),
+    );
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /approve/i }));
+    expect(await screen.findByText('Executed')).toBeInTheDocument();
+    expect(screen.queryByLabelText('New token')).toBeNull();
+  });
+
   it('rejects', async () => {
     get.mockResolvedValue(request());
     reject.mockResolvedValue(request({ status: 'REJECTED' }));

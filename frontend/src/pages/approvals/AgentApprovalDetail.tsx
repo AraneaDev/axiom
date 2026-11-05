@@ -90,7 +90,8 @@ export default function AgentApprovalDetail() {
 
   const row = decided ?? data;
   const status = effectiveStatus(row, now);
-  const secret = secretTokenOf(decided?.result);
+  // An invitation's result has a token too, which is no API token to hand over
+  const secret = data?.action === 'token.create' ? secretTokenOf(decided?.result) : null;
   const decisionError = approve.error ?? reject.error;
   const open = status === 'PENDING';
   const busy = approve.isPending || reject.isPending;
