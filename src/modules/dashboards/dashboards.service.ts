@@ -46,7 +46,7 @@ export const WIDGETS_AT_ONCE = 4;
  * such views.
  */
 export const RENDER_LIMIT = { windowMs: 60_000, max: 60 } as const;
-const limitRender = perUserLimit(
+export const limitRender = perUserLimit(
   RENDER_LIMIT,
   'Too many dashboard renders, please try again later',
 );
@@ -455,7 +455,7 @@ export async function mapWithCap<T, R>(
  * @param widgetId - The widget
  * @param err - What was thrown
  */
-function widgetError(widgetId: string, err: unknown) {
+export function widgetError(widgetId: string, err: unknown) {
   if (err instanceof AppError && err.statusCode < 500) {
     return {
       error: { status: err.statusCode, code: err.code ?? 'ERROR', message: err.message },
@@ -465,16 +465,30 @@ function widgetError(widgetId: string, err: unknown) {
   return { error: { status: 500, code: 'INTERNAL', message: 'This widget could not be rendered' } };
 }
 
-type WidgetRow = Pick<DashboardWidget, keyof typeof WIDGET_SELECT>;
+export type WidgetRow = Pick<DashboardWidget, keyof typeof WIDGET_SELECT>;
+
+/** How one render reads what its widgets refer to and says what went wrong with them */
+export interface RenderRules {
+  /** The text of a saved query */
+  savedText: (savedQueryId: string) => Promise<{ text: string; projectId?: string }>;
+  /** What a failed widget answers */
+  errorOf: typeof widgetError;
+}
 
 /**
  * Get a widget's data with the viewer's rights.
  * @param ctx - The viewer
  * @param widget - The widget
  * @param options - Its options
+ * @param savedText - Reads its saved query
  * @returns The result, and the scope of the projects it read
  */
-async function widgetData(ctx: ActionContext, widget: WidgetRow, options: WidgetOptions) {
+async function widgetData(
+  ctx: ActionContext,
+  widget: WidgetRow,
+  options: WidgetOptions,
+  savedText: RenderRules['savedText'],
+) {
   if (widget.type === 'SPRINT_OVERVIEW') {
     // sprints:read alone, as the sprint report (P9)
     if (ctx.scopes && !scopeAllows(ctx.scopes, 'sprints', 'read')) {
@@ -492,7 +506,7 @@ async function widgetData(ctx: ActionContext, widget: WidgetRow, options: Widget
     };
   }
   // A saved query, loaded on every render: the viewer may have lost it since the last one
-  const saved = widget.savedQueryId ? await textToRun(ctx.userId, widget.savedQueryId) : null;
+  const saved = widget.savedQueryId ? await savedText(widget.savedQueryId) : null;
   const text = saved?.text ?? widget.query;
   if (text === null) throw new AppError(404, 'The saved query of this widget no longer exists');
   const scope: QueryInput['scope'] = saved?.projectId
@@ -510,6 +524,62 @@ async function widgetData(ctx: ActionContext, widget: WidgetRow, options: Widget
 }
 
 /**
+ * A dashboard's widgets, in their order.
+ * @param dashboardId - The dashboard
+ */
+export function widgetsOf(dashboardId: string): Promise<WidgetRow[]> {
+  return prisma.dashboardWidget.findMany({
+    where: { dashboardId },
+    orderBy: WIDGET_ORDER,
+    select: WIDGET_SELECT,
+  });
+}
+
+/**
+ * Run widgets with the viewer's rights, at most WIDGETS_AT_ONCE at a time. The caller holds the
+ * read slot and has counted against a limit.
+ * @param ctx - The viewer
+ * @param rows - The widgets
+ * @param rules - How this render reads saved queries and reports errors
+ * @returns Their results, and the projects a live view should follow: those the widgets read that
+ * the viewer can see, up to what one socket may join
+ */
+export async function renderWidgets(ctx: ActionContext, rows: WidgetRow[], rules: RenderRules) {
+  const rendered = await mapWithCap(rows, WIDGETS_AT_ONCE, async (widget) => {
+    try {
+      const options = widgetOptions.parse(widget.options);
+      const { result, scope } = await widgetData(ctx, widget, options, rules.savedText);
+      return { result, scope, ok: true as const };
+    } catch (err) {
+      return { result: rules.errorOf(widget.id, err), scope: undefined, ok: false as const };
+    }
+  });
+  const followed = rendered.filter((widget) => widget.ok);
+  const projects = followed.length
+    ? await prisma.project.findMany({
+        where: {
+          AND: [
+            await viewableProjectsWhere(ctx.userId),
+            { OR: followed.map((widget) => projectsInScope(widget.scope)) },
+          ],
+        },
+        orderBy: { id: 'asc' },
+        take: MAX_ROOMS_PER_SOCKET,
+        select: { id: true },
+      })
+    : [];
+  return {
+    widgets: rows.map((widget, index) => ({
+      id: widget.id,
+      type: widget.type,
+      title: widget.title,
+      result: rendered[index].result,
+    })),
+    projectIds: projects.map((project) => project.id),
+  };
+}
+
+/**
  * Render a dashboard with the viewer's rights: each widget runs as they would run it, and one that
  * fails answers with its error. The render as a whole takes one read slot and counts once against
  * RENDER_LIMIT, the widgets none of either, and at most WIDGETS_AT_ONCE run at once.
@@ -523,43 +593,10 @@ export async function render(ctx: ActionContext, id: string) {
   const dashboard = await loadFor(ctx.userId, id, 'view');
   await limitRender(ctx.userId);
   return readSlots.run(ctx.userId, READS_BUSY, async () => {
-    const rows = await prisma.dashboardWidget.findMany({
-      where: { dashboardId: id },
-      orderBy: WIDGET_ORDER,
-      select: WIDGET_SELECT,
+    const widgets = await renderWidgets(ctx, await widgetsOf(id), {
+      savedText: (savedQueryId) => textToRun(ctx.userId, savedQueryId),
+      errorOf: widgetError,
     });
-    const rendered = await mapWithCap(rows, WIDGETS_AT_ONCE, async (widget) => {
-      try {
-        const options = widgetOptions.parse(widget.options);
-        const { result, scope } = await widgetData(ctx, widget, options);
-        return { result, scope, ok: true as const };
-      } catch (err) {
-        return { result: widgetError(widget.id, err), scope: undefined, ok: false as const };
-      }
-    });
-    const followed = rendered.filter((widget) => widget.ok);
-    const projects = followed.length
-      ? await prisma.project.findMany({
-          where: {
-            AND: [
-              await viewableProjectsWhere(ctx.userId),
-              { OR: followed.map((widget) => projectsInScope(widget.scope)) },
-            ],
-          },
-          orderBy: { id: 'asc' },
-          take: MAX_ROOMS_PER_SOCKET,
-          select: { id: true },
-        })
-      : [];
-    return {
-      dashboard: await withEdit(ctx.userId, dashboard),
-      widgets: rows.map((widget, index) => ({
-        id: widget.id,
-        type: widget.type,
-        title: widget.title,
-        result: rendered[index].result,
-      })),
-      projectIds: projects.map((project) => project.id),
-    };
+    return { dashboard: await withEdit(ctx.userId, dashboard), ...widgets };
   });
 }

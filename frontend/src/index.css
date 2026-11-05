@@ -425,18 +425,19 @@ div[contenteditable].tiptap-editor {
   font-size: 0.875em;
   font-family: var(--font-mono);
 }
-.tiptap-editor table {
+/* A live block's widgets in the editor bring their own table styles */
+.tiptap-editor table:not(.not-prose table) {
   border-collapse: collapse;
   width: 100%;
   margin: 1rem 0;
 }
-.tiptap-editor th,
-.tiptap-editor td {
+.tiptap-editor th:not(.not-prose th),
+.tiptap-editor td:not(.not-prose td) {
   border: 1px solid var(--color-border);
   padding: 0.5rem 0.75rem;
   text-align: left;
 }
-.tiptap-editor th {
+.tiptap-editor th:not(.not-prose th) {
   background: var(--color-surface-secondary);
   font-weight: 600;
 }

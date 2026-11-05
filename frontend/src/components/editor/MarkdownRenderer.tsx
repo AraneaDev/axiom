@@ -10,9 +10,12 @@ import {
   List as ListIcon,
 } from 'lucide-react';
 import { marked, type Token } from 'marked';
-import { useMemo, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { QueryBlockScope } from '@/components/dashboards/query-block-scope';
+import { QueryBlock } from '@/components/dashboards/QueryBlock';
+import { parseQueryEmbedTarget, queryEmbedTargetOfLine } from '@/editor-core/nodes/query-embed';
 import { attachmentIdOf } from '@/hooks/useAttachmentObjectUrl';
 import { cn } from '@/lib/utils';
 
@@ -57,7 +60,27 @@ const imageRenderer = {
     return `<span class="attachment-image-slot" data-attachment-src="${escapeAttr(href)}" data-alt="${escapeAttr(text)}"></span>`;
   },
 };
-marked.use({ renderer: { ...headingRenderer, ...imageRenderer } });
+
+// A live block is a line of its own, as the editor reads it, so a query's `_` and `*` stay text.
+// Inside a scope HtmlContent fills the element with the block; elsewhere it shows the line. The
+// target is encoded because the mention and issue rewrites of the finished HTML reach attributes.
+const queryEmbedExtension = {
+  name: 'queryEmbed',
+  level: 'block' as const,
+  tokenizer(src: string) {
+    const line = /^ {0,3}([^\n]*)(?:\n|$)/.exec(src);
+    const target = line && queryEmbedTargetOfLine(line[1]);
+    return target ? { type: 'queryEmbed', raw: line[0], target } : undefined;
+  },
+  renderer(token: Token) {
+    const target = (token as Token & { target: string }).target;
+    return `<div data-query-embed="" data-query-target="${encodeURIComponent(target)}"><p>${escapeAttr(`:::query ${target}:::`)}</p></div>`;
+  },
+};
+marked.use({
+  renderer: { ...headingRenderer, ...imageRenderer },
+  extensions: [queryEmbedExtension],
+});
 
 type Segment = { type: 'html'; content: string } | { type: 'mermaid'; content: string };
 
@@ -67,9 +90,30 @@ interface ImageSlot {
   alt: string;
 }
 
+interface QueryBlockSlot {
+  el: HTMLElement;
+  target: string;
+}
+
+/**
+ * The target of a live block's element. Raw HTML can write this element too: a target that names
+ * nothing is left as it is.
+ * @param el - The element
+ * @returns The target, or null
+ */
+function queryBlockTarget(el: HTMLElement): string | null {
+  try {
+    const target = decodeURIComponent(el.dataset.queryTarget ?? '');
+    return parseQueryEmbedTarget(target) ? target : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Sanitized HTML from the renderer. Attachment image slots in it are filled with
  * AttachmentImage, which loads the file with auth and shows it from a blob URL.
+ * Live blocks are filled with QueryBlock, inside a QueryBlockScope only.
  * @param props - The HTML and wrapper classes.
  * @param props.html - Sanitized HTML.
  * @param props.className - Classes for the wrapper div.
@@ -86,6 +130,18 @@ function HtmlContent({ html, className }: { html: string; className?: string }) 
         .filter((slot) => attachmentIdOf(slot.src) !== null)
     );
   }, [container]);
+  const blocksRun = useContext(QueryBlockScope) !== null;
+  const blocks = useMemo<QueryBlockSlot[]>(() => {
+    if (!container || !blocksRun) return [];
+    const found: QueryBlockSlot[] = [];
+    container.querySelectorAll<HTMLElement>('div[data-query-embed]').forEach((el) => {
+      const target = queryBlockTarget(el);
+      if (target === null) return;
+      el.replaceChildren();
+      found.push({ el, target });
+    });
+    return found;
+  }, [container, blocksRun]);
   // A new object every render would make React write the HTML again, wiping the filled slots
   const innerHtml = useMemo(() => ({ __html: html }), [html]);
 
@@ -103,6 +159,9 @@ function HtmlContent({ html, className }: { html: string; className?: string }) 
           slot.el,
           `${slot.src}-${i}`,
         ),
+      )}
+      {blocks.map((block, i) =>
+        createPortal(<QueryBlock target={block.target} />, block.el, `${block.target}-${i}`),
       )}
     </>
   );

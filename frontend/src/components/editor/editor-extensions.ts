@@ -11,6 +11,7 @@ import { ImageExtension } from './ImageExtension';
 import { IssueEmbedExtension } from './IssueEmbedExtension';
 import { IssueReferenceExtension } from './IssueReferenceExtension';
 import { MentionExtension } from './MentionExtension';
+import { QueryEmbedExtension } from './QueryEmbedExtension';
 import { SlashCommandExtension } from './SlashCommandExtension';
 import { SmartLinkExtension } from './SmartLinkExtension';
 import { TableOfContentsExtension } from './TableOfContentsExtension';
@@ -21,6 +22,8 @@ interface EditorExtensionOptions {
   placeholder?: string;
   projectId?: string;
   instanceId: number;
+  /** Offer the live query and dashboard blocks, which only a wiki page renders */
+  liveBlocks?: boolean;
 }
 
 /**
@@ -33,12 +36,14 @@ interface EditorExtensionOptions {
  * @param opts.placeholder - Placeholder text for an empty editor.
  * @param opts.projectId - Project used by the issue reference autocomplete.
  * @param opts.instanceId - Editor instance key for the shared projectId store.
+ * @param opts.liveBlocks - Offer the live query and dashboard blocks in the slash menu.
  * @returns The extension list.
  */
 export function buildEditorExtensions({
   placeholder,
   projectId,
   instanceId,
+  liveBlocks,
 }: EditorExtensionOptions): AnyExtension[] {
   const browserVariants: Record<string, AnyExtension> = {
     codeBlock: CodeBlockLowlight.configure({ lowlight }),
@@ -52,6 +57,7 @@ export function buildEditorExtensions({
     tableOfContents: TableOfContentsExtension,
     smartLink: SmartLinkExtension,
     issueEmbed: IssueEmbedExtension,
+    queryEmbed: QueryEmbedExtension,
     image: ImageExtension,
   };
 
@@ -61,7 +67,7 @@ export function buildEditorExtensions({
       extensions.push(Placeholder.configure({ placeholder: placeholder || 'Write something...' }));
     }
     if (extension.name === 'smartLink') {
-      extensions.push(SlashCommandExtension);
+      extensions.push(SlashCommandExtension.configure({ liveBlocks: liveBlocks ?? false }));
     }
     extensions.push(browserVariants[extension.name] ?? extension);
   }

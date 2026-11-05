@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import { wikiApi } from '@/api/wiki.api';
+import { QueryBlockScope } from '@/components/dashboards/query-block-scope';
 import { CollaborativeEditor } from '@/components/editor/CollaborativeEditor';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
@@ -413,68 +414,72 @@ export default function PageEdit() {
         )}
 
         {/* Hidden, not unmounted, while resolving conflicts: the merge replaces this content */}
-        <div className="flex gap-0" hidden={conflictsOpen}>
-          <div className={cn('flex-1 gap-4', showPreview ? 'grid grid-cols-2' : '')}>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-text">Content</label>
-              {useCollab && collab.ydoc && collab.provider ? (
-                <CollaborativeEditor
-                  ydoc={collab.ydoc}
-                  provider={collab.provider}
-                  key={collab.ydoc.guid}
-                  fragmentName={collab.fragmentName}
-                  onChange={(markdown) => {
-                    setBody(markdown);
-                    if (!collab.isConnected) typedOffline.current = markdown;
-                  }}
-                  placeholder="Write your content..."
-                  uploadTarget={existingPage?.id ? { pageId: existingPage.id } : undefined}
-                  locked={collab.locked}
-                  canEdit={canEdit}
-                />
-              ) : canEdit && waitingForSession ? (
-                <Card className="min-h-[300px] p-4">
-                  <p
-                    role="status"
-                    className="mb-3 flex items-center gap-2 text-xs text-text-secondary"
-                  >
-                    <Spinner size="sm" />
-                    Joining the live session. You can type as soon as it is ready.
-                  </p>
-                  <MarkdownRenderer content={body} />
-                </Card>
-              ) : canEdit ? (
-                <MarkdownEditor
-                  value={body}
-                  onChange={setBody}
-                  placeholder="Write your content..."
-                  uploadTarget={existingPage?.id ? { pageId: existingPage.id } : undefined}
-                />
-              ) : (
-                <Card className="min-h-[300px] p-4">
-                  <MarkdownRenderer content={body} />
-                </Card>
+        <QueryBlockScope value={{ pageId: existingPage?.id }}>
+          <div className="flex gap-0" hidden={conflictsOpen}>
+            <div className={cn('flex-1 gap-4', showPreview ? 'grid grid-cols-2' : '')}>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-text">Content</label>
+                {useCollab && collab.ydoc && collab.provider ? (
+                  <CollaborativeEditor
+                    ydoc={collab.ydoc}
+                    provider={collab.provider}
+                    key={collab.ydoc.guid}
+                    fragmentName={collab.fragmentName}
+                    onChange={(markdown) => {
+                      setBody(markdown);
+                      if (!collab.isConnected) typedOffline.current = markdown;
+                    }}
+                    placeholder="Write your content..."
+                    uploadTarget={existingPage?.id ? { pageId: existingPage.id } : undefined}
+                    liveBlocks
+                    locked={collab.locked}
+                    canEdit={canEdit}
+                  />
+                ) : canEdit && waitingForSession ? (
+                  <Card className="min-h-[300px] p-4">
+                    <p
+                      role="status"
+                      className="mb-3 flex items-center gap-2 text-xs text-text-secondary"
+                    >
+                      <Spinner size="sm" />
+                      Joining the live session. You can type as soon as it is ready.
+                    </p>
+                    <MarkdownRenderer content={body} />
+                  </Card>
+                ) : canEdit ? (
+                  <MarkdownEditor
+                    value={body}
+                    onChange={setBody}
+                    placeholder="Write your content..."
+                    uploadTarget={existingPage?.id ? { pageId: existingPage.id } : undefined}
+                    liveBlocks
+                  />
+                ) : (
+                  <Card className="min-h-[300px] p-4">
+                    <MarkdownRenderer content={body} />
+                  </Card>
+                )}
+              </div>
+              {showPreview && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-text">Preview</label>
+                  <Card className="p-4 min-h-[300px] overflow-auto">
+                    {body ? (
+                      <MarkdownRenderer content={body} />
+                    ) : (
+                      <p className="text-text-tertiary italic text-sm">
+                        Start typing to see a preview...
+                      </p>
+                    )}
+                  </Card>
+                </div>
               )}
             </div>
-            {showPreview && (
-              <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-text">Preview</label>
-                <Card className="p-4 min-h-[300px] overflow-auto">
-                  {body ? (
-                    <MarkdownRenderer content={body} />
-                  ) : (
-                    <p className="text-text-tertiary italic text-sm">
-                      Start typing to see a preview...
-                    </p>
-                  )}
-                </Card>
-              </div>
+            {showVariablePanel && (
+              <TemplateVariablePanel onInsert={(variable) => setBody((b) => b + variable)} />
             )}
           </div>
-          {showVariablePanel && (
-            <TemplateVariablePanel onInsert={(variable) => setBody((b) => b + variable)} />
-          )}
-        </div>
+        </QueryBlockScope>
 
         {/* Change description (existing pages only) */}
         {!isNew && (

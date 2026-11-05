@@ -5,6 +5,7 @@ import { registerActions } from '../../actions/registry';
 import { queryRunOutput } from '../search/query.actions';
 
 import * as dashboardsService from './dashboards.service';
+import { assertEmbedReadable, EMBED_ID_MAX, renderEmbedded } from './embedded.service';
 
 const record = z.looseObject({ id: z.string() });
 const nothing = z.void();
@@ -20,6 +21,7 @@ const QUERY_MAX = 1000;
 const noTarget = z.object({});
 const dashboardTarget = z.object({ id });
 const widgetTarget = dashboardTarget.extend({ widgetId: id });
+const embedTarget = z.object({ pageId: id });
 
 const widgetType = z
   .enum(['TABLE', 'COUNT', 'BAR', 'LIST', 'SPRINT_OVERVIEW'])
@@ -186,6 +188,33 @@ const dashboardActions = [
     // would: its input is the id alone, so nothing runs ahead of that check
     authorize: async () => {},
     handler: async (ctx, input) => dashboardsService.render(ctx, input.id),
+  }),
+  defineAction({
+    name: 'dashboard.renderEmbedded',
+    area: 'dashboards',
+    kind: 'read',
+    summary:
+      'Render a live block of a wiki page you can read: whoever may read the page sees it, each ' +
+      'widget with their own rights, also when they may not open the dashboard or saved query ' +
+      'itself. embedId is the text of a :::query <embedId>::: block in the current body: a saved ' +
+      'query id, dashboard:<id> or inline:"<query>". It gives widget titles and results, never ' +
+      'query text or sharing. Needs wiki:read as well, and each widget the scope of its data.',
+    target: embedTarget,
+    input: embedTarget.extend({ embedId: z.string().min(1).max(EMBED_ID_MAX) }),
+    output: z.looseObject({
+      widgets: z.array(
+        z.looseObject({
+          id: z.string(),
+          type: z.string(),
+          title: z.string(),
+          result: renderedResult,
+        }),
+      ),
+      projectIds: z.array(z.string()),
+    }),
+    rest: { method: 'POST', path: `${DASHBOARDS}/embedded`, status: 200 },
+    authorize: (ctx, { pageId }) => assertEmbedReadable(ctx, pageId),
+    handler: async (ctx, input) => renderEmbedded(ctx, input.pageId, input.embedId),
   }),
   defineAction({
     name: 'dashboardWidget.add',

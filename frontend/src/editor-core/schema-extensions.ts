@@ -23,6 +23,7 @@ import {
   OrderedListNode,
 } from './nodes/list-item';
 import { MentionNode } from './nodes/mention';
+import { QueryEmbedNode } from './nodes/query-embed';
 import { RawHtmlInlineMark, RawHtmlNode } from './nodes/raw-html';
 import { SmartLinkNode } from './nodes/smart-link';
 import { SoftBreakAfterInline } from './nodes/soft-break';
@@ -95,6 +96,7 @@ export function getSchemaExtensions(opts: SchemaExtensionOptions = {}): AnyExten
     TableOfContentsNode,
     SmartLinkNode,
     IssueEmbedNode,
+    QueryEmbedNode,
     RawHtmlNode,
     RawHtmlInlineMark,
     SoftBreakAfterInline,

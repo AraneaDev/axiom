@@ -21,7 +21,15 @@ interface EditorCoreBundle {
   yFragmentToMarkdown(fragment: Y.XmlFragment): string;
   normalizeMarkdown(md: string): string;
   mergeMarkdown(base: string, ours: string, theirs: string): MergeResult;
+  queryEmbedsIn(md: string): string[];
+  parseQueryEmbedTarget(target: string): QueryEmbedTarget | null;
 }
+
+/** What a live block in a page shows (see frontend/src/editor-core/nodes/query-embed.ts) */
+export type QueryEmbedTarget =
+  | { kind: 'dashboard'; id: string }
+  | { kind: 'savedQuery'; id: string }
+  | { kind: 'inline'; query: string };
 
 /** A block-level three-way merge result (see frontend/src/editor-core/merge.ts) */
 export interface MergeResult {
@@ -98,4 +106,23 @@ export function normalizeMarkdown(md: string): string {
  */
 export function mergeMarkdown(base: string, ours: string, theirs: string): MergeResult {
   return core().mergeMarkdown(base, ours, theirs);
+}
+
+/**
+ * The live blocks of a body, read as the editor reads it: text that merely looks like one, in a
+ * code block or a paragraph, is not one.
+ * @param md - Markdown source.
+ * @returns The target of each `:::query <target>:::` block, as written.
+ */
+export function queryEmbedsIn(md: string): string[] {
+  return core().queryEmbedsIn(md);
+}
+
+/**
+ * Read a live block's target.
+ * @param target - As written in Markdown.
+ * @returns What it names, or null when it names nothing.
+ */
+export function parseQueryEmbedTarget(target: string): QueryEmbedTarget | null {
+  return core().parseQueryEmbedTarget(target);
 }

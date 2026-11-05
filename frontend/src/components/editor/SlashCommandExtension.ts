@@ -21,8 +21,12 @@ import {
   Link,
   GitBranch,
   CircleDot,
+  LayoutDashboard,
+  ListFilter,
 } from 'lucide-react';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
+
+import { dashboardEmbedTarget, queryEmbedTarget } from '@/editor-core/nodes/query-embed';
 
 import { insertImageFromUrl, pickAndInsertImage } from './image-upload';
 import SlashCommandMenu, {
@@ -35,6 +39,12 @@ interface CommandDefinition {
   category: string;
   icon: SlashCommandItem['icon'];
   action: (editor: Editor) => void;
+  /** A live block: offered only where it will render */
+  liveBlock?: boolean;
+}
+
+function insertQueryEmbed(editor: Editor, target: string | null): void {
+  if (target) editor.chain().focus().setQueryEmbed({ target }).run();
 }
 
 const commands: CommandDefinition[] = [
@@ -131,6 +141,26 @@ const commands: CommandDefinition[] = [
       }
     },
   },
+  {
+    name: 'Dashboard',
+    category: 'Blocks',
+    icon: LayoutDashboard,
+    liveBlock: true,
+    action: (editor) => {
+      const input = window.prompt('Dashboard address or id:');
+      if (input) insertQueryEmbed(editor, dashboardEmbedTarget(input));
+    },
+  },
+  {
+    name: 'Query',
+    category: 'Blocks',
+    icon: ListFilter,
+    liveBlock: true,
+    action: (editor) => {
+      const input = window.prompt('A query, or the id of a saved query:');
+      if (input) insertQueryEmbed(editor, queryEmbedTarget(input));
+    },
+  },
   // Media
   {
     name: 'Image: Upload file',
@@ -163,6 +193,19 @@ const commands: CommandDefinition[] = [
 ];
 
 /**
+ * The commands to offer.
+ * @param query - What was typed after the slash
+ * @param liveBlocks - Whether this editor's document renders live blocks
+ * @returns The matching commands
+ */
+export function slashCommandsFor(query: string, liveBlocks: boolean): CommandDefinition[] {
+  const lower = query.toLowerCase();
+  return commands.filter(
+    (cmd) => (liveBlocks || !cmd.liveBlock) && cmd.name.toLowerCase().includes(lower),
+  );
+}
+
+/**
  * TipTap extension providing a slash command menu.
  * Type "/" to open a filterable command palette for inserting block types.
  */
@@ -171,14 +214,10 @@ export const SlashCommandExtension = Extension.create({
 
   addOptions() {
     return {
+      liveBlocks: false,
       suggestion: {
         char: '/',
         startOfLine: false,
-        items: ({ query }: { query: string }): CommandDefinition[] => {
-          if (!query) return commands;
-          const lower = query.toLowerCase();
-          return commands.filter((cmd) => cmd.name.toLowerCase().includes(lower));
-        },
         render: () => {
           let component: ReactRenderer<SlashCommandMenuRef> | null = null;
           let popup: TippyInstance[] | null = null;
@@ -258,6 +297,7 @@ export const SlashCommandExtension = Extension.create({
         editor: this.editor,
         pluginKey: new PluginKey('slashCommand'),
         ...this.options.suggestion,
+        items: ({ query }: { query: string }) => slashCommandsFor(query, this.options.liveBlocks),
       }),
     ];
   },

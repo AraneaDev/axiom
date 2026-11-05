@@ -19,6 +19,7 @@ import { attachmentsApi } from '@/api/attachments.api';
 import { hydrateApi } from '@/api/hydrate.api';
 import { wikiIssueLinksApi } from '@/api/wiki-issue-links.api';
 import { wikiApi } from '@/api/wiki.api';
+import { QueryBlockScope } from '@/components/dashboards/query-block-scope';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Badge } from '@/components/ui/Badge';
@@ -312,7 +313,9 @@ export default function PageView() {
                   </div>
                   <div className="px-6 py-5 max-h-64 overflow-hidden relative">
                     <div className="prose max-w-none text-sm leading-relaxed pointer-events-none">
-                      <MarkdownRenderer content={welcomePage.body} />
+                      <QueryBlockScope value={{ pageId: welcomePage.id }}>
+                        <MarkdownRenderer content={welcomePage.body} />
+                      </QueryBlockScope>
                     </div>
                     <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-surface to-transparent" />
                   </div>
@@ -377,7 +380,9 @@ export default function PageView() {
       <div className="flex gap-6 items-start">
         <Card className="flex-1 min-w-0 p-6">
           <div className="prose max-w-none leading-relaxed">
-            <MarkdownRenderer content={page.body} />
+            <QueryBlockScope value={{ pageId: page.id }}>
+              <MarkdownRenderer content={page.body} />
+            </QueryBlockScope>
           </div>
         </Card>
         <TocSidebar tocEntries={tocEntries} />

@@ -18,6 +18,8 @@ import type * as Y from 'yjs';
 
 import { getSchemaExtensions } from './schema-extensions';
 
+export { parseQueryEmbedTarget, type QueryEmbedTarget } from './nodes/query-embed';
+
 interface MarkdownStorage {
   parser: { parse(content: string): string };
   serializer: { serialize(doc: PMNode): string };
@@ -108,4 +110,20 @@ export function yFragmentToMarkdown(fragment: Y.XmlFragment): string {
  */
 export function normalizeMarkdown(md: string): string {
   return domScope(() => docToMarkdown(markdownToDoc(md)));
+}
+
+/**
+ * The live blocks of a body, by the same parse the editor does: text that merely looks like one,
+ * in a code block or a paragraph, is not one.
+ * @param md - Markdown source.
+ * @returns The target of each `:::query <target>:::` block, as written.
+ */
+export function queryEmbedsIn(md: string): string[] {
+  const targets: string[] = [];
+  domScope(() =>
+    markdownToDoc(md).descendants((node) => {
+      if (node.type.name === 'queryEmbed') targets.push(node.attrs.target as string);
+    }),
+  );
+  return targets;
 }

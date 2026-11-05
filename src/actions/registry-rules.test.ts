@@ -45,6 +45,7 @@ const NO_LEGACY_ROUTE = new Set([
   'dashboard.update',
   'dashboard.delete',
   'dashboard.render',
+  'dashboard.renderEmbedded',
   'dashboardWidget.add',
   'dashboardWidget.update',
   'dashboardWidget.remove',

@@ -249,7 +249,23 @@ export async function textToRun(
   userId: string,
   id: string,
 ): Promise<{ text: string; projectId?: string }> {
-  const row = await loadFor(userId, id, 'view');
+  return runnableText(await loadFor(userId, id, 'view'));
+}
+
+/**
+ * The query text of a saved query that is part of a page or dashboard the reader may see, whoever
+ * may open the saved query itself. The text is for running, never for showing to that reader.
+ * @param id - The saved query
+ * @returns Its text, and the project it is about if any
+ * @throws {AppError} 404 when it is gone; 400 LEGACY_FILTER when it has no exact query
+ */
+export async function embeddedTextToRun(id: string): Promise<{ text: string; projectId?: string }> {
+  const row = await prisma.savedFilter.findUnique({ where: { id } });
+  if (!row) throw new AppError(404, 'Saved query not found');
+  return runnableText(row);
+}
+
+function runnableText(row: SavedFilter): { text: string; projectId?: string } {
   const text = storedText(row.query) ?? legacyToText(row.query);
   if (text === null) {
     throw new AppError(

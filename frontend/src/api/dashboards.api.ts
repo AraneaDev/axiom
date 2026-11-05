@@ -108,6 +108,13 @@ export interface RenderedDashboard {
   projectIds: string[];
 }
 
+/** What a live block in a wiki page shows: widget titles and results, nothing about their source */
+export interface EmbeddedBlock {
+  widgets: RenderedWidget[];
+  /** The projects its widgets read that the viewer can see */
+  projectIds: string[];
+}
+
 export interface DashboardInput {
   name?: string;
   description?: string | null;
@@ -124,6 +131,9 @@ export interface WidgetInput {
   query?: string | null;
 }
 
+/** As many rows as a widget shows by default, also for a query not embedded yet */
+const BLOCK_ROWS = 25;
+
 /** Dashboards API client: shared boards of widgets, each rendered with the viewer's rights. */
 export const dashboardsApi = {
   /** List the user's own dashboards and those shared with their teams and orgs. */
@@ -138,6 +148,25 @@ export const dashboardsApi = {
    * @param id
    */
   render: (id: string) => get<RenderedDashboard>(`/dashboards/${id}/render`),
+  /**
+   * Render a live block of a wiki page the current user can read.
+   * @param pageId
+   * @param embedId - The block's target as written in the Markdown
+   */
+  renderEmbedded: (pageId: string, embedId: string) =>
+    post<EmbeddedBlock>('/dashboards/embedded', { pageId, embedId }),
+  /**
+   * Run a saved query with the current user's rights.
+   * @param id
+   */
+  runSavedQuery: (id: string) =>
+    post<ItemsResult | GroupsResult>(`/saved-filters/${id}/run`, { limit: BLOCK_ROWS }),
+  /**
+   * Run a query with the current user's rights.
+   * @param query
+   */
+  runQuery: (query: string) =>
+    post<ItemsResult | GroupsResult>('/query', { query, limit: BLOCK_ROWS }),
   /**
    * Create a dashboard.
    * @param data

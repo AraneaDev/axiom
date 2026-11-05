@@ -45,6 +45,8 @@ interface MarkdownEditorProps {
   projectId?: string;
   /** The page or issue uploaded images belong to; without one they are staged until the body is saved */
   uploadTarget?: ImageUploadTarget;
+  /** Offer the live query and dashboard blocks: for a wiki page, the one place that renders them */
+  liveBlocks?: boolean;
 }
 
 interface ToolbarButtonProps {
@@ -87,6 +89,7 @@ function ToolbarDivider() {
  * @param props.placeholder - Placeholder text when the editor is empty.
  * @param props.compact - Reduces minimum height and hides advanced toolbar buttons when true.
  * @param props.projectId - Project ID used for issue reference autocomplete suggestions.
+ * @param props.liveBlocks - Offer the live query and dashboard blocks.
  * @param props.uploadTarget - Page or issue that uploaded images attach to; staged when omitted.
  */
 export function MarkdownEditor({
@@ -96,6 +99,7 @@ export function MarkdownEditor({
   compact = false,
   projectId,
   uploadTarget,
+  liveBlocks,
 }: MarkdownEditorProps) {
   // Each editor instance gets a stable key for the shared mutable store
   const [instanceId] = useState(() => nextEditorInstanceId());
@@ -111,7 +115,7 @@ export function MarkdownEditor({
   }, [instanceId, projectId]);
 
   const editor = useEditor({
-    extensions: buildEditorExtensions({ placeholder, projectId, instanceId }),
+    extensions: buildEditorExtensions({ placeholder, projectId, instanceId, liveBlocks }),
     content: value || '',
     onUpdate: ({ editor: e }) => {
       const md = editorMarkdown(e);

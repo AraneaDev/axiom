@@ -5,9 +5,12 @@ import {
   markdownToProseMirrorJSON,
   markdownToYFragment,
   normalizeMarkdown,
+  parseQueryEmbedTarget,
   proseMirrorJSONToMarkdown,
+  queryEmbedsIn,
   yFragmentToMarkdown,
 } from './converter';
+import { dashboardEmbedTarget, queryEmbedTarget } from './nodes/query-embed';
 
 const identical: Record<string, string> = {
   heading: '# One\n\n## Two\n\n### Three',
@@ -22,6 +25,14 @@ const identical: Record<string, string> = {
   callout: '> [!WARNING]\n> careful',
   collapsible: '> [!DETAILS] More\n> hidden',
   issueEmbed: 'a\n\n:::issue AXM-12:::\n\nb',
+  queryEmbedSaved: 'a\n\n:::query cm1saved23:::\n\nb',
+  queryEmbedDashboard: ':::query dashboard:cm1dash45:::',
+  queryEmbedInline: ':::query inline:"type = Bug AND priority > Medium":::',
+  queryEmbedTricky:
+    ':::query inline:"title ~ \\"a_b_c_d\\" AND title ~ \\"*x*\\" AND title ~ \\"<b>:::\\" AND `y` @tim":::',
+  queryEmbedInList: '- a\n\n  :::query dashboard:cm1dash45:::\n\n- b',
+  queryEmbedInCallout: '> [!NOTE]\n> intro\n>\n> :::query dashboard:cm1dash45:::',
+  queryNotAnEmbed: ':::query two words:::\n\n:::query inline:"not json:::\n\n:::query :::',
   issueReference: 'See <span data-issue-key="AXM-7" class="issue-ref">AXM-7</span>.',
   mention: 'Hi <span class="mention">@Tim Schipper</span>.',
   toc: '[TOC]\n\n## Section',
@@ -102,6 +113,7 @@ describe('editor core converter', () => {
       horizontalRule: { type: 'horizontalRule' },
       paragraph: p('second'),
       issueEmbed: { type: 'issueEmbed', attrs: { issueKey: 'AXM-1' } },
+      queryEmbed: { type: 'queryEmbed', attrs: { target: 'dashboard:cm1dash45' } },
       tableOfContents: { type: 'tableOfContents' },
       emptyBulletList: {
         type: 'bulletList',
@@ -345,5 +357,95 @@ describe('mixed and adjacent lists', () => {
 
   it('writes a hard break in a heading as a space', () => {
     expect(stable('a  \nhard\n---')).toBe('## a hard');
+  });
+});
+
+describe('query embeds', () => {
+  const embedOf = (md: string) => markdownToProseMirrorJSON(md).content?.[0];
+
+  it.each([
+    ['a saved query', 'cm1saved23', { kind: 'savedQuery', id: 'cm1saved23' }],
+    ['a dashboard', 'dashboard:cm1dash45', { kind: 'dashboard', id: 'cm1dash45' }],
+    ['an inline query', 'inline:"type = Bug"', { kind: 'inline', query: 'type = Bug' }],
+  ])('reads %s as a block', (_name, target, parsed) => {
+    const embed = embedOf(`:::query ${target}:::`);
+    expect(embed?.type).toBe('queryEmbed');
+    expect(embed?.attrs).toEqual({ target });
+    expect(parseQueryEmbedTarget(target)).toEqual(parsed);
+  });
+
+  it('keeps Markdown characters and quotes of an inline query as written', () => {
+    const query = 'title ~ "a_b_c" AND title ~ "*x*" AND title ~ "<b> ::: \\\\ `y`"';
+    const target = `inline:${JSON.stringify(query)}`;
+    const md = `:::query ${target}:::`;
+    expect(embedOf(md)?.attrs).toEqual({ target });
+    expect(parseQueryEmbedTarget(target)).toEqual({ kind: 'inline', query });
+    expect(normalizeMarkdown(md)).toBe(md);
+  });
+
+  it('survives the Yjs round trip', () => {
+    const md = 'a\n\n:::query inline:"title ~ \\"x_y_z\\"":::\n';
+    const doc = new Y.Doc();
+    const fragment = doc.getXmlFragment('default');
+    markdownToYFragment(md, fragment);
+    expect(yFragmentToMarkdown(fragment)).toBe(normalizeMarkdown(md));
+  });
+
+  it('does not end a paragraph, and text that becomes one line stays text', () => {
+    expect(queryEmbedsIn('text\n:::query cm1saved23:::')).toEqual([]);
+    expect(normalizeMarkdown('text\n:::query cm1saved23:::')).toBe('text :::query cm1saved23:::');
+  });
+
+  it('settles on one space, so that text never turns into a block on a later save', () => {
+    expect(queryEmbedsIn(':::query  cm1saved23:::')).toEqual(['cm1saved23']);
+    expect(normalizeMarkdown(':::query  cm1saved23:::')).toBe(':::query cm1saved23:::');
+  });
+
+  it('writes what the editor holds', () => {
+    const doc = {
+      type: 'doc',
+      content: [{ type: 'queryEmbed', attrs: { target: 'dashboard:cm1dash45' } }],
+    };
+    expect(proseMirrorJSONToMarkdown(doc)).toBe(':::query dashboard:cm1dash45:::');
+  });
+
+  it.each([
+    ['after text in a paragraph', 'text :::query cm1saved23:::'],
+    ['two words', ':::query two words:::'],
+    ['bad JSON', ':::query inline:"oops:::'],
+    ['JSON that is no string', ':::query inline:12:::'],
+    ['an unknown prefix', ':::query other:cm1:::'],
+    ['an id too long', `:::query ${'x'.repeat(65)}:::`],
+  ])('leaves text alone: %s', (_name, md) => {
+    expect(queryEmbedsIn(md)).toEqual([]);
+    expect(normalizeMarkdown(md).trim()).toBe(md);
+  });
+
+  it('makes a target from what someone typed', () => {
+    expect(dashboardEmbedTarget(' cm1dash45 ')).toBe('dashboard:cm1dash45');
+    expect(dashboardEmbedTarget('http://x.test/dashboards/cm1dash45/edit?a=1')).toBe(
+      'dashboard:cm1dash45',
+    );
+    expect(dashboardEmbedTarget('two words')).toBeNull();
+    const savedId = 'cmaaaaaaaaaaaaaaaaaaaaaaa';
+    expect(queryEmbedTarget(savedId)).toBe(savedId);
+    expect(queryEmbedTarget('type = "Bug"')).toBe('inline:"type = \\"Bug\\""');
+    expect(queryEmbedTarget('   ')).toBeNull();
+    const typed = queryEmbedTarget('line one\nline two');
+    expect(queryEmbedsIn(`:::query ${typed}:::`)).toEqual([typed]);
+  });
+
+  it('finds the embeds of a body, wherever the blocks are, and none in code', () => {
+    const body = [
+      ':::query dashboard:top:::',
+      '- item\n\n  :::query inlist:::',
+      '> quoted\n>\n> :::query inquote:::',
+      '> [!NOTE]\n> note\n>\n> :::query incallout:::',
+      '```\n:::query infence:::\n```',
+      '    :::query indented:::',
+      'and `:::query incode:::` inline',
+      '<div>\n:::query inhtml:::\n</div>',
+    ].join('\n\n');
+    expect(queryEmbedsIn(body)).toEqual(['dashboard:top', 'inlist', 'inquote', 'incallout']);
   });
 });

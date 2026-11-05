@@ -8,6 +8,8 @@ import {
   loadEditorCore,
   markdownToYFragment,
   normalizeMarkdown,
+  parseQueryEmbedTarget,
+  queryEmbedsIn,
   yFragmentToMarkdown,
 } from './editor-core';
 
@@ -73,6 +75,7 @@ describe('editor core markdown round trip', () => {
       'callout-important.md',
       'collapsible.md',
       'issue-embed.md',
+      'query-embed.md',
       'issue-reference.md',
       'mention.md',
       'smart-link.md',
@@ -130,6 +133,17 @@ describe('editor core markdown round trip', () => {
     const out = toYjsAndBack(md);
     expect(out).toContain('<details><summary>x</summary>y</details>');
     expect(out).toContain(':::foo bar:::');
+  });
+
+  it('knows the query embeds of a body, and none in a code block', () => {
+    const embeds = queryEmbedsIn(read('query-embed.md'));
+    expect(embeds).toEqual(['cm1saved23', 'dashboard:cm1dash45', 'inline:"type = Bug"']);
+    expect(embeds.map(parseQueryEmbedTarget)).toEqual([
+      { kind: 'savedQuery', id: 'cm1saved23' },
+      { kind: 'dashboard', id: 'cm1dash45' },
+      { kind: 'inline', query: 'type = Bug' },
+    ]);
+    expect(queryEmbedsIn('```\n:::query cm1saved23:::\n```')).toEqual([]);
   });
 
   it('parses structure, not text', () => {

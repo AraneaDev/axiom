@@ -62,6 +62,8 @@ interface CollaborativeEditorProps {
   locked?: { byName: string } | null;
   /** Whether the user may edit; viewers get a read-only editor */
   canEdit?: boolean;
+  /** Offer the live query and dashboard blocks: for a wiki page, the one place that renders them */
+  liveBlocks?: boolean;
 }
 
 interface ToolbarButtonProps {
@@ -103,6 +105,7 @@ function ToolbarDivider() {
  * @param root0.onChange
  * @param root0.placeholder
  * @param root0.projectId
+ * @param root0.liveBlocks
  * @param root0.uploadTarget
  * @param root0.locked
  * @param root0.canEdit
@@ -114,6 +117,7 @@ export function CollaborativeEditor({
   onChange,
   placeholder,
   projectId,
+  liveBlocks,
   uploadTarget,
   locked = null,
   canEdit = true,
@@ -129,7 +133,7 @@ export function CollaborativeEditor({
 
   const editor = useEditor({
     extensions: [
-      ...buildEditorExtensions({ placeholder, projectId, instanceId }),
+      ...buildEditorExtensions({ placeholder, projectId, instanceId, liveBlocks }),
       // Yjs collaboration
       Collaboration.configure({
         document: ydoc,
