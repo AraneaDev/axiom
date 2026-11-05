@@ -101,7 +101,9 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: 'search',
     description:
       'Search issues and wiki pages you can open. Free text, plus filters such as type:bug, ' +
-      'status:done or assignee:name. Results carry the key to pass to read.',
+      'status:done or assignee:name. Results carry the key to pass to read. SELECT, WHERE, ' +
+      'GROUP BY or ORDER BY in capitals makes it an issue query over all you can see, such as ' +
+      'SELECT COUNT, SUM(storypoints) WHERE sprintstate = ACTIVE GROUP BY sprint, status.',
     input: () => inputOfAction('search.run'),
     run: (args, { ctx }) => executeAction('search.run', args, ctx),
   },

@@ -55,8 +55,15 @@ export interface OrderByTerm {
   dir: SortDirection;
 }
 
+/** A term of a SELECT clause */
+export type SelectTerm = 'count' | 'sum' | 'avg';
+
 export interface ParsedQuery {
-  /** Absent when the query is only an ORDER BY clause */
+  /** Absent when the query is only clauses */
   where: Expression | null;
   orderBy: OrderByTerm[];
+  /** Only with a SELECT clause */
+  select?: SelectTerm[];
+  /** Only with a GROUP BY clause */
+  groupBy?: string[];
 }

@@ -1,3 +1,4 @@
+import { parseGroupBy, parseSelect } from './aggregate';
 import type { Expression, Value, ComparisonOp, OrderByTerm, ParsedQuery } from './ast';
 import { CUSTOM_FIELD_PREFIX } from './custom-fields';
 import { issueFieldRegistry } from './fields/issue-fields';
@@ -346,21 +347,51 @@ export function parse(input: string): Expression {
 /** Why a field has no place in ORDER BY: the database can't order by it cleanly */
 const UNSORTABLE_FIELDS = new Set(['label', 'blocked', 'blocks', 'linked', 'text']);
 
+const CLAUSES = ['SELECT', 'WHERE', 'GROUP BY', 'ORDER BY'] as const;
+type ClauseName = (typeof CLAUSES)[number];
+
+interface Clause {
+  name: ClauseName;
+  /** Where the keyword starts */
+  at: number;
+  /** Where its text starts */
+  start: number;
+}
+
 /**
- * Where the ORDER BY clause starts, outside double quotes (the only quotes the lexer reads, without
- * escapes), as an exact uppercase keyword; -1 for none.
- * @param input
+ * The clause keywords in a query, in the order written: exact uppercase, as whole words, outside
+ * double quotes (the only quotes the lexer reads, without escapes). SELECT opens a query or is a
+ * word like any other.
+ * @param input - The query, trimmed
  */
-function findOrderBy(input: string): number {
+function findClauses(input: string): Clause[] {
+  const found: Clause[] = [];
   let inQuote = false;
   for (let i = 0; i < input.length; i++) {
     if (input[i] === '"') inQuote = !inQuote;
-    if (inQuote || !input.startsWith('ORDER BY', i)) continue;
-    const before = i === 0 || /\s/.test(input[i - 1]);
-    const after = i + 8 >= input.length || /\s/.test(input[i + 8]);
-    if (before && after) return i;
+    if (inQuote || (i > 0 && !/\s/.test(input[i - 1]))) continue;
+    const name = CLAUSES.find((clause) => input.startsWith(clause, i));
+    if (!name || (name === 'SELECT' && i > 0)) continue;
+    const next = input[i + name.length];
+    if (next === undefined || /\s/.test(next) || (name === 'WHERE' && next === '(')) {
+      found.push({ name, at: i, start: i + name.length });
+    }
   }
-  return -1;
+  return found;
+}
+
+/**
+ * Whether search.run hands a query to query.run. Case-sensitive, so "where is login" stays a text
+ * search, and a keyword without a field stays text too.
+ * @param query - The query
+ */
+export function hasQueryClauses(query: string): boolean {
+  return (
+    /^SELECT\b/.test(query) ||
+    /\bWHERE\b/.test(query) ||
+    /\bGROUP BY\s+\S/.test(query) ||
+    /\bORDER BY\s+\S/.test(query)
+  );
 }
 
 function parseOrderBy(input: string, start: number): OrderByTerm[] {
@@ -397,15 +428,65 @@ function parseOrderBy(input: string, start: number): OrderByTerm[] {
 }
 
 /**
- * A query with an optional trailing `ORDER BY <field> [ASC|DESC] [, ...]` clause. The keywords are
- * exact uppercase, so a lowercase "order by" stays the text it always was.
+ * A query with optional clauses around its condition:
+ * `[SELECT <aggregates>] [WHERE] <condition> [GROUP BY <fields>] [ORDER BY <field> [ASC|DESC], ...]`.
+ * The keywords are exact uppercase, so a lowercase "order by" stays the text it always was. After a
+ * SELECT the condition needs its WHERE. `select` and `groupBy` are there only if the query has them.
  * @param input - The query
  * @throws {ParseError} For a clause or a where part the grammar has no reading for
  */
 export function parseQuery(input: string): ParsedQuery {
-  const at = findOrderBy(input);
-  if (at < 0) return { where: parse(input), orderBy: [] };
-  const head = input.slice(0, at);
-  const orderBy = parseOrderBy(input, at + 'ORDER BY'.length);
-  return { where: head.trim() === '' ? null : parse(head), orderBy };
+  const query = input.trim();
+  const clauses = findClauses(query);
+  if (clauses.length === 0) return { where: parse(query), orderBy: [] };
+
+  const text: Partial<Record<ClauseName, { text: string; position: number }>> = {};
+  clauses.forEach((clause, i) => {
+    if (text[clause.name]) {
+      throw new ParseError(`${clause.name} appears twice`, clause.at, clause.name);
+    }
+    const before = clauses[i - 1];
+    if (before && CLAUSES.indexOf(before.name) > CLAUSES.indexOf(clause.name)) {
+      throw new ParseError(
+        `${clause.name} must come before ${before.name}`,
+        clause.at,
+        clause.name,
+      );
+    }
+    text[clause.name] = {
+      text: query.slice(clause.start, clauses[i + 1]?.at ?? query.length),
+      position: clause.start,
+    };
+  });
+
+  const head = query.slice(0, clauses[0].at).trim();
+  if (text.WHERE && head !== '') {
+    throw new ParseError(`Unexpected "${head}" before WHERE`, 0, head);
+  }
+  if (text.WHERE && text.WHERE.text.trim() === '') {
+    throw new ParseError('WHERE expects a condition', text.WHERE.position);
+  }
+
+  const select = text.SELECT && parseSelect(text.SELECT.text, text.SELECT.position);
+  const groupBy =
+    text['GROUP BY'] && parseGroupBy(text['GROUP BY'].text, text['GROUP BY'].position);
+  const orderBy = text['ORDER BY'] ? parseOrderBy(query, text['ORDER BY'].position) : [];
+  if (select || groupBy) {
+    const stray = orderBy.find((term) => !groupBy?.includes(term.field));
+    if (stray) {
+      throw new ParseError(
+        'ORDER BY in a grouped query takes only fields from GROUP BY',
+        text['ORDER BY']?.position ?? 0,
+        stray.field,
+      );
+    }
+  }
+
+  const condition = text.WHERE?.text ?? head;
+  return {
+    where: condition.trim() === '' ? null : parse(condition),
+    orderBy,
+    ...(select ? { select } : {}),
+    ...(groupBy ? { groupBy } : {}),
+  };
 }

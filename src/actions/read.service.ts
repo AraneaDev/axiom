@@ -127,7 +127,7 @@ export const READ_LIMIT = { windowMs: 60_000, maxKeys: 300 } as const;
 export const READ_CONCURRENCY = { perUser: 4, total: 16 } as const;
 export const readSlots = createUserSlots(READ_CONCURRENCY.perUser, READ_CONCURRENCY.total);
 
-const READS_BUSY = new AppError(
+export const READS_BUSY = new AppError(
   429,
   'Too many reads running, please try again shortly',
   'RATE_LIMITED',
@@ -621,7 +621,7 @@ async function loadIncludes<K extends ReadInclude>(
  * @param base - The base item
  * @param fields - The fields asked for
  */
-function pickFields<T extends { id: string; key: string }>(
+export function pickFields<T extends { id: string; key: string }>(
   base: T,
   fields: readonly ReadField[] | undefined,
 ): Partial<T> & { id: string; key: string } {

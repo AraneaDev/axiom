@@ -23,8 +23,10 @@ const TOKEN_BLOCKED_WRITE_AREAS = new Set(['admin', 'orgs', 'teams', 'projects']
  * Actions on a route that only exists in the registry, so tokenAllows has no rule to compare with
  * and answers "forbidden" for an unknown path. Each with the reason:
  * - item.read, POST /api/read: new in the agent layer, area search with a scope per item (R4)
+ * - query.run, POST /api/query: new in plan 2, a read in area search that also needs issues:read
+ *   inside the handler (P9)
  */
-const NO_LEGACY_ROUTE = new Set(['item.read']);
+const NO_LEGACY_ROUTE = new Set(['item.read', 'query.run']);
 
 /**
  * Every actions file below a directory, tests excluded by their suffix.
