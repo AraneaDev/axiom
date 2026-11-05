@@ -18,6 +18,34 @@ import FROZEN_REACH from './token-reach.json';
 const TOKEN_BLOCKED_WRITE_AREAS = new Set(['admin', 'orgs', 'teams', 'projects']);
 
 /**
+ * Access control and the account (R7): a binding on one of these paths needs admin, uiOnly or
+ * tokenBlocked, whatever its area. The production path rules are gone; this list keeps a new
+ * action in an open area from reaching them unflagged. `write` limits a pattern to writes.
+ */
+const ACCESS_CONTROL_PATHS: Array<{ pattern: RegExp; write: boolean }> = [
+  { pattern: /^\/api\/admin(\/|$)/, write: false },
+  { pattern: /^\/api\/users\/me(\/|$)/, write: true },
+  { pattern: /^\/api\/orgs\/[^/]+\/invites(\/|$)/, write: false },
+  { pattern: /^\/api\/wiki\/spaces\/[^/]+\/permissions(\/|$)/, write: true },
+  { pattern: /^\/api\/wiki\/pages\/[^/]+\/restrictions$/, write: true },
+  { pattern: /^\/api\/wiki\/restrictions\//, write: true },
+  { pattern: /^\/api\/projects\/team\/[^/]+$/, write: true },
+  { pattern: /^\/api\/projects\/[^/]+$/, write: true },
+];
+
+/**
+ * Whether a binding is on an access-control or account path (R7).
+ * @param binding - The binding
+ * @param binding.method - Its method
+ * @param binding.path - Its path
+ */
+function onAccessControlPath(binding: NonNullable<ActionDef['rest']>): boolean {
+  const write = !['GET', 'HEAD'].includes(binding.method);
+  const concrete = binding.path.replace(/:[^/]+/g, 'probe');
+  return ACCESS_CONTROL_PATHS.some((p) => (write || !p.write) && p.pattern.test(concrete));
+}
+
+/**
  * A token's call over REST, as actionRefusal sees it.
  * @param scopes - The token's scopes
  */
@@ -170,6 +198,13 @@ function ruleViolations(def: ActionDef): string[] {
   ) {
     violations.push(
       `${def.name}: a write in area ${def.area} needs admin, uiOnly or tokenBlocked (R9)`,
+    );
+  }
+
+  if (def.rest && !def.uiOnly && !def.tokenBlocked && !def.admin && onAccessControlPath(def.rest)) {
+    violations.push(
+      `${def.name}: ${def.rest.method} ${def.rest.path} is access control or the account, ` +
+        'so it needs admin, uiOnly or tokenBlocked (R7)',
     );
   }
 
@@ -447,6 +482,48 @@ describe('registry rules', () => {
       );
       expect(ruleViolations(defineAction({ ...base, area: 'orgs', kind: 'read' }))).toEqual([]);
       expect(ruleViolations(defineAction({ ...write, area: 'issues' }))).toEqual([]);
+    });
+  });
+
+  describe('R7: access control and the account', () => {
+    it.each([
+      ['PATCH', '/api/projects/:projectId'],
+      ['DELETE', '/api/projects/:projectId'],
+      ['POST', '/api/projects/team/:teamId'],
+      ['PUT', '/api/wiki/pages/:pageId/restrictions'],
+      ['DELETE', '/api/wiki/restrictions/:restrictionId'],
+      ['PUT', '/api/wiki/spaces/:spaceId/permissions'],
+      ['GET', '/api/admin/users'],
+      ['GET', '/api/orgs/:orgId/invites'],
+      ['PATCH', '/api/users/me'],
+    ] as const)('fails on %s %s in an open area without a flag', (method, p) => {
+      const params = Object.fromEntries(paramsOf(p).map((name) => [name, z.string()]));
+      const base = {
+        ...throwaway,
+        name: 'throwaway.accessControl',
+        area: 'wiki' as const,
+        kind: method === 'GET' ? ('read' as const) : ('write' as const),
+        input: z.object(params),
+        rest: { method, path: p },
+      };
+      expect(ruleViolations(defineAction(base))).toEqual([expect.stringContaining('R7')]);
+      expect(ruleViolations(defineAction({ ...base, tokenBlocked: true }))).toEqual([]);
+      expect(ruleViolations(defineAction({ ...base, uiOnly: true }))).toEqual([]);
+    });
+
+    it('passes a read of a project or of the account', () => {
+      for (const p of ['/api/projects/:projectId', '/api/users/me'] as const) {
+        const params = Object.fromEntries(paramsOf(p).map((name) => [name, z.string()]));
+        const action = defineAction({
+          ...throwaway,
+          name: 'throwaway.read',
+          area: 'wiki',
+          kind: 'read',
+          input: z.object(params),
+          rest: { method: 'GET', path: p },
+        });
+        expect(ruleViolations(action)).toEqual([]);
+      }
     });
   });
 
