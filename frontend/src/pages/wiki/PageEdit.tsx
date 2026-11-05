@@ -414,7 +414,7 @@ export default function PageEdit() {
         )}
 
         {/* Hidden, not unmounted, while resolving conflicts: the merge replaces this content */}
-        <QueryBlockScope value={{ pageId: existingPage?.id }}>
+        <QueryBlockScope value={{ pageId: existingPage?.id, editing: true }}>
           <div className="flex gap-0" hidden={conflictsOpen}>
             <div className={cn('flex-1 gap-4', showPreview ? 'grid grid-cols-2' : '')}>
               <div className="flex flex-col gap-1">

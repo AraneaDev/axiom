@@ -26,11 +26,14 @@ import { QueryBlockScope } from './query-block-scope';
 
 const MESSAGE = 'This block could not be loaded';
 
-function page(content: string) {
+function page(
+  content: string,
+  scope: { pageId?: string; editing?: boolean } = { pageId: 'page1' },
+) {
   const client = new QueryClient();
   return render(
     <QueryClientProvider client={client}>
-      <QueryBlockScope value={{ pageId: 'page1' }}>
+      <QueryBlockScope value={scope}>
         <MarkdownRenderer content={content} />
       </QueryBlockScope>
     </QueryClientProvider>,
@@ -49,6 +52,37 @@ afterEach(() => {
 });
 
 describe('a block whose code cannot be loaded', () => {
+  describe('while the page is being edited, where a reload would lose unsaved text', () => {
+    const SAVE_FIRST = 'Save the page first, then reload it.';
+
+    const expectNoReload = async () => {
+      await screen.findByRole('alert');
+      fireEvent.click(screen.getByRole('button', { name: /Try again/ }));
+      await screen.findByText(new RegExp(SAVE_FIRST));
+      expect(screen.queryByRole('button', { name: /Reload page/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Try again/ })).not.toBeInTheDocument();
+    };
+
+    it('the editor node offers no reload after a failed retry', async () => {
+      const props = { node: { attrs: { target: 'dashboard:d1' } } } as unknown as NodeViewProps;
+      render(<QueryEmbedNode {...props} />);
+      await expectNoReload();
+    });
+
+    it('nor does the preview beside the editor', async () => {
+      page(':::query dashboard:d1:::', { pageId: 'page1', editing: true });
+      await expectNoReload();
+    });
+
+    it('still retries first', async () => {
+      page(':::query dashboard:d1:::', { pageId: 'page1', editing: true });
+      await screen.findByRole('alert');
+      chunk.fails = false;
+      fireEvent.click(screen.getByRole('button', { name: /Try again/ }));
+      expect(await screen.findByTestId('the-block')).toBeInTheDocument();
+    });
+  });
+
   it('stays inside the block: the page text stays', async () => {
     page('Text before.\n\n:::query dashboard:d1:::\n\nText after.');
     expect(await screen.findByRole('alert')).toHaveTextContent(MESSAGE);

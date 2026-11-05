@@ -130,7 +130,8 @@ function HtmlContent({ html, className }: { html: string; className?: string }) 
         .filter((slot) => attachmentIdOf(slot.src) !== null)
     );
   }, [container]);
-  const blocksRun = useContext(QueryBlockScope) !== null;
+  const scope = useContext(QueryBlockScope);
+  const blocksRun = scope !== null;
   const blocks = useMemo<QueryBlockSlot[]>(() => {
     if (!container || !blocksRun) return [];
     const found: QueryBlockSlot[] = [];
@@ -161,7 +162,11 @@ function HtmlContent({ html, className }: { html: string; className?: string }) 
         ),
       )}
       {blocks.map((block, i) =>
-        createPortal(<LazyQueryBlock target={block.target} />, block.el, `${block.target}-${i}`),
+        createPortal(
+          <LazyQueryBlock target={block.target} editing={scope?.editing} />,
+          block.el,
+          `${block.target}-${i}`,
+        ),
       )}
     </>
   );

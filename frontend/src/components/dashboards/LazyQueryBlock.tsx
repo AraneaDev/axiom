@@ -17,11 +17,13 @@ const loadQueryBlock = () =>
  * failure stays in the block, so the page around it remains. A lazy component keeps its rejection
  * for good, so a retry needs a new one, and the boundary a new key to forget what it caught.
  * Chromium also remembers a failed import() until the document goes, without asking the network
- * again, so a retry that fails leaves only a reload.
+ * again, so a retry that fails leaves only a reload. While editing the reader does that themselves
+ * once they have saved, as a reload would lose text the page has not saved.
  * @param root0
  * @param root0.target - The block's target as written in the Markdown
+ * @param root0.editing - The page may hold unsaved text
  */
-export function LazyQueryBlock({ target }: { target: string }) {
+export function LazyQueryBlock({ target, editing }: { target: string; editing?: boolean }) {
   const [attempt, setAttempt] = useState(() => ({ key: 0, Block: lazy(loadQueryBlock) }));
   const retry = () => setAttempt(({ key }) => ({ key: key + 1, Block: lazy(loadQueryBlock) }));
   const { key, Block } = attempt;
@@ -37,23 +39,27 @@ export function LazyQueryBlock({ target }: { target: string }) {
           >
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span className="flex-1 min-w-0">
-              {key === 0
-                ? 'This block could not be loaded.'
-                : 'This block could not be loaded. Reloading the page may help.'}
+              This block could not be loaded.
+              {key > 0 &&
+                (editing
+                  ? ' Save the page first, then reload it.'
+                  : ' Reloading the page may help.')}
             </span>
             {key === 0 ? (
               <Button type="button" size="sm" variant="outline" onClick={retry}>
                 <RefreshCw className="h-4 w-4" /> Try again
               </Button>
             ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => window.location.reload()}
-              >
-                <RotateCw className="h-4 w-4" /> Reload page
-              </Button>
+              !editing && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => window.location.reload()}
+                >
+                  <RotateCw className="h-4 w-4" /> Reload page
+                </Button>
+              )
             )}
           </div>
         </Card>

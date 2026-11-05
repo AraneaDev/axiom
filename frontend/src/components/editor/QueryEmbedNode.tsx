@@ -10,7 +10,7 @@ import { LazyQueryBlock } from '@/components/dashboards/LazyQueryBlock';
 export default function QueryEmbedNode({ node }: NodeViewProps) {
   return (
     <NodeViewWrapper>
-      <LazyQueryBlock target={(node.attrs.target as string) || ''} />
+      <LazyQueryBlock target={(node.attrs.target as string) || ''} editing />
     </NodeViewWrapper>
   );
 }

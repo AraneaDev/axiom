@@ -165,17 +165,27 @@ test.describe('Live blocks in wiki pages', () => {
     });
     await expect(editor.getByText('Text after.')).toBeVisible();
 
-    // Chromium remembers the failed import, so a retry fails even with the code back, and the
-    // block then offers the reload that does bring it back
+    // Chromium remembers the failed import, so a retry fails even with the code back. While
+    // editing that leaves advice and no button: a reload would lose what is not saved
     await page.unroute(chunk);
     await editor.getByRole('button', { name: 'Try again' }).first().click();
-    await editor.getByRole('button', { name: 'Reload page' }).click();
+    await expect(editor.getByText('Save the page first, then reload it.')).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'Reload page' })).toHaveCount(0);
+
+    // A real reload brings the blocks back in the editor
+    await page.reload();
     await expect(
       page.locator('.ProseMirror').first().getByTestId('widget-count').first(),
     ).toBeVisible({ timeout: 15_000 });
 
-    // And in view mode
+    // In view mode there is nothing to lose, so the block offers the reload itself. Blocked until
+    // after the page has opened, in a document that has not loaded the code yet
+    await page.route(chunk, (route) => route.abort());
     await page.goto(`${WIKI_URL}/docs/${slug}`);
+    await expect(message).toHaveCount(2, { timeout: 15_000 });
+    await page.unroute(chunk);
+    await page.getByRole('button', { name: 'Try again' }).first().click();
+    await page.getByRole('button', { name: 'Reload page' }).click();
     await expect(page.getByTestId('query-block').first().getByTestId('widget-count')).toBeVisible({
       timeout: 15_000,
     });
