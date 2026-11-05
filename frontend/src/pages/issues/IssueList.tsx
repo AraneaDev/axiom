@@ -3,7 +3,7 @@ import { Plus, Download, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
-import { fetchWithAuth } from '@/api/client';
+import { getBlob } from '@/api/client';
 import { hydrateApi } from '@/api/hydrate.api';
 import { issuesApi } from '@/api/issues.api';
 import { savedFiltersApi } from '@/api/saved-filters.api';
@@ -305,10 +305,10 @@ export default function IssueList() {
           variant="secondary"
           size="sm"
           onClick={async () => {
-            const res = await fetchWithAuth(`/api/projects/${currentProject!.id}/issues/export`, {
+            const blob = await getBlob(`/api/projects/${currentProject!.id}/issues/export`, {
               headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            });
-            const blob = await res.blob();
+            }).catch(() => null);
+            if (!blob) return;
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;

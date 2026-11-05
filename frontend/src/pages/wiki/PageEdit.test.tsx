@@ -33,7 +33,6 @@ vi.mock('@/api/client', () => ({
   post: vi.fn(),
   patch: vi.fn(),
   del: vi.fn(),
-  fetchWithAuth: vi.fn(),
   getAccessToken: () => 'token',
 }));
 

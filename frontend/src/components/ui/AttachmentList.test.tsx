@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock useQuery to avoid network calls
@@ -14,9 +14,8 @@ vi.mock('@/api/attachments.api', () => ({
   },
 }));
 
-vi.mock('@/api/client', () => ({
-  fetchWithAuth: vi.fn().mockResolvedValue({ ok: false }),
-}));
+const getBlob = vi.hoisted(() => vi.fn());
+vi.mock('@/api/client', () => ({ getBlob }));
 
 vi.mock('@/lib/format', () => ({
   formatSize: (n: number) => `${n}B`,
@@ -90,6 +89,17 @@ describe('AttachmentList', () => {
     const att = makeAttachment({ id: 'att-1', uploaderId: 'user-1' });
     render(<AttachmentList attachments={[att]} currentUserId="user-1" />);
     expect(screen.queryByTitle('Delete attachment')).not.toBeInTheDocument();
+  });
+
+  it('downloads through getBlob, which refreshes an expired token', async () => {
+    getBlob.mockResolvedValue(new Blob(['x']));
+    const createObjectURL = vi.fn(() => 'blob:x');
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }));
+    const att = makeAttachment({ id: 'att-1', mimeType: 'text/plain' });
+    render(<AttachmentList attachments={[att]} />);
+    fireEvent.click(screen.getByTitle('Download file'));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+    expect(getBlob).toHaveBeenCalledWith('/api/attachments/att-1/download');
   });
 
   it('shows download button for each attachment', () => {

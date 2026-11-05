@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
-import { fetchWithAuth } from '@/api/client';
+import { getBlob } from '@/api/client';
 import { canPreview } from '@/lib/attachment-utils';
 import { formatSize } from '@/lib/format';
 import { cn, formatDate } from '@/lib/utils';
@@ -21,10 +21,8 @@ function AuthImage({ src, alt, className }: { src: string; alt: string; classNam
   const { data: blobUrl } = useQuery({
     queryKey: ['auth-image', src],
     queryFn: async () => {
-      const res = await fetchWithAuth(src);
-      if (!res.ok) return null;
-      const blob = await res.blob();
-      return URL.createObjectURL(blob);
+      const blob = await getBlob(src).catch(() => null);
+      return blob && URL.createObjectURL(blob);
     },
     staleTime: Infinity,
     gcTime: 5 * 60_000,
@@ -68,9 +66,8 @@ export function AttachmentList({
 
   const handleDownload = async (attachment: AttachmentMeta) => {
     const url = attachmentsApi.getDownloadUrl(attachment.id);
-    const res = await fetchWithAuth(url);
-    if (!res.ok) return;
-    const blob = await res.blob();
+    const blob = await getBlob(url).catch(() => null);
+    if (!blob) return;
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;

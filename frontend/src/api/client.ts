@@ -141,12 +141,7 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   return res.json();
 }
 
-/**
- * Fetch with auth headers. Use for blob/download endpoints where get() doesn't work.
- * @param url
- * @param init
- */
-export async function fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
+async function fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
   return fetch(url, {
     ...init,
     headers: {
@@ -160,11 +155,12 @@ export async function fetchWithAuth(url: string, init?: RequestInit): Promise<Re
  * Fetch a file as a Blob with auth. Refreshes an expired access token once (sharing the
  * single in-flight refresh with the other helpers) and retries.
  * @param url - Absolute path of the file, e.g. /api/attachments/<id>.
+ * @param init - Headers and such for the request.
  * @returns The file.
  * @throws {ApiError} With the response status when the file can't be fetched.
  */
-export async function getBlob(url: string): Promise<Blob> {
-  let res = await fetchWithAuth(url);
+export async function getBlob(url: string, init?: RequestInit): Promise<Blob> {
+  let res = await fetchWithAuth(url, init);
   if (res.status === 401 && refreshToken) {
     if (!refreshPromise) {
       refreshPromise = refreshAccessToken().finally(() => {
@@ -177,7 +173,7 @@ export async function getBlob(url: string): Promise<Blob> {
       window.location.href = '/login';
       throw new ApiError(401, 'Session expired');
     }
-    res = await fetchWithAuth(url);
+    res = await fetchWithAuth(url, init);
   }
   if (!res.ok) throw new ApiError(res.status, 'File could not be loaded');
   return res.blob();

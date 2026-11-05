@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { attachmentsApi } from '@/api/attachments.api';
 import type { AttachmentMeta } from '@/api/attachments.api';
-import { fetchWithAuth } from '@/api/client';
+import { getBlob } from '@/api/client';
 import { canConvertToMarkdown, getPreviewType } from '@/lib/attachment-utils';
 import { formatSize } from '@/lib/format';
 
@@ -18,16 +18,11 @@ interface AttachmentPreviewProps {
 }
 
 async function fetchAuthBlob(url: string): Promise<string> {
-  const res = await fetchWithAuth(url);
-  if (!res.ok) throw new Error('Failed to fetch');
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
+  return URL.createObjectURL(await getBlob(url));
 }
 
 async function fetchAuthText(url: string): Promise<string> {
-  const res = await fetchWithAuth(url);
-  if (!res.ok) throw new Error('Failed to fetch');
-  return res.text();
+  return (await getBlob(url)).text();
 }
 
 function useAuthBlob(url: string) {
@@ -173,9 +168,8 @@ function AttachmentPreviewInner({
 
   const handleDownload = async () => {
     const url = attachmentsApi.getDownloadUrl(attachment.id);
-    const res = await fetchWithAuth(url);
-    if (!res.ok) return;
-    const blob = await res.blob();
+    const blob = await getBlob(url).catch(() => null);
+    if (!blob) return;
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;

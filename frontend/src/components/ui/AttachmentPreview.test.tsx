@@ -19,7 +19,7 @@ vi.mock('@/api/attachments.api', () => ({
 }));
 
 vi.mock('@/api/client', () => ({
-  fetchWithAuth: vi.fn().mockResolvedValue({ ok: false }),
+  getBlob: vi.fn().mockRejectedValue(new Error('no file')),
 }));
 
 vi.mock('@/lib/format', () => ({

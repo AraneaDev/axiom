@@ -40,6 +40,17 @@ describe('getBlob', () => {
     expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe('Bearer new-access');
   });
 
+  it('sends the headers it is given, on the retry as well', async () => {
+    const blob = new Blob(['x']);
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 401 } as Response)
+      .mockResolvedValueOnce(json(200, { accessToken: 'new-access', refreshToken: 'refresh2' }))
+      .mockResolvedValueOnce({ ok: true, status: 200, blob: async () => blob } as Response);
+    const init = { headers: { 'X-Requested-With': 'XMLHttpRequest' } };
+    await getBlob('/api/projects/p/issues/export', init);
+    expect(fetchMock.mock.calls[2][1].headers['X-Requested-With']).toBe('XMLHttpRequest');
+  });
+
   it('throws an error carrying the status, which the query retry predicate reads', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 404 } as Response);
     await expect(getBlob('/api/attachments/a')).rejects.toMatchObject({ status: 404 });
