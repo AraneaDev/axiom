@@ -115,6 +115,8 @@ describe('a fragment in the request target', () => {
         const token = await tokenWith([...TOKEN_SCOPES]);
         const res = await rawRequest(server, m, '/api/admin/users#/x', token);
         expect(res.status).toBe(404);
+        // The catch-all's answer, not an action's own 404
+        expect(res.body).toEqual({ error: { message: 'Not found' } });
       },
     );
   });
@@ -132,6 +134,8 @@ describe('a fragment in the request target', () => {
       const token = await tokenWith(['wiki:write']);
       const res = await rawRequest(server, m, '/api/wiki/pages/P/restrictions#', token);
       expect(res.status).toBe(404);
+      // The catch-all's answer, not an action's own 404
+      expect(res.body).toEqual({ error: { message: 'Not found' } });
     });
 
     it('refuses HEAD to a token without a wiki scope', async () => {
