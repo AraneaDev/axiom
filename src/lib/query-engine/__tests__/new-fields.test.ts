@@ -147,6 +147,31 @@ describe('the language fixes', () => {
     expect(run('duedate = "null"', { ...issue, dueDate: null })).toBe(false);
   });
 
+  it('NOT keeps the rows with an empty column, and goes down through AND and OR', () => {
+    const notTim = { NOT: compile('assignee = currentUser()') };
+    expect(compile('NOT assignee = currentUser()')).toEqual({
+      OR: [{ assigneeId: null }, notTim],
+    });
+    const notThree = { OR: [{ storyPoints: null }, { NOT: { storyPoints: 3 } }] };
+    expect(compile('NOT storypoints = 3')).toEqual(notThree);
+    expect(compile('NOT (type = BUG AND storypoints = 3)')).toEqual({
+      OR: [{ NOT: { type: 'BUG' } }, notThree],
+    });
+    expect(compile('NOT (type = BUG OR storypoints = 3)')).toEqual({
+      AND: [{ NOT: { type: 'BUG' } }, notThree],
+    });
+    expect(compile('NOT (NOT storypoints = 3)')).toEqual({ storyPoints: 3 });
+    // These have an answer for an empty column already
+    expect(compile('NOT assignee = null')).toEqual({ NOT: { assigneeId: null } });
+    expect(compile('NOT storypoints != 3')).toEqual({ NOT: compile('storypoints != 3') });
+    expect(compile('NOT storypoints NOT IN (3)')).toEqual({
+      NOT: compile('storypoints NOT IN (3)'),
+    });
+    expect(compile('storypoints != 3')).toEqual({
+      OR: [{ storyPoints: null }, { storyPoints: { not: 3 } }],
+    });
+  });
+
   it('matches nobody for currentUser() without a user', () => {
     const noUser: QueryContext = { projectId: 'p1' };
     const nothing = { id: { in: [] } };

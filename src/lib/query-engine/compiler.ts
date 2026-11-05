@@ -246,7 +246,10 @@ function compileComparison(
         ? { [joinName]: { none: { [subField]: { equals: strVal, mode: 'insensitive' } } } }
         : { [joinName]: { some: condition } };
     }
-    return { [joinName]: condition };
+    // No row to compare is not this value, as the evaluator reads it
+    return isNegated
+      ? { OR: [{ [joinName]: null }, { [joinName]: condition }] }
+      : { [joinName]: condition };
   }
 
   const column = fieldDef.column;
@@ -290,7 +293,10 @@ function compileComparison(
     return { [column]: scalar };
   }
   if (operator === '!=') {
-    return { [column]: { not: scalar } };
+    // An empty column is not this value, as the evaluator reads it. SQL would leave it out
+    return fieldDef.nullable && scalar !== null
+      ? { OR: [{ [column]: null }, { [column]: { not: scalar } }] }
+      : { [column]: { not: scalar } };
   }
 
   // Numeric and date fields
@@ -354,14 +360,17 @@ function compileIn(
     if (fieldDef.many) {
       return { [fieldDef.join]: { [negated ? 'none' : 'some']: { [subField]: filter } } };
     }
-    return {
-      [fieldDef.join]: {
-        [subField]: negated ? { notIn: scalars, mode: 'insensitive' } : filter,
-      },
-    };
+    if (negated) {
+      const others = { [fieldDef.join]: { [subField]: { notIn: scalars, mode: 'insensitive' } } };
+      return { OR: [{ [fieldDef.join]: null }, others] };
+    }
+    return { [fieldDef.join]: { [subField]: filter } };
   }
 
-  return { [column]: negated ? { notIn: scalars } : { in: scalars } };
+  if (!negated) return { [column]: { in: scalars } };
+  return fieldDef.nullable
+    ? { OR: [{ [column]: null }, { [column]: { notIn: scalars } }] }
+    : { [column]: { notIn: scalars } };
 }
 
 /**
@@ -379,6 +388,83 @@ function chainOperands(ast: Expression, type: 'and' | 'or'): Expression[] {
     else operands.push(node);
   }
   return operands;
+}
+
+/**
+ * The column of a comparison that SQL answers with unknown on an empty column, where the evaluator
+ * answers no. NOT over unknown is unknown again, which would leave out the very rows NOT asks for.
+ * @param ast - The comparison
+ * @param registry - The fields
+ * @returns The column, or null when the comparison always has an answer: one about null, != and
+ * NOT IN (which hold for an empty column already), ~ (through its relation), a custom or derived
+ * field (through theirs)
+ */
+function columnUnknownWhenEmpty(
+  ast: Extract<Expression, { type: 'comparison' | 'in' }>,
+  registry: FieldRegistry,
+): string | null {
+  if (customFieldName(ast.field) !== null || derivedField(ast.field.toLowerCase())) return null;
+  const fieldDef = lookupField(ast.field, registry);
+  if (!fieldDef.nullable) return null;
+  const decided =
+    ast.type === 'in'
+      ? ast.negated
+      : ast.value.type === 'null' || ast.operator === '!=' || ast.operator === '~';
+  return decided ? null : fieldDef.column;
+}
+
+/**
+ * What NOT means, as the evaluator reads it: the rows the expression does not hold for. NOT goes
+ * down to the comparisons, so each can answer for its own empty column.
+ * @param ast - The expression under the NOT
+ * @param registry - The fields
+ * @param context - The query's context
+ * @param depth - How deep this is
+ * @throws {QueryValueError} For a value its field can't take, or nesting past MAX_DEPTH
+ */
+function compileNegated(
+  ast: Expression,
+  registry: FieldRegistry,
+  context: QueryContext,
+  depth: number,
+): Record<string, unknown> {
+  if (depth > MAX_DEPTH) {
+    throw new QueryValueError(`A query can nest at most ${MAX_DEPTH} levels deep`);
+  }
+  switch (ast.type) {
+    case 'not':
+      return compileAt(ast.operand, registry, context, depth + 1);
+
+    case 'and': {
+      // Text holds for every row here, as it does without the NOT: the text search answers for it
+      const operands = chainOperands(ast, 'and').filter((operand) => operand.type !== 'freetext');
+      return operands.length > 0
+        ? { OR: operands.map((operand) => compileNegated(operand, registry, context, depth + 1)) }
+        : { NOT: {} };
+    }
+
+    case 'or':
+      return {
+        AND: chainOperands(ast, 'or').map((operand) =>
+          compileNegated(operand, registry, context, depth + 1),
+        ),
+      };
+
+    case 'comparison':
+    case 'in': {
+      const where = { NOT: compileAt(ast, registry, context, depth) };
+      const column = columnUnknownWhenEmpty(ast, registry);
+      return column === null ? where : { OR: [{ [column]: null }, where] };
+    }
+
+    case 'freetext':
+      return { NOT: {} };
+
+    default: {
+      const _exhaustive: never = ast;
+      throw new Error(`Unhandled expression type: ${JSON.stringify(_exhaustive)}`);
+    }
+  }
 }
 
 function compileAt(
@@ -412,7 +498,7 @@ function compileAt(
       };
 
     case 'not':
-      return { NOT: compileAt(ast.operand, registry, context, depth + 1) };
+      return compileNegated(ast.operand, registry, context, depth + 1);
 
     case 'freetext':
       return {};

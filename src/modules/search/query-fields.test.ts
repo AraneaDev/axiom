@@ -7,6 +7,7 @@ import { join } from 'path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { executeAction } from '../../actions/execute';
 import { prisma } from '../../config/database';
 import {
   compileToPrisma,
@@ -596,6 +597,111 @@ describe('query fields', () => {
       }
     });
 
+    it('NOT answers as the evaluator does, on empty columns and nested', async () => {
+      const pointed = await makeIssue('pointed');
+      await prisma.issue.update({
+        where: { id: pointed.id },
+        data: { storyPoints: 3, dueDate: new Date('2026-03-01T00:00:00Z') },
+      });
+      const noColumn = await makeIssue('noColumn');
+      await prisma.issue.update({ where: { id: noColumn.id }, data: { columnId: null } });
+      const { name: status } = await prisma.boardColumn.findUniqueOrThrow({
+        where: { id: openColumn },
+      });
+      const user = member.username;
+      const queries = [
+        // On a nullable column
+        'NOT assignee = currentUser()',
+        `NOT assignee = "${user}"`,
+        `NOT assignee = "${member.id}"`,
+        `NOT assignee != "${user}"`,
+        'NOT assignee != currentUser()',
+        'NOT assignee = null',
+        'NOT assignee != null',
+        `NOT assignee IN ("${user}")`,
+        `NOT assignee NOT IN ("${user}")`,
+        `NOT assignee ~ "${user.slice(1, -1)}"`,
+        `NOT (NOT assignee = "${user}")`,
+        'NOT sprint = "Named sprint"',
+        'NOT sprint != "Named sprint"',
+        'NOT sprint IN ("Named sprint", "Now")',
+        'NOT sprint NOT IN ("Named sprint")',
+        'NOT sprint = currentSprint()',
+        'NOT sprint != currentSprint()',
+        'NOT sprint = null',
+        'NOT storypoints = 3',
+        'NOT storypoints != 3',
+        'NOT storypoints > 2',
+        'NOT storypoints < 2',
+        'NOT storypoints IN (3)',
+        'NOT storypoints NOT IN (3)',
+        'NOT storypoints = null',
+        'storypoints != 3',
+        'storypoints NOT IN (3)',
+        'NOT duedate = "2026-03-01"',
+        'NOT duedate > "2026-01-01"',
+        'NOT duedate < "2026-01-01"',
+        'NOT duedate != "2026-03-01"',
+        'NOT duedate = null',
+        'duedate != "2026-03-01"',
+        // Through a relation that can be empty
+        `NOT status = "${status}"`,
+        `status != "${status}"`,
+        `NOT status != "${status}"`,
+        `status IN ("${status}")`,
+        `NOT status IN ("${status}")`,
+        `status NOT IN ("${status}")`,
+        `NOT status NOT IN ("${status}")`,
+        'NOT status = null',
+        'NOT label = nosuchlabel',
+        'NOT label != nosuchlabel',
+        'NOT label = null',
+        'NOT done = true',
+        'NOT done = false',
+        'NOT sprintstate = ACTIVE',
+        'NOT sprintstate != ACTIVE',
+        'NOT sprintstate = null',
+        // Columns that are never empty, and what no column answers
+        `NOT creator = "${ctx.owner.username}"`,
+        `NOT project = ${ctx.projectPrefix}`,
+        'NOT type = BUG',
+        'NOT priority > MEDIUM',
+        'NOT blocked = true',
+        'NOT cf.Cost > 9',
+        'NOT cf.Severity = High',
+        'NOT cf.Notes = null',
+        'NOT cf.Owner = currentUser()',
+        // Nested
+        `NOT (assignee = "${user}" AND storypoints = 3)`,
+        `NOT (assignee = "${user}" OR storypoints = 3)`,
+        `NOT (assignee = "${user}" AND (sprint = "Named sprint" OR duedate > "2026-01-01"))`,
+        `NOT (NOT (assignee = "${user}" OR sprint = "Named sprint"))`,
+        `NOT (NOT assignee = "${user}" AND NOT storypoints = 3)`,
+        `NOT (NOT assignee = "${user}" OR storypoints = 3)`,
+        `NOT (status = "${status}" AND NOT assignee = null)`,
+        `type != BUG AND NOT storypoints = 3`,
+        `type = BUG OR NOT (duedate > "2026-01-01" OR assignee = "${user}")`,
+      ];
+      try {
+        const differ: string[] = [];
+        for (const query of queries) {
+          const [search, evaluator] = [await found(query), await evaluated(query)];
+          if (JSON.stringify(search) !== JSON.stringify(evaluator)) {
+            differ.push(
+              `${query.replace(user, '<user>')}: ${search.length} and ${evaluator.length}`,
+            );
+          }
+        }
+        expect(differ).toEqual([]);
+        // A row that says something, so the table cannot pass on nothing
+        expect(await found('NOT assignee = currentUser()')).toContain('named');
+        expect(await found('NOT storypoints = 3')).not.toContain('pointed');
+        expect(await found('NOT storypoints = 3')).toContain('plain');
+      } finally {
+        await prisma.issue.deleteMany({ where: { id: { in: [pointed.id, noColumn.id] } } });
+      }
+    });
+
     it('agrees with the evaluator', async () => {
       const queries = [
         `assignee = "${member.username}"`,
@@ -702,6 +808,38 @@ describe('query fields', () => {
         (err: { statusCode: number }) => err.statusCode,
       );
       expect(empty).toBe(400);
+    });
+
+    it('keeps the access filter outside NOT: an unseen project stays unseen', async () => {
+      const other = await createTestContext(`qfnot${Date.now()}`);
+      const mark = `unseen${Date.now()}`;
+      try {
+        await prisma.issue.create({
+          data: {
+            projectId: other.projectId,
+            number: 1,
+            title: mark,
+            body: '',
+            creatorId: other.owner.id,
+          },
+        });
+        for (const query of [
+          'NOT assignee = currentUser()',
+          'NOT storypoints = 3',
+          'NOT (storypoints = 3 AND type = BUG)',
+          'NOT (NOT assignee = null OR sprint = "Named sprint")',
+        ]) {
+          const res = (await executeAction(
+            'query.run',
+            { query, limit: 100 },
+            { userId: member.id, channel: 'ui' },
+          )) as { items: unknown[] };
+          expect(res.items.length, query).toBeGreaterThan(0);
+          expect(JSON.stringify(res), query).not.toContain(mark);
+        }
+      } finally {
+        await cleanupTestContext(other);
+      }
     });
 
     it('search gives currentUser() its user', async () => {

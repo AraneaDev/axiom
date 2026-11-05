@@ -2512,6 +2512,8 @@ A value that can't be read as the definition's type matches nothing, and so does
 
 Operators are case-insensitive (`IN`, `in`, and `In` are all valid).
 
+An empty field is no value, so it is different from every value: `!=`, `NOT IN` and `NOT` include it. `NOT assignee = tim` and `assignee != tim` both find unassigned issues, and `NOT storyPoints > 3` finds issues without story points. Search and automation conditions answer alike.
+
 `null` (without quotes) is the empty value, as `empty()` is: `assignee = null`. `"null"` is the text. Numbers may be negative and have a fraction: `cf.Cost > -1.5`.
 
 Names with a hyphen or a space need quotes: `assignee = "jan-willem"`. An issue key is upper case, or quoted with org and team. A date in `YYYY-MM-DD` form needs no quotes: `created > 2026-01-31`.
