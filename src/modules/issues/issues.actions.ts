@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
+import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { checkProjectAccess, projectOf } from '../../middleware/requireProjectAccess';
@@ -155,6 +156,8 @@ const issueActions = [
     rest: { method: 'PATCH', path: `${PROJECT}/issues/bulk` },
     authorize: write,
     bulkCount: ({ issueIds }) => issueIds.length,
+    preview: (_ctx, { projectId, issueIds, updates }) =>
+      previews.issueBulkUpdate(projectId, issueIds, updates),
     handler: async (ctx, { projectId, issueIds, updates }) =>
       issuesService.bulkUpdate(projectId, issueIds, updates, ctx.userId),
   }),
@@ -242,8 +245,7 @@ const issueActions = [
     input: issueInput,
     output: nothing,
     rest: { method: 'DELETE', path: ISSUE },
-    preview: (_ctx, { projectId, issueNumber }) =>
-      issuesService.deleteIssuePreview(projectId, issueNumber),
+    preview: (_ctx, { projectId, issueNumber }) => previews.issueDelete(projectId, issueNumber),
     authorize: write,
     handler: async (ctx, { projectId, issueNumber }) => {
       await issuesService.deleteIssue(projectId, issueNumber, ctx.userId);
@@ -261,6 +263,8 @@ const issueActions = [
     authorize: write,
     crossContainer: (_ctx, { projectId, columnId }) =>
       issuesService.columnInOtherProject(projectId, columnId),
+    preview: (_ctx, { projectId, issueNumber, columnId }) =>
+      previews.issueMove(projectId, issueNumber, columnId),
     handler: async (_ctx, { projectId, issueNumber, columnId, position }) =>
       issuesService.moveIssue(projectId, issueNumber, columnId, position),
   }),
@@ -363,6 +367,7 @@ const commentActions = [
     input: commentTarget,
     output: nothing,
     rest: { method: 'DELETE', path: `${PROJECT}/comments/:commentId` },
+    preview: (_ctx, { commentId }) => previews.commentDelete(commentId),
     authorize: ownsComment,
     handler: async (ctx, { commentId }) => {
       await issuesService.deleteComment(commentId, ctx.userId);
@@ -447,6 +452,7 @@ const linkActions = [
     input: linkTarget.extend({ issueNumber: strictInt }),
     output: nothing,
     rest: { method: 'DELETE', path: `${ISSUE}/links/:linkId` },
+    preview: (_ctx, { linkId }) => previews.issueLinkDelete(linkId),
     authorize: ownedByProject(
       projectOf.issueLink,
       (input: z.infer<typeof linkTarget>) => ({
@@ -557,6 +563,7 @@ const webLinkActions = [
     input: linkTarget.extend({ issueNumber: strictInt }),
     output: nothing,
     rest: { method: 'DELETE', path: `${ISSUE}/web-links/:linkId` },
+    preview: (_ctx, { linkId }) => previews.issueWebLinkDelete(linkId),
     authorize: ownedByProject(
       projectOf.issueWebLink,
       (input: z.infer<typeof linkTarget>) => ({

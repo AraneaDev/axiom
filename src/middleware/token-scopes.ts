@@ -17,6 +17,8 @@
  *   /api/admin is never allowed with a token, and neither is changing space permissions or
  *   page restrictions or creating, changing or deleting projects. No scope opens these, so
  *   a write scope on orgs, teams, projects or search does nothing on these paths.
+ * - A legacy route that deletes is refused whatever the scopes, as it can't wait for approval:
+ *   see legacyRouteDeletes.
  */
 export const SCOPE_AREAS = [
   'issues',
@@ -139,6 +141,29 @@ export function scopeAllows(
   kind: 'read' | 'write',
 ): boolean {
   return scopes.includes(`${area}:write`) || (kind === 'read' && scopes.includes(`${area}:read`));
+}
+
+/**
+ * The legacy writes that delete a row without being a DELETE: toggles that remove what is there.
+ * Everything else that deletes through a legacy route is a DELETE, or is already refused by
+ * tokenAllows (admin, auth, tokens, access control).
+ */
+const LEGACY_WRITES_THAT_DELETE = [
+  /^\/api\/wiki\/pages\/[^/]+\/star$/,
+  /^\/api\/wiki\/comments\/[^/]+\/reactions$/,
+];
+
+/**
+ * Whether this request deletes through a legacy route, for a request Express did not route to a
+ * registry action. Only registry actions can wait for approval, so a token has no way to these
+ * until plan 4 migrates them (A19). Apart from tokenAllows, which says what a scope reaches and
+ * which tests compare registry bindings with.
+ * @param method - HTTP method
+ * @param path - The request path, normalized
+ */
+export function legacyRouteDeletes(method: string, path: string): boolean {
+  if (method.toUpperCase() === 'DELETE') return true;
+  return !SAFE.has(method) && LEGACY_WRITES_THAT_DELETE.some((route) => route.test(path));
 }
 
 /**

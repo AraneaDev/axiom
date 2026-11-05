@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { listWindow, pagedList } from '../../actions/paging';
+import * as previews from '../../actions/previews';
 import { READS_BUSY, readSlots } from '../../actions/read.service';
 import { registerActions } from '../../actions/registry';
 import { projectOf } from '../../middleware/requireProjectAccess';
@@ -213,6 +214,7 @@ const sprintActions = [
     output: record,
     rest: { method: 'POST', path: `${SPRINT}/issues`, status: 200 },
     bulkCount: ({ issueIds }) => issueIds.length,
+    preview: (_ctx, { sprintId, issueIds }) => previews.sprintAddIssues(sprintId, issueIds),
     authorize: writeSprint,
     handler: async (_ctx, { sprintId, issueIds }) =>
       sprintsService.addIssuesToSprint(sprintId, issueIds),

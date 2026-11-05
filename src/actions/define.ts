@@ -24,6 +24,13 @@ export interface ActionContext {
    * their own routes and limiters.
    */
   byName?: { ipAddress?: string };
+  /** Where a REST caller came from, for an audit row written here rather than per request */
+  ipAddress?: string;
+  /**
+   * Set on the run of an approved request, so its audit row names the request. Says nothing to the
+   * gate: only the approval service can let a run through.
+   */
+  approvalRunId?: string;
 }
 
 /** Where the REST adapter mounts an action. */

@@ -23,6 +23,7 @@ const PATH_RESOURCE_MAP: [RegExp, string][] = [
   [/\/api\/wiki/, 'wiki_page'],
   [/\/api\/users/, 'user'],
   [/\/api\/notifications/, 'notification'],
+  [/\/api\/agent-approvals/, 'agent_approval'],
   [/\/api\/attachments/, 'attachment'],
   [/\/api\/uploads/, 'attachment'],
   [/\/api\/saved-filters/, 'saved_filter'],
@@ -76,6 +77,8 @@ export function auditMiddleware(req: Request, res: Response, next: NextFunction)
   res.on('finish', () => {
     // Only log successful requests (2xx)
     if (res.statusCode < 200 || res.statusCode >= 300) return;
+    // Nothing ran: executeAction wrote the row that says pending_approval
+    if (res.locals.pendingApproval) return;
 
     const pathname = requestPathname(req);
     if (AUDITED_PER_ACTION.has(normalizeApiPath(pathname))) return;

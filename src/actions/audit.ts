@@ -169,8 +169,13 @@ async function writeRow(
         userId: ctx.userId,
         action,
         resourceType,
-        ipAddress: ctx.byName?.ipAddress,
-        details: { target, channel: ctx.channel, ...outcomeOf(err, approvalId) },
+        ipAddress: ctx.byName?.ipAddress ?? ctx.ipAddress,
+        details: {
+          target,
+          channel: ctx.channel,
+          ...outcomeOf(err, approvalId),
+          ...(ctx.approvalRunId ? { approvalId: ctx.approvalRunId } : {}),
+        },
       }),
     );
   } catch (auditError) {
@@ -179,7 +184,9 @@ async function writeRow(
 }
 
 /**
- * The audit row of one write action, done or refused. Reads aren't audited, as over REST.
+ * The audit row of one write action, done or refused. Reads aren't audited, as over REST. A request
+ * that waits for approval is always written here, on every channel and for a read too, as no other
+ * row would say what it is.
  * @param def - The action
  * @param rawInput - Its input as given
  * @param ctx - Who ran it
@@ -195,7 +202,8 @@ export async function auditAction(
   ctx: ActionContext,
   outcome: { err?: unknown; result?: unknown; key?: string; approvalId?: string } = {},
 ): Promise<void> {
-  if (def.kind !== 'write' || !auditedPerAction(ctx)) return;
+  const pending = outcome.approvalId !== undefined;
+  if (!pending && (def.kind !== 'write' || !auditedPerAction(ctx))) return;
   const target = targetOf(def, rawInput, outcome.result, outcome.key);
   await writeRow(def.name, def.area, target, ctx, outcome.err, outcome.approvalId);
 }

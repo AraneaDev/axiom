@@ -4,6 +4,7 @@ import { prisma } from './config/database';
 import {
   clearDecidedAgentApprovals,
   expireAgentApprovals,
+  failStuckAgentApprovals,
 } from './modules/agent-approvals/agent-approvals.cleanup';
 import { cleanupExpiredUploads } from './modules/attachments/upload-intents.service';
 import { logger } from './utils/logger';
@@ -18,9 +19,13 @@ function runUploadCleanup(): void {
   });
 }
 
-/** Expire waiting agent approvals and clear old ones; a failure waits for the next round. */
+/** Expire waiting agent approvals, close stuck ones, clear old ones; a failure waits a round. */
 function runApprovalCleanup(): void {
-  Promise.all([expireAgentApprovals(), clearDecidedAgentApprovals()]).catch((err) => {
+  Promise.all([
+    expireAgentApprovals(),
+    failStuckAgentApprovals(),
+    clearDecidedAgentApprovals(),
+  ]).catch((err) => {
     logger.error('Agent approval cleanup failed', {}, err as Error);
   });
 }

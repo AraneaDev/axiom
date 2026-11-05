@@ -16,10 +16,12 @@ import { z } from 'zod';
 
 import { defineAction } from '../../actions/define';
 import { executeAction } from '../../actions/execute';
+import { LEGACY_ROUTES } from '../../actions/legacy-routes';
 import { registerActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import app from '../../index';
 import { createAgentServer } from '../../mcp/agent-server';
+import { legacyRouteDeletes, normalizeApiPath } from '../../middleware/token-scopes';
 import { createWebSocketServer } from '../../realtime/ws-server';
 import { tokenFor, waitFor } from '../../test/collab-client';
 import {
@@ -33,9 +35,15 @@ import {
 import { authGet, authPost } from '../../test/helpers';
 import { callTool, connectMcp, serveApp, tokenHeaderFor } from '../../test/mcp-client';
 
-import { clearDecidedAgentApprovals, expireAgentApprovals } from './agent-approvals.cleanup';
+import {
+  clearDecidedAgentApprovals,
+  expireAgentApprovals,
+  failStuckAgentApprovals,
+} from './agent-approvals.cleanup';
 
 const runs: string[] = [];
+/** What approvalTest.slow waits for. */
+let releaseSlow: () => void = () => undefined;
 
 registerActions([
   defineAction({
@@ -64,6 +72,65 @@ registerActions([
     output: z.looseObject({ id: z.string() }),
     authorize: () => Promise.resolve(),
     handler: () => Promise.resolve({ id: 'x'.repeat(1024 * 1024 + 1) }),
+  }),
+  defineAction({
+    name: 'approvalTest.unstorable',
+    destructive: true,
+    area: 'issues',
+    kind: 'write',
+    summary: 'A gated test action whose result is no JSON',
+    input: z.object({}),
+    output: z.looseObject({ id: z.string() }),
+    authorize: () => Promise.resolve(),
+    handler: () => {
+      runs.push('unstorable');
+      return Promise.resolve({ id: 'x', big: 1n });
+    },
+  }),
+  defineAction({
+    name: 'approvalTest.badRedact',
+    destructive: true,
+    area: 'issues',
+    kind: 'write',
+    summary: 'A gated test action whose redaction throws',
+    input: z.object({}),
+    output: z.looseObject({ id: z.string() }),
+    redactResult: () => {
+      throw new Error('redaction broke');
+    },
+    authorize: () => Promise.resolve(),
+    handler: () => {
+      runs.push('badRedact');
+      return Promise.resolve({ id: 'x' });
+    },
+  }),
+  defineAction({
+    name: 'approvalTest.slow',
+    destructive: true,
+    area: 'issues',
+    kind: 'write',
+    summary: 'A gated test action that ends when told',
+    input: z.object({}),
+    output: z.looseObject({ id: z.string() }),
+    authorize: () => Promise.resolve(),
+    handler: async () => {
+      runs.push('slow');
+      await new Promise<void>((resolve) => {
+        releaseSlow = resolve;
+      });
+      return { id: 'late' };
+    },
+  }),
+  defineAction({
+    name: 'approvalTest.keys',
+    destructive: true,
+    area: 'issues',
+    kind: 'write',
+    summary: 'A gated test action with several fields',
+    input: z.object({ zebra: z.string(), alpha: z.looseObject({}) }),
+    output: z.looseObject({ id: z.string() }),
+    authorize: () => Promise.resolve(),
+    handler: () => Promise.resolve({ id: 'x' }),
   }),
   defineAction({
     name: 'approvalTest.free',
@@ -245,46 +312,19 @@ describe('agent approvals', () => {
       });
     });
 
-    it('says in the preview that the subtasks of an issue stay', async () => {
-      const parent = await createIssue('Parent issue');
-      const child = await createIssue('Child issue');
-      await prisma.issue.update({ where: { id: child.id }, data: { parentId: parent.id } });
-      const res = await deleteIssue(parent.number, ownerToken);
-      expect(res.body.preview).toBe(
-        `Delete ${ctx.projectPrefix}-${parent.number}: Parent issue ` +
-          '(its 1 subtask stays, without a parent)',
-      );
-      await approve(res.body.approvalId);
-      const kept = await prisma.issue.findUniqueOrThrow({ where: { id: child.id } });
-      expect(kept.parentId).toBeNull();
-    });
-
-    it('names the page and its space in the preview, and keeps the page until approved', async () => {
-      const space = await prisma.wikiSpace.create({
-        data: { name: 'Handbook', slug: `approvals-${Date.now()}`, teamId: ctx.teamId },
-      });
-      const page = await prisma.page.create({
-        data: {
-          spaceId: space.id,
-          title: 'Onboarding',
-          slug: 'onboarding',
-          body: '',
-        },
-      });
-      const res = await request(app)
-        .delete(`/api/wiki/spaces/${space.id}/pages/onboarding`)
-        .set('Authorization', ownerToken)
-        .set('X-Requested-With', 'XMLHttpRequest');
-      expect(res.status).toBe(202);
-      expect(res.body.preview).toBe('Delete the page Onboarding in Handbook');
-      expect(await prisma.page.findUnique({ where: { id: page.id } })).not.toBeNull();
-      expect((await approve(res.body.approvalId)).body.status).toBe('EXECUTED');
-      expect(await prisma.page.findUnique({ where: { id: page.id } })).toBeNull();
-    });
-
     it('falls back to the summary and the input for a preview', async () => {
       const res = await act(ownerToken, { action: 'approvalTest.plain', input: { value: 'v' } });
       expect(res.body.preview).toBe('A gated test action without a preview: {"value":"v"}');
+    });
+
+    it('sorts the keys of the fallback, whatever order the agent sent', async () => {
+      const res = await act(ownerToken, {
+        action: 'approvalTest.keys',
+        input: { zebra: 'z', alpha: { b: 1, a: 2 } },
+      });
+      expect(res.body.preview).toBe(
+        'A gated test action with several fields: {"alpha":{"a":2,"b":1},"zebra":"z"}',
+      );
     });
 
     it('caps the preview, however long the input', async () => {
@@ -294,6 +334,7 @@ describe('agent approvals', () => {
       });
       expect(res.status).toBe(202);
       expect(res.body.preview.length).toBeLessThanOrEqual(2000);
+      expect(res.body.preview).toContain('[cut: the full input is on the request]');
       const note = await prisma.notification.findFirstOrThrow({
         where: { userId: owner.id, link: res.body.approveUrl },
       });
@@ -434,7 +475,11 @@ describe('agent approvals', () => {
         orderBy: { createdAt: 'desc' },
       });
       expect(audit.via).toBe('owner-agent');
-      expect(audit.details).toMatchObject({ channel: 'rest-token', outcome: 'ok' });
+      expect(audit.details).toMatchObject({
+        channel: 'rest-token',
+        outcome: 'ok',
+        approvalId: pending.body.approvalId,
+      });
     });
 
     it('writes a pending row in the audit log, not a done one', async () => {
@@ -444,6 +489,76 @@ describe('agent approvals', () => {
         orderBy: { createdAt: 'desc' },
       });
       expect(audit.details).toMatchObject({ outcome: 'pending_approval', approvalId: id });
+    });
+
+    it('audits a pending request alike over REST, act and MCP', async () => {
+      const seen: unknown[] = [];
+      const pendingRow = async (id: string, action: string) => {
+        const row = await prisma.auditLog.findFirstOrThrow({
+          where: { userId: owner.id, action, details: { path: ['approvalId'], equals: id } },
+        });
+        expect(row.details).toMatchObject({ outcome: 'pending_approval', approvalId: id });
+        expect(row.via).toBe('owner-agent');
+        seen.push((row.details as { channel: string }).channel);
+      };
+
+      const before = new Date();
+      const issue = await createIssue();
+      const viaRest = await deleteIssue(issue.number, ownerToken);
+      await pendingRow(viaRest.body.approvalId, 'issue.delete');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      // The row of the request says what it is: no generic row claims that a delete happened
+      const generic = await prisma.auditLog.count({
+        where: { userId: owner.id, action: 'delete', createdAt: { gte: before } },
+      });
+      expect(generic).toBe(0);
+
+      const viaAct = await act(ownerToken, { action: 'approvalTest.gated', input: { value: 'a' } });
+      await pendingRow(viaAct.body.approvalId, 'approvalTest.gated');
+
+      const served = await serveApp();
+      const client = await connectMcp(served.base, ownerToken);
+      try {
+        const answer = await callTool(client, 'act', {
+          action: 'approvalTest.gated',
+          input: { value: 'm' },
+        });
+        await pendingRow(answer.data.approvalId, 'approvalTest.gated');
+      } finally {
+        await client.close();
+        await served.close();
+      }
+      expect(seen).toEqual(['rest-token', 'rest-token', 'mcp']);
+    });
+
+    it('runs once when approve and reject race, and the row says which won', async () => {
+      for (let round = 0; round < 5; round++) {
+        runs.length = 0;
+        const id = await pendingOn(`race-${round}`);
+        const [approved, rejected] = await Promise.all([
+          approve(id),
+          authPost(`/api/agent-approvals/${id}/reject`, owner.token),
+        ]);
+        expect([approved.status, rejected.status].sort()).toEqual([200, 409]);
+        const row = await prisma.agentApproval.findUniqueOrThrow({ where: { id } });
+        expect(row.status).toBe(approved.status === 200 ? 'EXECUTED' : 'REJECTED');
+        expect(runs).toEqual(approved.status === 200 ? [`race-${round}`] : []);
+      }
+    });
+
+    it.each([
+      ['a result that is no JSON', 'approvalTest.unstorable', 'unstorable'],
+      ['a redaction that throws', 'approvalTest.badRedact', 'badRedact'],
+    ])('ends in FAILED OUTCOME_UNKNOWN after %s, and never runs again', async (_, action, ran) => {
+      const pending = await act(ownerToken, { action, input: {} });
+      const res = await approve(pending.body.approvalId);
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('FAILED');
+      expect(res.body.error.code).toBe('OUTCOME_UNKNOWN');
+      expect(res.body.error.message).toContain('may have run');
+      expect(runs).toEqual([ran]);
+      expect((await approve(pending.body.approvalId)).status).toBe(409);
+      expect(runs).toEqual([ran]);
     });
 
     it('runs once when approved twice in parallel', async () => {
@@ -622,6 +737,45 @@ describe('agent approvals', () => {
       expect(res.body.status).toBe('EXPIRED');
     });
 
+    it('sweeps a row stuck in APPROVED to FAILED OUTCOME_UNKNOWN, without running it', async () => {
+      const stuck = await pendingOn('stuck');
+      const recent = await pendingOn('recent');
+      const old = new Date(Date.now() - 2 * 3_600_000);
+      await prisma.agentApproval.update({
+        where: { id: stuck },
+        data: { status: 'APPROVED', decidedAt: old },
+      });
+      await prisma.agentApproval.update({
+        where: { id: recent },
+        data: { status: 'APPROVED', decidedAt: new Date() },
+      });
+      await failStuckAgentApprovals();
+      const swept = await prisma.agentApproval.findUniqueOrThrow({ where: { id: stuck } });
+      expect(swept.status).toBe('FAILED');
+      expect(swept.error).toMatchObject({ code: 'OUTCOME_UNKNOWN' });
+      const kept = await prisma.agentApproval.findUniqueOrThrow({ where: { id: recent } });
+      expect(kept.status).toBe('APPROVED');
+      expect(runs).toEqual([]);
+    });
+
+    it('lets a run that ends after the sweep tell the truer outcome', async () => {
+      const pending = await act(ownerToken, { action: 'approvalTest.slow', input: {} });
+      const id = pending.body.approvalId as string;
+      const approving = approve(id).then((res) => res);
+      await waitFor(() => runs.includes('slow'));
+      await prisma.agentApproval.update({
+        where: { id },
+        data: { decidedAt: new Date(Date.now() - 2 * 3_600_000) },
+      });
+      await failStuckAgentApprovals();
+      releaseSlow();
+      expect((await approving).body.status).toBe('EXECUTED');
+      const row = await prisma.agentApproval.findUniqueOrThrow({ where: { id } });
+      expect(row.status).toBe('EXECUTED');
+      expect(row.result).toEqual({ id: 'late' });
+      expect(runs).toEqual(['slow']);
+    });
+
     it('clears input and result 30 days after the decision and keeps the row', async () => {
       const oldId = await pendingOn('old');
       const newId = await pendingOn('new');
@@ -637,6 +791,383 @@ describe('agent approvals', () => {
       const recent = await prisma.agentApproval.findUniqueOrThrow({ where: { id: newId } });
       expect(recent.input).toEqual({ value: 'new' });
       expect(recent.result).toEqual({ id: 'done' });
+    });
+  });
+
+  describe('legacy routes that delete', () => {
+    const concrete = (path: string) => path.replace(/:[^/]+/g, 'probe');
+    const deleting = LEGACY_ROUTES.filter((route) =>
+      legacyRouteDeletes(route.method, normalizeApiPath(concrete(route.path))),
+    );
+
+    it('are all the DELETE routes, the star and the reaction', () => {
+      const writes = deleting.filter((route) => route.method !== 'DELETE');
+      expect(writes.map((route) => `${route.method} ${route.path}`).sort()).toEqual([
+        'POST /api/wiki/comments/:commentId/reactions',
+        'POST /api/wiki/pages/:pageId/star',
+      ]);
+      const deletes = LEGACY_ROUTES.filter((route) => route.method === 'DELETE');
+      expect(deleting.filter((route) => route.method === 'DELETE')).toEqual(deletes);
+      expect(deletes.length).toBeGreaterThan(20);
+    });
+
+    it.each(LEGACY_ROUTES.filter((route) => route.method === 'DELETE').map((r) => r.path))(
+      'refuses a token on DELETE %s',
+      async (path) => {
+        const res = await request(app)
+          .delete(concrete(path))
+          .set('Authorization', ownerToken)
+          .set('X-Requested-With', 'XMLHttpRequest');
+        expect(res.status).toBe(403);
+        expect(['NEEDS_REGISTRY_ACTION', 'SCOPE']).toContain(res.body.error.code);
+      },
+    );
+
+    it.each(['/api/wiki/comments/probe/reactions', '/api/wiki/pages/probe/star'])(
+      'refuses a token on POST %s, also spelled otherwise',
+      async (path) => {
+        for (const spelled of [path, `${path}/`, path.toUpperCase().replace('/API/', '/api/')]) {
+          const res = await request(app)
+            .post(spelled)
+            .set('Authorization', ownerToken)
+            .set('X-Requested-With', 'XMLHttpRequest')
+            .send({ emoji: 'thumbsup' });
+          expect(res.status).toBe(403);
+          expect(res.body.error.code).toBe('NEEDS_REGISTRY_ACTION');
+        }
+      },
+    );
+
+    it('says what is needed, and deletes nothing', async () => {
+      const label = await prisma.label.create({
+        data: { projectId: ctx.projectId, name: `legacy-${Date.now()}`, color: '#000000' },
+      });
+      const path = `/api/projects/${ctx.projectId}/labels/${label.name}`;
+      const res = await request(app)
+        .delete(path)
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest');
+      expect(res.status).toBe(403);
+      expect(res.body.error.message).toContain('registry action');
+      expect(await prisma.label.findUnique({ where: { id: label.id } })).not.toBeNull();
+      expect(await prisma.agentApproval.count({ where: { userId: owner.id } })).toBe(0);
+    });
+
+    it('still lets a browser session delete there', async () => {
+      const label = await prisma.label.create({
+        data: { projectId: ctx.projectId, name: `session-${Date.now()}`, color: '#000000' },
+      });
+      const res = await request(app)
+        .delete(`/api/projects/${ctx.projectId}/labels/${label.name}`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .set('X-Requested-With', 'XMLHttpRequest');
+      expect(res.status).toBeLessThan(300);
+      expect(await prisma.label.findUnique({ where: { id: label.id } })).toBeNull();
+    });
+
+    it('leaves a read of the same area open', async () => {
+      const res = await request(app)
+        .get(`/api/projects/${ctx.projectId}/labels`)
+        .set('Authorization', ownerToken);
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('previews', () => {
+    /**
+     * Run a gated action through act and read its preview.
+     * @param action - The action
+     * @param input - Its input
+     */
+    async function previewOf(action: string, input: object): Promise<string> {
+      const res = await act(ownerToken, { action, input });
+      expect(res.status, JSON.stringify(res.body)).toBe(202);
+      return res.body.preview as string;
+    }
+
+    /**
+     * A space with a page, for the wiki previews.
+     * @param slugPart
+     */
+    async function pageInSpace(slugPart: string) {
+      const stamp = `${slugPart}-${Date.now()}`;
+      const space = await prisma.wikiSpace.create({
+        data: { name: `Handbook ${slugPart}`, slug: stamp, teamId: ctx.teamId },
+      });
+      const page = await prisma.page.create({
+        data: { spaceId: space.id, title: 'Onboarding', slug: 'onboarding', body: '' },
+      });
+      return { space, page };
+    }
+
+    const key = (number: number) => `${ctx.projectPrefix}-${number}`;
+
+    it('issue.delete: key first, subtasks counted as of the request', async () => {
+      const parent = await createIssue('Parent issue');
+      const child = await createIssue('Child issue');
+      await prisma.issue.update({ where: { id: child.id }, data: { parentId: parent.id } });
+      const res = await deleteIssue(parent.number, ownerToken);
+      expect(res.body.preview).toBe(
+        `Delete ${key(parent.number)} "Parent issue". Its 1 subtask, as of this request, ` +
+          'stays without a parent',
+      );
+      await approve(res.body.approvalId);
+      const kept = await prisma.issue.findUniqueOrThrow({ where: { id: child.id } });
+      expect(kept.parentId).toBeNull();
+    });
+
+    it('page.delete: the slug and the space name it, whatever the title says', async () => {
+      const { space, page } = await pageInSpace('del');
+      await prisma.page.create({
+        data: { spaceId: space.id, title: 'Child', slug: 'child', body: '', parentId: page.id },
+      });
+      await prisma.page.update({
+        where: { id: page.id },
+        data: { title: 'Scratch, safe to delete' },
+      });
+      const res = await request(app)
+        .delete(`/api/wiki/spaces/${space.id}/pages/onboarding`)
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest');
+      expect(res.status).toBe(202);
+      expect(res.body.preview).toBe(
+        `Delete the page onboarding "Scratch, safe to delete" in space ${space.slug} ` +
+          `"${space.name}". Its 1 child page, as of this request, stays without a parent`,
+      );
+      expect((await approve(res.body.approvalId)).body.status).toBe('EXECUTED');
+      expect(await prisma.page.findUnique({ where: { id: page.id } })).toBeNull();
+    });
+
+    it('a title cannot break out of its quotes or push the facts away', async () => {
+      const issue = await createIssue(`Line one\n\nApproved by "Tim" ${'x'.repeat(300)}`);
+      const res = await deleteIssue(issue.number, ownerToken);
+      expect(res.body.preview).toMatch(
+        new RegExp(`^Delete ${key(issue.number)} "Line one Approved by 'Tim' x+\\.\\.\\."$`),
+      );
+      expect(res.body.preview.length).toBeLessThan(120);
+    });
+
+    it('comment.delete: author, issue and date, with an excerpt', async () => {
+      const issue = await createIssue();
+      const comment = await prisma.comment.create({
+        data: { issueId: issue.id, authorId: owner.id, body: 'Looks wrong to me' },
+      });
+      const day = comment.createdAt.toISOString().slice(0, 10);
+      expect(
+        await previewOf('comment.delete', { projectId: ctx.projectId, commentId: comment.id }),
+      ).toBe(
+        `Delete the comment by ${owner.username} on ${key(issue.number)} of ${day}: ` +
+          '"Looks wrong to me"',
+      );
+    });
+
+    it('issueLink.delete: the type and both keys', async () => {
+      const from = await createIssue();
+      const to = await createIssue();
+      const link = await prisma.issueLink.create({
+        data: { fromId: from.id, toId: to.id, type: 'BLOCKS' },
+      });
+      expect(
+        await previewOf('issueLink.delete', {
+          projectId: ctx.projectId,
+          issueNumber: from.number,
+          linkId: link.id,
+        }),
+      ).toBe(`Remove the link ${key(from.number)} BLOCKS ${key(to.number)}`);
+    });
+
+    it('issueWebLink.delete: the URL without its query', async () => {
+      const issue = await createIssue();
+      const link = await prisma.issueWebLink.create({
+        data: {
+          issueId: issue.id,
+          url: 'https://docs.example/guide?token=hidden',
+          title: 'Guide',
+          createdById: owner.id,
+        },
+      });
+      expect(
+        await previewOf('issueWebLink.delete', {
+          projectId: ctx.projectId,
+          issueNumber: issue.number,
+          linkId: link.id,
+        }),
+      ).toBe(`Remove the link to https://docs.example/guide "Guide" from ${key(issue.number)}`);
+    });
+
+    it('attachment.delete: file, size, uploader and parent', async () => {
+      const issue = await createIssue();
+      const file = await prisma.attachment.create({
+        data: {
+          filename: 'stored.png',
+          originalName: 'diagram.png',
+          mimeType: 'image/png',
+          size: 2048,
+          storageKey: `approvals/${Date.now()}`,
+          uploaderId: owner.id,
+          issueId: issue.id,
+        },
+      });
+      expect(await previewOf('attachment.delete', { id: file.id })).toBe(
+        `Delete the file "diagram.png" (image/png, 2 KB) uploaded by ${owner.username} ` +
+          `on ${key(issue.number)}`,
+      );
+    });
+
+    it('savedQuery.delete: owner, sharing and date', async () => {
+      const filter = await prisma.savedFilter.create({
+        data: { userId: owner.id, name: 'My bugs', query: { text: 'type = Bug' } },
+      });
+      const day = filter.createdAt.toISOString().slice(0, 10);
+      expect(await previewOf('savedQuery.delete', { filterId: filter.id })).toBe(
+        `Delete the saved query "My bugs" by ${owner.username}, shared PRIVATE, made ${day}`,
+      );
+    });
+
+    it('dashboard.delete and dashboardWidget.remove: owner, counts and widget', async () => {
+      const dashboard = await prisma.dashboard.create({
+        data: { name: 'Team health', ownerId: owner.id },
+      });
+      const widget = await prisma.dashboardWidget.create({
+        data: { dashboardId: dashboard.id, type: 'COUNT', title: 'Open bugs', position: 0 },
+      });
+      const day = dashboard.createdAt.toISOString().slice(0, 10);
+      expect(await previewOf('dashboard.delete', { id: dashboard.id })).toBe(
+        `Delete the dashboard "Team health" by ${owner.username}, shared PRIVATE, made ${day}, ` +
+          'with its 1 widget as of this request',
+      );
+      expect(
+        await previewOf('dashboardWidget.remove', { id: dashboard.id, widgetId: widget.id }),
+      ).toBe(
+        `Remove the COUNT widget "Open bugs" from the dashboard "Team health" by ${owner.username}`,
+      );
+    });
+
+    it('creates no doomed request for a widget or link that does not exist', async () => {
+      const dashboard = await prisma.dashboard.create({
+        data: { name: 'Empty', ownerId: owner.id },
+      });
+      const widget = await act(ownerToken, {
+        action: 'dashboardWidget.remove',
+        input: { id: dashboard.id, widgetId: 'missing' },
+      });
+      expect(widget.status).toBe(404);
+      const { page } = await pageInSpace('nolink');
+      const link = await act(ownerToken, {
+        action: 'pageIssueLink.remove',
+        input: { pageId: page.id, issueId: 'missing' },
+      });
+      expect(link.status).toBe(404);
+      expect(await prisma.agentApproval.count({ where: { userId: owner.id } })).toBe(0);
+    });
+
+    it('pageIssueLink.remove: the page by slug and the issue by key', async () => {
+      const issue = await createIssue();
+      const { space, page } = await pageInSpace('link');
+      await prisma.wikiPageIssueLink.create({
+        data: { pageId: page.id, issueId: issue.id, linkType: 'EMBED', createdById: owner.id },
+      });
+      expect(await previewOf('pageIssueLink.remove', { pageId: page.id, issueId: issue.id })).toBe(
+        `Remove the link between the page onboarding in space ${space.slug} and ${key(issue.number)}`,
+      );
+    });
+
+    /** Eleven issues, one more than the bulk threshold. */
+    async function manyIssues() {
+      const issues = [];
+      for (let i = 0; i < 11; i++) issues.push(await createIssue(`Bulk ${i}`));
+      return issues;
+    }
+
+    it('issue.bulkUpdate: the count, some keys and each change by name', async () => {
+      const issues = await manyIssues();
+      const preview = await previewOf('issue.bulkUpdate', {
+        projectId: ctx.projectId,
+        issueIds: [...issues.map((issue) => issue.id), 'not-in-this-project'],
+        updates: { priority: 'HIGH', assigneeId: member.id, labels: ['urgent'] },
+      });
+      expect(preview).toContain(`Change 11 issues of ${ctx.projectPrefix}`);
+      expect(preview).toContain(key(issues[0].number));
+      expect(preview).toContain('and 1 more');
+      expect(preview).toContain(`assignee to ${member.username}`);
+      expect(preview).toContain('priority to HIGH');
+      expect(preview).toContain('labels to urgent');
+      expect(preview).toContain('1 id outside this project is ignored');
+      expect(preview).not.toContain(member.id);
+    });
+
+    it('sprint.addIssues: the sprint by name and state, some keys', async () => {
+      const issues = await manyIssues();
+      const sprint = await prisma.sprint.create({
+        data: {
+          projectId: ctx.projectId,
+          name: 'Sprint 7',
+          startDate: new Date('2026-11-02'),
+          endDate: new Date('2026-11-16'),
+        },
+      });
+      const preview = await previewOf('sprint.addIssues', {
+        projectId: ctx.projectId,
+        sprintId: sprint.id,
+        issueIds: issues.map((issue) => issue.id),
+      });
+      expect(preview).toContain(
+        `Add 11 issues of ${ctx.projectPrefix} to the sprint "Sprint 7" ` +
+          '(PLANNING, 2026-11-02 to 2026-11-16)',
+      );
+      expect(preview).toContain(key(issues[0].number));
+    });
+
+    it('issue.move: the issue by key, and no name from another project', async () => {
+      const issue = await createIssue();
+      const elsewhere = await createTestContext('agent-approvals-other');
+      try {
+        const column = await prisma.boardColumn.create({
+          data: { projectId: elsewhere.projectId, name: 'Secret column', position: 50 },
+        });
+        const preview = await previewOf('issue.move', {
+          projectId: ctx.projectId,
+          issueNumber: issue.number,
+          columnId: column.id,
+        });
+        expect(preview).toBe(
+          `Move ${key(issue.number)} "Target issue" to a column of another project`,
+        );
+      } finally {
+        await cleanupTestContext(elsewhere);
+      }
+    });
+
+    it('page.move: from where to where by slug', async () => {
+      const from = await pageInSpace('from');
+      const to = await pageInSpace('to');
+      const preview = await previewOf('page.move', {
+        pageId: from.page.id,
+        targetSpaceId: to.space.id,
+      });
+      expect(preview).toBe(
+        `Move the page onboarding "Onboarding" from space ${from.space.slug} ` +
+          `to space ${to.space.slug} "${to.space.name}"`,
+      );
+    });
+
+    it('page.move: refuses a destination the caller may not write before asking', async () => {
+      const from = await pageInSpace('reach');
+      const stranger = await createTestContext('agent-approvals-stranger');
+      try {
+        const space = await prisma.wikiSpace.create({
+          data: { name: 'Their space', slug: `their-${Date.now()}`, teamId: stranger.teamId },
+        });
+        const res = await act(ownerToken, {
+          action: 'page.move',
+          input: { pageId: from.page.id, targetSpaceId: space.id },
+        });
+        expect([403, 404]).toContain(res.status);
+        expect(JSON.stringify(res.body)).not.toContain('Their space');
+        expect(await prisma.agentApproval.count({ where: { userId: owner.id } })).toBe(0);
+      } finally {
+        await cleanupTestContext(stranger);
+      }
     });
   });
 
@@ -768,7 +1299,7 @@ describe('agent approvals', () => {
       const note = await prisma.notification.findFirstOrThrow({
         where: { userId: owner.id, type: 'agent:approval', link: `/approvals/agent/${id}` },
       });
-      expect(note.title).toBe('Claude Code wants to: Run the test action on noticed');
+      expect(note.title).toBe('owner-agent wants to: Run the test action on noticed');
     });
 
     it("sends a realtime event to the user's room", async () => {

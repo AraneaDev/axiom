@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineAction, type ActionContext } from '../../actions/define';
+import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { queryRunOutput } from '../search/query.actions';
 import { limitSearch, QUERY_ITEM_FIELDS, runQuery } from '../search/query.service';
@@ -153,6 +154,7 @@ const savedFilterActions = [
     input: savedTarget,
     output: nothing,
     rest: { method: 'DELETE', path: `${SAVED}/:filterId` },
+    preview: (_ctx, { filterId }) => previews.savedQueryDelete(filterId),
     authorize: authorizeEdit,
     handler: async (ctx, { filterId }) => {
       await savedFiltersService.remove(ctx.userId, filterId);

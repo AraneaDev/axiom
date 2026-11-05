@@ -19,10 +19,13 @@ import { broadcastToUser } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 import { createNotification } from '../notifications/notifications.service';
 
+import { OUTCOME_UNKNOWN } from './agent-approvals.cleanup';
+
 const MAX_INPUT_BYTES = 256 * 1024;
 const MAX_RESULT_BYTES = 1024 * 1024;
 const MAX_PENDING_PER_USER = 50;
 const MAX_PREVIEW_LENGTH = 2000;
+const CUT_MARKER = ' [cut: the full input is on the request]';
 const MAX_NOTIFIED_PREVIEW_LENGTH = 250;
 
 export const MAX_WAIT_SECONDS = 25;
@@ -101,7 +104,24 @@ function storedInput(def: ActionDef, rawInput: unknown): Prisma.InputJsonObject 
 }
 
 /**
- * The text an approver reads. Plain text, built by the server.
+ * JSON with its keys sorted at every level, so what the agent puts first decides nothing about what
+ * is left after a cut.
+ * @param value - JSON
+ */
+function sortedJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(item).sort(([left], [right]) =>
+            left < right ? -1 : left > right ? 1 : 0,
+          ),
+        )
+      : item,
+  );
+}
+
+/**
+ * The text an approver reads. Plain text, built by the server. A cut says so.
  * @param def - The action
  * @param input - Its validated input
  * @param stored - Its input as stored
@@ -115,8 +135,10 @@ async function previewOf(
 ): Promise<string> {
   const text = def.preview
     ? await def.preview(ctx, input)
-    : `${def.summary}: ${JSON.stringify(stored)}`;
-  return text.slice(0, MAX_PREVIEW_LENGTH);
+    : `${def.summary}: ${sortedJson(stored)}`;
+  return text.length > MAX_PREVIEW_LENGTH
+    ? text.slice(0, MAX_PREVIEW_LENGTH - CUT_MARKER.length) + CUT_MARKER
+    : text;
 }
 
 /**
@@ -156,6 +178,16 @@ function createWithinCap(data: Prisma.AgentApprovalUncheckedCreateInput): Promis
     }
     return tx.agentApproval.create({ data });
   });
+}
+
+/**
+ * A preview as a notification title holds it.
+ * @param preview - The preview
+ */
+function notifiedPreview(preview: string): string {
+  return preview.length > MAX_NOTIFIED_PREVIEW_LENGTH
+    ? `${preview.slice(0, MAX_NOTIFIED_PREVIEW_LENGTH)}...`
+    : preview;
 }
 
 /**
@@ -202,7 +234,7 @@ async function requestApproval(
     await createNotification(
       ctx.userId,
       'agent:approval',
-      `Claude Code wants to: ${preview.slice(0, MAX_NOTIFIED_PREVIEW_LENGTH)}`,
+      `${ctx.apiTokenName ?? 'An agent'} wants to: ${notifiedPreview(preview)}`,
       undefined,
       approveUrl,
     );
@@ -383,8 +415,8 @@ async function claim(
 
 /**
  * Who a run acts as: the user and the token that asked, with the token's scopes as they are now and
- * the original channel, so the audit log says via. byName makes the run audit per action, as the
- * row the adapter would have written is for the approve request instead.
+ * the original channel, so the audit log says via and names this request. byName makes the run
+ * audit per action, as the row the adapter would have written is for the approve request instead.
  * @param row - The request
  * @returns The context, or undefined when the token is gone or expired
  */
@@ -402,6 +434,7 @@ async function contextOfRun(row: AgentApproval): Promise<ActionContext | undefin
     scopes: token.scopes,
     channel: row.channel as ActionContext['channel'],
     byName: {},
+    approvalRunId: row.id,
   };
 }
 
@@ -458,29 +491,36 @@ async function finishRun(row: AgentApproval, result: unknown) {
 /**
  * Approve a request and run its action as the user and token that asked, with their rights now.
  * The run's outcome is in the row, so an action refused or failing still answers 200 with FAILED.
+ * Whatever goes wrong around the run leaves FAILED OUTCOME_UNKNOWN, as the action may have run: it
+ * never runs again. If even that can't be written, the worker closes the row.
  * @param id - The request
  * @param userId - Who approves
  * @throws {AppError} 404 unless it is theirs, 409 when nothing waits anymore
  */
 export async function approveAgentApproval(id: string, userId: string) {
   const row = await claim(id, userId, 'APPROVED');
-  const ctx = await contextOfRun(row);
-  if (!ctx) {
-    return finishFailed(id, {
-      status: 403,
-      code: 'TOKEN_REVOKED',
-      message: 'The token that asked for this was revoked or has expired',
-    });
-  }
-  let result: unknown;
   try {
-    result = await approvedRun.run({ approvalId: id, action: row.action, userId }, () =>
-      executeAction(row.action, row.input, ctx),
-    );
+    const ctx = await contextOfRun(row);
+    if (!ctx) {
+      return await finishFailed(id, {
+        status: 403,
+        code: 'TOKEN_REVOKED',
+        message: 'The token that asked for this was revoked or has expired',
+      });
+    }
+    let result: unknown;
+    try {
+      result = await approvedRun.run({ approvalId: id, action: row.action, userId }, () =>
+        executeAction(row.action, row.input, ctx),
+      );
+    } catch (err) {
+      return await finishFailed(id, toActError(err));
+    }
+    return await finishRun(row, result);
   } catch (err) {
-    return finishFailed(id, toActError(err));
+    logger.error('closing an approved run failed', { id }, err as Error);
+    return finishFailed(id, OUTCOME_UNKNOWN);
   }
-  return finishRun(row, result);
 }
 
 /**

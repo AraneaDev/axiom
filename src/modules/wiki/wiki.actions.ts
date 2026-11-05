@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pageAccess, pageBySlugAccess, spaceAccess, teamPermission } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { listWindow, pagedList } from '../../actions/paging';
+import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { checkWikiSpaceOrgAccess } from '../../middleware/rbac';
@@ -253,7 +254,7 @@ const pageActions = [
     input: slugTarget,
     output: nothing,
     rest: { method: 'DELETE', path: PAGE },
-    preview: (_ctx, { spaceId, pageSlug }) => wikiService.deletePagePreview(spaceId, pageSlug),
+    preview: (_ctx, { spaceId, pageSlug }) => previews.pageDelete(spaceId, pageSlug),
     authorize: editBySlug,
     handler: async (ctx, { spaceId, pageSlug }) => {
       await wikiService.deletePage(spaceId, pageSlug, ctx.userId);
@@ -373,6 +374,10 @@ const pageActions = [
     authorize: editPage,
     crossContainer: (_ctx, { pageId, targetSpaceId, targetParentId }) =>
       wikiService.moveCrossesSpace(pageId, targetSpaceId, targetParentId),
+    preview: async (ctx, { pageId, targetSpaceId, targetParentId }) => {
+      await assertPageDestinationWritable(ctx.userId, pageId, targetSpaceId, targetParentId);
+      return previews.pageMove(pageId, targetSpaceId, targetParentId);
+    },
     handler: async (ctx, { pageId, targetSpaceId, targetParentId }) => {
       await assertPageDestinationWritable(ctx.userId, pageId, targetSpaceId, targetParentId);
       return wikiService.movePage(pageId, targetSpaceId, targetParentId, ctx.userId);
@@ -452,6 +457,7 @@ const linkActions = [
     input: pageTarget.extend({ issueId: z.string() }),
     output: nothing,
     rest: { method: 'DELETE', path: `${PAGE_BY_ID}/linked-issues/:issueId` },
+    preview: (_ctx, { pageId, issueId }) => previews.pageIssueLinkRemove(pageId, issueId),
     authorize: editPage,
     handler: async (_ctx, { pageId, issueId }) => {
       await linkService.removeEmbedLink(pageId, issueId);

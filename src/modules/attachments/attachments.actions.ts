@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { pageBySlugAccess, projectAction } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { MAX_KEY_LENGTH, parseKey, resolveKey } from '../../actions/keys';
+import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
@@ -360,6 +361,7 @@ const attachmentActions = [
     input: idTarget,
     output: nothing,
     rest: { method: 'DELETE', path: `${BASE}/:id` },
+    preview: (_ctx, { id }) => previews.attachmentDelete(id),
     authorize: async (ctx, { id }) => {
       await assertStoredParentScope(ctx, id, true);
       await attachmentsService.getDeletableAttachment(id, ctx.userId);

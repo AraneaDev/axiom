@@ -145,6 +145,10 @@ function ruleViolations(def: ActionDef): string[] {
   const violations: string[] = [];
   const inputFields = fieldsOf(def.input);
 
+  if ((def.destructive || def.admin || def.bulkCount || def.crossContainer) && !def.preview) {
+    violations.push(`${def.name}: what waits for approval needs a preview from the database (G8)`);
+  }
+
   if (def.rest?.raw && (def.destructive || def.admin || def.bulkCount || def.crossContainer)) {
     violations.push(
       `${def.name}: a raw binding can't wait for approval, its input can't be queued (A6)`,
@@ -373,6 +377,26 @@ describe('registry rules', () => {
         rest: { method: 'POST', path: '/api/throwaway', raw: true },
       });
       expect(ruleViolations(action)).toContainEqual(expect.stringContaining('A6'));
+    });
+
+    it.each([
+      ['destructive', { destructive: true }],
+      ['admin', { admin: true }],
+      ['bulkCount', { bulkCount: () => 1 }],
+      ['crossContainer', { crossContainer: () => Promise.resolve(false) }],
+    ])('fails on a %s action without a preview', (_, flag) => {
+      const action = defineAction({
+        ...throwaway,
+        ...flag,
+        name: 'throwaway.gated',
+        area: 'issues',
+        kind: 'write',
+        input: z.object({}),
+      });
+      expect(ruleViolations(action)).toEqual([expect.stringContaining('G8')]);
+      expect(
+        ruleViolations({ ...action, preview: () => Promise.resolve('Named') } as never),
+      ).toEqual([]);
     });
 
     it('passes with uiOnly or tokenBlocked, on reads and in other areas', () => {

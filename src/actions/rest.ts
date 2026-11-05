@@ -85,6 +85,8 @@ export function actionContextFromRequest(req: Request): ActionContext {
  */
 function sendResult(res: Response, binding: RestBinding, result: unknown): void {
   if (result instanceof PendingApproval) {
+    // executeAction wrote the row of this request: the generic one would say a delete happened
+    res.locals.pendingApproval = true;
     res.status(202).json(result.body);
     return;
   }
@@ -124,6 +126,7 @@ export function mountActions(router: Router, defs: ActionDef[]): void {
     const route = router[ROUTER_METHOD[binding.method]].bind(router);
     route(binding.path, markRegistryRoute, authenticate, async (req, res) => {
       const ctx = actionContextFromRequest(req);
+      ctx.ipAddress = req.ip;
       if (binding.raw) ctx.http = { req, res };
       // Only a read takes its fields from the query (R14); a write reads the body, as the old
       // controllers did. Neither can override the params that authorize reads.

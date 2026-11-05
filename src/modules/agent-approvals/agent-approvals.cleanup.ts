@@ -5,6 +5,29 @@ import { prisma } from '../../config/database';
 /** How long a decided request keeps its input and result. The row stays as a record. */
 const KEEP_CONTENT_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** How long a run may take before its row counts as stuck. */
+const STUCK_AFTER_MS = 60 * 60 * 1000;
+
+/** The error of a run nobody knows the end of. */
+export const OUTCOME_UNKNOWN = {
+  status: 500,
+  code: 'OUTCOME_UNKNOWN',
+  message: 'The action may have run, but its outcome could not be recorded. Check the item itself',
+};
+
+/**
+ * Close rows stuck in APPROVED: the process died during the run, or its end could not be written.
+ * They never run again. A run that does end later overwrites this with what really happened.
+ * @returns How many were closed
+ */
+export async function failStuckAgentApprovals(): Promise<number> {
+  const { count } = await prisma.agentApproval.updateMany({
+    where: { status: 'APPROVED', decidedAt: { lt: new Date(Date.now() - STUCK_AFTER_MS) } },
+    data: { status: 'FAILED', error: OUTCOME_UNKNOWN },
+  });
+  return count;
+}
+
 /**
  * Mark requests past their expiry. Approving one was refused from the moment it expired, this makes
  * the row say so. Apart from the service, so the worker doesn't load the action registry.

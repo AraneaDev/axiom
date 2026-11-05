@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineAction, type ActionContext } from '../../actions/define';
+import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { queryRunOutput } from '../search/query.actions';
 
@@ -156,6 +157,7 @@ const dashboardActions = [
     input: dashboardTarget,
     output: nothing,
     rest: { method: 'DELETE', path: `${DASHBOARDS}/:id` },
+    preview: (_ctx, { id }) => previews.dashboardDelete(id),
     authorize: authorizeEdit,
     handler: async (ctx, input) => {
       await dashboardsService.remove(ctx.userId, input.id);
@@ -272,6 +274,7 @@ const dashboardActions = [
     input: widgetTarget,
     output: nothing,
     rest: { method: 'DELETE', path: `${DASHBOARDS}/:id/widgets/:widgetId` },
+    preview: (_ctx, { id, widgetId }) => previews.dashboardWidgetRemove(id, widgetId),
     authorize: authorizeEdit,
     handler: async (ctx, input) => {
       await dashboardsService.removeWidget(ctx.userId, input.id, input.widgetId);

@@ -633,32 +633,6 @@ export async function deleteIssue(projectId: string, issueNumber: number, userId
 }
 
 /**
- * What an approver reads before an issue is deleted. Its subtasks stay, without a parent.
- * @param projectId - The project the issue belongs to
- * @param issueNumber - The issue number
- * @throws {AppError} 404 if issue not found
- */
-export async function deleteIssuePreview(projectId: string, issueNumber: number): Promise<string> {
-  const issue = await findOrThrow(
-    prisma.issue.findUnique({
-      where: { projectId_number: { projectId, number: issueNumber } },
-      select: {
-        title: true,
-        project: { select: { prefix: true } },
-        _count: { select: { children: true } },
-      },
-    }),
-    ERR.ISSUE_NOT_FOUND,
-  );
-  const subtasks = issue._count.children;
-  const left =
-    subtasks === 0
-      ? ''
-      : ` (${subtasks === 1 ? 'its 1 subtask stays' : `its ${subtasks} subtasks stay`}, without a parent)`;
-  return `Delete ${issue.project.prefix}-${issueNumber}: ${issue.title}${left}`;
-}
-
-/**
  * Get progress stats for an epic's child issues (total, completed, in-progress, percentage).
  * @param projectId - The project the epic belongs to
  * @param issueNumber - The epic issue number

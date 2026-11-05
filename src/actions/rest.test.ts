@@ -513,7 +513,7 @@ describe('REST adapter', () => {
         .get('/api/rest-test/context')
         .set('Authorization', jwtHeader);
       expect(session.body).toEqual({ channel: 'ui' });
-      expect(seenContexts[0]).toEqual({ userId, channel: 'ui' });
+      expect(seenContexts[0]).toEqual({ userId, channel: 'ui', ipAddress: expect.any(String) });
 
       const token = await tokenWith(['issues:read']);
       const viaToken = await request(app).get('/api/rest-test/context').set('Authorization', token);
@@ -524,6 +524,7 @@ describe('REST adapter', () => {
         apiTokenName: 'rest-test',
         scopes: ['issues:read'],
         channel: 'rest-token',
+        ipAddress: expect.any(String),
       });
     });
 
