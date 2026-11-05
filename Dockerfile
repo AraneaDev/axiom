@@ -11,6 +11,14 @@ COPY prisma ./prisma
 COPY prisma.config.ts ./
 RUN npx prisma generate
 
+# What production runs on, without the dev dependencies
+FROM base AS prod-deps
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npx prisma generate
+
 # Frontend build
 FROM node:25-alpine AS frontend-build
 WORKDIR /app/frontend
@@ -32,9 +40,9 @@ RUN npm run build
 FROM base AS production
 ENV NODE_ENV=production
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/prisma ./prisma
-COPY --from=deps /app/prisma.config.ts ./
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/prisma ./prisma
+COPY --from=prod-deps /app/prisma.config.ts ./
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/dist-editor-core ./dist-editor-core
 COPY --from=frontend-build /app/frontend/dist ./public

@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { existsSync } from 'fs';
 import { createRequire } from 'module';
 import path from 'path';
 
@@ -14,15 +15,28 @@ router.get('/openapi.json', (_req, res) => {
 });
 
 /**
- * The Scalar bundle comes from the installed package and is served from the app's own origin, so
- * the docs page loads no third-party script (this origin holds the tokens in localStorage).
+ * The Scalar bundle is served from the app's own origin, so the docs page loads no third-party
+ * script (this origin holds the tokens in localStorage). `npm run build` copies it into dist, and
+ * the package itself is a dev dependency, which is where running from source finds it.
  */
-const SCALAR_ASSETS = path.join(
-  path.dirname(createRequire(__filename).resolve('@scalar/api-reference')),
-  'browser',
-);
+function scalarAssets(): string {
+  const built = path.join(__dirname, '..', '..', 'docs-assets');
+  if (existsSync(built)) return built;
+  return path.join(
+    path.dirname(createRequire(__filename).resolve('@scalar/api-reference')),
+    'browser',
+  );
+}
+
 const SCALAR_SCRIPT = '/api/docs/assets/standalone.js';
-router.use('/docs/assets', express.static(SCALAR_ASSETS, { index: false, dotfiles: 'deny' }));
+router.use(
+  '/docs/assets',
+  express.static(scalarAssets(), { index: false, dotfiles: 'deny' }),
+  // Not on to the docs page below, which would answer any path with 200
+  (_req, res) => {
+    res.status(404).end();
+  },
+);
 
 const scalar = apiReference({
   url: '/api/openapi.json',
