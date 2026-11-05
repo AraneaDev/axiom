@@ -66,7 +66,8 @@ registerActions([
     target: orgTarget,
     input: orgTarget.extend(createTeamSchema.shape),
     output: record,
-    preview: (_ctx, { orgId, name, slug }) => previews.teamCreate(orgId, name, slug),
+    preview: (_ctx, { orgId, name, slug, description }) =>
+      previews.teamCreate(orgId, name, slug, description),
     rest: { method: 'POST', path: '/api/teams/org/:orgId' },
     authorize: orgPermission<z.infer<typeof orgTarget>>('team:create', (input) => input.orgId),
     handler: async (ctx, { orgId, ...data }) => teamsService.createTeam(orgId, ctx.userId, data),
@@ -113,7 +114,8 @@ registerActions([
     target: teamTarget,
     input: teamTarget.extend(addTeamMemberSchema.shape),
     output: record,
-    preview: (_ctx, { teamId, userId, role }) => previews.teamMemberAdd(teamId, userId, role),
+    preview: (ctx, { teamId, userId, role }) =>
+      previews.teamMemberAdd(ctx.userId, teamId, userId, role),
     rest: { method: 'POST', path: '/api/teams/:teamId/members' },
     authorize: manageMembers,
     handler: async (_ctx, { teamId, userId, role }) =>
@@ -128,8 +130,8 @@ registerActions([
     target: memberTarget,
     input: memberTarget.extend({ role: teamRoleValidator }),
     output: record,
-    preview: (_ctx, { teamId, memberId, role }) =>
-      previews.teamMemberUpdate(teamId, memberId, role),
+    preview: (ctx, { teamId, memberId, role }) =>
+      previews.teamMemberUpdate(ctx.userId, teamId, memberId, role),
     rest: { method: 'PATCH', path: '/api/teams/:teamId/members/:memberId' },
     authorize: manageMembers,
     handler: async (_ctx, { teamId, memberId, role }) =>
@@ -144,7 +146,7 @@ registerActions([
     summary: 'Remove a member from a team',
     input: memberTarget,
     output: nothing,
-    preview: (_ctx, { teamId, memberId }) => previews.teamMemberRemove(teamId, memberId),
+    preview: (ctx, { teamId, memberId }) => previews.teamMemberRemove(ctx.userId, teamId, memberId),
     rest: { method: 'DELETE', path: '/api/teams/:teamId/members/:memberId' },
     authorize: manageMembers,
     handler: async (_ctx, { teamId, memberId }) => {

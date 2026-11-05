@@ -5,7 +5,7 @@
 import crypto from 'crypto';
 
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../config/database';
 import app from '../index';
@@ -31,15 +31,17 @@ type Method = 'get' | 'post' | 'patch' | 'put' | 'delete';
  * @param userId - Its user
  * @param scopes - Its scopes
  * @param name - Its name, which a write carries as `via`
+ * @param expiresAt - When it expires, if ever
  * @returns The id and what the agent holds
  */
-async function tokenOf(userId: string, scopes: string[], name = 'reach-agent') {
+async function tokenOf(userId: string, scopes: string[], name = 'reach-agent', expiresAt?: Date) {
   const raw = `tk_${crypto.randomBytes(24).toString('hex')}`;
   const row = await prisma.apiToken.create({
     data: {
       userId,
       name,
       scopes,
+      expiresAt,
       prefix: raw.slice(0, 11),
       tokenHash: crypto.createHash('sha256').update(raw).digest('hex'),
     },
@@ -146,92 +148,85 @@ describe('admin reach', () => {
     await cleanupTestContext(ctx);
   });
 
+  /** What the owner of the org and the team can ask for. */
+  const ownerCalls = (): Array<[string, Method, string, object?]> => [
+    ['org.create', 'post', '/api/orgs', { name: 'Asked', slug: `asked-${Date.now()}` }],
+    ['org.update', 'patch', `/api/orgs/${ctx.orgId}`, { name: 'Renamed by agent' }],
+    ['org.delete', 'delete', `/api/orgs/${ctx.orgId}`],
+    ['orgMember.add', 'post', `/api/orgs/${ctx.orgId}/members`, { userId: stranger.id }],
+    ['orgMember.update', 'patch', `/api/orgs/${ctx.orgId}/members/${member.id}`, { role: 'ADMIN' }],
+    ['orgMember.remove', 'delete', `/api/orgs/${ctx.orgId}/members/${member.id}`],
+    ['invitation.list', 'get', `/api/orgs/${ctx.orgId}/invitations`],
+    [
+      'invitation.create',
+      'post',
+      `/api/orgs/${ctx.orgId}/invitations`,
+      { email: 'asked@test.dev', role: 'MEMBER' },
+    ],
+    ['invitation.revoke', 'delete', `/api/orgs/${ctx.orgId}/invitations/${invitationId}`],
+    ['team.create', 'post', `/api/teams/org/${ctx.orgId}`, { name: 'Asked', slug: 'asked' }],
+    ['team.update', 'patch', `/api/teams/${ctx.teamId}`, { name: 'Renamed by agent' }],
+    ['team.delete', 'delete', `/api/teams/${ctx.teamId}`],
+    ['teamMember.add', 'post', `/api/teams/${ctx.teamId}/members`, { userId: stranger.id }],
+    [
+      'teamMember.update',
+      'patch',
+      `/api/teams/${ctx.teamId}/members/${member.id}`,
+      { role: 'ADMIN' },
+    ],
+    ['teamMember.remove', 'delete', `/api/teams/${ctx.teamId}/members/${member.id}`],
+    [
+      'project.create',
+      'post',
+      `/api/projects/team/${ctx.teamId}`,
+      { name: 'Asked', slug: 'asked', prefix: 'ASK' },
+    ],
+    ['project.update', 'patch', `/api/projects/${ctx.projectId}`, { name: 'Renamed by agent' }],
+    ['project.delete', 'delete', `/api/projects/${ctx.projectId}`],
+    [
+      'space.create',
+      'post',
+      `/api/wiki/team/${ctx.teamId}/spaces`,
+      { name: 'Asked', slug: 'asked' },
+    ],
+    ['space.update', 'patch', `/api/wiki/spaces/${spaceId}`, { isArchived: true }],
+    ['spacePermission.list', 'get', `/api/wiki/spaces/${spaceId}/permissions`],
+    [
+      'spacePermission.set',
+      'put',
+      `/api/wiki/spaces/${spaceId}/permissions`,
+      { userId: stranger.id, level: 'ADMIN' },
+    ],
+    ['spacePermission.remove', 'delete', `/api/wiki/spaces/${spaceId}/permissions/${permissionId}`],
+    ['pageRestriction.get', 'get', `/api/wiki/pages/${pageId}/restrictions`],
+    [
+      'pageRestriction.set',
+      'put',
+      `/api/wiki/pages/${pageId}/restrictions`,
+      { type: 'VIEW', userIds: [ctx.owner.id] },
+    ],
+    ['pageRestriction.remove', 'delete', `/api/wiki/restrictions/${restrictionId}`],
+    ['token.create', 'post', '/api/users/me/tokens', { name: 'Asked', scopes: ['admin:read'] }],
+    ['token.revoke', 'delete', `/api/users/me/tokens/${ownerAgent.id}`],
+  ];
+
+  /** What only a platform admin can ask for. */
+  const platformCalls = (): Array<[string, Method, string, object?]> => [
+    ['admin.stats', 'get', '/api/admin/stats'],
+    ['admin.settings', 'get', '/api/admin/settings'],
+    ['adminUser.list', 'get', '/api/admin/users?search=factory&limit=5'],
+    ['adminUser.get', 'get', `/api/admin/users/${member.id}`],
+    ['adminUser.update', 'patch', `/api/admin/users/${member.id}`, { role: 'VIEWER' }],
+    ['adminUser.delete', 'delete', `/api/admin/users/${stranger.id}`],
+    ['adminUser.deactivate', 'post', `/api/admin/users/${member.id}/deactivate`],
+    ['adminUser.reactivate', 'post', `/api/admin/users/${member.id}/reactivate`],
+    ['auditLog.list', 'get', '/api/admin/audit-logs?limit=5'],
+    ['auditLog.get', 'get', `/api/admin/audit-logs/${auditId}`],
+  ];
+
+  const allCalls = () => [...ownerCalls(), ...platformCalls()];
+
   describe('every route a token was barred from waits for a person', () => {
-    /** What the owner of the org and the team can ask for. */
-    const ownerCalls = (): Array<[string, Method, string, object?]> => [
-      ['org.create', 'post', '/api/orgs', { name: 'Asked', slug: `asked-${Date.now()}` }],
-      ['org.update', 'patch', `/api/orgs/${ctx.orgId}`, { name: 'Renamed by agent' }],
-      ['org.delete', 'delete', `/api/orgs/${ctx.orgId}`],
-      ['orgMember.add', 'post', `/api/orgs/${ctx.orgId}/members`, { userId: stranger.id }],
-      [
-        'orgMember.update',
-        'patch',
-        `/api/orgs/${ctx.orgId}/members/${member.id}`,
-        { role: 'ADMIN' },
-      ],
-      ['orgMember.remove', 'delete', `/api/orgs/${ctx.orgId}/members/${member.id}`],
-      ['invitation.list', 'get', `/api/orgs/${ctx.orgId}/invitations`],
-      [
-        'invitation.create',
-        'post',
-        `/api/orgs/${ctx.orgId}/invitations`,
-        { email: 'asked@test.dev', role: 'MEMBER' },
-      ],
-      ['invitation.revoke', 'delete', `/api/orgs/${ctx.orgId}/invitations/${invitationId}`],
-      ['team.create', 'post', `/api/teams/org/${ctx.orgId}`, { name: 'Asked', slug: 'asked' }],
-      ['team.update', 'patch', `/api/teams/${ctx.teamId}`, { name: 'Renamed by agent' }],
-      ['team.delete', 'delete', `/api/teams/${ctx.teamId}`],
-      ['teamMember.add', 'post', `/api/teams/${ctx.teamId}/members`, { userId: stranger.id }],
-      [
-        'teamMember.update',
-        'patch',
-        `/api/teams/${ctx.teamId}/members/${member.id}`,
-        { role: 'ADMIN' },
-      ],
-      ['teamMember.remove', 'delete', `/api/teams/${ctx.teamId}/members/${member.id}`],
-      [
-        'project.create',
-        'post',
-        `/api/projects/team/${ctx.teamId}`,
-        { name: 'Asked', slug: 'asked', prefix: 'ASK' },
-      ],
-      ['project.update', 'patch', `/api/projects/${ctx.projectId}`, { name: 'Renamed by agent' }],
-      ['project.delete', 'delete', `/api/projects/${ctx.projectId}`],
-      [
-        'space.create',
-        'post',
-        `/api/wiki/team/${ctx.teamId}/spaces`,
-        { name: 'Asked', slug: 'asked' },
-      ],
-      ['space.update', 'patch', `/api/wiki/spaces/${spaceId}`, { isArchived: true }],
-      ['spacePermission.list', 'get', `/api/wiki/spaces/${spaceId}/permissions`],
-      [
-        'spacePermission.set',
-        'put',
-        `/api/wiki/spaces/${spaceId}/permissions`,
-        { userId: stranger.id, level: 'ADMIN' },
-      ],
-      [
-        'spacePermission.remove',
-        'delete',
-        `/api/wiki/spaces/${spaceId}/permissions/${permissionId}`,
-      ],
-      ['pageRestriction.get', 'get', `/api/wiki/pages/${pageId}/restrictions`],
-      [
-        'pageRestriction.set',
-        'put',
-        `/api/wiki/pages/${pageId}/restrictions`,
-        { type: 'VIEW', userIds: [ctx.owner.id] },
-      ],
-      ['pageRestriction.remove', 'delete', `/api/wiki/restrictions/${restrictionId}`],
-      ['token.create', 'post', '/api/users/me/tokens', { name: 'Asked', scopes: ['admin:read'] }],
-      ['token.revoke', 'delete', `/api/users/me/tokens/${ownerAgent.id}`],
-    ];
-
-    /** What only a platform admin can ask for. */
-    const platformCalls = (): Array<[string, Method, string, object?]> => [
-      ['admin.stats', 'get', '/api/admin/stats'],
-      ['admin.settings', 'get', '/api/admin/settings'],
-      ['adminUser.list', 'get', '/api/admin/users?search=factory&limit=5'],
-      ['adminUser.get', 'get', `/api/admin/users/${member.id}`],
-      ['adminUser.update', 'patch', `/api/admin/users/${member.id}`, { role: 'VIEWER' }],
-      ['adminUser.delete', 'delete', `/api/admin/users/${stranger.id}`],
-      ['adminUser.deactivate', 'post', `/api/admin/users/${member.id}/deactivate`],
-      ['adminUser.reactivate', 'post', `/api/admin/users/${member.id}/reactivate`],
-      ['auditLog.list', 'get', '/api/admin/audit-logs?limit=5'],
-      ['auditLog.get', 'get', `/api/admin/audit-logs/${auditId}`],
-    ];
-
     it('runs nothing for the owner, each call a request with a preview', async () => {
       const before = await prisma.organization.findUniqueOrThrow({ where: { id: ctx.orgId } });
       for (const [action, method, path, body] of ownerCalls()) {
@@ -272,7 +267,7 @@ describe('admin reach', () => {
     });
 
     it('marks all of them admin, in area admin, with a preview', () => {
-      const names = [...ownerCalls(), ...platformCalls()].map(([name]) => name);
+      const names = allCalls().map(([name]) => name);
       const wrong = names.filter((name) => {
         const def = getAction(name);
         return !def?.admin || def.area !== 'admin' || !def.preview || !def.rest;
@@ -634,6 +629,313 @@ describe('admin reach', () => {
         expect(res.status, path).toBe(403);
         expect(res.body.error.code).toBe('SCOPE');
       }
+    });
+  });
+
+  describe('a token that asks for a token (A27)', () => {
+    const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
+    const ask = (raw: string, body: object) =>
+      asToken(raw, 'post', '/api/users/me/tokens', {
+        name: 'Successor',
+        scopes: ['admin:read'],
+        ...body,
+      });
+
+    it.each([
+      ['no expiry at all', {}],
+      ['an expiry past its own', { expiresInDays: 30 }],
+    ])('refuses %s with a 400 and no request, when it expires itself', async (_label, body) => {
+      const agent = await tokenOf(ctx.owner.id, ['admin:write'], 'short-lived', inDays(10));
+      const res = await ask(agent.raw, body);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('TOKEN_OUTLIVES_ASKER');
+      expect(res.body.error.message).toMatch(/expire/i);
+      expect(await prisma.agentApproval.count({ where: { userId: ctx.owner.id } })).toBe(0);
+    });
+
+    it('takes an expiry within its own', async () => {
+      const agent = await tokenOf(ctx.owner.id, ['admin:write'], 'short-lived', inDays(10));
+      expect((await ask(agent.raw, { expiresInDays: 9 })).status).toBe(202);
+    });
+
+    it('leaves a token with no expiry free', async () => {
+      expect((await ask(ownerAgent.raw, {})).status).toBe(202);
+      expect((await ask(ownerAgent.raw, { expiresInDays: 365 })).status).toBe(202);
+    });
+
+    it('checks again at approval, as the asker may be cut short by then', async () => {
+      const agent = await tokenOf(ctx.owner.id, ['admin:write'], 'short-lived', inDays(10));
+      const asked = await ask(agent.raw, { expiresInDays: 9 });
+      await prisma.apiToken.update({ where: { id: agent.id }, data: { expiresAt: inDays(1) } });
+      const done = await approve(ctx.owner, asked.body.approvalId);
+      expect(done.body.status).toBe('FAILED');
+      expect(done.body.error.status).toBe(400);
+      expect(await prisma.apiToken.count({ where: { name: 'Successor' } })).toBe(0);
+    });
+
+    it('leaves a session alone', async () => {
+      const res = await authPost('/api/users/me/tokens', ctx.owner.token, {
+        name: 'Session made',
+        scopes: ['issues:read'],
+      });
+      expect(res.status).toBe(201);
+    });
+  });
+
+  describe('a preview reveals nothing the caller could not see (A28)', () => {
+    let other: TestContext;
+    const absentId = 'cabsentabsentabsentabsent0';
+
+    beforeAll(async () => {
+      other = await createTestContext(`rcz${Date.now()}`);
+      await prisma.team.update({
+        where: { id: other.teamId },
+        data: { name: 'Secret team name' },
+      });
+    });
+
+    afterAll(async () => {
+      await cleanupTestContext(other);
+    });
+
+    it.each<[string, (teamId: string) => [Method, string, object?]]>([
+      [
+        'invitation.list',
+        (teamId) => ['get', `/api/orgs/${ctx.orgId}/invitations?teamId=${teamId}`],
+      ],
+      [
+        'invitation.create',
+        (teamId) => [
+          'post',
+          `/api/orgs/${ctx.orgId}/invitations`,
+          { email: 'cross@test.dev', role: 'MEMBER', teamId },
+        ],
+      ],
+    ])('%s answers a team of another org as one that is not there', async (_name, call) => {
+      const hidden = await asToken(ownerAgent.raw, ...call(other.teamId));
+      const absent = await asToken(ownerAgent.raw, ...call(absentId));
+      expect(hidden.status).toBe(404);
+      expect(hidden.body).toEqual(absent.body);
+      expect(JSON.stringify(hidden.body)).not.toContain('Secret team name');
+      expect(await prisma.agentApproval.count({ where: { userId: ctx.owner.id } })).toBe(0);
+    });
+
+    it('invitation.list still names a team of its own org', async () => {
+      const res = await asToken(
+        ownerAgent.raw,
+        'get',
+        `/api/orgs/${ctx.orgId}/invitations?teamId=${ctx.teamId}`,
+      );
+      expect(res.status).toBe(202);
+      expect(res.body.preview).toContain(ctx.teamSlug);
+    });
+
+    const hiddenUserCalls = (): Array<[string, Method, string, (userId: string) => object]> => [
+      ['orgMember.add', 'post', `/api/orgs/${ctx.orgId}/members`, (userId) => ({ userId })],
+      ['teamMember.add', 'post', `/api/teams/${ctx.teamId}/members`, (userId) => ({ userId })],
+      [
+        'spacePermission.set',
+        'put',
+        `/api/wiki/spaces/${spaceId}/permissions`,
+        (userId) => ({ userId, level: 'VIEW' }),
+      ],
+      [
+        'pageRestriction.set',
+        'put',
+        `/api/wiki/pages/${pageId}/restrictions`,
+        (userId) => ({ type: 'VIEW', userIds: [userId] }),
+      ],
+    ];
+
+    it('names no user the caller shares no org with, and answers an absent one alike', async () => {
+      for (const [name, method, path, body] of hiddenUserCalls()) {
+        const hidden = await asToken(ownerAgent.raw, method, path, body(other.owner.id));
+        const absent = await asToken(ownerAgent.raw, method, path, body(absentId));
+        expect(hidden.status, name).toBe(202);
+        expect(absent.status, name).toBe(202);
+        expect(hidden.body.preview, name).not.toContain(other.owner.username);
+        expect(hidden.body.preview, name).toContain(other.owner.id.slice(-8));
+        expect(absent.body.preview, name).toContain(absentId.slice(-8));
+        const shape = (text: string, id: string) => text.replace(id.slice(-8), 'ID');
+        expect(shape(hidden.body.preview, other.owner.id), name).toBe(
+          shape(absent.body.preview, absentId),
+        );
+      }
+    });
+
+    it('names a user the caller shares an org with', async () => {
+      for (const [name, method, path, body] of hiddenUserCalls()) {
+        const res = await asToken(ownerAgent.raw, method, path, body(member.id));
+        expect(res.body.preview, name).toContain(member.username);
+      }
+    });
+
+    it('names a user to a platform admin, who can read them anyway', async () => {
+      const res = await asToken(adminAgent.raw, 'get', `/api/admin/users/${other.owner.id}`);
+      expect(res.body.preview).toContain(other.owner.username);
+    });
+  });
+
+  describe('what a preview says', () => {
+    it('says when the token to revoke is the one asking', async () => {
+      const agent = await tokenOf(ctx.owner.id, ['admin:write'], 'Self revoker');
+      const own = await asToken(agent.raw, 'delete', `/api/users/me/tokens/${agent.id}`);
+      expect(own.body.preview).toMatch(/the token asking/i);
+      const another = await asToken(ownerAgent.raw, 'delete', `/api/users/me/tokens/${agent.id}`);
+      expect(another.body.preview).not.toMatch(/the token asking/i);
+    });
+
+    it('shows nothing of an audit row before approval', async () => {
+      const row = await prisma.auditLog.create({
+        data: { orgId: 'system', action: 'hidden.action', resource: 'hidden-resource' },
+      });
+      const res = await asToken(adminAgent.raw, 'get', `/api/admin/audit-logs/${row.id}`);
+      expect(res.status).toBe(202);
+      expect(res.body.preview).not.toContain('hidden');
+      expect(res.body.preview).toContain(row.id.slice(-8));
+    });
+
+    it('reads properly for a restriction naming only ids that are no user', async () => {
+      const res = await asToken(ownerAgent.raw, 'put', `/api/wiki/pages/${pageId}/restrictions`, {
+        type: 'VIEW',
+        userIds: ['cabsentabsentabsentabsent0'],
+      });
+      expect(res.status).toBe(202);
+      expect(res.body.preview).not.toMatch(/only {2}|only and/);
+      expect(res.body.preview).toContain('absent0'.slice(-7));
+    });
+
+    it('names a user in a restriction with the end of the id too', async () => {
+      const res = await asToken(ownerAgent.raw, 'put', `/api/wiki/pages/${pageId}/restrictions`, {
+        type: 'VIEW',
+        userIds: [member.id],
+      });
+      expect(res.body.preview).toContain(member.username);
+      expect(res.body.preview).toContain(member.id.slice(-8));
+    });
+
+    it.each<[string, () => string, object, string[]]>([
+      [
+        'org.create',
+        () => '/api/orgs',
+        { name: 'N', slug: `pv-${Date.now()}`, description: 'Org text' },
+        ['Org text'],
+      ],
+      [
+        'team.create',
+        () => `/api/teams/org/${ctx.orgId}`,
+        { name: 'N', slug: 'pv-team', description: 'Team text' },
+        ['Team text', 'pv-team'],
+      ],
+      [
+        'project.create',
+        () => `/api/projects/team/${ctx.teamId}`,
+        { name: 'N', slug: 'pv-project', prefix: 'PVP', description: 'Project text' },
+        ['Project text', 'pv-project', 'PVP'],
+      ],
+      [
+        'space.create',
+        () => `/api/wiki/team/${ctx.teamId}/spaces`,
+        { name: 'N', slug: 'pv-space', description: 'Space text' },
+        ['Space text', 'pv-space'],
+      ],
+    ])('%s shows every field that takes effect', async (_name, path, body, words) => {
+      const res = await asToken(ownerAgent.raw, 'post', path(), body);
+      expect(res.status).toBe(202);
+      for (const word of words) expect(res.body.preview).toContain(word);
+    });
+
+    it('needs no preview for what can never wait', () => {
+      expect(getAction('adminUser.resetPassword')?.preview).toBeUndefined();
+    });
+  });
+
+  describe('small answers', () => {
+    it('gives the refusal of its own account a code', async () => {
+      const res = await asToken(adminAgent.raw, 'delete', `/api/admin/users/${platformAdmin.id}`);
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('takes a null description on a space, as the route did', async () => {
+      const res = await authPatch(`/api/wiki/spaces/${spaceId}`, ctx.owner.token, {
+        description: null,
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.description).toBeNull();
+    });
+
+    it('keeps an invitation token out of the audit row of its acceptance', async () => {
+      const invited = await createTestUser();
+      const invitation = await prisma.invitation.create({
+        data: {
+          email: invited.email,
+          orgId: ctx.orgId,
+          invitedBy: ctx.owner.id,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+      const res = await authPost(`/api/invitations/${invitation.token}/accept`, invited.token, {});
+      expect(res.status).toBe(200);
+      await vi.waitFor(async () => {
+        expect(await prisma.auditLog.count({ where: { userId: invited.id } })).toBeGreaterThan(0);
+      });
+      const rows = await prisma.auditLog.findMany({ where: { userId: invited.id } });
+      expect(JSON.stringify(rows)).not.toContain(invitation.token);
+      expect(JSON.stringify(rows)).toContain('/accept');
+      await prisma.user.delete({ where: { id: invited.id } });
+    });
+  });
+
+  describe('role refusals, for every route', () => {
+    /** Open to anyone, for their own account: there is no role to refuse. */
+    const NO_ROLE = new Set(['org.create', 'token.create']);
+    /** What an org and team MEMBER with EDIT on the space may ask for. */
+    const MEMBER_MAY = new Set([
+      ...NO_ROLE,
+      'project.create',
+      'space.create',
+      'pageRestriction.get',
+      'pageRestriction.set',
+      'pageRestriction.remove',
+    ]);
+
+    it('covers all 38 that wait', () => {
+      expect(allCalls()).toHaveLength(38);
+    });
+
+    it('refuses a stranger, by token and by session, on all that need a role', async () => {
+      const agent = await tokenOf(stranger.id, ['admin:write']);
+      for (const [name, method, path, body] of allCalls()) {
+        if (NO_ROLE.has(name)) continue;
+        // Revoking is limited to your own tokens: another's answers as absent
+        const expected = name === 'token.revoke' ? 404 : 403;
+        const viaToken = await asToken(agent.raw, method, path, body);
+        expect(viaToken.status, `${name} by token`).toBe(expected);
+        const client = request(app);
+        const viaSession = client[method](path)
+          .set('Authorization', `Bearer ${stranger.token}`)
+          .set('X-Requested-With', 'XMLHttpRequest');
+        const session = await (body ? viaSession.send(body) : viaSession);
+        expect(session.status, `${name} by session`).toBe(expected);
+      }
+      expect(await prisma.agentApproval.count({ where: { userId: stranger.id } })).toBe(0);
+    });
+
+    it('refuses an org MEMBER what the role does not give', async () => {
+      const agent = await tokenOf(member.id, ['admin:write']);
+      for (const [name, method, path, body] of allCalls()) {
+        const res = await asToken(agent.raw, method, path, body);
+        const expected = MEMBER_MAY.has(name) ? 202 : name === 'token.revoke' ? 404 : 403;
+        expect(res.status, `${name}: ${JSON.stringify(res.body)}`).toBe(expected);
+      }
+    });
+
+    it('refuses the password reset to everyone but a platform admin session', async () => {
+      const path = `/api/admin/users/${member.id}/reset-password`;
+      const body = { newPassword: 'a-new-password-1' };
+      expect((await authPost(path, ctx.owner.token, body)).status).toBe(403);
+      expect((await asToken(adminAgent.raw, 'post', path, body)).status).toBe(403);
     });
   });
 

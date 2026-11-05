@@ -49,7 +49,7 @@ registerActions([
     target: teamTarget,
     input: teamTarget.extend(createProjectSchema.shape),
     output: record,
-    preview: (_ctx, { teamId, name, prefix }) => previews.projectCreate(teamId, name, prefix),
+    preview: (_ctx, { teamId, ...fields }) => previews.projectCreate(teamId, fields),
     rest: { method: 'POST', path: '/api/projects/team/:teamId' },
     authorize: teamMemberWith<z.infer<typeof teamTarget>>(
       'project:create',

@@ -572,16 +572,82 @@ async function pageLabel(pageId: string): Promise<string> {
 }
 
 /**
- * A user as a preview names them. A username can't be told from another by its look alone, so the
- * end of the id goes with it.
+ * Whether a caller may read a user's name: themselves, someone they share an org with, or anyone
+ * for a platform admin. The agent reads a preview before a person acts (A28).
+ * @param viewerId - Who asks
+ * @param userIds - The users, which need not exist
+ * @returns The usernames of those the caller may read, by id
+ */
+async function visibleUsernames(
+  viewerId: string,
+  userIds: readonly string[],
+): Promise<Map<string, string>> {
+  const viewer = await prisma.user.findUnique({
+    where: { id: viewerId },
+    select: { isAdmin: true },
+  });
+  const users = await prisma.user.findMany({
+    where: {
+      id: { in: [...userIds] },
+      ...(viewer?.isAdmin
+        ? {}
+        : {
+            OR: [
+              { id: viewerId },
+              { orgMemberships: { some: { org: { members: { some: { userId: viewerId } } } } } },
+            ],
+          }),
+    },
+    select: { id: true, username: true },
+  });
+  return new Map(users.map((user) => [user.id, user.username]));
+}
+
+/**
+ * A user as a preview names them: the end of the id, as usernames can look alike, and the username
+ * only for a caller who may read it. Anyone else reads the id alone, for a user who is hidden and
+ * for one who isn't there, so the answer tells them apart for no one.
+ * @param viewerId - Who asks
  * @param userId - The user
  */
-async function userLabel(userId: string): Promise<string> {
+async function userLabel(viewerId: string, userId: string): Promise<string> {
+  const username = (await visibleUsernames(viewerId, [userId])).get(userId);
+  return username ? `user ${username} ${shortId(userId)}` : `user ${shortId(userId)}`;
+}
+
+/**
+ * The account an admin action works on, for a caller already known to be a platform admin: one who
+ * can see every user, so an absent one can answer 404 and no request is made.
+ * @param userId - The user
+ */
+async function adminTargetLabel(userId: string): Promise<string> {
   const user = await findOrThrow(
     prisma.user.findUnique({ where: { id: userId }, select: { username: true } }),
     ERR.USER_NOT_FOUND,
   );
   return `user ${user.username} ${shortId(userId)}`;
+}
+
+/**
+ * A team named in an org's own request. Another org's team answers as one that isn't there, for it
+ * is a name the caller may have no way to read (A28).
+ * @param orgId - The org the action works on
+ * @param teamId - The team the input names
+ */
+async function teamOfOrgLabel(orgId: string, teamId: string): Promise<string> {
+  const team = await findOrThrow(
+    prisma.team.findFirst({ where: { id: teamId, orgId }, select: { id: true } }),
+    ERR.TEAM_NOT_FOUND,
+  );
+  return teamLabel(team.id);
+}
+
+/**
+ * The optional text of something new, as it reads at the end of a sentence.
+ * @param description - The description, if given
+ */
+function withDescription(description?: string): string {
+  return description ? `, described as ${quoted(description)}` : '';
 }
 
 /**
@@ -598,9 +664,12 @@ function changeList(fields: Record<string, string | boolean | null | undefined>)
 /**
  * @param name - The new org's name
  * @param slug - Its slug
+ * @param description - Its description, if any
  */
-export function orgCreate(name: string, slug: string): Promise<string> {
-  return Promise.resolve(`Create the organization ${slug} ${quoted(name)}, with you as its owner`);
+export function orgCreate(name: string, slug: string, description?: string): Promise<string> {
+  return Promise.resolve(
+    `Create the organization ${slug} ${quoted(name)}${withDescription(description)}, with you as its owner`,
+  );
 }
 
 /**
@@ -642,36 +711,49 @@ async function orgRoleOf(orgId: string, userId: string): Promise<string> {
 }
 
 /**
+ * @param viewerId - Who asks
  * @param orgId - The org
  * @param userId - Who joins
  * @param role - With what role
  */
-export async function orgMemberAdd(orgId: string, userId: string, role: string): Promise<string> {
-  return `Add ${await userLabel(userId)} to ${await orgLabel(orgId)} as ${role}`;
+export async function orgMemberAdd(
+  viewerId: string,
+  orgId: string,
+  userId: string,
+  role: string,
+): Promise<string> {
+  return `Add ${await userLabel(viewerId, userId)} to ${await orgLabel(orgId)} as ${role}`;
 }
 
 /**
+ * @param viewerId - Who asks
  * @param orgId - The org
  * @param memberId - The user
  * @param role - The new role
  */
 export async function orgMemberUpdate(
+  viewerId: string,
   orgId: string,
   memberId: string,
   role: string,
 ): Promise<string> {
   const current = await orgRoleOf(orgId, memberId);
-  return `Change ${await userLabel(memberId)} in ${await orgLabel(orgId)} from ${current} to ${role}`;
+  return `Change ${await userLabel(viewerId, memberId)} in ${await orgLabel(orgId)} from ${current} to ${role}`;
 }
 
 /**
+ * @param viewerId - Who asks
  * @param orgId - The org
  * @param memberId - The user
  */
-export async function orgMemberRemove(orgId: string, memberId: string): Promise<string> {
+export async function orgMemberRemove(
+  viewerId: string,
+  orgId: string,
+  memberId: string,
+): Promise<string> {
   const current = await orgRoleOf(orgId, memberId);
   return (
-    `Remove ${await userLabel(memberId)}, now ${current}, from ${await orgLabel(orgId)}, ` +
+    `Remove ${await userLabel(viewerId, memberId)}, now ${current}, from ${await orgLabel(orgId)}, ` +
     'with their team places, space permissions and page access there'
   );
 }
@@ -681,7 +763,7 @@ export async function orgMemberRemove(orgId: string, memberId: string): Promise<
  * @param teamId - Only this team's, if given
  */
 export async function invitationList(orgId: string, teamId?: string): Promise<string> {
-  const only = teamId ? ` for ${await teamLabel(teamId)}` : '';
+  const only = teamId ? ` for ${await teamOfOrgLabel(orgId, teamId)}` : '';
   return `Read who is invited to ${await orgLabel(orgId)}${only}`;
 }
 
@@ -697,7 +779,7 @@ export async function invitationCreate(
   role: string,
   teamId?: string,
 ): Promise<string> {
-  const team = teamId ? ` and ${await teamLabel(teamId)}` : '';
+  const team = teamId ? ` and ${await teamOfOrgLabel(orgId, teamId)}` : '';
   return `Invite ${quoted(email)} to ${await orgLabel(orgId)}${team} as ${role}`;
 }
 
@@ -723,9 +805,15 @@ export async function invitationRevoke(orgId: string, invitationId: string): Pro
  * @param orgId - The org
  * @param name - The new team's name
  * @param slug - Its slug
+ * @param description - Its description, if any
  */
-export async function teamCreate(orgId: string, name: string, slug: string): Promise<string> {
-  return `Create the team ${slug} ${quoted(name)} in ${await orgLabel(orgId)}`;
+export async function teamCreate(
+  orgId: string,
+  name: string,
+  slug: string,
+  description?: string,
+): Promise<string> {
+  return `Create the team ${slug} ${quoted(name)} in ${await orgLabel(orgId)}${withDescription(description)}`;
 }
 
 /**
@@ -767,44 +855,64 @@ async function teamRoleOf(teamId: string, userId: string): Promise<string> {
 }
 
 /**
+ * @param viewerId - Who asks
  * @param teamId - The team
  * @param userId - Who joins
  * @param role - With what role
  */
-export async function teamMemberAdd(teamId: string, userId: string, role: string): Promise<string> {
-  return `Add ${await userLabel(userId)} to ${await teamLabel(teamId)} as ${role}`;
+export async function teamMemberAdd(
+  viewerId: string,
+  teamId: string,
+  userId: string,
+  role: string,
+): Promise<string> {
+  return `Add ${await userLabel(viewerId, userId)} to ${await teamLabel(teamId)} as ${role}`;
 }
 
 /**
+ * @param viewerId - Who asks
  * @param teamId - The team
  * @param memberId - The user
  * @param role - The new role
  */
 export async function teamMemberUpdate(
+  viewerId: string,
   teamId: string,
   memberId: string,
   role: string,
 ): Promise<string> {
   const current = await teamRoleOf(teamId, memberId);
-  return `Change ${await userLabel(memberId)} in ${await teamLabel(teamId)} from ${current} to ${role}`;
+  return `Change ${await userLabel(viewerId, memberId)} in ${await teamLabel(teamId)} from ${current} to ${role}`;
 }
 
 /**
+ * @param viewerId - Who asks
  * @param teamId - The team
  * @param memberId - The user
  */
-export async function teamMemberRemove(teamId: string, memberId: string): Promise<string> {
+export async function teamMemberRemove(
+  viewerId: string,
+  teamId: string,
+  memberId: string,
+): Promise<string> {
   const current = await teamRoleOf(teamId, memberId);
-  return `Remove ${await userLabel(memberId)}, now ${current}, from ${await teamLabel(teamId)}`;
+  return `Remove ${await userLabel(viewerId, memberId)}, now ${current}, from ${await teamLabel(teamId)}`;
 }
 
 /**
  * @param teamId - The team
- * @param name - The new project's name
- * @param prefix - Its prefix
+ * @param fields - The new project
+ * @param fields.name - Its name
+ * @param fields.slug - Its slug
+ * @param fields.prefix - Its prefix
+ * @param fields.description - Its description, if any
  */
-export async function projectCreate(teamId: string, name: string, prefix: string): Promise<string> {
-  return `Create the project ${prefix} ${quoted(name)} in ${await teamLabel(teamId)}`;
+export async function projectCreate(
+  teamId: string,
+  fields: { name: string; slug: string; prefix: string; description?: string },
+): Promise<string> {
+  const { name, slug, prefix, description } = fields;
+  return `Create the project ${prefix} ${quoted(name)} with slug ${slug} in ${await teamLabel(teamId)}${withDescription(description)}`;
 }
 
 /**
@@ -844,9 +952,15 @@ export async function projectDelete(projectId: string): Promise<string> {
  * @param teamId - The team
  * @param name - The new space's name
  * @param slug - Its slug
+ * @param description - Its description, if any
  */
-export async function spaceCreate(teamId: string, name: string, slug: string): Promise<string> {
-  return `Create the wiki space ${slug} ${quoted(name)} in ${await teamLabel(teamId)}`;
+export async function spaceCreate(
+  teamId: string,
+  name: string,
+  slug: string,
+  description?: string,
+): Promise<string> {
+  return `Create the wiki space ${slug} ${quoted(name)} in ${await teamLabel(teamId)}${withDescription(description)}`;
 }
 
 /**
@@ -855,7 +969,7 @@ export async function spaceCreate(teamId: string, name: string, slug: string): P
  */
 export async function spaceUpdate(
   spaceId: string,
-  fields: Record<string, string | boolean | undefined>,
+  fields: Record<string, string | boolean | null | undefined>,
 ): Promise<string> {
   return `In ${await spaceLabel(spaceId)}, set ${changeList(fields)}`;
 }
@@ -866,6 +980,7 @@ export async function spacePermissionList(spaceId: string): Promise<string> {
 }
 
 /**
+ * @param viewerId - Who asks
  * @param spaceId - The space
  * @param grant - Who gets what
  * @param grant.userId - One user, or
@@ -873,18 +988,23 @@ export async function spacePermissionList(spaceId: string): Promise<string> {
  * @param grant.level - The level
  */
 export async function spacePermissionSet(
+  viewerId: string,
   spaceId: string,
   grant: { userId?: string; teamRole?: string; level: string },
 ): Promise<string> {
-  const who = grant.userId ? await userLabel(grant.userId) : `every team ${grant.teamRole}`;
+  const who = grant.userId
+    ? await userLabel(viewerId, grant.userId)
+    : `every team ${grant.teamRole}`;
   return `Give ${who} the permission ${grant.level} on ${await spaceLabel(spaceId)}`;
 }
 
 /**
+ * @param viewerId - Who asks
  * @param spaceId - The space in the path
  * @param permissionId - The permission
  */
 export async function spacePermissionRemove(
+  viewerId: string,
   spaceId: string,
   permissionId: string,
 ): Promise<string> {
@@ -896,7 +1016,7 @@ export async function spacePermissionRemove(
     ERR.PERMISSION_NOT_FOUND,
   );
   const who = permission.userId
-    ? await userLabel(permission.userId)
+    ? await userLabel(viewerId, permission.userId)
     : `every team ${permission.teamRole}`;
   return `Take the permission ${permission.level} of ${who} off ${await spaceLabel(spaceId)}`;
 }
@@ -907,29 +1027,35 @@ export async function pageRestrictionGet(pageId: string): Promise<string> {
 }
 
 /**
+ * @param viewerId - Who asks
  * @param pageId - The page
  * @param type - VIEW or EDIT
  * @param userIds - Who it is restricted to from now on
  */
 export async function pageRestrictionSet(
+  viewerId: string,
   pageId: string,
   type: string,
   userIds: string[],
 ): Promise<string> {
   const label = await pageLabel(pageId);
   if (userIds.length === 0) return `Lift the ${type} restrictions of the ${label}`;
-  const users = await prisma.user.findMany({
-    where: { id: { in: userIds } },
-    select: { username: true },
+  const usernames = await visibleUsernames(viewerId, userIds);
+  const names = userIds.map((id) => {
+    const username = usernames.get(id);
+    return username ? `${username} ${shortId(id)}` : shortId(id);
   });
-  const unknown = userIds.length - users.length;
-  const names = keyList(users.map((user) => user.username));
-  const note = unknown > 0 ? ` and ${amount(unknown, 'id')} that is no user` : '';
-  return `Replace the ${type} restrictions of the ${label}: only ${names}${note}`;
+  return `Replace the ${type} restrictions of the ${label}: only ${keyList(names)}`;
 }
 
-/** @param restrictionId - The restriction */
-export async function pageRestrictionRemove(restrictionId: string): Promise<string> {
+/**
+ * @param viewerId - Who asks
+ * @param restrictionId - The restriction
+ */
+export async function pageRestrictionRemove(
+  viewerId: string,
+  restrictionId: string,
+): Promise<string> {
   const restriction = await findOrThrow(
     prisma.pageRestriction.findUnique({
       where: { id: restrictionId },
@@ -938,7 +1064,7 @@ export async function pageRestrictionRemove(restrictionId: string): Promise<stri
     ERR.RESTRICTION_NOT_FOUND,
   );
   const who = restriction.userId
-    ? await userLabel(restriction.userId)
+    ? await userLabel(viewerId, restriction.userId)
     : `team role ${restriction.teamRoleMin}`;
   return `Take ${who} off the ${restriction.type} restrictions of the ${await pageLabel(restriction.pageId)}`;
 }
@@ -967,8 +1093,13 @@ export function tokenCreate(
  * Only the caller's own token: another's answers 404, as the service does.
  * @param userId - Whose token
  * @param tokenId - The token
+ * @param askingTokenId - The token that asks, if a token does
  */
-export async function tokenRevoke(userId: string, tokenId: string): Promise<string> {
+export async function tokenRevoke(
+  userId: string,
+  tokenId: string,
+  askingTokenId?: string,
+): Promise<string> {
   const token = await findOrThrow(
     prisma.apiToken.findFirst({
       where: { id: tokenId, userId },
@@ -976,7 +1107,11 @@ export async function tokenRevoke(userId: string, tokenId: string): Promise<stri
     }),
     'API token not found',
   );
-  return `Revoke the API token ${token.prefix}... ${quoted(token.name)} with the scopes ${token.scopes.join(', ')}`;
+  const self =
+    tokenId === askingTokenId
+      ? '. This is the token asking: it stops working, and its open requests fail'
+      : '';
+  return `Revoke the API token ${token.prefix}... ${quoted(token.name)} with the scopes ${token.scopes.join(', ')}${self}`;
 }
 
 /** The numbers of the whole installation. */
@@ -997,7 +1132,7 @@ export function adminUserList(search?: string): Promise<string> {
 
 /** @param userId - The user */
 export async function adminUserGet(userId: string): Promise<string> {
-  return `Read the account of ${await userLabel(userId)}, with their email address and memberships`;
+  return `Read the account of ${await adminTargetLabel(userId)}, with their email address and memberships`;
 }
 
 /**
@@ -1006,7 +1141,7 @@ export async function adminUserGet(userId: string): Promise<string> {
  * @param role - The new role, if given
  */
 export async function adminUserUpdate(userId: string, role?: string): Promise<string> {
-  const label = await userLabel(userId);
+  const label = await adminTargetLabel(userId);
   if (!role) return `Change nothing about ${label}: only a role takes effect here`;
   const orgs = await prisma.orgMembership.count({ where: { userId } });
   return `Make ${label} ${role} in every organization they are in: ${amount(orgs, 'organization')} as of this request`;
@@ -1014,7 +1149,7 @@ export async function adminUserUpdate(userId: string, role?: string): Promise<st
 
 /** @param userId - The user */
 export async function adminUserDelete(userId: string): Promise<string> {
-  const label = await userLabel(userId);
+  const label = await adminTargetLabel(userId);
   const [orgs, tokens] = await Promise.all([
     prisma.orgMembership.count({ where: { userId } }),
     prisma.apiToken.count({ where: { userId } }),
@@ -1027,12 +1162,12 @@ export async function adminUserDelete(userId: string): Promise<string> {
 
 /** @param userId - The user */
 export async function adminUserDeactivate(userId: string): Promise<string> {
-  return `Deactivate ${await userLabel(userId)}: they can no longer sign in or use a token`;
+  return `Deactivate ${await adminTargetLabel(userId)}: they can no longer sign in or use a token`;
 }
 
 /** @param userId - The user */
 export async function adminUserReactivate(userId: string): Promise<string> {
-  return `Reactivate ${await userLabel(userId)}: they can sign in again`;
+  return `Reactivate ${await adminTargetLabel(userId)}: they can sign in again`;
 }
 
 /**
@@ -1054,16 +1189,14 @@ export function auditLogList(filters: {
   );
 }
 
-/** @param id - The row */
+/**
+ * Only that the row exists: what it holds is the read that waits (A14).
+ * @param id - The row
+ */
 export async function auditLogGet(id: string): Promise<string> {
-  const row = await findOrThrow(
-    prisma.auditLog.findUnique({ where: { id }, select: { action: true, resource: true } }),
+  await findOrThrow(
+    prisma.auditLog.findUnique({ where: { id }, select: { id: true } }),
     'Audit log not found',
   );
-  return `Read the audit row ${shortId(id)}: ${quoted(row.action)} on ${quoted(row.resource)}`;
-}
-
-/** @param userId - The user */
-export async function adminUserResetPassword(userId: string): Promise<string> {
-  return `Set a new password for ${await userLabel(userId)}`;
+  return `Read the audit row ${shortId(id)}`;
 }

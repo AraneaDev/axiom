@@ -174,7 +174,8 @@ const accessActions = [
     target: teamTarget,
     input: teamTarget.extend(createWikiSpaceSchema.shape),
     output: record,
-    preview: (_ctx, { teamId, name, slug }) => previews.spaceCreate(teamId, name, slug),
+    preview: (_ctx, { teamId, name, slug, description }) =>
+      previews.spaceCreate(teamId, name, slug, description),
     rest: { method: 'POST', path: `${WIKI}/team/:teamId/spaces` },
     authorize: teamMemberWith<z.infer<typeof teamTarget>>('wiki:create_space', (i) => i.teamId),
     handler: async (_ctx, { teamId, ...data }) => wikiService.createSpace(teamId, data),
@@ -189,7 +190,8 @@ const accessActions = [
     // Named fields: this route once passed its whole body on to the database
     input: spaceTarget.extend({
       name: createWikiSpaceSchema.shape.name.optional(),
-      description: createWikiSpaceSchema.shape.description,
+      // null clears it, as the route always took
+      description: z.string().max(500).nullable().optional(),
       isArchived: z.boolean().optional(),
     }),
     output: record,
@@ -223,7 +225,8 @@ const accessActions = [
       .extend(setSpacePermissionSchema.shape)
       .refine(ONE_SPACE_GRANT.check, { message: ONE_SPACE_GRANT.message }),
     output: record,
-    preview: (_ctx, { spaceId, ...grant }) => previews.spacePermissionSet(spaceId, grant),
+    preview: (ctx, { spaceId, ...grant }) =>
+      previews.spacePermissionSet(ctx.userId, spaceId, grant),
     rest: { method: 'PUT', path: `${SPACE}/permissions` },
     authorize: manageSpace,
     handler: async (_ctx, { spaceId, ...grant }) =>
@@ -238,8 +241,8 @@ const accessActions = [
     summary: 'Take a permission off a wiki space',
     input: spaceTarget.extend({ permissionId: z.string() }),
     output: nothing,
-    preview: (_ctx, { spaceId, permissionId }) =>
-      previews.spacePermissionRemove(spaceId, permissionId),
+    preview: (ctx, { spaceId, permissionId }) =>
+      previews.spacePermissionRemove(ctx.userId, spaceId, permissionId),
     rest: { method: 'DELETE', path: `${SPACE}/permissions/:permissionId` },
     authorize: manageSpace,
     handler: async (_ctx, { spaceId, permissionId }) =>
@@ -267,8 +270,8 @@ const accessActions = [
     target: pageTarget,
     input: pageTarget.extend(setRestrictionsSchema.shape),
     output: list,
-    preview: (_ctx, { pageId, type, userIds }) =>
-      previews.pageRestrictionSet(pageId, type, userIds),
+    preview: (ctx, { pageId, type, userIds }) =>
+      previews.pageRestrictionSet(ctx.userId, pageId, type, userIds),
     rest: { method: 'PUT', path: `${PAGE_BY_ID}/restrictions` },
     authorize: pageAccess<z.infer<typeof pageTarget>>('edit', (i) => i.pageId),
     handler: async (_ctx, { pageId, type, userIds }) => {
@@ -286,7 +289,7 @@ const accessActions = [
     input: z.object({ restrictionId: z.string() }),
     output: nothing,
     orgIds: (_ctx, { restrictionId }) => orgsOfRestriction(restrictionId),
-    preview: (_ctx, { restrictionId }) => previews.pageRestrictionRemove(restrictionId),
+    preview: (ctx, { restrictionId }) => previews.pageRestrictionRemove(ctx.userId, restrictionId),
     rest: { method: 'DELETE', path: `${WIKI}/restrictions/:restrictionId` },
     authorize: restrictionAccess<{ restrictionId: string }>((i) => i.restrictionId),
     handler: async (_ctx, { restrictionId }) => pagePermissions.removeRestriction(restrictionId),

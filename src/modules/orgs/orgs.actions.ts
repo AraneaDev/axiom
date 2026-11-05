@@ -59,7 +59,7 @@ registerActions([
     target: z.object({}),
     input: z.object(createOrgSchema.shape),
     output: record,
-    preview: (_ctx, { name, slug }) => previews.orgCreate(name, slug),
+    preview: (_ctx, { name, slug, description }) => previews.orgCreate(name, slug, description),
     rest: { method: 'POST', path: '/api/orgs' },
     authorize: async () => {},
     handler: async (ctx, input) => orgsService.createOrg(ctx.userId, input),
@@ -103,7 +103,8 @@ registerActions([
     target: orgTarget,
     input: orgTarget.extend(addOrgMemberSchema.shape),
     output: record,
-    preview: (_ctx, { orgId, userId, role }) => previews.orgMemberAdd(orgId, userId, role),
+    preview: (ctx, { orgId, userId, role }) =>
+      previews.orgMemberAdd(ctx.userId, orgId, userId, role),
     rest: { method: 'POST', path: '/api/orgs/:orgId/members' },
     authorize: manageMembers,
     handler: async (ctx, { orgId, userId, role }) =>
@@ -118,7 +119,8 @@ registerActions([
     target: memberTarget,
     input: memberTarget.extend({ role: addOrgMemberSchema.shape.role }),
     output: record,
-    preview: (_ctx, { orgId, memberId, role }) => previews.orgMemberUpdate(orgId, memberId, role),
+    preview: (ctx, { orgId, memberId, role }) =>
+      previews.orgMemberUpdate(ctx.userId, orgId, memberId, role),
     rest: { method: 'PATCH', path: '/api/orgs/:orgId/members/:memberId' },
     authorize: manageMembers,
     handler: async (ctx, { orgId, memberId, role }) =>
@@ -133,7 +135,7 @@ registerActions([
     summary: 'Remove a member from an organization, with what the organization gave them',
     input: memberTarget,
     output: nothing,
-    preview: (_ctx, { orgId, memberId }) => previews.orgMemberRemove(orgId, memberId),
+    preview: (ctx, { orgId, memberId }) => previews.orgMemberRemove(ctx.userId, orgId, memberId),
     rest: { method: 'DELETE', path: '/api/orgs/:orgId/members/:memberId' },
     authorize: manageMembers,
     handler: async (ctx, { orgId, memberId }) => {

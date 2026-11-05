@@ -253,7 +253,7 @@ function areaOf(path: string): ScopeArea | 'personal' | 'none' {
 export function tokenAllows(scopes: readonly string[], method: string, path: string): boolean {
   const write = !SAFE.has(method);
   const kind = write ? 'write' : 'read';
-  // Tokens never manage tokens, the account or admin settings
+  // Off a registry action, nothing under admin opens to a token, nor a write on the account
   if (path.startsWith('/api/admin')) return false;
   if (path.startsWith('/api/users/me') && write) return false;
   // An invite link's code lets whoever holds it join, so reading one is no org read

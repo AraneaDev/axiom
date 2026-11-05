@@ -9,6 +9,7 @@ import { pageBySlugAccess, projectAction } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { MAX_KEY_LENGTH, parseKey, resolveKey } from '../../actions/keys';
 import {
+  orgsCallerCanSee,
   orgsOfAttachment,
   orgsOfComments,
   orgsOfProjects,
@@ -244,10 +245,14 @@ const attachmentActions = [
         attachmentsService.assertParentScope(ctx.scopes, fields, true);
         // A rule that names this action binds it per parent; a staged file takes every org
         const parentOrgs = await orgsOfParent(fields);
+        // Only orgs the caller belongs to: a stranger learns nothing of a foreign org's rule, and
+        // is refused on the parent next
         await assertRawNotNamed(
           ctx,
           'attachment.upload',
-          parentOrgs ?? (await orgsOfUser(ctx.userId)),
+          parentOrgs
+            ? await orgsCallerCanSee(ctx.userId, parentOrgs)
+            : await orgsOfUser(ctx.userId),
         );
         if (!file) throw new AppError(400, 'No file provided', 'MISSING_FILE');
         if (file.originalname.includes('\u0000')) {

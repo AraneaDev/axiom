@@ -113,7 +113,7 @@ export async function listSpaces(teamId: string, includeArchived = false, userId
  */
 export async function updateSpace(
   spaceId: string,
-  data: { name?: string; description?: string; isArchived?: boolean },
+  data: { name?: string; description?: string | null; isArchived?: boolean },
 ) {
   const space = await findOrThrow(
     prisma.wikiSpace.findUnique({ where: { id: spaceId } }),

@@ -175,7 +175,9 @@ function ruleViolations(def: ActionDef): string[] {
 
   if (
     (def.destructive || def.admin || def.permissionChange || def.bulkCount || def.crossContainer) &&
-    !def.preview
+    !def.preview &&
+    // Never reaches the gate
+    !def.uiOnly
   ) {
     violations.push(`${def.name}: what waits for approval needs a preview from the database (G8)`);
   }

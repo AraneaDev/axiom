@@ -40,7 +40,11 @@ const queryDate = z
 async function notYourOwnAccount(ctx: ActionContext, { userId }: { userId: string }) {
   await platformAdmin(ctx);
   if (isToken(ctx) && userId === ctx.userId) {
-    throw new AppError(403, "A token can't delete its own account: do this in the web UI");
+    throw new AppError(
+      403,
+      "A token can't delete its own account: do this in the web UI",
+      'FORBIDDEN',
+    );
   }
 }
 
@@ -162,7 +166,8 @@ registerActions([
   }),
   defineAction({
     name: 'adminUser.resetPassword',
-    // Its input holds a password, which must not wait in a table for an approval (A4)
+    // Its input holds a password, which must not wait in a table for an approval (A4), so it never
+    // reaches the gate and has no preview
     uiOnly: true,
     admin: true,
     noOrg: true,
@@ -172,7 +177,6 @@ registerActions([
     target: userTarget,
     input: userTarget.extend(adminResetPasswordSchema.shape),
     output: success,
-    preview: (_ctx, { userId }) => previews.adminUserResetPassword(userId),
     rest: { method: 'POST', path: '/api/admin/users/:userId/reset-password', status: 200 },
     authorize: platformAdmin,
     handler: async (_ctx, { userId, newPassword }) =>

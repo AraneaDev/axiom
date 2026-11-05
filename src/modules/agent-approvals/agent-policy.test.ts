@@ -10,6 +10,7 @@ import { PendingApproval } from '../../actions/approval-policy';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { executeAction } from '../../actions/execute';
 import { registerActions } from '../../actions/registry';
+import { dashboardUpdate } from '../../actions/sharing-previews';
 import { prisma } from '../../config/database';
 import app from '../../index';
 import {
@@ -492,6 +493,44 @@ describe('agent policies', () => {
         .attach('file', Buffer.from('hello'), 'hello.txt');
       // Not refused by the rule (storing the file is the upload tests' concern)
       expect(session.status).not.toBe(403);
+    });
+
+    it('says an update that sets nothing does nothing', async () => {
+      const made = await request(app)
+        .post('/api/dashboards')
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ name: 'Nothing to set' });
+      expect(made.status).toBe(201);
+      const text = await dashboardUpdate(made.body.id, {});
+      expect(text).toContain('Nothing to set');
+      expect(text).toMatch(/nothing/i);
+      expect(text).not.toMatch(/set $/);
+    });
+
+    it("tells a stranger nothing of a foreign org's rule on a multipart upload", async () => {
+      const foreign = await prisma.issue.create({
+        data: {
+          projectId: otherOrg.projectId,
+          number: 4399,
+          title: 'Foreign',
+          body: '',
+          creatorId: otherOrg.owner.id,
+        },
+      });
+      const upload = () =>
+        request(app)
+          .post('/api/attachments')
+          .set('Authorization', ownerToken)
+          .set('X-Requested-With', 'XMLHttpRequest')
+          .field('issueId', foreign.id)
+          .attach('file', Buffer.from('hello'), 'hello.txt');
+      const without = await upload();
+      await setOrg(otherOrg.orgId, { alsoRequire: ['attachment.upload'] });
+      const withRule = await upload();
+      expect(withRule.status).toBe(without.status);
+      expect(withRule.body).toEqual(without.body);
+      expect(JSON.stringify(withRule.body)).not.toContain('alsoRequire');
     });
 
     it('binds a multipart upload by the org of its parent, and a staged one by every org', async () => {

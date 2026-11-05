@@ -126,7 +126,10 @@ async function updateSentence(
       `who can open it: shared with ${sharing} as of this request, to ${await nextSharing(input)}`,
     );
   }
-  return `Change the ${what} ${quoted(row.name)} #${id.slice(-8)} by ${row.who}: set ${parts.join('; ')}`;
+  const label = `the ${what} ${quoted(row.name)} #${id.slice(-8)} by ${row.who}`;
+  return parts.length > 0
+    ? `Change ${label}: set ${parts.join('; ')}`
+    : `Change nothing about ${label}`;
 }
 
 /**

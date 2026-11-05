@@ -29,6 +29,9 @@ export function loggableExternalUrl(url: string): string {
   }
 }
 
+/** Its second segment is the invitation's token, which lets whoever holds it join. */
+const INVITATION_ACCEPT = /^\/api\/invitations\/[^/]+\/accept$/;
+
 /**
  * The request URL for logs and the audit trail. On a signed upload the query is left out as a
  * whole: it holds a credential that still works if the request failed, and looking for its name
@@ -37,5 +40,7 @@ export function loggableExternalUrl(url: string): string {
  */
 export function loggableUrl(req: Request): string {
   const pathname = requestPathname(req);
-  return normalizeApiPath(pathname).startsWith('/api/uploads') ? pathname : req.originalUrl;
+  const normal = normalizeApiPath(pathname);
+  if (INVITATION_ACCEPT.test(normal)) return '/api/invitations/[token]/accept';
+  return normal.startsWith('/api/uploads') ? pathname : req.originalUrl;
 }

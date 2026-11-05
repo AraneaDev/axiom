@@ -112,6 +112,21 @@ export async function orgsOfAttachment(attachmentId: string): Promise<string[]> 
 }
 
 /**
+ * The orgs of these a user can see: those they belong to, or all for a platform admin.
+ * @param userId - The user
+ * @param orgIds - The orgs
+ */
+export async function orgsCallerCanSee(
+  userId: string,
+  orgIds: readonly string[],
+): Promise<string[]> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  if (user?.isAdmin) return [...orgIds];
+  const mine = await orgsOfUser(userId);
+  return orgIds.filter((orgId) => mine.includes(orgId));
+}
+
+/**
  * Every org a user belongs to. For a file with no parent yet: it can attach to anything of the
  * user's later, so every org's rules count and the strictest wins.
  * @param userId - The user
