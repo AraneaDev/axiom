@@ -75,9 +75,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const user = await usersApi.getMe();
       set({ user, isAuthenticated: true, isLoading: false });
-    } catch {
-      // Clear stale tokens so we don't retry on next load
-      clearTokens();
+    } catch (err: unknown) {
+      // Only an answer says the tokens are no good. Without one (a navigation aborts the request,
+      // the network is down) they stay, or a reload at the wrong moment signs you out.
+      const { status } = err as { status?: number };
+      if (status === 401 || status === 403) clearTokens();
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
