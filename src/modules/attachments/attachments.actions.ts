@@ -353,6 +353,7 @@ const attachmentActions = [
   }),
   defineAction({
     name: 'attachment.delete',
+    destructive: true,
     area: 'files',
     kind: 'write',
     summary: 'Delete an attachment you uploaded',

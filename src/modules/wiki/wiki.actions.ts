@@ -246,6 +246,7 @@ const pageActions = [
   }),
   defineAction({
     name: 'page.delete',
+    destructive: true,
     area: 'wiki',
     kind: 'write',
     summary: 'Delete a page',
@@ -369,6 +370,8 @@ const pageActions = [
     output: record,
     rest: { method: 'POST', path: `${PAGE_BY_ID}/move`, status: 200 },
     authorize: editPage,
+    crossContainer: (_ctx, { pageId, targetSpaceId, targetParentId }) =>
+      wikiService.moveCrossesSpace(pageId, targetSpaceId, targetParentId),
     handler: async (ctx, { pageId, targetSpaceId, targetParentId }) => {
       await assertPageDestinationWritable(ctx.userId, pageId, targetSpaceId, targetParentId);
       return wikiService.movePage(pageId, targetSpaceId, targetParentId, ctx.userId);
@@ -441,6 +444,7 @@ const linkActions = [
   }),
   defineAction({
     name: 'pageIssueLink.remove',
+    destructive: true,
     area: 'wiki',
     kind: 'write',
     summary: 'Remove the embed link between an issue and a page',

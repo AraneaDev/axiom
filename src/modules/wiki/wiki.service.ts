@@ -671,6 +671,29 @@ export {
 // ─── Page Move / Copy ───────────────────────────────────────
 
 /**
+ * Whether a move takes the page into another space, by the target space or by the target
+ * parent's space. The database decides; the input only names the destination.
+ * @param pageId - The page
+ * @param targetSpaceId - The destination space, if named
+ * @param targetParentId - The destination parent, if named
+ */
+export async function moveCrossesSpace(
+  pageId: string,
+  targetSpaceId?: string,
+  targetParentId?: string | null,
+): Promise<boolean> {
+  const page = await prisma.page.findUnique({ where: { id: pageId }, select: { spaceId: true } });
+  if (!page) return false;
+  if (targetSpaceId !== undefined && targetSpaceId !== page.spaceId) return true;
+  if (!targetParentId) return false;
+  const parent = await prisma.page.findUnique({
+    where: { id: targetParentId },
+    select: { spaceId: true },
+  });
+  return parent !== null && parent.spaceId !== page.spaceId;
+}
+
+/**
  * Move a wiki page to a different space or parent, checking slug uniqueness and circular references.
  * @param pageId - The page to move
  * @param targetSpaceId - Optional target wiki space ID (defaults to current space)

@@ -145,6 +145,7 @@ const savedFilterActions = [
   }),
   defineAction({
     name: 'savedQuery.delete',
+    destructive: true,
     area: 'dashboards',
     kind: 'write',
     summary: 'Delete a saved query you may change',

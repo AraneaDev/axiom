@@ -44,6 +44,20 @@ export async function getBoard(projectId: string) {
 }
 
 /**
+ * Whether a column belongs to another project than the issue's. moveIssue refuses such a move;
+ * the approval gate asks the database all the same, not the input.
+ * @param projectId - The project of the issue
+ * @param columnId - The destination column
+ */
+export async function columnInOtherProject(projectId: string, columnId: string): Promise<boolean> {
+  const column = await prisma.boardColumn.findUnique({
+    where: { id: columnId },
+    select: { projectId: true },
+  });
+  return column !== null && column.projectId !== projectId;
+}
+
+/**
  * Move an issue to a different board column and position, validating workflow transitions.
  * @param projectId - The project the issue belongs to
  * @param issueNumber - The issue number within the project

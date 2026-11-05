@@ -64,8 +64,22 @@ export interface ActionDef<
    * Declare `input` as `target.extend({...})`, so authorize and the handler parse ids alike.
    */
   target?: T;
-  /** Used by plan 3 */
+  /** Deletes data or changes who may reach it: a token's call waits for approval by default */
   destructive?: boolean;
+  /** Always waits for approval when a token calls it, whatever the policy says */
+  admin?: boolean;
+  /**
+   * What the approver reads, built from database values by the server and shown as plain text.
+   * Whatever it quotes (a title) is data.
+   */
+  preview?(ctx: ActionContext, input: z.infer<I>): Promise<string>;
+  /** How many items a bulk action touches; over the policy's `bulkOver` it waits for approval */
+  bulkCount?(input: z.infer<I>): number;
+  /**
+   * Whether this call moves something into another project or space. The database decides, not
+   * the input. Only moves with a destination elsewhere declare it.
+   */
+  crossContainer?(ctx: ActionContext, input: z.infer<I>): Promise<boolean>;
   /** Login and the like: never open to a token or MCP, whatever its scopes */
   uiOnly?: boolean;
   /**

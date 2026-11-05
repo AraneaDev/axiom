@@ -148,6 +148,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboard.delete',
+    destructive: true,
     area: 'dashboards',
     kind: 'write',
     summary: 'Delete a dashboard you may change, with its widgets',
@@ -263,6 +264,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.remove',
+    destructive: true,
     area: 'dashboards',
     kind: 'write',
     summary: 'Remove a widget from a dashboard you may change',

@@ -37,7 +37,7 @@ export { findIssueOrThrow } from './issue-utils';
 export { addComment, updateComment, deleteComment } from './issue-comments.service';
 export { logWork, getWorklogs, getTimeReport } from './issue-time.service';
 export { setParent, getChildren } from './issue-hierarchy.service';
-export { getBoard, moveIssue, getRoadmap } from './issue-board.service';
+export { getBoard, moveIssue, columnInOtherProject, getRoadmap } from './issue-board.service';
 export { exportIssuesCsv } from './issue-export.service';
 export { bulkUpdate } from './issue-bulk.service';
 

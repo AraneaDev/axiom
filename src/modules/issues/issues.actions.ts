@@ -154,6 +154,7 @@ const issueActions = [
     output: loose,
     rest: { method: 'PATCH', path: `${PROJECT}/issues/bulk` },
     authorize: write,
+    bulkCount: ({ issueIds }) => issueIds.length,
     handler: async (ctx, { projectId, issueIds, updates }) =>
       issuesService.bulkUpdate(projectId, issueIds, updates, ctx.userId),
   }),
@@ -233,6 +234,7 @@ const issueActions = [
   }),
   defineAction({
     name: 'issue.delete',
+    destructive: true,
     area: 'issues',
     kind: 'write',
     summary: 'Delete an issue',
@@ -255,6 +257,8 @@ const issueActions = [
     output: record,
     rest: { method: 'PATCH', path: `${ISSUE}/move` },
     authorize: write,
+    crossContainer: (_ctx, { projectId, columnId }) =>
+      issuesService.columnInOtherProject(projectId, columnId),
     handler: async (_ctx, { projectId, issueNumber, columnId, position }) =>
       issuesService.moveIssue(projectId, issueNumber, columnId, position),
   }),
@@ -349,6 +353,7 @@ const commentActions = [
   }),
   defineAction({
     name: 'comment.delete',
+    destructive: true,
     area: 'issues',
     kind: 'write',
     summary: 'Delete your own comment',
@@ -432,6 +437,7 @@ const linkActions = [
   }),
   defineAction({
     name: 'issueLink.delete',
+    destructive: true,
     area: 'issues',
     kind: 'write',
     summary: 'Remove a link between issues',
@@ -541,6 +547,7 @@ const webLinkActions = [
   }),
   defineAction({
     name: 'issueWebLink.delete',
+    destructive: true,
     area: 'issues',
     kind: 'write',
     summary: 'Remove an external link from an issue',
