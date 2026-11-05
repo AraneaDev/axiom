@@ -186,6 +186,47 @@ describe('Realtime room authorization', () => {
     expect(deniedRooms(client)).toEqual([]);
   });
 
+  it('tells a project room when a sprint starts and completes, through the routes', async () => {
+    const sprint = await prisma.sprint.create({
+      data: {
+        projectId: ctx.projectId,
+        name: 'Realtime sprint',
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const client = await connect(member.id);
+    const room = `project:${ctx.projectId}`;
+    client.send({ type: 'subscribe', rooms: [room] });
+    await waitFor(() => client.messages.some((m) => m.type === 'subscribed' && m.room === room));
+    const sprintEvents = () => client.messages.filter((m) => m.type === 'sprint:updated');
+    const expected = { type: 'sprint:updated', projectId: ctx.projectId, sprintId: sprint.id };
+
+    const started = await authPost(
+      `/api/projects/${ctx.projectId}/sprints/${sprint.id}/start`,
+      ctx.owner.token,
+    );
+    expect(started.status).toBe(200);
+    await waitFor(() => sprintEvents().length === 1);
+    expect(sprintEvents()[0]).toEqual(expected);
+
+    // A refused start changes nothing, and says nothing
+    const again = await authPost(
+      `/api/projects/${ctx.projectId}/sprints/${sprint.id}/start`,
+      ctx.owner.token,
+    );
+    expect(again.status).toBe(400);
+
+    const completed = await authPost(
+      `/api/projects/${ctx.projectId}/sprints/${sprint.id}/complete`,
+      ctx.owner.token,
+      {},
+    );
+    expect(completed.status).toBe(200);
+    await waitFor(() => sprintEvents().length === 2);
+    expect(sprintEvents()[1]).toEqual(expected);
+  });
+
   it('grants VIEW-level space rooms and denies them to outsiders', async () => {
     const memberClient = await connect(member.id);
     const outsiderClient = await connect(outsider.id);

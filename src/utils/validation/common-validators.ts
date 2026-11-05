@@ -47,6 +47,30 @@ export const slugValidator = z
   .max(50)
   .regex(/^[a-z0-9-]+$/);
 
+/**
+ * What a new org may not be called: /:org is the last route the app tries, so an org with the name
+ * of a top-level route would never reach its own page. org-slugs.test.ts ties this to the router.
+ * Orgs that already have such a slug stay as they are.
+ */
+export const RESERVED_ORG_SLUGS: ReadonlySet<string> = new Set([
+  'admin',
+  'api',
+  'assets',
+  'dashboard',
+  'dashboards',
+  'f',
+  'forgot-password',
+  'login',
+  'notifications',
+  'orgs',
+  'register',
+  'reset-password',
+  'search',
+  'settings',
+  'setup-2fa',
+  'ws',
+]);
+
 /** Team-level role enum */
 export const teamRoleValidator = z.enum(['ADMIN', 'MEMBER', 'VIEWER']);
 
@@ -90,7 +114,9 @@ export const resetPasswordSchema = z.object({
 
 export const createOrgSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: slugValidator,
+  slug: slugValidator.refine((slug) => !RESERVED_ORG_SLUGS.has(slug), {
+    message: 'This slug is reserved by the app, choose another',
+  }),
   description: z.string().max(500).optional(),
 });
 

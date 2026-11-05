@@ -3,7 +3,7 @@
  * see, widget by widget.
  */
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { readSlots, READ_CONCURRENCY } from '../../actions/read.service';
 import { prisma } from '../../config/database';
@@ -19,6 +19,7 @@ import {
 } from '../../test/factory';
 import { authPost } from '../../test/helpers';
 import { tokenHeaderFor } from '../../test/mcp-client';
+import * as queryService from '../search/query.service';
 
 import { mapWithCap, RENDER_LIMIT, WIDGETS_AT_ONCE } from './dashboards.service';
 
@@ -802,6 +803,47 @@ describe('dashboards', () => {
       expect(answers[RENDER_LIMIT.max]).toBe(429);
       // A live dashboard must not cut its viewer off from search
       expect((await queryRun(user)).status).toBe(200);
+    });
+
+    it('caps a real render at 4 widgets at once', async () => {
+      const user = await member();
+      const id = await fullDashboard(user);
+      const original = queryService.runQueryInHeldSlot;
+      let running = 0;
+      let peak = 0;
+      // Passes through to the real query, and only counts what overlaps
+      const spy = vi
+        .spyOn(queryService, 'runQueryInHeldSlot')
+        .mockImplementation(async (...args) => {
+          running++;
+          peak = Math.max(peak, running);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            return await original(...args);
+          } finally {
+            running--;
+          }
+        });
+      try {
+        const { widgets } = await render(id, user);
+        expect(widgets).toHaveLength(24);
+        expect(widgets.every((w) => w.result.total === 2)).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(peak).toBe(4);
+    });
+
+    it('loads the dashboard once in a render, also through authorization', async () => {
+      const user = await member();
+      const id = await newDashboard({}, user);
+      const spy = vi.spyOn(prisma.dashboard, 'findUnique');
+      try {
+        await render(id, user);
+        expect(spy).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('runs at most 4 at once, and keeps the order', async () => {

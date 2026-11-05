@@ -182,7 +182,9 @@ const dashboardActions = [
       projectIds: z.array(z.string()),
     }),
     rest: { method: 'GET', path: `${DASHBOARDS}/:id/render` },
-    authorize: authorizeView,
+    // The render loads the dashboard for this viewer first thing, and answers 404 as authorize
+    // would: its input is the id alone, so nothing runs ahead of that check
+    authorize: async () => {},
     handler: async (ctx, input) => dashboardsService.render(ctx, input.id),
   }),
   defineAction({

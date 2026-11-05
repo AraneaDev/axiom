@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { broadcastToRoom } from '../../realtime/broadcast';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { formatIssueKey } from '../../utils/issue-key';
@@ -212,7 +213,7 @@ export async function startSprint(sprintId: string) {
     throw new AppError(409, `Sprint "${activeSprint.name}" is already active. Complete it first.`);
   }
 
-  return prisma.sprint.update({
+  const started = await prisma.sprint.update({
     where: { id: sprintId },
     data: { status: 'ACTIVE', committedAt: new Date() },
     include: {
@@ -225,6 +226,12 @@ export async function startSprint(sprintId: string) {
       },
     },
   });
+  broadcastToRoom(`project:${sprint.projectId}`, {
+    type: 'sprint:updated',
+    projectId: sprint.projectId,
+    sprintId,
+  });
+  return started;
 }
 
 /**
@@ -281,7 +288,7 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
     });
   }
 
-  return prisma.sprint.update({
+  const completed = await prisma.sprint.update({
     where: { id: sprintId },
     data: { status: 'COMPLETED' },
     include: {
@@ -294,6 +301,12 @@ export async function completeSprint(sprintId: string, moveToSprintId?: string) 
       },
     },
   });
+  broadcastToRoom(`project:${sprint.projectId}`, {
+    type: 'sprint:updated',
+    projectId: sprint.projectId,
+    sprintId,
+  });
+  return completed;
 }
 
 /**
