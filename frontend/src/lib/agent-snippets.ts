@@ -23,7 +23,7 @@ export interface Snippet {
  * @param token - The raw token
  */
 export function agentSnippets(client: AgentClient, origin: string, token: string): Snippet[] {
-  const url = `${origin}/api/mcp`;
+  const url = new URL('api/mcp', `${origin}/`).href;
   const header = `Token ${token}`;
   if (client === 'claude-code') {
     return [
