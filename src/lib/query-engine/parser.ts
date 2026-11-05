@@ -347,7 +347,8 @@ export function parse(input: string): Expression {
 const UNSORTABLE_FIELDS = new Set(['label', 'blocked', 'blocks', 'linked', 'text']);
 
 /**
- * Where the ORDER BY clause starts, outside quotes, as an exact uppercase keyword; -1 for none.
+ * Where the ORDER BY clause starts, outside double quotes (the only quotes the lexer reads, without
+ * escapes), as an exact uppercase keyword; -1 for none.
  * @param input
  */
 function findOrderBy(input: string): number {

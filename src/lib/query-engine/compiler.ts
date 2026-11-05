@@ -422,7 +422,8 @@ export function compileToPrisma(
 /**
  * Per sortable field, what Prisma orders by. Nulls go last in both directions on the issue's own
  * columns; Prisma takes no null placement through a relation, so there the database's default
- * holds (empty last ascending, first descending).
+ * holds (empty last ascending, first descending). Status sorts by column name, so alphabetically
+ * and not along the board's workflow; priority sorts by ordinal.
  */
 const SORT_COLUMNS: Record<string, (dir: 'asc' | 'desc') => Record<string, unknown>> = {
   type: (dir) => ({ type: dir }),
