@@ -112,3 +112,23 @@ export async function viewablePageIdFilter(
   });
   return { spaceIds, hiddenPageIds: hidden.map((p) => p.id) };
 }
+
+/**
+ * The projects a scope narrows to: an unscoped one narrows to nothing, leaving the viewer's access
+ * filter to decide.
+ * @param scope - The org, team or project named, if any
+ * @param scope.orgId
+ * @param scope.teamId
+ * @param scope.projectId
+ */
+export function projectsInScope(scope?: {
+  orgId?: string;
+  teamId?: string;
+  projectId?: string;
+}): Prisma.ProjectWhereInput {
+  return {
+    ...(scope?.projectId ? { id: scope.projectId } : {}),
+    ...(scope?.teamId ? { teamId: scope.teamId } : {}),
+    ...(scope?.orgId ? { team: { orgId: scope.orgId } } : {}),
+  };
+}

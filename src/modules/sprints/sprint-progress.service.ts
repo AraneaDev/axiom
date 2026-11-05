@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { BLOCKED_WHERE, OPEN_ISSUE } from '../../lib/query-engine/derived-fields';
-import { viewableProjectsWhere } from '../search/search-access';
+import { projectsInScope, viewableProjectsWhere } from '../search/search-access';
 
 import { committedIssueIds, isDoneIssue, issueStage, pointsOf } from './sprint-metrics';
 
@@ -62,16 +62,8 @@ export async function sprintOverview(
   now: Date = new Date(),
 ): Promise<{ sprints: SprintOverviewEntry[] }> {
   const viewable = await viewableProjectsWhere(userId);
-  const scope = input.scope;
   const projectWhere: Prisma.ProjectWhereInput = {
-    AND: [
-      viewable,
-      {
-        ...(scope?.projectId ? { id: scope.projectId } : {}),
-        ...(scope?.teamId ? { teamId: scope.teamId } : {}),
-        ...(scope?.orgId ? { team: { orgId: scope.orgId } } : {}),
-      },
-    ],
+    AND: [viewable, projectsInScope(input.scope)],
   };
 
   const sprints = await prisma.sprint.findMany({

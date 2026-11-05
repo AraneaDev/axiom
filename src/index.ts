@@ -56,6 +56,7 @@ import './modules/sprints/sprints.actions';
 import './modules/search/search.actions';
 import './modules/search/query.actions';
 import './modules/saved-filters/saved-filters.actions';
+import './modules/dashboards/dashboards.actions';
 import './modules/roadmap/roadmap.actions';
 import issuesRoutes from './modules/issues/issues.routes';
 import labelsRoutes from './modules/labels/labels.routes';

@@ -187,3 +187,31 @@ export async function resolveSharing(
   if (!org) throw new AppError(404, 'Organization not found');
   return { visibility: 'ORG', teamId: null, orgId: org.id };
 }
+
+/**
+ * What to store when an item's sharing changes: nothing without a visibility. A team or org left
+ * out stays as it was, when the visibility still calls for one.
+ * @param userId - The user changing it
+ * @param current - The item as it is
+ * @param change - The visibility asked for and the team or org it names
+ * @param change.visibility
+ * @param change.teamId
+ * @param change.orgId
+ * @throws {AppError} 400 for a team or org without a visibility, and as resolveSharing
+ */
+export async function resolveSharingChange(
+  userId: string,
+  current: SharedRow,
+  change: { visibility?: Visibility; teamId?: string; orgId?: string },
+): Promise<Partial<SharedRow>> {
+  const { visibility, teamId, orgId } = change;
+  if (!visibility) {
+    if (teamId || orgId) throw new AppError(400, 'teamId and orgId need a visibility to go with');
+    return {};
+  }
+  return resolveSharing(userId, {
+    visibility,
+    teamId: teamId ?? (visibility === 'TEAM' ? current.teamId : null),
+    orgId: orgId ?? (visibility === 'ORG' ? current.orgId : null),
+  });
+}

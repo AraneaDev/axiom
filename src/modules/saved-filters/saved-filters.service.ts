@@ -7,6 +7,7 @@ import {
   canEdit,
   editRightsOf,
   resolveSharing,
+  resolveSharingChange,
   sharedWith,
   type SharingInput,
 } from '../../lib/sharing';
@@ -74,7 +75,7 @@ function legacyToText(filter: Prisma.JsonValue): string | null {
  * @param text - The query text
  * @throws {AppError} 400 INVALID_QUERY
  */
-function assertParses(text: string): void {
+export function assertParses(text: string): void {
   try {
     parseQuery(text);
   } catch (err) {
@@ -213,18 +214,8 @@ export async function update(
   },
 ): Promise<SavedQueryRecord> {
   const current = await loadFor(userId, id, 'edit');
-  if (!data.sharing.visibility && (data.sharing.teamId || data.sharing.orgId)) {
-    throw new AppError(400, 'teamId and orgId need a visibility to go with');
-  }
+  const sharing = await resolveSharingChange(userId, current, data.sharing);
   const changesQuery = data.body.query !== undefined || data.body.text !== undefined;
-  const { visibility, teamId, orgId } = data.sharing;
-  const sharing = visibility
-    ? await resolveSharing(userId, {
-        visibility,
-        teamId: teamId ?? (visibility === 'TEAM' ? current.teamId : null),
-        orgId: orgId ?? (visibility === 'ORG' ? current.orgId : null),
-      })
-    : {};
   const row = await prisma.savedFilter.update({
     where: { id },
     data: {

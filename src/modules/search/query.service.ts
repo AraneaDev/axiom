@@ -31,7 +31,7 @@ import { PROJECT_URL_WITH_NAME_SELECT } from '../../utils/prisma-selects';
 import { MAX_DB_INT } from '../../utils/validation/common-validators';
 
 import { resolveQueryFields } from './query-fields.service';
-import { viewableProjectsWhere } from './search-access';
+import { projectsInScope, viewableProjectsWhere } from './search-access';
 
 /**
  * GET /api/search has searchLimiter per address; search.run and query.run are reached by name, so
@@ -187,12 +187,10 @@ async function queryWhere(
   scope: QueryInput['scope'],
   viewable: Prisma.ProjectWhereInput,
 ): Promise<Prisma.IssueWhereInput> {
-  const scoped: Prisma.ProjectWhereInput = {
-    ...(scope?.projectId ? { id: scope.projectId } : {}),
-    ...(scope?.teamId ? { teamId: scope.teamId } : {}),
-    ...(scope?.orgId ? { team: { orgId: scope.orgId } } : {}),
-  };
-  const and: Prisma.IssueWhereInput[] = [{ project: viewable }, { project: scoped }];
+  const and: Prisma.IssueWhereInput[] = [
+    { project: viewable },
+    { project: projectsInScope(scope) },
+  ];
   if (parsed.where) {
     const condition = withTextConditions(parsed.where);
     and.push(
@@ -419,26 +417,68 @@ async function runItems(parsed: ParsedQuery, where: Prisma.IssueWhereInput, inpu
 }
 
 /**
- * Run a query with the caller's rights: every issue it counts, sums, groups or returns is one they
- * can open. A token also needs issues:read, as the results are issue data.
+ * Read a query for one caller, before any database work.
+ * @param ctx - Who runs it
+ * @param input - The query and its page
+ * @throws {AppError} 403 SCOPE; 400 INVALID_QUERY or INVALID_CURSOR
+ */
+async function prepareQuery(ctx: ActionContext, input: QueryInput): Promise<ParsedQuery> {
+  if (ctx.scopes && !scopeAllows(ctx.scopes, 'issues', 'read')) {
+    throw new AppError(403, 'This API token does not have the scope for this request', 'SCOPE');
+  }
+  const parsed = await asQueryError(() => parseQuery(input.query));
+  if (isGrouped(parsed) && input.cursor !== undefined) {
+    throw new AppError(400, 'Groups come in one page, without a cursor', 'INVALID_CURSOR');
+  }
+  return parsed;
+}
+
+const isGrouped = (parsed: ParsedQuery) =>
+  parsed.select !== undefined || parsed.groupBy !== undefined;
+
+/**
+ * Run a query that is already read: every issue it counts, sums, groups or returns is one the
+ * caller can open.
+ * @param ctx - Who runs it
+ * @param parsed - The query
+ * @param input - Its page and what to narrow it to
+ */
+async function executeQuery(ctx: ActionContext, parsed: ParsedQuery, input: QueryInput) {
+  const viewable = await viewableProjectsWhere(ctx.userId);
+  const where = await queryWhere(ctx.userId, parsed, input.scope, viewable);
+  return isGrouped(parsed)
+    ? runGroups(parsed, where, input.limit, viewable)
+    : runItems(parsed, where, input);
+}
+
+/**
+ * Run a query with the caller's rights. A token also needs issues:read, as the results are issue
+ * data.
  * @param ctx - Who runs it
  * @param input - The query, its page and what to narrow it to
  * @throws {AppError} 403 SCOPE; 400 INVALID_QUERY or INVALID_CURSOR; 429 past the read cap
  */
 export async function runQuery(ctx: ActionContext, input: QueryInput) {
-  if (ctx.scopes && !scopeAllows(ctx.scopes, 'issues', 'read')) {
-    throw new AppError(403, 'This API token does not have the scope for this request', 'SCOPE');
-  }
-  const parsed = await asQueryError(() => parseQuery(input.query));
-  const grouped = parsed.select !== undefined || parsed.groupBy !== undefined;
-  if (grouped && input.cursor !== undefined) {
-    throw new AppError(400, 'Groups come in one page, without a cursor', 'INVALID_CURSOR');
-  }
-  return readSlots.run(ctx.userId, READS_BUSY, async () => {
-    const viewable = await viewableProjectsWhere(ctx.userId);
-    const where = await queryWhere(ctx.userId, parsed, input.scope, viewable);
-    return grouped
-      ? runGroups(parsed, where, input.limit, viewable)
-      : runItems(parsed, where, input);
-  });
+  const parsed = await prepareQuery(ctx, input);
+  return readSlots.run(ctx.userId, READS_BUSY, () => executeQuery(ctx, parsed, input));
+}
+
+/**
+ * Run a query as part of a larger read that already holds its read slot and counted against its
+ * limit: a dashboard's widgets. Otherwise as runQuery.
+ * @param ctx - Who runs it
+ * @param input - The query, its page and what to narrow it to
+ * @param options - What to do with it
+ * @param options.count - Count the matches of a query for items, instead of listing them
+ * @throws {AppError} 403 SCOPE; 400 INVALID_QUERY or INVALID_CURSOR
+ */
+export async function runQueryInHeldSlot(
+  ctx: ActionContext,
+  input: QueryInput,
+  options: { count?: boolean } = {},
+) {
+  const parsed = await prepareQuery(ctx, input);
+  const counted: ParsedQuery =
+    options.count && !isGrouped(parsed) ? { ...parsed, select: ['count'], orderBy: [] } : parsed;
+  return executeQuery(ctx, counted, input);
 }

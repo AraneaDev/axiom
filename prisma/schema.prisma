@@ -43,6 +43,7 @@ model User {
   activities              Activity[]
   pageComments            PageComment[]
   savedFilters            SavedFilter[]
+  dashboards              Dashboard[]
   starredPages            StarredPage[]            @relation("UserStarredPages")
   pageViews               PageView[]               @relation("UserPageViews")
   issueVotes              IssueVote[]
@@ -153,6 +154,7 @@ model Organization {
   inviteLinks  InviteLink[]
   invitations  Invitation[]
   savedFilters SavedFilter[]
+  dashboards   Dashboard[]
 
   @@map("organizations")
 }
@@ -198,6 +200,7 @@ model Team {
   wikiSpaces   WikiSpace[]
   invitations  Invitation[]
   savedFilters SavedFilter[]
+  dashboards   Dashboard[]
 
   @@unique([orgId, slug])
   @@map("teams")
@@ -890,9 +893,65 @@ model SavedFilter {
   orgId       String?
   org         Organization?   @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
+  widgets DashboardWidget[]
+
   @@index([teamId])
   @@index([orgId])
   @@map("saved_filters")
+}
+
+// ─── Dashboards ─────────────────────────────────────────────
+
+enum WidgetType {
+  TABLE
+  COUNT
+  BAR
+  LIST
+  SPRINT_OVERVIEW
+}
+
+model Dashboard {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Sharing, as on saved queries: PRIVATE is the owner only, TEAM needs teamId, ORG needs orgId
+  visibility SavedVisibility @default(PRIVATE)
+  teamId     String?
+  team       Team?           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  orgId      String?
+  org        Organization?   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  layout  Json              @default("{}")
+  widgets DashboardWidget[]
+
+  @@index([ownerId])
+  @@index([teamId])
+  @@index([orgId])
+  @@map("dashboards")
+}
+
+model DashboardWidget {
+  id           String       @id @default(cuid())
+  dashboardId  String
+  dashboard    Dashboard    @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  // A saved query or an inline query; a sprint overview has neither. A deleted saved query leaves
+  // the widget without one, which renders as that widget's error
+  savedQueryId String?
+  savedQuery   SavedFilter? @relation(fields: [savedQueryId], references: [id], onDelete: SetNull)
+  query        String?
+  type         WidgetType
+  title        String
+  options      Json         @default("{}")
+  position     Int
+
+  @@index([dashboardId, position])
+  @@index([savedQueryId])
+  @@map("dashboard_widgets")
 }
 
 // ─── Issue Votes ────────────────────────────────────────────
