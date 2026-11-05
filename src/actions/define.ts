@@ -80,6 +80,11 @@ export interface ActionDef<
    * the input. Only moves with a destination elsewhere declare it.
    */
   crossContainer?(ctx: ActionContext, input: z.infer<I>): Promise<boolean>;
+  /**
+   * What an approved run may store and tell the agent that waits. A secret in the result stays in
+   * the approver's own answer. Without this, the whole result is stored.
+   */
+  redactResult?(result: z.infer<O>): unknown;
   /** Login and the like: never open to a token or MCP, whatever its scopes */
   uiOnly?: boolean;
   /**

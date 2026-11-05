@@ -17,8 +17,8 @@ import { formatIssueKey } from '../utils/issue-key';
 import { logger } from '../utils/logger';
 import { PROJECT_URL_SELECT, SPACE_URL_SELECT } from '../utils/prisma-selects';
 
+import { isToken } from './approval-policy';
 import type { ActionContext } from './define';
-import { isToken } from './execute';
 import {
   createViewer,
   keyIdentity,

@@ -434,6 +434,23 @@ export async function applyPageMerge(
 }
 
 /**
+ * What an approver reads before a page is deleted.
+ * @param spaceId - The space the page is in
+ * @param pageSlug - The page's slug
+ * @throws {AppError} 404 if the page is not found
+ */
+export async function deletePagePreview(spaceId: string, pageSlug: string): Promise<string> {
+  const page = await findOrThrow(
+    prisma.page.findUnique({
+      where: { spaceId_slug: { spaceId, slug: pageSlug } },
+      select: { title: true, space: { select: { name: true } } },
+    }),
+    ERR.PAGE_NOT_FOUND,
+  );
+  return `Delete the page ${page.title} in ${page.space.name}`;
+}
+
+/**
  * Delete a wiki page by space and slug.
  * @param spaceId - The wiki space ID
  * @param pageSlug - The page slug within the space

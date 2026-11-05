@@ -242,6 +242,8 @@ const issueActions = [
     input: issueInput,
     output: nothing,
     rest: { method: 'DELETE', path: ISSUE },
+    preview: (_ctx, { projectId, issueNumber }) =>
+      issuesService.deleteIssuePreview(projectId, issueNumber),
     authorize: write,
     handler: async (ctx, { projectId, issueNumber }) => {
       await issuesService.deleteIssue(projectId, issueNumber, ctx.userId);

@@ -6,6 +6,7 @@ import { perUserLimit } from '../middleware/rate-limit';
 import { logger } from '../utils/logger';
 import { validate } from '../utils/validation/common-validators';
 
+import { PendingApproval, type PendingApprovalBody } from './approval-policy';
 import { auditAction, auditRefusedBatch } from './audit';
 import type { ActionContext, ActionDef } from './define';
 import { assertRunnable, executeAction } from './execute';
@@ -46,6 +47,7 @@ export type ActError = { status: number; code: string; message: string };
 export type BatchResult =
   | { ok: true; result: unknown }
   | { ok: false; error: ActError }
+  | ({ ok: false; pending: true } & PendingApprovalBody)
   | { ok: false; skipped: true };
 
 /**
@@ -160,11 +162,11 @@ function an(kind: 'issue' | 'page'): string {
 }
 
 /**
- * Run the items in order, stopping at the first failure. Each is authorized on its own and what ran
- * before a failure stays done: a batch is no transaction.
+ * Run the items in order, stopping at the first failure or the first item that needs approval. Each
+ * is authorized on its own and what ran before that stays done: a batch is no transaction.
  * @param items - The items
  * @param ctx - Who runs them
- * @returns A result per item, later ones skipped after a failure, and how many completed
+ * @returns A result per item, later ones skipped after a stop, and how many completed
  * @throws {AppError} 400 past MAX_BATCH_ITEMS and 429 past ACT_LIMIT, before anything runs
  */
 export async function executeBatch(
@@ -186,16 +188,22 @@ export async function executeBatch(
   }
 
   const results: BatchResult[] = [];
-  let failed = false;
+  let stopped = false;
   for (const item of items) {
-    if (failed) {
+    if (stopped) {
       results.push({ ok: false, skipped: true });
       continue;
     }
     try {
-      results.push({ ok: true, result: await runItem(item, ctx) });
+      const result = await runItem(item, ctx);
+      if (result instanceof PendingApproval) {
+        stopped = true;
+        results.push({ ok: false, pending: true, ...result.body });
+      } else {
+        results.push({ ok: true, result });
+      }
     } catch (err) {
-      failed = true;
+      stopped = true;
       results.push({ ok: false, error: toActError(err) });
     }
   }
@@ -236,5 +244,9 @@ export async function runAct(request: ActRequest, ctx: ActionContext): Promise<u
 export async function handleAct(req: Request, res: Response): Promise<void> {
   const ctx = { ...actionContextFromRequest(req), byName: { ipAddress: req.ip } };
   const result = await runAct(validate(actRequest, req.body), ctx);
+  if (result instanceof PendingApproval) {
+    res.status(202).json(result.body);
+    return;
+  }
   res.status(200).json(result === undefined ? { ok: true } : result);
 }

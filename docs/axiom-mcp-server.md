@@ -20,7 +20,7 @@ A browser request must come from an allowed origin (`CORS_ORIGIN` or `FRONTEND_U
 
 ### Create a token
 
-In Axiom open Settings, API tokens, and create one. Name it after the agent (`claude-code`, `codex`), since that name becomes `via`. A new token starts with `search:read`, `issues:read`, `wiki:read` and `files:read`, which is what `search` and `read` need. Add the write scopes the agent should have, below. Over REST: `POST /api/users/me/tokens` with `{ "name": "claude-code", "scopes": ["search:read", "issues:write", "wiki:write", "files:write"] }`. The token is shown once.
+In Axiom open Settings, API tokens, and create one. Name it after the agent (`claude-code`, `codex`), since that name becomes `via`. A new token starts with `search:read`, `issues:read`, `wiki:read`, `files:read` and `approvals:read`, which is what `search` and `read` need and what `agentApproval.wait` needs. Add the write scopes the agent should have, below. Over REST: `POST /api/users/me/tokens` with `{ "name": "claude-code", "scopes": ["search:read", "issues:write", "wiki:write", "files:write"] }`. The token is shown once.
 
 ## Setup
 

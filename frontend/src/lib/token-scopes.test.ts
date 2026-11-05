@@ -10,6 +10,7 @@ describe('the token form scopes', () => {
     expect(scopeAllows(DEFAULT_SCOPES, 'issues', 'read')).toBe(true);
     expect(scopeAllows(DEFAULT_SCOPES, 'wiki', 'read')).toBe(true);
     expect(scopeAllows(DEFAULT_SCOPES, 'files', 'read')).toBe(true);
+    expect(scopeAllows(DEFAULT_SCOPES, 'approvals', 'read')).toBe(true);
   });
 
   it('offer exactly what the API mints', () => {

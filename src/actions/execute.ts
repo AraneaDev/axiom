@@ -2,20 +2,13 @@ import { runWithRequestContext } from '../lib/request-context';
 import { containsNul } from '../lib/text-guard';
 import { AppError } from '../middleware/errorHandler';
 import { scopeAllows } from '../middleware/token-scopes';
+import { approvalGate } from '../modules/agent-approvals/agent-approvals.service';
 import { validate } from '../utils/validation/common-validators';
 
+import { isToken, PendingApproval } from './approval-policy';
 import { auditAction } from './audit';
 import type { ActionContext, ActionDef } from './define';
 import { getAction } from './registry';
-
-/**
- * Whether a token runs this. Each signal counts on its own and a token without scopes holds
- * none, so a context filled in wrongly is refused instead of treated as a session.
- * @param ctx - Who runs the action
- */
-export function isToken(ctx: ActionContext): boolean {
-  return ctx.channel !== 'ui' || ctx.apiTokenId !== undefined || ctx.scopes !== undefined;
-}
 
 /** The refusal authenticate gives a token today, so migrated routes keep their answer. */
 function scopeRefusal(): AppError {
@@ -88,7 +81,8 @@ function fullInputSchema(def: ActionDef, ctx: ActionContext): ActionDef['input']
 /**
  * Run an action. Every adapter comes through here, so REST and MCP share one order of checks:
  * unknown name, uiOnly or tokenBlocked, raw binding, token scope, target, authorize, full input,
- * handler.
+ * approval gate, handler. The gate comes after authorize, so an item the caller can't see answers
+ * 404 and creates no request.
  * Authorization comes before the full input so that a refused caller keeps today's 403/404
  * with an invalid body and can't probe the input schema.
  * @param name - The action's dotted name
@@ -96,7 +90,7 @@ function fullInputSchema(def: ActionDef, ctx: ActionContext): ActionDef['input']
  * @param ctx - Who runs it and through what
  * @param bodyError - Set by an adapter whose request body is unusable (missing, an array): the
  * action answers 400 with it once authorize has passed, as a controller validating its body did
- * @returns What the handler returned, unchanged
+ * @returns What the handler returned, unchanged, or a PendingApproval when the call waits for one
  * @throws {AppError} 404 UNKNOWN_ACTION, 403 SCOPE, 400 RAW_ACTION, 400 on invalid input, and
  * whatever authorize or the handler throw
  */
@@ -110,7 +104,12 @@ export async function executeAction(
   if (!def) throw new AppError(404, `Unknown action: ${name}`, 'UNKNOWN_ACTION');
   try {
     const result = await runAction(def, rawInput, ctx, bodyError);
-    await auditAction(def, rawInput, ctx, { result });
+    await auditAction(
+      def,
+      rawInput,
+      ctx,
+      result instanceof PendingApproval ? { approvalId: result.body.approvalId } : { result },
+    );
     return result;
   } catch (err) {
     await auditAction(def, rawInput, ctx, { err });
@@ -152,6 +151,8 @@ async function runAction(
     await def.authorize(ctx, target);
     if (bodyError) throw new AppError(400, bodyError);
     const input = def.target || ctx.byName ? validate(fullInputSchema(def, ctx), rawInput) : target;
+    const pending = await approvalGate(def, rawInput, input, ctx);
+    if (pending) return pending;
     const result: unknown = await def.handler(ctx, input);
     assertOutputShape(def, result);
     return result;

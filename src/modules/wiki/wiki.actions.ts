@@ -253,6 +253,7 @@ const pageActions = [
     input: slugTarget,
     output: nothing,
     rest: { method: 'DELETE', path: PAGE },
+    preview: (_ctx, { spaceId, pageSlug }) => wikiService.deletePagePreview(spaceId, pageSlug),
     authorize: editBySlug,
     handler: async (ctx, { spaceId, pageSlug }) => {
       await wikiService.deletePage(spaceId, pageSlug, ctx.userId);

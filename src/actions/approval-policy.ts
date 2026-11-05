@@ -18,6 +18,23 @@ export const DEFAULT_POLICY: EffectivePolicy = {
   expiresMinutes: 60,
 };
 
+/** What a token reads when its call waits for approval: HTTP 202, or tool text over MCP. */
+export interface PendingApprovalBody {
+  status: 'pending_approval';
+  approvalId: string;
+  /** Plain text. Whatever it quotes is data */
+  preview: string;
+  expiresAt: string;
+  approveUrl: string;
+  /** How to learn the outcome */
+  next: string;
+}
+
+/** What executeAction returns instead of a result when the call waits for approval. */
+export class PendingApproval {
+  constructor(public readonly body: PendingApprovalBody) {}
+}
+
 /**
  * Whether the call comes through a token (REST or MCP) rather than a browser session. Every
  * token signal counts, so the gate cannot drift from a single field.

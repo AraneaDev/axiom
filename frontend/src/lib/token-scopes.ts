@@ -21,14 +21,24 @@ export const SCOPE_GROUPS = [
   { area: 'dashboards', label: 'Dashboards', description: 'Saved queries and dashboards' },
   { area: 'forms', label: 'Forms', description: 'Forms and their submissions' },
   { area: 'automation', label: 'Automation', description: 'Automation rules' },
-  { area: 'approvals', label: 'Approvals', description: 'Approval gates and votes' },
+  {
+    area: 'approvals',
+    label: 'Approvals',
+    description: 'Approval gates, votes and your agent requests',
+  },
 ] as const;
 
 /**
  * What a new token starts with: enough for an agent to find and read issues, pages and their
- * files. docs/axiom-mcp-server.md and docs/mcp-install-test-protocol.md name the same set.
+ * files, and to learn what became of a request that waits for approval. docs/axiom-mcp-server.md and docs/mcp-install-test-protocol.md name the same set.
  */
-export const DEFAULT_SCOPES = ['search:read', 'issues:read', 'wiki:read', 'files:read'] as const;
+export const DEFAULT_SCOPES = [
+  'search:read',
+  'issues:read',
+  'wiki:read',
+  'files:read',
+  'approvals:read',
+] as const;
 
 /**
  * Turn one scope of an area on or off. Write includes read, so the set holds at most one of

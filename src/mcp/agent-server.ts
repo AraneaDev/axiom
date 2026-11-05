@@ -7,18 +7,26 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Request, RequestHandler } from 'express';
 
+import { PendingApproval, type PendingApprovalBody } from '../actions/approval-policy';
 import { toActError, type ActError } from '../actions/batch';
 import type { ActionContext } from '../actions/define';
 import { actionContextFromRequest } from '../actions/rest';
 import { env as config } from '../config/env';
 import { logger } from '../utils/logger';
 
-import { AGENT_TOOLS, FailedResult, listAgentTools, type ToolEnv } from './agent-tools';
+import {
+  AGENT_TOOLS,
+  FailedResult,
+  listAgentTools,
+  pendingAnswer,
+  type ToolEnv,
+} from './agent-tools';
 
 const INSTRUCTIONS =
   'Axiom holds issues, sprints and wiki pages. Use search to find things and read to open them ' +
   'by key. Use describe to see the actions your token allows, and act to run them. Use upload ' +
-  'for files.';
+  'for files. An action that needs approval answers pending_approval: your user decides in the ' +
+  'web UI.';
 
 /**
  * A tool answer as compact JSON text.
@@ -38,14 +46,38 @@ function toolError(error: ActError) {
 }
 
 /**
- * An MCP server for one request of one caller.
- * @param toolEnv - Who calls, and where the request came in
+ * Show a client that declares elicitation where a request waits. Only the web UI decides, so the
+ * answer is ignored, a failure as well, and the tool call never waits on it.
+ * @param server - The server of this call
+ * @param pending - The request, with the URL to open
  */
-export function createAgentServer(toolEnv: ToolEnv): Server {
+function elicitPointer(server: Server, pending: PendingApprovalBody): void {
+  if (!server.getClientCapabilities()?.elicitation) return;
+  server
+    .elicitInput({
+      message:
+        `An agent is waiting for your approval: ${pending.preview}. ` +
+        `Approve or reject it at ${pending.approveUrl}. Answering here decides nothing.`,
+      requestedSchema: { type: 'object', properties: {} },
+    })
+    .catch(() => undefined);
+}
+
+/**
+ * An MCP server for one request of one caller.
+ * @param base - Who calls, and where the request came in
+ */
+export function createAgentServer(base: ToolEnv): Server {
   const server = new Server(
     { name: 'axiom', version: '0.2.0' },
     { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
   );
+  const toolEnv: ToolEnv = {
+    ...base,
+    pointToApproval: (pending) => {
+      elicitPointer(server, pending);
+    },
+  };
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: listAgentTools() }));
   server.setRequestHandler(CallToolRequestSchema, async ({ params }) => {
     const tool = AGENT_TOOLS.find((candidate) => candidate.name === params.name);
@@ -59,6 +91,7 @@ export function createAgentServer(toolEnv: ToolEnv): Server {
     try {
       const result = await tool.run(params.arguments ?? {}, toolEnv);
       if (result instanceof FailedResult) return { ...toolResult(result.value), isError: true };
+      if (result instanceof PendingApproval) return toolResult(pendingAnswer(result.body, toolEnv));
       return toolResult(result);
     } catch (err) {
       return toolError(toActError(err));

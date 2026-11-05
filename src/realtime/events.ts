@@ -13,6 +13,8 @@ export type RealtimeEvent =
   // pageId is left out for VIEW-restricted pages: the space room includes members who can't see them
   | { type: 'wiki:updated'; spaceId: string; pageId?: string }
   | { type: 'notification'; userId: string; notificationId: string }
+  // An agent's request appeared or was decided: only ever sent to that user's room
+  | { type: 'agent:approval'; userId: string; approvalId: string; status: string }
   | { type: 'approval:request:created'; projectId: string; requestId: string; issueId: string }
   | {
       type: 'approval:request:updated';

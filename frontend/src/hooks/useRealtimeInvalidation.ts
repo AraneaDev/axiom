@@ -15,6 +15,7 @@ export type RealtimeEvent =
   | { type: 'sprint:updated'; projectId: string; sprintId: string }
   | { type: 'wiki:updated'; spaceId: string; pageId?: string }
   | { type: 'notification'; userId: string; notificationId: string }
+  | { type: 'agent:approval'; userId: string; approvalId: string; status: string }
   | { type: 'approval:request:created'; projectId: string; requestId: string; issueId: string }
   | {
       type: 'approval:request:updated';
@@ -85,6 +86,10 @@ export function useRealtimeInvalidation(): void {
 
         case 'notification':
           queryClient.invalidateQueries({ queryKey: ['notifications'] });
+          break;
+
+        case 'agent:approval':
+          queryClient.invalidateQueries({ queryKey: ['agent-approvals'] });
           break;
 
         case 'approval:request:created':

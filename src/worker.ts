@@ -1,15 +1,27 @@
 import './config/load-env';
 
 import { prisma } from './config/database';
+import {
+  clearDecidedAgentApprovals,
+  expireAgentApprovals,
+} from './modules/agent-approvals/agent-approvals.cleanup';
 import { cleanupExpiredUploads } from './modules/attachments/upload-intents.service';
 import { logger } from './utils/logger';
 
 const UPLOAD_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const APPROVAL_CLEANUP_INTERVAL_MS = 60 * 1000;
 
 /** Remove expired upload URLs and staged attachments; a failure waits for the next round. */
 function runUploadCleanup(): void {
   cleanupExpiredUploads().catch((err) => {
     logger.error('Upload cleanup failed', {}, err as Error);
+  });
+}
+
+/** Expire waiting agent approvals and clear old ones; a failure waits for the next round. */
+function runApprovalCleanup(): void {
+  Promise.all([expireAgentApprovals(), clearDecidedAgentApprovals()]).catch((err) => {
+    logger.error('Agent approval cleanup failed', {}, err as Error);
   });
 }
 
@@ -25,12 +37,15 @@ async function main(): Promise<void> {
 
   runUploadCleanup();
   const uploadCleanup = setInterval(runUploadCleanup, UPLOAD_CLEANUP_INTERVAL_MS);
+  runApprovalCleanup();
+  const approvalCleanup = setInterval(runApprovalCleanup, APPROVAL_CLEANUP_INTERVAL_MS);
 
   logger.info('Axiom worker running');
 
   const shutdown = async (signal: string) => {
     logger.info('Worker shutting down', { signal });
     clearInterval(uploadCleanup);
+    clearInterval(approvalCleanup);
     if (stopEmail) await stopEmail();
     await prisma.$disconnect();
     process.exit(0);

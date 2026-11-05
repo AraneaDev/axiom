@@ -58,6 +58,7 @@ import './modules/search/query.actions';
 import './modules/saved-filters/saved-filters.actions';
 import './modules/dashboards/dashboards.actions';
 import './modules/roadmap/roadmap.actions';
+import './modules/agent-approvals/agent-approvals.actions';
 import issuesRoutes from './modules/issues/issues.routes';
 import labelsRoutes from './modules/labels/labels.routes';
 import linksRoutes from './modules/links/links.routes';

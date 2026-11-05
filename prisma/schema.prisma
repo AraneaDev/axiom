@@ -31,6 +31,7 @@ model User {
 
   // Relations
   apiTokens               ApiToken[]
+  agentApprovals          AgentApproval[]
   uploadIntents           UploadIntent[]
   orgMemberships          OrgMembership[]
   teamMemberships         TeamMembership[]
@@ -1281,4 +1282,39 @@ model SiteSettings {
   updatedAt        DateTime @updatedAt
 
   @@map("site_settings")
+}
+
+enum AgentApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  EXECUTED
+  FAILED
+}
+
+/// A token's call that waits for its user to decide in the web UI. Not the issue approval gates.
+model AgentApproval {
+  id           String              @id @default(cuid())
+  userId       String
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// No relation: the row outlives the token, and a token that is gone stops the run
+  apiTokenId   String?
+  apiTokenName String?
+  /// The channel of the request, which the run keeps so the audit log says via
+  channel      String
+  action       String
+  input        Json
+  preview      String
+  status       AgentApprovalStatus @default(PENDING)
+  result       Json?
+  error        Json?
+  decidedAt    DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime            @default(now())
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
+  @@index([decidedAt])
+  @@map("agent_approvals")
 }

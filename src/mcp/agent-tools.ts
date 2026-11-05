@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
+import { PendingApproval, type PendingApprovalBody } from '../actions/approval-policy';
 import { auditAction } from '../actions/audit';
-import { actRequest, countActItems, keyKindOf, runAct } from '../actions/batch';
+import { actRequest, countActItems, keyKindOf, runAct, type BatchResult } from '../actions/batch';
 import type { ActionContext, ActionDef } from '../actions/define';
 import { actionRefusal, assertRunnable, executeAction } from '../actions/execute';
 import { MAX_KEY_LENGTH, parseKey } from '../actions/keys';
@@ -15,6 +16,8 @@ export interface ToolEnv {
   ctx: ActionContext;
   /** Where this request came in, for URLs the agent uses next */
   origin: string;
+  /** Show the user where a request waits, where the client can. Never waited on */
+  pointToApproval?: (pending: PendingApprovalBody) => void;
 }
 
 /** A result the agent must read as a failure, though it holds what did complete. */
@@ -44,6 +47,18 @@ const uploadInput = z.strictObject({
     .union([z.string().min(1).max(MAX_KEY_LENGTH), z.record(z.string(), z.unknown())])
     .optional(),
 });
+
+/**
+ * What the agent reads for a request that waits, with a URL it can pass on to its user, and the
+ * client told where it can.
+ * @param pending - The request
+ * @param env - The tool call
+ */
+export function pendingAnswer<T extends PendingApprovalBody>(pending: T, env: ToolEnv): T {
+  const answer = { ...pending, approveUrl: `${env.origin}${pending.approveUrl}` };
+  env.pointToApproval?.(answer);
+  return answer;
+}
 
 /**
  * An action's schema as JSON Schema. What JSON Schema can't express reads as "anything".
@@ -152,14 +167,21 @@ export const AGENT_TOOLS: AgentTool[] = [
       'Run an action by name, as listed by describe: { action, input }, optionally with key to ' +
       "address its issue or page, as in { action: 'issue.update', key: 'AXM-42', input: { status: " +
       "'Done' } }. Or up to 25 in order with { batch: [...] }: it stops at the first failure, " +
-      'reports the rest as skipped, and what already ran stays done.',
+      'reports the rest as skipped, and what already ran stays done. An action that needs ' +
+      'approval answers pending_approval with approveUrl: nothing ran yet, your user decides on ' +
+      'that page, and agentApproval.wait with its approvalId tells you the outcome. A batch stops ' +
+      'at that item as well.',
     input: () => actRequest,
-    run: async (args, { ctx }) => {
+    run: async (args, env) => {
       const request = validate(actRequest, args);
-      const result = await runAct(request, ctx);
+      const result = await runAct(request, env.ctx);
       if (!request.batch) return result;
-      const { results } = result as { results: Array<{ ok: boolean }> };
-      return results.every((item) => item.ok) ? result : new FailedResult(result);
+      const batch = result as { results: BatchResult[]; completed: number };
+      const results = batch.results.map((item) =>
+        'pending' in item ? pendingAnswer(item, env) : item,
+      );
+      const answer = { ...batch, results };
+      return results.some((item) => 'error' in item) ? new FailedResult(answer) : answer;
     },
   },
   {
@@ -188,11 +210,13 @@ export const AGENT_TOOLS: AgentTool[] = [
       if (url !== undefined) {
         return executeAction(action, { url, filename, target: location }, ctx);
       }
-      const created = (await executeAction(
+      const intent = await executeAction(
         action,
         { filename, mimeType, size, target: location },
         ctx,
-      )) as { uploadUrl: string };
+      );
+      if (intent instanceof PendingApproval) return intent;
+      const created = intent as { uploadUrl: string };
       const uploadUrl = `${origin}${created.uploadUrl}`;
       // The signed route refuses any other type, and curl sends a form type by default
       const contentType = `Content-Type: ${bareMimeType(mimeType ?? '')}`;

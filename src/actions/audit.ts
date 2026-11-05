@@ -120,8 +120,10 @@ function shrink(target: Target): Target {
 /**
  * How an action ended.
  * @param err - What it threw, if anything
+ * @param approvalId - The request it waits on instead of having run, if any
  */
-function outcomeOf(err: unknown) {
+function outcomeOf(err: unknown, approvalId?: string) {
+  if (approvalId !== undefined) return { outcome: 'pending_approval', approvalId };
   if (err === undefined) return { outcome: 'ok' };
   if (err instanceof AppError && err.statusCode < 500) {
     return { outcome: 'refused', status: err.statusCode, code: err.code ?? 'ERROR' };
@@ -145,6 +147,7 @@ export function auditedPerAction(ctx: ActionContext): boolean {
  * @param target - What was worked on
  * @param ctx - Who ran it
  * @param err - What it threw, if anything
+ * @param approvalId - The request it waits on instead of having run, if any
  */
 async function writeRow(
   action: string,
@@ -152,6 +155,7 @@ async function writeRow(
   target: Record<string, unknown>,
   ctx: ActionContext,
   err: unknown,
+  approvalId?: string,
 ): Promise<void> {
   const requestCtx = {
     userId: ctx.userId,
@@ -166,7 +170,7 @@ async function writeRow(
         action,
         resourceType,
         ipAddress: ctx.byName?.ipAddress,
-        details: { target, channel: ctx.channel, ...outcomeOf(err) },
+        details: { target, channel: ctx.channel, ...outcomeOf(err, approvalId) },
       }),
     );
   } catch (auditError) {
@@ -183,16 +187,17 @@ async function writeRow(
  * @param outcome.err - What it threw, if anything
  * @param outcome.result - What it returned, if it ran
  * @param outcome.key - The key it was addressed by, when it stopped there
+ * @param outcome.approvalId - The request it waits on, when it has not run
  */
 export async function auditAction(
   def: ActionDef,
   rawInput: unknown,
   ctx: ActionContext,
-  outcome: { err?: unknown; result?: unknown; key?: string } = {},
+  outcome: { err?: unknown; result?: unknown; key?: string; approvalId?: string } = {},
 ): Promise<void> {
   if (def.kind !== 'write' || !auditedPerAction(ctx)) return;
   const target = targetOf(def, rawInput, outcome.result, outcome.key);
-  await writeRow(def.name, def.area, target, ctx, outcome.err);
+  await writeRow(def.name, def.area, target, ctx, outcome.err, outcome.approvalId);
 }
 
 /**

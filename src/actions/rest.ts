@@ -3,6 +3,7 @@ import type { Request, RequestHandler, Response, Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 
+import { PendingApproval } from './approval-policy';
 import type { ActionContext, ActionDef, RestBinding } from './define';
 import { executeAction } from './execute';
 
@@ -83,6 +84,10 @@ export function actionContextFromRequest(req: Request): ActionContext {
  * @param result - What the handler returned
  */
 function sendResult(res: Response, binding: RestBinding, result: unknown): void {
+  if (result instanceof PendingApproval) {
+    res.status(202).json(result.body);
+    return;
+  }
   if (binding.raw) return;
   if (result === undefined && (binding.method === 'DELETE' || binding.status === 204)) {
     res.status(204).end();

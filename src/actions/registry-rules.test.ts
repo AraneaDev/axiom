@@ -31,6 +31,9 @@ const TOKEN_BLOCKED_WRITE_AREAS = new Set(['admin', 'orgs', 'teams', 'projects']
  * - dashboard.*, dashboardWidget.*, /api/dashboards: new in plan 2, area dashboards (P12)
  */
 const NO_LEGACY_ROUTE = new Set([
+  'agentApproval.list',
+  'agentApproval.get',
+  'agentApproval.wait',
   'item.read',
   'query.run',
   'savedQuery.list',
@@ -141,6 +144,12 @@ function alwaysBlocked(binding: NonNullable<ActionDef['rest']>): boolean {
 function ruleViolations(def: ActionDef): string[] {
   const violations: string[] = [];
   const inputFields = fieldsOf(def.input);
+
+  if (def.rest?.raw && (def.destructive || def.admin || def.bulkCount || def.crossContainer)) {
+    violations.push(
+      `${def.name}: a raw binding can't wait for approval, its input can't be queued (A6)`,
+    );
+  }
 
   if (
     def.kind === 'write' &&
@@ -352,6 +361,19 @@ describe('registry rules', () => {
         expect(ruleViolations(action)).toEqual([expect.stringContaining('R9')]);
       },
     );
+
+    it('fails on a raw binding that could wait for approval (A6)', () => {
+      const action = defineAction({
+        ...throwaway,
+        name: 'throwaway.raw',
+        area: 'issues',
+        kind: 'write',
+        input: z.object({}),
+        destructive: true,
+        rest: { method: 'POST', path: '/api/throwaway', raw: true },
+      });
+      expect(ruleViolations(action)).toContainEqual(expect.stringContaining('A6'));
+    });
 
     it('passes with uiOnly or tokenBlocked, on reads and in other areas', () => {
       const base = { ...throwaway, name: 'throwaway.ok', input: z.object({}) };
