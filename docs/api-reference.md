@@ -68,6 +68,8 @@ A token acts as its owner, limited to its scopes. A request its scopes don't cov
 
 Each area has an `<area>:read` and an `<area>:write` scope. Write includes read within its own area only.
 
+A scope no action uses yet can't be minted (`400`): `admin:read`, `admin:write`, `orgs:write`, `teams:write`, `projects:write`, `search:write` and `dashboards:write`. A token that holds one from before gets nothing from it.
+
 | Area         | Covers                                                                                                                                                                                                        |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `issues`     | Issues, comments, labels, milestones, templates, workflows, custom fields, links, team roadmap, activity and analytics (`/api/issues`, `/api/custom-fields`, `/api/links`, the rest of `/api/projects/:id/*`) |
@@ -158,7 +160,7 @@ Run one action, or a batch of up to 25 in order. Takes a session or an API token
 
 **Request body:** `{ action, key?, input? }` or `{ batch: [{ action, key?, input? }, ...] }`, never both.
 
-`key` names the issue, page, space or project the action works in (`AXM-42`, `org/team/space/page-slug`, `org/team/space`, `AXM`), so you can leave the id fields out of `input`. See the [MCP server guide](axiom-mcp-server.md#keys) for the key forms and their errors. `issue.update` also takes `status` as a column name.
+`key` names the issue, page, space or project the action works in (`AXM-42`, `org/team/space/page-slug`, `org/team/space`, `AXM`), so you can leave the id fields out of `input`. See the [MCP server guide](axiom-mcp-server.md#keys) for the key forms and their errors. `issue.update` also takes `status` as a column name. `page.create` needs `title` and `slug` (lower-case letters, digits and hyphens) in `input`.
 
 **Response 200:** the action's result, or for a batch `{ results, completed }` with one `{ ok: true, result }`, `{ ok: false, error: { status, code, message } }` or `{ ok: false, skipped: true }` per item. A batch stops at the first failure and what ran stays done.
 

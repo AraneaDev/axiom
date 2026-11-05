@@ -161,15 +161,15 @@ The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, 
 
 ## Limits
 
-| What         | Limit                                                                        |
-| ------------ | ---------------------------------------------------------------------------- |
-| `read`       | 300 keys per minute per user, over REST and MCP; 10 MB per call              |
-| `act`        | 300 items per minute per user (a batch counts each item), 25 items per batch |
-| `search`     | 30 per minute per user                                                       |
-| Files        | 25 MB each; 100 staged at once; 4 signed uploads running per user            |
-| Public forms | Wrong access codes lock out the sending IP after 20 tries for 15 minutes     |
+| What         | Limit                                                                                                |
+| ------------ | ---------------------------------------------------------------------------------------------------- |
+| `read`       | 300 keys per minute per user, over REST and MCP; 10 MB per call; 4 calls at once per user, 16 in all |
+| `act`        | 300 items per minute per user (a batch counts each item), 25 items per batch                         |
+| `search`     | 30 per minute per user                                                                               |
+| Files        | 25 MB each; 100 staged at once; 4 signed uploads running per user                                    |
+| Public forms | Wrong access codes lock out the sending IP after 20 tries for 15 minutes                             |
 
-Past a rate limit the answer is `429 RATE_LIMITED`.
+Past a rate limit the answer is `429 RATE_LIMITED`. Reads past the cap on calls at once also say when to try again: `Retry-After` over REST, `details.retryAfterSeconds` in both.
 
 ## Errors
 
