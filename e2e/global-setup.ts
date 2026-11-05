@@ -16,8 +16,9 @@ export default async function globalSetup() {
   }
   await adminPool.end();
 
-  // 2. Push Prisma schema to E2E database
-  execSync(`DATABASE_URL="${E2E_DB_URL}" npx prisma db push`, {
+  // 2. The schema, by the same mechanism as the migrate container that also runs against this
+  // database: a pushed schema has no migration history, which that container can't get past
+  execSync(`DATABASE_URL="${E2E_DB_URL}" npx prisma migrate deploy`, {
     stdio: 'inherit',
     cwd: process.cwd(),
   });
