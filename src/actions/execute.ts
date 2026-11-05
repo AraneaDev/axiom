@@ -2,7 +2,7 @@ import { runWithRequestContext } from '../lib/request-context';
 import { containsNul } from '../lib/text-guard';
 import { AppError } from '../middleware/errorHandler';
 import { scopeAllows } from '../middleware/token-scopes';
-import { approvalGate } from '../modules/agent-approvals/agent-approvals.service';
+import { approvalGate } from '../modules/agent-approvals/agent-approvals.gate';
 import { validate } from '../utils/validation/common-validators';
 
 import { isToken, PendingApproval } from './approval-policy';
