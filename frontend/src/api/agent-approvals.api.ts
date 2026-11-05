@@ -39,19 +39,19 @@ interface ListResult {
   total: number;
 }
 
-const BASE = '/agent-approvals';
-
 /** Requests that agents made and wait for your decision. Only the web UI approves. */
 export const agentApprovalsApi = {
   list: (params: { status?: AgentApprovalStatus; limit?: number; offset?: number } = {}) => {
-    const query = new URLSearchParams();
-    if (params.status) query.set('status', params.status);
-    if (params.limit !== undefined) query.set('limit', String(params.limit));
-    if (params.offset !== undefined) query.set('offset', String(params.offset));
-    const text = query.toString();
-    return get<ListResult>(text ? `${BASE}?${text}` : BASE);
+    const search = new URLSearchParams();
+    if (params.status) search.set('status', params.status);
+    if (params.limit !== undefined) search.set('limit', String(params.limit));
+    if (params.offset !== undefined) search.set('offset', String(params.offset));
+    const query = search.size > 0 ? '?' + search.toString() : '';
+    return get<ListResult>(`/agent-approvals${query}`);
   },
-  get: (id: string) => get<AgentApproval>(`${BASE}/${encodeURIComponent(id)}`),
-  approve: (id: string) => post<AgentApproval>(`${BASE}/${encodeURIComponent(id)}/approve`, {}),
-  reject: (id: string) => post<AgentApproval>(`${BASE}/${encodeURIComponent(id)}/reject`, {}),
+  get: (id: string) => get<AgentApproval>(`/agent-approvals/${encodeURIComponent(id)}`),
+  approve: (id: string) =>
+    post<AgentApproval>(`/agent-approvals/${encodeURIComponent(id)}/approve`, {}),
+  reject: (id: string) =>
+    post<AgentApproval>(`/agent-approvals/${encodeURIComponent(id)}/reject`, {}),
 };
