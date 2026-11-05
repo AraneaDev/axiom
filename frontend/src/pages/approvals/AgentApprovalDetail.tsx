@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Bot, Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -19,8 +19,9 @@ import {
   secretTokenOf,
   STATUS_LABELS,
   STATUS_VARIANTS,
+  timeLeft,
 } from '@/lib/agent-approvals';
-import { formatDate } from '@/lib/utils';
+import { formatTimestamp } from '@/lib/format';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -48,6 +49,7 @@ export default function AgentApprovalDetail() {
   const [showInput, setShowInput] = useState(false);
   // The decision's own answer: only it holds a secret (a new token), and it is never refetched
   const [decided, setDecided] = useState<AgentApproval | null>(null);
+  const queryClient = useQueryClient();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 5_000);
@@ -64,7 +66,15 @@ export default function AgentApprovalDetail() {
 
   const options = {
     invalidateKeys: [['agent-approvals'], ['notifications']],
+    // The answer holds a new token once: keep it out of the mutation cache after unmount
+    gcTime: 0,
     onSuccess: (row: AgentApproval) => setDecided(row),
+    // Another decision got there first (409): show the row as it is now, not a red error
+    onError: (error: Error) => {
+      if ((error as { status?: number }).status === 409) {
+        void queryClient.invalidateQueries({ queryKey: ['agent-approvals'] });
+      }
+    },
   };
   const approve = useMutationWithToast(() => agentApprovalsApi.approve(id), {
     ...options,
@@ -88,11 +98,14 @@ export default function AgentApprovalDetail() {
     );
   }
 
-  const row = decided ?? data;
+  // The decision's answer belongs to the request it was made on, not to the next one opened
+  const mine = decided?.id === id ? decided : null;
+  const row = mine ?? data;
   const status = effectiveStatus(row, now);
   // An invitation's result has a token too, which is no API token to hand over
-  const secret = data?.action === 'token.create' ? secretTokenOf(decided?.result) : null;
-  const decisionError = approve.error ?? reject.error;
+  const secret = data?.action === 'token.create' ? secretTokenOf(mine?.result) : null;
+  const failed = approve.error ?? reject.error;
+  const decisionError = (failed as { status?: number } | null)?.status === 409 ? null : failed;
   const open = status === 'PENDING';
   const busy = approve.isPending || reject.isPending;
 
@@ -122,9 +135,16 @@ export default function AgentApprovalDetail() {
           <Field label="Action">
             <span className="font-mono text-xs">{row.action}</span>
           </Field>
-          <Field label="Asked">{formatDate(row.createdAt)}</Field>
-          <Field label={open ? 'Expires' : 'Expired'}>{formatDate(row.expiresAt)}</Field>
-          {row.decidedAt && <Field label="Decided">{formatDate(row.decidedAt)}</Field>}
+          <Field label="Asked">{formatTimestamp(row.createdAt)}</Field>
+          {(open || status === 'EXPIRED') && (
+            <Field label={open ? 'Expires' : 'Expired'}>
+              {formatTimestamp(row.expiresAt)}
+              {open && (
+                <span className="ml-2 text-text-secondary">{timeLeft(row.expiresAt, now)}</span>
+              )}
+            </Field>
+          )}
+          {row.decidedAt && <Field label="Decided">{formatTimestamp(row.decidedAt)}</Field>}
           <Field label="Exact input">
             <Button
               variant="ghost"

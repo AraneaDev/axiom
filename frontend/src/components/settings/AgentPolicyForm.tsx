@@ -23,6 +23,8 @@ interface AgentPolicyFormProps {
   /** False for a reader who may not change the rules. */
   canEdit: boolean;
   saving: boolean;
+  /** What the server said when the last save failed. */
+  error?: string | null;
   onSave: (rules: ReturnType<typeof rulesFrom>) => void;
 }
 
@@ -46,6 +48,19 @@ function Row({
   );
 }
 
+function ActionNames({ names }: { names: string[] }) {
+  return (
+    <details className="mt-2 text-xs text-text-secondary">
+      <summary className="cursor-pointer">Action names that can be listed ({names.length})</summary>
+      <ul className="mt-1 grid max-h-40 gap-0.5 overflow-y-auto font-mono sm:grid-cols-2">
+        {names.map((name) => (
+          <li key={name}>{name}</li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 /**
  * The rules for which agent actions wait for your approval. An org owner can loosen or tighten
  * them for the org; a person can only tighten their own. Admin actions always wait.
@@ -54,9 +69,17 @@ function Row({
  * @param root0.policy - The rules, the effective values and the defaults
  * @param root0.canEdit - False for a reader who may not change them
  * @param root0.saving - Whether a save is under way
+ * @param root0.error - What the server said when the last save failed
  * @param root0.onSave - Called with the rules to store
  */
-export function AgentPolicyForm({ scope, policy, canEdit, saving, onSave }: AgentPolicyFormProps) {
+export function AgentPolicyForm({
+  scope,
+  policy,
+  canEdit,
+  saving,
+  error,
+  onSave,
+}: AgentPolicyFormProps) {
   const [values, setValues] = useState(() => valuesOf(policy));
   const [problem, setProblem] = useState<string | null>(null);
   // Typed as text, so a new line can be typed; the names are read at save
@@ -153,14 +176,17 @@ export function AgentPolicyForm({ scope, policy, canEdit, saving, onSave }: Agen
 
       <div className="mt-4">
         {scope === 'org' ? (
-          <Textarea
-            label="Also require approval for"
-            rows={3}
-            value={alsoText}
-            disabled={!canEdit}
-            onChange={(e) => setAlsoText(e.target.value)}
-            hint="Action names, one per line, such as issue.update."
-          />
+          <>
+            <Textarea
+              label="Also require approval for"
+              rows={3}
+              value={alsoText}
+              disabled={!canEdit}
+              onChange={(e) => setAlsoText(e.target.value)}
+              hint="Action names, one per line, such as issue.update."
+            />
+            <ActionNames names={policy.writeActions} />
+          </>
         ) : (
           <fieldset>
             <legend className="text-sm font-medium text-text">Also require approval for</legend>
@@ -202,12 +228,12 @@ export function AgentPolicyForm({ scope, policy, canEdit, saving, onSave }: Agen
         </div>
       )}
 
-      {problem && (
+      {(problem ?? error) && (
         <div
           role="alert"
           className="mt-4 rounded-md border border-danger/20 bg-danger-light px-3 py-2 text-sm text-danger"
         >
-          {problem}
+          {problem ?? error}
         </div>
       )}
 

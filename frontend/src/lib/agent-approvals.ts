@@ -51,3 +51,16 @@ export function secretTokenOf(result: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * How long a request has left, in words.
+ * @param expiresAt - When it expires
+ * @param now - The time to judge by
+ */
+export function timeLeft(expiresAt: string, now: number = Date.now()): string {
+  const minutes = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 60_000));
+  if (minutes < 60) return `${minutes} min left`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} h left` : `${hours} h ${rest} min left`;
+}

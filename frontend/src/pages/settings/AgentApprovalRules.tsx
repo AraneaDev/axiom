@@ -25,6 +25,7 @@ export default function AgentApprovalRules() {
       agentPolicyApi.update({ scope: 'user', rules }),
     {
       successMessage: 'Rules saved',
+      errorMessage: null,
       onSuccess: (policy) => queryClient.setQueryData(['agent-policy', 'user'], policy),
     },
   );
@@ -73,6 +74,7 @@ export default function AgentApprovalRules() {
         policy={data}
         canEdit
         saving={save.isPending}
+        error={save.error?.message}
         onSave={(rules) => save.mutate(rules)}
       />
       {owned.length > 0 && (

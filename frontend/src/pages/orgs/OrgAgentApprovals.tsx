@@ -33,6 +33,7 @@ export default function OrgAgentApprovals() {
       agentPolicyApi.update({ scope: 'org', orgId: org?.id, rules }),
     {
       successMessage: 'Rules saved',
+      errorMessage: null,
       onSuccess: (policy) => queryClient.setQueryData(['agent-policy', 'org', org?.id], policy),
     },
   );
@@ -82,6 +83,7 @@ export default function OrgAgentApprovals() {
         policy={data}
         canEdit={isOwner}
         saving={save.isPending}
+        error={save.error?.message}
         onSave={(rules) => save.mutate(rules)}
       />
     </SettingsPage>

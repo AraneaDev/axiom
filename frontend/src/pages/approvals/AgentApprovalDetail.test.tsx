@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const get = vi.hoisted(() => vi.fn());
@@ -41,6 +41,7 @@ function show() {
     >
       <ToastProvider>
         <MemoryRouter initialEntries={['/approvals/agent/a1']}>
+          <Link to="/approvals/agent/b2">Go to b2</Link>
           <Routes>
             <Route path="/approvals/agent/:id" element={<AgentApprovalDetail />} />
           </Routes>
@@ -139,5 +140,50 @@ describe('AgentApprovalDetail', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('This request is no longer waiting'),
     );
+  });
+
+  it('shows the next request, not the one decided before, after in-app navigation', async () => {
+    get.mockImplementation(async (id: string) =>
+      id === 'a1'
+        ? request()
+        : request({ id: 'b2', preview: 'Delete issue AXM-2', input: { key: 'AXM-2' } }),
+    );
+    approve.mockResolvedValue(request({ status: 'EXECUTED', result: { deleted: true } }));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /approve/i }));
+    expect(await screen.findByText(/"deleted": true/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Go to b2'));
+    expect(await screen.findByText('Delete issue AXM-2')).toBeInTheDocument();
+    expect(screen.queryByText(/"deleted": true/)).toBeNull();
+    expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument();
+  });
+
+  it('shows when a request expires with the time, and the time left while open', async () => {
+    const at = new Date(Date.now() + 600_000);
+    get.mockResolvedValue(request({ expiresAt: at.toISOString() }));
+    show();
+    const label = await screen.findByText('Expires');
+    const value = label.nextElementSibling as HTMLElement;
+    expect(value.textContent).toMatch(/\d{1,2}:\d{2}/);
+    expect(value.textContent).toMatch(/left/);
+  });
+
+  it('does not label a decided request Expired', async () => {
+    get.mockResolvedValue(request({ status: 'EXECUTED', decidedAt: new Date().toISOString() }));
+    show();
+    await screen.findByText('Delete issue AXM-1');
+    expect(screen.queryByText('Expired')).toBeNull();
+    expect(screen.queryByText('Expires')).toBeNull();
+  });
+
+  it('shows the row instead of an error when another decision got there first', async () => {
+    get.mockResolvedValueOnce(request());
+    get.mockResolvedValue(request({ status: 'REJECTED', decidedAt: new Date().toISOString() }));
+    const conflict = Object.assign(new Error('This request is rejected'), { status: 409 });
+    approve.mockRejectedValue(conflict);
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /approve/i }));
+    expect(await screen.findByText(/You rejected this request/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

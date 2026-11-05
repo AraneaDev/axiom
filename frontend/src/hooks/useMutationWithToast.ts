@@ -14,6 +14,8 @@ interface UseMutationWithToastOptions<TData, TVariables> {
   errorMessage?: string | null;
   /** Query keys to invalidate on success. */
   invalidateKeys?: QueryKey[];
+  /** How long the mutation's result stays in the cache after its component unmounts. */
+  gcTime?: number;
   /** Additional callback on success. */
   onSuccess?: (data: TData, variables: TVariables) => void;
   /** Additional callback on error. */
@@ -28,6 +30,7 @@ interface UseMutationWithToastOptions<TData, TVariables> {
  * @param root0.successMessage
  * @param root0.errorMessage
  * @param root0.invalidateKeys
+ * @param root0.gcTime
  * @param root0.onSuccess
  * @param root0.onError
  */
@@ -37,6 +40,7 @@ export function useMutationWithToast<TData = unknown, TVariables = void>(
     successMessage = 'Done',
     errorMessage = 'Something went wrong',
     invalidateKeys = [],
+    gcTime,
     onSuccess,
     onError,
   }: UseMutationWithToastOptions<TData, TVariables> = {},
@@ -46,6 +50,7 @@ export function useMutationWithToast<TData = unknown, TVariables = void>(
 
   return useMutation({
     mutationFn,
+    gcTime,
     onSuccess: async (data, variables) => {
       for (const key of invalidateKeys) {
         await queryClient.invalidateQueries({ queryKey: key });

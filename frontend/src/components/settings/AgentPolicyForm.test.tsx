@@ -86,4 +86,19 @@ describe('AgentPolicyForm', () => {
     expect(screen.queryByRole('button', { name: /save rules/i })).toBeNull();
     expect(screen.getByLabelText('Expires after (minutes)')).toBeDisabled();
   });
+
+  it('shows what the server said and lists the names that are valid', () => {
+    render(
+      <AgentPolicyForm
+        scope="org"
+        policy={policy}
+        canEdit
+        saving={false}
+        onSave={vi.fn()}
+        error="Unknown action: issue.updat"
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Unknown action: issue.updat');
+    expect(screen.getByText('page.update')).toBeInTheDocument();
+  });
 });
