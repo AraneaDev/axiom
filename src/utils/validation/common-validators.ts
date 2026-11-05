@@ -55,6 +55,7 @@ export const slugValidator = z
 export const RESERVED_ORG_SLUGS: ReadonlySet<string> = new Set([
   'admin',
   'api',
+  'approvals',
   'assets',
   'dashboard',
   'dashboards',
