@@ -210,10 +210,10 @@ describe('dashboards', () => {
       expect(countOf(widgets[1])).toBe(5);
     });
 
-    it('gives a viewer who cannot open the saved query an error, not its data', async () => {
+    it('runs a saved query the viewer cannot open with their own rights, like an embed', async () => {
       const privateQuery = (
         await authPost('/api/saved-filters', creator.token, {
-          name: 'Mine',
+          name: `Mine ${MARK}`,
           text: `SELECT COUNT WHERE ${COUNTING}`,
         })
       ).body.id as string;
@@ -225,13 +225,38 @@ describe('dashboards', () => {
       expect(countOf(mine.widgets[0])).toBe(5);
 
       const theirs = await render(id, teamMember);
-      expect(theirs.widgets[0].result.error?.message).toMatch(/not found/i);
-      expect(theirs.widgets[0].result).not.toHaveProperty('total');
-      expect(theirs.widgets[0].result).not.toHaveProperty('groups');
+      expect(theirs.widgets[0].result.error).toBeUndefined();
+      expect(countOf(theirs.widgets[0])).toBe(2);
       expect(countOf(theirs.widgets[1])).toBe(2);
+      // Neither its text nor its name reach them, and it stays closed by itself
+      expect(JSON.stringify(theirs.widgets[0])).not.toContain(MARK);
+      expect((await act(teamMember, 'savedQuery.get', { filterId: privateQuery })).status).toBe(
+        404,
+      );
     });
 
-    it('stops answering for a saved query once the viewer leaves its team', async () => {
+    it('keeps the text of a saved query out of the error for who cannot open it', async () => {
+      const secret = `nosuchfield${MARK}`;
+      const query = (
+        await authPost('/api/saved-filters', creator.token, { name: 'Mine', text: COUNTING })
+      ).body.id as string;
+      // Parses, so the write takes it, and then fails on the field it names
+      await prisma.savedFilter.update({
+        where: { id: query },
+        data: { query: { kind: 'query', text: `${secret} = 1` } },
+      });
+      const id = await newDashboard({ visibility: 'TEAM', teamId: a.teamId });
+      await addWidget(id, { type: 'COUNT', savedQueryId: query });
+
+      const theirs = await render(id, teamMember);
+      expect(theirs.widgets[0].result.error?.code).toBe('INVALID_QUERY');
+      expect(JSON.stringify(theirs)).not.toContain(secret);
+      // Who can open it may read it anyway, and learns what is wrong
+      const mine = await render(id, creator);
+      expect(mine.widgets[0].result.error?.message).toContain(secret);
+    });
+
+    it('keeps following the viewer rights once they leave the team of the saved query', async () => {
       const leaver = await addMemberToContext(a);
       const teamQuery = (
         await authPost('/api/saved-filters', creator.token, {
@@ -249,8 +274,8 @@ describe('dashboards', () => {
         where: { userId_teamId: { userId: leaver.id, teamId: a.teamId } },
       });
       const after = await render(id, leaver);
-      expect(after.widgets[0].result.error).toBeDefined();
-      expect(after.widgets[0].result).not.toHaveProperty('total');
+      expect(after.widgets[0].result.error).toBeUndefined();
+      expect(countOf(after.widgets[0])).toBe(0);
       await prisma.user.delete({ where: { id: leaver.id } });
     });
 
@@ -263,7 +288,7 @@ describe('dashboards', () => {
       await done(creator, 'savedQuery.delete', { filterId: query });
       const { widgets } = await render(id, creator);
       expect(widgets).toHaveLength(1);
-      expect(widgets[0].result.error).toBeDefined();
+      expect(widgets[0].result.error?.message).toMatch(/no longer exists/);
     });
 
     it('turns a UI filter with no exact query into an error on that widget', async () => {

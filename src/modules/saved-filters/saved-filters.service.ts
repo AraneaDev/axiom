@@ -5,6 +5,7 @@ import { ParseError, parseQuery } from '../../lib/query-engine';
 import {
   assertAccess,
   canEdit,
+  canView,
   editRightsOf,
   resolveSharing,
   resolveSharingChange,
@@ -119,6 +120,16 @@ export async function loadFor(
 ): Promise<SavedFilter> {
   const row = await prisma.savedFilter.findUnique({ where: { id } });
   return assertAccess(userId, row, row?.userId, need, WHAT);
+}
+
+/**
+ * Whether the user may open a saved query. One that is gone is one they may not.
+ * @param userId - The user
+ * @param id - The saved query
+ */
+export async function mayOpen(userId: string, id: string): Promise<boolean> {
+  const row = await prisma.savedFilter.findUnique({ where: { id } });
+  return row !== null && canView(userId, row, row.userId);
 }
 
 /**

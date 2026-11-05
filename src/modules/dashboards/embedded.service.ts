@@ -16,6 +16,7 @@ import { scopeAllows } from '../../middleware/token-scopes';
 import { embeddedTextToRun } from '../saved-filters/saved-filters.service';
 
 import {
+  hiddenWidgetError,
   limitRender,
   renderWidgets,
   widgetError,
@@ -52,20 +53,6 @@ export async function assertEmbedReadable(ctx: ActionContext, pageId: string): P
 }
 
 /**
- * What a failed widget of something the reader may not open answers: the query language's messages
- * quote the query, and a saved query's name or absence is not theirs to know either. A missing
- * scope is about their token, so that one says so.
- * @param widgetId - The widget
- * @param err - What was thrown
- */
-const hiddenError: RenderRules['errorOf'] = (widgetId, err) => {
-  const answer = widgetError(widgetId, err);
-  return answer.error.code === 'SCOPE'
-    ? answer
-    : { error: { ...answer.error, message: 'This widget could not be rendered' } };
-};
-
-/**
  * A single block's query as a widget, for what shows one table.
  * @param source - Where it gets its data
  * @param source.savedQueryId
@@ -99,7 +86,7 @@ export async function renderEmbedded(ctx: ActionContext, pageId: string, embedId
   return readSlots.run(ctx.userId, READS_BUSY, async () => {
     const hidden: RenderRules = {
       savedText: embeddedTextToRun,
-      errorOf: hiddenError,
+      errorOf: (widget, err) => hiddenWidgetError(widget.id, err),
     };
     switch (target.kind) {
       case 'dashboard': {
@@ -119,7 +106,7 @@ export async function renderEmbedded(ctx: ActionContext, pageId: string, embedId
         }
         return renderWidgets(ctx, [queryWidget({ savedQueryId: null, query: target.query })], {
           ...hidden,
-          errorOf: widgetError,
+          errorOf: (widget, err) => widgetError(widget.id, err),
         });
     }
   });

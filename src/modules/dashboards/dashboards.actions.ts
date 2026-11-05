@@ -166,7 +166,8 @@ const dashboardActions = [
     kind: 'read',
     summary:
       'Render a dashboard you may open, each widget with your own rights: a shared dashboard ' +
-      'shows you what you can see. A widget that fails, or needs a scope your token lacks, has ' +
+      'shows you what you can see. A widget on a saved query you cannot open runs too, without ' +
+      'showing you its text. A widget that fails, or needs a scope your token lacks, has ' +
       '{ error } as its result and the others still render. Query widgets need issues:read, ' +
       'sprint overviews sprints:read. projectIds are the visible projects it reads.',
     target: dashboardTarget,
@@ -222,7 +223,9 @@ const dashboardActions = [
     kind: 'write',
     summary:
       'Add a widget at the end of a dashboard you may change, at most 24. Give savedQueryId or ' +
-      'query (as query.run takes it), neither for a SPRINT_OVERVIEW.',
+      'query (as query.run takes it), neither for a SPRINT_OVERVIEW. A saved query needs to be ' +
+      'one you may open; once on the dashboard it runs for everyone who may open the dashboard, ' +
+      'with their own rights, without showing them its text.',
     target: dashboardTarget,
     input: dashboardTarget.extend({
       type: widgetType,

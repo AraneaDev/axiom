@@ -1,7 +1,9 @@
 /**
  * Dashboards and their widgets. Sharing and edit rights are those of saved queries (lib/sharing).
  * A widget runs with the rights of whoever renders it, whoever made the dashboard, and a widget
- * that fails answers with its error and leaves the others alone.
+ * that fails answers with its error and leaves the others alone. A widget on a saved query runs
+ * for anyone who may open the dashboard, as a block in a wiki page does for its readers, and what
+ * the saved query says stays with those who may open it.
  */
 import { Prisma, type Dashboard, type DashboardWidget, type WidgetType } from '@prisma/client';
 import { z } from 'zod';
@@ -25,8 +27,9 @@ import { MAX_ROOMS_PER_SOCKET } from '../../realtime/room-access';
 import { logger } from '../../utils/logger';
 import {
   assertParses,
+  embeddedTextToRun,
   loadFor as loadSavedQuery,
-  textToRun,
+  mayOpen,
 } from '../saved-filters/saved-filters.service';
 import { runQueryInHeldSlot, type QueryInput } from '../search/query.service';
 import { projectsInScope, viewableProjectsWhere } from '../search/search-access';
@@ -361,7 +364,7 @@ export async function updateWidget(
   };
   assertSource(source);
   if (source.query !== null && source.query !== widget.query) assertParses(source.query);
-  // A saved query it already has stays, also for an editor who cannot open it: they see its error
+  // A saved query it already has stays, also for an editor who cannot open it
   if (source.savedQueryId !== null && source.savedQueryId !== widget.savedQueryId) {
     await loadSavedQuery(userId, source.savedQueryId, 'view');
   }
@@ -465,14 +468,30 @@ export function widgetError(widgetId: string, err: unknown) {
   return { error: { status: 500, code: 'INTERNAL', message: 'This widget could not be rendered' } };
 }
 
+/**
+ * What a failed widget of something the viewer may not open answers: the query language's messages
+ * quote the query, and a saved query's name is not theirs to know either. A missing scope is about
+ * their token, so that one says so.
+ * @param widgetId - The widget
+ * @param err - What was thrown
+ */
+export const hiddenWidgetError: typeof widgetError = (widgetId, err) => {
+  const answer = widgetError(widgetId, err);
+  return answer.error.code === 'SCOPE'
+    ? answer
+    : { error: { ...answer.error, message: 'This widget could not be rendered' } };
+};
+
 export type WidgetRow = Pick<DashboardWidget, keyof typeof WIDGET_SELECT>;
+
+type WidgetFailure = ReturnType<typeof widgetError>;
 
 /** How one render reads what its widgets refer to and says what went wrong with them */
 export interface RenderRules {
   /** The text of a saved query */
   savedText: (savedQueryId: string) => Promise<{ text: string; projectId?: string }>;
-  /** What a failed widget answers */
-  errorOf: typeof widgetError;
+  /** What a failed widget answers. It may not throw */
+  errorOf: (widget: WidgetRow, err: unknown) => WidgetFailure | Promise<WidgetFailure>;
 }
 
 /**
@@ -505,7 +524,7 @@ async function widgetData(
       scope: options.scope,
     };
   }
-  // A saved query, loaded on every render: the viewer may have lost it since the last one
+  // A saved query, loaded on every render: it may have changed or gone since the last one
   const saved = widget.savedQueryId ? await savedText(widget.savedQueryId) : null;
   const text = saved?.text ?? widget.query;
   if (text === null) throw new AppError(404, 'The saved query of this widget no longer exists');
@@ -551,7 +570,7 @@ export async function renderWidgets(ctx: ActionContext, rows: WidgetRow[], rules
       const { result, scope } = await widgetData(ctx, widget, options, rules.savedText);
       return { result, scope, ok: true as const };
     } catch (err) {
-      return { result: rules.errorOf(widget.id, err), scope: undefined, ok: false as const };
+      return { result: await rules.errorOf(widget, err), scope: undefined, ok: false as const };
     }
   });
   const followed = rendered.filter((widget) => widget.ok);
@@ -580,8 +599,9 @@ export async function renderWidgets(ctx: ActionContext, rows: WidgetRow[], rules
 }
 
 /**
- * Render a dashboard with the viewer's rights: each widget runs as they would run it, and one that
- * fails answers with its error. The render as a whole takes one read slot and counts once against
+ * Render a dashboard with the viewer's rights: each widget runs as they would run it, also on a
+ * saved query they cannot open themselves, and one that fails answers with its error, which keeps
+ * quiet about a saved query they cannot open. The render as a whole takes one read slot and counts once against
  * RENDER_LIMIT, the widgets none of either, and at most WIDGETS_AT_ONCE run at once.
  * @param ctx - The viewer
  * @param id - The dashboard, which they may open
@@ -594,8 +614,14 @@ export async function render(ctx: ActionContext, id: string) {
   await limitRender(ctx.userId);
   return readSlots.run(ctx.userId, READS_BUSY, async () => {
     const widgets = await renderWidgets(ctx, await widgetsOf(id), {
-      savedText: (savedQueryId) => textToRun(ctx.userId, savedQueryId),
-      errorOf: widgetError,
+      savedText: embeddedTextToRun,
+      errorOf: async (widget, err) => {
+        // Asked only of a widget that failed. When the answer can't be had, it stays hidden
+        const open =
+          widget.savedQueryId === null ||
+          (await mayOpen(ctx.userId, widget.savedQueryId).catch(() => false));
+        return open ? widgetError(widget.id, err) : hiddenWidgetError(widget.id, err);
+      },
     });
     return { dashboard: await withEdit(ctx.userId, dashboard), ...widgets };
   });

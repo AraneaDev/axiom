@@ -190,7 +190,7 @@ In progress is a heuristic on the column name: a column that is neither done nor
 
 ### Dashboards
 
-`dashboard.create` makes a dashboard, shared like a saved query, and `dashboardWidget.add` fills it: `COUNT`, `TABLE`, `LIST`, `BAR` (a query with `GROUP BY`) or `SPRINT_OVERVIEW`, each with `savedQueryId` or `query`. A dashboard holds at most 24 widgets. `dashboard.render` returns every widget with its result, evaluated with your own rights. A widget that fails has `{ error }` and the others still render. A render runs 4 widgets at once and is limited to 60 per minute. In the UI an open dashboard updates itself after changes in the projects it reads.
+`dashboard.create` makes a dashboard, shared like a saved query, and `dashboardWidget.add` fills it: `COUNT`, `TABLE`, `LIST` or `BAR` (a query with `GROUP BY`), each with `savedQueryId` or `query`, or `SPRINT_OVERVIEW`, which takes neither. A dashboard holds at most 24 widgets. `dashboard.render` returns every widget with its result, evaluated with your own rights. A widget on a saved query runs for anyone who can open the dashboard, as a wiki block does, also when they cannot open that saved query: they get the result with their own rights and never its text. A widget that fails, a deleted saved query included, has `{ error }` and the others still render. A render runs 4 widgets at once and is limited to 60 per minute. In the UI an open dashboard updates itself after changes in the projects it reads.
 
 ### Wiki blocks
 

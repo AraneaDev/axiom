@@ -2639,6 +2639,8 @@ A widget has a `type`, a `title`, a source and `options`:
 
 `options`: `limit` (1 to 100, default 25), `state` (`ACTIVE` or `PLANNING`, for the sprint overview) and `scope` (`orgId`, `teamId`, `projectId`). To change a widget's source, give the new one and `null` for the other.
 
+A widget on a saved query runs for anyone who can open the dashboard, with their own rights, as a wiki block does. Someone who cannot open that saved query gets its result, and neither its text nor, when it fails, the error's own wording. A deleted saved query gives the widget an error.
+
 **Limits.** At most 24 widgets per dashboard (`400` beyond). A render runs at most 4 widgets at once, takes one read slot, and is limited to 60 per minute per user. A widget that fails, or needs a scope the token lacks (`issues:read` for query widgets, `sprints:read` for sprint overviews), has `{ "error": { "message", "code" } }` as its result and the others still render. `dashboard.render` also returns `projectIds`, the visible projects it reads, at most 50.
 
 **Live updates.** The dashboard view joins the rooms of those projects and refetches the render after `issue:created`, `issue:updated`, `board:moved` or `sprint:updated`. The first event starts a 2 second wait and later events do not extend it. A hidden tab refetches nothing and catches up once when it is visible again, as it does after a socket reconnect. Past 50 projects the render stays correct but live updates can miss projects.
