@@ -6,6 +6,13 @@ Base URL: `http://localhost:3000` (development)
 
 All API endpoints are prefixed with `/api`.
 
+Every route is the REST binding of an action in the registry, and the registry also feeds `POST /api/act`, `POST /api/read` and the MCP server. The full reference, with every path, input, output, status and the scope each one needs, is generated from it and always matches the running server:
+
+- `/api/docs` is the browsable reference.
+- `/api/openapi.json` is the same as OpenAPI, for clients and generators.
+
+Both are public and need no sign-in. This page keeps the parts a generated list can't say well: authentication, scopes, permissions, approvals, the query language and the shape of the larger resources. Where it differs from `/api/docs`, `/api/docs` is right. A path that no action serves answers `404`, for a session and a token alike, and `401` for a caller who is not signed in.
+
 ### Content Type
 
 All request and response bodies use `application/json` unless noted otherwise (file uploads use `multipart/form-data`).
@@ -87,9 +94,11 @@ A scope no action uses can't be minted (`400`): `orgs:write`, `teams:write`, `pr
 | `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
 | `admin` | Orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and `/api/admin`. Every call waits for approval, see [Approvals](#approvals-for-token-calls) |
 
-Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (changing the profile, the password or 2FA) and resetting another user's password stay closed to tokens (`403`); reading the profile is open. Creating a token with any other scope name returns `400`.
+Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (changing the profile, the password or 2FA) and resetting another user's password stay closed to tokens (`403`); reading the profile is open. Login, refresh, logout and the other sign-in routes are `uiOnly`: a session reaches them, a token never does, and `act` doesn't list them. Invite links are `tokenBlocked`: a normal action for your browser session, refused to every token. Creating a token with any other scope name returns `400`.
 
 Tokens created before scopes per area were rewritten by migration and reach what they always reached: the old `issues:*` and `wiki:*` scopes became the set of area scopes that covers the same paths (`LEGACY_SCOPE_MAP` in `src/middleware/token-scopes.ts`).
+
+What a token reaches comes from the registry alone. Each action has an area and a kind (`read` or `write`), and the token needs the matching scope. No path rule sits in front of it. The few actions on your own state (profile, notifications, your dashboard) are open to a token with read on any area they name. `src/actions/token-reach.json` freezes the scopes per action and changes in the same commit as any change of reach.
 
 ### Permissions
 
@@ -196,7 +205,7 @@ Endpoints, all `approvals` area:
 | `POST /api/agent-approvals/:id/reject` | `agentApproval.reject` | Web UI only |
 | `GET`, `PUT /api/agent-policy` | `agentPolicy.get`, `agentPolicy.update` | `scope` `org` (owners write) or `user` (tighten only); update is an admin action |
 
-Statuses are `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED` and `FAILED`. Limits: 256 KB of input (`400`), 50 pending per user (`429`), expiry from 10 minutes to 24 hours (an hour by default). Tokens are refused (`403`) on legacy `DELETE` routes and other legacy routes that delete, and on legacy writes to human checks (approval gates and votes), until those are migrated. An org policy that lists `attachment.upload` (the multipart upload, which can't wait) in `alsoRequire` refuses it to tokens outright (`403`); `attachment.createUploadUrl` and `attachment.fromUrl` wait for approval like any other action. A token that has an expiry can only create tokens that expire by then; a token with none is free. The [MCP server guide](axiom-mcp-server.md#approvals) has the whole picture.
+Statuses are `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED` and `FAILED`. Limits: 256 KB of input (`400`), 50 pending per user (`429`), expiry from 10 minutes to 24 hours (an hour by default). Deletes, approval gate writes and votes wait for approval like any destructive action; none is refused outright. An org policy that lists `attachment.upload` (the multipart upload, which can't wait) in `alsoRequire` refuses it to tokens outright (`403`); `attachment.createUploadUrl` and `attachment.fromUrl` wait for approval like any other action. A token that has an expiry can only create tokens that expire by then; a token with none is free. The [MCP server guide](axiom-mcp-server.md#approvals) has the whole picture.
 
 ### Uploads
 
@@ -1880,36 +1889,40 @@ Create an automation rule.
 ```json
 {
   "name": "Assign on critical label",
-  "trigger": "LABEL_ADDED",
-  "triggerValue": "critical",
+  "trigger": "label:added",
   "condition": "type = Bug AND priority IN (High, Critical)",
-  "action": "ASSIGN_USER",
-  "actionValue": "usr_01HZ..."
+  "actions": [{ "type": "set_assignee", "userId": "usr_01HZ..." }],
+  "enabled": true
 }
 ```
 
-| Field          | Type   | Description                                                                                                                                        |
-| -------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`         | string | Display name for the rule                                                                                                                          |
-| `trigger`      | string | Event that fires the rule                                                                                                                          |
-| `triggerValue` | string | Value associated with the trigger (e.g. label name)                                                                                                |
-| `condition`    | string | Optional query string condition evaluated before running the action (e.g. `"type = Bug AND priority IN (High, Critical)"`). Validated on creation. |
-| `conditions`   | array  | **Deprecated.** Legacy JSON condition format. Use `condition` instead.                                                                             |
-| `action`       | string | Action type to execute (see action types below)                                                                                                    |
-| `actionValue`  | string | Value for the action (depends on action type)                                                                                                      |
+The body is bounded and typed. An unknown trigger or action type answers `400`, and so does a field over its length.
+
+| Field        | Type    | Description                                                                                                                                  |
+| ------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`       | string  | Display name, 1 to 200 characters                                                                                                            |
+| `trigger`    | string  | One of `issue:created`, `issue:status_changed`, `issue:assigned`, `label:added`                                                              |
+| `condition`  | string  | Optional query string evaluated before the actions run, up to 2000 characters (e.g. `"type = Bug AND priority IN (High, Critical)"`). Validated on write |
+| `conditions` | array   | **Deprecated.** The older JSON condition format, at most 50 entries. Use `condition` instead                                                  |
+| `actions`    | array   | At most 50 actions, each with a `type` from the table below and the fields that type reads                                                    |
+| `enabled`    | boolean | Optional                                                                                                                                     |
+
+Text fields of an action are capped: `body`, `value` 5000 characters, `title`, `to`, `subject` 500, `url` 2000, `name` 200, `field` 100. Actions support `{{expression}}` template variables.
 
 **Action types:**
 
-| Action         | Description                                                                                                                                                                                                                                                                      | `actionValue`                                                                |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `ASSIGN_USER`  | Assign the issue to a user                                                                                                                                                                                                                                                       | User ID                                                                      |
-| `SET_STATUS`   | Set the issue status                                                                                                                                                                                                                                                             | Status name                                                                  |
-| `SET_PRIORITY` | Set the issue priority                                                                                                                                                                                                                                                           | Priority name                                                                |
-| `ADD_LABEL`    | Add a label to the issue                                                                                                                                                                                                                                                         | Label name                                                                   |
-| `set_field`    | Set a plain content field (`title`, `body`, `priority`, `type`, `storyPoints`, `timeEstimate`, `dueDate`, `startDate`) or one of the project's custom fields (`custom:<name>`). Ids, the column, the assignee and other relations are refused (use `set_status`, `set_assignee`) | JSON object: `{ "field": "storyPoints", "value": "3" }`                      |
-| `create_issue` | Create a new linked issue                                                                                                                                                                                                                                                        | JSON object with issue fields                                                |
-| `send_email`   | Send an email notification                                                                                                                                                                                                                                                       | JSON object: `{ "to": "user@example.com", "subject": "...", "body": "..." }` |
-| `webhook`      | Send an HTTP POST to a URL                                                                                                                                                                                                                                                       | JSON object: `{ "url": "https://...", "headers": { ... } }`                  |
+| `type`         | Description                                                                                                                                                                                                                  | Fields                                  |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `set_status`   | Move the issue to a column                                                                                                                                                                                                   | `columnId`                              |
+| `set_assignee` | Assign the issue to a user                                                                                                                                                                                                   | `userId`                                |
+| `add_label`    | Add a label to the issue                                                                                                                                                                                                     | `name`                                  |
+| `add_comment`  | Comment on the issue                                                                                                                                                                                                         | `body`                                  |
+| `set_field`    | Set a plain content field (`title`, `body`, `priority`, `type`, `storyPoints`, `timeEstimate`, `dueDate`, `startDate`) or a custom field (`custom:<name>`). Ids, the column, the assignee and other relations are refused | `field`, `value`                        |
+| `create_issue` | Create a new linked issue                                                                                                                                                                                                    | `title`, `body`, and other issue fields |
+| `send_email`   | Send an email                                                                                                                                                                                                                | `to`, `subject`, `body`                 |
+| `webhook`      | Send an HTTP request to a URL                                                                                                                                                                                                | `url`, `method`, `headers`, `data`      |
+
+Automation rules are project settings. Writing one needs team ADMIN or higher, and a token needs `automation:write`. A rule write is an ordinary write for a token, it doesn't wait for approval.
 
 **Response 201:** Automation rule object.
 

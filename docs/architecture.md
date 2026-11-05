@@ -94,9 +94,12 @@ Requests pass through the following middleware in order:
 5. `globalLimiter` — 300 requests/minute per IP (skipped in test env)
 6. `authLimiter` — 15 requests/minute on `/api/auth/login`, `/api/auth/refresh`, `/api/auth/register`
 7. `csrfGuard` — applied to all `/api/*` routes (see [Security Model](#security-model))
-8. `auditMiddleware` — registers a `finish` listener to log mutating API requests to `AuditLog`
-9. Route handlers
-10. `errorHandler` — global error handler (must be last)
+8. `openApiRouter` — `/api/docs` and `/api/openapi.json`, public
+9. `require2fa` — 2FA enforcement for signed-in sessions
+10. `auditMiddleware` — registers a `finish` listener to log mutating API requests to `AuditLog`
+11. The action routes (`mountActions`), then `/api/act` and `/api/mcp`
+12. A catch-all `authenticate` for `/api`, then a JSON `404`: a stranger gets `401` on any unknown path, a signed-in caller or token gets `404`
+13. `errorHandler` — global error handler (must be last)
 
 ### Module System
 
@@ -104,12 +107,11 @@ All feature code lives under `src/modules/`. Each module follows the pattern:
 
 ```
 src/modules/<feature>/
-  <feature>.routes.ts     # Express Router — mounts at /api/...
-  <feature>.controller.ts # Request handlers — delegates to service
+  <feature>.actions.ts    # defineAction: input, output, authorize, REST binding, handler
   <feature>.service.ts    # Business logic — interacts with Prisma
 ```
 
-Controllers receive `req`/`res` and call service functions. Services never touch `req`/`res` and throw `AppError` on failure.
+There are no route or controller files. An action's `rest` binding gives it a path, and the REST adapter mounts it. A handler calls a service. Services never touch `req`/`res` and throw `AppError` on failure.
 
 **Registered modules (route prefix → module):**
 
@@ -134,9 +136,21 @@ Controllers receive `req`/`res` and call service functions. Services never touch
 
 Each operation is one `defineAction` with a name, an area and kind (`read` or `write`), a Zod input and output, an optional REST binding, `authorize` and a `handler` that calls a service. `executeAction` runs: unknown, `uiOnly`, raw, scope, parse `target` (the ids authorize needs), `authorize`, parse the full input, handler, then one audit row per write. Three adapters share it:
 
-- **REST.** `mountActions` mounts bindings under `/api/*` before the legacy routers. Paths, status codes and response shapes are the same as the controllers it replaced.
+- **REST.** `mountActions` mounts every action's binding under `/api/*`. Every route is an action: no router, controller or path rule stands beside the registry. A binding can also be `public` (no authentication, for public forms and health), carry its own `rateLimit`, or be `raw` when the handler answers through `ctx.http` (uploads, downloads, exports).
 - **`/api/act` and `/api/read`.** An action by name, or a batch, and read by key.
 - **MCP.** The five tools of `src/mcp/agent-tools.ts`, authenticated by API token so each write carries its token's name as `via`.
+
+#### What a token reaches
+
+The registry alone decides, from the definition of each action:
+
+- **Area and kind.** A token needs `<area>:read` or `<area>:write`. `openToReadOf` lets a read scope on any of several areas stand in for it on the caller's own state (profile, notifications, dashboard). Registry rule R18 limits it to reads and to writes that belong to no org and do no harm.
+- **`uiOnly`.** Login and the like: refused to tokens and to `act`.
+- **`tokenBlocked`.** Normal for a browser session, refused to every token (invite links, changing your profile).
+- **`admin`.** Orgs, teams, members, tokens, space permissions, page restrictions and project writes. A token's call always waits for approval.
+- **`destructive`, `destructiveWhen`, `permissionChange`.** Deletes and removals wait by default, an org may relax them. `destructiveWhen` makes an action destructive for some inputs only (renaming a board column). `permissionChange` waits whatever any rule says.
+
+A public action is declared with `definePublicAction`, whose context has no `userId`, so a handler that reads it doesn't compile. `src/actions/token-reach.json` freezes which scopes reach which action and must change in the same commit as any reach change; `token-reach.test.ts` calls every action with a token of each scope and checks the answer. `no-legacy.test.ts` walks the Express router and fails on any `/api` route that is no binding. It reads routes and nested routers only: a handler added with `app.use` is invisible to it, so review those by hand.
 
 OpenAPI and `describe` are generated from the same definitions, so documentation can't drift from behavior. `src/actions/parity.test.ts` and `registry-rules.test.ts` fail when a route, an input type or a scope rule drifts.
 

@@ -1,10 +1,10 @@
 # Axiom MCP server
 
-Axiom has an MCP server so your agents work in the same projects you do. It has five tools. They cover the developer loop: issues, comments, worklogs, links, attachments, wiki pages, sprints and the org, team and project reads, so an agent finishes a ticket in one or two calls instead of ten. The rest of the API (forms, automation, labels, milestones, custom fields, templates, board columns, notifications, administration) follows in later work and isn't reachable through `act` yet.
+Axiom has an MCP server so your agents work in the same projects you do. It has five tools. They cover the developer loop: issues, comments, worklogs, links, attachments, wiki pages, sprints and the org, team and project reads, so an agent finishes a ticket in one or two calls instead of ten. Every operation Axiom has is an action, so `act` reaches all of it: forms, automation, labels, milestones, custom fields, templates, board columns, notifications and administration too. What a token may run depends on its scopes and on the rules below, and `describe` lists exactly that.
 
 ## Connection
 
-The server speaks Streamable HTTP, stateless, at `POST /api/mcp`. `GET` and `DELETE` answer `405`. Legacy SSE and the 24 separate tools of the earlier server are gone.
+The server speaks Streamable HTTP, stateless, at `POST /api/mcp`. `GET` and `DELETE` answer `405`. The 24 separate tools of the earlier server are gone.
 
 | What            | Value                                                                  |
 | --------------- | ---------------------------------------------------------------------- |
@@ -20,7 +20,22 @@ A browser request must come from an allowed origin (`CORS_ORIGIN` or `FRONTEND_U
 
 ### Create a token
 
-In Axiom open Settings, API tokens, and create one. Name it after the agent (`claude-code`, `codex`), since that name becomes `via`. A new token starts with `search:read`, `issues:read`, `wiki:read`, `files:read` and `approvals:read`, which is what `search` and `read` need and what `agentApproval.wait` needs. Add the write scopes the agent should have, below. Over REST: `POST /api/users/me/tokens` with `{ "name": "claude-code", "scopes": ["search:read", "approvals:read", "issues:write", "wiki:write", "files:write"] }`. The token is shown once.
+The quickest way is Settings, Connect an agent (`/settings/connect-agent`). Pick Claude Code or Codex, and Axiom creates a token for it (90 days, every scope except `admin`) and shows the exact command or config with the token filled in. The token is shown once. For Claude Code the page shows:
+
+```bash
+claude mcp add --transport http axiom http://localhost:3000/api/mcp \
+  --header "Authorization: Token tk_..."
+```
+
+For Codex it shows a block for `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.axiom]
+url = "http://localhost:3000/api/mcp"
+http_headers = { "Authorization" = "Token tk_..." }
+```
+
+To choose the scopes yourself, open Settings, API tokens, and create one. Name it after the agent (`claude-code`, `codex`), since that name becomes `via`. A new token starts with `search:read`, `issues:read`, `wiki:read`, `files:read` and `approvals:read`, which is what `search` and `read` need and what `agentApproval.wait` needs. Add the write scopes the agent should have, below. Over REST: `POST /api/users/me/tokens` with `{ "name": "claude-code", "scopes": ["search:read", "approvals:read", "issues:write", "wiki:write", "files:write"] }`. The token is shown once.
 
 ## Setup
 
@@ -47,17 +62,15 @@ Or in `.mcp.json` at the project root:
 
 ### Codex
 
-Codex sends `--bearer-token-env-var` as `Bearer ...`, which Axiom does not accept for API tokens. Put the whole header value in an environment variable and map it in `~/.codex/config.toml`:
-
-```bash
-export AXIOM_AUTH="Token tk_..."
-```
+Codex sends `--bearer-token-env-var` as `Bearer ...`, which Axiom does not accept for API tokens. Put the header in `~/.codex/config.toml` instead:
 
 ```toml
 [mcp_servers.axiom]
 url = "http://localhost:3000/api/mcp"
-env_http_headers = { Authorization = "AXIOM_AUTH" }
+http_headers = { "Authorization" = "Token tk_..." }
 ```
+
+To keep the token out of the file, put the whole header value in an environment variable and map it with `env_http_headers = { Authorization = "AXIOM_AUTH" }`, after `export AXIOM_AUTH="Token tk_..."`.
 
 ## The five tools
 
@@ -217,13 +230,14 @@ Some things an agent asks for wait for you. A call from a token that needs appro
 
 A browser session never waits. A token always goes through the gate, over MCP and REST alike. By default these wait:
 
-- Destructive actions (deletes and removals).
+- Destructive actions (deletes and removals). Some are destructive for certain inputs only (`destructiveWhen`): renaming a board column, changing which column counts as done, or a workflow rule write. An org's rules can relax these, as they can any destructive action.
+- Writes that change a human check: creating, changing or deleting an approval gate, and voting on an approval request. A token's call waits for you instead of being refused.
 - A bulk action over 10 items. A batch of 50 single updates doesn't count as bulk.
 - A move that crosses a project (`issue.move`) or a space (`page.move`).
-- Anything that changes who can see or edit something, such as sharing a dashboard or saved query.
+- Anything that changes who can see or edit something (`permissionChange`), such as sharing a dashboard or saved query. No org rule lifts this one.
 - Every admin action, whatever any policy says.
 
-An admin action is one in the `admin` area: orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and reads under `/api/admin`. These are no longer closed to tokens, they wait for you. Your own account (profile, password, 2FA) is not in that list: a token can read your profile, but changing the profile, the password or 2FA stays closed to it. A call that waits needs the scope of its area, and a request expires after an hour unless a policy says otherwise.
+An admin action is one in the `admin` area: orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and reads under `/api/admin`. These are not closed to tokens, they wait for you. Your own account (profile, password, 2FA) is not in that list: a token can read your profile, but changing the profile, the password or 2FA stays closed to it. A call that waits needs the scope of its area, and a request expires after an hour unless a policy says otherwise.
 
 ### Policies
 
@@ -256,14 +270,18 @@ Approving and rejecting (`agentApproval.approve`, `agentApproval.reject`) are we
 
 These are never available to a token, and wait for nothing: login, refresh and logout, password reset and change, 2FA setup, deleting your own account, resetting another user's password, and approving or rejecting a request. An agent that could change a password or a 2FA setup behind an approval would be a takeover path.
 
-### Until they are migrated
+### What a token never reaches
 
-Some older routes can't wait for approval yet, so a token is refused on them (`403`):
+Every action is one of four kinds for a token, and the registry decides which:
 
-- Every legacy `DELETE`, and any other legacy route that deletes. This includes wiki stars and reactions toggles.
-- Legacy writes that change a human check: editing or creating an approval gate, and voting on an approval request.
+- **Ordinary.** Runs when the token holds the scope of the action's area and kind.
+- **Waits.** `destructive`, `bulkCount`, `crossContainer`, `permissionChange` or `admin`, as described above.
+- **`tokenBlocked`.** A normal action for your browser session, refused to every token (`403`). Examples are invite links and changing your own profile.
+- **`uiOnly`.** Login, password, 2FA and the like. Refused to tokens and to `act`, whatever the scopes.
 
-They return once they are migrated behind approval.
+A few reads and writes of your own state (your profile, notifications, your dashboard) are open to a token that holds read on any of the areas the action names (`openToReadOf`), in place of the scope of its own area. This applies to reads, and to writes that belong to no org and do no harm, such as marking a notification read.
+
+`src/actions/token-reach.json` freezes which scopes reach which action. It changes in the same commit as any change of reach, so a reviewer sees the widening in the diff.
 
 ### Over MCP
 
@@ -280,7 +298,7 @@ A token has one `<area>:read` and one `<area>:write` scope per area, and write i
 | `sprint.overview` | `sprints:read` |
 | `savedQuery.*`, `dashboard.*` | `dashboards:read` or `dashboards:write`; running one also needs `issues:read`, a sprint overview widget `sprints:read` |
 | `read`         | `search:read`, plus `issues:read` or `wiki:read` per item. Some includes need `files:read`                    |
-| `act`          | The scope of the action's area, for example `issues:write` for `issue.update`, `wiki:write` for `page.create` |
+| `act`          | The scope of the action's area and kind, for example `issues:write` for `issue.update`, `wiki:write` for `page.create`. `describe` shows the area and kind of each action |
 | `upload`       | `files:write` and the scope of the target's area                                                              |
 
 The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals` and `admin`. `search`, `orgs`, `teams` and `projects` have only a read scope, because everything that changes them is an admin action. A scope no action uses can't be minted, so a token never gains reach later without you choosing it. Managing orgs, teams, members, tokens, space permissions, page restrictions and projects is in the `admin` area, and those calls always wait for you to approve them (see [Approvals](#approvals)). A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.

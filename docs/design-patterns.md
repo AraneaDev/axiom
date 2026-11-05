@@ -359,34 +359,43 @@ export const itemsApi = {
 
 ## Backend Module Pattern
 
-Every feature module follows the same 3-file structure:
+Every feature module has an actions file and a service. There are no route or controller files: every route is the REST binding of an action.
 
-### Routes (`module.routes.ts`)
+### Actions (`module.actions.ts`)
 ```typescript
-import { Router } from 'express';
-import { authenticate } from '../../middleware/auth';
-import * as controller from './module.controller';
-
-const router = Router();
-router.get('/', authenticate, controller.list);
-router.post('/', authenticate, controller.create);
-router.patch('/:id', authenticate, controller.update);
-router.delete('/:id', authenticate, controller.delete);
-export default router;
-```
-
-### Controller (`module.controller.ts`)
-```typescript
-import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
+import { defineAction } from '../../actions/define';
+import { registerActions } from '../../actions/registry';
 import * as service from './module.service';
 
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await service.list(req.params.projectId, req.query);
-    res.json(result);
-  } catch (err) { next(err); }
-}
+const target = z.object({ projectId: z.string().min(1).max(64) });
+
+registerActions([
+  defineAction({
+    name: 'item.list',
+    area: 'issues',
+    kind: 'read',
+    summary: 'List the items of a project',
+    target,
+    input: target,
+    output: z.looseObject({ items: z.array(z.looseObject({ id: z.string() })) }),
+    rest: { method: 'GET', path: '/api/projects/:projectId/items' },
+    authorize: async (ctx, { projectId }) => { /* throw 403 or 404 */ },
+    handler: async (_ctx, { projectId }) => service.list(projectId),
+  }),
+]);
 ```
+
+Import the file in `src/index.ts` above `mountActions`. Rules every action follows (enforced by `registry-rules.test.ts`):
+
+- **Area and kind** give the token scope, `<area>:read` or `<area>:write`. They also name the action in the docs and the audit log.
+- **Authorize first.** `target` holds only the ids `authorize` needs, and `input` extends it with `target.extend({...})`, so a refused caller gets 403 or 404 whatever the body holds.
+- **Handlers call services**, never raw Prisma for a write.
+- **Typed input.** Ids use `strictInt` or a bounded string; no top-level `z.unknown()` or `z.any()`; a repeatable query value uses `queryValue`.
+- **Token reach by flag.** `destructive` and `destructiveWhen(input)` (destructive for some inputs only), `permissionChange(input)` (always waits), `admin` (always waits), `bulkCount`, `crossContainer`, `uiOnly` (never a token) and `tokenBlocked` (a session only). `openToReadOf` opens an action on the caller's own state to a read scope of several areas (rule R18: reads, and writes that belong to no org). A waiting action also declares a `preview`.
+- **Public routes.** An action with no sign-in (public forms, health) is declared with `definePublicAction` and a `rest` binding with `public: true`. Its context has no `userId`.
+- **Token reach is frozen.** `src/actions/token-reach.json` lists the scopes that reach each action. Change it in the same commit as any change of reach.
+- **No legacy routes.** `no-legacy.test.ts` fails on any `/api` route that is no binding. It can't see a handler added with `app.use`, so keep those out of `src/index.ts` unless they are middleware.
 
 ### Service (`module.service.ts`)
 ```typescript
@@ -485,7 +494,7 @@ One registry per resource type. To filter a new resource, create `src/lib/query-
 1. Create `frontend/src/api/feature.api.ts`
 2. Import `get, post, patch, del` from `./client`
 3. Export a named object with typed endpoints
-4. Create backend module: routes + controller + service
-5. Mount routes in `src/index.ts`
+4. Create backend module: actions + service
+5. Import the actions file in `src/index.ts` above `mountActions`, and add the action to `src/actions/token-reach.json`
 6. Use `parseServicePagination` for list endpoints
 7. Use `AppError` for error responses

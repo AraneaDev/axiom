@@ -395,14 +395,13 @@ Opens a browser-based GUI at http://localhost:5555.
 
 ## Adding a New Backend Module
 
-All backend features follow the same three-file pattern: routes, controller, service.
+All backend features follow the same pattern: an actions file that declares what the module can do, and a service that does it. There are no route or controller files. Every operation is an action, and its REST path, the MCP tools, `/api/act` and the OpenAPI page all come from it.
 
 ### Step 1: Create the module directory and files
 
 ```
 src/modules/widgets/
-  widgets.routes.ts
-  widgets.controller.ts
+  widgets.actions.ts
   widgets.service.ts
 ```
 
@@ -425,53 +424,51 @@ export async function createWidget(data: { name: string; orgId: string }) {
 }
 ```
 
-### Step 3: Controller (`widgets.controller.ts`)
+### Step 3: Actions (`widgets.actions.ts`)
 
-The controller handles `req`/`res` and delegates to the service.
+Each action names itself, its area and kind, its input and output, who may run it, and the REST route it answers. The area and kind decide which token scope reaches it. The handler calls the service.
 
 ```ts
-import type { Request, Response } from 'express';
+import { z } from 'zod';
+
+import { defineAction } from '../../actions/define';
+import { registerActions } from '../../actions/registry';
+
 import * as widgetService from './widgets.service';
 
-export async function getWidget(req: Request, res: Response) {
-  const widget = await widgetService.getWidget(req.params.id);
-  res.json(widget);
-}
+const target = z.object({ widgetId: z.string().min(1).max(64) });
 
-export async function createWidget(req: Request, res: Response) {
-  const widget = await widgetService.createWidget({
-    name: req.body.name,
-    orgId: req.params.orgId,
-  });
-  res.status(201).json(widget);
-}
+registerActions([
+  defineAction({
+    name: 'widget.get',
+    area: 'issues',
+    kind: 'read',
+    summary: 'Get a widget',
+    target,
+    input: target,
+    output: z.looseObject({ id: z.string() }),
+    rest: { method: 'GET', path: '/api/widgets/:widgetId' },
+    authorize: async (ctx, { widgetId }) => {
+      // Throw a 403 or 404 unless ctx.userId may open this widget
+    },
+    handler: async (_ctx, { widgetId }) => widgetService.getWidget(widgetId),
+  }),
+]);
 ```
 
-### Step 4: Routes (`widgets.routes.ts`)
+Mark what needs care: `destructive` for deletes, `admin` for what only an approver should allow a token, `permissionChange` for sharing, `uiOnly` or `tokenBlocked` for what a token must never run, `preview` for what the approver reads. See [Design Patterns](design-patterns.md#backend-module-pattern) for the rules.
+
+### Step 4: Register the file in `src/index.ts`
+
+Import the actions file above the `mountActions` call. A file that is not imported registers nothing, and its routes don't exist.
 
 ```ts
-import { Router } from 'express';
-import { requireAuth } from '../../middleware/auth';
-import * as controller from './widgets.controller';
-
-const router = Router();
-
-router.get('/:id', requireAuth, controller.getWidget);
-router.post('/', requireAuth, controller.createWidget);
-
-export default router;
+import './modules/widgets/widgets.actions';
 ```
 
-### Step 5: Mount in `src/index.ts`
+`registry-rules.test.ts`, `parity.test.ts` and `token-reach.test.ts` check the new action. Add its scopes to `src/actions/token-reach.json` in the same commit; the test fails and says which.
 
-```ts
-import widgetRoutes from './modules/widgets/widgets.routes';
-
-// inside the Express app setup:
-app.use('/api/orgs/:orgSlug/widgets', widgetRoutes);
-```
-
-### Step 6: Add the Prisma model
+### Step 5: Add the Prisma model
 
 Add your model to `prisma/schema.prisma`, then run:
 
