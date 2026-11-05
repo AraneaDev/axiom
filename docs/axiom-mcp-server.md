@@ -1,17 +1,18 @@
 # Axiom MCP server
 
-Axiom has an MCP server so your agents work in the same projects you do. It has five tools. They cover everything the REST API does, so an agent finishes a ticket in one or two calls instead of ten.
+Axiom has an MCP server so your agents work in the same projects you do. It has five tools. They cover the developer loop: issues, comments, worklogs, links, attachments, wiki pages, sprints and the org, team and project reads, so an agent finishes a ticket in one or two calls instead of ten. The rest of the API (forms, automation, labels, milestones, custom fields, templates, board columns, notifications, administration) follows in later work and isn't reachable through `act` yet.
 
 ## Connection
 
 The server speaks Streamable HTTP, stateless, at `POST /api/mcp`. `GET` and `DELETE` answer `405`. Legacy SSE and the 24 separate tools of the earlier server are gone.
 
-| What            | Value                                                              |
-| --------------- | ------------------------------------------------------------------ |
-| URL (local dev) | `http://localhost:3000/api/mcp`                                    |
-| Transport       | `http` (Streamable HTTP)                                           |
-| Header          | `Authorization: Token tk_...`                                      |
-| Body            | One JSON-RPC message per request, `Content-Type: application/json` |
+| What            | Value                                                                  |
+| --------------- | ---------------------------------------------------------------------- |
+| URL (local dev) | `http://localhost:3000/api/mcp`                                        |
+| Transport       | `http` (Streamable HTTP)                                               |
+| Header          | `Authorization: Token tk_...`                                          |
+| Body            | One JSON-RPC message per request, `Content-Type: application/json`     |
+| Accept          | `application/json, text/event-stream`; without it a POST answers `406` |
 
 The endpoint takes API tokens only. A session or JWT gets `401 TOKEN_REQUIRED`. That is on purpose: every write an agent makes is recorded with the name of its token as `via`, so your history shows what you did and what an agent did.
 
@@ -141,7 +142,7 @@ curl -X PUT -H 'Content-Type: image/png' --data-binary @shot.png 'http://localho
 
 The `Content-Type` must be the `mimeType` you gave. The URL works once, for 10 minutes, and takes no other credential.
 
-`target` is a key (`AXM-42`, `org/team/space/page-slug`) or an object such as `{ pageKey }`. Without one the file is staged and visible to you only. It joins an issue or page when a body references `attachmentUrl`, for example `![shot](/api/attachments/...)` in a `page.create` body. Staged files are removed after 24 hours. Put a screenshot in a wiki page in two tool calls: `upload`, then `act` with `page.create` and a `key` of the space.
+`target` is a key (`AXM-42`, `org/team/space/page-slug`) or an object such as `{ pageKey }`. Without one the file is staged and visible to you only. It joins an issue or page when a body references `attachmentUrl`, for example `![shot](/api/attachments/...)` in a `page.create` body. Staged files are removed after 24 hours. Put a screenshot in a wiki page in two tool calls: `upload`, then `act` with `page.create`, a `key` of the space, and an `input` with `title`, `slug` (lower-case letters, digits and hyphens) and `body`.
 
 The URL in the answer is built from `FRONTEND_URL` when it is set, so set it when you reach Axiom through a tunnel or proxy, and set `TRUST_PROXY` to match.
 

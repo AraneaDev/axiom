@@ -98,7 +98,7 @@ Rate limiting: 300 req/min global, 15 req/min on auth endpoints.
 
 Authentication uses JWT access + refresh tokens with automatic refresh on 401. CSRF protection via `X-Requested-With` header on all mutating requests. Structured request logging with pino and per-request correlation IDs (`X-Request-Id`).
 
-The MCP server has five tools (search, read, describe, act, upload) that cover the whole API.
+The MCP server has five tools (search, read, describe, act, upload) that cover the developer loop: issues, comments, worklogs, links, attachments, wiki pages, sprints and the org, team and project reads. The rest of the API follows later.
 
 ---
 

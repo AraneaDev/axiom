@@ -1392,6 +1392,22 @@ Get issues formatted for the roadmap view, including `startDate` and `dueDate` f
 
 **Response 200:** Array of roadmap items.
 
+### PATCH /api/projects/:projectId/roadmap/issues/:issueId/bucket
+
+Move an issue to a roadmap bucket of its project. Needs `issue:edit`, as the other roadmap writes do. Action: `roadmap.setIssueBucket`.
+
+**Request body:** `{ "bucketId": "..." }`, or `null` for no bucket.
+
+**Response 200:** The issue as the roadmap shows it. `404` for an issue or bucket outside this project.
+
+### PATCH /api/projects/:projectId/roadmap/issues/:issueId/dates
+
+Set an issue's dates on the roadmap. Needs `issue:edit`. A date left out stays as it is, `null` clears it. Action: `roadmap.setIssueDates`.
+
+**Request body:** `{ "startDate": "2026-11-05", "dueDate": "2026-11-19" }`, at least one of them.
+
+**Response 200:** The issue as the roadmap shows it. `400` for no date, or a start after the due date.
+
 ---
 
 ## Time Report
@@ -2798,17 +2814,7 @@ Get a single audit log entry.
 
 ## MCP Server
 
-Base path: `/api/mcp`
-
-The Axiom MCP (Model Context Protocol) server exposes project data to AI assistants. All endpoints require authentication.
-
-### GET /api/mcp
-
-Server-Sent Events stream for MCP communication.
-
-### POST /api/mcp/messages
-
-Send a message to the MCP server.
+`POST /api/mcp` takes API tokens only and speaks stateless Streamable HTTP: POST only (`GET` and `DELETE` answer `405`), one JSON-RPC message per request, `Content-Type: application/json` and `Accept: application/json, text/event-stream`. See the [MCP server guide](axiom-mcp-server.md) for the tools, keys and scopes.
 
 ---
 
