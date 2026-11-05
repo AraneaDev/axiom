@@ -11,22 +11,8 @@ export interface LegacyRoute {
   plan: 3 | 4;
 }
 
-/**
- * Plan 3 brings the admin reach of tokens behind approval: admin, org, team and project writes,
- * space permissions, page restrictions and token management. Plan 4 migrates the rest.
- */
+/** Plan 4 migrates what is left; plan 3 brought the admin reach of tokens behind approval. */
 export const LEGACY_ROUTES: LegacyRoute[] = [
-  { method: 'GET', path: '/api/admin/audit-logs', plan: 3 },
-  { method: 'GET', path: '/api/admin/audit-logs/:id', plan: 3 },
-  { method: 'GET', path: '/api/admin/settings', plan: 3 },
-  { method: 'GET', path: '/api/admin/stats', plan: 3 },
-  { method: 'GET', path: '/api/admin/users', plan: 3 },
-  { method: 'DELETE', path: '/api/admin/users/:userId', plan: 3 },
-  { method: 'GET', path: '/api/admin/users/:userId', plan: 3 },
-  { method: 'PATCH', path: '/api/admin/users/:userId', plan: 3 },
-  { method: 'POST', path: '/api/admin/users/:userId/deactivate', plan: 3 },
-  { method: 'POST', path: '/api/admin/users/:userId/reactivate', plan: 3 },
-  { method: 'POST', path: '/api/admin/users/:userId/reset-password', plan: 3 },
   { method: 'POST', path: '/api/approval-requests/:requestId/cancel', plan: 4 },
   { method: 'POST', path: '/api/approval-requests/:requestId/vote', plan: 4 },
   { method: 'POST', path: '/api/auth/logout', plan: 4 },

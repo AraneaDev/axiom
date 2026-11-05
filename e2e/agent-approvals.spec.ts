@@ -137,4 +137,50 @@ test.describe('Agent approvals', () => {
     await expect(page.getByRole('button', { name: /^approve$/i })).toHaveCount(0);
     expect(await issueExists(request, key), 'an expired request ran nothing').toBe(true);
   });
+
+  test('a token an agent asked for shows once, to the person who approved it', async ({
+    page,
+    request,
+  }) => {
+    const created = await request.post('/api/users/me/tokens', {
+      headers: await session(request),
+      data: { name: 'e2e-admin-agent', scopes: ['admin:write', 'approvals:read'] },
+    });
+    expect(created.status()).toBe(201);
+    const agentHeaders = { ...HEADERS, Authorization: `Token ${(await created.json()).token}` };
+
+    const asked = await request.post('/api/users/me/tokens', {
+      headers: agentHeaders,
+      data: { name: 'e2e-asked-for', scopes: ['admin:read'], expiresInDays: 7 },
+    });
+    expect(asked.status()).toBe(202);
+    const pending = await asked.json();
+    expect(pending.preview).toContain('admin:read');
+    expect(pending.preview).toContain('7 days');
+
+    await login(page, DEMO_USERS.admin);
+    await page.goto(`/approvals/agent/${pending.approvalId}`);
+    await expect(page.getByText(pending.preview)).toBeVisible();
+    await page.getByRole('button', { name: /^approve$/i }).click();
+
+    const field = page.getByLabel('New token', { exact: true });
+    await expect(field).toBeVisible({ timeout: 15_000 });
+    const raw = await field.inputValue();
+    expect(raw).toMatch(/^tk_/);
+
+    // The agent that asked reads the outcome without it
+    const read = await request.get(`/api/agent-approvals/${pending.approvalId}`, {
+      headers: agentHeaders,
+    });
+    expect(read.status()).toBe(200);
+    const outcome = await read.json();
+    expect(outcome.status).toBe('EXECUTED');
+    expect(JSON.stringify(outcome)).not.toContain(raw);
+
+    // Shown once: it is gone after a reload
+    await page.reload();
+    await expect(page.getByText('Executed', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel('New token', { exact: true })).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText(raw);
+  });
 });

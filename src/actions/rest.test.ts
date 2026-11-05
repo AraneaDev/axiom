@@ -433,7 +433,7 @@ describe('REST adapter', () => {
 
     it('still refuses a token the legacy table refuses on a path without a binding', async () => {
       const token = await tokenWith([...TOKEN_SCOPES]);
-      const res = await request(app).get('/api/admin/users').set('Authorization', token);
+      const res = await request(app).get('/api/admin/no-binding').set('Authorization', token);
       expect(res.status).toBe(403);
       expect(res.body.error.code).toBe('SCOPE');
     });
