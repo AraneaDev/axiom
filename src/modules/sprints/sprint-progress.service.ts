@@ -42,6 +42,7 @@ export interface SprintOverviewEntry {
 const DAY_MS = 86_400_000;
 
 const BLOCKER_SELECT = {
+  id: true,
   number: true,
   title: true,
   projectId: true,
@@ -178,12 +179,14 @@ async function blockedBySprint(
       ...issue.linksFrom.map((link) => link.to),
       ...issue.linksTo.map((link) => link.from),
     ]) {
-      // A link pair stored both ways names the same blocker twice
-      const key = `${blocker.project.prefix}-${blocker.number}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      // A link pair stored both ways names the same blocker twice. By id: a key can repeat across
+      // orgs, and one the viewer can open must not stand in for one they cannot
+      if (seen.has(blocker.id)) continue;
+      seen.add(blocker.id);
       blockedBy.push(
-        visible.has(blocker.projectId) ? { key, title: blocker.title } : { hidden: true },
+        visible.has(blocker.projectId)
+          ? { key: `${blocker.project.prefix}-${blocker.number}`, title: blocker.title }
+          : { hidden: true },
       );
     }
     const entry: BlockedIssue = {

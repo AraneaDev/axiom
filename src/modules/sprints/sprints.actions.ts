@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { listWindow, pagedList } from '../../actions/paging';
+import { READS_BUSY, readSlots } from '../../actions/read.service';
 import { registerActions } from '../../actions/registry';
 import { projectOf } from '../../middleware/requireProjectAccess';
 import {
@@ -189,14 +190,17 @@ const sprintActions = [
     // Only sprints of projects the viewer can open are read, so there is no id to authorize
     authorize: async () => {},
     // The spread turns each entry's interface into a plain object for the loose output schema
-    handler: async (ctx, { state, scope, includeBlocked }) => {
-      const { sprints } = await sprintProgressService.sprintOverview(ctx.userId, {
-        state,
-        scope,
-        includeBlocked,
-      });
-      return { sprints: sprints.map((sprint) => ({ ...sprint })) };
-    },
+    handler: async (ctx, { state, scope, includeBlocked }) =>
+      // It loads every issue and history row of the sprints in view, so it holds a read slot. A
+      // dashboard widget calls the service inside the slot its render holds
+      readSlots.run(ctx.userId, READS_BUSY, async () => {
+        const { sprints } = await sprintProgressService.sprintOverview(ctx.userId, {
+          state,
+          scope,
+          includeBlocked,
+        });
+        return { sprints: sprints.map((sprint) => ({ ...sprint })) };
+      }),
   }),
   defineAction({
     name: 'sprint.addIssues',

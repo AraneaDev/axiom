@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { executeAction } from '../../actions/execute';
+import { readSlots, READ_CONCURRENCY } from '../../actions/read.service';
 import { prisma } from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -181,6 +183,68 @@ describe('sprint.overview', () => {
       );
     await expect(as(['search:read', 'issues:read'])).rejects.toMatchObject({ statusCode: 403 });
     await expect(as(['sprints:read'])).resolves.toHaveProperty('sprints');
+  });
+
+  it('takes a read slot, and refuses when none is free', async () => {
+    const user = await addMemberToContext(visible);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const refused = new AppError(500, 'no free slot in the test');
+    const running = Array.from({ length: READ_CONCURRENCY.perUser }, () =>
+      readSlots.run(user.id, refused, () => held),
+    );
+    try {
+      await expect(
+        executeAction('sprint.overview', {}, { userId: user.id, channel: 'ui' }),
+      ).rejects.toMatchObject({ statusCode: 429, code: 'RATE_LIMITED' });
+    } finally {
+      release();
+      await Promise.all(running);
+      await prisma.user.delete({ where: { id: user.id } });
+    }
+  });
+
+  it('keeps blockers apart that share a prefix and number across orgs', async () => {
+    const same = await createTestContext(`ovs${Date.now()}`);
+    const sameHidden = await createTestContext(`ovt${Date.now()}`);
+    try {
+      await prisma.project.update({
+        where: { id: sameHidden.projectId },
+        data: { prefix: same.projectPrefix },
+      });
+      const columnA = (await columnOf(same.projectId, { isDefault: true })).id;
+      const columnB = (await columnOf(sameHidden.projectId, { isDefault: true })).id;
+      const planned = await sprint(same, 'Same prefix', 'ACTIVE');
+      const stuck = await makeIssue(same, 'Waits on two', {
+        columnId: columnA,
+        sprintId: planned.id,
+      });
+      const seen = await makeIssue(same, 'Seen blocker', { columnId: columnA });
+      // The same key, in another org the viewer cannot open
+      const unseen = await makeIssue(sameHidden, 'Unseen blocker', { columnId: columnB });
+      await prisma.issue.update({ where: { id: unseen.id }, data: { number: seen.number } });
+      await prisma.issueLink.createMany({
+        data: [
+          { fromId: stuck.id, toId: unseen.id, type: 'IS_BLOCKED_BY' },
+          { fromId: stuck.id, toId: seen.id, type: 'IS_BLOCKED_BY' },
+        ],
+      });
+      const { sprints } = (await executeAction(
+        'sprint.overview',
+        {},
+        { userId: same.owner.id, channel: 'ui' },
+      )) as Awaited<ReturnType<typeof run>>;
+      const entry = sprints.find((s) => s.id === planned.id);
+      const blockers = entry?.blocked[0].blockedBy ?? [];
+      expect(blockers).toHaveLength(2);
+      expect(blockers.filter((b) => b.hidden)).toEqual([{ hidden: true }]);
+      expect(blockers.find((b) => !b.hidden)).toMatchObject({ title: 'Seen blocker' });
+    } finally {
+      await cleanupTestContext(same);
+      await cleanupTestContext(sameHidden);
+    }
   });
 
   it('agrees with the sprint report on done and points', async () => {
