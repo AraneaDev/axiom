@@ -18,6 +18,19 @@ const SALT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '4h';
 const REFRESH_TOKEN_TTL_DAYS = 30;
 
+/**
+ * Check a TOTP code against a secret.
+ * otplib 13's verifySync returns `{ valid }`, not a boolean: an object is always truthy,
+ * so the field is what decides. A 30 second tolerance accepts the code of the
+ * neighbouring period, for a code typed at the edge of one.
+ * @param token - The six-digit code the user typed
+ * @param secret - The user's stored TOTP secret
+ * @returns Whether the code is valid now
+ */
+function isValidTotp(token: string, secret: string): boolean {
+  return verifySync({ token, secret, epochTolerance: 30 }).valid === true;
+}
+
 function generateTokens(userId: string) {
   const accessToken = jwt.sign({ userId } as AuthPayload, env.JWT_SECRET, {
     expiresIn: ACCESS_TOKEN_TTL,
@@ -173,11 +186,7 @@ export async function login(data: { login: string; password: string; twoFactorCo
     if (!user.twoFactorSecret) {
       throw new AppError(500, '2FA misconfigured');
     }
-    const isValid = verifySync({
-      token: data.twoFactorCode,
-      secret: user.twoFactorSecret,
-    });
-    if (!isValid) {
+    if (!isValidTotp(data.twoFactorCode, user.twoFactorSecret)) {
       throw new AppError(401, 'Invalid 2FA code', 'INVALID_TWO_FACTOR');
     }
   }
@@ -311,8 +320,7 @@ export async function verifyAndActivateTwoFactor(userId: string, code: string) {
     throw new AppError(400, 'Call enable-2fa first');
   }
 
-  const isValid = verifySync({ token: code, secret: user.twoFactorSecret });
-  if (!isValid) throw new AppError(400, 'Invalid 2FA code');
+  if (!isValidTotp(code, user.twoFactorSecret)) throw new AppError(400, 'Invalid 2FA code');
 
   await prisma.user.update({
     where: { id: userId },
@@ -345,8 +353,7 @@ export async function disableTwoFactor(userId: string, code: string) {
     throw new AppError(400, '2FA not enabled');
   }
 
-  const isValid = verifySync({ token: code, secret: user.twoFactorSecret });
-  if (!isValid) throw new AppError(401, 'Invalid 2FA code');
+  if (!isValidTotp(code, user.twoFactorSecret)) throw new AppError(401, 'Invalid 2FA code');
 
   await prisma.user.update({
     where: { id: userId },
