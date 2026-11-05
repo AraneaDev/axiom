@@ -21,6 +21,10 @@ export async function createInvitation(
   invitedBy: string,
   data: { email: string; role?: string; teamId?: string },
 ) {
+  await findOrThrow(
+    prisma.organization.findUnique({ where: { id: orgId }, select: { id: true } }),
+    ERR.ORGANIZATION_NOT_FOUND,
+  );
   // Check for existing pending invitation with same email+org+team
   const existing = await prisma.invitation.findFirst({
     where: {

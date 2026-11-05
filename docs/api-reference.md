@@ -87,7 +87,7 @@ A scope no action uses can't be minted (`400`): `orgs:write`, `teams:write`, `pr
 | `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
 | `admin` | Orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and `/api/admin`. Every call waits for approval, see [Approvals](#approvals-for-token-calls) |
 
-Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (profile, password, 2FA) and resetting another user's password stay closed to tokens (`403`). Creating a token with any other scope name returns `400`.
+Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (changing the profile, the password or 2FA) and resetting another user's password stay closed to tokens (`403`); reading the profile is open. Creating a token with any other scope name returns `400`.
 
 Tokens created before scopes per area were rewritten by migration and reach what they always reached: the old `issues:*` and `wiki:*` scopes became the set of area scopes that covers the same paths (`LEGACY_SCOPE_MAP` in `src/middleware/token-scopes.ts`).
 
@@ -2380,7 +2380,7 @@ All endpoints require authentication.
 
 ### GET /api/notifications
 
-List notifications for the current user.
+List notifications for the current user. A token's list leaves out agent approval notifications, as they carry the preview of what an agent wants to run.
 
 **Query parameters:** `read` (boolean), `page`, `limit`
 
@@ -2400,13 +2400,13 @@ Get the count of unread notifications.
 
 ### PATCH /api/notifications/:id/read
 
-Mark a notification as read.
+Mark a notification as read. A token can't mark an agent approval notification read (`403`): you do that in the web UI.
 
 **Response 200:** Updated notification object.
 
 ### POST /api/notifications/read-all
 
-Mark all notifications as read.
+Mark all notifications as read. A token leaves the agent approval notifications unread.
 
 **Response 200:**
 

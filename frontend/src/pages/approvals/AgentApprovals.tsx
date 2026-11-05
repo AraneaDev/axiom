@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Bot, CheckCircle, History, Hourglass, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
@@ -43,7 +43,9 @@ export default function AgentApprovals() {
       tab === 'pending'
         ? agentApprovalsApi.list({ status: 'PENDING' })
         : agentApprovalsApi.list({ state: 'decided', limit: HISTORY_PAGE, offset }),
-    placeholderData: keepPreviousData,
+    // Paging keeps the rows on screen; the other tab does not borrow this tab's rows
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === tab ? previous : undefined,
     refetchInterval: REFETCH_MS,
     refetchOnWindowFocus: true,
   });

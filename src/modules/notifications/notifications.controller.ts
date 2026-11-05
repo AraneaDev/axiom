@@ -12,11 +12,11 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
   const unreadOnly = req.query.unreadOnly === 'true';
   const { take, skip } = parsePagination(req.query as Record<string, string>);
 
-  const result = await notificationsService.listNotifications(userId, {
-    unreadOnly,
-    limit: take,
-    offset: skip,
-  });
+  const result = await notificationsService.listNotifications(
+    userId,
+    { unreadOnly, limit: take, offset: skip },
+    req.apiTokenId !== undefined,
+  );
   res.json(result);
 });
 

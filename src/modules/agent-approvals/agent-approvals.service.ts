@@ -114,6 +114,25 @@ function sortedJson(value: unknown): string {
 }
 
 /**
+ * The stored input of an action without a preview, with the ids an approver cannot read swapped for
+ * the project key and the issue key they stand for. Other fields stay as stored.
+ * @param stored - The input as stored
+ */
+async function readableInput(stored: Prisma.InputJsonObject): Promise<Prisma.InputJsonObject> {
+  const { projectId, issueNumber, ...rest } = stored;
+  if (typeof projectId !== 'string') return stored;
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { prefix: true },
+  });
+  if (!project) return stored;
+  const number = typeof issueNumber === 'string' || typeof issueNumber === 'number';
+  return number
+    ? { issue: `${project.prefix}-${issueNumber}`, ...rest }
+    : { project: project.prefix, ...(issueNumber === undefined ? {} : { issueNumber }), ...rest };
+}
+
+/**
  * The text an approver reads. Plain text, built by the server. A cut says so.
  * @param def - The action
  * @param input - Its validated input
@@ -128,7 +147,7 @@ async function previewOf(
 ): Promise<string> {
   const text = def.preview
     ? await def.preview(ctx, input)
-    : `Run ${def.name} (${def.summary.replace(/[\s.:;]+$/, '')}) with ${sortedJson(stored)}`;
+    : `Run ${def.name} (${def.summary.replace(/[\s.:;]+$/, '')}) with ${sortedJson(await readableInput(stored))}`;
   return text.length > MAX_PREVIEW_LENGTH
     ? text.slice(0, MAX_PREVIEW_LENGTH - CUT_MARKER.length) + CUT_MARKER
     : text;

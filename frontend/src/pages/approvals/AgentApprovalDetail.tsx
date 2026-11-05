@@ -47,6 +47,11 @@ function Json({ value }: { value: unknown }) {
  */
 export default function AgentApprovalDetail() {
   const { id = '' } = useParams();
+  // Keyed by the request, so a decision, an error or the input panel of one never shows on the next
+  return <AgentApprovalDetailFor key={id} id={id} />;
+}
+
+function AgentApprovalDetailFor({ id }: { id: string }) {
   const [showInput, setShowInput] = useState(false);
   // The decision's own answer: only it holds a secret (a new token), and it is never refetched
   const [decided, setDecided] = useState<AgentApproval | null>(null);

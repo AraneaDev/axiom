@@ -170,6 +170,19 @@ describe('AgentApprovalDetail', () => {
     expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument();
   });
 
+  it('does not show the failed decision of one request on the next', async () => {
+    get.mockImplementation(async (id: string) =>
+      id === 'a1' ? request() : request({ id: 'b2', preview: 'Delete issue AXM-2' }),
+    );
+    approve.mockRejectedValue(new Error('This request is no longer waiting'));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /approve/i }));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByText('Go to b2'));
+    expect(await screen.findByText('Delete issue AXM-2')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('shows when a request expires with the time, and the time left while open', async () => {
     const at = new Date(Date.now() + 600_000);
     get.mockResolvedValue(request({ expiresAt: at.toISOString() }));

@@ -27,6 +27,10 @@ export async function createTeam(
   userId: string,
   data: { name: string; slug: string; description?: string },
 ) {
+  await findOrThrow(
+    prisma.organization.findUnique({ where: { id: orgId }, select: { id: true } }),
+    ERR.ORGANIZATION_NOT_FOUND,
+  );
   await checkUnique('team', { orgId, slug: data.slug }, 'Team slug already taken in this org');
 
   return prisma.team.create({

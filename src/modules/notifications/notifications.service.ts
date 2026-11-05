@@ -71,14 +71,18 @@ export async function createNotification(
  * @param opts.unreadOnly
  * @param opts.limit
  * @param opts.offset
+ * @param byToken - Whether an API token asks: approval lines carry the preview of what an agent
+ * wants to run, and are for the person, so a token's list leaves them out
  * @returns Paginated notifications with total count
  */
 export async function listNotifications(
   userId: string,
   opts?: { unreadOnly?: boolean; limit?: number; offset?: number },
+  byToken = false,
 ) {
   const { take, skip } = parseServicePagination(opts, 50);
-  const where: { userId: string; read?: boolean } = { userId };
+  const where: { userId: string; read?: boolean; type?: { not: string } } = { userId };
+  if (byToken) where.type = { not: 'agent:approval' };
   if (opts?.unreadOnly) where.read = false;
 
   const [notifications, total] = await Promise.all([

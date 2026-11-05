@@ -144,6 +144,21 @@ registerActions([
     handler: () => Promise.resolve({ id: 'x' }),
   }),
   defineAction({
+    name: 'approvalTest.target',
+    destructive: true,
+    area: 'issues',
+    kind: 'write',
+    summary: 'Changes fields of an issue. Move it with status or columnId.',
+    input: z.object({
+      projectId: z.string(),
+      issueNumber: z.string().optional(),
+      value: z.string(),
+    }),
+    output: z.looseObject({ id: z.string() }),
+    authorize: () => Promise.resolve(),
+    handler: () => Promise.resolve({ id: 'x' }),
+  }),
+  defineAction({
     name: 'approvalTest.free',
     area: 'issues',
     kind: 'write',
@@ -334,6 +349,26 @@ describe('agent approvals', () => {
       const res = await act(ownerToken, { action: 'approvalTest.stopped', input: { value: 'v' } });
       expect(res.body.preview).toBe(
         'Run approvalTest.stopped (Ends in a full stop) with {"value":"v"}',
+      );
+    });
+
+    it('names the issue and the project in the fallback, not their ids', async () => {
+      const issue = await createIssue();
+      const prefix = (await prisma.project.findUniqueOrThrow({ where: { id: ctx.projectId } }))
+        .prefix;
+      const one = await act(ownerToken, {
+        action: 'approvalTest.target',
+        input: { projectId: ctx.projectId, issueNumber: String(issue.number), value: 'v' },
+      });
+      expect(one.body.preview).toBe(
+        `Run approvalTest.target (Changes fields of an issue. Move it with status or columnId) with {"issue":"${prefix}-${issue.number}","value":"v"}`,
+      );
+      const two = await act(ownerToken, {
+        action: 'approvalTest.target',
+        input: { projectId: ctx.projectId, value: 'v' },
+      });
+      expect(two.body.preview).toBe(
+        `Run approvalTest.target (Changes fields of an issue. Move it with status or columnId) with {"project":"${prefix}","value":"v"}`,
       );
     });
 
@@ -1521,6 +1556,38 @@ describe('agent approvals', () => {
       expect((await prisma.notification.findUniqueOrThrow({ where: { id: note.id } })).read).toBe(
         true,
       );
+    });
+
+    it('keeps the approval notifications, and so their previews, out of a token list', async () => {
+      await pendingOn('shown to a person');
+      const plain = await prisma.notification.create({
+        data: { userId: owner.id, type: 'issue_assigned', title: 'Listed to all' },
+      });
+      const viaToken = await request(app)
+        .get('/api/notifications')
+        .set('Authorization', ownerToken);
+      expect(viaToken.status).toBe(200);
+      const tokenTypes = (viaToken.body.notifications as Array<{ type: string; id: string }>).map(
+        (n) => n.type,
+      );
+      expect(tokenTypes).not.toContain('agent:approval');
+      expect((viaToken.body.notifications as Array<{ id: string }>).map((n) => n.id)).toContain(
+        plain.id,
+      );
+      const approvals = await prisma.notification.count({
+        where: { userId: owner.id, type: 'agent:approval' },
+      });
+      expect(viaToken.body.total).toBe(
+        (await prisma.notification.count({ where: { userId: owner.id } })) - approvals,
+      );
+      const viaSession = await request(app)
+        .get('/api/notifications?limit=100')
+        .set('Authorization', `Bearer ${owner.token}`);
+      expect(
+        (viaSession.body.notifications as Array<{ type: string }>).some(
+          (n) => n.type === 'agent:approval',
+        ),
+      ).toBe(true);
     });
 
     it('lets a token write other preferences, and a session this one', async () => {

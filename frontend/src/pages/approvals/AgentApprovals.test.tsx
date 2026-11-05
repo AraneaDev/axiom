@@ -91,4 +91,20 @@ describe('AgentApprovals', () => {
       expect(list).toHaveBeenLastCalledWith({ state: 'decided', limit: 25, offset: 25 }),
     );
   });
+
+  it("shows a skeleton, not the other tab's rows or an empty state, while the history loads", async () => {
+    list.mockImplementation((args?: { state?: string }) =>
+      args?.state === 'decided'
+        ? new Promise(() => {})
+        : Promise.resolve({ data: [row({})], total: 1 }),
+    );
+    show();
+    await screen.findByText('Delete issue AXM-1');
+    fireEvent.click(screen.getByRole('tab', { name: /history/i }));
+    await waitFor(() =>
+      expect(list).toHaveBeenCalledWith(expect.objectContaining({ state: 'decided' })),
+    );
+    expect(screen.queryByText('No decided requests yet')).toBeNull();
+    expect(screen.queryByText('Delete issue AXM-1')).toBeNull();
+  });
 });

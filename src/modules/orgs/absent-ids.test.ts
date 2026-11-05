@@ -33,6 +33,18 @@ describe('an org or team id that is no record', () => {
       `DELETE /api/orgs/${id}/members/x`,
       () => authDel(`/api/orgs/${id}/members/x`, ctx.owner.token),
     ],
+    [
+      `POST /api/orgs/${id}/invitations`,
+      () =>
+        authPost(`/api/orgs/${id}/invitations`, ctx.owner.token, {
+          email: 'nobody@example.test',
+          role: 'MEMBER',
+        }),
+    ],
+    [
+      `POST /api/orgs/${id}/teams`,
+      () => authPost(`/api/orgs/${id}/teams`, ctx.owner.token, { name: 'X', slug: 'x-team' }),
+    ],
     [`PATCH /api/teams/${id}`, () => authPatch(`/api/teams/${id}`, ctx.owner.token, { name: 'X' })],
     [`DELETE /api/teams/${id}`, () => authDel(`/api/teams/${id}`, ctx.owner.token)],
     [

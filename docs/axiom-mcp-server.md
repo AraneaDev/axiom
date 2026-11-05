@@ -223,7 +223,7 @@ A browser session never waits. A token always goes through the gate, over MCP an
 - Anything that changes who can see or edit something, such as sharing a dashboard or saved query.
 - Every admin action, whatever any policy says.
 
-An admin action is one in the `admin` area: orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and reads under `/api/admin`. These are no longer closed to tokens, they wait for you. Your own account (profile, password, 2FA) is not in that list: it stays closed to tokens. A call that waits needs the scope of its area, and a request expires after an hour unless a policy says otherwise.
+An admin action is one in the `admin` area: orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and reads under `/api/admin`. These are no longer closed to tokens, they wait for you. Your own account (profile, password, 2FA) is not in that list: a token can read your profile, but changing the profile, the password or 2FA stays closed to it. A call that waits needs the scope of its area, and a request expires after an hour unless a policy says otherwise.
 
 ### Policies
 
@@ -238,7 +238,7 @@ Defaults come first, then the org, then you. Admin actions ignore every rule, an
 
 Changing a policy is itself an admin action (`agentPolicy.update`): an agent can't loosen its own leash, or tighten and loosen it again, without you approving.
 
-Naming `attachment.upload` in `alsoRequire` refuses it to tokens outright (`403`), because a multipart upload can't be queued for approval. `attachment.createUploadUrl` and `attachment.fromUrl` are ordinary actions: naming them makes them wait. To keep agents from uploading to an org, name all three. The refusal of `attachment.upload` holds for every org of the user that names it.
+Naming `attachment.upload` in `alsoRequire` refuses it to tokens outright (`403`), because a multipart upload can't be queued for approval. `attachment.createUploadUrl` and `attachment.fromUrl` are ordinary actions: naming them makes them wait. To keep agents from uploading to an org, name `attachment.upload` there (a refusal) and the other two (they wait for you, and you can still approve them). An upload that has a parent is checked against the org of that parent. A staged upload, which has none yet, is checked against every org of the user.
 
 ### Waiting for the outcome
 
@@ -250,7 +250,7 @@ Approving and rejecting (`agentApproval.approve`, `agentApproval.reject`) are we
 
 ### Creating a token
 
-`token.create` waits like any admin action. Its preview names the scopes and the expiry. The raw token goes only to you, in the response to your approval. It is never stored and never reaches the agent: you hand it over. A new token can't hold a scope the asking token lacks. When the asking token has an expiry, the new one must have one too, no later than that, so an agent can't renew itself with a longer one. An asking token with no expiry puts no limit on it. Asking for N days leaves room for at most N-1, since time has passed.
+`token.create` waits like any admin action. Its preview names the scopes and the expiry. The raw token goes only to you, in the response to your approval. It is never stored and never reaches the agent: you hand it over. A new token can't hold a scope the asking token lacks. When the asking token has an expiry, the new one must have one too, no later than that, so an agent can't renew itself with a longer one. An asking token with no expiry puts no limit on it. For a token that was made with an expiry of N days, a new token can ask for at most N-1 days, since time has passed.
 
 ### What stays web UI only
 
