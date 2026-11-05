@@ -125,6 +125,19 @@ describe('seed-demo', () => {
 
   // ── Idempotency ────────────────────────────────────────────
 
+  it('links seeded pages to the issues they name', async () => {
+    const pages = await prisma.page.findMany({
+      where: { space: { team: { org: { slug: 'aranea-dev' } } }, body: { contains: 'AXM-' } },
+      select: { id: true },
+    });
+    expect(pages.length).toBeGreaterThan(0);
+    const links = await prisma.wikiPageIssueLink.findMany({
+      where: { pageId: { in: pages.map((page) => page.id) }, linkType: 'MENTION' },
+      select: { pageId: true },
+    });
+    expect(new Set(links.map((link) => link.pageId)).size).toBe(pages.length);
+  });
+
   it('is idempotent on re-run', async () => {
     const beforeUsers = await prisma.user.count();
     const beforeIssues = await prisma.issue.count();
