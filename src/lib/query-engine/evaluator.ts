@@ -10,7 +10,7 @@ import { customFieldName, evaluateCustomField } from './custom-fields';
 import { derivedField } from './derived-fields';
 import { PRIORITY_ORDINALS } from './fields/issue-fields';
 import { builtinFunctions } from './functions';
-import { hydrated, NO_USER } from './query-values';
+import { hydrated, isContainsCurrentUser, NO_USER } from './query-values';
 
 /**
  * A field of the registry. Only its own names: `constructor` is no field.
@@ -165,6 +165,10 @@ function evaluateComparison(
 ): boolean {
   const customName = customFieldName(field);
   const fieldDef = customName === null ? lookupField(field, registry) : null;
+
+  if (isContainsCurrentUser(fieldDef, operator, value)) {
+    return evaluateComparison(field, '=', value, obj, registry, context);
+  }
 
   const resolved = resolveValue(value, context);
 

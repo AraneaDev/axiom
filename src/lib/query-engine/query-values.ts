@@ -2,6 +2,8 @@
  * What the compiler, the evaluator and their field modules share about values.
  */
 
+import type { FieldDefinition, Value } from './ast';
+
 /**
  * A query that parses and names real fields, but holds a value its field can't be compared with.
  * Callers answer this as a bad query. It must never reach the database as a failed query.
@@ -18,6 +20,26 @@ export const NO_USER = Symbol('no user');
 
 /** A where clause no issue meets. */
 export const MATCH_NOTHING = { id: { in: [] as string[] } };
+
+/**
+ * Whether a comparison is ~ currentUser() on a user field. Its value is an id rather than part of
+ * a name, so it asks the same as = currentUser().
+ * @param fieldDef - The field, null for a custom field
+ * @param operator - The operator
+ * @param value - The value as written
+ */
+export function isContainsCurrentUser(
+  fieldDef: FieldDefinition | null,
+  operator: string,
+  value: Value,
+): boolean {
+  return (
+    operator === '~' &&
+    fieldDef?.type === 'user' &&
+    value.type === 'function' &&
+    value.name.toLowerCase() === 'currentuser'
+  );
+}
 
 /**
  * Text for a case-insensitive Prisma filter, which runs as ILIKE and doesn't escape on its own.

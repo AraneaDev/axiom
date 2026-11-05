@@ -152,6 +152,8 @@ describe('the language fixes', () => {
     const nothing = { id: { in: [] } };
     expect(compile('assignee = currentUser()', noUser)).toEqual(nothing);
     expect(compile('assignee != currentUser()', noUser)).toEqual({});
+    expect(compile('assignee ~ currentUser()', noUser)).toEqual(nothing);
+    expect(compile('creator ~ currentUser()', noUser)).toEqual(nothing);
     expect(compile('assignee IN (currentUser())', noUser)).toEqual(nothing);
     expect(compile('assignee NOT IN (currentUser())', noUser)).toEqual({});
     expect(compile('assignee IN (currentUser(), "u2")', noUser)).toEqual({

@@ -582,6 +582,20 @@ describe('query fields', () => {
       );
     });
 
+    it('reads ~ currentUser() as = currentUser() on assignee and creator', async () => {
+      const mine = await makeIssue('assignedToMe', { assigneeId: ctx.owner.id });
+      try {
+        expect(await found('assignee ~ currentUser()')).toEqual(['assignedToMe']);
+        expect(await evaluated('assignee ~ currentUser()')).toEqual(['assignedToMe']);
+        const created = await found('creator = currentUser()');
+        expect(created).not.toEqual([]);
+        expect(await found('creator ~ currentUser()')).toEqual(created);
+        expect(await evaluated('creator ~ currentUser()')).toEqual(created);
+      } finally {
+        await prisma.issue.delete({ where: { id: mine.id } });
+      }
+    });
+
     it('agrees with the evaluator', async () => {
       const queries = [
         `assignee = "${member.username}"`,
@@ -605,6 +619,9 @@ describe('query fields', () => {
         `NOT assignee ~ "${member.username.slice(1, -1)}"`,
         'assignee ~ "no-such-person"',
         'assignee ~ currentUser()',
+        'NOT assignee ~ currentUser()',
+        'creator ~ currentUser()',
+        'NOT creator ~ currentUser()',
         `creator ~ "${ctx.owner.username.slice(1, -1)}"`,
         'sprint ~ "named"',
         'NOT sprint ~ "named"',

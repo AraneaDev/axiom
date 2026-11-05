@@ -601,8 +601,8 @@ export async function renderWidgets(ctx: ActionContext, rows: WidgetRow[], rules
 /**
  * Render a dashboard with the viewer's rights: each widget runs as they would run it, also on a
  * saved query they cannot open themselves, and one that fails answers with its error, which keeps
- * quiet about a saved query they cannot open. The render as a whole takes one read slot and counts once against
- * RENDER_LIMIT, the widgets none of either, and at most WIDGETS_AT_ONCE run at once.
+ * quiet about a saved query they cannot open. The render as a whole takes one read slot and counts
+ * once against RENDER_LIMIT, the widgets none of either, and at most WIDGETS_AT_ONCE run at once.
  * @param ctx - The viewer
  * @param id - The dashboard, which they may open
  * @returns The dashboard, its widgets' results and the projects a live view should follow: those

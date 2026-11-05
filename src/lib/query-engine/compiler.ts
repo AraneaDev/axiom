@@ -11,7 +11,13 @@ import { compileCustomField, customFieldName } from './custom-fields';
 import { CURRENT_SPRINT_WHERE, derivedField } from './derived-fields';
 import { PRIORITY_ORDINALS } from './fields/issue-fields';
 import { builtinFunctions } from './functions';
-import { likeLiteral, MATCH_NOTHING, NO_USER, QueryValueError } from './query-values';
+import {
+  isContainsCurrentUser,
+  likeLiteral,
+  MATCH_NOTHING,
+  NO_USER,
+  QueryValueError,
+} from './query-values';
 
 export { QueryValueError };
 
@@ -167,6 +173,13 @@ function compileComparison(
   const fieldDef = customName === null ? lookupField(field, registry) : null;
 
   const resolved = resolveValue(value, context);
+
+  // Through the relation, as the name match below: NOT over it keeps an issue without one
+  if (isContainsCurrentUser(fieldDef, operator, value)) {
+    if (resolved === NO_USER) return MATCH_NOTHING;
+    const [relation] = (fieldDef?.aliasField as string).split('.');
+    return { [relation]: { id: resolved } };
+  }
 
   // currentUser() without a user: nobody, so equal to nothing and different from everything
   if (resolved === NO_USER) {
