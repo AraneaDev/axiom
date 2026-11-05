@@ -15,7 +15,8 @@ class FakeProvider {
     on: vi.fn(),
     off: vi.fn(),
   };
-  constructor() {
+  connect = vi.fn();
+  constructor(public options?: unknown) {
     providers.push(this);
   }
   on(event: string, fn: (arg: unknown) => void) {
@@ -30,8 +31,8 @@ class FakeProvider {
 }
 
 vi.mock('y-websocket', () => ({
-  WebsocketProvider: function (this: unknown) {
-    return new FakeProvider();
+  WebsocketProvider: function (_url: string, _room: string, _doc: unknown, options: unknown) {
+    return new FakeProvider(options);
   },
 }));
 vi.mock('@/api/client', () => ({ getAccessToken: () => 'token' }));
@@ -101,6 +102,38 @@ describe('useCollaboration state messages', () => {
     deliver(provider, 21);
     expect(result.current.pendingChange).toMatchObject({ externalVersionId: 'ext-1' });
     expect(result.current.locked).toBeNull();
+  });
+
+  it('remembers that it synced once, through a lost connection', () => {
+    const { result } = renderHook(() => useCollaboration({ pageId: 'p1' }));
+    const provider = providers[0];
+    expect(result.current.hasSynced).toBe(false);
+    act(() => provider.emit('sync', true));
+    expect(result.current.hasSynced).toBe(true);
+    act(() => provider.emit('sync', false));
+    expect(result.current.isSynced).toBe(false);
+    expect(result.current.hasSynced).toBe(true);
+  });
+
+  it('connects from the effect, through the server only', () => {
+    renderHook(() => useCollaboration({ pageId: 'p1' }));
+    const provider = providers.at(-1)!;
+    expect(provider.options).toMatchObject({ connect: false, disableBc: true });
+    expect(provider.connect).toHaveBeenCalled();
+  });
+
+  it('stops reconnecting when its session has ended, and rejoins with a new document', () => {
+    const { result } = renderHook(() => useCollaboration({ pageId: 'p1' }));
+    const provider = providers[0];
+    const firstDoc = result.current.ydoc;
+    const disconnect = vi.spyOn(provider, 'disconnect');
+    act(() => provider.messageHandlers[23]({}, { arr: new Uint8Array([23]), pos: 1 }));
+    expect(disconnect).toHaveBeenCalled();
+    expect(result.current.sessionEnded).toBe(true);
+    act(() => result.current.rejoin());
+    expect(result.current.sessionEnded).toBe(false);
+    expect(providers).toHaveLength(2);
+    expect(result.current.ydoc).not.toBe(firstDoc);
   });
 
   it('a new connection drops the previous lock and pending state', () => {

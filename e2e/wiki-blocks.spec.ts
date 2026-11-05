@@ -75,6 +75,99 @@ test.describe('Wiki custom blocks', () => {
     expect(body).not.toContain('<paragraph');
   });
 
+  test('nothing can be typed before the session has synced, and what is typed then is saved', async ({
+    page,
+    request,
+  }) => {
+    const api = await wikiApi(request);
+    const slug = `slow-sync-${Date.now()}`;
+    await api.createPage(slug, 'Slow sync', 'Typed after this.');
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.routeWebSocket(/\/ws\/wiki/, (ws) => {
+      const server = ws.connectToServer();
+      const waiting: Array<string | Buffer> = [];
+      let open = false;
+      void held.then(() => {
+        open = true;
+        for (const message of waiting) server.send(message);
+      });
+      ws.onMessage((message) => (open ? server.send(message) : waiting.push(message)));
+      server.onMessage((message) => ws.send(message));
+    });
+
+    await page.goto(`${WIKI_URL}/docs/${slug}/edit`);
+    await expect(page.getByRole('status').getByText(/live session/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText('Typed after this.')).toBeVisible();
+    await expect(page.locator('.ProseMirror')).toHaveCount(0);
+
+    release();
+    const editor = page.locator('.ProseMirror').first();
+    await expect(editor.getByText('Typed after this.')).toBeVisible({ timeout: 15_000 });
+    await editor.getByText('Typed after this.').click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' Kept.');
+    await expect
+      .poll(
+        async () => {
+          await api.flush(slug);
+          return (await api.getPage(slug)).body as string;
+        },
+        { timeout: 15_000, intervals: [500] },
+      )
+      .toContain('Typed after this. Kept.');
+  });
+
+  test('text typed while the connection is lost is there after it comes back', async ({
+    page,
+    request,
+  }) => {
+    const api = await wikiApi(request);
+    const slug = `lost-connection-${Date.now()}`;
+    await api.createPage(slug, 'Lost connection', 'Before the drop.');
+    let refuse = false;
+    const sockets: Array<{ close: () => Promise<void> }> = [];
+    await page.routeWebSocket(/\/ws\/wiki/, (ws) => {
+      if (refuse) {
+        void ws.close();
+        return;
+      }
+      sockets.push(ws);
+      const server = ws.connectToServer();
+      ws.onMessage((message) => server.send(message));
+      server.onMessage((message) => ws.send(message));
+    });
+
+    await page.goto(`${WIKI_URL}/docs/${slug}/edit`);
+    const editor = page.locator('.ProseMirror').first();
+    await expect(editor.getByText('Before the drop.')).toBeVisible({ timeout: 15_000 });
+
+    refuse = true;
+    await Promise.all(sockets.map((ws) => ws.close()));
+    await expect(page.getByTitle('Editing offline')).toBeVisible({ timeout: 10_000 });
+    await editor.getByText('Before the drop.').click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' Typed offline.');
+    await expect(editor).toContainText('Typed offline.');
+
+    refuse = false;
+    await expect(page.getByTitle('Real-time sync active')).toBeVisible({ timeout: 30_000 });
+    // The session ended with the connection, so the text comes back as a change to merge, and the
+    // page is there once, not merged with a second copy from the new session
+    await expect(editor.getByText('Before the drop.')).toHaveCount(1, { timeout: 15_000 });
+    await expect
+      .poll(async () => ((await api.getPage(slug)).body as string).trim(), {
+        timeout: 15_000,
+        intervals: [500],
+      })
+      .toBe('Before the drop. Typed offline.');
+    await expect(page.getByText(/merge|changed/i).first()).toBeVisible({ timeout: 10_000 });
+  });
+
   test('a mention in an issue description survives an edit', async ({ page, request }) => {
     const issues = await issuesApi(request);
     const mention = '<span class="mention">@Sarah Chen</span>';

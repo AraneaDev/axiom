@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import * as Y from 'yjs';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
@@ -572,6 +573,52 @@ describe('Page merge', () => {
     });
     expect((await prisma.page.findUniqueOrThrow({ where: { id: pageId } })).body).toBe(final);
     expect(await prisma.pendingPageChange.count({ where: { pageId } })).toBe(0);
+  });
+
+  describe('a client reconnecting with the document it had', () => {
+    const copyOf = (doc: Y.Doc) => {
+      const copy = new Y.Doc();
+      Y.applyUpdate(copy, Y.encodeStateAsUpdate(doc));
+      return copy;
+    };
+
+    it('is told its session ended, and doubles nothing, when the room is a new one', async () => {
+      const first = await connect(editorId);
+      appendParagraph(first.doc, 'Before the drop');
+      await waitFor(async () => (await roomMarkdown()).includes('Before the drop'));
+      const held = copyOf(first.doc);
+      await disconnect(first);
+
+      const before = await roomMarkdown();
+      const back = connectCollabClient(server, pageId, editorId, held);
+      clients.push(back);
+      await waitFor(() => back.sessionEnded.count === 1);
+      expect(await back.closeCode).toBe(4009);
+      clients.splice(clients.indexOf(back), 1);
+      await waitFor(() => !isRoomLive(pageId));
+      await roomSettled(pageId);
+      expect(await roomMarkdown()).toBe(before);
+      await disconnect(await connect(editorId));
+    });
+
+    it('merges what it typed when the room is still the same', async () => {
+      const stays = await connect(ownerId);
+      const first = await connect(editorId);
+      appendParagraph(first.doc, 'Typed online');
+      await waitFor(async () => (await roomMarkdown()).includes('Typed online'));
+      const held = copyOf(first.doc);
+      await disconnect(first);
+
+      appendParagraph(held, 'Typed offline');
+      const back = connectCollabClient(server, pageId, editorId, held);
+      clients.push(back);
+      await waitFor(async () => (await roomMarkdown()).includes('Typed offline'));
+      expect(back.sessionEnded.count).toBe(0);
+      const text = await roomMarkdown();
+      expect(text.match(/Typed online/g)).toHaveLength(1);
+      await disconnect(back);
+      await disconnect(stays);
+    });
   });
 
   describe('saving a live session with a change description', () => {

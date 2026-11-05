@@ -89,6 +89,9 @@ const MESSAGE_EXTERNAL_CHANGE = 20;
 const MESSAGE_LOCK = 21;
 /** The client's own edit access changed: { canEdit } */
 const MESSAGE_ACCESS = 22;
+/** This client holds the document of a session that ended: it must start over from this room */
+const MESSAGE_SESSION_ENDED = 23;
+const CLOSE_SESSION_ENDED = 4009;
 
 /**
  * Safety net only: the merge releases its lock when it finishes. A lock nobody releases (a merge
@@ -106,6 +109,8 @@ interface CollabClient {
   clientId: number;
   /** False for users who may only view the page: their sync updates are dropped */
   canEdit: boolean;
+  /** Holds the document of an earlier room: nothing it sends may reach this one */
+  sessionEnded?: boolean;
 }
 
 interface RoomLock {
@@ -119,6 +124,11 @@ export interface CollabRoom {
   clients: Map<WebSocket, CollabClient>;
   pageId: string;
   lock: RoomLock | null;
+  /**
+   * The Yjs client that wrote the page's text into this room, or null for an empty page. Each room
+   * writes it anew, under a new id: anyone who has synced with this room holds that id.
+   */
+  seedClientId: number | null;
 }
 
 export type ExternalChangeMessage =
@@ -212,6 +222,7 @@ async function createRoom(pageId: string): Promise<CollabRoom> {
     clients: new Map(),
     pageId,
     lock: null,
+    seedClientId: Y.encodeStateVector(doc).length > 1 ? doc.clientID : null,
   };
 
   doc.on('update', (update: Uint8Array, origin: unknown) => {
@@ -461,7 +472,18 @@ async function handleMessage(
       case MESSAGE_SYNC: {
         const syncMessageType = decoding.readVarUint(decoder);
 
+        if (client.sessionEnded) break;
+
         if (syncMessageType === syncProtocol.messageYjsSyncStep1) {
+          // A document from an earlier room holds the same text under other ids: merging it in
+          // would put the whole page in here twice
+          const held = Y.decodeStateVector(decoding.readVarUint8Array(decoding.clone(decoder)));
+          if (room.seedClientId !== null && held.size > 0 && !held.has(room.seedClientId)) {
+            client.sessionEnded = true;
+            sendJson(room, MESSAGE_SESSION_ENDED, {}, client.ws);
+            client.ws.close(CLOSE_SESSION_ENDED, 'Session ended');
+            break;
+          }
           // Anyone may read: answer with what the client is missing
           const encoder = encoding.createEncoder();
           encoding.writeVarUint(encoder, MESSAGE_SYNC);

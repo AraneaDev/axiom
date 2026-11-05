@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -51,36 +51,55 @@ vi.mock('./WikiLayout', () => ({
 let collab: {
   isConnected: boolean;
   isSynced: boolean;
+  hasSynced?: boolean;
+  sessionEnded?: boolean;
   pendingChange: PendingChange | null;
 };
 
+const lastEnabled: Array<boolean | undefined> = [];
+const mockRejoin = vi.fn();
+const editorOnChange: { current?: (md: string) => void } = {};
+
 vi.mock('@/hooks/useCollaboration', () => ({
-  useCollaboration: () => ({
-    ydoc: collab.isConnected ? {} : null,
-    provider: collab.isConnected ? {} : null,
-    isConnected: collab.isConnected,
-    isSynced: collab.isSynced,
-    presenceUsers: [],
-    fragmentName: 'default',
-    pendingChange: collab.pendingChange,
-    resolvedBy: null,
-    locked: null,
-    readOnly: false,
-    dismissResolved: () => {},
-  }),
+  useCollaboration: (options: { enabled?: boolean }) => {
+    lastEnabled.push(options.enabled);
+    return {
+      ydoc: {},
+      provider: {},
+      isConnected: collab.isConnected,
+      isSynced: collab.isSynced,
+      hasSynced: collab.hasSynced ?? collab.isSynced,
+      presenceUsers: [],
+      fragmentName: 'default',
+      pendingChange: collab.pendingChange,
+      resolvedBy: null,
+      locked: null,
+      readOnly: false,
+      dismissResolved: () => {},
+      sessionEnded: collab.sessionEnded ?? false,
+      rejoin: mockRejoin,
+    };
+  },
 }));
 
 vi.mock('@/components/editor/CollaborativeEditor', () => ({
-  CollaborativeEditor: ({ canEdit }: { canEdit: boolean }) => (
-    <div data-testid="collab-editor" data-can-edit={String(canEdit)} />
-  ),
+  CollaborativeEditor: ({
+    canEdit,
+    onChange,
+  }: {
+    canEdit: boolean;
+    onChange: (md: string) => void;
+  }) => {
+    editorOnChange.current = onChange;
+    return <div data-testid="collab-editor" data-can-edit={String(canEdit)} />;
+  },
 }));
 
 vi.mock('@/components/editor/MarkdownEditor', () => ({
   MarkdownEditor: () => <div data-testid="markdown-editor" />,
 }));
 
-import PageEdit from './PageEdit';
+import PageEdit, { COLLAB_SYNC_TIMEOUT_MS } from './PageEdit';
 
 const page = (extra: Record<string, unknown> = {}) => ({
   id: 'p1',
@@ -186,6 +205,114 @@ describe('PageEdit', () => {
     mockGetPage.mockResolvedValue(page({ canEdit: true }));
     renderEdit();
     expect(await screen.findByTestId('collab-editor')).toHaveAttribute('data-can-edit', 'true');
+  });
+
+  describe('typed text never disappears in a swap of editors', () => {
+    it('offers no editor to type in until the session has synced', async () => {
+      mockGetPage.mockResolvedValue(page({ canEdit: true }));
+      collab = { isConnected: false, isSynced: false, pendingChange: null };
+      renderEdit();
+      expect(await screen.findByText('two')).toBeInTheDocument();
+      expect(screen.queryByTestId('markdown-editor')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('collab-editor')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent(/live session/i);
+    });
+
+    it('keeps the collaborative editor through a lost connection', async () => {
+      mockGetPage.mockResolvedValue(page({ canEdit: true }));
+      const { rerender } = renderEdit();
+      await screen.findByTestId('collab-editor');
+      collab = { isConnected: false, isSynced: false, hasSynced: true, pendingChange: null };
+      rerender();
+      expect(screen.getByTestId('collab-editor')).toBeInTheDocument();
+      expect(screen.queryByTestId('markdown-editor')).not.toBeInTheDocument();
+    });
+
+    it('saves the local text, not the server session, while the connection is lost', async () => {
+      mockGetPage.mockResolvedValue(page({ canEdit: true }));
+      mockUpdatePage.mockResolvedValue(page());
+      const { rerender } = renderEdit();
+      await screen.findByTestId('collab-editor');
+      collab = { isConnected: false, isSynced: false, hasSynced: true, pendingChange: null };
+      rerender();
+      await userEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+      await waitFor(() => expect(mockUpdatePage).toHaveBeenCalled());
+      expect(mockFlushCollab).not.toHaveBeenCalled();
+      expect(mockUpdatePage.mock.calls[0][2]).toHaveProperty('body', 'one\n\ntwo');
+    });
+
+    it('hands text typed in an ended session to the new session as a change to merge', async () => {
+      mockGetPage.mockResolvedValue(page({ canEdit: true }));
+      mockUpdatePage.mockResolvedValue(page());
+      const { rerender } = renderEdit();
+      await screen.findByTestId('collab-editor');
+      collab = { isConnected: false, isSynced: false, hasSynced: true, pendingChange: null };
+      rerender();
+      act(() => editorOnChange.current!('Typed offline'));
+
+      collab = { ...collab, sessionEnded: true };
+      rerender();
+      await waitFor(() => expect(mockRejoin).toHaveBeenCalledTimes(1));
+      // Not yet: without a live session it would overwrite whatever the page has become
+      expect(mockUpdatePage).not.toHaveBeenCalled();
+
+      collab = { isConnected: true, isSynced: true, hasSynced: true, pendingChange: null };
+      rerender();
+      await waitFor(() => expect(mockUpdatePage).toHaveBeenCalledTimes(1));
+      expect(mockUpdatePage.mock.calls[0][2]).toEqual({ body: 'Typed offline' });
+    });
+
+    it('sends nothing when the ended session had no text typed offline', async () => {
+      mockGetPage.mockResolvedValue(page({ canEdit: true }));
+      const { rerender } = renderEdit();
+      await screen.findByTestId('collab-editor');
+      collab = {
+        isConnected: false,
+        isSynced: false,
+        hasSynced: true,
+        sessionEnded: true,
+        pendingChange: null,
+      };
+      rerender();
+      await waitFor(() => expect(mockRejoin).toHaveBeenCalled());
+      collab = { isConnected: true, isSynced: true, hasSynced: true, pendingChange: null };
+      rerender();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(mockUpdatePage).not.toHaveBeenCalled();
+    });
+
+    it('leaves a reconnect to the same session to the document itself', async () => {
+      mockGetPage.mockResolvedValue(page({ canEdit: true }));
+      const { rerender } = renderEdit();
+      await screen.findByTestId('collab-editor');
+      collab = { isConnected: false, isSynced: false, hasSynced: true, pendingChange: null };
+      rerender();
+      act(() => editorOnChange.current!('Typed offline'));
+      collab = { isConnected: true, isSynced: true, hasSynced: true, pendingChange: null };
+      rerender();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(mockUpdatePage).not.toHaveBeenCalled();
+    });
+
+    it('gives up on a session that never syncs, for good, and leaves the session', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockGetPage.mockResolvedValue(page({ canEdit: true }));
+        collab = { isConnected: false, isSynced: false, pendingChange: null };
+        const { rerender } = renderEdit();
+        await screen.findByText('two');
+        await act(() => vi.advanceTimersByTimeAsync(COLLAB_SYNC_TIMEOUT_MS));
+        expect(screen.getByTestId('markdown-editor')).toBeInTheDocument();
+        expect(lastEnabled.at(-1)).toBe(false);
+        // A sync after this must not replace what was typed
+        collab = { isConnected: true, isSynced: true, pendingChange: null };
+        rerender();
+        expect(screen.getByTestId('markdown-editor')).toBeInTheDocument();
+        expect(screen.queryByTestId('collab-editor')).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('a 403 from the pending merge still makes the editor read-only', async () => {

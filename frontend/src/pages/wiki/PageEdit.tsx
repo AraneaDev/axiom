@@ -14,7 +14,7 @@ import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Dropdown';
 import { FileUpload } from '@/components/ui/FileUpload';
 import { Input } from '@/components/ui/Input';
-import { PageLoader } from '@/components/ui/Spinner';
+import { PageLoader, Spinner } from '@/components/ui/Spinner';
 import { ConflictView } from '@/components/wiki/ConflictView';
 import { ExternalChangeBanner } from '@/components/wiki/ExternalChangeBanner';
 import { TemplateVariablePanel } from '@/components/wiki/TemplateVariablePanel';
@@ -29,6 +29,9 @@ import { useAuthStore } from '@/stores/auth.store';
 import { PageEditHeader } from './PageEditHeader';
 import { TemplatePicker } from './TemplatePicker';
 import { useWikiContext } from './WikiLayout';
+
+/** How long the page waits for its live session before editing without one. */
+export const COLLAB_SYNC_TIMEOUT_MS = 10_000;
 
 /**
  *
@@ -75,13 +78,26 @@ export default function PageEdit() {
   });
 
   // Real-time collaboration (only for existing pages, not new ones)
-  const collabEnabled = !isNew && !!existingPage?.id && !!currentSpace;
+  const [collabGaveUp, setCollabGaveUp] = useState(false);
+  const collabEnabled = !isNew && !!existingPage?.id && !!currentSpace && !collabGaveUp;
   const collab = useCollaboration({
     pageId: existingPage?.id,
     enabled: collabEnabled,
   });
-  const useCollab =
-    collabEnabled && collab.isConnected && collab.isSynced && collab.ydoc && collab.provider;
+  // Never swap one editor for the other with text in it: the collaborative editor starts from the
+  // session and the plain one from the saved page, so the swap would drop what was typed. Once
+  // synced the session stays through a lost connection, as the Yjs document keeps what is typed
+  // and hands it over on reconnecting. Before that nothing is editable, until it is clear no
+  // session is coming, and then the plain editor stays.
+  const useCollab = collabEnabled && collab.hasSynced && collab.ydoc && collab.provider;
+  const waitingForSession = collabEnabled && !collab.hasSynced;
+  useEffect(() => {
+    if (!waitingForSession) return;
+    const timer = setTimeout(() => setCollabGaveUp(true), COLLAB_SYNC_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [waitingForSession]);
+  // The server holds the body only while connected; offline the local text is what can be saved
+  const sessionHoldsBody = useCollab && collab.isConnected && collab.isSynced;
 
   // The page says whether this user may edit it; a 403 from the merge endpoints is the fallback
   const pendingChange = useCollab ? collab.pendingChange : null;
@@ -111,6 +127,30 @@ export default function PageEdit() {
   const [parentId, setParentId] = useState<string>(searchParams.get('parent') ?? '');
   const [changeDescription, setChangeDescription] = useState('');
   const { error, setError } = useFormError();
+
+  // Text typed while disconnected. A reconnect to the same session syncs it by itself. When that
+  // session has ended, its document can't join the new one, so this goes to the new session as a
+  // change to merge: sent while that session is live, so it can't overwrite anything silently.
+  const typedOffline = useRef<string | null>(null);
+  const toHandOver = useRef<string | null>(null);
+  const { sessionEnded, rejoin } = collab;
+  useEffect(() => {
+    if (!sessionEnded) return;
+    toHandOver.current = typedOffline.current;
+    typedOffline.current = null;
+    rejoin();
+  }, [sessionEnded, rejoin]);
+  const spaceId = currentSpace?.id;
+  useEffect(() => {
+    if (!sessionHoldsBody) return;
+    typedOffline.current = null;
+    const text = toHandOver.current;
+    if (text === null || !spaceId) return;
+    toHandOver.current = null;
+    wikiApi.updatePage(spaceId, pageSlug!, { body: text }).catch((err: Error) => {
+      setError(`Text typed offline could not be saved: ${err.message}`);
+    });
+  }, [sessionHoldsBody, spaceId, pageSlug, setError]);
   const [showPreview, setShowPreview] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(isNew);
   const [showVariablePanel, setShowVariablePanel] = useState(false);
@@ -209,7 +249,7 @@ export default function PageEdit() {
         // a stale local copy can never overwrite it.
         const description = changeDescription.trim();
         let flushed = false;
-        if (useCollab) {
+        if (sessionHoldsBody) {
           try {
             flushed = (
               await wikiApi.flushCollab(currentSpace.id, pageSlug!, description || undefined)
@@ -221,7 +261,7 @@ export default function PageEdit() {
         }
         return wikiApi.updatePage(currentSpace.id, pageSlug!, {
           title,
-          ...(useCollab ? {} : { body }),
+          ...(sessionHoldsBody ? {} : { body }),
           // No parent here: the form has no parent picker for an existing page, so sending one
           // would move it (null means the top level). Moving is the sidebar's job.
           // The flush already stored the description; without a live room the PATCH carries it
@@ -381,13 +421,28 @@ export default function PageEdit() {
                 <CollaborativeEditor
                   ydoc={collab.ydoc}
                   provider={collab.provider}
+                  key={collab.ydoc.guid}
                   fragmentName={collab.fragmentName}
-                  onChange={setBody}
+                  onChange={(markdown) => {
+                    setBody(markdown);
+                    if (!collab.isConnected) typedOffline.current = markdown;
+                  }}
                   placeholder="Write your content..."
                   uploadTarget={existingPage?.id ? { pageId: existingPage.id } : undefined}
                   locked={collab.locked}
                   canEdit={canEdit}
                 />
+              ) : canEdit && waitingForSession ? (
+                <Card className="min-h-[300px] p-4">
+                  <p
+                    role="status"
+                    className="mb-3 flex items-center gap-2 text-xs text-text-secondary"
+                  >
+                    <Spinner size="sm" />
+                    Joining the live session. You can type as soon as it is ready.
+                  </p>
+                  <MarkdownRenderer content={body} />
+                </Card>
               ) : canEdit ? (
                 <MarkdownEditor
                   value={body}

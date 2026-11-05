@@ -9,6 +9,8 @@ export const MESSAGE_EXTERNAL_CHANGE = 20;
 export const MESSAGE_LOCK = 21;
 /** The server changed this client's own edit access: { canEdit } */
 export const MESSAGE_ACCESS = 22;
+/** This client's document belongs to a session that ended; it must start over */
+export const MESSAGE_SESSION_ENDED = 23;
 
 /** An external change (agent, API, restore) waiting to be merged into the live session */
 export interface PendingChange {

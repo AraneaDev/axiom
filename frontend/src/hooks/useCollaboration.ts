@@ -12,6 +12,7 @@ import {
   MESSAGE_ACCESS,
   MESSAGE_EXTERNAL_CHANGE,
   MESSAGE_LOCK,
+  MESSAGE_SESSION_ENDED,
   parseAccess,
   parseExternalChange,
   parseLock,
@@ -33,8 +34,10 @@ interface UseCollaborationReturn {
   provider: WebsocketProvider | null;
   /** Whether the provider is connected and synced */
   isConnected: boolean;
-  /** Whether the initial sync has completed */
+  /** Whether the document is in sync with the server right now */
   isSynced: boolean;
+  /** Whether it has been at any time: after that a lost connection only pauses the session */
+  hasSynced: boolean;
   /** List of other users currently editing */
   presenceUsers: PresenceUser[];
   /** The collaboration fragment name used by TipTap */
@@ -47,6 +50,10 @@ interface UseCollaborationReturn {
   locked: { byName: string } | null;
   /** The server says this user may not edit right now */
   readOnly: boolean;
+  /** The session this document belonged to ended while disconnected: call rejoin */
+  sessionEnded: boolean;
+  /** Start over with a new document from the server; replaces ydoc and provider */
+  rejoin: () => void;
   /** Clear the "Merged by" note */
   dismissResolved: () => void;
 }
@@ -69,6 +76,7 @@ export function useCollaboration({
 
   const [isConnected, setIsConnected] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
+  const [hasSynced, setHasSynced] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [resolvedBy, setResolvedBy] = useState<string | null>(null);
@@ -76,6 +84,12 @@ export function useCollaboration({
   // Set when the server says this user may no longer edit (a permission change mid-session)
   const [readOnly, setReadOnly] = useState(false);
   const dismissResolved = useCallback(() => setResolvedBy(null), []);
+  const [sessionEnded, setSessionEnded] = useState(false);
+  const [generation, setGeneration] = useState(0);
+  const rejoin = useCallback(() => {
+    setSessionEnded(false);
+    setGeneration((g) => g + 1);
+  }, []);
 
   const fragmentName = 'default';
 
@@ -105,8 +119,13 @@ export function useCollaboration({
     const serverUrl = `${proto}://${window.location.host}/ws/wiki`;
 
     const newProvider = new WebsocketProvider(serverUrl, pageId, newYdoc, {
-      connect: true,
+      // In the effect below: a render can run this and throw the result away (StrictMode does),
+      // and only what the effect holds gets cleaned up
+      connect: false,
       params: { token },
+      // Everything goes through the server. Tabs talking directly would feed the document of an
+      // ended session into a new one, which is the doubling the server refuses it for.
+      disableBc: true,
     });
 
     // Server state messages, registered before the first message can arrive. y-websocket and
@@ -136,12 +155,22 @@ export function useCollaboration({
       flushSync(() => setReadOnly(!message.canEdit));
     };
 
+    newProvider.messageHandlers[MESSAGE_SESSION_ENDED] = () => {
+      // No reconnecting with this document: the server would only refuse it again
+      newProvider.disconnect();
+      setSessionEnded(true);
+    };
+
     return { ydoc: newYdoc, provider: newProvider };
-  }, [pageId, enabled, user]);
+    // generation: a rejoin needs a new document
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageId, enabled, user, generation]);
 
   // Set up awareness, listeners, and cleanup in an effect
   useEffect(() => {
     if (!provider || !ydoc || !user) return;
+
+    provider.connect();
 
     // Set local awareness state with user info
     const myColor = getMyColor();
@@ -166,6 +195,7 @@ export function useCollaboration({
 
     const onSync = (synced: boolean) => {
       setIsSynced(synced);
+      if (synced) setHasSynced(true);
     };
     provider.on('sync', onSync);
 
@@ -199,6 +229,7 @@ export function useCollaboration({
       ydoc.destroy();
       setIsConnected(false);
       setIsSynced(false);
+      setHasSynced(false);
       setPresenceUsers([]);
       setPendingChange(null);
       setResolvedBy(null);
@@ -211,6 +242,7 @@ export function useCollaboration({
     provider,
     isConnected,
     isSynced,
+    hasSynced,
     presenceUsers,
     fragmentName,
     pendingChange,
@@ -219,6 +251,8 @@ export function useCollaboration({
     locked,
     // This user may not edit right now: a permission change, or view-only access
     readOnly,
+    sessionEnded,
+    rejoin,
     dismissResolved,
   };
 }

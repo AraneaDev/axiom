@@ -60,6 +60,8 @@ export interface CollabTestClient {
   lockMessages: Array<{ locked: boolean; byName: string | null }>;
   /** Parsed JSON payloads of message type 22 (the client's own edit access) */
   accessMessages: Array<{ canEdit: boolean }>;
+  /** Times the server said this client holds the document of a session that has ended */
+  sessionEnded: { count: number };
   closeCode: Promise<number>;
   /** Resolves once the client has applied the server's document state */
   synced: Promise<void>;
@@ -72,14 +74,16 @@ export interface CollabTestClient {
  * @param server
  * @param pageId
  * @param userId
+ * @param doc - A document to reconnect with, as a browser does after a lost connection
  */
 export function connectCollabClient(
   server: CollabTestServer,
   pageId: string,
   userId: string,
+  doc: Y.Doc = new Y.Doc(),
 ): CollabTestClient {
   const ws = new WebSocket(`${server.url}/ws/wiki/${pageId}?token=${tokenFor(userId)}`);
-  const doc = new Y.Doc();
+  const sessionEnded = { count: 0 };
   const changeMessages: Array<Record<string, unknown>> = [];
   const lockMessages: Array<{ locked: boolean; byName: string | null }> = [];
   const accessMessages: Array<{ canEdit: boolean }> = [];
@@ -109,6 +113,8 @@ export function connectCollabClient(
       lockMessages.push(JSON.parse(decoding.readVarString(decoder)));
     } else if (type === 22) {
       accessMessages.push(JSON.parse(decoding.readVarString(decoder)));
+    } else if (type === 23) {
+      sessionEnded.count++;
     }
   });
 
@@ -124,6 +130,7 @@ export function connectCollabClient(
     ws,
     doc,
     changeMessages,
+    sessionEnded,
     lockMessages,
     accessMessages,
     closeCode,
