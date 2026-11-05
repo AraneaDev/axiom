@@ -102,4 +102,29 @@ describe('public form actions', () => {
     const row = await prisma.formSubmission.findUniqueOrThrow({ where: { id: res.body.id } });
     expect(JSON.stringify(row)).not.toContain(ctx.owner.id);
   });
+
+  it('writes the audit row of a public submission as a form, naming it by its path', async () => {
+    const slug = `pa-audit-${stamp}`;
+    await prisma.form.create({
+      data: {
+        projectId: ctx.projectId,
+        createdById: ctx.owner.id,
+        status: 'PUBLISHED',
+        name: 'Audited',
+        slug,
+      },
+    });
+    const res = await request(app).post(`/api/f/${slug}/submit`).set(XHR).send({ data: {} });
+    expect(res.status).toBe(201);
+    const find = () =>
+      prisma.auditLog.findFirst({
+        where: { userId: null, details: { path: ['path'], string_contains: slug } },
+      });
+    let row = await find();
+    for (let i = 0; i < 20 && !row; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      row = await find();
+    }
+    expect(row?.resource).toBe('form');
+  });
 });

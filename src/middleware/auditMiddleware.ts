@@ -17,6 +17,8 @@ const METHOD_ACTION_MAP: Record<string, string> = {
 };
 
 const PATH_RESOURCE_MAP: [RegExp, string][] = [
+  // The public pages of a form: anyone with its link, so the row says which kind of thing it is
+  [/^\/api\/f\//, 'form'],
   [/\/api\/orgs/, 'org'],
   [/\/api\/teams/, 'team'],
   [/\/api\/projects/, 'project'],
