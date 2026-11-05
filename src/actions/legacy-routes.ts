@@ -29,6 +29,7 @@ export const LEGACY_ROUTES: LegacyRoute[] = [
   { method: 'POST', path: '/api/admin/users/:userId/reset-password', plan: 3 },
   { method: 'POST', path: '/api/approval-requests/:requestId/cancel', plan: 4 },
   { method: 'POST', path: '/api/approval-requests/:requestId/vote', plan: 4 },
+  { method: 'POST', path: '/api/auth/logout', plan: 4 },
   { method: 'POST', path: '/api/auth/2fa/disable', plan: 4 },
   { method: 'POST', path: '/api/auth/2fa/enable', plan: 4 },
   { method: 'POST', path: '/api/auth/2fa/verify', plan: 4 },

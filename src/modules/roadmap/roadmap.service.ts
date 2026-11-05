@@ -2,10 +2,12 @@ import type { z } from 'zod';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 
 import type {
   createBucketSchema,
+  setIssueDatesSchema,
   updateBucketSchema,
   timelineQuerySchema,
   bucketsViewQuerySchema,
@@ -194,6 +196,72 @@ export async function createDefaultBuckets(projectId: string) {
 }
 
 // ─── Timeline data ────────────────────────────────────────────────────────────
+
+/**
+ * The issue of a project, by id, or 404: an id from another project is no issue here.
+ * @param projectId - The project in the URL
+ * @param issueId - The issue
+ */
+async function issueInProject(projectId: string, issueId: string) {
+  return findOrThrow(
+    prisma.issue.findFirst({ where: { id: issueId, projectId } }),
+    ERR.ISSUE_NOT_FOUND,
+  );
+}
+
+/**
+ * Move an issue to a bucket of its project, or out of any.
+ * @param projectId - The project
+ * @param issueId - The issue
+ * @param bucketId - The bucket, or null for none
+ * @returns The issue as the roadmap shows it
+ * @throws {AppError} 404 for an issue or a bucket that isn't in this project
+ */
+export async function setIssueBucket(projectId: string, issueId: string, bucketId: string | null) {
+  await issueInProject(projectId, issueId);
+  if (bucketId !== null) {
+    await findOrThrow(
+      prisma.roadmapBucket.findFirst({ where: { id: bucketId, projectId } }),
+      'Roadmap bucket not found',
+    );
+  }
+  return prisma.issue.update({
+    where: { id: issueId },
+    data: { roadmapBucketId: bucketId },
+    select: ISSUE_ROADMAP_SELECT,
+  });
+}
+
+/**
+ * Set the dates of an issue on the roadmap. A date left out stays as it is; null clears it.
+ * @param projectId - The project
+ * @param issueId - The issue
+ * @param dates - The dates to change
+ * @returns The issue as the roadmap shows it
+ * @throws {AppError} 404 for an issue that isn't in this project
+ * @throws {AppError} 400 for no date at all, or a start after the due date
+ */
+export async function setIssueDates(
+  projectId: string,
+  issueId: string,
+  dates: z.output<typeof setIssueDatesSchema>,
+) {
+  const issue = await issueInProject(projectId, issueId);
+  if (dates.startDate === undefined && dates.dueDate === undefined) {
+    throw new AppError(400, 'Give startDate, dueDate or both');
+  }
+  const asDate = (value: string | null) => (value === null ? null : new Date(value));
+  const startDate = dates.startDate === undefined ? issue.startDate : asDate(dates.startDate);
+  const dueDate = dates.dueDate === undefined ? issue.dueDate : asDate(dates.dueDate);
+  if (startDate && dueDate && startDate > dueDate) {
+    throw new AppError(400, 'The start date is after the due date');
+  }
+  return prisma.issue.update({
+    where: { id: issueId },
+    data: { startDate, dueDate },
+    select: ISSUE_ROADMAP_SELECT,
+  });
+}
 
 /**
  * Get timeline data: top-level issues with dueDate, their dated children,

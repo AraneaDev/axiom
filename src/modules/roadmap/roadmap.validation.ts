@@ -16,6 +16,17 @@ export const reorderBucketsSchema = z.object({
   bucketIds: z.array(z.string()).min(1),
 });
 
+export const setIssueBucketSchema = z.object({
+  bucketId: z.string().min(1).nullable(),
+});
+
+const roadmapDate = z.iso.date().nullable().optional();
+
+export const setIssueDatesSchema = z.object({
+  startDate: roadmapDate,
+  dueDate: roadmapDate,
+});
+
 export const timelineQuerySchema = z.object({
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),

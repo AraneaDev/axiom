@@ -65,18 +65,7 @@ const UNREADABLE_ALLOWED: Array<{ file: string; arg: string; reason: string }> =
  * each stays here until its route is built or its caller removed. The test below fails once
  * Express serves one, so the entry can't outlive the bug.
  */
-const BROKEN_FRONTEND_CALLS: Array<{ method: string; path: string; reason: string }> = [
-  {
-    method: 'PATCH',
-    path: '/api/projects/:projectId/roadmap/issues/:issueId/bucket',
-    reason: 'Roadmap.tsx moves an issue to a bucket; the roadmap module has no such route',
-  },
-  {
-    method: 'PATCH',
-    path: '/api/projects/:projectId/roadmap/issues/:issueId/dates',
-    reason: "Roadmap.tsx sets an issue's dates; the roadmap module has no such route",
-  },
-];
+const BROKEN_FRONTEND_CALLS: Array<{ method: string; path: string; reason: string }> = [];
 
 interface FrontendCall {
   method: string;
@@ -597,6 +586,10 @@ describe('frontend and registry parity', () => {
       return route?.plan !== entry.plan || !entry.task.includes(`plan ${entry.plan}`);
     });
     expect(wrong.map((entry) => `${entry.method} ${entry.path}`)).toEqual([]);
+  });
+
+  it('has no frontend call without a route', () => {
+    expect(BROKEN_FRONTEND_CALLS).toEqual([]);
   });
 
   it('lists a broken frontend call only while no route serves it', () => {

@@ -54,6 +54,7 @@ import './modules/teams/teams.actions';
 import './modules/projects/projects.actions';
 import './modules/sprints/sprints.actions';
 import './modules/search/search.actions';
+import './modules/roadmap/roadmap.actions';
 import issuesRoutes from './modules/issues/issues.routes';
 import labelsRoutes from './modules/labels/labels.routes';
 import linksRoutes from './modules/links/links.routes';

@@ -1,4 +1,6 @@
 import { createHash } from 'crypto';
+import { readFileSync } from 'fs';
+import path from 'path';
 
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -9,12 +11,14 @@ import '../../modules/attachments/attachments.actions';
 import '../../modules/issues/issues.actions';
 import '../../modules/orgs/orgs.actions';
 import '../../modules/projects/projects.actions';
+import '../../modules/roadmap/roadmap.actions';
 import '../../modules/search/search.actions';
 import '../../modules/sprints/sprints.actions';
 import '../../modules/teams/teams.actions';
 import '../../modules/wiki/wiki.actions';
 
 import { listActions } from '../../actions/registry';
+import { listenForRawRequests, rawRequest } from '../../test/raw-request';
 
 import { buildOpenApi, openApiPath } from './build';
 
@@ -260,6 +264,37 @@ describe('OpenAPI from the action registry', () => {
       const res = await request(app).get('/api/docs/assets/standalone.js');
       expect(res.status).toBe(200);
       expect(res.headers['content-type']).toMatch(/javascript/);
+    });
+
+    it('answers 404 for a docs asset that does not exist, not the docs page', async () => {
+      for (const asset of ['nope.js', 'chunks/nope.js', 'nope/']) {
+        const res = await request(app).get(`/api/docs/assets/${asset}`);
+        expect(res.status, asset).toBe(404);
+        expect(res.text, asset).not.toContain('<html');
+      }
+    });
+
+    it('serves nothing outside the docs assets, however the path is spelled', async () => {
+      const server = await listenForRawRequests(app);
+      try {
+        for (const target of [
+          '/api/docs/assets/../../package.json',
+          '/api/docs/assets/%2e%2e/%2e%2e/package.json',
+          '/api/docs/assets/..%2f..%2fpackage.json',
+        ]) {
+          const res = await rawRequest(server, 'GET', target, '');
+          expect(res.status, target).toBe(404);
+          expect(JSON.stringify(res.body), target).not.toContain('"dependencies"');
+        }
+      } finally {
+        server.close();
+      }
+    });
+
+    it('pins the docs bundle exactly, as a build time dependency', () => {
+      const pkg = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'));
+      expect(pkg.dependencies['@scalar/api-reference']).toBeUndefined();
+      expect(pkg.devDependencies['@scalar/api-reference']).toMatch(/^\d+\.\d+\.\d+$/);
     });
 
     it('keeps the policy of every other page strict', async () => {
