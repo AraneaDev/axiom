@@ -43,8 +43,13 @@ export default function ConnectAgent() {
       errorMessage: null,
       invalidateKeys: [['apiTokens']],
       onSuccess: (data) => {
+        if (!data.token) {
+          // Nothing to copy: a command without the token would look like it works
+          setError('The server did not return a token. Try again.');
+          return;
+        }
         setError('');
-        setCreated({ token: data.token ?? '', client });
+        setCreated({ token: data.token, client });
       },
       onError: (err) => setError(err.message || 'Failed to create token'),
     },
@@ -52,7 +57,7 @@ export default function ConnectAgent() {
 
   function pickClient(id: AgentClient) {
     setClient(id);
-    setName(AGENT_CLIENTS.find((c) => c.id === id)?.label ?? '');
+    setName(AGENT_CLIENTS.find((c) => c.id === id)?.tokenName ?? '');
   }
 
   const daysValid = Number.isInteger(Number(days)) && Number(days) >= 1;
@@ -181,7 +186,7 @@ export default function ConnectAgent() {
       )}
       {tokens && tokens.length > 0 && (
         <p className="text-xs text-text-secondary">
-          You have {tokens.length} API tokens.{' '}
+          You have {tokens.length} API {tokens.length === 1 ? 'token' : 'tokens'}.{' '}
           <Link to="/settings/tokens" className="underline">
             Manage them
           </Link>

@@ -52,4 +52,30 @@ describe('ConnectAgent', () => {
     expect((block as HTMLInputElement).value).toContain('http_headers');
     expect((block as HTMLInputElement).value).toContain('Token tk_secret');
   });
+
+  it('names the token Agent for a client that is not listed, not Other', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByRole('button', { name: /other/i }));
+    expect(screen.getByLabelText('Token name')).toHaveValue('Agent');
+  });
+
+  it('shows an error, not an empty command, when the answer holds no token', async () => {
+    createApiToken.mockResolvedValue({ id: '1', name: 'Claude Code' });
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByRole('button', { name: /create token/i }));
+    expect(await screen.findByText(/did not return a token/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('~/.codex/config.toml')).not.toBeInTheDocument();
+    expect(screen.queryByText(/claude mcp add/i)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [1, 'You have 1 API token.'],
+    [3, 'You have 3 API tokens.'],
+  ])('says "%s API token" in the singular or the plural', async (count, text) => {
+    listApiTokens.mockResolvedValue(Array.from({ length: count }, (_, i) => ({ id: `${i}` })));
+    show();
+    expect(await screen.findByText(text, { exact: false })).toBeInTheDocument();
+  });
 });

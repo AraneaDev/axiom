@@ -98,7 +98,7 @@ export default function ApiTokens() {
         {
           title: 'Scopes',
           description:
-            'Each area has a read and a write scope, and write includes read. Reading your profile and notifications needs read on issues or wiki. Tokens never manage orgs, teams, members, projects, permissions or tokens, whatever their scopes.',
+            'Each area has a read and a write scope, and write includes read. Reading your profile and notifications needs read on issues or wiki. Calls that delete, change who can reach something, or manage orgs, teams, members, projects, permissions and tokens wait until you approve them in Agent approvals, whatever the scopes.',
         },
       ]}
       actions={

@@ -1,10 +1,10 @@
 export type AgentClient = 'claude-code' | 'codex' | 'other';
 
-/** The clients offered on the connect page; the label also names the new token. */
-export const AGENT_CLIENTS: { id: AgentClient; label: string }[] = [
-  { id: 'claude-code', label: 'Claude Code' },
-  { id: 'codex', label: 'Codex' },
-  { id: 'other', label: 'Other' },
+/** The clients offered on the connect page; `tokenName` is what a new token is called. */
+export const AGENT_CLIENTS: { id: AgentClient; label: string; tokenName: string }[] = [
+  { id: 'claude-code', label: 'Claude Code', tokenName: 'Claude Code' },
+  { id: 'codex', label: 'Codex', tokenName: 'Codex' },
+  { id: 'other', label: 'Other', tokenName: 'Agent' },
 ];
 
 /** One copyable block shown after the token is created. */
