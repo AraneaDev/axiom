@@ -71,8 +71,7 @@ registerActions([
     rest: { method: 'PATCH', path: LABEL },
     authorize: write,
     handler: async (_ctx, { projectId, labelName, ...data }) =>
-      // The route decoded the path value once more itself
-      labelsService.updateLabel(projectId, decodeURIComponent(labelName), data),
+      labelsService.updateLabel(projectId, labelName, data),
   }),
   defineAction({
     name: 'label.delete',
@@ -87,6 +86,6 @@ registerActions([
     rest: { method: 'DELETE', path: LABEL },
     authorize: write,
     handler: async (_ctx, { projectId, labelName }) =>
-      labelsService.deleteLabel(projectId, decodeURIComponent(labelName)),
+      labelsService.deleteLabel(projectId, labelName),
   }),
 ]);

@@ -834,13 +834,10 @@ const labelActions = [
     summary: 'Take a label off a wiki page',
     input: pageTarget.extend({ label: z.string() }),
     output: nothing,
-    // The route decoded the path value once more itself
-    preview: (_ctx, { pageId, label }) =>
-      previews.pageLabelRemove(pageId, decodeURIComponent(label)),
+    preview: (_ctx, { pageId, label }) => previews.pageLabelRemove(pageId, label),
     rest: { method: 'DELETE', path: `${PAGE_BY_ID}/labels/:label` },
     authorize: editPage,
-    handler: async (_ctx, { pageId, label }) =>
-      labelsService.removeLabel(pageId, decodeURIComponent(label)),
+    handler: async (_ctx, { pageId, label }) => labelsService.removeLabel(pageId, label),
   }),
   defineAction({
     name: 'pageLabel.search',

@@ -1244,7 +1244,7 @@ export async function pageCommentDelete(commentId: string): Promise<string> {
 
 /**
  * @param pageId - The page
- * @param label - The label as the path gave it
+ * @param label - The label already decoded from the path
  */
 export async function pageLabelRemove(pageId: string, label: string): Promise<string> {
   const page = await findOrThrow(
@@ -1273,12 +1273,12 @@ export async function pageTemplateDelete(templateId: string): Promise<string> {
 
 /**
  * @param projectId - The project in the input
- * @param labelName - The label as the path gave it
+ * @param labelName - The label, already decoded from the path
  */
 export async function labelDelete(projectId: string, labelName: string): Promise<string> {
   const label = await findOrThrow(
     prisma.label.findUnique({
-      where: { projectId_name: { projectId, name: decodeURIComponent(labelName) } },
+      where: { projectId_name: { projectId, name: labelName } },
       select: {
         name: true,
         project: { select: { prefix: true } },

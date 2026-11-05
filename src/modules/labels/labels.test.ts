@@ -4,6 +4,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
+import { cleanupTestContext, createTestContext, type TestContext } from '../../test/factory';
+import { authDel, authPatch, authPost } from '../../test/helpers';
+import { tokenHeaderFor } from '../../test/mcp-client';
 
 describe('Labels API', () => {
   let token: string;
@@ -191,5 +194,58 @@ describe('Labels API', () => {
         .set('X-Requested-With', 'XMLHttpRequest');
       expect(res.status).toBe(404);
     });
+  });
+});
+
+describe('Label names with a percent sign', () => {
+  let ctx: TestContext;
+  let tokenHeader: string;
+
+  beforeAll(async () => {
+    ctx = await createTestContext(`labelpct${Date.now()}`);
+    tokenHeader = await tokenHeaderFor(ctx.owner, ['issues:write'], 'label-agent');
+  });
+
+  afterAll(async () => {
+    await cleanupTestContext(ctx);
+  });
+
+  const make = (name: string) =>
+    prisma.label.create({ data: { projectId: ctx.projectId, name, color: '#112233' } });
+  const names = async () =>
+    (await prisma.label.findMany({ where: { projectId: ctx.projectId } })).map((l) => l.name);
+
+  it('reads the path once over REST: 100% is found, and so is a%20b as written', async () => {
+    await make('100%');
+    await make('a%20b');
+    await make('a b');
+    const path = (name: string) =>
+      `/api/projects/${ctx.projectId}/labels/${encodeURIComponent(name)}`;
+
+    const patched = await authPatch(path('100%'), ctx.owner.token, { color: '#445566' });
+    expect(patched.status).toBe(200);
+    expect(patched.body.name).toBe('100%');
+
+    const removed = await authDel(path('a%20b'), ctx.owner.token);
+    expect(removed.status).toBe(204);
+    expect(await names()).toContain('a b');
+    expect(await names()).not.toContain('a%20b');
+  });
+
+  it('previews the delete of a name with a percent sign for a token, and reads it once by name', async () => {
+    const held = await request(app)
+      .delete(`/api/projects/${ctx.projectId}/labels/${encodeURIComponent('100%')}`)
+      .set('Authorization', tokenHeader)
+      .set('X-Requested-With', 'XMLHttpRequest');
+    expect(held.status).toBe(202);
+    expect(held.body.preview).toContain('100%');
+
+    await make('50% off');
+    const byName = await authPost('/api/act', ctx.owner.token, {
+      action: 'label.update',
+      input: { projectId: ctx.projectId, labelName: '50% off', color: '#778899' },
+    });
+    expect(byName.status).toBe(200);
+    expect(byName.body.name).toBe('50% off');
   });
 });
