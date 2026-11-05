@@ -365,7 +365,7 @@ describe('project settings as registry actions', () => {
       await updateSiteSettings({ enforce2fa: false });
     });
 
-    it('are not open to a token, by name or over REST', async () => {
+    it('are not open to a token by name', async () => {
       const byName = await request(app)
         .post('/api/act')
         .set('Authorization', token)
