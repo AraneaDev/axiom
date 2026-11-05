@@ -73,6 +73,14 @@ export interface ActionDef<
   target?: T;
   /** Deletes data or changes who may reach it: a token's call waits for approval by default */
   destructive?: boolean;
+  /**
+   * The orgs this call touches, read from the database rather than from what the agent sent. For
+   * an action whose input names no project, team, space, issue, page or sprint: a dashboard, a
+   * saved query, an attachment target. An org's rules bind the call through it.
+   */
+  orgIds?(ctx: ActionContext, input: z.infer<I>): Promise<string[]>;
+  /** States on purpose that the action belongs to no org (a private dashboard or query) */
+  noOrg?: boolean;
   /** Always waits for approval when a token calls it, whatever the policy says */
   admin?: boolean;
   /**

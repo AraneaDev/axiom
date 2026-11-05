@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { pageBySlugAccess, projectAction } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import { MAX_KEY_LENGTH, parseKey, resolveKey } from '../../actions/keys';
+import { orgsOfAttachment, orgsOfProjects, orgsOfSpaces } from '../../actions/org-lookups';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
@@ -104,6 +105,19 @@ async function targetIds(target: UploadTargetInput, userId: string): Promise<Iss
  * second time could name something else by then (R11).
  */
 const authorizedTargets = new WeakMap<ActionContext, IssueRef | PageRef>();
+
+/**
+ * The org of the issue or page a new file goes to: the ids authorize resolved, so a key counts
+ * as the item it names. A staged file has none.
+ * @param ctx - Who runs the action
+ */
+async function uploadTargetOrgs(ctx: ActionContext): Promise<string[]> {
+  const target = authorizedTargets.get(ctx);
+  if (!target) return [];
+  return 'projectId' in target
+    ? orgsOfProjects([target.projectId])
+    : orgsOfSpaces([target.spaceId]);
+}
 
 /**
  * Attach a new file to a target: the parent's scope, then edit access to it. Without a target
@@ -217,6 +231,7 @@ const attachmentActions = [
   }),
   defineAction({
     name: 'attachment.createUploadUrl',
+    orgIds: uploadTargetOrgs,
     area: 'files',
     kind: 'write',
     summary:
@@ -245,6 +260,7 @@ const attachmentActions = [
   }),
   defineAction({
     name: 'attachment.fromUrl',
+    orgIds: uploadTargetOrgs,
     area: 'files',
     kind: 'write',
     summary:
@@ -354,6 +370,7 @@ const attachmentActions = [
   }),
   defineAction({
     name: 'attachment.delete',
+    orgIds: (_ctx, { id }) => orgsOfAttachment(id),
     destructive: true,
     area: 'files',
     kind: 'write',

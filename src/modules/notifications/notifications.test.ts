@@ -161,13 +161,13 @@ describe('Notifications API', () => {
   // ── Notification Preferences ──────────────────────────────
 
   describe('GET /api/notifications/preferences', () => {
-    it('should return default preferences for all 3 event types', async () => {
+    it('should return default preferences for all 4 event types', async () => {
       const res = await request(app)
         .get('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('preferences');
-      expect(res.body.preferences).toHaveLength(3);
+      expect(res.body.preferences).toHaveLength(4);
 
       const eventTypes = res.body.preferences.map((p: { eventType: string }) => p.eventType);
       expect(eventTypes).toContain('issue_assigned');
@@ -175,6 +175,8 @@ describe('Notifications API', () => {
       expect(eventTypes).not.toContain('pr_review_requested');
       expect(eventTypes).not.toContain('pr_merged');
       expect(eventTypes).toContain('mention');
+      // So the settings page offers email for an agent's request for approval
+      expect(eventTypes).toContain('agent:approval');
 
       for (const pref of res.body.preferences) {
         expect(pref.inApp).toBe(true);
@@ -184,6 +186,18 @@ describe('Notifications API', () => {
   });
 
   describe('PATCH /api/notifications/preferences', () => {
+    it.each([[['agent:approval']], [{ equals: 'mention' }], [5], [undefined]])(
+      'answers 400 when eventType is %j',
+      async (eventType) => {
+        const res = await request(app)
+          .patch('/api/notifications/preferences')
+          .set('Authorization', `Bearer ${token}`)
+          .set('X-Requested-With', 'XMLHttpRequest')
+          .send({ eventType, email: true });
+        expect(res.status).toBe(400);
+      },
+    );
+
     it('should enable email preference and persist it', async () => {
       const res = await request(app)
         .patch('/api/notifications/preferences')

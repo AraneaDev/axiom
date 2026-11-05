@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineAction, type ActionContext } from '../../actions/define';
+import { orgsOfSavedQuery } from '../../actions/org-lookups';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { queryRunOutput } from '../search/query.actions';
@@ -121,6 +122,7 @@ const savedFilterActions = [
   }),
   defineAction({
     name: 'savedQuery.update',
+    orgIds: (_ctx, { filterId }) => orgsOfSavedQuery(filterId),
     area: 'dashboards',
     kind: 'write',
     summary:
@@ -146,6 +148,7 @@ const savedFilterActions = [
   }),
   defineAction({
     name: 'savedQuery.delete',
+    orgIds: (_ctx, { filterId }) => orgsOfSavedQuery(filterId),
     destructive: true,
     area: 'dashboards',
     kind: 'write',

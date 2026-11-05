@@ -2,9 +2,11 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 import { DEFAULT_POLICY, type EffectivePolicy } from '../../actions/approval-policy';
+import type { ActionContext, ActionDef } from '../../actions/define';
 import { listActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
 
 export const MIN_EXPIRES_MINUTES = 10;
 export const MAX_EXPIRES_MINUTES = 24 * 60;
@@ -41,7 +43,11 @@ const BASE: FullPolicy = { ...DEFAULT_POLICY, alsoRequire: [], neverRequire: [] 
  */
 function parseRules(value: unknown): PolicyRules {
   const parsed = rulesSchema.safeParse(value);
-  return parsed.success ? parsed.data : {};
+  if (parsed.success) return parsed.data;
+  logger.error('an agent policy row no longer fits the schema and counts as empty', {
+    issues: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`),
+  });
+  return {};
 }
 
 /**
@@ -129,6 +135,18 @@ export async function effectivePolicy(
   return own ? withUserRules(base, parseRules(own.rules)) : base;
 }
 
+/** The input fields that name something with an org above it: the call's org is read from them. */
+export const ORG_INPUT_FIELDS = [
+  'orgId',
+  'teamId',
+  'projectId',
+  'spaceId',
+  'issueId',
+  'issueIds',
+  'pageId',
+  'sprintId',
+] as const;
+
 /**
  * Every id of one field the input holds, as strings.
  * @param input - The validated input
@@ -152,7 +170,7 @@ export async function orgIdsOfInput(input: unknown): Promise<string[]> {
   const given = input as Record<string, unknown>;
   const orgs = new Set<string>(idsOf(given, 'orgId'));
   const teamIds = idsOf(given, 'teamId');
-  const projectIds = [...idsOf(given, 'projectId'), ...idsOf(given, 'targetProjectId')];
+  const projectIds = idsOf(given, 'projectId');
   const spaceIds = idsOf(given, 'spaceId');
   const issueIds = [...idsOf(given, 'issueId'), ...idsOf(given, 'issueIds')];
   const pageIds = idsOf(given, 'pageId');
@@ -200,20 +218,61 @@ export async function orgIdsOfInput(input: unknown): Promise<string[]> {
 }
 
 /**
- * The policy of one call: its input decides which orgs count.
- * @param userId - The user whose token calls
+ * The policy of one call: the ids in its input and the lookup the action declares decide which
+ * orgs count.
+ * @param def - The action
+ * @param ctx - Who runs it
  * @param input - The action's validated input
  */
-export async function policyForCall(userId: string, input: unknown): Promise<FullPolicy> {
-  return effectivePolicy(userId, await orgIdsOfInput(input));
+export async function policyForCall(
+  def: ActionDef,
+  ctx: ActionContext,
+  input: unknown,
+): Promise<FullPolicy> {
+  const [named, declared] = await Promise.all([
+    orgIdsOfInput(input),
+    def.orgIds ? def.orgIds(ctx, input) : [],
+  ]);
+  return effectivePolicy(ctx.userId, [...new Set([...named, ...declared])]);
 }
 
 /** The names a user may add with alsoRequire: actions that write and that a token may call. */
 export function writeActionNames(): string[] {
   return listActions()
-    .filter((def) => def.kind === 'write' && !def.uiOnly)
+    .filter((def) => def.kind === 'write' && !def.uiOnly && !def.tokenBlocked && !def.rest?.raw)
     .map((def) => def.name)
     .sort();
+}
+
+/**
+ * Refuse names that are no action a token may call, so a misspelt rule is a 400 rather than a rule
+ * that binds nothing. An admin action can't be exempted: it always waits.
+ * @param rules - The rules being saved
+ * @throws {AppError} 400
+ */
+function assertKnownNames(rules: PolicyRules): void {
+  const known = new Set(writeActionNames());
+  const unknown = (rules.alsoRequire ?? []).filter((name) => !known.has(name));
+  if (unknown.length > 0) {
+    throw new AppError(
+      400,
+      `alsoRequire takes names of actions that write; not known: ${unknown.slice(0, 5).join(', ')}`,
+    );
+  }
+  const admin = new Set(
+    listActions()
+      .filter((def) => def.admin)
+      .map((def) => def.name),
+  );
+  const badExempt = (rules.neverRequire ?? []).filter(
+    (name) => !known.has(name) || admin.has(name),
+  );
+  if (badExempt.length > 0) {
+    throw new AppError(
+      400,
+      `neverRequire takes names of actions that write and are not admin actions; not accepted: ${badExempt.slice(0, 5).join(', ')}`,
+    );
+  }
 }
 
 /**
@@ -240,14 +299,7 @@ function assertUserRulesTighten(rules: PolicyRules): void {
       `expiresMinutes can only be ${DEFAULT_POLICY.expiresMinutes} or lower in your own rules`,
     );
   }
-  const known = new Set(writeActionNames());
-  const unknown = (rules.alsoRequire ?? []).filter((name) => !known.has(name));
-  if (unknown.length > 0) {
-    throw new AppError(
-      400,
-      `alsoRequire takes names of actions that write; not known: ${unknown.slice(0, 5).join(', ')}`,
-    );
-  }
+  assertKnownNames(rules);
 }
 
 export type PolicyView = {
@@ -305,6 +357,7 @@ export async function savePolicy(
 ): Promise<PolicyView> {
   if (scope === 'org' && !orgId) throw new AppError(400, 'orgId is required for scope org');
   if (scope === 'user') assertUserRulesTighten(rules);
+  else assertKnownNames(rules);
   const json = rules as Prisma.InputJsonObject;
   await (scope === 'org'
     ? prisma.agentPolicy.upsert({
@@ -318,4 +371,68 @@ export async function savePolicy(
         update: { rules: json },
       }));
   return getPolicy(userId, scope, scope === 'org' ? orgId : undefined);
+}
+
+/** At most this many names of one list in a preview before it counts the rest. */
+const PREVIEW_NAMES = 25;
+
+/**
+ * Names for a preview, bounded.
+ * @param names - Action names
+ */
+function listed(names: string[]): string {
+  const shown = names.slice(0, PREVIEW_NAMES).join(', ');
+  return names.length > PREVIEW_NAMES ? `${shown} and ${names.length - PREVIEW_NAMES} more` : shown;
+}
+
+/**
+ * What an approver reads before a rule change: whose rules, and first what gets looser compared
+ * with the stored rules, as the database holds them. Built from the stored row and the validated
+ * rules, never from the agent's text, and short enough that padding can't push the loosening past
+ * the cut of a preview.
+ * @param userId - The caller
+ * @param scope - org or user
+ * @param orgId - The org, for scope org
+ * @param rules - The rules the call would save
+ */
+export async function describePolicyChange(
+  userId: string,
+  scope: PolicyScope,
+  orgId: string | undefined,
+  rules: PolicyRules,
+): Promise<string> {
+  const [org, row] = await Promise.all([
+    scope === 'org' && orgId
+      ? prisma.organization.findUnique({ where: { id: orgId }, select: { name: true, slug: true } })
+      : null,
+    prisma.agentPolicy.findFirst({
+      where: scope === 'org' ? { orgId } : { userId },
+      select: { rules: true },
+    }),
+  ]);
+  const stored = row ? parseRules(row.rules) : {};
+  const looser: string[] = [];
+  const exempt = (rules.neverRequire ?? []).filter((n) => !(stored.neverRequire ?? []).includes(n));
+  const dropped = (stored.alsoRequire ?? []).filter((n) => !(rules.alsoRequire ?? []).includes(n));
+  const base = DEFAULT_POLICY;
+  if (exempt.length > 0) looser.push(`no approval needed for ${exempt.length}: ${listed(exempt)}`);
+  if (rules.destructive === false && stored.destructive !== false)
+    looser.push('deletes need no approval');
+  if (rules.crossContainerMove === false && stored.crossContainerMove !== false) {
+    looser.push('moves between projects or spaces need no approval');
+  }
+  const bulkBefore = stored.bulkOver ?? base.requireFor.bulkOver;
+  const bulkAfter = rules.bulkOver ?? base.requireFor.bulkOver;
+  if (bulkAfter > bulkBefore) looser.push(`bulk threshold ${bulkBefore} to ${bulkAfter}`);
+  const expiresBefore = stored.expiresMinutes ?? base.expiresMinutes;
+  const expiresAfter = rules.expiresMinutes ?? base.expiresMinutes;
+  if (expiresAfter > expiresBefore) looser.push(`requests expire after ${expiresAfter} minutes`);
+  if (dropped.length > 0) looser.push(`approval no longer needed for ${listed(dropped)}`);
+  const whose =
+    scope === 'org' ? `organization ${org?.name ?? '?'} (${org?.slug ?? '?'})` : 'your own tokens';
+  const head = `Replace the approval rules of ${whose}.`;
+  const rest = `${Object.keys(rules).length} rule fields are set afterwards.`;
+  return looser.length > 0
+    ? `${head} Looser: ${looser.join('; ')}. ${rest}`
+    : `${head} Nothing gets looser. ${rest}`;
 }

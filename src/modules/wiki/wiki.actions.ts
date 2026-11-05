@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { pageAccess, pageBySlugAccess, spaceAccess, teamPermission } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
+import { orgsOfProjects, orgsOfSpaces } from '../../actions/org-lookups';
 import { listWindow, pagedList } from '../../actions/paging';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
@@ -119,6 +120,10 @@ async function authorizeResolveTemplate(
 const templateActions = [
   defineAction({
     name: 'pageTemplate.resolve',
+    orgIds: async (_ctx, { context }) => [
+      ...(await orgsOfSpaces([context.spaceId])),
+      ...(await orgsOfProjects(context.projectId ? [context.projectId] : [])),
+    ],
     area: 'wiki',
     // A POST under /api/wiki, which only a wiki:write token has ever reached (R7)
     kind: 'write',

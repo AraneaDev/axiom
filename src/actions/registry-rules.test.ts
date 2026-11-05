@@ -12,6 +12,7 @@ import {
   TOKEN_SCOPES,
   tokenAllows,
 } from '../middleware/token-scopes';
+import { ORG_INPUT_FIELDS } from '../modules/agent-approvals/agent-policy.service';
 
 import { defineAction, type ActionDef } from './define';
 import { listActions } from './registry';
@@ -140,6 +141,30 @@ function alwaysBlocked(binding: NonNullable<ActionDef['rest']>): boolean {
   return !tokenAllows(TOKEN_SCOPES, binding.method, normalizeApiPath(concrete));
 }
 
+const ORG_FIELDS = ORG_INPUT_FIELDS;
+
+/**
+ * Whether an org's approval rules can reach a write: through a field its input names, a lookup it
+ * declares, or a statement that it belongs to no org.
+ * @param def - The action
+ */
+function orgPathViolations(def: ActionDef): string[] {
+  const inputFields = fieldsOf(def.input);
+  if (
+    def.kind !== 'write' ||
+    def.uiOnly ||
+    def.tokenBlocked ||
+    def.noOrg ||
+    def.orgIds ||
+    ORG_FIELDS.some((field) => inputFields && field in inputFields)
+  ) {
+    return [];
+  }
+  return [
+    `${def.name}: an org's approval rules can't reach it, so it needs a field in ${ORG_FIELDS.join(', ')}, an orgIds lookup or noOrg`,
+  ];
+}
+
 /**
  * What an action breaks of the rules for the registry.
  * @param def - The action
@@ -259,6 +284,7 @@ describe('registry rules', () => {
 
   it('holds for every registered action', () => {
     expect(listActions().flatMap(ruleViolations)).toEqual([]);
+    expect(listActions().flatMap(orgPathViolations)).toEqual([]);
   });
 
   it('finds every actions file imported by the app', () => {
@@ -307,6 +333,28 @@ describe('registry rules', () => {
         return fine ? [] : [`${def.name} with ${scope}: was ${before}, is ${after}`];
       });
       expect(differences).toEqual([]);
+    });
+  });
+
+  describe('an org path for every write', () => {
+    const write = {
+      ...throwaway,
+      name: 'throwaway.write',
+      area: 'issues' as const,
+      kind: 'write' as const,
+    };
+
+    it('fails a write whose org no rule can find', () => {
+      expect(orgPathViolations(defineAction(write))).toEqual([expect.stringContaining('noOrg')]);
+    });
+
+    it.each([
+      ['a project field', { input: z.object({ projectId: z.string() }) }],
+      ['a declared lookup', { orgIds: () => Promise.resolve([]) }],
+      ['a statement of no org', { noOrg: true }],
+      ['a read', { kind: 'read' as const }],
+    ])('passes a write with %s', (_label, extra) => {
+      expect(orgPathViolations(defineAction({ ...write, ...extra }))).toEqual([]);
     });
   });
 

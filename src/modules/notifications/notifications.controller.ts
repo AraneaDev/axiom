@@ -47,6 +47,9 @@ export const getPreferences = asyncHandler(async (req: Request, res: Response) =
 export const updatePreference = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
   const { eventType, inApp, email } = req.body;
+  if (typeof eventType !== 'string' || eventType === '') {
+    throw new AppError(400, 'eventType must be a string');
+  }
   // How a person hears of an agent's request is theirs to decide, not the agent's (A22)
   if (req.apiTokenId !== undefined && eventType === 'agent:approval') {
     throw new AppError(

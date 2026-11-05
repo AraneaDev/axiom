@@ -6,7 +6,7 @@ import { registerActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
-import { getPolicy, rulesSchema, savePolicy } from './agent-policy.service';
+import { describePolicyChange, getPolicy, rulesSchema, savePolicy } from './agent-policy.service';
 
 const BASE = '/api/agent-policy';
 
@@ -98,11 +98,8 @@ registerActions([
     target,
     input: target.extend({ rules: rulesSchema }),
     output: policyView,
-    preview: (_ctx, input) =>
-      Promise.resolve(
-        `Change the approval rules ${input.scope === 'org' ? 'of an organization' : 'for your tokens'}` +
-          `: ${JSON.stringify(input.rules)}`,
-      ),
+    preview: (ctx, input) =>
+      describePolicyChange(ctx.userId, input.scope, input.orgId, input.rules),
     rest: { method: 'PUT', path: BASE },
     authorize: authorizeWrite,
     handler: (ctx, input) => savePolicy(ctx.userId, input.scope, input.orgId, input.rules),

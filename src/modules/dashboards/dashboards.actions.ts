@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineAction, type ActionContext } from '../../actions/define';
+import { orgsOfDashboard } from '../../actions/org-lookups';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { queryRunOutput } from '../search/query.actions';
@@ -124,6 +125,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboard.update',
+    orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',
     summary:
@@ -149,6 +151,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboard.delete',
+    orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     destructive: true,
     area: 'dashboards',
     kind: 'write',
@@ -222,6 +225,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.add',
+    orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',
     summary:
@@ -245,6 +249,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.update',
+    orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',
     summary:
@@ -266,6 +271,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.remove',
+    orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     destructive: true,
     area: 'dashboards',
     kind: 'write',
@@ -282,6 +288,7 @@ const dashboardActions = [
   }),
   defineAction({
     name: 'dashboardWidget.reorder',
+    orgIds: (_ctx, { id }) => orgsOfDashboard(id),
     area: 'dashboards',
     kind: 'write',
     summary: "Put a dashboard's widgets in this order, naming each of them once",

@@ -23,7 +23,7 @@ import {
 import { authGet, authPut } from '../../test/helpers';
 import { tokenHeaderFor } from '../../test/mcp-client';
 
-import { effectivePolicy } from './agent-policy.service';
+import { describePolicyChange, effectivePolicy } from './agent-policy.service';
 
 const runs: string[] = [];
 
@@ -93,6 +93,7 @@ describe('agent policies', () => {
   let tokenCtx: ActionContext;
   let memberCtx: ActionContext;
   let memberToken: string;
+  let ownerToken: string;
 
   /**
    * A token's context for a user.
@@ -103,7 +104,7 @@ describe('agent policies', () => {
       userId: user.id,
       channel: 'rest-token',
       apiTokenId: 'policy-t',
-      scopes: ['issues:write', 'approvals:write'],
+      scopes: ['issues:write', 'approvals:write', 'dashboards:write', 'files:write'],
     };
   }
 
@@ -126,6 +127,7 @@ describe('agent policies', () => {
     tokenCtx = asToken(ctx.owner);
     memberCtx = asToken(member);
     memberToken = await tokenHeaderFor(member, undefined, 'policy-member');
+    ownerToken = await tokenHeaderFor(ctx.owner, undefined, 'policy-owner');
   });
 
   beforeEach(async () => {
@@ -269,6 +271,174 @@ describe('agent policies', () => {
       });
       expect(await waits('policyTest.admin', { projectId: ctx.projectId })).toBe(true);
       expect(runs).toEqual([]);
+    });
+  });
+
+  describe('actions whose input names no org', () => {
+    /**
+     * A dashboard of the owner.
+     * @param shared - Shared with the org, or private
+     */
+    async function dashboard(shared: boolean) {
+      return prisma.dashboard.create({
+        data: {
+          name: 'Policy board',
+          ownerId: ctx.owner.id,
+          visibility: shared ? 'ORG' : 'PRIVATE',
+          orgId: shared ? ctx.orgId : null,
+        },
+      });
+    }
+
+    it('binds dashboard.update, widgets and savedQuery.update to the org it is shared with', async () => {
+      const board = await dashboard(true);
+      const saved = await prisma.savedFilter.create({
+        data: {
+          userId: ctx.owner.id,
+          name: 'Policy query',
+          query: {},
+          visibility: 'ORG',
+          orgId: ctx.orgId,
+        },
+      });
+      await setOrg(ctx.orgId, {
+        alsoRequire: ['dashboard.update', 'dashboardWidget.reorder', 'savedQuery.update'],
+      });
+      expect(await waits('dashboard.update', { id: board.id, name: 'Renamed' })).toBe(true);
+      expect(await waits('dashboardWidget.reorder', { id: board.id, widgetIds: ['w1'] })).toBe(
+        true,
+      );
+      expect(await waits('savedQuery.update', { filterId: saved.id, name: 'Renamed' })).toBe(true);
+      const after = await prisma.dashboard.findUniqueOrThrow({ where: { id: board.id } });
+      expect(after.name).toBe('Policy board');
+      await prisma.dashboard.delete({ where: { id: board.id } });
+      await prisma.savedFilter.delete({ where: { id: saved.id } });
+    });
+
+    it('lets an org loosen dashboard.delete, but not for a private dashboard', async () => {
+      await setOrg(ctx.orgId, { destructive: false });
+      const shared = await dashboard(true);
+      expect(await waits('dashboard.delete', { id: shared.id })).toBe(false);
+      const priv = await dashboard(false);
+      expect(await waits('dashboard.delete', { id: priv.id })).toBe(true);
+      await prisma.dashboard.delete({ where: { id: priv.id } });
+    });
+
+    it('binds an upload by issue key and the org of the issue it goes to', async () => {
+      const issue = await prisma.issue.create({
+        data: {
+          projectId: ctx.projectId,
+          number: 4200,
+          title: 'Upload target',
+          body: '',
+          creatorId: ctx.owner.id,
+        },
+      });
+      await setOrg(ctx.orgId, { alsoRequire: ['attachment.createUploadUrl'] });
+      const file = { filename: 'a.png', mimeType: 'image/png', size: 8 };
+      const key = `${ctx.projectPrefix}-${issue.number}`;
+      const res = await request(app)
+        .post('/api/act')
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({
+          action: 'attachment.createUploadUrl',
+          input: { ...file, target: { issueKey: key } },
+        });
+      expect(res.status).toBe(202);
+      const staged = await request(app)
+        .post('/api/act')
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ action: 'attachment.createUploadUrl', input: file });
+      // A staged file has no parent and no org, so the org's rule does not apply
+      expect(staged.status).toBe(200);
+    });
+
+    it('binds an action named by key and one inside a batch', async () => {
+      const issue = await prisma.issue.create({
+        data: {
+          projectId: ctx.projectId,
+          number: 4201,
+          title: 'Key target',
+          body: '',
+          creatorId: ctx.owner.id,
+        },
+      });
+      await setOrg(ctx.orgId, { alsoRequire: ['issue.update'] });
+      const key = `${ctx.projectPrefix}-${issue.number}`;
+      const post = (body: object) =>
+        request(app)
+          .post('/api/act')
+          .set('Authorization', ownerToken)
+          .set('X-Requested-With', 'XMLHttpRequest')
+          .send(body);
+      const single = await post({ action: 'issue.update', key, input: { title: 'By key' } });
+      expect(single.status).toBe(202);
+      const batch = await post({
+        batch: [{ action: 'issue.update', key, input: { title: 'In batch' } }],
+      });
+      expect(batch.body.results[0]).toMatchObject({ pending: true });
+      const after = await prisma.issue.findUniqueOrThrow({ where: { id: issue.id } });
+      expect(after.title).toBe('Key target');
+    });
+
+    it('binds pageTemplate.resolve to the org of its space', async () => {
+      const space = await prisma.wikiSpace.create({
+        data: {
+          teamId: ctx.teamId,
+          name: 'Policy space',
+          slug: 'policy-space',
+        },
+      });
+      await setOrg(ctx.orgId, { alsoRequire: ['pageTemplate.resolve'] });
+      const wikiCtx = { ...tokenCtx, scopes: ['wiki:write'] };
+      expect(
+        await waits('pageTemplate.resolve', { body: 'x', context: { spaceId: space.id } }, wikiCtx),
+      ).toBe(true);
+      await prisma.wikiSpace.delete({ where: { id: space.id } });
+    });
+  });
+
+  describe('names in org rules', () => {
+    it('refuses a misspelt, a read, a uiOnly and a raw name, and exempting an admin action', async () => {
+      for (const rules of [
+        { alsoRequire: ['isue.delete'] },
+        { alsoRequire: ['issue.list'] },
+        { alsoRequire: ['attachment.upload'] },
+        { neverRequire: ['nope'] },
+        { neverRequire: ['agentPolicy.update'] },
+      ]) {
+        const res = await authPut('/api/agent-policy', ctx.owner.token, {
+          scope: 'org',
+          orgId: ctx.orgId,
+          rules,
+        });
+        expect(res.status, JSON.stringify(rules)).toBe(400);
+      }
+    });
+  });
+
+  describe('the preview of a rule change', () => {
+    it('names the org, leads with what gets looser and is not moved by padding', async () => {
+      const org = await prisma.organization.findUniqueOrThrow({ where: { id: ctx.orgId } });
+      const padding = Array.from({ length: 200 }, (_, i) => `padding.action${i}-${'x'.repeat(80)}`);
+      const text = await describePolicyChange(ctx.owner.id, 'org', ctx.orgId, {
+        destructive: false,
+        neverRequire: ['issue.delete'],
+        alsoRequire: padding,
+      });
+      expect(text).toContain(org.name);
+      expect(text).toContain(org.slug);
+      expect(text.indexOf('issue.delete')).toBeGreaterThan(-1);
+      expect(text.indexOf('issue.delete')).toBeLessThan(400);
+      expect(text).toContain('deletes need no approval');
+      expect(text).not.toContain('padding.action');
+    });
+
+    it('says nothing gets looser when it only tightens', async () => {
+      const text = await describePolicyChange(ctx.owner.id, 'org', ctx.orgId, { bulkOver: 3 });
+      expect(text).toContain('Nothing gets looser');
     });
   });
 

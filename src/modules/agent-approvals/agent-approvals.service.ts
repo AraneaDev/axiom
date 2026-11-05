@@ -231,9 +231,13 @@ async function requestApproval(
       undefined,
       approveUrl,
     );
-    announce(row);
   } catch (err) {
     logger.error('telling about an agent approval failed', { id: row.id }, err as Error);
+  }
+  try {
+    announce(row);
+  } catch (err) {
+    logger.error('announcing an agent approval failed', { id: row.id }, err as Error);
   }
   return new PendingApproval({
     status: 'pending_approval',
@@ -262,7 +266,9 @@ export async function approvalGate(
   ctx: ActionContext,
 ): Promise<PendingApproval | undefined> {
   if (!isToken(ctx)) return undefined;
-  const policy = await policyForCall(ctx.userId, input);
+  // A read can't need approval, so it costs no lookups
+  if (def.kind === 'read' && !def.admin) return undefined;
+  const policy = await policyForCall(def, ctx, input);
   if (!(await needsApproval(def, input, ctx, policy))) return undefined;
   if (await isApprovedRun(def, ctx)) return undefined;
   return requestApproval(def, rawInput, input, ctx, policy);
