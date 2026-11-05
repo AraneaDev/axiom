@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import type { z } from 'zod';
 
 import type { ScopeArea } from '../middleware/token-scopes';
@@ -44,6 +44,19 @@ export interface RestBinding {
   emptyBody?: boolean;
   /** The body may be left out altogether; one that is sent is read and validated as usual. */
   optionalBody?: boolean;
+  /**
+   * No authentication: anyone may call it, and a credential that comes along is not read. The
+   * context holds no user (`ctx.userId` is undefined at runtime), so the action must not use it.
+   * For what is open today (public forms, health), nothing else.
+   */
+  public?: boolean;
+  /** A limiter for this route alone, ahead of authentication, so a refused caller costs little. */
+  rateLimit?: RequestHandler;
+  /**
+   * Handlers after authentication (before authorize) for what the old route had on its own, such
+   * as a CSRF check or require2fa. Use only where the old route had them.
+   */
+  middleware?: RequestHandler[];
 }
 
 /** What authorize receives: the target when the action declares one, else the full input. */

@@ -63,9 +63,13 @@ export const markRegistryRoute: RequestHandler = (req, _res, next) => {
 /**
  * Who runs an action, from what authenticate left on the request.
  * @param req - An authenticated request
+ * @param open - Whether the route is public: no user is expected
  * @throws {AppError} 401 when the request went through no authentication
  */
-export function actionContextFromRequest(req: Request): ActionContext {
+export function actionContextFromRequest(req: Request, open = false): ActionContext {
+  // A public route runs with no user. The type says string for every other action; a public one
+  // must not read it (its authorize and handler are written for that)
+  if (open) return { userId: undefined as unknown as string, channel: 'ui' };
   if (!req.userId) throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
   if (req.apiTokenId === undefined) return { userId: req.userId, channel: 'ui' };
   return {
@@ -124,8 +128,14 @@ export function mountActions(router: Router, defs: ActionDef[]): void {
     mounted.push({ def, method: binding.method, segments });
 
     const route = router[ROUTER_METHOD[binding.method]].bind(router);
-    route(binding.path, markRegistryRoute, authenticate, async (req, res) => {
-      const ctx = actionContextFromRequest(req);
+    const chain: RequestHandler[] = [
+      markRegistryRoute,
+      ...(binding.rateLimit ? [binding.rateLimit] : []),
+      ...(binding.public ? [] : [authenticate]),
+      ...(binding.middleware ?? []),
+    ];
+    route(binding.path, ...chain, async (req: Request, res: Response) => {
+      const ctx = actionContextFromRequest(req, binding.public);
       ctx.ipAddress = req.ip;
       if (binding.raw) ctx.http = { req, res };
       // Only a read takes its fields from the query (R14); a write reads the body, as the old
