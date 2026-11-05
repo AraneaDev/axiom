@@ -336,5 +336,40 @@ describe('people and notifications over REST', () => {
       const res = await authGet('/api/links/resolve-link?url=https://example.test/x', member.token);
       expect(res.status).toBe(404);
     });
+
+    it('gives a token the title of a wiki page only when it reads wiki, on every channel', async () => {
+      const space = await prisma.wikiSpace.create({
+        data: { teamId: ctx.teamId, name: 'Notes', slug: 'link-notes' },
+      });
+      await prisma.page.create({
+        data: { spaceId: space.id, title: 'Quarterly plan', slug: 'quarterly', body: 'x' },
+      });
+      const url = `/${ctx.orgSlug}/${ctx.teamSlug}/wiki/link-notes/quarterly`;
+      const query = encodeURIComponent(url);
+
+      const viaRest = await request(app)
+        .get(`/api/links/resolve-link?url=${query}`)
+        .set('Authorization', issuesRead);
+      expect(viaRest.status).toBe(404);
+      expect(JSON.stringify(viaRest.body)).not.toContain('Quarterly plan');
+
+      const viaAct = await request(app)
+        .post('/api/act')
+        .set('Authorization', issuesRead)
+        .set(XHR)
+        .send({ action: 'link.resolve', input: { url } });
+      expect(viaAct.status).toBe(404);
+      expect(JSON.stringify(viaAct.body)).not.toContain('Quarterly plan');
+
+      const both = await tokenHeaderFor(ctx.owner, ['issues:read', 'wiki:read'], 'both-agent');
+      const allowed = await request(app)
+        .get(`/api/links/resolve-link?url=${query}`)
+        .set('Authorization', both);
+      expect(allowed.status).toBe(200);
+      expect(allowed.body.title).toBe('Quarterly plan');
+
+      const session = await authGet(`/api/links/resolve-link?url=${query}`, ctx.owner.token);
+      expect(session.body.title).toBe('Quarterly plan');
+    });
   });
 });

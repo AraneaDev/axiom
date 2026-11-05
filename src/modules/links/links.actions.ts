@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { defineAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
+import { scopeAllows } from '../../middleware/token-scopes';
 import { queryText } from '../../utils/validation';
 
-import { resolveLink } from './resolve-link.service';
+import { parseAxiomUrl, resolveLink } from './resolve-link.service';
 
 const noTarget = z.object({});
 
@@ -24,6 +25,15 @@ registerActions([
     handler: async (ctx, { url }) => {
       if (typeof url !== 'string' || url === '') {
         throw new AppError(400, 'url query parameter required');
+      }
+      // The action's scope is issues. A wiki URL previews a page title, so it needs wiki as well;
+      // the answer is the one for a link that resolves to nothing
+      if (
+        ctx.scopes &&
+        parseAxiomUrl(url)?.type === 'wiki' &&
+        !scopeAllows(ctx.scopes, 'wiki', 'read')
+      ) {
+        throw new AppError(404, 'Could not resolve link');
       }
       const preview = await resolveLink(url, ctx.userId);
       if (!preview) throw new AppError(404, 'Could not resolve link');
