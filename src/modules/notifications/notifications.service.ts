@@ -3,6 +3,9 @@ import { broadcastToUser } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
 
+/** A request nobody sees is a dead request, so these go out whatever the preferences say (A8). */
+const IGNORES_OPT_OUTS: ReadonlySet<string> = new Set(['agent:approval']);
+
 /**
  * Create a notification and broadcast it to the user via WebSocket.
  * @param userId - The user to notify
@@ -29,13 +32,15 @@ export async function createNotification(
     notificationId: notification.id,
   });
 
-  // Enqueue email if user has email preference enabled for this event type
+  // Enqueue email if the user has it enabled for this event type, or the type ignores opt-outs
   try {
     if (process.env.SMTP_HOST) {
-      const pref = await prisma.notificationPreference.findUnique({
-        where: { userId_eventType: { userId, eventType: type } },
-      });
-      const emailEnabled = pref?.email ?? false;
+      const pref = IGNORES_OPT_OUTS.has(type)
+        ? null
+        : await prisma.notificationPreference.findUnique({
+            where: { userId_eventType: { userId, eventType: type } },
+          });
+      const emailEnabled = IGNORES_OPT_OUTS.has(type) || (pref?.email ?? false);
 
       if (emailEnabled) {
         const user = await prisma.user.findUnique({

@@ -145,12 +145,13 @@ export function scopeAllows(
 
 /**
  * The legacy writes that have the effect of a delete without being a DELETE: toggles that remove
- * what is there (A19), and what takes a person out of an issue approval (A20): changing a gate can
- * switch it off, and a vote decides it. Everything else that deletes through a legacy route is a
- * DELETE, or is already refused by tokenAllows (admin, auth, tokens, access control).
+ * what is there (A19), and what takes a person out of an issue approval. Changing a gate can switch
+ * it off (A20), a vote decides it, and a new gate on another way into a column can be the weaker
+ * one a request then counts (A21). Everything else that deletes through a legacy route is a DELETE,
+ * or is already refused by tokenAllows (admin, auth, tokens, access control).
  */
 const LEGACY_WRITES_THAT_DELETE = [
-  /^\/api\/projects\/[^/]+\/approval-gates\/[^/]+$/,
+  /^\/api\/projects\/[^/]+\/approval-gates(\/[^/]+)?$/,
   /^\/api\/approval-requests\/[^/]+\/vote$/,
   /^\/api\/wiki\/pages\/[^/]+\/star$/,
   /^\/api\/wiki\/comments\/[^/]+\/reactions$/,
@@ -158,9 +159,9 @@ const LEGACY_WRITES_THAT_DELETE = [
 
 /**
  * Whether this request deletes through a legacy route or takes a person out of a check, for a
- * request Express did not route to a registry action. Only registry actions can wait for approval, so a token has no way to these
- * until plan 4 migrates them (A19). Apart from tokenAllows, which says what a scope reaches and
- * which tests compare registry bindings with.
+ * request Express did not route to a registry action. Only registry actions can wait for approval,
+ * so a token has no way to these until plan 4 migrates them (A19). Apart from tokenAllows, which
+ * says what a scope reaches and which tests compare registry bindings with.
  * @param method - HTTP method
  * @param path - The request path, normalized
  */

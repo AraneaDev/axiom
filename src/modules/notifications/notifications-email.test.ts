@@ -54,6 +54,43 @@ describe('Notification Email Enqueue Integration', () => {
     process.env.SMTP_HOST = origSmtp;
   });
 
+  describe('agent:approval (A8)', () => {
+    const send = () =>
+      createNotification(userId, 'agent:approval', 'agent wants to: Delete', undefined, '/a/1');
+
+    it('emails with no preference stored', async () => {
+      process.env.SMTP_HOST = 'localhost';
+      await send();
+      expect(mockAdd).toHaveBeenCalledWith(
+        'send',
+        expect.objectContaining({ to: testEmail, type: 'agent:approval', link: '/a/1' }),
+      );
+    });
+
+    it('emails after an opt-out, which a token could have made', async () => {
+      process.env.SMTP_HOST = 'localhost';
+      await updatePreference(userId, 'agent:approval', { email: false, inApp: false });
+      await send();
+      expect(mockAdd).toHaveBeenCalledTimes(1);
+      expect(await prisma.notification.count({ where: { userId } })).toBe(1);
+    });
+
+    it('still honours the opt-out of every other type', async () => {
+      process.env.SMTP_HOST = 'localhost';
+      await updatePreference(userId, 'issue_assigned', { email: false });
+      await createNotification(userId, 'issue_assigned', 'Title', 'Body', '/issues/1');
+      expect(mockAdd).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing without SMTP', async () => {
+      const original = process.env.SMTP_HOST;
+      delete process.env.SMTP_HOST;
+      await send();
+      expect(mockAdd).not.toHaveBeenCalled();
+      process.env.SMTP_HOST = original;
+    });
+  });
+
   it('should not enqueue email when user has email preference disabled', async () => {
     process.env.SMTP_HOST = 'localhost';
 

@@ -800,11 +800,12 @@ describe('agent approvals', () => {
       legacyRouteDeletes(route.method, normalizeApiPath(concrete(route.path))),
     );
 
-    it('are all the DELETE routes, the star and the reaction', () => {
+    it('are all the DELETE routes and the writes listed by A19, A20 and A21', () => {
       const writes = deleting.filter((route) => route.method !== 'DELETE');
       expect(writes.map((route) => `${route.method} ${route.path}`).sort()).toEqual([
         'PATCH /api/projects/:projectId/approval-gates/:gateId',
         'POST /api/approval-requests/:requestId/vote',
+        'POST /api/projects/:projectId/approval-gates',
         'POST /api/wiki/comments/:commentId/reactions',
         'POST /api/wiki/pages/:pageId/star',
       ]);
@@ -877,6 +878,29 @@ describe('agent approvals', () => {
         expect(row).toMatchObject({ enabled: true, minApprovals: 1, allowSelfApproval: false });
       });
 
+      it('refuses a token creating a gate, which could undo a stricter one', async () => {
+        const gate = await createGate();
+        const before = await prisma.approvalGate.count({ where: { projectId: ctx.projectId } });
+        const path = `/api/projects/${ctx.projectId}/approval-gates`;
+        for (const spelled of [path, `${path}/`, path.replace('/api/', '/API/')]) {
+          const res = await request(app)
+            .post(spelled)
+            .set('Authorization', ownerToken)
+            .set('X-Requested-With', 'XMLHttpRequest')
+            .send({
+              fromColumnId: gate.toColumnId,
+              toColumnId: gate.fromColumnId,
+              minApprovals: 1,
+              allowSelfApproval: true,
+            });
+          expect(res.status).toBe(403);
+          expect(res.body.error.code).toBe('NEEDS_REGISTRY_ACTION');
+        }
+        expect(await prisma.approvalGate.count({ where: { projectId: ctx.projectId } })).toBe(
+          before,
+        );
+      });
+
       it('lets a session change a gate', async () => {
         const gate = await createGate();
         const res = await request(app)
@@ -901,7 +925,6 @@ describe('agent approvals', () => {
         ['POST', '/api/projects/probe/automation-rules/probe/toggle'],
         ['POST', '/api/approval-requests/probe/cancel'],
         ['POST', '/api/issues/probe/approval-requests/probe'],
-        ['POST', '/api/projects/probe/approval-gates'],
         ['GET', '/api/projects/probe/approval-gates'],
       ])('leaves %s %s to the scopes', (method, path) => {
         expect(legacyRouteDeletes(method, normalizeApiPath(path))).toBe(false);
@@ -1394,6 +1417,20 @@ describe('agent approvals', () => {
         where: { userId: owner.id, type: 'agent:approval', link: `/approvals/agent/${id}` },
       });
       expect(note.title).toBe('owner-agent wants to: Run the test action on noticed');
+    });
+
+    it('still notifies after a token opts out through the preferences', async () => {
+      const res = await request(app)
+        .patch('/api/notifications/preferences')
+        .set('Authorization', ownerToken)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ eventType: 'agent:approval', inApp: false, email: false });
+      expect(res.status).toBe(200);
+      const id = await pendingOn('muted');
+      const note = await prisma.notification.findFirst({
+        where: { userId: owner.id, type: 'agent:approval', link: `/approvals/agent/${id}` },
+      });
+      expect(note).not.toBeNull();
     });
 
     it("sends a realtime event to the user's room", async () => {
