@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
@@ -103,24 +103,24 @@ export function useCollaboration({
     return COLLAB_COLORS[Math.abs(hash) % COLLAB_COLORS.length];
   }, [user]);
 
-  // Create ydoc and provider synchronously so they are available during render
-  const { ydoc, provider } = useMemo(() => {
-    if (!enabled || !pageId || !user) {
-      return { ydoc: null, provider: null };
-    }
+  const [session, setSession] = useState<{ ydoc: Y.Doc; provider: WebsocketProvider } | null>(null);
+  const ydoc = session?.ydoc ?? null;
+  const provider = session?.provider ?? null;
+
+  // The document and provider belong to one run of this effect, which alone cleans them up: a
+  // render can be thrown away, and StrictMode runs an effect twice with a cleanup in between
+  useEffect(() => {
+    if (!enabled || !pageId || !user) return;
 
     const token = getAccessToken();
-    if (!token) {
-      return { ydoc: null, provider: null };
-    }
+    if (!token) return;
 
     const newYdoc = new Y.Doc();
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const serverUrl = `${proto}://${window.location.host}/ws/wiki`;
 
     const newProvider = new WebsocketProvider(serverUrl, pageId, newYdoc, {
-      // In the effect below: a render can run this and throw the result away (StrictMode does),
-      // and only what the effect holds gets cleaned up
+      // Below, once the messages have their handlers and the listeners are on
       connect: false,
       params: { token },
       // Everything goes through the server. Tabs talking directly would feed the document of an
@@ -161,20 +161,9 @@ export function useCollaboration({
       setSessionEnded(true);
     };
 
-    return { ydoc: newYdoc, provider: newProvider };
-    // generation: a rejoin needs a new document
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageId, enabled, user, generation]);
-
-  // Set up awareness, listeners, and cleanup in an effect
-  useEffect(() => {
-    if (!provider || !ydoc || !user) return;
-
-    provider.connect();
-
     // Set local awareness state with user info
     const myColor = getMyColor();
-    provider.awareness.setLocalStateField('user', {
+    newProvider.awareness.setLocalStateField('user', {
       name: user.displayName ?? user.username,
       color: myColor,
       userId: user.id,
@@ -191,19 +180,19 @@ export function useCollaboration({
       }
       setIsConnected(event.status === 'connected');
     };
-    provider.on('status', onStatus);
+    newProvider.on('status', onStatus);
 
     const onSync = (synced: boolean) => {
       setIsSynced(synced);
       if (synced) setHasSynced(true);
     };
-    provider.on('sync', onSync);
+    newProvider.on('sync', onSync);
 
     // Track awareness (other users' presence)
     const updatePresence = () => {
-      const states = provider.awareness.getStates();
+      const states = newProvider.awareness.getStates();
       const users: PresenceUser[] = [];
-      const myClientId = ydoc.clientID;
+      const myClientId = newYdoc.clientID;
 
       states.forEach((state, clientId) => {
         if (clientId !== myClientId && state.user) {
@@ -218,15 +207,20 @@ export function useCollaboration({
       setPresenceUsers(users);
     };
 
-    provider.awareness.on('change', updatePresence);
+    newProvider.awareness.on('change', updatePresence);
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the session exists from here on
+    setSession({ ydoc: newYdoc, provider: newProvider });
+    newProvider.connect();
 
     return () => {
-      provider.awareness.off('change', updatePresence);
-      provider.off('status', onStatus);
-      provider.off('sync', onSync);
-      provider.disconnect();
-      provider.destroy();
-      ydoc.destroy();
+      newProvider.awareness.off('change', updatePresence);
+      newProvider.off('status', onStatus);
+      newProvider.off('sync', onSync);
+      newProvider.disconnect();
+      newProvider.destroy();
+      newYdoc.destroy();
+      setSession(null);
       setIsConnected(false);
       setIsSynced(false);
       setHasSynced(false);
@@ -235,7 +229,8 @@ export function useCollaboration({
       setResolvedBy(null);
       setLocked(null);
     };
-  }, [provider, ydoc, user, getMyColor]);
+    // generation: a rejoin needs a new document
+  }, [pageId, enabled, user, generation, getMyColor]);
 
   return {
     ydoc,

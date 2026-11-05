@@ -1,9 +1,12 @@
 import { act, renderHook } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 type Handler = (encoder: unknown, decoder: { arr: Uint8Array; pos: number }) => void;
 
 const providers: FakeProvider[] = [];
+
+const connectedAfterDestroy: unknown[] = [];
 
 class FakeProvider {
   messageHandlers: Handler[] = [];
@@ -15,7 +18,9 @@ class FakeProvider {
     on: vi.fn(),
     off: vi.fn(),
   };
-  connect = vi.fn();
+  connect = vi.fn(() => {
+    if (this.destroyed) connectedAfterDestroy.push(this);
+  });
   constructor(public options?: unknown) {
     providers.push(this);
   }
@@ -27,7 +32,10 @@ class FakeProvider {
     for (const fn of this.listeners[event] ?? []) fn(arg);
   }
   disconnect() {}
-  destroy() {}
+  destroyed = false;
+  destroy() {
+    this.destroyed = true;
+  }
 }
 
 vi.mock('y-websocket', () => ({
@@ -113,6 +121,22 @@ describe('useCollaboration state messages', () => {
     act(() => provider.emit('sync', false));
     expect(result.current.isSynced).toBe(false);
     expect(result.current.hasSynced).toBe(true);
+  });
+
+  it('survives StrictMode running its effect twice when enabled on the first render', () => {
+    connectedAfterDestroy.length = 0;
+    const { result } = renderHook(() => useCollaboration({ pageId: 'p1' }), {
+      wrapper: StrictMode,
+    });
+    const live = result.current.provider as unknown as FakeProvider;
+    expect(connectedAfterDestroy).toEqual([]);
+    expect(live.destroyed).toBe(false);
+    expect(live.connect).toHaveBeenCalledTimes(1);
+    // Whatever else got made was cleaned up, and nothing else holds a connection
+    for (const other of providers) {
+      if (other !== live) expect(other.destroyed).toBe(true);
+    }
+    expect((result.current.ydoc as unknown as { isDestroyed: boolean }).isDestroyed).toBe(false);
   });
 
   it('connects from the effect, through the server only', () => {
