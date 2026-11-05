@@ -18,7 +18,7 @@ import type * as Y from 'yjs';
 
 import { getSchemaExtensions } from './schema-extensions';
 
-export { parseQueryEmbedTarget, type QueryEmbedTarget } from './nodes/query-embed';
+export { parseQueryEmbedTarget, type QueryEmbedTarget } from './query-embed-target';
 
 interface MarkdownStorage {
   parser: { parse(content: string): string };

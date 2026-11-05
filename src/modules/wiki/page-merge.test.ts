@@ -5,7 +5,7 @@ import * as Y from 'yjs';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
-import { normalizeMarkdown, yFragmentToMarkdown } from '../../lib/editor-core';
+import { normalizeMarkdown, queryEmbedsIn, yFragmentToMarkdown } from '../../lib/editor-core';
 import {
   flushRoom,
   getOrCreateRoom,
@@ -263,6 +263,33 @@ describe('Page merge', () => {
     await disconnect(a);
     await disconnect(b);
     expect(await prisma.pageVersion.count({ where: { pageId } })).toBe(before);
+  });
+
+  it('a live block keeps its exact text through a merge and into the live doc', async () => {
+    const block = ':::query inline:"title ~ \\"a_b_c\\" AND x:::":::';
+    const start = `Intro\n\n${block}\n\nEnd`;
+    await prisma.page.update({ where: { id: pageId }, data: { body: start } });
+    const a = await connect(editorId);
+    const written = await externalWrite(`Intro changed\n\n${block}\n\nEnd`);
+    await waitFor(() => a.changeMessages.length > 0);
+
+    const pending = await getPendingMerge(pageId, editorId);
+    expect(pending?.ours).toBe(start);
+    expect(pending?.theirs).toBe(`Intro changed\n\n${block}\n\nEnd`);
+
+    const merged = `Intro changed\n\n${block}\n\nEnd\n\nMerged`;
+    await applyMerge(pageId, editorId, {
+      externalVersionId: written.version!.id,
+      markdown: merged,
+      ours: await roomMarkdown(),
+    });
+
+    const page = await prisma.page.findUniqueOrThrow({ where: { id: pageId } });
+    expect(page.body).toBe(merged);
+    expect(queryEmbedsIn(page.body)).toEqual(['inline:"title ~ \\"a_b_c\\" AND x:::"']);
+    expect(await roomMarkdown()).toBe(merged);
+    await waitFor(() => yFragmentToMarkdown(a.doc.getXmlFragment('default')) === merged);
+    await disconnect(a);
   });
 
   it('applyMerge saves the session state as a draft before replacing it', async () => {

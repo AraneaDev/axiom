@@ -26,9 +26,8 @@ import {
 } from 'lucide-react';
 import tippy, { type Instance as TippyInstance } from 'tippy.js';
 
-import { dashboardEmbedTarget, queryEmbedTarget } from '@/editor-core/nodes/query-embed';
-
 import { insertImageFromUrl, pickAndInsertImage } from './image-upload';
+import { QueryEmbedPicker, type QueryEmbedSource } from './QueryEmbedPicker';
 import SlashCommandMenu, {
   type SlashCommandItem,
   type SlashCommandMenuRef,
@@ -43,8 +42,27 @@ interface CommandDefinition {
   liveBlock?: boolean;
 }
 
-function insertQueryEmbed(editor: Editor, target: string | null): void {
-  if (target) editor.chain().focus().setQueryEmbed({ target }).run();
+/**
+ * Ask what a live block should show, and put it where the slash was. Rendered through the editor,
+ * so the form has the page's providers.
+ * @param editor - The editor
+ * @param source - Which of the form's sources to start on
+ */
+function pickQueryEmbed(editor: Editor, source: QueryEmbedSource): void {
+  const renderer = new ReactRenderer(QueryEmbedPicker, {
+    editor,
+    props: {
+      source,
+      onPick: (target: string) => {
+        renderer.destroy();
+        editor.chain().focus().setQueryEmbed({ target }).run();
+      },
+      onClose: () => {
+        renderer.destroy();
+        editor.commands.focus();
+      },
+    },
+  });
 }
 
 const commands: CommandDefinition[] = [
@@ -146,20 +164,14 @@ const commands: CommandDefinition[] = [
     category: 'Blocks',
     icon: LayoutDashboard,
     liveBlock: true,
-    action: (editor) => {
-      const input = window.prompt('Dashboard address or id:');
-      if (input) insertQueryEmbed(editor, dashboardEmbedTarget(input));
-    },
+    action: (editor) => pickQueryEmbed(editor, 'dashboard'),
   },
   {
     name: 'Query',
     category: 'Blocks',
     icon: ListFilter,
     liveBlock: true,
-    action: (editor) => {
-      const input = window.prompt('A query, or the id of a saved query:');
-      if (input) insertQueryEmbed(editor, queryEmbedTarget(input));
-    },
+    action: (editor) => pickQueryEmbed(editor, 'saved'),
   },
   // Media
   {

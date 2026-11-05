@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('./MermaidBlock', () => ({ MermaidBlock: () => null }));
 vi.mock('@/api/client', () => ({ getBlob: vi.fn() }));
 
+import { QueryBlockScope } from '@/components/dashboards/query-block-scope';
+
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 describe('MarkdownRenderer issue embeds', () => {
@@ -67,5 +69,20 @@ describe('MarkdownRenderer sanitising', () => {
     expect(container.querySelector('[onerror], [onload]')).toBeNull();
     expect(container.innerHTML).not.toMatch(/onerror|onload/i);
     expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
+  });
+});
+
+describe('MarkdownRenderer live blocks in code', () => {
+  it('shows a fenced :::query line as code, also where blocks run', () => {
+    const { container } = render(
+      <QueryBlockScope value={{ pageId: 'page1' }}>
+        <MarkdownRenderer content={'```\n:::query dashboard:cm1dash45:::\n```'} />
+      </QueryBlockScope>,
+    );
+    expect(container.querySelector('pre code')?.textContent).toBe(
+      ':::query dashboard:cm1dash45:::\n',
+    );
+    expect(container.querySelector('[data-query-embed]')).toBeNull();
+    expect(container.querySelector('[data-testid="query-block-loading"]')).toBeNull();
   });
 });

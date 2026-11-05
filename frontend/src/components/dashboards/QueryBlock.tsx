@@ -10,7 +10,7 @@ import {
 import { WidgetCard } from '@/components/dashboards/widgets/WidgetCard';
 import { Card } from '@/components/ui/Card';
 import { CardSkeleton } from '@/components/ui/Skeleton';
-import { parseQueryEmbedTarget, type QueryEmbedTarget } from '@/editor-core/nodes/query-embed';
+import { parseQueryEmbedTarget, type QueryEmbedTarget } from '@/editor-core/query-embed-target';
 import { dashboardRenderKey, useDashboardLive } from '@/hooks/useDashboardLive';
 import { useRefusableQuery } from '@/hooks/useRefusableQuery';
 import { cn } from '@/lib/utils';

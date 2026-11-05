@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
+import { isTextQuery } from './saved-query';
 import { sharingComplete, sharingInput, type Sharing } from './sharing';
 import { SharingFields } from './SharingFields';
 
@@ -22,13 +23,6 @@ const TYPE_OPTIONS: Array<{ value: WidgetType; label: string }> = [
   { value: 'BAR', label: 'Bar chart' },
   { value: 'SPRINT_OVERVIEW', label: 'Sprint overview' },
 ];
-
-/**
- * Presets the issue list saved have no query text: only rows written as text can be picked.
- * @param query - The saved row's stored query
- */
-const isTextQuery = (query: unknown) =>
-  typeof query === 'object' && query !== null && (query as { kind?: unknown }).kind === 'query';
 
 /**
  * Keep the query being written as a saved query, for this widget and others.

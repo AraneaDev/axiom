@@ -142,9 +142,13 @@ test.describe('Live blocks in wiki pages', () => {
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
 
-    page.once('dialog', (dialog) => void dialog.accept(`http://x.test/dashboards/${dashboard.id}`));
     await page.keyboard.type('/Dashboard');
     await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+    const picker = page.getByRole('dialog');
+    await picker.getByTestId('dashboard-picker').getByRole('button').click();
+    await picker.getByRole('button', { name: `Slash ${mark}` }).click();
+    await picker.getByRole('button', { name: 'Add block' }).click();
+    await expect(picker).toBeHidden();
 
     // Live in the editor before the page holds it, then saved as Markdown
     const block = editor.locator('.node-queryEmbed');
@@ -160,9 +164,34 @@ test.describe('Live blocks in wiki pages', () => {
       )
       .toContain(`:::query dashboard:${dashboard.id}:::`);
 
+    // A query typed in the same form becomes an inline block, also when it looks like an id
+    await editor
+      .locator('.node-queryEmbed')
+      .first()
+      .click({ position: { x: 2, y: 2 } });
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/Query');
+    await page.getByRole('button', { name: 'Query', exact: true }).click();
+    const form = page.getByRole('dialog');
+    await form.getByRole('button', { name: 'Inline query' }).click();
+    await form.getByLabel('Query', { exact: true }).fill('priority = HIGH GROUP BY status');
+    await form.getByRole('button', { name: 'Add block' }).click();
+    await expect(editor.locator('.node-queryEmbed')).toHaveCount(2);
+    await expect
+      .poll(
+        async () => {
+          await wiki.flush(slug);
+          return ((await wiki.getPage(slug)) as { body: string }).body;
+        },
+        { timeout: 20_000 },
+      )
+      .toContain(':::query inline:"priority = HIGH GROUP BY status":::');
+
     await page.goto(`${WIKI_URL}/docs/${slug}`);
-    await expect(page.getByTestId('query-block').getByTestId('widget-count')).toBeVisible({
+    await expect(page.getByTestId('query-block').first().getByTestId('widget-count')).toBeVisible({
       timeout: 15_000,
     });
+    await expect(page.getByTestId('query-block')).toHaveCount(2);
   });
 });

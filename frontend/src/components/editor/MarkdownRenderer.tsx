@@ -13,9 +13,9 @@ import { marked, type Token } from 'marked';
 import { useContext, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { LazyQueryBlock } from '@/components/dashboards/LazyQueryBlock';
 import { QueryBlockScope } from '@/components/dashboards/query-block-scope';
-import { QueryBlock } from '@/components/dashboards/QueryBlock';
-import { parseQueryEmbedTarget, queryEmbedTargetOfLine } from '@/editor-core/nodes/query-embed';
+import { parseQueryEmbedTarget, queryEmbedTargetOfLine } from '@/editor-core/query-embed-target';
 import { attachmentIdOf } from '@/hooks/useAttachmentObjectUrl';
 import { cn } from '@/lib/utils';
 
@@ -161,7 +161,7 @@ function HtmlContent({ html, className }: { html: string; className?: string }) 
         ),
       )}
       {blocks.map((block, i) =>
-        createPortal(<QueryBlock target={block.target} />, block.el, `${block.target}-${i}`),
+        createPortal(<LazyQueryBlock target={block.target} />, block.el, `${block.target}-${i}`),
       )}
     </>
   );

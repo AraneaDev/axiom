@@ -1,6 +1,6 @@
 import { type NodeViewProps, NodeViewWrapper } from '@tiptap/react';
 
-import { QueryBlock } from '@/components/dashboards/QueryBlock';
+import { LazyQueryBlock } from '@/components/dashboards/LazyQueryBlock';
 
 /**
  * Block React node view showing a live query or dashboard in the editor.
@@ -10,7 +10,7 @@ import { QueryBlock } from '@/components/dashboards/QueryBlock';
 export default function QueryEmbedNode({ node }: NodeViewProps) {
   return (
     <NodeViewWrapper>
-      <QueryBlock target={(node.attrs.target as string) || ''} />
+      <LazyQueryBlock target={(node.attrs.target as string) || ''} />
     </NodeViewWrapper>
   );
 }

@@ -10,7 +10,7 @@ import {
   queryEmbedsIn,
   yFragmentToMarkdown,
 } from './converter';
-import { dashboardEmbedTarget, queryEmbedTarget } from './nodes/query-embed';
+import { formatQueryEmbedTarget } from './query-embed-target';
 
 const identical: Record<string, string> = {
   heading: '# One\n\n## Two\n\n### Three',
@@ -421,18 +421,21 @@ describe('query embeds', () => {
     expect(normalizeMarkdown(md).trim()).toBe(md);
   });
 
-  it('makes a target from what someone typed', () => {
-    expect(dashboardEmbedTarget(' cm1dash45 ')).toBe('dashboard:cm1dash45');
-    expect(dashboardEmbedTarget('http://x.test/dashboards/cm1dash45/edit?a=1')).toBe(
-      'dashboard:cm1dash45',
-    );
-    expect(dashboardEmbedTarget('two words')).toBeNull();
-    const savedId = 'cmaaaaaaaaaaaaaaaaaaaaaaa';
-    expect(queryEmbedTarget(savedId)).toBe(savedId);
-    expect(queryEmbedTarget('type = "Bug"')).toBe('inline:"type = \\"Bug\\""');
-    expect(queryEmbedTarget('   ')).toBeNull();
-    const typed = queryEmbedTarget('line one\nline two');
-    expect(queryEmbedsIn(`:::query ${typed}:::`)).toEqual([typed]);
+  it.each([
+    [{ kind: 'dashboard', id: 'cm1dash45' }, 'dashboard:cm1dash45'],
+    [{ kind: 'savedQuery', id: 'cm1saved23' }, 'cm1saved23'],
+    [{ kind: 'inline', query: 'type = "Bug"' }, 'inline:"type = \\"Bug\\""'],
+    // A word that looks like an id stays what the form said it is
+    [{ kind: 'inline', query: 'cmaaaaaaaaaaaaaaaaaaaaaaa' }, 'inline:"cmaaaaaaaaaaaaaaaaaaaaaaa"'],
+  ] as const)('writes the target of %o, and reads it back', (target, written) => {
+    expect(formatQueryEmbedTarget(target)).toBe(written);
+    expect(parseQueryEmbedTarget(written)).toEqual(target);
+    expect(queryEmbedsIn(`:::query ${written}:::`)).toEqual([written]);
+  });
+
+  it('keeps a query of several lines on the one line of its block', () => {
+    const written = formatQueryEmbedTarget({ kind: 'inline', query: 'line one\nline two' });
+    expect(queryEmbedsIn(`:::query ${written}:::`)).toEqual([written]);
   });
 
   it('finds the embeds of a body, wherever the blocks are, and none in code', () => {

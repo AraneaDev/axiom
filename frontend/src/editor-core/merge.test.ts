@@ -1,8 +1,44 @@
 import { describe, it, expect } from 'vitest';
 
+import { normalizeMarkdown } from './converter';
 import { countMergeChanges, mergeMarkdown, resolveMerge, splitBlocks } from './merge';
 
 describe('mergeMarkdown', () => {
+  describe('a live block', () => {
+    const BLOCK = ':::query inline:"title ~ \\"a_b\\" AND x:::":::';
+    const base = normalizeMarkdown(`one\n\n${BLOCK}\n\nthree`);
+
+    it('stays one block of its own, the way the editor writes it', () => {
+      expect(splitBlocks(base)).toEqual(['one', BLOCK, 'three']);
+    });
+
+    it('survives changes on both sides of it', () => {
+      const ours = normalizeMarkdown(`ONE\n\n${BLOCK}\n\nthree`);
+      const theirs = normalizeMarkdown(`one\n\n${BLOCK}\n\nTHREE`);
+      expect(mergeMarkdown(base, ours, theirs).merged).toBe(`ONE\n\n${BLOCK}\n\nTHREE`);
+    });
+
+    it('takes the one side that changed its target', () => {
+      const other = ':::query dashboard:cm1dash45:::';
+      const theirs = normalizeMarkdown(`one\n\n${other}\n\nthree`);
+      expect(mergeMarkdown(base, base, theirs).merged).toBe(`one\n\n${other}\n\nthree`);
+    });
+
+    it('is one conflict when both sides change its target differently', () => {
+      const conflicts = mergeMarkdown(
+        base,
+        'one\n\n:::query dashboard:ours:::\n\nthree',
+        'one\n\n:::query dashboard:theirs:::\n\nthree',
+      ).hunks.filter((hunk) => hunk.kind === 'conflict');
+      expect(conflicts).toHaveLength(1);
+      expect(conflicts[0]).toMatchObject({
+        base: BLOCK,
+        ours: ':::query dashboard:ours:::',
+        theirs: ':::query dashboard:theirs:::',
+      });
+    });
+  });
+
   it('clean merge combines changes in different blocks', () => {
     const base = 'one\n\ntwo\n\nthree';
     const r = mergeMarkdown(base, 'ONE\n\ntwo\n\nthree', 'one\n\ntwo\n\nTHREE');
