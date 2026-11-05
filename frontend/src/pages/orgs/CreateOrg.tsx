@@ -7,6 +7,7 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
+import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 /**
@@ -17,12 +18,14 @@ export default function CreateOrg() {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const { error: slugError, setError: setSlugError, clearError } = useFormError();
 
   const mutation = useMutationWithToast(
     () => orgsApi.create({ name, slug, description: description || undefined }),
     {
       successMessage: 'Organization created',
-      errorMessage: 'Failed to create organization',
+      errorMessage: '',
+      onError: (err) => setSlugError(err.message),
       onSuccess: (org) => navigate(`/${org.slug}`),
     },
   );
@@ -39,6 +42,7 @@ export default function CreateOrg() {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    clearError();
     mutation.mutate();
   }
 
@@ -61,6 +65,7 @@ export default function CreateOrg() {
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
           placeholder="my-company"
+          error={slugError || undefined}
           required
         />
         <div>

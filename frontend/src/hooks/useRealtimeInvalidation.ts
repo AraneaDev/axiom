@@ -12,6 +12,7 @@ export type RealtimeEvent =
   | { type: 'issue:links-updated'; issueId: string }
   | { type: 'comment:added'; projectId: string; issueId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
+  | { type: 'sprint:updated'; projectId: string; sprintId: string }
   | { type: 'wiki:updated'; spaceId: string; pageId?: string }
   | { type: 'notification'; userId: string; notificationId: string }
   | { type: 'approval:request:created'; projectId: string; requestId: string; issueId: string }

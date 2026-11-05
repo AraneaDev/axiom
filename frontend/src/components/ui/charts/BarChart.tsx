@@ -4,6 +4,18 @@ import { chartColor, calcViewBoxWidth } from './chart-utils';
 import { ChartTooltip } from './ChartTooltip';
 import { useChartAnimation } from './useChartAnimation';
 
+const MIN_WIDTH = 400;
+const MIN_BAR_WIDTH = 4;
+const MAX_BAR_WIDTH = 48;
+const MIN_BAR_GAP = 2;
+const FONT_SIZE = 9;
+/** About what one character of a label takes, in the chart's units */
+const CHAR_WIDTH = 5;
+const MAX_LABEL = 14;
+
+const labelText = (label: string) =>
+  label.length > MAX_LABEL ? label.slice(0, MAX_LABEL - 1) + '..' : label;
+
 interface BarChartProps {
   data: { label: string; value: number; color?: string }[];
   height?: number;
@@ -19,7 +31,7 @@ interface BarChartProps {
  * @param root0.showValues
  * @param root0.className
  */
-export function BarChart({ data, height = 60, showValues = true, className }: BarChartProps) {
+export function BarChart({ data, height = 180, showValues = true, className }: BarChartProps) {
   const progress = useChartAnimation();
   const [hovered, setHovered] = useState<number | null>(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -35,22 +47,29 @@ export function BarChart({ data, height = 60, showValues = true, className }: Ba
 
   const paddingLeft = 28;
   const paddingRight = 8;
-  const paddingTop = showValues ? 12 : 6;
-  const paddingBottom = 30;
-  const barGap = 4;
-  const barWidth = Math.max(4, Math.min(16, 200 / data.length));
+  const paddingTop = showValues ? 14 : 6;
+  // Enough bars widen the chart, so that each keeps MIN_BAR_WIDTH and a gap
   const width = Math.max(
-    400,
-    calcViewBoxWidth(data.length, barWidth, barGap, paddingLeft, paddingRight),
+    MIN_WIDTH,
+    calcViewBoxWidth(data.length, MIN_BAR_WIDTH, MIN_BAR_GAP, paddingLeft, paddingRight),
   );
   const chartW = width - paddingLeft - paddingRight;
+  const slot = chartW / data.length;
+  const barWidth = Math.min(Math.max(slot * 0.7, MIN_BAR_WIDTH), MAX_BAR_WIDTH);
+  const labelsFit = data.every((d) => labelText(d.label).length * CHAR_WIDTH <= slot);
+  const paddingBottom = labelsFit ? 18 : 68;
   const chartH = height - paddingTop - paddingBottom;
   const maxValue = Math.max(...data.map((d) => d.value), 1);
+  // Past one label per FONT_SIZE of width they would overlap, so only every so many get one
+  const labelEvery = Math.ceil(FONT_SIZE / slot);
+  const valuesFit = slot >= FONT_SIZE * 2;
 
   const tickCount = 3;
-  const yTicks = Array.from({ length: tickCount + 1 }, (_, i) =>
-    Math.round((maxValue / tickCount) * i),
-  );
+  const yTicks = [
+    ...new Set(
+      Array.from({ length: tickCount + 1 }, (_, i) => Math.round((maxValue / tickCount) * i)),
+    ),
+  ];
 
   return (
     <div
@@ -79,10 +98,10 @@ export function BarChart({ data, height = 60, showValues = true, className }: Ba
               />
               <text
                 x={paddingLeft - 4}
-                y={y + 2}
+                y={y + 3}
                 textAnchor="end"
                 className="fill-text-tertiary"
-                fontSize={5}
+                fontSize={FONT_SIZE}
               >
                 {tick}
               </text>
@@ -94,7 +113,8 @@ export function BarChart({ data, height = 60, showValues = true, className }: Ba
         {data.map((d, i) => {
           const fullH = (d.value / maxValue) * chartH;
           const barH = fullH * progress;
-          const x = paddingLeft + barGap + i * (barWidth + barGap);
+          const center = paddingLeft + slot * i + slot / 2;
+          const x = center - barWidth / 2;
           const y = paddingTop + chartH - barH;
           const isHovered = hovered === i;
           const dimmed = hovered !== null && !isHovered;
@@ -113,28 +133,32 @@ export function BarChart({ data, height = 60, showValues = true, className }: Ba
                   transition: 'opacity 150ms, height 300ms ease-in-out, y 300ms ease-in-out',
                 }}
               />
-              {showValues && progress > 0.8 && (
+              {showValues && valuesFit && progress > 0.8 && (
                 <text
-                  x={x + barWidth / 2}
-                  y={y - 2}
+                  x={center}
+                  y={y - 3}
                   textAnchor="middle"
                   className="fill-text-secondary"
-                  fontSize={5}
+                  fontSize={FONT_SIZE}
                   style={{ opacity: dimmed ? 0.4 : 1, transition: 'opacity 150ms' }}
                 >
                   {d.value}
                 </text>
               )}
-              <text
-                x={x + barWidth / 2}
-                y={paddingTop + chartH + 5}
-                textAnchor="end"
-                className="fill-text-tertiary"
-                fontSize={5}
-                transform={`rotate(-45, ${x + barWidth / 2}, ${paddingTop + chartH + 5})`}
-              >
-                {d.label.length > 14 ? d.label.slice(0, 13) + '..' : d.label}
-              </text>
+              {i % labelEvery === 0 && (
+                <text
+                  x={center}
+                  y={paddingTop + chartH + 12}
+                  textAnchor={labelsFit ? 'middle' : 'end'}
+                  className="fill-text-tertiary"
+                  fontSize={FONT_SIZE}
+                  transform={
+                    labelsFit ? undefined : `rotate(-45, ${center}, ${paddingTop + chartH + 12})`
+                  }
+                >
+                  {labelText(d.label)}
+                </text>
+              )}
             </g>
           );
         })}

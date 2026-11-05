@@ -6,12 +6,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockSubscribe = vi.fn();
 const mockUnsubscribe = vi.fn();
 let emit: (event: unknown) => void = () => {};
+let reconnect: () => void = () => {};
 
 vi.mock('@/hooks/useWebSocket', () => ({
   subscribe: (...args: unknown[]) => mockSubscribe(...args),
   unsubscribe: (...args: unknown[]) => mockUnsubscribe(...args),
   useRealtimeListener: (callback: (event: unknown) => void) => {
     emit = callback;
+  },
+  onReconnect: (callback: () => void) => {
+    reconnect = callback;
+    return () => {
+      reconnect = () => {};
+    };
   },
 }));
 
@@ -34,8 +41,14 @@ describe('useDashboardLive', () => {
   });
 
   afterEach(() => {
+    setHidden(false);
     vi.useRealTimers();
   });
+
+  const setHidden = (hidden: boolean) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: hidden });
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
 
   it('waits 2 seconds', () => {
     expect(LIVE_REFETCH_MS).toBe(2000);
@@ -113,5 +126,80 @@ describe('useDashboardLive', () => {
       vi.advanceTimersByTime(LIVE_REFETCH_MS);
     });
     expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('refetches on a sprint event', () => {
+    renderHook(() => useDashboardLive('d1', ['p1']), { wrapper });
+    act(() => {
+      emit({ type: 'sprint:updated', projectId: 'p1', sprintId: 's1' });
+      vi.advanceTimersByTime(LIVE_REFETCH_MS);
+    });
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  describe('while the tab is hidden', () => {
+    it('does not refetch, and refetches once when visible again', () => {
+      renderHook(() => useDashboardLive('d1', ['p1']), { wrapper });
+      act(() => setHidden(true));
+      act(() => {
+        emit(updated('p1'));
+        vi.advanceTimersByTime(LIVE_REFETCH_MS * 3);
+        emit(updated('p1'));
+        vi.advanceTimersByTime(LIVE_REFETCH_MS * 3);
+      });
+      expect(invalidate).not.toHaveBeenCalled();
+      act(() => setHidden(false));
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      act(() => {
+        vi.advanceTimersByTime(LIVE_REFETCH_MS * 3);
+      });
+      expect(invalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops a wait that was running when the tab went hidden', () => {
+      renderHook(() => useDashboardLive('d1', ['p1']), { wrapper });
+      act(() => emit(updated('p1')));
+      act(() => setHidden(true));
+      act(() => {
+        vi.advanceTimersByTime(LIVE_REFETCH_MS * 2);
+      });
+      expect(invalidate).not.toHaveBeenCalled();
+      act(() => setHidden(false));
+      act(() => {
+        vi.advanceTimersByTime(LIVE_REFETCH_MS * 2);
+      });
+      expect(invalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a reconnect to the moment it is visible', () => {
+      renderHook(() => useDashboardLive('d1', ['p1']), { wrapper });
+      act(() => setHidden(true));
+      act(() => reconnect());
+      expect(invalidate).not.toHaveBeenCalled();
+      act(() => setHidden(false));
+      expect(invalidate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when the socket reconnects', () => {
+    it('refetches once, taking a running wait along', () => {
+      renderHook(() => useDashboardLive('d1', ['p1']), { wrapper });
+      act(() => emit(updated('p1')));
+      act(() => reconnect());
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      act(() => {
+        vi.advanceTimersByTime(LIVE_REFETCH_MS * 2);
+      });
+      expect(invalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops listening on unmount', () => {
+      const { unmount } = renderHook(() => useDashboardLive('d1', ['p1']), { wrapper });
+      unmount();
+      act(() => reconnect());
+      act(() => setHidden(true));
+      act(() => setHidden(false));
+      expect(invalidate).not.toHaveBeenCalled();
+    });
   });
 });

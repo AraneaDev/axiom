@@ -30,6 +30,22 @@ export const savedFiltersApi = {
   create: (data: { name: string; query: Record<string, string>; projectId?: string }) =>
     post<SavedFilter>('/saved-filters', data),
   /**
+   * Save a query written in the query language, private or shared with a team or org.
+   * @param data
+   * @param data.name
+   * @param data.text
+   * @param data.visibility
+   * @param data.teamId
+   * @param data.orgId
+   */
+  createQuery: (data: {
+    name: string;
+    text: string;
+    visibility?: 'PRIVATE' | 'TEAM' | 'ORG';
+    teamId?: string;
+    orgId?: string;
+  }) => post<SavedFilter>('/saved-filters', data),
+  /**
    * Update a saved filter's name or query.
    * @param filterId
    * @param data

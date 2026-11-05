@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, LayoutDashboard, Pencil } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -10,6 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { CardSkeleton } from '@/components/ui/Skeleton';
 import { dashboardRenderKey, useDashboardLive } from '@/hooks/useDashboardLive';
+import { useRefusableQuery } from '@/hooks/useRefusableQuery';
 import { cn } from '@/lib/utils';
 
 /** Whole class names, for Tailwind to find. One column below xl, whatever the dashboard asks. */
@@ -26,10 +26,12 @@ const DEFAULT_COLUMNS = 3;
  */
 export default function DashboardView() {
   const { id = '' } = useParams();
-  const { data, isLoading, error } = useQuery({
-    queryKey: dashboardRenderKey(id),
-    queryFn: () => dashboardsApi.render(id),
-  });
+  // useDashboardLive decides when coming back to the tab refetches
+  const { data, isLoading, error, refusedWith } = useRefusableQuery(
+    dashboardRenderKey(id),
+    () => dashboardsApi.render(id),
+    { refetchOnWindowFocus: false },
+  );
   useDashboardLive(id, data?.projectIds ?? []);
 
   if (isLoading) {
@@ -43,7 +45,7 @@ export default function DashboardView() {
       </PageLayout>
     );
   }
-  // A failed refetch keeps what is on screen: the next change brings a new one
+  // A refetch the server could not answer keeps what is on screen; one it refused does not
   if (!data) {
     return (
       <PageLayout>
@@ -51,7 +53,7 @@ export default function DashboardView() {
           card
           icon={<AlertTriangle />}
           title="Could not open this dashboard"
-          description={error?.message}
+          description={refusedWith ?? error?.message}
         />
       </PageLayout>
     );

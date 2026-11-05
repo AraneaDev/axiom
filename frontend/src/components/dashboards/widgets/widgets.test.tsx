@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
@@ -127,18 +127,22 @@ describe('WidgetCard', () => {
       expect(screen.getByText('Backlog')).toBeInTheDocument();
     });
 
-    it('scales the bars to the largest group, and shows each value', () => {
+    it('scales the bars to the largest group', async () => {
       const { container } = show({ type: 'BAR', result: groups });
+      await waitFor(() =>
+        expect(Number(container.querySelector('svg rect')?.getAttribute('height'))).toBeGreaterThan(
+          0,
+        ),
+      );
       const [done, backlog] = [...container.querySelectorAll('svg rect')].map((rect) =>
         Number(rect.getAttribute('height')),
       );
       expect(backlog / done).toBeCloseTo(2 / 5);
-      expect(screen.getByText('5')).toBeInTheDocument();
     });
 
-    it('cuts a long label under a narrow bar and keeps the whole text in its title', () => {
+    it('cuts a long label and shows the whole text on hover', async () => {
       const name = 'A very long group name that would run into the next bar';
-      show({
+      const { container } = show({
         type: 'BAR',
         result: {
           kind: 'groups',
@@ -150,10 +154,11 @@ describe('WidgetCard', () => {
         },
       });
       expect(screen.queryByText(name)).not.toBeInTheDocument();
-      expect(screen.getByText(`${name}: 1`)).toBeInTheDocument();
+      fireEvent.mouseEnter(container.querySelector('svg g:has(rect)')!);
+      expect(await screen.findByText(name)).toBeInTheDocument();
     });
 
-    it('draws a bar for an aggregate by its value', () => {
+    it('draws a bar for an aggregate by its value', async () => {
       show({
         type: 'BAR',
         result: {
@@ -162,7 +167,7 @@ describe('WidgetCard', () => {
           groups: [{ key: { status: 'Done' }, count: 1, sum: 13 }],
         },
       });
-      expect(screen.getByText('13')).toBeInTheDocument();
+      expect(await screen.findByText('13')).toBeInTheDocument();
     });
 
     it('names an empty key rather than leaving a gap', () => {

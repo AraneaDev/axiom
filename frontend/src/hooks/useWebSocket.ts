@@ -22,6 +22,9 @@ const listeners = new Set<EventCallback>();
 /** Rooms the app wants, with how many mounted subscribers want each one */
 const subscribedRooms = new Map<string, number>();
 const stateListeners = new Set<() => void>();
+const reconnectListeners = new Set<() => void>();
+/** A socket has been open since the last logout, so the next one to open is a reconnect */
+let hasOpened = false;
 
 function notifyStateListeners(): void {
   for (const cb of stateListeners) cb();
@@ -69,6 +72,9 @@ function connect(): void {
     if (subscribedRooms.size > 0) {
       sendJson({ type: 'subscribe', rooms: Array.from(subscribedRooms.keys()) });
     }
+
+    if (hasOpened) for (const cb of reconnectListeners) cb();
+    hasOpened = true;
   };
 
   ws.onmessage = (ev) => {
@@ -117,6 +123,7 @@ function disconnect(): void {
     reconnectTimer = null;
   }
   reconnectAttempt = 0;
+  hasOpened = false;
   subscribedRooms.clear();
 
   if (ws) {
@@ -181,6 +188,16 @@ export function unsubscribe(rooms: string[]): void {
 export function onEvent(callback: EventCallback): () => void {
   listeners.add(callback);
   return () => listeners.delete(callback);
+}
+
+/**
+ * Register a listener for a dropped socket coming back: events sent in between were missed.
+ * Returns an unsubscribe function.
+ * @param callback
+ */
+export function onReconnect(callback: () => void): () => void {
+  reconnectListeners.add(callback);
+  return () => reconnectListeners.delete(callback);
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Bookmark, Code, Save, X } from 'lucide-react';
+import { Bookmark, BookmarkPlus, Code, Save, X } from 'lucide-react';
 import { useState } from 'react';
 
 import type { DashboardWidget, WidgetInput, WidgetType } from '@/api/dashboards.api';
@@ -9,6 +9,11 @@ import { Select } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Textarea } from '@/components/ui/Textarea';
+import { useFormError } from '@/hooks/useFormError';
+import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+
+import { sharingComplete, sharingInput, type Sharing } from './sharing';
+import { SharingFields } from './SharingFields';
 
 const TYPE_OPTIONS: Array<{ value: WidgetType; label: string }> = [
   { value: 'COUNT', label: 'Count' },
@@ -24,6 +29,59 @@ const TYPE_OPTIONS: Array<{ value: WidgetType; label: string }> = [
  */
 const isTextQuery = (query: unknown) =>
   typeof query === 'object' && query !== null && (query as { kind?: unknown }).kind === 'query';
+
+/**
+ * Keep the query being written as a saved query, for this widget and others.
+ * @param root0
+ * @param root0.text
+ * @param root0.onSaved
+ */
+function SaveQueryFields({ text, onSaved }: { text: string; onSaved: (id: string) => void }) {
+  const [name, setName] = useState('');
+  const [sharing, setSharing] = useState<Sharing>({
+    visibility: 'PRIVATE',
+    teamId: null,
+    orgId: null,
+  });
+  const { error, setError, clearError } = useFormError();
+  const save = useMutationWithToast(
+    () => savedFiltersApi.createQuery({ name: name.trim(), text, ...sharingInput(sharing) }),
+    {
+      successMessage: 'Query saved',
+      errorMessage: '',
+      invalidateKeys: [['saved-filters']],
+      onSuccess: (saved) => onSaved(saved.id),
+      onError: (err) => setError(err.message),
+    },
+  );
+  const ready = !!name.trim() && sharingComplete(sharing) && !save.isPending;
+  const submit = () => {
+    clearError();
+    save.mutate();
+  };
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+      <Input
+        label="Query name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(event) => {
+          // Enter here saves the query, not the widget around it
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          if (ready) submit();
+        }}
+      />
+      <SharingFields value={sharing} onChange={setSharing} />
+      {error && <p className="text-sm text-danger">{error}</p>}
+      <div>
+        <Button type="button" size="sm" disabled={!ready} onClick={submit}>
+          <Save className="h-4 w-4" /> Save query
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 interface WidgetFormModalProps {
   /** The widget to change, or nothing to make a new one */
@@ -52,6 +110,7 @@ export function WidgetFormModal({ widget, error, saving, onSave, onClose }: Widg
   );
   const [query, setQuery] = useState(widget?.query ?? '');
   const [savedQueryId, setSavedQueryId] = useState(widget?.savedQueryId ?? '');
+  const [savingQuery, setSavingQuery] = useState(false);
 
   const { data: saved = [] } = useQuery({
     queryKey: ['saved-filters', 'all'],
@@ -120,18 +179,41 @@ export function WidgetFormModal({ widget, error, saving, onSave, onClose }: Widg
               </Button>
             </div>
             {source === 'inline' ? (
-              <Textarea
-                label="Query"
-                value={query}
-                rows={3}
-                className="font-mono"
-                hint={
-                  type === 'BAR'
-                    ? 'A bar chart needs GROUP BY, as in: WHERE type = BUG GROUP BY status'
-                    : 'For example: type = BUG AND priority = HIGH'
-                }
-                onChange={(e) => setQuery(e.target.value)}
-              />
+              <>
+                <Textarea
+                  label="Query"
+                  value={query}
+                  rows={3}
+                  className="font-mono"
+                  hint={
+                    type === 'BAR'
+                      ? 'A bar chart needs GROUP BY, as in: WHERE type = BUG GROUP BY status'
+                      : 'For example: type = BUG AND priority = HIGH'
+                  }
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                <div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={!query.trim()}
+                    onClick={() => setSavingQuery((open) => !open)}
+                  >
+                    <BookmarkPlus className="h-4 w-4" /> Save as query
+                  </Button>
+                </div>
+                {savingQuery && (
+                  <SaveQueryFields
+                    text={query.trim()}
+                    onSaved={(id) => {
+                      setSavedQueryId(id);
+                      setSource('saved');
+                      setSavingQuery(false);
+                    }}
+                  />
+                )}
+              </>
             ) : (
               <div data-testid="saved-query-picker">
                 <Select

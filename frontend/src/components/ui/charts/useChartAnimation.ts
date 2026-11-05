@@ -14,7 +14,8 @@ export function useChartAnimation(duration = 500): number {
 
     function tick(now: number) {
       const elapsed = now - start;
-      const t = Math.min(1, elapsed / duration);
+      // The first frame's timestamp can be earlier than the effect that asked for it
+      const t = Math.max(0, Math.min(1, elapsed / duration));
       // ease-out cubic
       const eased = 1 - Math.pow(1 - t, 3);
       setProgress(eased);

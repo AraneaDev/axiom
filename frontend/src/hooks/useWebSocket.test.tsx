@@ -41,7 +41,7 @@ class FakeSocket {
   }
 }
 
-import { subscribe, unsubscribe, useWebSocket } from './useWebSocket';
+import { onReconnect, subscribe, unsubscribe, useWebSocket } from './useWebSocket';
 
 describe('useWebSocket', () => {
   beforeEach(() => {
@@ -52,6 +52,32 @@ describe('useWebSocket', () => {
   afterEach(() => {
     configure({ reactStrictMode: false });
     vi.unstubAllGlobals();
+  });
+
+  it('tells listeners when a dropped socket is back, not on the first connection', () => {
+    vi.useFakeTimers();
+    const back = vi.fn();
+    const stop = onReconnect(back);
+    const { unmount } = renderHook(() => useWebSocket());
+    try {
+      FakeSocket.instances[0].open();
+      expect(back).not.toHaveBeenCalled();
+
+      FakeSocket.instances[0].close();
+      vi.advanceTimersByTime(1000);
+      FakeSocket.instances[1].open();
+      expect(back).toHaveBeenCalledTimes(1);
+
+      // Logging out and in again is a new start, not a reconnect
+      unmount();
+      const again = renderHook(() => useWebSocket());
+      FakeSocket.instances[2].open();
+      expect(back).toHaveBeenCalledTimes(1);
+      again.unmount();
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
   });
 
   it('sends subscriptions on a live socket after StrictMode mounts twice', () => {

@@ -38,6 +38,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { dashboardRenderKey } from '@/hooks/useDashboardLive';
 import { useFormError } from '@/hooks/useFormError';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
+import { useRefusableQuery } from '@/hooks/useRefusableQuery';
 
 const COLUMN_OPTIONS = [1, 2, 3, 4].map((columns) => ({
   value: String(columns),
@@ -191,10 +192,9 @@ export default function DashboardEdit() {
   const [deleting, setDeleting] = useState(false);
 
   const queryKey = ['dashboards', id];
-  const { data, isLoading, error } = useQuery({
-    queryKey,
-    queryFn: () => dashboardsApi.get(id),
-  });
+  const { data, isLoading, error, refusedWith } = useRefusableQuery(queryKey, () =>
+    dashboardsApi.get(id),
+  );
   const { data: saved } = useQuery({
     queryKey: ['saved-filters', 'all'],
     queryFn: () => savedFiltersApi.list(),
@@ -264,7 +264,7 @@ export default function DashboardEdit() {
           card
           icon={<AlertTriangle />}
           title="Could not open this dashboard"
-          description={error?.message}
+          description={refusedWith ?? error?.message}
         />
       </PageLayout>
     );

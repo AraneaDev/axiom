@@ -47,9 +47,27 @@ test.describe('Dashboards', () => {
     await page.getByRole('button', { name: 'Add widget' }).click();
     const form = page.getByRole('dialog');
     await form.getByLabel('Title').fill('Marked issues');
-    await form.getByLabel('Query').fill(`title ~ ${mark}`);
+    await form.getByLabel('Query', { exact: true }).fill(`title ~ ${mark}`);
     await form.getByRole('button', { name: 'Save widget' }).click();
     await expect(page.getByTestId('widget-row-Marked issues')).toBeVisible();
+
+    // A query written here can be kept, and the widget then reads the saved one
+    await page.getByRole('button', { name: 'Add widget' }).click();
+    const second = page.getByRole('dialog');
+    await second.getByLabel('Title').fill('From saved');
+    await second.getByLabel('Query', { exact: true }).fill(`title ~ ${mark} GROUP BY project`);
+    await second.getByRole('button', { name: 'Save as query' }).click();
+    await second.getByLabel('Query name').fill(`Saved ${mark}`);
+    await second.getByRole('button', { name: 'Save query' }).click();
+    await expect(second.getByTestId('saved-query-picker')).toContainText(`Saved ${mark}`);
+    await second.getByRole('button', { name: 'Save widget' }).click();
+    await expect(page.getByTestId('widget-row-From saved')).toContainText(`Saved ${mark}`);
+    await page
+      .getByTestId('widget-row-From saved')
+      .getByRole('button', { name: 'Remove widget' })
+      .click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
+    await expect(page.getByTestId('widget-row-From saved')).toBeHidden();
 
     await page.getByRole('link', { name: 'View' }).click();
     const count = page.getByTestId('widget-count');
