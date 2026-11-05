@@ -38,7 +38,6 @@ const makeAttachment = (overrides: Partial<AttachmentMeta> = {}): AttachmentMeta
   originalName: 'document.txt',
   mimeType: 'text/plain',
   size: 1024,
-  storageKey: 'store/document.txt',
   uploaderId: 'user-1',
   issueId: null,
   pageId: null,

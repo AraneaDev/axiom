@@ -59,6 +59,18 @@ const openTempStreams = () =>
     })
     .filter((target) => target.startsWith(TEMP_DIR));
 
+const openStoredStreams = () =>
+  fs
+    .readdirSync('/proc/self/fd')
+    .map((fd) => {
+      try {
+        return fs.readlinkSync(`/proc/self/fd/${fd}`);
+      } catch {
+        return '';
+      }
+    })
+    .filter((target) => target.includes('stream/a.txt'));
+
 const partHead =
   `--${BOUNDARY}\r\n` +
   'Content-Disposition: form-data; name="file"; filename="n.txt"\r\n' +
@@ -424,6 +436,18 @@ describe('requests that do not finish', () => {
     expect(fs.existsSync(outside)).toBe(true);
     expect(await prisma.attachment.count()).toBe(rows);
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('opens a stored file as a stream with its size, and rejects a missing one', async () => {
+    const storage = new LocalStorageBackend();
+    await storage.put('stream/a.txt', Buffer.from('in pieces'), 'text/plain');
+    const { stream, size } = await storage.openStream('stream/a.txt');
+    expect(size).toBe(9);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(chunk as Buffer);
+    expect(Buffer.concat(chunks).toString()).toBe('in pieces');
+    await expect(storage.openStream('stream/none.txt')).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(openStoredStreams()).toEqual([]);
   });
 
   it('moves a file into storage, or copies it across filesystems', async () => {

@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import type { Readable } from 'stream';
 
 import type { StorageBackend } from './storage';
 import { isTempUploadPath } from './temp-dir';
@@ -47,6 +48,17 @@ export class LocalStorageBackend implements StorageBackend {
   async get(key: string): Promise<Buffer> {
     const filePath = this.resolve(key);
     return fs.readFile(filePath);
+  }
+
+  async openStream(key: string): Promise<{ stream: Readable; size: number }> {
+    const handle = await fs.open(this.resolve(key), 'r');
+    try {
+      const { size } = await handle.stat();
+      return { stream: handle.createReadStream(), size };
+    } catch (err) {
+      await handle.close();
+      throw err;
+    }
   }
 
   async delete(key: string): Promise<void> {

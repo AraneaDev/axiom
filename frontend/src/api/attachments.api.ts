@@ -6,7 +6,6 @@ export interface AttachmentMeta {
   originalName: string;
   mimeType: string;
   size: number;
-  storageKey: string;
   uploaderId: string;
   issueId: string | null;
   pageId: string | null;

@@ -1,3 +1,5 @@
+import { Readable } from 'stream';
+
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -10,6 +12,10 @@ const mockStorage = {
   // Uploads store from disk now; for this mock that is the same as put
   putFile: vi.fn(async (...args: unknown[]) => mockStorage.put(...args)),
   get: vi.fn().mockResolvedValue(Buffer.from('Hello, this is a test file.')),
+  openStream: vi.fn(async () => ({
+    stream: Readable.from([Buffer.from('Hello, this is a test file.')]),
+    size: 27,
+  })),
   delete: vi.fn().mockResolvedValue(undefined),
   exists: vi.fn().mockResolvedValue(true),
 };
@@ -111,8 +117,27 @@ describe('Attachments API', () => {
     expect(res.body.originalName).toBe('test.txt');
     expect(res.body.mimeType).toBe('text/plain');
     expect(res.body.uploaderId).toBe(userId);
+    expect(res.body).not.toHaveProperty('storageKey');
     expect(mockStorage.put).toHaveBeenCalled();
     attachmentId = res.body.id;
+  });
+
+  it('does not tell a reader where a file is stored', async () => {
+    const list = await request(app)
+      .get(`/api/attachments?pageId=${pageId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(list.status).toBe(200);
+    expect(list.body.length).toBeGreaterThan(0);
+    // The attachment list uses uploaderId for its delete button
+    for (const attachment of list.body) {
+      expect(attachment).not.toHaveProperty('storageKey');
+      expect(attachment.uploaderId).toBe(userId);
+    }
+    const meta = await request(app)
+      .get(`/api/attachments/${attachmentId}/meta`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(meta.status).toBe(200);
+    expect(meta.body).not.toHaveProperty('storageKey');
   });
 
   it('should upload an image file', async () => {
@@ -184,7 +209,30 @@ describe('Attachments API', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/plain');
-    expect(mockStorage.get).toHaveBeenCalled();
+    expect(res.headers['content-length']).toBe('27');
+    expect(res.text).toBe('Hello, this is a test file.');
+    expect(mockStorage.openStream).toHaveBeenCalled();
+  });
+
+  it('streams a preview, and never reads a whole file into memory', async () => {
+    const res = await request(app)
+      .get(`/api/attachments/${attachmentId}/preview`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/plain');
+    expect(res.text).toBe('Hello, this is a test file.');
+    expect(mockStorage.get).not.toHaveBeenCalled();
+  });
+
+  it('answers an error, not a broken file, when the stored file is gone', async () => {
+    mockStorage.openStream.mockRejectedValueOnce(
+      Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
+    );
+    const res = await request(app)
+      .get(`/api/attachments/${attachmentId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(500);
+    expect(res.headers['content-disposition']).toBeUndefined();
   });
 
   it('should return 404 for non-existent attachment', async () => {

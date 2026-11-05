@@ -361,7 +361,9 @@ describe('upload intents', () => {
       const res = await put(uploadUrl);
       expect(res.status).toBe(201);
       expect(res.body.originalName).toBe('pass.wd');
-      expect(res.body.storageKey).toMatch(/^attachments\/\d{4}\/\d{2}\/[a-z0-9]+\.wd$/);
+      const stored = await prisma.attachment.findUniqueOrThrow({ where: { id: res.body.id } });
+      expect(stored.storageKey).toMatch(/^attachments\/\d{4}\/\d{2}\/[a-z0-9]+\.wd$/);
+      expect(res.body).not.toHaveProperty('storageKey');
       expect((await createUrl({ ...file, filename: '../' })).status).toBe(400);
     });
 

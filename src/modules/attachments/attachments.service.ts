@@ -1,10 +1,14 @@
 import { execFile } from 'child_process';
+import { createWriteStream } from 'fs';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import type { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { promisify } from 'util';
 
 import { createId } from '@paralleldrive/cuid2';
+import type { Attachment } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
@@ -259,7 +263,7 @@ export async function uploadAttachment(
       });
     }
 
-    return attachment;
+    return toAttachmentView(attachment);
   } finally {
     await removeTempFile(file.path);
   }
@@ -341,6 +345,29 @@ export async function getAttachmentAuthorized(id: string, userId: string) {
   return attachment;
 }
 
+export type AttachmentView = Omit<Attachment, 'storageKey'>;
+
+/**
+ * What leaves the server about an attachment. The storage key, which shows how files are laid out
+ * on disk, and the parent rows access checks load don't.
+ * @param row - The attachment
+ */
+export function toAttachmentView(row: AttachmentView): AttachmentView {
+  return {
+    id: row.id,
+    filename: row.filename,
+    originalName: row.originalName,
+    mimeType: row.mimeType,
+    size: row.size,
+    uploaderId: row.uploaderId,
+    issueId: row.issueId,
+    pageId: row.pageId,
+    commentId: row.commentId,
+    stagedAt: row.stagedAt,
+    createdAt: row.createdAt,
+  };
+}
+
 /**
  * List attachments for a given resource (issue or wiki page) with authorization check.
  * Verifies the requesting user belongs to the same org as the parent resource.
@@ -363,11 +390,12 @@ export async function listAttachments(opts: { issueId?: string; pageId?: string 
   if (opts.issueId) where.issueId = opts.issueId;
   if (opts.pageId) where.pageId = opts.pageId;
 
-  return prisma.attachment.findMany({
+  const rows = await prisma.attachment.findMany({
     where,
     orderBy: { createdAt: 'desc' },
     take: 100,
   });
+  return rows.map(toAttachmentView);
 }
 
 /**
@@ -418,29 +446,33 @@ export async function getDeletableAttachment(id: string, userId: string) {
 }
 
 /**
- * Get the file buffer for download.
+ * Open the file of an attachment for download.
  * @param id - The attachment ID
  * @param userId
- * @returns Object with attachment metadata and file data buffer
+ * @returns The attachment's metadata, and the file as a stream with its size
  * @throws {AppError} 404 if attachment not found
  */
 export async function downloadAttachment(id: string, userId: string) {
   const attachment = await getAttachmentAuthorized(id, userId);
-  const storage = getStorage();
-  const data = await storage.get(attachment.storageKey);
-  return { attachment, data };
+  const { stream, size } = await getStorage().openStream(attachment.storageKey);
+  return { attachment, stream, size };
 }
 
 /**
- * Write a buffer to a temporary file and return its path.
- * Caller is responsible for cleanup.
- * @param data
+ * Copy a stored file to a temporary file and return its path. Caller is responsible for cleanup.
+ * @param storageKey
  * @param ext
  */
-async function writeToTempFile(data: Buffer, ext: string): Promise<string> {
+async function copyToTempFile(storageKey: string, ext: string): Promise<string> {
+  const { stream } = await getStorage().openStream(storageKey);
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'axiom-preview-'));
   const tmpFile = path.join(tmpDir, `file.${ext}`);
-  await fs.writeFile(tmpFile, data);
+  try {
+    await pipeline(stream, createWriteStream(tmpFile));
+  } catch (err) {
+    await cleanupTempFile(tmpFile);
+    throw err;
+  }
   return tmpFile;
 }
 
@@ -465,8 +497,12 @@ export async function preview(
   id: string,
   userId: string,
 ): Promise<{
-  type: 'redirect' | 'text' | 'html' | 'pdf';
-  content: string | Buffer;
+  type: 'redirect' | 'file' | 'html';
+  /** The converted page, for html */
+  content?: string;
+  /** The file itself, for file */
+  stream?: Readable;
+  size?: number;
   mimeType: string;
 }> {
   const attachment = await getAttachmentAuthorized(id, userId);
@@ -474,30 +510,30 @@ export async function preview(
 
   // Images: redirect to download endpoint
   if (mime.startsWith('image/')) {
-    return { type: 'redirect', content: '', mimeType: mime };
+    return { type: 'redirect', mimeType: mime };
   }
 
-  const storage = getStorage();
-  const data = await storage.get(attachment.storageKey);
-
-  // PDF: return raw buffer
-  if (mime === 'application/pdf') {
-    return { type: 'pdf', content: data, mimeType: 'application/pdf' };
-  }
-
-  // Plain text, JSON, XML: return as text
-  if (mime.startsWith('text/') && !PANDOC_FORMAT_MAP[mime]) {
-    return { type: 'text', content: data.toString('utf-8'), mimeType: 'text/plain' };
-  }
-  if (mime === 'application/json' || mime === 'application/xml') {
-    return { type: 'text', content: data.toString('utf-8'), mimeType: 'text/plain' };
+  // PDF, plain text, JSON and XML go out as they are, in pieces
+  const asText = mime === 'application/json' || mime === 'application/xml';
+  if (
+    mime === 'application/pdf' ||
+    asText ||
+    (mime.startsWith('text/') && !PANDOC_FORMAT_MAP[mime])
+  ) {
+    const { stream, size } = await getStorage().openStream(attachment.storageKey);
+    return {
+      type: 'file',
+      stream,
+      size,
+      mimeType: mime === 'application/pdf' ? mime : 'text/plain; charset=utf-8',
+    };
   }
 
   // Pandoc-convertible formats: convert to HTML
   const pandocFormat = PANDOC_FORMAT_MAP[mime];
   if (pandocFormat) {
     const ext = path.extname(attachment.originalName).slice(1) || 'bin';
-    const tmpFile = await writeToTempFile(data, ext);
+    const tmpFile = await copyToTempFile(attachment.storageKey, ext);
     try {
       const { stdout } = await execFileAsync('pandoc', [
         '-f',
@@ -538,10 +574,8 @@ export async function convertToMarkdown(
     throw new AppError(415, 'Cannot convert this file type to markdown', 'UNSUPPORTED_CONVERSION');
   }
 
-  const storage = getStorage();
-  const data = await storage.get(attachment.storageKey);
   const ext = path.extname(attachment.originalName).slice(1) || 'bin';
-  const tmpFile = await writeToTempFile(data, ext);
+  const tmpFile = await copyToTempFile(attachment.storageKey, ext);
 
   try {
     const { stdout } = await execFileAsync('pandoc', ['-f', pandocFormat, '-t', 'gfm', tmpFile]);

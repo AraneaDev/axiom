@@ -1,5 +1,8 @@
 import fs from 'fs/promises';
+import type { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 
+import type { Response } from 'express';
 import { z } from 'zod';
 
 import { pageBySlugAccess, projectAction } from '../../actions/authorize';
@@ -7,6 +10,7 @@ import { defineAction, type ActionContext } from '../../actions/define';
 import { MAX_KEY_LENGTH, parseKey, resolveKey } from '../../actions/keys';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
 import { MAX_DB_INT, validate } from '../../utils/validation/common-validators';
 
 import { receiveMultipart } from './attachments.routes';
@@ -119,6 +123,22 @@ async function writeTarget(
   if ('projectId' in ids) await writeIssueRef(ctx, ids);
   else await writePageRef(ctx, ids);
   authorizedTargets.set(ctx, ids);
+}
+
+/**
+ * Answer with a file in pieces, so that it isn't held in memory. Once it has started there is no
+ * error to answer with: the connection just ends, which a client sees as an incomplete download.
+ * @param res - The response, with its other headers set
+ * @param stream - The file
+ * @param size - Its size in bytes
+ */
+async function sendStream(res: Response, stream: Readable, size: number): Promise<void> {
+  res.setHeader('Content-Length', size);
+  await pipeline(stream, res).catch((err: NodeJS.ErrnoException) => {
+    if (err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+      logger.warn('attachment stream failed', { code: err.code });
+    }
+  });
 }
 
 /**
@@ -267,7 +287,10 @@ const attachmentActions = [
     output: record,
     rest: { method: 'GET', path: `${BASE}/:id/meta` },
     authorize: readAttachment,
-    handler: async (ctx, { id }) => attachmentsService.getAttachmentAuthorized(id, ctx.userId),
+    handler: async (ctx, { id }) =>
+      attachmentsService.toAttachmentView(
+        await attachmentsService.getAttachmentAuthorized(id, ctx.userId),
+      ),
   }),
   defineAction({
     name: 'attachment.preview',
@@ -284,9 +307,9 @@ const attachmentActions = [
       const result = await attachmentsService.preview(id, ctx.userId);
       if (result.type === 'redirect') {
         res.redirect(`/api/attachments/${id}`);
-      } else if (result.type === 'pdf') {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.send(result.content);
+      } else if (result.type === 'file') {
+        res.setHeader('Content-Type', result.mimeType);
+        await sendStream(res, result.stream!, result.size!);
       } else {
         res.setHeader('Content-Type', result.mimeType);
         res.send(result.content);
@@ -316,14 +339,16 @@ const attachmentActions = [
     authorize: readAttachment,
     handler: async (ctx, { id }) => {
       const { res } = httpOf(ctx);
-      const { attachment, data } = await attachmentsService.downloadAttachment(id, ctx.userId);
+      const { attachment, stream, size } = await attachmentsService.downloadAttachment(
+        id,
+        ctx.userId,
+      );
       res.setHeader('Content-Type', attachment.mimeType);
-      res.setHeader('Content-Length', data.length);
       res.setHeader(
         'Content-Disposition',
         `inline; filename="${encodeURIComponent(attachment.originalName)}"`,
       );
-      res.send(data);
+      await sendStream(res, stream, size);
     },
   }),
   defineAction({

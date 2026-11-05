@@ -1,6 +1,8 @@
 /**
  * Storage backend interface for file persistence.
  */
+import type { Readable } from 'stream';
+
 export interface StorageBackend {
   put(key: string, data: Buffer, contentType: string): Promise<void>;
   /**
@@ -9,6 +11,11 @@ export interface StorageBackend {
    */
   putFile(key: string, tempPath: string, contentType: string): Promise<void>;
   get(key: string): Promise<Buffer>;
+  /**
+   * Open a stored file to read in pieces. A file that isn't there rejects here, before anything
+   * has been answered, rather than as a stream error halfway through a response.
+   */
+  openStream(key: string): Promise<{ stream: Readable; size: number }>;
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
 }
