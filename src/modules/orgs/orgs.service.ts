@@ -116,7 +116,21 @@ export async function listUserOrgs(userId: string) {
  * @returns The updated organization record
  */
 export async function updateOrg(orgId: string, data: { name?: string; description?: string }) {
+  await assertOrgExists(orgId);
   return prisma.organization.update({ where: { id: orgId }, data });
+}
+
+/**
+ * Throw the 404 for an org that does not exist, as a platform admin passes the permission check
+ * on any id.
+ * @param orgId - The organization ID
+ * @throws {AppError} 404
+ */
+async function assertOrgExists(orgId: string): Promise<void> {
+  await findOrThrow(
+    prisma.organization.findUnique({ where: { id: orgId }, select: { id: true } }),
+    ERR.ORGANIZATION_NOT_FOUND,
+  );
 }
 
 /**
@@ -124,6 +138,7 @@ export async function updateOrg(orgId: string, data: { name?: string; descriptio
  * @param orgId - The organization ID
  */
 export async function deleteOrg(orgId: string) {
+  await assertOrgExists(orgId);
   await prisma.organization.delete({ where: { id: orgId } });
 }
 
@@ -155,6 +170,7 @@ export async function addOrgMember(
   role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'GUEST' = 'MEMBER',
   actorId?: string,
 ) {
+  await assertOrgExists(orgId);
   if (actorId) await assertCanGrantOrgRole(orgId, actorId, role);
   await checkUnique('orgMembership', { userId, orgId }, 'User is already a member');
 

@@ -144,6 +144,7 @@ export async function listOrgTeams(
  * @returns The updated team record
  */
 export async function updateTeam(teamId: string, data: { name?: string; description?: string }) {
+  await findOrThrow(prisma.team.findUnique({ where: { id: teamId } }), ERR.TEAM_NOT_FOUND);
   return prisma.team.update({ where: { id: teamId }, data });
 }
 
@@ -152,6 +153,7 @@ export async function updateTeam(teamId: string, data: { name?: string; descript
  * @param teamId - The team ID
  */
 export async function deleteTeam(teamId: string) {
+  await findOrThrow(prisma.team.findUnique({ where: { id: teamId } }), ERR.TEAM_NOT_FOUND);
   await prisma.team.delete({ where: { id: teamId } });
 }
 
