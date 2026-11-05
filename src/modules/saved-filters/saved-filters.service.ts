@@ -13,6 +13,7 @@ import {
   type SharingInput,
 } from '../../lib/sharing';
 import { AppError } from '../../middleware/errorHandler';
+import { viewableProjectsWhere } from '../search/search-access';
 
 const WHAT = 'Saved query';
 const LIST_LIMIT = 100;
@@ -99,6 +100,10 @@ function toStored(body: QueryBody): Prisma.InputJsonValue {
     assertParses(body.text);
     return { kind: QUERY_KIND, text: body.text };
   }
+  // A key of this name would make a record pass for a text query, past the parse above
+  if (body.query !== undefined && Object.hasOwn(body.query, 'kind')) {
+    throw new AppError(400, 'A filter record cannot have a key called kind');
+  }
   return body.query as Prisma.InputJsonValue;
 }
 
@@ -133,9 +138,24 @@ export async function mayOpen(userId: string, id: string): Promise<boolean> {
 }
 
 /**
+ * Throw unless the user can see the project. One they cannot see answers as one that does not exist.
+ * @param userId - The user
+ * @param projectId - The project
+ * @throws {AppError} 404
+ */
+async function assertProjectVisible(userId: string, projectId: string): Promise<void> {
+  const project = await prisma.project.findFirst({
+    where: { AND: [await viewableProjectsWhere(userId), { id: projectId }] },
+    select: { id: true },
+  });
+  if (!project) throw new AppError(404, 'Project not found');
+}
+
+/**
  * Create a saved query, private unless shared with a team or org the user belongs to.
  * @param userId - The creator
  * @param data - Name, the query as a record or text, and the sharing
+ * @throws {AppError} 400 for a query that can't be stored; 404 for a project they cannot see
  * @param data.name
  * @param data.description
  * @param data.projectId
@@ -153,6 +173,7 @@ export async function create(
   },
 ): Promise<SavedQueryRecord> {
   const query = toStored(data.body);
+  if (data.projectId !== undefined) await assertProjectVisible(userId, data.projectId);
   const sharing = await resolveSharing(userId, data.sharing);
   const row = await prisma.savedFilter.create({
     data: {

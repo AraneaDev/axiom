@@ -322,6 +322,42 @@ describe('saved queries', () => {
       expect(next.body.items).toHaveLength(2);
     });
 
+    it('answers the same 404 for a project that does not exist and one the caller cannot see', async () => {
+      const save = async (projectId: string) =>
+        authPost('/api/saved-filters', teamMember.token, { name: 'Scoped', text, projectId });
+      const missing = await save('no-such-project');
+      const hidden = await save(b.projectId);
+      expect(missing.status).toBe(404);
+      expect(hidden.status).toBe(404);
+      expect(hidden.body).toEqual(missing.body);
+      const viaAct = await authPost('/api/act', teamMember.token, {
+        action: 'savedQuery.create',
+        input: { name: 'Scoped', text, projectId: b.projectId },
+      });
+      expect(viaAct.status).toBe(404);
+      expect(viaAct.body.error.message).toBe(missing.body.error.message);
+      expect((await save(a.projectId)).status).toBe(201);
+    });
+
+    it('refuses a record that carries kind, on create and on update', async () => {
+      const smuggled = { kind: 'query', text: 'garbage(((' };
+      const created = await authPost('/api/saved-filters', creator.token, {
+        name: 'Smuggled',
+        query: smuggled,
+      });
+      expect(created.status).toBe(400);
+      const id = await create({ name: 'Fine', query: { type: 'BUG' } });
+      const updated = await authPatch(`/api/saved-filters/${id}`, creator.token, {
+        query: smuggled,
+      });
+      expect(updated.status).toBe(400);
+      const viaAct = await authPost('/api/act', creator.token, {
+        action: 'savedQuery.create',
+        input: { name: 'Smuggled', query: { kind: 'x' } },
+      });
+      expect(viaAct.status).toBe(400);
+    });
+
     it('narrows a query saved on a project to that project', async () => {
       const id = await create({ name: 'Scoped', text, projectId: b.projectId });
       const res = await authPost(`/api/saved-filters/${id}/run`, creator.token);
