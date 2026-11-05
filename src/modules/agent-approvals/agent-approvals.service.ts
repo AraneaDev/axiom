@@ -128,7 +128,7 @@ async function previewOf(
 ): Promise<string> {
   const text = def.preview
     ? await def.preview(ctx, input)
-    : `${def.summary}: ${sortedJson(stored)}`;
+    : `Run ${def.name} (${def.summary.replace(/[\s.:;]+$/, '')}) with ${sortedJson(stored)}`;
   return text.length > MAX_PREVIEW_LENGTH
     ? text.slice(0, MAX_PREVIEW_LENGTH - CUT_MARKER.length) + CUT_MARKER
     : text;

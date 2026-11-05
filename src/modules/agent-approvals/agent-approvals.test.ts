@@ -122,6 +122,17 @@ registerActions([
     },
   }),
   defineAction({
+    name: 'approvalTest.stopped',
+    destructive: true,
+    area: 'issues',
+    kind: 'write',
+    summary: 'Ends in a full stop.',
+    input: z.object({ value: z.string() }),
+    output: z.looseObject({ id: z.string() }),
+    authorize: () => Promise.resolve(),
+    handler: () => Promise.resolve({ id: 'x' }),
+  }),
+  defineAction({
     name: 'approvalTest.keys',
     destructive: true,
     area: 'issues',
@@ -314,7 +325,16 @@ describe('agent approvals', () => {
 
     it('falls back to the summary and the input for a preview', async () => {
       const res = await act(ownerToken, { action: 'approvalTest.plain', input: { value: 'v' } });
-      expect(res.body.preview).toBe('A gated test action without a preview: {"value":"v"}');
+      expect(res.body.preview).toBe(
+        'Run approvalTest.plain (A gated test action without a preview) with {"value":"v"}',
+      );
+    });
+
+    it('reads the fallback as a sentence when the summary ends in a full stop', async () => {
+      const res = await act(ownerToken, { action: 'approvalTest.stopped', input: { value: 'v' } });
+      expect(res.body.preview).toBe(
+        'Run approvalTest.stopped (Ends in a full stop) with {"value":"v"}',
+      );
     });
 
     it('sorts the keys of the fallback, whatever order the agent sent', async () => {
@@ -323,7 +343,7 @@ describe('agent approvals', () => {
         input: { zebra: 'z', alpha: { b: 1, a: 2 } },
       });
       expect(res.body.preview).toBe(
-        'A gated test action with several fields: {"alpha":{"a":2,"b":1},"zebra":"z"}',
+        'Run approvalTest.keys (A gated test action with several fields) with {"alpha":{"a":2,"b":1},"zebra":"z"}',
       );
     });
 
