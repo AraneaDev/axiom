@@ -118,6 +118,70 @@ test.describe('Live blocks in wiki pages', () => {
     await context.close();
   });
 
+  test('a block whose code cannot be fetched leaves the page standing', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(90_000);
+    const mark = `livefail${Date.now()}`;
+    const admin = await adminApi(request);
+    const dashboard = await admin.post('/api/dashboards', { name: `Fail ${mark}` });
+    await admin.post(`/api/dashboards/${dashboard.id}/widgets`, {
+      type: 'COUNT',
+      title: 'Everything high',
+      query: 'priority = HIGH',
+    });
+    const wiki = await wikiApi(request);
+    const slug = `fail-${mark}`;
+    await wiki.createPage(
+      slug,
+      `Fail ${mark}`,
+      [
+        'Text before.',
+        `:::query dashboard:${dashboard.id}:::`,
+        'Text between.',
+        ':::query inline:"priority = HIGH":::',
+        'Text after.',
+      ].join('\n\n'),
+    );
+
+    await login(page, DEMO_USERS.admin);
+    const chunk = /\/QueryBlock(\.tsx|-[^/]*\.js)/;
+    await page.route(chunk, (route) => route.abort());
+
+    await page.goto(`${WIKI_URL}/docs/${slug}`);
+    const message = page.getByText('This block could not be loaded');
+    await expect(message).toHaveCount(2, { timeout: 15_000 });
+    await expect(page.getByText('Text before.')).toBeVisible();
+    await expect(page.getByText('Text between.')).toBeVisible();
+    await expect(page.getByText('Text after.')).toBeVisible();
+    await expect(page.getByText('Something went wrong')).toHaveCount(0);
+
+    // The same in the editor
+    await page.goto(`${WIKI_URL}/docs/${slug}/edit`);
+    const editor = page.locator('.ProseMirror').first();
+    await expect(editor.getByText('This block could not be loaded')).toHaveCount(2, {
+      timeout: 15_000,
+    });
+    await expect(editor.getByText('Text after.')).toBeVisible();
+
+    // Chromium remembers the failed import, so a retry fails even with the code back, and the
+    // block then offers the reload that does bring it back
+    await page.unroute(chunk);
+    await editor.getByRole('button', { name: 'Try again' }).first().click();
+    await editor.getByRole('button', { name: 'Reload page' }).click();
+    await expect(
+      page.locator('.ProseMirror').first().getByTestId('widget-count').first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // And in view mode
+    await page.goto(`${WIKI_URL}/docs/${slug}`);
+    await expect(page.getByTestId('query-block').first().getByTestId('widget-count')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId('query-block')).toHaveCount(2);
+  });
+
   test('the slash menu puts a dashboard in a page, and the page keeps it', async ({
     page,
     request,

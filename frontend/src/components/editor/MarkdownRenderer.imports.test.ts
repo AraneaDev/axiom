@@ -6,14 +6,18 @@ import { describe, expect, it } from 'vitest';
 const SRC = path.resolve(__dirname, '../..');
 
 /**
- * What a source file imports at load time: `import type` and `import()` load nothing.
- * @param file - Absolute path
+ * What a source loads when it loads: `import type`, `export type` and `import()` load nothing, and
+ * a re-export loads what it names as an import does.
+ * @param source - The source text
  */
+function staticSpecifiers(source: string): string[] {
+  return [
+    ...source.matchAll(/^(?:import|export)\s+(?!type\b)(?:[^'";]*?\sfrom\s+)?['"]([^'"]+)['"]/gm),
+  ].map((match) => match[1]);
+}
+
 function staticImports(file: string): string[] {
-  const source = readFileSync(file, 'utf8');
-  return [...source.matchAll(/^import\s+(?!type\b)(?:[^'"]*?\sfrom\s+)?['"]([^'"]+)['"]/gm)].map(
-    (match) => match[1],
-  );
+  return staticSpecifiers(readFileSync(file, 'utf8'));
 }
 
 function resolveLocal(from: string, specifier: string): string | null {
@@ -52,6 +56,25 @@ function reach(entry: string): { files: string[]; packages: string[] } {
   visit(path.join(SRC, entry));
   return { files: [...seen].map((file) => path.relative(SRC, file)), packages: [...packages] };
 }
+
+describe('reading what a source loads', () => {
+  it.each([
+    ["import { a } from './a';", ['./a']],
+    ["import a, {\n  b,\n} from 'pkg';", ['pkg']],
+    ["import './side-effect';", ['./side-effect']],
+    ["export { a } from './barrel';", ['./barrel']],
+    ["export * from './all';", ['./all']],
+    ["export * as all from 'pkg';", ['pkg']],
+    ["export {\n  a,\n  b,\n} from './many';", ['./many']],
+    ["import type { A } from './types';", []],
+    ["export type { A } from './types';", []],
+    ["export const a = 'not an import';", []],
+    ["export function f() {\n  return 'text';\n}", []],
+    ["const load = () => import('./later');", []],
+  ] as const)('%s', (source, expected) => {
+    expect(staticSpecifiers(source)).toEqual(expected);
+  });
+});
 
 describe('what read-only pages load for live blocks', () => {
   const renderer = reach('components/editor/MarkdownRenderer.tsx');
