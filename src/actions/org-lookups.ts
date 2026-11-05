@@ -196,3 +196,15 @@ export async function orgsOfCustomField(fieldId: string): Promise<string[]> {
   });
   return row ? [row.project.team.orgId] : [];
 }
+
+/**
+ * The org of the project an approval request's issue is in.
+ * @param requestId - The approval request
+ */
+export async function orgsOfApprovalRequest(requestId: string): Promise<string[]> {
+  const row = await prisma.approvalRequest.findUnique({
+    where: { id: requestId },
+    select: { issue: { select: { project: PROJECT_ORG } } },
+  });
+  return row ? [row.issue.project.team.orgId] : [];
+}

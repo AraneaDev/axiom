@@ -92,8 +92,8 @@ registerActions([
   defineAction({
     name: 'boardColumn.update',
     // A rename or a change of isDone changes what a column means to workflows, gates and reports
-    // (ruling B3), and the action cannot tell which field a call touches before it runs
-    destructive: true,
+    // (ruling B3), so a token's call waits for approval then; a limit alone does not (A24)
+    permissionChange: ({ name, isDone }) => name !== undefined || isDone !== undefined,
     area: 'boards',
     kind: 'write',
     summary: 'Rename a column, mark it done or not, or set its work in progress limit',

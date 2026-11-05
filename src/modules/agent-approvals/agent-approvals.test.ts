@@ -855,29 +855,9 @@ describe('agent approvals', () => {
       legacyRouteDeletes(route.method, normalizeApiPath(concrete(route.path))),
     );
 
-    it('are all the DELETE routes and the writes listed by A19, A20 and A21', () => {
-      const writes = deleting.filter((route) => route.method !== 'DELETE');
-      expect(writes.map((route) => `${route.method} ${route.path}`).sort()).toEqual([
-        'PATCH /api/projects/:projectId/approval-gates/:gateId',
-        'POST /api/approval-requests/:requestId/vote',
-        'POST /api/projects/:projectId/approval-gates',
-      ]);
-      const deletes = LEGACY_ROUTES.filter((route) => route.method === 'DELETE');
-      expect(deleting.filter((route) => route.method === 'DELETE')).toEqual(deletes);
-      expect(deletes.length).toBeGreaterThan(0);
+    it('are none: every route that deletes or takes a person out of a check is a registry action', () => {
+      expect(deleting).toEqual([]);
     });
-
-    it.each(LEGACY_ROUTES.filter((route) => route.method === 'DELETE').map((r) => r.path))(
-      'refuses a token on DELETE %s',
-      async (path) => {
-        const res = await request(app)
-          .delete(concrete(path))
-          .set('Authorization', ownerToken)
-          .set('X-Requested-With', 'XMLHttpRequest');
-        expect(res.status).toBe(403);
-        expect(['NEEDS_REGISTRY_ACTION', 'SCOPE']).toContain(res.body.error.code);
-      },
-    );
 
     describe('human checks (A20)', () => {
       /** A gate between two new columns of the project. */
@@ -899,7 +879,7 @@ describe('agent approvals', () => {
         ['enabled', { enabled: false }],
         ['minApprovals', { minApprovals: 5 }],
         ['allowSelfApproval', { allowSelfApproval: true }],
-      ])('refuses a token changing %s of a gate', async (_, body) => {
+      ])('holds a token changing %s of a gate for approval', async (_, body) => {
         const gate = await createGate();
         const path = `/api/projects/${ctx.projectId}/approval-gates/${gate.id}`;
         for (const spelled of [path, `${path}/`, path.replace('/api/', '/API/')]) {
@@ -908,15 +888,14 @@ describe('agent approvals', () => {
             .set('Authorization', ownerToken)
             .set('X-Requested-With', 'XMLHttpRequest')
             .send(body);
-          expect(res.status).toBe(403);
-          expect(res.body.error.code).toBe('NEEDS_REGISTRY_ACTION');
-          expect(res.body.error.message).toContain('registry action');
+          expect(res.status).toBe(202);
+          expect(res.body.status).toBe('pending_approval');
         }
         const row = await prisma.approvalGate.findUniqueOrThrow({ where: { id: gate.id } });
         expect(row).toMatchObject({ enabled: true, minApprovals: 1, allowSelfApproval: false });
       });
 
-      it('refuses a token creating a gate, which could undo a stricter one', async () => {
+      it('holds a token creating a gate for approval, as it could undo a stricter one', async () => {
         const gate = await createGate();
         const before = await prisma.approvalGate.count({ where: { projectId: ctx.projectId } });
         const path = `/api/projects/${ctx.projectId}/approval-gates`;
@@ -931,8 +910,8 @@ describe('agent approvals', () => {
               minApprovals: 1,
               allowSelfApproval: true,
             });
-          expect(res.status).toBe(403);
-          expect(res.body.error.code).toBe('NEEDS_REGISTRY_ACTION');
+          expect(res.status).toBe(202);
+          expect(res.body.status).toBe('pending_approval');
         }
         expect(await prisma.approvalGate.count({ where: { projectId: ctx.projectId } })).toBe(
           before,
@@ -949,14 +928,28 @@ describe('agent approvals', () => {
         expect(res.status).toBe(200);
       });
 
-      it('refuses a token voting on an approval request', async () => {
+      it('holds a token voting on an approval request for approval', async () => {
+        const gate = await createGate();
+        const issue = await createIssue('Waits for a vote');
+        const pending = await prisma.approvalRequest.create({
+          data: {
+            issueId: issue.id,
+            approvalGateId: gate.id,
+            targetColumnId: gate.toColumnId,
+            requestedById: owner.id,
+            approverIds: [owner.id],
+          },
+        });
         const res = await request(app)
-          .post('/api/approval-requests/probe/vote')
+          .post(`/api/approval-requests/${pending.id}/vote`)
           .set('Authorization', ownerToken)
           .set('X-Requested-With', 'XMLHttpRequest')
           .send({ decision: 'APPROVED' });
-        expect(res.status).toBe(403);
-        expect(res.body.error.code).toBe('NEEDS_REGISTRY_ACTION');
+        expect(res.status).toBe(202);
+        expect(res.body.status).toBe('pending_approval');
+        expect(await prisma.approvalVote.count({ where: { approvalRequestId: pending.id } })).toBe(
+          0,
+        );
       });
 
       it.each([
@@ -969,27 +962,14 @@ describe('agent approvals', () => {
       });
     });
 
-    it('says what is needed, and deletes nothing', async () => {
-      const stamp = Date.now();
-      const [from, to] = await Promise.all(
-        ['from', 'to'].map((name, position) =>
-          prisma.boardColumn.create({
-            data: { projectId: ctx.projectId, name: `${name}-${stamp}`, position: 900 + position },
-          }),
-        ),
-      );
-      const rule = await prisma.workflowRule.create({
-        data: { projectId: ctx.projectId, fromColumnId: from.id, toColumnId: to.id },
-      });
+    it('still refuses a token a DELETE that no registry action serves, and says what is needed', async () => {
       const res = await request(app)
-        .delete(`/api/projects/${ctx.projectId}/workflow-rules/${rule.id}`)
+        .delete('/api/notifications/probe')
         .set('Authorization', ownerToken)
         .set('X-Requested-With', 'XMLHttpRequest');
       expect(res.status).toBe(403);
       expect(res.body.error.message).toContain('registry action');
-      expect(await prisma.workflowRule.findUnique({ where: { id: rule.id } })).not.toBeNull();
       expect(await prisma.agentApproval.count({ where: { userId: owner.id } })).toBe(0);
-      await prisma.boardColumn.deleteMany({ where: { id: { in: [from.id, to.id] } } });
     });
 
     it('still lets a browser session delete there', async () => {

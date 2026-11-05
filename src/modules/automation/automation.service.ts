@@ -71,8 +71,8 @@ export { AUTOMATION_ISSUE_INCLUDE } from '../../utils/prisma-selects';
 interface CreateRuleData {
   name: string;
   trigger: AutomationTrigger;
-  condition?: string;
-  conditions?: AutomationCondition[];
+  condition?: string | null;
+  conditions?: AutomationCondition[] | null;
   actions: AutomationAction[];
   enabled?: boolean;
 }

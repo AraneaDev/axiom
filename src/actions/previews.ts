@@ -1422,3 +1422,312 @@ export async function roadmapBucketDelete(projectId: string, bucketId: string): 
     `leaving ${amount(bucket._count.issues, 'issue')} without a bucket as of this request`
   );
 }
+
+const GATE_COLUMNS = {
+  fromColumn: { select: { name: true } },
+  toColumn: { select: { name: true } },
+  project: { select: { prefix: true } },
+} as const;
+
+/**
+ * The names of columns of a project, in the order asked. A column outside the project is a 404.
+ * @param projectId - The project in the input
+ * @param columnIds - The columns
+ */
+async function columnNames(projectId: string, columnIds: string[]): Promise<string[]> {
+  const rows = await prisma.boardColumn.findMany({
+    where: { id: { in: columnIds }, projectId },
+    select: { id: true, name: true },
+  });
+  return columnIds.map((id) => {
+    const row = rows.find((candidate) => candidate.id === id);
+    if (!row) throw new AppError(404, ERR.COLUMN_NOT_FOUND);
+    return quoted(row.name);
+  });
+}
+
+/**
+ * The project's prefix.
+ * @param projectId - The project
+ */
+async function prefixOf(projectId: string): Promise<string> {
+  const project = await findOrThrow(
+    prisma.project.findUnique({ where: { id: projectId }, select: { prefix: true } }),
+    ERR.PROJECT_NOT_FOUND,
+  );
+  return project.prefix;
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param fromColumnId - The column a card leaves
+ * @param toColumnId - The column the gate guards
+ * @param minApprovals - Approvals needed, when given
+ * @param allowSelfApproval - Whether the requester may approve, when given
+ */
+export async function approvalGateCreate(
+  projectId: string,
+  fromColumnId: string,
+  toColumnId: string,
+  minApprovals: number,
+  allowSelfApproval: boolean,
+): Promise<string> {
+  const [from, to] = await columnNames(projectId, [fromColumnId, toColumnId]);
+  return (
+    `Create an approval gate on project ${await prefixOf(projectId)} from column ${from} to ` +
+    `column ${to}, needing ${amount(minApprovals, 'approval')}, self-approval ` +
+    `${allowSelfApproval ? 'allowed' : 'not allowed'}. A new gate can be the weaker way into ` +
+    'a column that another gate guards'
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param gateId - The gate
+ * @param fields - What the call would change
+ * @param fields.minApprovals - A new number of approvals
+ * @param fields.allowSelfApproval - A new self-approval setting
+ * @param fields.enabled - Whether the gate is switched on or off
+ */
+export async function approvalGateUpdate(
+  projectId: string,
+  gateId: string,
+  fields: { minApprovals?: number; allowSelfApproval?: boolean; enabled?: boolean },
+): Promise<string> {
+  const gate = await findOrThrow(
+    prisma.approvalGate.findFirst({
+      where: { id: gateId, projectId },
+      select: { ...GATE_COLUMNS, enabled: true, minApprovals: true, allowSelfApproval: true },
+    }),
+    'Approval gate not found',
+  );
+  const changes: string[] = [];
+  if (fields.minApprovals !== undefined) {
+    changes.push(`needs ${amount(fields.minApprovals, 'approval')} (now ${gate.minApprovals})`);
+  }
+  if (fields.allowSelfApproval !== undefined) {
+    changes.push(
+      `${fields.allowSelfApproval ? 'allows' : 'refuses'} self-approval ` +
+        `(now ${gate.allowSelfApproval ? 'allowed' : 'refused'})`,
+    );
+  }
+  if (fields.enabled !== undefined) {
+    changes.push(
+      `is switched ${fields.enabled ? 'on' : 'off'} (now ${gate.enabled ? 'on' : 'off'})`,
+    );
+  }
+  return (
+    `Change the approval gate from column ${quoted(gate.fromColumn.name)} to column ` +
+    `${quoted(gate.toColumn.name)} of project ${gate.project.prefix}: it ` +
+    `${changes.join(', ') || 'stays as it is'}`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param gateId - The gate
+ */
+export async function approvalGateDelete(projectId: string, gateId: string): Promise<string> {
+  const gate = await findOrThrow(
+    prisma.approvalGate.findFirst({
+      where: { id: gateId, projectId },
+      select: {
+        ...GATE_COLUMNS,
+        _count: { select: { requests: { where: { status: 'PENDING' } } } },
+      },
+    }),
+    'Approval gate not found',
+  );
+  return (
+    `Delete the approval gate from column ${quoted(gate.fromColumn.name)} to column ` +
+    `${quoted(gate.toColumn.name)} of project ${gate.project.prefix}, cancelling its ` +
+    `${amount(gate._count.requests, 'pending request')} as of this request`
+  );
+}
+
+/**
+ * @param requestId - The approval request
+ * @param decision - APPROVED or REJECTED
+ */
+export async function approvalRequestVote(requestId: string, decision: string): Promise<string> {
+  const request = await findOrThrow(
+    prisma.approvalRequest.findUnique({
+      where: { id: requestId },
+      select: {
+        status: true,
+        issue: { select: { ...ISSUE_KEY, title: true } },
+        targetColumn: { select: { name: true } },
+      },
+    }),
+    'Approval request not found',
+  );
+  return (
+    `Vote ${decision} on the request to move ${keyOf(request.issue)} ` +
+    `${quoted(request.issue.title)} to column ${quoted(request.targetColumn.name)}. ` +
+    `The request is ${request.status} as of this request`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param fromColumnId - The column a card leaves
+ * @param toColumnId - The column it may move to
+ */
+export async function workflowRuleCreate(
+  projectId: string,
+  fromColumnId: string,
+  toColumnId: string,
+): Promise<string> {
+  const [from, to] = await columnNames(projectId, [fromColumnId, toColumnId]);
+  return (
+    `Create the workflow rule that lets an issue move from column ${from} to column ${to} ` +
+    `in project ${await prefixOf(projectId)}. Once a column has rules, only moves a rule names ` +
+    'are allowed'
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param ruleId - The rule
+ * @param fields - What the call would change
+ * @param fields.fromColumnId - A new source column
+ * @param fields.toColumnId - A new target column
+ */
+export async function workflowRuleUpdate(
+  projectId: string,
+  ruleId: string,
+  fields: { fromColumnId?: string; toColumnId?: string },
+): Promise<string> {
+  const rule = await findOrThrow(
+    prisma.workflowRule.findFirst({
+      where: { id: ruleId, projectId },
+      select: { fromColumn: { select: { name: true } }, toColumn: { select: { name: true } } },
+    }),
+    'Workflow rule not found',
+  );
+  const from = fields.fromColumnId
+    ? (await columnNames(projectId, [fields.fromColumnId]))[0]
+    : quoted(rule.fromColumn.name);
+  const to = fields.toColumnId
+    ? (await columnNames(projectId, [fields.toColumnId]))[0]
+    : quoted(rule.toColumn.name);
+  return (
+    `Change the workflow rule from column ${quoted(rule.fromColumn.name)} to column ` +
+    `${quoted(rule.toColumn.name)} of project ${await prefixOf(projectId)} to allow the move ` +
+    `from ${from} to ${to}`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param ruleId - The rule
+ */
+export async function workflowRuleDelete(projectId: string, ruleId: string): Promise<string> {
+  const rule = await findOrThrow(
+    prisma.workflowRule.findFirst({
+      where: { id: ruleId, projectId },
+      select: {
+        fromColumn: { select: { name: true } },
+        toColumn: { select: { name: true } },
+        project: { select: { prefix: true } },
+      },
+    }),
+    'Workflow rule not found',
+  );
+  return (
+    `Delete the workflow rule from column ${quoted(rule.fromColumn.name)} to column ` +
+    `${quoted(rule.toColumn.name)} of project ${rule.project.prefix}`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param ruleId - The rule
+ */
+export async function automationRuleDelete(projectId: string, ruleId: string): Promise<string> {
+  const rule = await findOrThrow(
+    prisma.automationRule.findFirst({
+      where: { id: ruleId, projectId },
+      select: { name: true, enabled: true, project: { select: { prefix: true } } },
+    }),
+    'Automation rule not found',
+  );
+  return (
+    `Delete the ${rule.enabled ? 'enabled' : 'disabled'} automation rule ${quoted(rule.name)} ` +
+    `of project ${rule.project.prefix}`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param formId - The form
+ */
+export async function formDelete(projectId: string, formId: string): Promise<string> {
+  const form = await findOrThrow(
+    prisma.form.findFirst({
+      where: { id: formId, projectId },
+      select: {
+        name: true,
+        slug: true,
+        status: true,
+        project: { select: { prefix: true } },
+        _count: { select: { pages: true, submissions: true } },
+      },
+    }),
+    ERR.FORM_NOT_FOUND,
+  );
+  return (
+    `Delete the ${form.status} form ${form.slug} ${quoted(form.name)} of project ` +
+    `${form.project.prefix}, with its ${amount(form._count.pages, 'page')} and ` +
+    `${amount(form._count.submissions, 'submission')} as of this request`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param pageId - The form page
+ */
+export async function formPageDelete(projectId: string, pageId: string): Promise<string> {
+  const page = await findOrThrow(
+    prisma.formPage.findFirst({
+      where: { id: pageId, form: { projectId } },
+      select: {
+        title: true,
+        form: { select: { slug: true, project: { select: { prefix: true } } } },
+        _count: { select: { fields: true } },
+      },
+    }),
+    ERR.PAGE_NOT_FOUND,
+  );
+  return (
+    `Delete the page ${quoted(page.title)} of the form ${page.form.slug} in project ` +
+    `${page.form.project.prefix}, with its ${amount(page._count.fields, 'field')} as of this request`
+  );
+}
+
+/**
+ * @param projectId - The project in the input
+ * @param fieldId - The form field
+ */
+export async function formFieldDelete(projectId: string, fieldId: string): Promise<string> {
+  const field = await findOrThrow(
+    prisma.formField.findFirst({
+      where: { id: fieldId, page: { form: { projectId } } },
+      select: {
+        label: true,
+        type: true,
+        page: {
+          select: {
+            title: true,
+            form: { select: { slug: true, project: { select: { prefix: true } } } },
+          },
+        },
+      },
+    }),
+    ERR.FIELD_NOT_FOUND,
+  );
+  return (
+    `Delete the ${field.type} field ${quoted(field.label)} on the page ${quoted(field.page.title)} ` +
+    `of the form ${field.page.form.slug} in project ${field.page.form.project.prefix}`
+  );
+}

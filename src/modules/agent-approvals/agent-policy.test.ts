@@ -495,6 +495,22 @@ describe('agent policies', () => {
     });
   });
 
+  describe('a column change that touches what a column means (B3)', () => {
+    it('makes boardColumn.update wait for a rename or isDone, and lets a limit alone pass', async () => {
+      const boards = { ...tokenCtx, scopes: ['boards:write'] };
+      const column = await prisma.boardColumn.create({
+        data: { projectId: ctx.projectId, name: `limit-${Date.now()}`, position: 500 },
+      });
+      const base = { projectId: ctx.projectId, columnId: column.id };
+      expect(await waits('boardColumn.update', { ...base, name: 'Renamed' }, boards)).toBe(true);
+      expect(await waits('boardColumn.update', { ...base, isDone: true }, boards)).toBe(true);
+      expect(await waits('boardColumn.update', { ...base, wipLimit: 3 }, boards)).toBe(false);
+      const kept = await prisma.boardColumn.findUniqueOrThrow({ where: { id: column.id } });
+      expect(kept).toMatchObject({ name: column.name, isDone: false, wipLimit: 3 });
+      await prisma.boardColumn.delete({ where: { id: column.id } });
+    });
+  });
+
   describe('raw actions named in a rule', () => {
     const file = { filename: 'a.png', mimeType: 'image/png', size: 8 };
 

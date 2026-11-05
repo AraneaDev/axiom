@@ -30,13 +30,9 @@ import { mountStaticFrontend, resolveStaticDir } from './middleware/static-front
 import activityRoutes from './modules/activity/activity.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
 import approvalActionRoutes from './modules/approvals/approvals-actions.routes';
-import approvalGateRoutes from './modules/approvals/approvals.routes';
 import { signedUploadRouter } from './modules/attachments/attachments.routes';
 import authRoutes from './modules/auth/auth.routes';
-import automationRoutes from './modules/automation/automation.routes';
 import { parseTrustProxy } from './modules/forms/client-ip';
-import formRoutes from './modules/forms/forms.routes';
-import publicFormRoutes from './modules/forms/public-forms.routes';
 import healthRoutes from './modules/health/health.routes';
 import invitationsRoutes from './modules/invitations/invitations.routes';
 import './actions/read.actions';
@@ -62,16 +58,19 @@ import './modules/intake/intake.actions';
 import './modules/agent-approvals/agent-approvals.actions';
 import './modules/agent-approvals/agent-policy.actions';
 import './modules/users/users.actions';
+import './modules/workflows/workflows.actions';
+import './modules/automation/automation.actions';
+import './modules/approvals/approvals.actions';
+import './modules/forms/forms.actions';
+import './modules/forms/public-forms.actions';
 import './modules/admin/admin.actions';
 import linksRoutes from './modules/links/links.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import orgsRoutes from './modules/orgs/orgs.routes';
 import projectsRoutes from './modules/projects/projects.routes';
-import searchRoutes from './modules/search/search.routes';
 import siteSettingsRoutes from './modules/site-settings/site-settings.routes';
 import teamsRoutes from './modules/teams/teams.routes';
 import usersRoutes from './modules/users/users.routes';
-import workflowRoutes from './modules/workflows/workflows.routes';
 import { createWebSocketServer } from './realtime/ws-server';
 import { logger } from './utils/logger';
 
@@ -132,9 +131,6 @@ app.use('/api/search', searchLimiter);
 // CSRF protection: require X-Requested-With header on state-changing requests
 app.use('/api', csrfGuard);
 
-// Public form routes (no auth required)
-app.use('/api', publicFormRoutes);
-
 // Health check (public, no auth required)
 app.use('/api/health', healthRoutes);
 
@@ -177,15 +173,10 @@ app.use('/api', invitationsRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/projects', activityRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/projects', workflowRoutes);
-app.use('/api/projects', automationRoutes);
-app.use('/api/projects', approvalGateRoutes);
 app.use('/api', approvalActionRoutes);
 app.use('/api/links', linksRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api', analyticsRoutes);
-app.use('/api/projects', formRoutes);
 
 // Unknown /api routes get a JSON 404, never the SPA index.html
 app.use('/api', (_req, res) => {

@@ -7,7 +7,6 @@ import {
   refreshSchema,
   registerSchema,
   resetPasswordSchema,
-  searchSchema,
 } from '../../utils/validation/common-validators';
 
 import { ERROR_RESPONSE_REFS } from './errors';
@@ -199,49 +198,7 @@ function authPaths(store: SchemaStore): Record<string, PathItem> {
 }
 
 /**
- * GET /api/search, which is no action yet (search.run is the action for agents).
- * @param store - The document's components
- */
-function searchPaths(store: SchemaStore): Record<string, PathItem> {
-  const query = jsonSchema(searchSchema, 'input', 'search.input', store) as {
-    properties: Record<string, oas31.SchemaObject>;
-    required?: string[];
-  };
-  return {
-    '/api/search': {
-      get: {
-        operationId: 'searchGet',
-        summary: 'Search issues and wiki pages the caller may see',
-        description: 'A token only gets the sections its issues and wiki scopes cover.',
-        tags: ['search'],
-        parameters: Object.entries(query.properties).map(([name, schema]) => ({
-          name,
-          in: 'query' as const,
-          required: query.required?.includes(name) ?? false,
-          schema,
-        })),
-        responses: {
-          '200': {
-            description: 'One section per kind of result',
-            content: json({
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: { type: { enum: ['issues', 'wiki'] } },
-                required: ['type'],
-              },
-            }),
-          },
-          ...refs('400', '401', '403', '429'),
-        },
-        'x-scope': 'search:read',
-      },
-    },
-  };
-}
-
-/**
- * The routes that are no actions (account routes, search, signed uploads) and the ones that take
+ * The routes that are no actions (account routes, signed uploads) and the ones that take
  * actions by name. The registry documents every action with a REST binding; these are routed by
  * hand.
  * @param store - The document's components
@@ -249,7 +206,6 @@ function searchPaths(store: SchemaStore): Record<string, PathItem> {
 export function extraPaths(store: SchemaStore): Record<string, PathItem> {
   return {
     ...authPaths(store),
-    ...searchPaths(store),
     '/api/act': {
       post: {
         operationId: 'act',

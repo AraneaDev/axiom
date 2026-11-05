@@ -26,6 +26,9 @@ const EXEMPT_REQUESTS = new Set([
   'GET /users/me',
 ]);
 
+/** The public side of the forms, by path relative to the /api mount */
+const PUBLIC_FORM_PATH = /^\/f\/[^/]+(\/(submit|verify))?\/?$/i;
+
 /**
  * Middleware that blocks authenticated users who haven't set up 2FA
  * when the admin has enabled enforce2fa in site settings.
@@ -36,6 +39,9 @@ const EXEMPT_REQUESTS = new Set([
  */
 export async function require2fa(req: Request, res: Response, next: NextFunction) {
   try {
+    // The public form pages take no account, so a session that comes along does not count
+    if (PUBLIC_FORM_PATH.test(req.path)) return next();
+
     // Soft-resolve userId from JWT if not already set by authenticate
     if (!req.userId) {
       const header = req.headers.authorization;

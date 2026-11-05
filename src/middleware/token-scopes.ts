@@ -148,16 +148,11 @@ export function scopeAllows(
 }
 
 /**
- * The legacy writes that have the effect of a delete without being a DELETE: toggles that remove
- * what is there (A19), and what takes a person out of an issue approval. Changing a gate can switch
- * it off (A20), a vote decides it, and a new gate on another way into a column can be the weaker
- * one a request then counts (A21). Everything else that deletes through a legacy route is a DELETE,
- * or is already refused by tokenAllows (admin, auth, tokens, access control).
+ * The legacy writes that have the effect of a delete without being a DELETE. None are left: the
+ * toggles that remove what is there (A19) and what takes a person out of an issue approval (a
+ * gate change, a vote) are registry actions now, and wait for approval. Task 6 removes this.
  */
-const LEGACY_WRITES_THAT_DELETE = [
-  /^\/api\/projects\/[^/]+\/approval-gates(\/[^/]+)?$/,
-  /^\/api\/approval-requests\/[^/]+\/vote$/,
-];
+const LEGACY_WRITES_THAT_DELETE: RegExp[] = [];
 
 /**
  * Whether this request deletes through a legacy route or takes a person out of a check, for a
