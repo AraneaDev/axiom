@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { OrgRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { generateSecret, generateURI, verifySync } from 'otplib';
+import { createGuardrails, generateSecret, generateURI, verifySync } from 'otplib';
 
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
@@ -33,6 +33,25 @@ const REFRESH_TOKEN_TTL_DAYS = 30;
  */
 function twoFactorContext(userId: string): string {
   return secretContext('user', 'twoFactorSecret', userId);
+}
+
+// otplib 13 refuses secrets under 16 bytes, but otplib 12 generated 10-byte secrets, and
+// users who set up 2FA before the upgrade still hold one. Verification accepts them; new
+// secrets keep otplib 13's default length.
+const LEGACY_MIN_SECRET_BYTES = 10;
+const MAX_SECRET_BYTES = 64;
+const TOTP_GUARDRAILS = createGuardrails({ MIN_SECRET_BYTES: LEGACY_MIN_SECRET_BYTES });
+
+/**
+ * Whether a TOTP secret is base32 of a length verification accepts.
+ * @param secret - The plain secret
+ * @returns Whether otplib can check a code against it
+ */
+function usableTotpSecret(secret: string): boolean {
+  const match = /^([A-Z2-7]+)=*$/i.exec(secret);
+  if (!match) return false;
+  const bytes = Math.floor((match[1].length * 5) / 8);
+  return bytes >= LEGACY_MIN_SECRET_BYTES && bytes <= MAX_SECRET_BYTES;
 }
 
 const UNREADABLE_ADMIN =
@@ -80,11 +99,13 @@ async function checkTwoFactorCode(
       if (!(err instanceof SecretBoxError)) throw err;
       return unreadableTwoFactor(user.id, err.reason, unreadable);
     }
+    if (!usableTotpSecret(secret)) {
+      return unreadableTwoFactor(user.id, 'secret-unusable', unreadable);
+    }
     return spendTotp(user, secret, code);
   }
 
-  // A plain value that is not base32 was never a usable secret
-  if (!/^[A-Z2-7]+=*$/i.test(stored)) {
+  if (!usableTotpSecret(stored)) {
     return unreadableTwoFactor(user.id, 'plaintext-unusable', unreadable);
   }
   const spent = await spendTotp(user, stored, code);
@@ -116,9 +137,12 @@ async function spendTotp(
   secret: string,
   token: string,
 ): Promise<boolean> {
+  // otplib throws for a token of another shape; for the user it is simply a wrong code
+  if (!/^\d{6}$/.test(token)) return false;
   const result = verifySync({
     token,
     secret,
+    guardrails: TOTP_GUARDRAILS,
     epochTolerance: [30, 0],
     ...(user.twoFactorLastStep !== null && { afterTimeStep: user.twoFactorLastStep }),
   });

@@ -1,4 +1,4 @@
-import { generateSecret, generateSync } from 'otplib';
+import { createGuardrails, generateSecret, generateSync } from 'otplib';
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -377,5 +377,133 @@ describe('verify on a pending setup that cannot be opened', () => {
     expect(res.body.error.code).toBe('TWO_FACTOR_UNREADABLE');
     expect(res.body.error.message).toMatch(/start .*setup again/i);
     expect(res.body.error.message).not.toMatch(/administrator/i);
+  });
+});
+
+describe('a 10-byte secret from before the otplib 13 upgrade', () => {
+  let user: TestUser;
+  let secret: string;
+  const legacy = createGuardrails({ MIN_SECRET_BYTES: 10 });
+  const codeOf = (s: string) => generateSync({ secret: s, guardrails: legacy });
+
+  beforeEach(async () => {
+    user = await createTestUser();
+    users.push(user);
+    secret = generateSecret({ length: 10 });
+  });
+
+  const login = (twoFactorCode: string) =>
+    request(app)
+      .post('/api/auth/login')
+      .set(CSRF)
+      .send({ login: user.email, password: PASSWORD, twoFactorCode });
+
+  const authed = (path: string, code: string) =>
+    request(app).post(path).set(CSRF).set('Authorization', `Bearer ${user.token}`).send({ code });
+
+  it('is 10 bytes', () => {
+    expect(secret).toHaveLength(16);
+  });
+
+  it.each([
+    ['sealed', (id: string, s: string) => sealed(id, s)],
+    ['plain', (_id: string, s: string) => s],
+  ])(
+    'login accepts the right code for a %s one and refuses it a second time',
+    async (_l, store) => {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { twoFactorSecret: store(user.id, secret), twoFactorEnabled: true },
+      });
+      const code = codeOf(secret);
+      expect((await login(code)).status).toBe(200);
+      const again = await login(code);
+      expect(again.status).toBe(401);
+      expect(again.body.error.code).toBe('INVALID_TWO_FACTOR');
+    },
+  );
+
+  it('login refuses a wrong code with 401', async () => {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: sealed(user.id, secret), twoFactorEnabled: true },
+    });
+    const wrong = codeOf(secret)
+      .split('')
+      .map((d) => String((Number(d) + 5) % 10))
+      .join('');
+    const res = await login(wrong);
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('INVALID_TWO_FACTOR');
+  });
+
+  it('verify accepts the right code for a pending setup', async () => {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: sealed(user.id, secret) },
+    });
+    const res = await authed('/api/auth/2fa/verify', codeOf(secret));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: true });
+  });
+
+  it('disable accepts the right code and clears the secret', async () => {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: sealed(user.id, secret), twoFactorEnabled: true },
+    });
+    const res = await authed('/api/auth/2fa/disable', codeOf(secret));
+    expect(res.status).toBe(200);
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(stored.twoFactorSecret).toBeNull();
+  });
+});
+
+describe('a secret too short to use, or a code of the wrong length', () => {
+  let user: TestUser;
+
+  beforeEach(async () => {
+    user = await createTestUser();
+    users.push(user);
+  });
+
+  it.each([
+    ['plain', (_id: string, s: string) => s, 'plaintext-unusable'],
+    ['sealed', (id: string, s: string) => sealed(id, s), 'secret-unusable'],
+  ])(
+    'login answers TWO_FACTOR_UNREADABLE for a %s 5-byte secret, never a generic 500',
+    async (_l, store, reason) => {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { twoFactorSecret: store(user.id, 'JBSWY3DP'), twoFactorEnabled: true },
+      });
+      const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      try {
+        const res = await request(app)
+          .post('/api/auth/login')
+          .set(CSRF)
+          .send({ login: user.email, password: PASSWORD, twoFactorCode: '123456' });
+        expect(res.status).toBe(500);
+        expect(res.body.error.code).toBe('TWO_FACTOR_UNREADABLE');
+        expect(JSON.stringify(error.mock.calls)).toContain(reason);
+      } finally {
+        error.mockRestore();
+      }
+    },
+  );
+
+  it('verify refuses a code that is not six digits with 400, not a 500', async () => {
+    const secret = generateSecret();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: sealed(user.id, secret) },
+    });
+    const res = await request(app)
+      .post('/api/auth/2fa/verify')
+      .set(CSRF)
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ code: '12345' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe('Invalid 2FA code');
   });
 });
