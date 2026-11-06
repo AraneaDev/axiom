@@ -19,6 +19,8 @@ export interface AdminUser {
   displayName: string;
   avatarUrl?: string;
   isAdmin?: boolean;
+  /** INTEGRATION is a built-in user such as GitHub: shown, never changed */
+  kind?: 'PERSON' | 'INTEGRATION';
   twoFactorEnabled: boolean;
   createdAt: string;
   deactivatedAt?: string | null;

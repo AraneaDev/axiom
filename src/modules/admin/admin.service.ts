@@ -69,7 +69,7 @@ function getDatabaseSize(): Promise<string> {
  */
 export async function getSystemStats() {
   const [totalUsers, totalOrgs, totalIssues, totalWikiPages, dbSize] = await Promise.all([
-    prisma.user.count(),
+    prisma.user.count({ where: { kind: 'PERSON' } }),
     prisma.organization.count(),
     prisma.issue.count(),
     prisma.page.count(),

@@ -300,6 +300,11 @@ export default function UserManagement() {
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-text">{user.displayName}</p>
+                          {user.kind === 'INTEGRATION' && (
+                            <Badge variant="outline" size="sm">
+                              Built in
+                            </Badge>
+                          )}
                           {user.deactivatedAt && (
                             <Badge variant="danger" size="sm">
                               Deactivated
@@ -334,7 +339,7 @@ export default function UserManagement() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {!user.isAdmin && (
+                      {!user.isAdmin && user.kind !== 'INTEGRATION' && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -359,15 +364,17 @@ export default function UserManagement() {
                           )}
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setResetPasswordTarget(user)}
-                        title="Reset password"
-                      >
-                        <KeyRound className="h-4 w-4" />
-                      </Button>
-                      {user.twoFactorEnabled && (
+                      {user.kind !== 'INTEGRATION' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setResetPasswordTarget(user)}
+                          title="Reset password"
+                        >
+                          <KeyRound className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {user.twoFactorEnabled && user.kind !== 'INTEGRATION' && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -378,15 +385,17 @@ export default function UserManagement() {
                           <ShieldOff className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeleteTarget(user)}
-                        title="Delete user"
-                        className="text-danger hover:text-danger"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {user.kind !== 'INTEGRATION' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteTarget(user)}
+                          title="Delete user"
+                          className="text-danger hover:text-danger"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </Td>
                 </Tr>

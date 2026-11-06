@@ -1,5 +1,7 @@
+import { createHash } from 'crypto';
+
 import request from 'supertest';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
@@ -80,19 +82,20 @@ describe('GitHub integration user', () => {
       .set('Authorization', `Bearer ${bearer}`);
     expect(res.status).toBe(401);
 
+    const plantedToken = 'tk_planted_for_the_integration_user';
     await prisma.apiToken.create({
       data: {
         userId: GITHUB_INTEGRATION_USER_ID,
         name: 'planted',
-        tokenHash: 'a'.repeat(64),
-        prefix: 'tk_planted',
+        tokenHash: createHash('sha256').update(plantedToken).digest('hex'),
+        prefix: plantedToken.slice(0, 11),
         scopes: ['issues:read'],
       },
     });
     try {
       const res2 = await request(app)
         .get('/api/users/search?q=x')
-        .set('Authorization', `Token ${'tk_planted'}`);
+        .set('Authorization', `Token ${plantedToken}`);
       expect(res2.status).toBe(401);
     } finally {
       await prisma.apiToken.deleteMany({ where: { userId: GITHUB_INTEGRATION_USER_ID } });
@@ -185,5 +188,75 @@ describe('GitHub integration user', () => {
       (c: { body: string }) => c.body === 'Opened on GitHub',
     );
     expect(comment?.author).toMatchObject({ displayName: 'GitHub' });
+  });
+
+  it('does not count as a person: the first registration still needs no invite', async () => {
+    await prisma.siteSettings.upsert({
+      where: { id: 1 },
+      update: { registrationMode: 'INVITE_ONLY' },
+      create: { id: 1, registrationMode: 'INVITE_ONLY' },
+    });
+    // A database whose only user is the integration user: every user count sees that row alone
+    const realCount = prisma.user.count.bind(prisma.user) as (args?: object) => Promise<number>;
+    const spy = vi.spyOn(prisma.user, 'count').mockImplementation(((args?: { where?: object }) =>
+      realCount({
+        ...args,
+        where: { AND: [args?.where ?? {}, { id: GITHUB_INTEGRATION_USER_ID }] },
+      })) as never);
+    const name = `firstuser-${Date.now()}`;
+    try {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .set(XHR)
+        .send({
+          email: `${name}@test.dev`,
+          username: name,
+          displayName: name,
+          password: 'testpassword123',
+        });
+      expect(res.status).toBe(201);
+      const stats = await adminService.getSystemStats();
+      expect(stats.totalUsers).toBe(0);
+    } finally {
+      spy.mockRestore();
+      const user = await prisma.user.findUnique({ where: { username: name } });
+      if (user) {
+        await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+        await prisma.user.delete({ where: { id: user.id } });
+      }
+    }
+  });
+
+  it('refuses a reset token planted for it', async () => {
+    const raw = 'planted-reset-token-for-the-integration-user';
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: GITHUB_INTEGRATION_USER_ID,
+        tokenHash: createHash('sha256').update(raw).digest('hex'),
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    try {
+      await expect(authService.resetPassword(raw, 'newpassword123')).rejects.toMatchObject({
+        statusCode: 400,
+      });
+      const user = await prisma.user.findUnique({ where: { id: GITHUB_INTEGRATION_USER_ID } });
+      expect(user?.passwordHash).toBe('!');
+    } finally {
+      await prisma.passwordResetToken.deleteMany({ where: { userId: GITHUB_INTEGRATION_USER_ID } });
+    }
+  });
+
+  it('spends a bcrypt compare on an unknown login too', async () => {
+    const bcrypt = (await import('bcryptjs')).default;
+    const spy = vi.spyOn(bcrypt, 'compare');
+    try {
+      await expect(
+        authService.login({ login: 'nobody-by-this-name', password: 'x' }),
+      ).rejects.toMatchObject({ statusCode: 401 });
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

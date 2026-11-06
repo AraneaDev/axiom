@@ -43,7 +43,8 @@ export default async function globalSetup() {
     await prisma.team.deleteMany();
     await prisma.orgMembership.deleteMany();
     await prisma.organization.deleteMany();
-    await prisma.user.deleteMany();
+    // The integration user comes from the migration and stays
+    await prisma.user.deleteMany({ where: { kind: 'PERSON' } });
 
     // Create users (all with password123 to match e2e/helpers.ts)
     const passwordHash = await bcrypt.hash('password123', 12);

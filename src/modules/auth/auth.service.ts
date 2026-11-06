@@ -31,6 +31,8 @@ function refusedAccountHash(): Promise<string> {
   refusedHash ??= bcrypt.hash(crypto.randomBytes(16).toString('hex'), SALT_ROUNDS);
   return refusedHash;
 }
+// Made at startup, so the first refused sign-in costs no more than later ones
+void refusedAccountHash();
 const ACCESS_TOKEN_TTL = '4h';
 const REFRESH_TOKEN_TTL_DAYS = 30;
 
@@ -201,7 +203,8 @@ export async function register(data: {
     throw new AppError(403, 'Registration is currently disabled', 'REGISTRATION_DISABLED');
   }
 
-  const userCount = await prisma.user.count();
+  // The built-in integration user is no person: it never ends the first-user bootstrap
+  const userCount = await prisma.user.count({ where: { kind: 'PERSON' } });
   let invite: {
     id: string;
     orgId: string;
@@ -297,7 +300,11 @@ export async function login(data: { login: string; password: string; twoFactorCo
       OR: [{ email: data.login }, { username: data.login }],
     },
   });
-  if (!user) throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
+  if (!user) {
+    // Same cost as a known account, so timing doesn't show which logins exist
+    await bcrypt.compare(data.password, await refusedAccountHash());
+    throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
+  }
 
   // The integration user has no password hash to compare with: it is checked against a real
   // bcrypt hash, so the refusal takes as long as a wrong password and reads the same
@@ -579,7 +586,7 @@ export async function resetPassword(token: string, newPassword: string) {
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const stored = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
 
-  if (!stored || stored.expiresAt < new Date()) {
+  if (!stored || stored.expiresAt < new Date() || isIntegrationUser(stored.userId)) {
     throw new AppError(400, 'Invalid or expired reset token', 'INVALID_RESET_TOKEN');
   }
 

@@ -1,4 +1,6 @@
 import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 /**
  *
@@ -12,16 +14,18 @@ export async function setup() {
     cwd: process.cwd(),
   });
 
-  // db push runs no migration, and teardown truncates every table: put back the rows a
-  // migration inserts (same statement as prisma/migrations/*_github_integration_user)
+  // db push runs no migration, and teardown truncates every table: put back the rows the
+  // migration inserts, taking the statement from the migration itself
+  const migration = readFileSync(
+    join(process.cwd(), 'prisma/migrations/20261106140000_github_integration_user/migration.sql'),
+    'utf8',
+  );
+  const insert = /INSERT INTO[\s\S]*?;/.exec(migration)?.[0];
+  if (!insert) throw new Error('The integration user migration has no INSERT statement');
   const { Pool } = await import('pg');
   const pool = new Pool({ connectionString: testUrl });
   try {
-    await pool.query(
-      `INSERT INTO "users" ("id", "email", "username", "displayName", "passwordHash", "kind", "createdAt", "updatedAt")
-       VALUES ('github-integration', 'github-integration@users.invalid', 'github-integration', 'GitHub', '!', 'INTEGRATION', NOW(), NOW())
-       ON CONFLICT DO NOTHING`,
-    );
+    await pool.query(insert);
   } finally {
     await pool.end();
   }
