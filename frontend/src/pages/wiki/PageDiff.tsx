@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, GitCompare } from 'lucide-react';
-import { useParams, useSearchParams, Link } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 
 import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { PageLoader } from '@/components/ui/Spinner';
 import { cn, formatDate } from '@/lib/utils';
@@ -59,11 +59,13 @@ export default function PageDiff() {
           <h1 className="h2">Version Comparison</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Link to={`/${org}/${team}/wiki/${spaceSlug}/${pageSlug}/history`}>
-            <Button variant="secondary" size="sm">
-              <ArrowLeft className="h-4 w-4" /> Back to history
-            </Button>
-          </Link>
+          <ButtonLink
+            to={`/${org}/${team}/wiki/${spaceSlug}/${pageSlug}/history`}
+            variant="secondary"
+            size="sm"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to history
+          </ButtonLink>
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Download, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 
 import { getBlob } from '@/api/client';
 import { hydrateApi } from '@/api/hydrate.api';
@@ -11,6 +11,7 @@ import { sprintsApi } from '@/api/sprints.api';
 import { teamsApi } from '@/api/teams.api';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
 import { ListSkeleton } from '@/components/ui/Skeleton';
@@ -319,11 +320,9 @@ export default function IssueList() {
         >
           <Download className="h-4 w-4" /> Export CSV
         </Button>
-        <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
-          <Button size="sm">
-            <Plus className="h-4 w-4" /> New Issue
-          </Button>
-        </Link>
+        <ButtonLink to={`/${org}/${teamSlug}/${projectSlug}/issues/new`} size="sm">
+          <Plus className="h-4 w-4" /> New Issue
+        </ButtonLink>
       </PageHeader>
 
       <IssueListToolbar

@@ -2,7 +2,7 @@ import { Shield, KeyRound } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { SettingsPage } from '@/components/ui/SettingsPage';
 import { useAuthStore } from '@/stores/auth.store';
@@ -50,11 +50,9 @@ export default function Security() {
             </Badge>
           </div>
           {!user?.twoFactorEnabled && (
-            <Link to="/setup-2fa" className="mt-3 block">
-              <Button size="sm">
-                <Shield className="h-4 w-4" /> Enable 2FA
-              </Button>
-            </Link>
+            <ButtonLink to="/setup-2fa" size="sm" className="mt-3">
+              <Shield className="h-4 w-4" /> Enable 2FA
+            </ButtonLink>
           )}
         </Card>
 

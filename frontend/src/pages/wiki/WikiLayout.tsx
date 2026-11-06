@@ -6,6 +6,7 @@ import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
@@ -176,11 +177,14 @@ export default function WikiLayout() {
 
             {/* Action buttons */}
             <div className="flex gap-1 mb-3 px-1">
-              <Link to={`${basePath}/new/edit`} className="flex-1">
-                <Button variant="ghost" size="xs" className="w-full justify-start">
-                  <Plus className="h-3.5 w-3.5" /> New Page
-                </Button>
-              </Link>
+              <ButtonLink
+                to={`${basePath}/new/edit`}
+                variant="ghost"
+                size="xs"
+                className="flex-1 w-full justify-start"
+              >
+                <Plus className="h-3.5 w-3.5" /> New Page
+              </ButtonLink>
               <Button
                 variant="ghost"
                 size="xs"

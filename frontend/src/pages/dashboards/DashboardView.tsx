@@ -1,10 +1,10 @@
 import { AlertTriangle, LayoutDashboard, Pencil } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { dashboardsApi } from '@/api/dashboards.api';
 import { WidgetCard } from '@/components/dashboards/widgets/WidgetCard';
 import { PageLayout } from '@/components/layout/PageLayout';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { CardSkeleton } from '@/components/ui/Skeleton';
@@ -65,11 +65,9 @@ export default function DashboardView() {
     <PageLayout>
       <PageHeader title={dashboard.name}>
         {dashboard.canEdit && (
-          <Link to={editLink}>
-            <Button variant="secondary" tabIndex={-1}>
-              <Pencil className="h-4 w-4" /> Edit
-            </Button>
-          </Link>
+          <ButtonLink to={editLink} variant="secondary">
+            <Pencil className="h-4 w-4" /> Edit
+          </ButtonLink>
         )}
       </PageHeader>
       {dashboard.description && (

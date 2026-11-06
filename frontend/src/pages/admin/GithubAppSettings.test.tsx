@@ -134,6 +134,33 @@ describe('GithubAppSettings', () => {
     expect(api.completeManifest).toHaveBeenCalledWith('abc_1', 'st1');
   });
 
+  it('has back links, not buttons, on every page of the flow', async () => {
+    api.status.mockResolvedValue(configured);
+    show('/admin/github');
+    expect(await screen.findByText('axiom-test')).toBeInTheDocument();
+    const admin = await screen.findByRole('link', { name: /back to admin/i });
+    expect(admin).toHaveAttribute('href', '/admin');
+    expect(screen.queryByRole('button', { name: /back to admin/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /view on github/i })).toHaveAttribute(
+      'href',
+      configured.htmlUrl,
+    );
+  });
+
+  it('links back to the App when finishing the setup or reading installations fails', async () => {
+    api.completeManifest.mockRejectedValue(new Error('This setup link has expired'));
+    show('/admin/github/created?code=abc_1&state=old');
+    const created = await screen.findByRole('link', { name: /back to github app/i });
+    expect(created).toHaveAttribute('href', '/admin/github');
+  });
+
+  it('links back to the App when reading installations fails', async () => {
+    api.syncInstallations.mockRejectedValue(new Error('boom'));
+    show('/admin/github/installed');
+    const link = await screen.findByRole('link', { name: /back to github app/i });
+    expect(link).toHaveAttribute('href', '/admin/github');
+  });
+
   it('shows the message when the state is bad or expired', async () => {
     api.completeManifest.mockRejectedValue(new Error('This setup link has expired'));
     show('/admin/github/created?code=abc_1&state=old');
@@ -185,11 +212,5 @@ describe('GithubAppSettings', () => {
     await user.click(buttons[buttons.length - 1]);
     expect(await screen.findByText('GitHub is unreachable')).toBeVisible();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('names the icon-only back button', async () => {
-    api.status.mockResolvedValue(configured);
-    show('/admin/github');
-    expect(await screen.findByRole('button', { name: 'Back to admin' })).toBeInTheDocument();
   });
 });

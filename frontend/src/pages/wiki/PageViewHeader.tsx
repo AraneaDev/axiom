@@ -23,6 +23,7 @@ import { Link } from 'react-router';
 
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
@@ -204,16 +205,12 @@ export function PageViewHeader({
             restrictions={page.restrictions ?? []}
           />
           <ExportDropdown spaceId={spaceId} pageSlug={pageSlug} />
-          <Link to={`${basePath}/${pageSlug}/history`}>
-            <Button variant="ghost" size="sm">
-              <History className="h-4 w-4" /> History
-            </Button>
-          </Link>
-          <Link to={`${basePath}/${pageSlug}/edit`}>
-            <Button variant="secondary" size="sm">
-              <Edit className="h-4 w-4" /> Edit
-            </Button>
-          </Link>
+          <ButtonLink to={`${basePath}/${pageSlug}/history`} variant="ghost" size="sm">
+            <History className="h-4 w-4" /> History
+          </ButtonLink>
+          <ButtonLink to={`${basePath}/${pageSlug}/edit`} variant="secondary" size="sm">
+            <Edit className="h-4 w-4" /> Edit
+          </ButtonLink>
           <Dropdown
             align="right"
             trigger={

@@ -1,7 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Settings } from 'lucide-react';
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Link } from 'react-router';
 
 import { approvalsApi, type ApprovalGate, type ApprovalRequest } from '@/api/approvals.api';
 import { issuesApi } from '@/api/issues.api';
@@ -9,6 +8,7 @@ import { projectsApi } from '@/api/projects.api';
 import { teamsApi } from '@/api/teams.api';
 import { ApprovalModal } from '@/components/ui/ApprovalModal';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { BoardSkeleton } from '@/components/ui/Skeleton';
 import { useIssueInvalidation } from '@/hooks/useIssueInvalidation';
@@ -266,11 +266,9 @@ export default function Board() {
         <Button variant="secondary" size="sm" onClick={() => setShowColumnManager(true)}>
           <Settings className="h-4 w-4" /> Columns
         </Button>
-        <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
-          <Button size="sm">
-            <Plus className="h-4 w-4" /> New Issue
-          </Button>
-        </Link>
+        <ButtonLink to={`/${org}/${teamSlug}/${projectSlug}/issues/new`} size="sm">
+          <Plus className="h-4 w-4" /> New Issue
+        </ButtonLink>
       </PageHeader>
 
       <BoardFilters

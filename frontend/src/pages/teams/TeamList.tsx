@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router';
 import { orgsApi } from '@/api/orgs.api';
 import { teamsApi } from '@/api/teams.api';
 import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
@@ -47,17 +47,13 @@ export default function TeamList() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="h2">Teams</h1>
         <div className="flex gap-2">
-          <Link to={`/${org}/analytics`}>
-            <Button variant="outline" size="sm">
-              <BarChart3 className="mr-1.5 h-4 w-4" />
-              Analytics
-            </Button>
-          </Link>
-          <Link to={`/${org}/teams/new`}>
-            <Button size="sm">
-              <Plus className="h-4 w-4" /> New Team
-            </Button>
-          </Link>
+          <ButtonLink to={`/${org}/analytics`} variant="outline" size="sm">
+            <BarChart3 className="mr-1.5 h-4 w-4" />
+            Analytics
+          </ButtonLink>
+          <ButtonLink to={`/${org}/teams/new`} size="sm">
+            <Plus className="h-4 w-4" /> New Team
+          </ButtonLink>
         </div>
       </div>
 
@@ -67,11 +63,9 @@ export default function TeamList() {
           title="No teams yet"
           description="Create your first team to start organizing work."
           action={
-            <Link to={`/${org}/teams/new`}>
-              <Button>
-                <Plus className="h-4 w-4" /> Create Team
-              </Button>
-            </Link>
+            <ButtonLink to={`/${org}/teams/new`}>
+              <Plus className="h-4 w-4" /> Create Team
+            </ButtonLink>
           }
         />
       ) : (

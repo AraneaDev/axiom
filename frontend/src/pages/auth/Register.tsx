@@ -7,6 +7,7 @@ import { siteSettingsApi } from '@/api/site-settings.api';
 import type { SiteSettings } from '@/api/site-settings.api';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
@@ -66,11 +67,9 @@ export default function Register() {
                 New account registration is currently disabled. Contact your administrator for
                 access.
               </p>
-              <Link to="/login">
-                <Button variant="outline" size="sm">
-                  <ArrowLeft className="h-4 w-4" /> Back to Login
-                </Button>
-              </Link>
+              <ButtonLink to="/login" variant="outline" size="sm">
+                <ArrowLeft className="h-4 w-4" /> Back to Login
+              </ButtonLink>
             </div>
           ) : (
             <>

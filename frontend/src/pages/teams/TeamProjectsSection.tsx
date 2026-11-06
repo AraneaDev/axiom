@@ -2,7 +2,7 @@ import { FolderKanban, Plus, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 interface Project {
@@ -35,11 +35,9 @@ export function TeamProjectsSection({ projects, orgSlug, teamSlug }: TeamProject
           <FolderKanban className="h-5 w-5 text-primary" />
           <h2 className="h3">Projects</h2>
         </div>
-        <Link to={`/${orgSlug}/${teamSlug}/projects/new`}>
-          <Button variant="ghost" size="sm">
-            <Plus className="h-4 w-4" /> New Project
-          </Button>
-        </Link>
+        <ButtonLink to={`/${orgSlug}/${teamSlug}/projects/new`} variant="ghost" size="sm">
+          <Plus className="h-4 w-4" /> New Project
+        </ButtonLink>
       </div>
       {!projects?.length ? (
         <EmptyState

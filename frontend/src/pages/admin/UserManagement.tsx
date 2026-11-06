@@ -15,13 +15,13 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
 
 import { adminApi } from '@/api/admin.api';
 import type { AdminUser } from '@/api/admin.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -241,11 +241,9 @@ export default function UserManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/admin">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4" /> Back
-            </Button>
-          </Link>
+          <ButtonLink to="/admin" variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4" /> Back
+          </ButtonLink>
           <div>
             <h1 className="h2">User Management</h1>
             <p className="text-sm text-text-secondary mt-1">

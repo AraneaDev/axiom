@@ -1,7 +1,7 @@
 import { LogIn, Moon, Sun } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { useDarkMode } from '@/hooks/useDarkMode';
 
 /**
@@ -29,11 +29,9 @@ export function PublicHeader({ showSignIn = false }: { showSignIn?: boolean }) {
           {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
         {showSignIn && (
-          <Link to="/login">
-            <Button variant="outline" size="sm">
-              <LogIn className="h-4 w-4" /> Sign in
-            </Button>
-          </Link>
+          <ButtonLink to="/login" variant="outline" size="sm">
+            <LogIn className="h-4 w-4" /> Sign in
+          </ButtonLink>
         )}
       </div>
     </header>

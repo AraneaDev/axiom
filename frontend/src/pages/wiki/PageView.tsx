@@ -24,6 +24,7 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { AttachmentList } from '@/components/ui/AttachmentList';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -271,11 +272,9 @@ export default function PageView() {
                 )}
               </div>
             </div>
-            <Link to={`${basePath}/new`}>
-              <Button size="sm">
-                <Plus className="h-4 w-4" /> New Page
-              </Button>
-            </Link>
+            <ButtonLink to={`${basePath}/new`} size="sm">
+              <Plus className="h-4 w-4" /> New Page
+            </ButtonLink>
           </div>
           {tree && tree.length > 0 && (
             <div className="flex items-center gap-4 mt-3 text-xs text-text-tertiary">

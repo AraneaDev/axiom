@@ -7,6 +7,8 @@ import { GITHUB_APP_KEY, githubAppApi } from '@/api/github.api';
 import type { GithubAppStatus } from '@/api/github.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { buttonClasses } from '@/components/ui/button-styles';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -18,12 +20,11 @@ import { useRunOnce } from '@/hooks/useRunOnce';
 import { useAuthStore } from '@/stores/auth.store';
 
 function Header({ subtitle }: { subtitle: string }) {
-  const navigate = useNavigate();
   return (
     <div className="flex items-center gap-3">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
+      <ButtonLink variant="ghost" size="sm" to="/admin">
         <ArrowLeft className="h-4 w-4" /> Back to admin
-      </Button>
+      </ButtonLink>
       <div>
         <h1 className="h2">GitHub App</h1>
         <p className="text-sm text-text-secondary mt-0.5">{subtitle}</p>
@@ -119,17 +120,23 @@ function Configured({ status }: { status: GithubAppStatus }) {
           </div>
           <div className="flex items-center gap-2">
             {status.htmlUrl && (
-              <a href={status.htmlUrl} target="_blank" rel="noreferrer">
-                <Button variant="outline" size="sm">
-                  <ExternalLink className="h-4 w-4" /> View on GitHub
-                </Button>
+              <a
+                href={status.htmlUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={buttonClasses('outline', 'sm')}
+              >
+                <ExternalLink className="h-4 w-4" /> View on GitHub
               </a>
             )}
             {status.installUrl && (
-              <a href={status.installUrl} target="_blank" rel="noreferrer">
-                <Button variant="outline" size="sm">
-                  <Plus className="h-4 w-4" /> Install on an account
-                </Button>
+              <a
+                href={status.installUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={buttonClasses('outline', 'sm')}
+              >
+                <Plus className="h-4 w-4" /> Install on an account
               </a>
             )}
             <Button variant="danger" size="sm" onClick={() => setConfirming(true)}>
@@ -249,9 +256,9 @@ export function GithubAppCreated() {
         <>
           <ErrorAlert error={result.error} fallback="Could not finish the setup" />
           <div>
-            <Button variant="outline" size="sm" onClick={() => navigate('/admin/github')}>
+            <ButtonLink variant="outline" size="sm" to="/admin/github">
               <ArrowLeft className="h-4 w-4" /> Back to GitHub App
-            </Button>
+            </ButtonLink>
           </div>
         </>
       )}
@@ -265,15 +272,13 @@ export function GithubAppCreated() {
           </div>
           <div className="flex items-center gap-2">
             {result.data.installUrl && (
-              <a href={result.data.installUrl}>
-                <Button size="sm">
-                  <ExternalLink className="h-4 w-4" /> Install on GitHub
-                </Button>
+              <a href={result.data.installUrl} className={buttonClasses('primary', 'sm')}>
+                <ExternalLink className="h-4 w-4" /> Install on GitHub
               </a>
             )}
-            <Button variant="outline" size="sm" onClick={() => navigate('/admin/github')}>
+            <ButtonLink variant="outline" size="sm" to="/admin/github">
               <GitBranch className="h-4 w-4" /> Go to the App
-            </Button>
+            </ButtonLink>
           </div>
         </Card>
       )}
@@ -303,9 +308,9 @@ export function GithubAppInstalled() {
         <>
           <ErrorAlert error={result.error} fallback="Could not read the installations" />
           <div>
-            <Button variant="outline" size="sm" onClick={() => navigate('/admin/github')}>
+            <ButtonLink variant="outline" size="sm" to="/admin/github">
               <ArrowLeft className="h-4 w-4" /> Back to GitHub App
-            </Button>
+            </ButtonLink>
           </div>
         </>
       )}

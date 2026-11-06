@@ -11,10 +11,11 @@ import {
 } from '@dnd-kit/core';
 import { FileText, FolderPlus, Lock, Plus } from 'lucide-react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { wikiApi } from '@/api/wiki.api';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
@@ -250,11 +251,9 @@ export function PageViewSidebar({
           </h3>
           <div className="flex gap-1">
             <Tooltip content="New Page">
-              <Link to={`${basePath}/new/edit`}>
-                <Button variant="ghost" size="xs">
-                  <Plus className="h-3.5 w-3.5" /> New Page
-                </Button>
-              </Link>
+              <ButtonLink to={`${basePath}/new/edit`} variant="ghost" size="xs">
+                <Plus className="h-3.5 w-3.5" /> New Page
+              </ButtonLink>
             </Tooltip>
             <Tooltip content="New Folder">
               <Button variant="ghost" size="xs" onClick={() => onNewFolder?.()}>

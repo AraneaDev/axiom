@@ -17,7 +17,7 @@ import { teamsApi } from '@/api/teams.api';
 import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
@@ -84,17 +84,13 @@ export default function TeamDetail() {
           )}
         </div>
         <div className="flex gap-2">
-          <Link to={`/${org}/${teamSlug}/analytics`}>
-            <Button variant="outline" size="sm">
-              <BarChart3 className="mr-1.5 h-4 w-4" />
-              Analytics
-            </Button>
-          </Link>
-          <Link to={`/${org}/${teamSlug}/members`}>
-            <Button variant="secondary" size="sm">
-              <Users className="h-4 w-4" /> Members
-            </Button>
-          </Link>
+          <ButtonLink to={`/${org}/${teamSlug}/analytics`} variant="outline" size="sm">
+            <BarChart3 className="mr-1.5 h-4 w-4" />
+            Analytics
+          </ButtonLink>
+          <ButtonLink to={`/${org}/${teamSlug}/members`} variant="secondary" size="sm">
+            <Users className="h-4 w-4" /> Members
+          </ButtonLink>
         </div>
       </div>
 
@@ -113,11 +109,9 @@ export default function TeamDetail() {
                   <BookOpen className="h-5 w-5 text-primary" />
                   <h2 className="h3">Wiki</h2>
                 </div>
-                <Link to={`/${org}/${teamSlug}/wiki/new`}>
-                  <Button variant="ghost" size="sm">
-                    <Plus className="h-4 w-4" /> New Space
-                  </Button>
-                </Link>
+                <ButtonLink to={`/${org}/${teamSlug}/wiki/new`} variant="ghost" size="sm">
+                  <Plus className="h-4 w-4" /> New Space
+                </ButtonLink>
               </div>
               <div className="space-y-2">
                 {spaces!.map((s) => (
@@ -157,11 +151,9 @@ export default function TeamDetail() {
                 title="No wiki spaces yet"
                 description="Create a wiki space for team documentation."
                 action={
-                  <Link to={`/${org}/${teamSlug}/wiki/new`}>
-                    <Button variant="secondary" size="sm">
-                      <Plus className="h-4 w-4" /> Create Wiki Space
-                    </Button>
-                  </Link>
+                  <ButtonLink to={`/${org}/${teamSlug}/wiki/new`} variant="secondary" size="sm">
+                    <Plus className="h-4 w-4" /> Create Wiki Space
+                  </ButtonLink>
                 }
               />
             </section>
@@ -196,11 +188,14 @@ export default function TeamDetail() {
                   Members ({teamDetail.members.length})
                 </h3>
                 <Tooltip content="View all members">
-                  <Link to={`/${org}/${teamSlug}/members`}>
-                    <Button variant="ghost" size="xs" title="View all members">
-                      <Users className="h-3.5 w-3.5" />
-                    </Button>
-                  </Link>
+                  <ButtonLink
+                    to={`/${org}/${teamSlug}/members`}
+                    variant="ghost"
+                    size="xs"
+                    title="View all members"
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                  </ButtonLink>
                 </Tooltip>
               </div>
               <div className="space-y-1">

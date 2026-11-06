@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Globe, Save } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
 
 import { siteSettingsApi } from '@/api/site-settings.api';
 import type { SiteSettings } from '@/api/site-settings.api';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/Spinner';
@@ -51,11 +51,9 @@ function LandingPageForm({ settings }: { settings: SiteSettings }) {
     <div className="p-6 flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to="/admin">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4" /> Back
-          </Button>
-        </Link>
+        <ButtonLink to="/admin" variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4" /> Back
+        </ButtonLink>
         <div>
           <h1 className="h2">Landing Page</h1>
           <p className="text-sm text-text-secondary mt-1">

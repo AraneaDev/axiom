@@ -10,7 +10,7 @@ import { MarkdownRenderer } from '@/components/editor/MarkdownRenderer';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Sparkline } from '@/components/ui/charts';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton';
@@ -110,11 +110,9 @@ export default function Dashboard() {
     <>
       <PageHeader title={`${greeting}, ${user?.displayName?.split(' ')[0]}`}>
         <p className="text-text-tertiary text-sm">{dateStr}</p>
-        <Link to="/orgs/new">
-          <Button variant="outline" size="sm">
-            <Plus className="h-3.5 w-3.5" /> New Organization
-          </Button>
-        </Link>
+        <ButtonLink to="/orgs/new" variant="outline" size="sm">
+          <Plus className="h-3.5 w-3.5" /> New Organization
+        </ButtonLink>
       </PageHeader>
       <PageLayout sidebar={activitySidebar} sidebarWidth="w-88">
         <div className="flex flex-col gap-5">

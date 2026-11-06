@@ -9,11 +9,10 @@ import {
   Shield,
   AlertTriangle,
 } from 'lucide-react';
-import { Link } from 'react-router';
 
 import { adminApi } from '@/api/admin.api';
 import type { SystemSettings as SystemSettingsType } from '@/api/admin.api';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -93,11 +92,9 @@ export default function SystemSettings() {
     <div className="p-6 flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to="/admin">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4" /> Back
-          </Button>
-        </Link>
+        <ButtonLink to="/admin" variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4" /> Back
+        </ButtonLink>
         <div>
           <h1 className="h2">System Settings</h1>
           <p className="text-sm text-text-secondary mt-1">

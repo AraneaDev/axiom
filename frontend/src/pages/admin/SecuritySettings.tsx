@@ -1,11 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Save } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
 
 import { siteSettingsApi } from '@/api/site-settings.api';
 import type { SiteSettings } from '@/api/site-settings.api';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
@@ -54,7 +54,6 @@ function SecuritySettingsSkeleton() {
 
 function SecuritySettingsForm({ settings }: { settings: SiteSettings }) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [registrationMode, setRegistrationMode] = useState<SiteSettings['registrationMode']>(
     settings.registrationMode,
   );
@@ -84,9 +83,9 @@ function SecuritySettingsForm({ settings }: { settings: SiteSettings }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
+          <ButtonLink variant="ghost" size="sm" to="/admin">
             <ArrowLeft className="h-4 w-4" /> Back to admin
-          </Button>
+          </ButtonLink>
           <div>
             <h1 className="h2">Security Settings</h1>
             <p className="text-sm text-text-secondary mt-0.5">

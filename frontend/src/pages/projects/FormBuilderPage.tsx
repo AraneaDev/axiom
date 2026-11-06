@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { formsApi } from '@/api/forms.api';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { FormBuilder } from '@/components/ui/FormBuilder';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
@@ -16,7 +16,6 @@ import { useProjectContext } from '@/hooks/useProjectContext';
 export default function FormBuilderPage() {
   const { formId } = useParams<{ formId: string }>();
   const { currentProject, basePath } = useProjectContext();
-  const navigate = useNavigate();
 
   const projectId = currentProject?.id ?? '';
 
@@ -96,9 +95,9 @@ export default function FormBuilderPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate(`${basePath}/settings/forms`)}>
+        <ButtonLink variant="ghost" size="sm" to={`${basePath}/settings/forms`}>
           <ArrowLeft className="h-4 w-4" /> Back to Forms
-        </Button>
+        </ButtonLink>
       </div>
 
       <FormBuilder

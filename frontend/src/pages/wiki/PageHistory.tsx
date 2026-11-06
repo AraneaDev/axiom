@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, GitCompare, History, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
 
 import { wikiApi } from '@/api/wiki.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -116,11 +117,13 @@ export default function PageHistory() {
           >
             <GitCompare className="h-4 w-4" /> Compare selected
           </Button>
-          <Link to={`/${org}/${team}/wiki/${spaceSlug}/${pageSlug}`}>
-            <Button variant="secondary" size="sm">
-              <History className="h-4 w-4" /> Back to page
-            </Button>
-          </Link>
+          <ButtonLink
+            to={`/${org}/${team}/wiki/${spaceSlug}/${pageSlug}`}
+            variant="secondary"
+            size="sm"
+          >
+            <History className="h-4 w-4" /> Back to page
+          </ButtonLink>
         </div>
       </div>
       <Card className="divide-y divide-border">

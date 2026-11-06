@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, GitBranch, Link as LinkIcon, Unlink } from 'lucide-react';
 import { useState } from 'react';
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
+import { Navigate, useNavigate, useSearchParams } from 'react-router';
 
 import {
   GITHUB_ACCOUNT_KEY,
@@ -10,6 +10,7 @@ import {
   githubAppApi,
 } from '@/api/github.api';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -148,11 +149,9 @@ export function GithubAccountCallback() {
         <div className="flex flex-col gap-6">
           <ErrorAlert error={result.error} fallback="Could not connect your GitHub account" />
           <div>
-            <Link to="/settings/github">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="h-4 w-4" /> Back to GitHub
-              </Button>
-            </Link>
+            <ButtonLink to="/settings/github" variant="outline" size="sm">
+              <ArrowLeft className="h-4 w-4" /> Back to GitHub
+            </ButtonLink>
           </div>
         </div>
       )}

@@ -1,12 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 import { useMemo } from 'react';
-import { Link } from 'react-router';
 
 import { siteSettingsApi } from '@/api/site-settings.api';
 import type { SiteSettings } from '@/api/site-settings.api';
 import { PublicHeader } from '@/components/layout/PublicHeader';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { sanitizeLandingHtml } from '@/lib/sanitize-html';
 
@@ -58,11 +57,9 @@ export default function LandingPage() {
             <p className="mt-6 text-lg sm:text-xl text-text-secondary max-w-2xl leading-relaxed">
               {settings.heroSubtitle}
             </p>
-            <Link to={settings.ctaLink} className="mt-10">
-              <Button size="lg">
-                <ArrowRight className="h-4 w-4" /> {settings.ctaText}
-              </Button>
-            </Link>
+            <ButtonLink to={settings.ctaLink} size="lg" className="mt-10">
+              <ArrowRight className="h-4 w-4" /> {settings.ctaText}
+            </ButtonLink>
           </section>
 
           {/* Body markdown */}

@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 
 import { usersApi } from '@/api/users.api';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { CopyInput } from '@/components/ui/CopyInput';
 import { Input } from '@/components/ui/Input';
@@ -82,11 +83,9 @@ export default function ConnectAgent() {
         },
       ]}
       actions={
-        <Link to="/settings/tokens">
-          <Button size="sm" variant="secondary">
-            <Bot className="h-4 w-4" /> All API tokens
-          </Button>
-        </Link>
+        <ButtonLink to="/settings/tokens" size="sm" variant="secondary">
+          <Bot className="h-4 w-4" /> All API tokens
+        </ButtonLink>
       }
     >
       {created ? (

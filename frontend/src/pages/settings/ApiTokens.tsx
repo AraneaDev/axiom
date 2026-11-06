@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Coins, KeyRound, Plug, Plus, Trash2, Copy, X } from 'lucide-react';
 import { Fragment, useState } from 'react';
-import { Link } from 'react-router';
 
 import { usersApi } from '@/api/users.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -103,11 +103,9 @@ export default function ApiTokens() {
       ]}
       actions={
         <div className="flex gap-2">
-          <Link to="/settings/connect-agent">
-            <Button size="sm" variant="secondary">
-              <Plug className="h-4 w-4" /> Connect an agent
-            </Button>
-          </Link>
+          <ButtonLink to="/settings/connect-agent" size="sm" variant="secondary">
+            <Plug className="h-4 w-4" /> Connect an agent
+          </ButtonLink>
           <Button
             size="sm"
             onClick={() => {

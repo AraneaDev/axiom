@@ -2,7 +2,7 @@ import { ChevronRight, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -54,11 +54,13 @@ export function IssueDetailMetaPanel({
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold">Sub-issues</h3>
           <Tooltip content="Add sub-issue">
-            <Link to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}>
-              <Button variant="ghost" size="sm">
-                <Plus className="h-3.5 w-3.5" /> Add
-              </Button>
-            </Link>
+            <ButtonLink
+              to={`/${org}/${teamSlug}/${projectSlug}/issues/new`}
+              variant="ghost"
+              size="sm"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add
+            </ButtonLink>
           </Tooltip>
         </div>
         {progress && progress.total > 0 && (

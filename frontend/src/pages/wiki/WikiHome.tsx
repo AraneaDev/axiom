@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router';
 import { wikiApi } from '@/api/wiki.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
@@ -62,11 +63,9 @@ export default function WikiHome() {
               {showArchived ? 'Hide Archived' : `Show Archived (${archivedSpaces.length})`}
             </Button>
           )}
-          <Link to={`/${org}/${teamSlug}/wiki/new`}>
-            <Button size="sm">
-              <Plus className="h-4 w-4" /> New Space
-            </Button>
-          </Link>
+          <ButtonLink to={`/${org}/${teamSlug}/wiki/new`} size="sm">
+            <Plus className="h-4 w-4" /> New Space
+          </ButtonLink>
         </div>
       </div>
 

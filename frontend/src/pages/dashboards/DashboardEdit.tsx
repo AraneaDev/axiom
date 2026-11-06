@@ -12,7 +12,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import {
   dashboardsApi,
@@ -27,6 +27,7 @@ import { WidgetFormModal } from '@/components/dashboards/WidgetFormModal';
 import { WIDGET_ICONS } from '@/components/dashboards/widgets/widget-icons';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Select } from '@/components/ui/Dropdown';
@@ -270,11 +271,9 @@ export default function DashboardEdit() {
     );
   }
   const backLink = (
-    <Link to={`/dashboards/${id}`}>
-      <Button variant="secondary" tabIndex={-1}>
-        <Eye className="h-4 w-4" /> View
-      </Button>
-    </Link>
+    <ButtonLink to={`/dashboards/${id}`} variant="secondary">
+      <Eye className="h-4 w-4" /> View
+    </ButtonLink>
   );
   if (!data.canEdit) {
     return (

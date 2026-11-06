@@ -16,14 +16,13 @@ import {
   Shield,
   UserCog,
 } from 'lucide-react';
-import { Link } from 'react-router';
 
 import { adminApi } from '@/api/admin.api';
 import type { SystemStats } from '@/api/admin.api';
 import { healthApi } from '@/api/health.api';
 import type { HealthStatus } from '@/api/health.api';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { PageLoader } from '@/components/ui/Spinner';
@@ -244,31 +243,21 @@ export default function AdminDashboard() {
           <p className="text-sm text-text-secondary mt-1">System overview and management</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/admin/users">
-            <Button variant="outline" size="sm">
-              <UserCog className="h-4 w-4" /> Manage Users
-            </Button>
-          </Link>
-          <Link to="/admin/landing">
-            <Button variant="outline" size="sm">
-              <Globe className="h-4 w-4" /> Landing Page
-            </Button>
-          </Link>
-          <Link to="/admin/github">
-            <Button variant="outline" size="sm">
-              <GitBranch className="h-4 w-4" /> GitHub
-            </Button>
-          </Link>
-          <Link to="/admin/security">
-            <Button variant="outline" size="sm">
-              <Shield className="h-4 w-4" /> Security
-            </Button>
-          </Link>
-          <Link to="/admin/settings">
-            <Button variant="outline" size="sm">
-              <Settings className="h-4 w-4" /> Settings
-            </Button>
-          </Link>
+          <ButtonLink to="/admin/users" variant="outline" size="sm">
+            <UserCog className="h-4 w-4" /> Manage Users
+          </ButtonLink>
+          <ButtonLink to="/admin/landing" variant="outline" size="sm">
+            <Globe className="h-4 w-4" /> Landing Page
+          </ButtonLink>
+          <ButtonLink to="/admin/github" variant="outline" size="sm">
+            <GitBranch className="h-4 w-4" /> GitHub
+          </ButtonLink>
+          <ButtonLink to="/admin/security" variant="outline" size="sm">
+            <Shield className="h-4 w-4" /> Security
+          </ButtonLink>
+          <ButtonLink to="/admin/settings" variant="outline" size="sm">
+            <Settings className="h-4 w-4" /> Settings
+          </ButtonLink>
         </div>
       </div>
 

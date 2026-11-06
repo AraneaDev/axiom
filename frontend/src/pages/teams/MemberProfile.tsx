@@ -9,12 +9,12 @@ import {
   Shield,
   User,
 } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { teamsApi } from '@/api/teams.api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DetailSkeleton } from '@/components/ui/Skeleton';
@@ -63,11 +63,9 @@ export default function MemberProfile() {
   return (
     <div className="">
       <div className="mb-6">
-        <Link to={`/${org}/${teamSlug}/members`}>
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4" /> Back to Members
-          </Button>
-        </Link>
+        <ButtonLink to={`/${org}/${teamSlug}/members`} variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4" /> Back to Members
+        </ButtonLink>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
