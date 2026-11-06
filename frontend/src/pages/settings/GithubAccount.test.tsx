@@ -2,8 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const account = vi.hoisted(() => ({
   get: vi.fn(),
@@ -13,9 +13,19 @@ const account = vi.hoisted(() => ({
 }));
 const app = vi.hoisted(() => ({ status: vi.fn() }));
 
-vi.mock('@/api/github.api', () => ({ githubAccountApi: account, githubAppApi: app }));
+vi.mock('@/api/github.api', () => ({
+  GITHUB_APP_KEY: ['github-app'],
+  GITHUB_ACCOUNT_KEY: ['github-account'],
+  githubAccountApi: account,
+  githubAppApi: app,
+}));
 
 import GithubAccount, { GithubAccountCallback } from './GithubAccount';
+
+function Where() {
+  const l = useLocation();
+  return <output data-testid="where">{l.pathname + l.search}</output>;
+}
 
 function show(path: string) {
   render(
@@ -28,13 +38,18 @@ function show(path: string) {
             <Route path="/settings/github" element={<GithubAccount />} />
             <Route path="/settings/github/callback" element={<GithubAccountCallback />} />
           </Routes>
+          <Where />
         </MemoryRouter>
       </QueryClientProvider>
     </StrictMode>,
   );
 }
 
+const realLocation = Object.getOwnPropertyDescriptor(window, 'location')!;
+
 describe('GithubAccount', () => {
+  afterEach(() => Object.defineProperty(window, 'location', realLocation));
+
   beforeEach(() => {
     Object.values(account).forEach((m) => m.mockReset());
     app.status.mockReset();
@@ -92,5 +107,31 @@ describe('GithubAccount', () => {
     );
     show('/settings/github/callback?code=c_1&state=s1');
     expect(await screen.findByText(/already connected to another user/)).toBeInTheDocument();
+  });
+
+  it('takes the code out of the URL before the request, and after a failure', async () => {
+    let seenAtRequest = '';
+    account.completeConnect.mockImplementation(async () => {
+      seenAtRequest = screen.getByTestId('where').textContent ?? '';
+      throw new Error('bad state');
+    });
+    show('/settings/github/callback?code=c_1&state=s1');
+    await screen.findByText('bad state');
+    expect(seenAtRequest).toBe('/settings/github/callback');
+    expect(screen.getByTestId('where').textContent).toBe('/settings/github/callback');
+  });
+
+  it('goes back to the page when reached without a code', async () => {
+    account.get.mockResolvedValue({ connected: false });
+    show('/settings/github/callback');
+    await screen.findByRole('button', { name: /connect github/i });
+    expect(account.completeConnect).not.toHaveBeenCalled();
+    expect(screen.getByTestId('where').textContent).toBe('/settings/github');
+  });
+
+  it('uses the shared settings layout with its help column', async () => {
+    account.get.mockResolvedValue({ connected: false });
+    show('/settings/github');
+    expect(await screen.findByText('What connecting does')).toBeInTheDocument();
   });
 });

@@ -35,6 +35,7 @@ import { require2fa } from './middleware/require2fa';
 import { mountStaticFrontend, resolveStaticDir } from './middleware/static-frontend';
 import { signedUploadRouter } from './modules/attachments/attachments.routes';
 import { parseTrustProxy } from './modules/forms/client-ip';
+import { githubWebOrigin } from './modules/github/github-client';
 import { githubWebhookGate } from './modules/github/webhook-gate';
 import './actions/read.actions';
 import './modules/attachments/attachments.actions';
@@ -104,6 +105,8 @@ app.use(
         'frame-src': ["'self'", 'blob:'],
         // Audio/video attachment previews play from blob: URLs.
         'media-src': ["'self'", 'blob:'],
+        // The GitHub App manifest flow posts a form to GitHub's web host (helmet's default is 'self').
+        'form-action': ["'self'", githubWebOrigin()],
       },
     },
   }),

@@ -21,8 +21,14 @@ export const GITHUB_LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 
 type SecretField = 'clientSecret' | 'privateKey' | 'webhookSecret';
 
-const sealed = (field: SecretField, plain: string) =>
+/**
+ * Seals a secret of the App row with the context it is opened with.
+ * @param field Which secret of the row
+ * @param plain The secret
+ */
+export const sealGithubAppSecret = (field: SecretField, plain: string) =>
   encryptSecret(plain, secretContext('githubApp', field, String(GITHUB_APP_ROW_ID)));
+const sealed = sealGithubAppSecret;
 const opened = (field: SecretField, stored: string) =>
   decryptSecret(stored, secretContext('githubApp', field, String(GITHUB_APP_ROW_ID)));
 

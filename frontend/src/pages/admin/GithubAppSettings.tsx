@@ -1,43 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ExternalLink, GitBranch, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 
-import { githubAppApi } from '@/api/github.api';
+import { GITHUB_APP_KEY, githubAppApi } from '@/api/github.api';
 import type { GithubAppStatus } from '@/api/github.api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { Input } from '@/components/ui/Input';
 import { PageLoader, Spinner } from '@/components/ui/Spinner';
 import { Table, Tbody, Td, Th, TrHead, Thead, Tr } from '@/components/ui/Table';
 import { useRunOnce } from '@/hooks/useRunOnce';
 import { useAuthStore } from '@/stores/auth.store';
 
-const STATUS_KEY = ['github-app'];
-
-function messageOf(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
-
-function ErrorBox({ message }: { message: string }) {
-  return (
-    <div
-      role="alert"
-      className="rounded-md bg-danger-light border border-danger/20 px-4 py-3 text-sm text-danger"
-    >
-      {message}
-    </div>
-  );
-}
-
 function Header({ subtitle }: { subtitle: string }) {
   return (
     <div className="flex items-center gap-3">
-      <Link to="/admin" title="Back to admin">
-        <Button variant="ghost" size="sm">
+      <Link to="/admin">
+        <Button variant="ghost" size="sm" title="Back to admin" aria-label="Back to admin">
           <ArrowLeft className="h-4 w-4" />
         </Button>
       </Link>
@@ -101,7 +85,7 @@ function NotConfigured() {
           placeholder="acme-co"
         />
       </div>
-      {start.isError && <ErrorBox message={messageOf(start.error, 'Could not start the setup')} />}
+      {start.isError && <ErrorAlert error={start.error} fallback="Could not start the setup" />}
       <div>
         <Button onClick={() => start.mutate()} disabled={start.isPending}>
           {start.isPending ? <Spinner size="sm" /> : <Plus className="h-4 w-4" />}
@@ -117,14 +101,13 @@ function Configured({ status }: { status: GithubAppStatus }) {
   const [confirming, setConfirming] = useState(false);
   const refresh = useMutation({
     mutationFn: githubAppApi.syncInstallations,
-    onSuccess: (data) => queryClient.setQueryData(STATUS_KEY, data),
+    onSuccess: (data) => queryClient.setQueryData(GITHUB_APP_KEY, data),
   });
   const forget = useMutation({
     mutationFn: githubAppApi.remove,
-    onSuccess: () => {
-      setConfirming(false);
-      queryClient.invalidateQueries({ queryKey: STATUS_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: GITHUB_APP_KEY }),
+    // A failure shows below, not behind the dialog
+    onSettled: () => setConfirming(false),
   });
 
   return (
@@ -171,7 +154,7 @@ function Configured({ status }: { status: GithubAppStatus }) {
           </Button>
         </div>
         {refresh.isError && (
-          <ErrorBox message={messageOf(refresh.error, 'Could not refresh the installations')} />
+          <ErrorAlert error={refresh.error} fallback="Could not refresh the installations" />
         )}
         {status.installations.length === 0 ? (
           <p className="text-sm text-text-secondary">
@@ -204,7 +187,7 @@ function Configured({ status }: { status: GithubAppStatus }) {
         )}
       </Card>
 
-      {forget.isError && <ErrorBox message={messageOf(forget.error, 'Could not forget the App')} />}
+      {forget.isError && <ErrorAlert error={forget.error} fallback="Could not forget the App" />}
       <ConfirmDialog
         open={confirming}
         onClose={() => setConfirming(false)}
@@ -222,7 +205,7 @@ function Configured({ status }: { status: GithubAppStatus }) {
 export default function GithubAppSettings() {
   const user = useAuthStore((s) => s.user);
   const { data, isLoading, error } = useQuery({
-    queryKey: STATUS_KEY,
+    queryKey: GITHUB_APP_KEY,
     queryFn: githubAppApi.status,
     enabled: !!user?.isAdmin,
   });
@@ -232,7 +215,7 @@ export default function GithubAppSettings() {
     <div className="flex flex-col gap-6">
       <Header subtitle="One App for the whole instance, installed on the accounts whose repositories you use" />
       {isLoading && <PageLoader />}
-      {error && <ErrorBox message={messageOf(error, 'Could not load the GitHub App')} />}
+      {error && <ErrorAlert error={error} fallback="Could not load the GitHub App" />}
       {data && (data.configured ? <Configured status={data} /> : <NotConfigured />)}
     </div>
   );
@@ -244,20 +227,20 @@ export function GithubAppCreated() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const code = params.get('code') ?? '';
-  const state = params.get('state') ?? '';
+  // Read once: the URL loses them before the request goes out
+  const [spent] = useState(() => ({ code: params.get('code'), state: params.get('state') }));
   const result = useRunOnce(async () => {
-    if (!user?.isAdmin) return null;
-    try {
-      const data = await githubAppApi.completeManifest(code, state);
-      queryClient.setQueryData(STATUS_KEY, data);
-      return data;
-    } finally {
-      // The code is spent, so a reload must not send it again
-      navigate('/admin/github/created', { replace: true });
-    }
+    // The code is single-use, so a reload must not find it
+    navigate('/admin/github/created', { replace: true });
+    // Let the router commit the new URL before the code goes out
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (!user?.isAdmin || !spent.code || !spent.state) return null;
+    const data = await githubAppApi.completeManifest(spent.code, spent.state);
+    queryClient.setQueryData(GITHUB_APP_KEY, data);
+    return data;
   });
 
+  if (!spent.code || !spent.state) return <Navigate to="/admin/github" replace />;
   if (!user?.isAdmin) return <AdminsOnly />;
   return (
     <div className="flex flex-col gap-6">
@@ -265,7 +248,7 @@ export function GithubAppCreated() {
       {result.status === 'pending' && <PageLoader />}
       {result.status === 'error' && (
         <>
-          <ErrorBox message={messageOf(result.error, 'Could not finish the setup')} />
+          <ErrorAlert error={result.error} fallback="Could not finish the setup" />
           <div>
             <Link to="/admin/github">
               <Button variant="outline" size="sm">
@@ -311,7 +294,7 @@ export function GithubAppInstalled() {
   const result = useRunOnce(async () => {
     if (!user?.isAdmin) return null;
     const data = await githubAppApi.syncInstallations();
-    queryClient.setQueryData(STATUS_KEY, data);
+    queryClient.setQueryData(GITHUB_APP_KEY, data);
     navigate('/admin/github', { replace: true });
     return data;
   });
@@ -323,7 +306,7 @@ export function GithubAppInstalled() {
       {result.status !== 'error' && <PageLoader />}
       {result.status === 'error' && (
         <>
-          <ErrorBox message={messageOf(result.error, 'Could not read the installations')} />
+          <ErrorAlert error={result.error} fallback="Could not read the installations" />
           <div>
             <Link to="/admin/github">
               <Button variant="outline" size="sm">

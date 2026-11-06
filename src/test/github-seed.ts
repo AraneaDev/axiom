@@ -1,8 +1,11 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 
 import { prisma } from '../config/database';
-import { encryptSecret, secretContext } from '../lib/secret-box';
-import { GITHUB_APP_ROW_ID, clearInstallationTokens } from '../modules/github/github-app.service';
+import {
+  GITHUB_APP_ROW_ID,
+  clearInstallationTokens,
+  sealGithubAppSecret,
+} from '../modules/github/github-app.service';
 
 import type { GithubFake } from './github-fake';
 
@@ -28,8 +31,7 @@ export async function seedGithubApp(opts: { appId?: number; fake?: GithubFake } 
   });
   const webhookSecret = `whsec_${randomBytes(12).toString('hex')}`;
   const clientSecret = `cs_${randomBytes(12).toString('hex')}`;
-  const seal = (field: string, plain: string) =>
-    encryptSecret(plain, secretContext('githubApp', field, String(GITHUB_APP_ROW_ID)));
+  const seal = sealGithubAppSecret;
   const data = {
     appId,
     slug: 'acme-axiom',

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
@@ -14,12 +14,17 @@ const api = vi.hoisted(() => ({
 }));
 const auth = vi.hoisted(() => ({ user: { isAdmin: true } as { isAdmin: boolean } | null }));
 
-vi.mock('@/api/github.api', () => ({ githubAppApi: api }));
+vi.mock('@/api/github.api', () => ({ GITHUB_APP_KEY: ['github-app'], githubAppApi: api }));
 vi.mock('@/stores/auth.store', () => ({
   useAuthStore: (select: (s: { user: typeof auth.user }) => unknown) => select({ user: auth.user }),
 }));
 
 import GithubAppSettings, { GithubAppCreated, GithubAppInstalled } from './GithubAppSettings';
+
+function Where() {
+  const l = useLocation();
+  return <output data-testid="where">{l.pathname + l.search}</output>;
+}
 
 function show(path: string) {
   render(
@@ -33,6 +38,7 @@ function show(path: string) {
             <Route path="/admin/github/created" element={<GithubAppCreated />} />
             <Route path="/admin/github/installed" element={<GithubAppInstalled />} />
           </Routes>
+          <Where />
         </MemoryRouter>
       </QueryClientProvider>
     </StrictMode>,
@@ -140,5 +146,50 @@ describe('GithubAppSettings', () => {
     show('/admin/github/installed?installation_id=7&setup_action=install');
     expect(await screen.findByText('axiom-test')).toBeInTheDocument();
     expect(api.syncInstallations).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes the code out of the URL before the request goes out', async () => {
+    let seenAtRequest = '';
+    api.completeManifest.mockImplementation(async () => {
+      seenAtRequest = screen.getByTestId('where').textContent ?? '';
+      return configured;
+    });
+    show('/admin/github/created?code=abc_1&state=st1');
+    await screen.findByRole('link', { name: /install on github/i });
+    expect(seenAtRequest).toBe('/admin/github/created');
+    expect(screen.getByTestId('where').textContent).not.toMatch(/code=/);
+  });
+
+  it('takes the code out of the URL when the call fails', async () => {
+    api.completeManifest.mockRejectedValue(new Error('This setup link has expired'));
+    show('/admin/github/created?code=abc_1&state=old');
+    await screen.findByText(/setup link has expired/);
+    expect(screen.getByTestId('where').textContent).toBe('/admin/github/created');
+  });
+
+  it('goes back to the page when reached without a code', async () => {
+    api.status.mockResolvedValue(configured);
+    show('/admin/github/created');
+    expect(await screen.findByText('axiom-test')).toBeInTheDocument();
+    expect(api.completeManifest).not.toHaveBeenCalled();
+    expect(screen.getByTestId('where').textContent).toBe('/admin/github');
+  });
+
+  it('closes the dialog and shows the error when forgetting fails', async () => {
+    api.status.mockResolvedValue(configured);
+    api.remove.mockRejectedValue(new Error('GitHub is unreachable'));
+    const user = userEvent.setup();
+    show('/admin/github');
+    await user.click(await screen.findByRole('button', { name: /forget app/i }));
+    const buttons = screen.getAllByRole('button', { name: /^forget app$/i });
+    await user.click(buttons[buttons.length - 1]);
+    expect(await screen.findByText('GitHub is unreachable')).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('names the icon-only back button', async () => {
+    api.status.mockResolvedValue(configured);
+    show('/admin/github');
+    expect(await screen.findByRole('button', { name: 'Back to admin' })).toBeInTheDocument();
   });
 });

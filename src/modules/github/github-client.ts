@@ -78,6 +78,14 @@ export function registeredGithubAuthKinds(): string[] {
 }
 
 /**
+ * The origin of GitHub's web host, for the CSP form-action that lets the manifest form post there.
+ * @returns The origin, such as https://github.com
+ */
+export function githubWebOrigin(): string {
+  return new URL(webBase()).origin;
+}
+
+/**
  * A URL on GitHub's web host, for links a person opens.
  * @param path A path starting with a slash
  */

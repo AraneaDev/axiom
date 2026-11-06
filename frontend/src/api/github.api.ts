@@ -25,6 +25,10 @@ export interface GithubAccountStatus {
   login?: string;
 }
 
+/** The query keys of the App's status and of your own account */
+export const GITHUB_APP_KEY = ['github-app'];
+export const GITHUB_ACCOUNT_KEY = ['github-account'];
+
 export const githubAppApi = {
   status: () => get<GithubAppStatus>('/github/app'),
   startManifest: (organization?: string) =>
