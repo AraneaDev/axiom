@@ -52,7 +52,7 @@ export type GithubAppStatus = {
  * Where this instance is reached, as GitHub is told to redirect and call back.
  * @returns The origin of FRONTEND_URL (localhost:7000 in development)
  */
-function instanceOrigin(): string {
+export function instanceOrigin(): string {
   try {
     return new URL(process.env.FRONTEND_URL || 'http://localhost:7000').origin;
   } catch {
@@ -411,12 +411,14 @@ export async function syncInstallations(): Promise<GithubAppStatus> {
 // ---- Removal
 
 /**
- * Forgets the App, its installations and the tokens cached for them. GitHub is not asked to
+ * Forgets the App, its installations, the connected accounts and the tokens cached for them. GitHub is not asked to
  * delete anything.
  */
 export async function deleteApp() {
   const { count } = await prisma.$transaction(async (tx) => {
     await tx.githubInstallation.deleteMany();
+    // Their tokens belong to this App: no other App can refresh them
+    await tx.githubAccount.deleteMany();
     await tx.githubSetupState.deleteMany();
     return tx.githubApp.deleteMany({ where: { id: GITHUB_APP_ROW_ID } });
   });

@@ -14,9 +14,12 @@ import type { GithubFake } from './github-fake';
  * @param opts.fake
  * @returns The plain secrets, for tests that need to look for them
  */
-export async function seedGithubApp(
-  opts: { appId?: number; fake?: GithubFake } = {},
-): Promise<{ privateKey: string; publicKey: string; webhookSecret: string }> {
+export async function seedGithubApp(opts: { appId?: number; fake?: GithubFake } = {}): Promise<{
+  privateKey: string;
+  publicKey: string;
+  webhookSecret: string;
+  clientSecret: string;
+}> {
   const appId = opts.appId ?? 1201;
   const { publicKey, privateKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
@@ -48,5 +51,6 @@ export async function seedGithubApp(
   // Two seeds in one millisecond would share a generation: never serve the last one's tokens
   clearInstallationTokens();
   opts.fake?.setApp({ appId, publicKey });
-  return { privateKey, publicKey, webhookSecret };
+  opts.fake?.setOAuthClient({ clientId: data.clientId, clientSecret });
+  return { privateKey, publicKey, webhookSecret, clientSecret };
 }

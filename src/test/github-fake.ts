@@ -67,16 +67,37 @@ export interface GithubFake {
   /** A `ghu_` token for that user, reaching only the given repositories */
   issueUserToken(login: string, repos: string[]): string;
   /**
+   * The App's OAuth client credentials, which the token endpoint and the revoke call check.
+   * With none set, any are accepted.
+   */
+  setOAuthClient(client: { clientId: string; clientSecret: string } | null): void;
+  /**
+   * A code as GitHub puts on the callback redirect after the person agrees: good once, and
+   * exchanged at `POST /login/oauth/access_token` for an expiring access token and a refresh
+   * token. `GET /user` with that token answers the login and id.
+   */
+  issueAuthorizationCode(login: string, opts?: { githubUserId?: number; repos?: string[] }): string;
+  /** How many `refresh_token` grants the token endpoint has seen */
+  readonly refreshGrants: number;
+  /** Holds the token endpoint's answer back this long, so two refreshes can overlap */
+  setRefreshDelay(ms: number): void;
+  /** Every refresh token of that login stops working: the next refresh gets `bad_refresh_token` */
+  revokeRefreshTokens(login: string): void;
+  /** Whether the fake would still accept this user token */
+  isTokenValid(token: string): boolean;
+  /**
    * Installation tokens expire an hour after they are issued, by `Date.now()`, so a test that
    * fakes the clock (`vi.useFakeTimers({ toFake: ['Date'] })`) drives `expires_at` and the
    * fake's refusal of an expired token alike.
    */
-  /** Forgets recorded requests and `on` routes; the App, installations and tokens stay */
+  /** Forgets recorded requests, `on` routes and the refresh counter and delay; the rest stays */
   reset(): void;
   close(): Promise<void>;
 }
 
 const TOKEN_LIFETIME_MS = 60 * 60_000;
+/** A user token from the OAuth endpoint lives 8 hours, as GitHub's do */
+const USER_TOKEN_LIFETIME_MS = 8 * 60 * 60_000;
 const FIXTURES = path.join(__dirname, '__fixtures__', 'github');
 
 function parseRoute(route: string, handler: Handler): Route {
@@ -161,6 +182,10 @@ const repoKey = (fullName: string) => fullName.toLowerCase();
 /** Who a request authenticated as, in the fake's eyes */
 interface Credential {
   kind: 'none' | 'invalid' | 'basic' | 'app' | 'installation' | 'user';
+  /** For `basic`: the client id and secret that were sent */
+  basic?: { id: string; secret: string };
+  /** For `user`: whose token it is */
+  identity?: { login: string; id: number };
   /** What the recorded `authorization` header says: `app`, `installation:<id>`, `user:<prefix>` */
   label?: string;
   installationId?: number;
@@ -186,7 +211,16 @@ class GithubFakeServer implements GithubFake {
   private manifestCodes = new Set<string>();
   private publicRepos = new Set<string>();
   private installationTokens = new Map<string, { installationId: number; expiresAt: number }>();
-  private userTokens = new Map<string, Set<string>>();
+  private userTokens = new Map<
+    string,
+    { repos: Set<string>; login: string; id: number; expiresAt: number | null }
+  >();
+  private refreshTokens = new Map<string, { login: string; id: number; repos: string[] }>();
+  private authCodes = new Map<string, { login: string; id: number; repos: string[] }>();
+  private userIds = new Map<string, number>([['octo-dev', 9101]]);
+  private oauthClient: { clientId: string; clientSecret: string } | null = null;
+  private refreshDelayMs = 0;
+  refreshGrants = 0;
 
   constructor(private readonly scenario: string) {}
 
@@ -269,15 +303,68 @@ class GithubFakeServer implements GithubFake {
     return token;
   }
 
-  issueUserToken(_login: string, repos: string[]): string {
+  issueUserToken(login: string, repos: string[]): string {
+    return this.mintUserToken(login, this.idOf(login), repos, null);
+  }
+
+  setOAuthClient(client: { clientId: string; clientSecret: string } | null): void {
+    this.oauthClient = client;
+  }
+
+  issueAuthorizationCode(
+    login: string,
+    opts: { githubUserId?: number; repos?: string[] } = {},
+  ): string {
+    if (opts.githubUserId !== undefined) this.userIds.set(login, opts.githubUserId);
+    const code = randomBytes(10).toString('hex');
+    this.authCodes.set(code, { login, id: this.idOf(login), repos: opts.repos ?? [] });
+    return code;
+  }
+
+  setRefreshDelay(ms: number): void {
+    this.refreshDelayMs = ms;
+  }
+
+  revokeRefreshTokens(login: string): void {
+    for (const [token, owner] of this.refreshTokens) {
+      if (owner.login === login) this.refreshTokens.delete(token);
+    }
+  }
+
+  isTokenValid(token: string): boolean {
+    return this.userTokens.has(token);
+  }
+
+  private idOf(login: string): number {
+    let id = this.userIds.get(login);
+    if (id === undefined) {
+      id = 9200 + this.userIds.size;
+      this.userIds.set(login, id);
+    }
+    return id;
+  }
+
+  private mintUserToken(
+    login: string,
+    id: number,
+    repos: string[],
+    lifetimeMs: number | null,
+  ): string {
     const token = tokenOf('ghu_');
-    this.userTokens.set(token, new Set(repos.map(repoKey)));
+    this.userTokens.set(token, {
+      repos: new Set(repos.map(repoKey)),
+      login,
+      id,
+      expiresAt: lifetimeMs === null ? null : Date.now() + lifetimeMs,
+    });
     return token;
   }
 
   reset(): void {
     this.requests.length = 0;
     this.overrides = [];
+    this.refreshGrants = 0;
+    this.refreshDelayMs = 0;
   }
 
   async close(): Promise<void> {
@@ -296,7 +383,10 @@ class GithubFakeServer implements GithubFake {
   private credentialOf(header: string | undefined): Credential {
     if (header === undefined) return { kind: 'none' };
     const [scheme, value = ''] = header.split(/\s+/, 2);
-    if (/^basic$/i.test(scheme)) return { kind: 'basic', label: 'basic' };
+    if (/^basic$/i.test(scheme)) {
+      const [id = '', secret = ''] = Buffer.from(value, 'base64').toString().split(/:(.*)/s);
+      return { kind: 'basic', label: 'basic', basic: { id, secret } };
+    }
     if (/^(token|bearer)$/i.test(scheme)) {
       const issued = this.installationTokens.get(value);
       // An expired token, or one of an installation that is gone, is a bad credential
@@ -313,8 +403,16 @@ class GithubFakeServer implements GithubFake {
           repos: this.installations.get(installationId),
         };
       }
-      const userRepos = this.userTokens.get(value);
-      if (userRepos) return { kind: 'user', label: `user:${value.slice(0, 8)}`, repos: userRepos };
+      const user = this.userTokens.get(value);
+      // An expired user token is a bad credential, as with an installation token
+      if (user && (user.expiresAt === null || user.expiresAt > Date.now())) {
+        return {
+          kind: 'user',
+          label: `user:${value.slice(0, 8)}`,
+          repos: user.repos,
+          identity: { login: user.login, id: user.id },
+        };
+      }
       const app = this.app;
       if (/^bearer$/i.test(scheme) && app && verifyAppJwt(value, app.publicKey, app.appId)) {
         return { kind: 'app', label: 'app' };
@@ -438,6 +536,16 @@ class GithubFakeServer implements GithubFake {
         })),
       };
     }
+    if (req.method === 'POST' && req.path === '/web/login/oauth/access_token') {
+      return this.tokenEndpoint(req.body);
+    }
+    const revoke = /^\/applications\/([^/]+)\/token$/.exec(req.path);
+    if (req.method === 'DELETE' && revoke) return this.revokeToken(revoke[1], req.body, credential);
+    if (req.method === 'GET' && req.path === '/user' && credential.identity) {
+      const found = this.fromRoutes(req);
+      const body = found.body as Record<string, unknown> | undefined;
+      return { ...found, body: { ...body, ...credential.identity } };
+    }
     const conversion = /^\/app-manifests\/([^/]+)\/conversions$/.exec(req.path);
     if (req.method === 'POST' && conversion) return this.convertManifest(conversion[1]);
     // The installation's own repositories, out of the fixture list
@@ -451,6 +559,85 @@ class GithubFakeServer implements GithubFake {
       return { ...answer, body: { ...body, total_count: repositories.length, repositories } };
     }
     return null;
+  }
+
+  /**
+   * GitHub's OAuth token endpoint for the code grant and the refresh_token grant. Refusals are
+   * 200 with an `error`, as GitHub answers them. A refresh token works once: the grant hands
+   * out a new one.
+   * @param body The JSON body that was sent
+   */
+  private tokenEndpoint(body: unknown): FakeReply {
+    const input = (body ?? {}) as Record<string, string>;
+    const refused = (error: string, description: string): FakeReply => ({
+      status: 200,
+      body: { error, error_description: description },
+      delayMs: this.refreshDelayMs,
+    });
+    const isRefresh = input.grant_type === 'refresh_token';
+    if (isRefresh) this.refreshGrants += 1;
+    const client = this.oauthClient;
+    if (
+      client &&
+      (input.client_id !== client.clientId || input.client_secret !== client.clientSecret)
+    ) {
+      return refused(
+        'incorrect_client_credentials',
+        'The client_id and/or client_secret passed are incorrect.',
+      );
+    }
+    let owner: { login: string; id: number; repos: string[] } | undefined;
+    if (isRefresh) {
+      owner = this.refreshTokens.get(input.refresh_token ?? '');
+      if (!owner)
+        return refused('bad_refresh_token', 'The refresh token passed is incorrect or expired.');
+      this.refreshTokens.delete(input.refresh_token);
+    } else {
+      owner = this.authCodes.get(input.code ?? '');
+      if (!owner)
+        return refused('bad_verification_code', 'The code passed is incorrect or expired.');
+      this.authCodes.delete(input.code);
+    }
+    const refreshToken = tokenOf('ghr_');
+    this.refreshTokens.set(refreshToken, owner);
+    return {
+      status: 200,
+      delayMs: isRefresh ? this.refreshDelayMs : 0,
+      body: {
+        access_token: this.mintUserToken(
+          owner.login,
+          owner.id,
+          owner.repos,
+          USER_TOKEN_LIFETIME_MS,
+        ),
+        expires_in: USER_TOKEN_LIFETIME_MS / 1000,
+        refresh_token: refreshToken,
+        refresh_token_expires_in: 15_811_200,
+        token_type: 'bearer',
+        scope: '',
+      },
+    };
+  }
+
+  /**
+   * `DELETE /applications/:client_id/token`: the token in the body stops working.
+   * @param clientId The client id in the path
+   * @param body The JSON body, `{ access_token }`
+   * @param credential Who the request authenticated as (the App's client credentials)
+   */
+  private revokeToken(clientId: string, body: unknown, credential: Credential): FakeReply {
+    const client = this.oauthClient;
+    const sent = credential.basic;
+    if (
+      client &&
+      (sent?.id !== client.clientId ||
+        sent.secret !== client.clientSecret ||
+        clientId !== client.clientId)
+    ) {
+      return reply(401, 'Bad credentials');
+    }
+    const token = (body as { access_token?: string } | undefined)?.access_token ?? '';
+    return this.userTokens.delete(token) ? { status: 204 } : NOT_FOUND;
   }
 
   /**

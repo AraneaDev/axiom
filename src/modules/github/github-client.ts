@@ -12,11 +12,15 @@ export type GithubAuth =
   | { kind: 'app' }
   | { kind: 'installation'; installationId: number }
   | { kind: 'user'; userId: string }
+  /** The App's client credentials as Basic auth, for the endpoints of its OAuth side */
+  | { kind: 'oauth-app' }
+  /** A token in hand that is not stored yet: the one a connection has just been given */
+  | { kind: 'token'; token: string }
   | { kind: 'none' };
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 type Query = Record<string, string | number>;
-type ResolvableKind = Exclude<GithubAuth['kind'], 'none'>;
+type ResolvableKind = Exclude<GithubAuth['kind'], 'none' | 'token'>;
 type Resolver = (auth: GithubAuth) => Promise<string>;
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -63,6 +67,55 @@ export function githubWebUrl(path: string): string {
 }
 
 /**
+ * One POST to GitHub's web host, for the OAuth token endpoint, which answers 200 with an `error`
+ * in the body for most refusals. Nothing is sent in the URL, redirects are not followed, and
+ * the log gets method, path and status only. The caller reads the answer.
+ * @param path A path starting with a slash, such as `/login/oauth/access_token`
+ * @param body The JSON body, which holds the credentials
+ * @param timeoutMs The most to wait (default 10 s)
+ * @returns GitHub's status and its parsed JSON body (null when it is not JSON)
+ */
+export async function githubWebPost(
+  path: string,
+  body: Record<string, string>,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<{ status: number; data: unknown }> {
+  const url = new URL(githubWebUrl(path));
+  const signal = AbortSignal.timeout(timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { ...API_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      redirect: 'manual',
+      signal,
+    });
+  } catch {
+    const timedOut = signal.aborted;
+    logger.warn('github request failed', {
+      method: 'POST',
+      path: url.pathname,
+      status: timedOut ? 'timeout' : 'unreachable',
+    });
+    throw githubUnavailable(timedOut ? 'timeout' : 'unreachable');
+  }
+  logger[response.ok ? 'debug' : 'warn']('github request', {
+    method: 'POST',
+    path: url.pathname,
+    status: response.status,
+  });
+  let data: unknown = null;
+  try {
+    const text = await response.text();
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // A body that is not JSON is no answer to read: the status decides
+  }
+  return { status: response.status, data };
+}
+
+/**
  * A path to put after a base URL. Only `/` followed by something other than `/` is one:
  * anything else (`@host/x`, `//host/x`, an absolute URL) could name another host, and the
  * credential would follow it there.
@@ -78,6 +131,7 @@ const apiOrigin = () => new URL(apiBase()).origin;
 
 async function authorization(auth: GithubAuth): Promise<string | undefined> {
   if (auth.kind === 'none') return undefined;
+  if (auth.kind === 'token') return `token ${auth.token}`;
   const resolve = resolvers.get(auth.kind);
   if (!resolve) {
     throw new AppError(502, 'GitHub is not set up on this instance.', 'GITHUB_APP_AUTH');

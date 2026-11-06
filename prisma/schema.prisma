@@ -50,6 +50,7 @@ model User {
   savedFilters            SavedFilter[]
   dashboards              Dashboard[]
   agentPolicy             AgentPolicy?
+  githubAccount           GithubAccount?
   starredPages            StarredPage[]            @relation("UserStarredPages")
   pageViews               PageView[]               @relation("UserPageViews")
   issueVotes              IssueVote[]
@@ -1362,6 +1363,25 @@ model GithubApp {
   createdAt     DateTime @default(now())
 
   @@map("github_apps")
+}
+
+/// A person's own GitHub account, connected through the App's user authorization. accessToken and
+/// refreshToken are sealed by the secret box (enc:v1:...) with the contexts
+/// githubAccount.accessToken:<id> and githubAccount.refreshToken:<id>.
+model GithubAccount {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  githubUserId          Int       @unique
+  login                 String
+  accessToken           String
+  accessTokenExpiresAt  DateTime?
+  refreshToken          String?
+  refreshTokenExpiresAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("github_accounts")
 }
 
 /// A setup step started here and finished on GitHub's redirect. The state is single use.

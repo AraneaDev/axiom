@@ -83,3 +83,20 @@ onGithubEvent('installation', (d) => {
 onGithubEvent('installation_repositories', (d) =>
   writeInstallation(d, (fromPayload) => fromPayload),
 );
+
+const authorizationPayload = z.object({
+  action: z.string().optional(),
+  sender: z.object({ id: z.number().int() }),
+});
+
+// A person revoked the App's access on GitHub: their tokens are dead, so the connection goes. One
+// connected after the event was received is a newer act of theirs and stays.
+onGithubEvent('github_app_authorization', async (d) => {
+  if (d.action !== 'revoked') return 'ignored';
+  const parsed = authorizationPayload.safeParse(d.payload);
+  if (!parsed.success) return 'ignored';
+  const { count } = await prisma.githubAccount.deleteMany({
+    where: { githubUserId: parsed.data.sender.id, createdAt: { lte: d.receivedAt } },
+  });
+  return count > 0 ? 'processed' : 'ignored';
+});

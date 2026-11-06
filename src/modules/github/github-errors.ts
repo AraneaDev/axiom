@@ -1,7 +1,7 @@
 import { AppError } from '../../middleware/errorHandler';
 
 /** Who a failed call was made as: decides what a 401 means for the caller */
-export type GithubAuthKind = 'app' | 'installation' | 'user' | 'none';
+export type GithubAuthKind = 'app' | 'installation' | 'user' | 'oauth-app' | 'token' | 'none';
 
 /** Seconds to wait when GitHub names no time, as its docs advise for secondary limits */
 const DEFAULT_RETRY_SECONDS = 60;
