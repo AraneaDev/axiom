@@ -6,6 +6,8 @@ export type RealtimeEvent =
   | { type: 'issue:updated'; projectId: string; issueId: string }
   | { type: 'issue:created'; projectId: string; issueId: string }
   | { type: 'issue:links-updated'; issueId: string }
+  // GitHub branches, pull requests or commits of an issue changed: sent to the project room only
+  | { type: 'issue:development-updated'; projectId: string; issueId: string }
   | { type: 'comment:added'; projectId: string; issueId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
   // A sprint started or completed

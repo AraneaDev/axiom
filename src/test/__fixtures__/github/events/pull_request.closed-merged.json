@@ -1,0 +1,50 @@
+{
+  "action": "closed",
+  "number": 17,
+  "pull_request": {
+    "number": 17,
+    "title": "{{P}}-2 add the widget",
+    "body": "Closes {{P}}-3",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "user": {
+      "id": 7001,
+      "login": "voorbeeld-dev"
+    },
+    "head": {
+      "ref": "{{p}}-1-x",
+      "sha": "1111111111111111111111111111111111111111"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "mergeable_state": "clean",
+    "merge_commit_sha": "2222222222222222222222222222222222222222",
+    "requested_reviewers": [
+      {
+        "id": 7002,
+        "login": "review-bot"
+      }
+    ],
+    "html_url": "https://github.com/acme-labs/widget/pull/17",
+    "created_at": "2026-11-01T10:00:00Z",
+    "updated_at": "2026-11-02T09:00:00Z",
+    "merged_at": "2026-11-02T09:00:00Z",
+    "closed_at": "2026-11-02T09:00:00Z"
+  },
+  "repository": {
+    "id": "__REPO_ID__",
+    "name": "widget",
+    "full_name": "acme-labs/widget",
+    "html_url": "https://github.com/acme-labs/widget",
+    "owner": {
+      "login": "acme-labs",
+      "id": 4001
+    }
+  },
+  "sender": {
+    "id": 7001,
+    "login": "voorbeeld-dev"
+  }
+}

@@ -1,12 +1,14 @@
 // Every GitHub event handler is registered here and nowhere else. The API and the worker both
 // import this file, so a delivery runs the same handlers in whichever process retries it: a
 // process without a handler would mark the delivery IGNORED and lose it. A new handler module
-// is imported here.
+// is imported here, and so is every outcome listener.
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
 
+import './github-events';
+import './github-realtime';
 import { onGithubEvent, type GithubDeliveryContext } from './webhook-dispatch';
 
 const installationPayload = z.object({

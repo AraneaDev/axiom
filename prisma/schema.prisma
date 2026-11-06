@@ -1444,9 +1444,9 @@ model GithubDelivery {
 /// The one GitHub repository a project is linked to (ids as GitHub numbers them). Deleting the
 /// link deletes what the later GitHub tables hold for it.
 model GithubRepoLink {
-  id                  String            @id @default(cuid())
-  projectId           String            @unique
-  repoId              BigInt            @unique
+  id                  String              @id @default(cuid())
+  projectId           String              @unique
+  repoId              BigInt              @unique
   installationId      BigInt
   owner               String
   name                String
@@ -1455,13 +1455,16 @@ model GithubRepoLink {
   htmlUrl             String
   /// Who linked it; no relation, so deleting that person does not block or unlink the project
   linkedById          String
-  createdAt           DateTime          @default(now())
+  createdAt           DateTime            @default(now())
   lastDeliveryAt      DateTime?
   lastReconciledAt    DateTime?
   lastReconcileError  String?
   reconcileLeaseUntil DateTime?
-  project             Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   issueLinks          GithubIssueLink[]
+  branches            GithubBranch[]
+  pullRequests        GithubPullRequest[]
+  commits             GithubCommit[]
 
   @@map("github_repo_links")
 }
@@ -1495,4 +1498,88 @@ model GithubIssueLink {
   @@unique([issueId, targetType, targetKey])
   @@index([repoLinkId, targetType, targetKey])
   @@map("github_issue_links")
+}
+
+/// A branch of a linked repository; `deletedAt` marks one deleted on GitHub (its issue links stay)
+model GithubBranch {
+  id         String         @id @default(cuid())
+  repoLinkId String
+  name       String
+  /// Empty while only a `create` event has been seen: that payload carries no commit
+  headSha    String
+  deletedAt  DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  repoLink   GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+
+  @@unique([repoLinkId, name])
+  @@map("github_branches")
+}
+
+enum GithubPrState {
+  OPEN
+  CLOSED
+  MERGED
+}
+
+model GithubPullRequest {
+  id                 String         @id @default(cuid())
+  repoLinkId         String
+  number             Int
+  title              String
+  state              GithubPrState
+  draft              Boolean
+  authorLogin        String
+  /// The connected Axiom user, else the integration user
+  authorUserId       String?
+  headRef            String
+  headSha            String
+  baseRef            String
+  mergeableState     String?
+  mergeCommitSha     String?
+  /// [{ login, userId? }]
+  requestedReviewers Json
+  htmlUrl            String
+  openedAt           DateTime
+  mergedAt           DateTime?
+  closedAt           DateTime?
+  /// GitHub's `updated_at` of the newest payload applied: an older one never overwrites it
+  githubUpdatedAt    DateTime
+  repoLink           GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+  reviews            GithubReview[]
+
+  @@unique([repoLinkId, number])
+  @@map("github_pull_requests")
+}
+
+model GithubReview {
+  /// GitHub's review id
+  id            String            @id
+  pullRequestId String
+  authorLogin   String
+  authorUserId  String?
+  state         String
+  /// The first 4096 bytes
+  body          String
+  commitSha     String
+  submittedAt   DateTime
+  pullRequest   GithubPullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+
+  @@index([pullRequestId])
+  @@map("github_reviews")
+}
+
+model GithubCommit {
+  repoLinkId   String
+  sha          String
+  /// The first 2048 bytes
+  message      String
+  authorLogin  String?
+  authorUserId String?
+  htmlUrl      String
+  committedAt  DateTime
+  repoLink     GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+
+  @@id([repoLinkId, sha])
+  @@map("github_commits")
 }

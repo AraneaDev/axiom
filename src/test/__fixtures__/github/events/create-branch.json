@@ -1,0 +1,19 @@
+{
+  "ref": "{{p}}-1-x",
+  "ref_type": "branch",
+  "master_branch": "main",
+  "repository": {
+    "id": "__REPO_ID__",
+    "name": "widget",
+    "full_name": "acme-labs/widget",
+    "html_url": "https://github.com/acme-labs/widget",
+    "owner": {
+      "login": "acme-labs",
+      "id": 4001
+    }
+  },
+  "sender": {
+    "id": 7001,
+    "login": "voorbeeld-dev"
+  }
+}

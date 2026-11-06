@@ -10,6 +10,7 @@ export type RealtimeEvent =
   | { type: 'issue:updated'; projectId: string; issueId: string }
   | { type: 'issue:created'; projectId: string; issueId: string }
   | { type: 'issue:links-updated'; issueId: string }
+  | { type: 'issue:development-updated'; projectId: string; issueId: string }
   | { type: 'comment:added'; projectId: string; issueId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
   | { type: 'sprint:updated'; projectId: string; sprintId: string }
@@ -70,6 +71,11 @@ export function useRealtimeInvalidation(): void {
 
         case 'issue:links-updated':
           queryClient.invalidateQueries({ queryKey: ['issue-wiki-links'] });
+          break;
+
+        case 'issue:development-updated':
+          // Keyed by project and issue number: the event has the id, so the project's issue pages refetch
+          queryClient.invalidateQueries({ queryKey: ['issue-hydrate', event.projectId] });
           break;
 
         case 'comment:added':

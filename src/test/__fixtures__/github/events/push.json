@@ -1,0 +1,54 @@
+{
+  "ref": "refs/heads/{{p}}-1-x",
+  "before": "0000000000000000000000000000000000000000",
+  "after": "3333333333333333333333333333333333333333",
+  "created": true,
+  "deleted": false,
+  "forced": false,
+  "commits": [
+    {
+      "id": "1111111111111111111111111111111111111111",
+      "message": "{{P}}-1 first step",
+      "timestamp": "2026-11-01T10:01:00Z",
+      "url": "https://github.com/acme-labs/widget/commit/1111111111111111111111111111111111111111",
+      "author": {
+        "name": "Voorbeeld Dev",
+        "username": "voorbeeld-dev"
+      }
+    },
+    {
+      "id": "2222222222222222222222222222222222222222",
+      "message": "tidy the widget",
+      "timestamp": "2026-11-01T10:02:00Z",
+      "url": "https://github.com/acme-labs/widget/commit/2222222222222222222222222222222222222222",
+      "author": {
+        "name": "Voorbeeld Dev",
+        "username": "voorbeeld-dev"
+      }
+    },
+    {
+      "id": "3333333333333333333333333333333333333333",
+      "message": "more tidying",
+      "timestamp": "2026-11-01T10:03:00Z",
+      "url": "https://github.com/acme-labs/widget/commit/3333333333333333333333333333333333333333",
+      "author": {
+        "name": "Voorbeeld Dev",
+        "username": "voorbeeld-dev"
+      }
+    }
+  ],
+  "repository": {
+    "id": "__REPO_ID__",
+    "name": "widget",
+    "full_name": "acme-labs/widget",
+    "html_url": "https://github.com/acme-labs/widget",
+    "owner": {
+      "login": "acme-labs",
+      "id": 4001
+    }
+  },
+  "sender": {
+    "id": 7001,
+    "login": "voorbeeld-dev"
+  }
+}
