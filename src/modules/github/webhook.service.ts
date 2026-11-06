@@ -109,7 +109,26 @@ export async function receive(
     });
   } catch (err) {
     // The unique key is the duplicate check: no read ahead of it, so two copies cannot both pass
-    if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+    if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
+      // Postgres refused the payload's text (a lone surrogate, say): keep the delivery in the
+      // log without it, as given up, and answer GitHub as for any other. Anything else, such as
+      // a database that is down, still fails the call so GitHub sees it.
+      try {
+        await prisma.githubDelivery.create({
+          data: {
+            id: deliveryId,
+            event,
+            action: null,
+            status: 'FAILED',
+            error: 'payload could not be stored',
+            processedAt: new Date(),
+          },
+        });
+      } catch {
+        throw err;
+      }
+      return { accepted: true };
+    }
     // GitHub's "Redeliver" reuses the id. One that gave up for good runs again, once: the reset
     // only matches while it is still in that state
     const reset = await prisma.githubDelivery.updateMany({

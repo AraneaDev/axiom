@@ -274,6 +274,33 @@ describe('before the body is read', () => {
   }, 60_000);
 });
 
+describe('the gate and the payload', () => {
+  it('answers 405 with Allow: POST to anything but a POST, before reading a body', async () => {
+    for (const method of ['put', 'patch', 'delete', 'get'] as const) {
+      const agent = request(app);
+      const res = await agent[method](URL)
+        .set('Content-Type', 'application/json')
+        .send(Buffer.alloc(26 * 1024 * 1024, 0x61));
+      expect(res.status).toBe(405);
+      expect(res.headers.allow).toBe('POST');
+    }
+  });
+
+  it('stores a payload with a lone surrogate as FAILED without a payload, and answers 202', async () => {
+    const res = await postWebhook(eventName(), null, {
+      deliveryId: 'd-surrogate',
+      rawBody: '{"text":"cut \\ud83d here"}',
+    });
+    expect(res.status).toBe(202);
+    expect(await row('d-surrogate')).toMatchObject({
+      status: 'FAILED',
+      payload: null,
+      error: 'payload could not be stored',
+      nextAttemptAt: null,
+    });
+  });
+});
+
 describe('handler registry', () => {
   it('registers the installation events in one module that both processes import', () => {
     expect(registeredGithubEvents()).toEqual(
@@ -625,26 +652,80 @@ describe('installation events', () => {
     ).toBe('renamed-labs');
   });
 
-  it('ignores an event that is older than the row, so a late created cannot bring back a deleted one', async () => {
-    const created = await prisma.githubInstallation.create({
+  /**
+   * A stored delivery of an installation event, as it would have been received at `at`
+   * @param id
+   * @param at
+   * @param action
+   * @param extra
+   */
+  const stored = (id: string, at: Date, action: string, extra: object = {}) =>
+    prisma.githubDelivery.create({
+      data: {
+        id,
+        event: 'installation',
+        action,
+        payload: { action, installation: installation(extra) },
+        receivedAt: at,
+      },
+    });
+  const T = Date.parse('2026-11-06T09:00:00Z');
+  const lastEvent = async () =>
+    (await prisma.githubInstallation.findUnique({ where: { id: 5001 } }))!;
+
+  it('keeps the newer state when the older delivery is processed last', async () => {
+    await stored('o-new', new Date(T + 20), 'unsuspend');
+    await stored('o-old', new Date(T), 'suspend', { suspended_at: '2026-11-06T08:59:00Z' });
+    await processDelivery('o-new');
+    await processDelivery('o-old');
+    expect((await lastEvent()).suspendedAt).toBeNull();
+    expect((await row('o-old'))?.status).toBe('IGNORED');
+    expect((await lastEvent()).lastEventAt?.getTime()).toBe(T + 20);
+  });
+
+  it('applies an event with the same timestamp as the last one', async () => {
+    await stored('e-1', new Date(T), 'created');
+    await stored('e-2', new Date(T), 'suspend', { suspended_at: '2026-11-06T08:59:00Z' });
+    await processDelivery('e-1');
+    await processDelivery('e-2');
+    expect((await lastEvent()).suspendedAt).not.toBeNull();
+    expect((await row('e-2'))?.status).toBe('PROCESSED');
+  });
+
+  it('applies created and the installation_repositories right after it, a few ms apart', async () => {
+    await stored('c-1', new Date(T), 'created');
+    await prisma.githubDelivery.create({
+      data: {
+        id: 'c-2',
+        event: 'installation_repositories',
+        action: 'added',
+        payload: {
+          action: 'added',
+          installation: installation({ account: { login: 'renamed-labs', type: 'Organization' } }),
+        },
+        receivedAt: new Date(T + 5),
+      },
+    });
+    await processDelivery('c-1');
+    await processDelivery('c-2');
+    expect((await row('c-1'))?.status).toBe('PROCESSED');
+    expect((await row('c-2'))?.status).toBe('PROCESSED');
+    expect((await lastEvent()).accountLogin).toBe('renamed-labs');
+  });
+
+  it('applies an event to a row the sync wrote before it, and not one the sync wrote after it', async () => {
+    await prisma.githubInstallation.create({
       data: {
         id: 5001,
         accountLogin: 'acme-labs',
         accountType: 'Organization',
-        suspendedAt: new Date('2026-11-06T08:00:00Z'),
+        lastEventAt: new Date(T + 1000),
       },
     });
-    await prisma.$executeRaw`UPDATE github_installations SET "updatedAt" = now() + interval '1 hour' WHERE id = ${created.id}`;
-    await postWebhook(
-      'installation',
-      { action: 'created', installation: installation() },
-      { deliveryId: 'i-old' },
-    );
-    await done('i-old');
-    expect((await row('i-old'))?.status).toBe('IGNORED');
-    expect(
-      (await prisma.githubInstallation.findUnique({ where: { id: 5001 } }))?.suspendedAt,
-    ).not.toBeNull();
+    await stored('s-old', new Date(T), 'suspend', { suspended_at: '2026-11-06T08:59:00Z' });
+    await processDelivery('s-old');
+    expect((await row('s-old'))?.status).toBe('IGNORED');
+    expect((await lastEvent()).suspendedAt).toBeNull();
   });
 
   it('ignores an installation event without an installation', async () => {

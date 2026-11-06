@@ -13,13 +13,16 @@ const refuse = (res: Response, status: number, message: string, code: string) =>
  * The cheap checks of a webhook call, ahead of the body parser: a caller that is going to be
  * refused is answered before the server reads up to 25 MB of body. It checks only what the
  * headers and one indexed read tell; the signature itself is checked in the action, over the
- * bytes. Anything but a POST passes on to the router.
+ * bytes. Anything but a POST is answered 405 here, so no body is read for it.
  * @param req The request
  * @param res The response
  * @param next Continues to the body parser
  */
 export async function githubWebhookGate(req: Request, res: Response, next: NextFunction) {
-  if (req.method !== 'POST') return next();
+  if (req.method !== 'POST') {
+    res.set('Allow', 'POST');
+    return refuse(res, 405, 'Only POST is allowed', 'METHOD_NOT_ALLOWED');
+  }
   try {
     const app = await prisma.githubApp.findUnique({
       where: { id: GITHUB_APP_ROW_ID },

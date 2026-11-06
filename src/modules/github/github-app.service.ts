@@ -388,8 +388,14 @@ export async function syncInstallations(): Promise<GithubAppStatus> {
           accountLogin: item.account.login,
           accountType: item.account.type,
           suspendedAt,
+          lastEventAt: now,
         },
-        update: { accountLogin: item.account.login, accountType: item.account.type, suspendedAt },
+        update: {
+          accountLogin: item.account.login,
+          accountType: item.account.type,
+          suspendedAt,
+          lastEventAt: now,
+        },
       });
     }
     if (complete) {

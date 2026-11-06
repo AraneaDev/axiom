@@ -1382,6 +1382,8 @@ model GithubInstallation {
   accountLogin String
   accountType  String
   suspendedAt  DateTime?
+  /// When the newest webhook event applied to this row was received (or the last sync ran)
+  lastEventAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
