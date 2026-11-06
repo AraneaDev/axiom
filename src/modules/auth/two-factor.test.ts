@@ -139,3 +139,73 @@ describe('two-factor codes are checked', () => {
     });
   });
 });
+
+describe('a two-factor code is accepted once', () => {
+  let user: TestUser;
+  let secret: string;
+
+  beforeEach(async () => {
+    user = await createTestUser();
+    users.push(user);
+    secret = generateSecret();
+  });
+
+  const login = (twoFactorCode: string) =>
+    request(app)
+      .post('/api/auth/login')
+      .set(CSRF)
+      .send({ login: user.email, password: PASSWORD, twoFactorCode });
+
+  const authed = (path: string, code: string) =>
+    request(app).post(path).set(CSRF).set('Authorization', `Bearer ${user.token}`).send({ code });
+
+  const enable = () =>
+    prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: secret, twoFactorEnabled: true },
+    });
+
+  it('login refuses the code a login already used', async () => {
+    await enable();
+    const code = generateSync({ secret });
+    expect((await login(code)).status).toBe(200);
+    const again = await login(code);
+    expect(again.status).toBe(401);
+    expect(again.body.error.code).toBe('INVALID_TWO_FACTOR');
+    expect(again.body.accessToken).toBeUndefined();
+  });
+
+  it('verify refuses the code a verify already used', async () => {
+    await prisma.user.update({ where: { id: user.id }, data: { twoFactorSecret: secret } });
+    const code = generateSync({ secret });
+    expect((await authed('/api/auth/2fa/verify', code)).status).toBe(200);
+    const again = await authed('/api/auth/2fa/verify', code);
+    expect(again.status).toBe(400);
+    expect(again.body.error.message).toBe('Invalid 2FA code');
+  });
+
+  it('a login refuses the code that turned 2FA on', async () => {
+    await prisma.user.update({ where: { id: user.id }, data: { twoFactorSecret: secret } });
+    const code = generateSync({ secret });
+    expect((await authed('/api/auth/2fa/verify', code)).status).toBe(200);
+    expect((await login(code)).status).toBe(401);
+  });
+
+  it('disable refuses the code a login already used, and 2FA stays on', async () => {
+    await enable();
+    const code = generateSync({ secret });
+    expect((await login(code)).status).toBe(200);
+    const again = await authed('/api/auth/2fa/disable', code);
+    expect(again.status).toBe(401);
+    expect(again.body.error.message).toBe('Invalid 2FA code');
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(stored.twoFactorEnabled).toBe(true);
+    expect(stored.twoFactorSecret).toBe(secret);
+  });
+
+  it('refuses the code of the next period, which only a clock ahead of the server would show', async () => {
+    await enable();
+    const next = generateSync({ secret, epoch: Math.floor(Date.now() / 1000) + 30 });
+    expect((await login(next)).status).toBe(401);
+  });
+});

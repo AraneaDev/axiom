@@ -19,16 +19,39 @@ const ACCESS_TOKEN_TTL = '4h';
 const REFRESH_TOKEN_TTL_DAYS = 30;
 
 /**
- * Check a TOTP code against a secret.
+ * Check a TOTP code against a user's secret and spend it, so it can't be used again.
  * otplib 13's verifySync returns `{ valid }`, not a boolean: an object is always truthy,
- * so the field is what decides. A 30 second tolerance accepts the code of the
- * neighbouring period, for a code typed at the edge of one.
- * @param token - The six-digit code the user typed
+ * so the field is what decides. The tolerance reaches one period back and none ahead, for a code
+ * typed at the edge of one. A code of the step last accepted, or of an earlier one, is refused, and
+ * the step is stored with a conditional update so two requests racing with one code can't both pass.
+ * @param user - The user, with the step of their last accepted code
+ * @param user.id
+ * @param user.twoFactorLastStep
  * @param secret - The user's stored TOTP secret
- * @returns Whether the code is valid now
+ * @param token - The six-digit code the user typed
+ * @returns Whether the code was valid and not used before
  */
-function isValidTotp(token: string, secret: string): boolean {
-  return verifySync({ token, secret, epochTolerance: 30 }).valid === true;
+async function spendTotp(
+  user: { id: string; twoFactorLastStep: number | null },
+  secret: string,
+  token: string,
+): Promise<boolean> {
+  const result = verifySync({
+    token,
+    secret,
+    epochTolerance: [30, 0],
+    ...(user.twoFactorLastStep !== null && { afterTimeStep: user.twoFactorLastStep }),
+  });
+  // The union also holds the HOTP result, which has no time step
+  if (result.valid !== true || !('timeStep' in result)) return false;
+  const { count } = await prisma.user.updateMany({
+    where: {
+      id: user.id,
+      OR: [{ twoFactorLastStep: null }, { twoFactorLastStep: { lt: result.timeStep } }],
+    },
+    data: { twoFactorLastStep: result.timeStep },
+  });
+  return count === 1;
 }
 
 function generateTokens(userId: string) {
@@ -186,7 +209,7 @@ export async function login(data: { login: string; password: string; twoFactorCo
     if (!user.twoFactorSecret) {
       throw new AppError(500, '2FA misconfigured');
     }
-    if (!isValidTotp(data.twoFactorCode, user.twoFactorSecret)) {
+    if (!(await spendTotp(user, user.twoFactorSecret, data.twoFactorCode))) {
       throw new AppError(401, 'Invalid 2FA code', 'INVALID_TWO_FACTOR');
     }
   }
@@ -301,7 +324,7 @@ export async function enableTwoFactor(userId: string) {
   // Store secret (not yet enabled — user must verify first)
   await prisma.user.update({
     where: { id: userId },
-    data: { twoFactorSecret: secret },
+    data: { twoFactorSecret: secret, twoFactorLastStep: null },
   });
 
   return { secret, otpauthUrl };
@@ -320,7 +343,9 @@ export async function verifyAndActivateTwoFactor(userId: string, code: string) {
     throw new AppError(400, 'Call enable-2fa first');
   }
 
-  if (!isValidTotp(code, user.twoFactorSecret)) throw new AppError(400, 'Invalid 2FA code');
+  if (!(await spendTotp(user, user.twoFactorSecret, code))) {
+    throw new AppError(400, 'Invalid 2FA code');
+  }
 
   await prisma.user.update({
     where: { id: userId },
@@ -353,11 +378,13 @@ export async function disableTwoFactor(userId: string, code: string) {
     throw new AppError(400, '2FA not enabled');
   }
 
-  if (!isValidTotp(code, user.twoFactorSecret)) throw new AppError(401, 'Invalid 2FA code');
+  if (!(await spendTotp(user, user.twoFactorSecret, code))) {
+    throw new AppError(401, 'Invalid 2FA code');
+  }
 
   await prisma.user.update({
     where: { id: userId },
-    data: { twoFactorEnabled: false, twoFactorSecret: null },
+    data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorLastStep: null },
   });
 
   logAudit({

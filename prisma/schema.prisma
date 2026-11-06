@@ -20,8 +20,10 @@ model User {
   isAdmin Boolean @default(false)
 
   // 2FA
-  twoFactorEnabled Boolean @default(false)
-  twoFactorSecret  String?
+  twoFactorEnabled  Boolean @default(false)
+  twoFactorSecret   String?
+  /// The TOTP time step of the last accepted code: a code of that step or earlier is refused
+  twoFactorLastStep Int?
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

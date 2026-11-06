@@ -111,7 +111,10 @@ test.describe.serial('Enforced 2FA, for a user without it', () => {
     await signIn(page);
     await expect(page).toHaveURL('/setup-2fa');
     const secret = (await page.locator('code').first().textContent())!.trim();
-    await page.getByPlaceholder('Enter 6-digit code').fill(generateSync({ secret }));
+    // A code counts once, so setup spends the previous period's code (still accepted) and the
+    // sign-in below has a later one of its own
+    const previous = generateSync({ secret, epoch: Math.floor(Date.now() / 1000) - 30 });
+    await page.getByPlaceholder('Enter 6-digit code').fill(previous);
     await page.getByRole('button', { name: 'Verify' }).click();
     await expectToSettleOn(page, '/dashboard');
     await expect(page.getByText(USER.display).first()).toBeVisible();
