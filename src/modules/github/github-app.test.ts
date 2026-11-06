@@ -12,8 +12,13 @@ import { createTestUser, type TestUser } from '../../test/factory';
 import { useGithubFake } from '../../test/github-fake';
 import { seedGithubApp } from '../../test/github-seed';
 
-import { appManifest, getGithubAppSecrets } from './github-app.service';
-import { githubRequest } from './github-client';
+import {
+  appManifest,
+  clearInstallationTokens,
+  deleteApp,
+  getGithubAppSecrets,
+} from './github-app.service';
+import { githubRequest, setGithubBaseUrls } from './github-client';
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
 const BASE = '/api/github/app';
@@ -83,6 +88,10 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
+  setGithubBaseUrls({ api: fake.url, web: `${fake.url}/web` });
+  clearInstallationTokens();
+  for (const id of [4101, 4102, 4103, 4104]) fake.removeInstallation(id);
   await prisma.githubApp.deleteMany();
   await prisma.githubInstallation.deleteMany();
   await prisma.githubSetupState.deleteMany();
@@ -137,6 +146,33 @@ describe('starting the manifest flow', () => {
       `${fake.url}/web/settings/apps/new?state=${encodeURIComponent(res.body.state)}`,
     );
     expect(res.body.manifest).toEqual(appManifest(res.body.manifest.url));
+  });
+
+  it('keeps the name inside GitHub 34 characters by shortening the host', () => {
+    const long = appManifest('https://axiom.internal.engineering.acme-labs.example') as {
+      name: string;
+    };
+    expect(long.name.length).toBeLessThanOrEqual(34);
+    expect(long.name).toBe('Axiom (axiom.internal.engineering)');
+    expect((appManifest('https://axiom.acme.test') as { name: string }).name).toBe(
+      'Axiom (axiom.acme.test)',
+    );
+  });
+
+  it('keeps at most 5 open states per person, dropping the oldest', async () => {
+    const states: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      states.push((await post(`${BASE}/manifest`, admin)).body.state);
+      // Distinct expiry times, so "oldest" is defined
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const left = (await prisma.githubSetupState.findMany({ where: { userId: admin.id } })).map(
+      (r) => r.state,
+    );
+    expect(left.sort()).toEqual(states.slice(2).sort());
+    const other2 = await post(`${BASE}/manifest`, other);
+    expect(other2.status).toBe(200);
+    expect(await prisma.githubSetupState.count({ where: { userId: admin.id } })).toBe(5);
   });
 
   it('builds the manifest from the origin', () => {
@@ -203,6 +239,65 @@ describe('starting the manifest flow', () => {
 });
 
 describe('completing the manifest flow', () => {
+  it('keeps the manifest code out of the logs when the conversion fails', async () => {
+    const logs: string[] = [];
+    const { logger } = await import('../../utils/logger');
+    for (const level of ['info', 'warn', 'error', 'debug'] as const) {
+      vi.spyOn(logger, level).mockImplementation((...args: unknown[]) => {
+        logs.push(JSON.stringify(args));
+        return logger;
+      });
+    }
+    // A 5xx from GitHub
+    const first = await post(`${BASE}/manifest`, admin);
+    const serverCode = fake.issueManifestCode();
+    fake.on('POST /app-manifests/:code/conversions', { status: 503, body: { message: 'down' } });
+    const failed = await post(`${BASE}/manifest/complete`, admin, {
+      code: serverCode,
+      state: first.body.state,
+    });
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    // GitHub not answering at all (the same log line as a timeout)
+    const second = await post(`${BASE}/manifest`, admin);
+    const lostCode = fake.issueManifestCode();
+    setGithubBaseUrls({ api: 'http://127.0.0.1:1', web: `${fake.url}/web` });
+    const lost = await post(`${BASE}/manifest/complete`, admin, {
+      code: lostCode,
+      state: second.body.state,
+    });
+    expect(lost.status).toBe(502);
+    const haystack = logs.join('\n');
+    expect(haystack).toContain('/app-manifests/[redacted]');
+    for (const code of [serverCode, lostCode]) {
+      expect(haystack).not.toContain(code);
+      expect(JSON.stringify([failed.body, lost.body])).not.toContain(code);
+    }
+  });
+
+  it('refuses a conversion without a webhook secret and stores nothing', async () => {
+    const { logger } = await import('../../utils/logger');
+    vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    const started = await post(`${BASE}/manifest`, admin);
+    fake.on('POST /app-manifests/:code/conversions', {
+      status: 201,
+      body: { ...FIXTURE, webhook_secret: null },
+    });
+    const res = await post(`${BASE}/manifest/complete`, admin, {
+      code: fake.issueManifestCode(),
+      state: started.body.state,
+    });
+    expect(res.status).toBe(502);
+    expect(res.body.error.code).toBe('GITHUB_APP_INCOMPLETE');
+    expect(res.body.error.message).toContain('Delete the App on GitHub');
+    expect(await prisma.githubApp.count()).toBe(0);
+  });
+
+  it('says in the 409 that an App may exist on GitHub unstored', async () => {
+    await seedGithubApp();
+    const res = await post(`${BASE}/manifest`, admin);
+    expect(res.body.error.message).toContain('may also exist on GitHub');
+  });
+
   it('stores the App sealed, and status shows it without a secret', async () => {
     const { done } = await setUpApp();
     expect(done.status).toBe(200);
@@ -289,7 +384,6 @@ describe('completing the manifest flow', () => {
     for (const secret of [secrets.clientSecret, secrets.webhookSecret, pemBody, 'PRIVATE KEY']) {
       expect(haystack).not.toContain(secret);
     }
-    vi.restoreAllMocks();
   });
 
   it.each([
@@ -445,6 +539,50 @@ describe('installation tokens', () => {
     expect(posts()).toHaveLength(1);
   });
 
+  it('does not cache a token whose fetch finishes after the App was forgotten', async () => {
+    await seedGithubApp({ fake });
+    fake.addInstallation(4103, ['acme-labs/widget']);
+    const slowToken = fake.issueInstallationToken(4103);
+    fake.on('POST /app/installations/:id/access_tokens', {
+      status: 201,
+      delayMs: 300,
+      body: { token: slowToken, expires_at: new Date(Date.now() + 3_600_000).toISOString() },
+    });
+    const auth = { kind: 'installation', installationId: 4103 } as const;
+    const inFlight = githubRequest<unknown>(auth, 'GET', '/repos/acme-labs/widget');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await deleteApp();
+    await inFlight;
+    // Nothing of the forgotten App is served: not from the cache, not from a shared fetch
+    await expect(githubRequest(auth, 'GET', '/repos/acme-labs/widget')).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    // And not for the App that replaces it
+    await seedGithubApp({ fake });
+    fake.reset();
+    fake.addInstallation(4103, ['acme-labs/widget']);
+    expect((await githubRequest(auth, 'GET', '/repos/acme-labs/widget')).status).toBe(200);
+    expect(posts()).toHaveLength(1);
+  });
+
+  it('drops a cached token when the App row is replaced behind this process', async () => {
+    await seedGithubApp({ fake });
+    fake.addInstallation(4104, ['acme-labs/widget']);
+    const auth = { kind: 'installation', installationId: 4104 } as const;
+    await githubRequest(auth, 'GET', '/repos/acme-labs/widget');
+    await githubRequest(auth, 'GET', '/repos/acme-labs/widget');
+    expect(posts()).toHaveLength(1);
+    // Another replica deleted the App and set up a new one: this process cleared nothing
+    await prisma.githubApp.deleteMany();
+    await expect(githubRequest(auth, 'GET', '/repos/acme-labs/widget')).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    vi.setSystemTime(new Date('2026-11-06T10:00:01Z'));
+    await seedGithubApp({ fake, appId: 1201 });
+    await githubRequest(auth, 'GET', '/repos/acme-labs/widget');
+    expect(posts()).toHaveLength(2);
+  });
+
   it('refuses an App call when none is set up', async () => {
     await expect(githubRequest({ kind: 'app' }, 'GET', '/app/installations')).rejects.toMatchObject(
       {
@@ -477,6 +615,21 @@ describe('syncing installations', () => {
     ]);
     const status = await request(app).get(BASE).set(as(member));
     expect(status.body.installations).toHaveLength(2);
+  });
+
+  it('follows GitHub suspending an installation and lifting it again', async () => {
+    await seedGithubApp({ fake });
+    fake.addInstallation(4101, ['acme-labs/widget']);
+    fake.suspendInstallation(4101);
+    const suspended = await post(`${BASE}/installations/sync`, admin);
+    expect(suspended.body.installations).toEqual([
+      { id: 4101, accountLogin: 'acme-labs', suspended: true },
+    ]);
+    fake.suspendInstallation(4101, false);
+    const active = await post(`${BASE}/installations/sync`, admin);
+    expect(active.body.installations).toEqual([
+      { id: 4101, accountLogin: 'acme-labs', suspended: false },
+    ]);
   });
 
   it('is refused to a person who is not a platform admin, and answers 409 with no App', async () => {

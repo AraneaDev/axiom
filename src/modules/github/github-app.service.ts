@@ -19,6 +19,7 @@ import { appJwt } from './github-jwt';
 /** The App is one row, and its id is part of every context a secret of it is sealed with */
 export const GITHUB_APP_ROW_ID = 1;
 const SETUP_STATE_MINUTES = 10;
+const MAX_OPEN_STATES = 5;
 /** A cached installation token is replaced this long before GitHub says it expires */
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60_000;
 /** GitHub's login rule: 1 to 39 letters, digits and hyphens, not starting with a hyphen */
@@ -30,6 +31,13 @@ const sealed = (field: SecretField, plain: string) =>
   encryptSecret(plain, secretContext('githubApp', field, String(GITHUB_APP_ROW_ID)));
 const opened = (field: SecretField, stored: string) =>
   decryptSecret(stored, secretContext('githubApp', field, String(GITHUB_APP_ROW_ID)));
+
+const appExists = () =>
+  new AppError(
+    409,
+    'A GitHub App is already set up here. If you just created one, it may also exist on GitHub without being stored: delete it there under Settings, Developer settings, GitHub Apps',
+    'GITHUB_APP_EXISTS',
+  );
 
 /** What `githubApp.status` answers: never a secret */
 export type GithubAppStatus = {
@@ -52,13 +60,26 @@ function instanceOrigin(): string {
   }
 }
 
+/** GitHub limits an App's name to 34 characters */
+const APP_NAME_MAX = 34;
+
+/**
+ * The App's name, with the host shortened until the name fits GitHub's limit. The admin can
+ * rename it on GitHub's form.
+ * @param host The host of this instance
+ */
+function appName(host: string): string {
+  const room = APP_NAME_MAX - 'Axiom ()'.length;
+  return `Axiom (${host.slice(0, room)})`;
+}
+
 /**
  * The manifest GitHub turns into an App.
  * @param origin The origin of this instance, from FRONTEND_URL
  */
 export function appManifest(origin: string): Record<string, unknown> {
   return {
-    name: `Axiom (${new URL(origin).host})`,
+    name: appName(new URL(origin).host),
     url: origin,
     hook_attributes: { url: `${origin}/api/github/webhook` },
     redirect_url: `${origin}/admin/github/created`,
@@ -116,8 +137,13 @@ export async function getGithubAppSecrets(): Promise<{
 
 // ---- Credentials for the client
 
-const installationTokens = new Map<number, { token: string; expiresAt: number }>();
-const installationFetches = new Map<number, Promise<string>>();
+// A token belongs to the App that minted it. The generation (appId and when the row was made)
+// is read from the database on every resolve, so a token of a forgotten or replaced App is
+// dropped by every process, not only the one that handled the delete.
+const installationTokens = new Map<number, { gen: string; token: string; expiresAt: number }>();
+const installationFetches = new Map<string, Promise<string>>();
+// Bumped by every clear: a fetch that started before one never writes to the cache
+let cacheEpoch = 0;
 
 const tokenReply = z.object({ token: z.string().min(1), expires_at: z.string() });
 
@@ -127,10 +153,23 @@ const tokenReply = z.object({ token: z.string().min(1), expires_at: z.string() }
  * @param installationId GitHub's installation id
  */
 async function installationToken(installationId: number): Promise<string> {
+  const current = await prisma.githubApp.findUnique({
+    where: { id: GITHUB_APP_ROW_ID },
+    select: { appId: true, createdAt: true },
+  });
+  if (!current) {
+    installationTokens.delete(installationId);
+    throw new AppError(409, 'No GitHub App is set up', 'GITHUB_APP_MISSING');
+  }
+  const gen = `${current.appId}:${current.createdAt.getTime()}`;
   const cached = installationTokens.get(installationId);
-  if (cached && Date.now() < cached.expiresAt - TOKEN_REFRESH_MARGIN_MS) return cached.token;
-  const running = installationFetches.get(installationId);
+  if (cached && cached.gen === gen && Date.now() < cached.expiresAt - TOKEN_REFRESH_MARGIN_MS) {
+    return cached.token;
+  }
+  const key = `${gen}/${installationId}`;
+  const running = installationFetches.get(key);
   if (running) return running;
+  const epoch = cacheEpoch;
   const fetching = (async () => {
     const { data } = await githubRequest<unknown>(
       { kind: 'app' },
@@ -140,16 +179,22 @@ async function installationToken(installationId: number): Promise<string> {
     const parsed = tokenReply.safeParse(data);
     const expiresAt = parsed.success ? Date.parse(parsed.data.expires_at) : Number.NaN;
     if (!parsed.success || Number.isNaN(expiresAt)) throw githubUnavailable('unreadable');
-    installationTokens.set(installationId, { token: parsed.data.token, expiresAt });
+    if (epoch === cacheEpoch) {
+      installationTokens.set(installationId, { gen, token: parsed.data.token, expiresAt });
+    }
     return parsed.data.token;
-  })().finally(() => installationFetches.delete(installationId));
-  installationFetches.set(installationId, fetching);
+  })().finally(() => {
+    if (installationFetches.get(key) === fetching) installationFetches.delete(key);
+  });
+  installationFetches.set(key, fetching);
   return fetching;
 }
 
-/** Forgets every cached installation token (the App was removed) */
+/** Forgets every cached installation token and every fetch in flight (the App changed) */
 export function clearInstallationTokens(): void {
+  cacheEpoch += 1;
   installationTokens.clear();
+  installationFetches.clear();
 }
 
 registerGithubAuthResolver('app', async () => {
@@ -198,10 +243,23 @@ export async function startManifest(userId: string, organization?: string) {
     throw new AppError(400, 'That is not a GitHub organization name', 'VALIDATION_ERROR');
   }
   if (await prisma.githubApp.findUnique({ where: { id: GITHUB_APP_ROW_ID } })) {
-    throw new AppError(409, 'A GitHub App is already set up', 'GITHUB_APP_EXISTS');
+    throw appExists();
   }
   const now = new Date();
   await prisma.githubSetupState.deleteMany({ where: { expiresAt: { lte: now } } });
+  // At most 5 open states per person: the oldest goes
+  const open = await prisma.githubSetupState.findMany({
+    where: { userId },
+    orderBy: { expiresAt: 'asc' },
+    select: { state: true },
+  });
+  if (open.length >= MAX_OPEN_STATES) {
+    await prisma.githubSetupState.deleteMany({
+      where: {
+        state: { in: open.slice(0, open.length - MAX_OPEN_STATES + 1).map((o) => o.state) },
+      },
+    });
+  }
   const state = randomBytes(24).toString('base64url');
   await prisma.githubSetupState.create({
     data: {
@@ -228,7 +286,8 @@ const conversionReply = z.object({
   html_url: z.string().min(1),
   client_id: z.string().min(1),
   client_secret: z.string().min(1),
-  webhook_secret: z.string().min(1),
+  // GitHub documents it as nullable; the manifest always asks for a webhook, so none is an error
+  webhook_secret: z.string().nullish(),
   pem: z.string().min(1),
   owner: z.object({ login: z.string().min(1) }),
 });
@@ -252,7 +311,7 @@ export async function completeManifest(userId: string, code: string, state: stri
     );
   }
   if (await prisma.githubApp.findUnique({ where: { id: GITHUB_APP_ROW_ID } })) {
-    throw new AppError(409, 'A GitHub App is already set up', 'GITHUB_APP_EXISTS');
+    throw appExists();
   }
   const { data } = await githubRequest<unknown>(
     { kind: 'none' },
@@ -262,6 +321,13 @@ export async function completeManifest(userId: string, code: string, state: stri
   const app = conversionReply.safeParse(data);
   // The reply holds the secrets, so nothing of it goes into an error
   if (!app.success) throw githubUnavailable('unreadable');
+  if (!app.data.webhook_secret) {
+    throw new AppError(
+      502,
+      'GitHub created the App without a webhook secret, so it was not stored. Delete the App on GitHub (Settings, Developer settings, GitHub Apps) and start again',
+      'GITHUB_APP_INCOMPLETE',
+    );
+  }
   try {
     await prisma.githubApp.create({
       data: {
@@ -280,10 +346,11 @@ export async function completeManifest(userId: string, code: string, state: stri
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new AppError(409, 'A GitHub App is already set up', 'GITHUB_APP_EXISTS');
+      throw appExists();
     }
     throw err;
   }
+  clearInstallationTokens();
   return getStatus();
 }
 

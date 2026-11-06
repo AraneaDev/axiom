@@ -105,6 +105,15 @@ interface SendOptions {
 }
 
 /**
+ * A path for the log. A manifest code is a bearer credential for the App's secrets until it is
+ * used, so it never reaches a log line.
+ * @param pathname The request path
+ */
+function loggablePath(pathname: string): string {
+  return pathname.replace(/\/app-manifests\/[^/]+/gi, '/app-manifests/[redacted]');
+}
+
+/**
  * One call with redirects followed by hand, so the credential never travels to a host it was
  * not meant for. The log gets method, path and status only.
  * @param url The first URL, on the API host
@@ -137,7 +146,7 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
       const timedOut = signal.aborted;
       logger.warn('github request failed', {
         method,
-        path: target.pathname,
+        path: loggablePath(target.pathname),
         status: timedOut ? 'timeout' : 'unreachable',
       });
       throw githubUnavailable(timedOut ? 'timeout' : 'unreachable');
@@ -145,7 +154,11 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
 
     const location = response.headers.get('location');
     if (response.status >= 300 && response.status < 400 && location && hop < MAX_REDIRECTS) {
-      logger.debug('github request', { method, path: target.pathname, status: response.status });
+      logger.debug('github request', {
+        method,
+        path: loggablePath(target.pathname),
+        status: response.status,
+      });
       await response.body?.cancel();
       target = new URL(location, target);
       // 303, and 301 or 302 after a POST, turn into a GET as browsers do
@@ -166,7 +179,11 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
     }
 
     const level = response.ok ? 'debug' : 'warn';
-    logger[level]('github request', { method, path: target.pathname, status: response.status });
+    logger[level]('github request', {
+      method,
+      path: loggablePath(target.pathname),
+      status: response.status,
+    });
     return response;
   }
 }

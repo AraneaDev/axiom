@@ -56,6 +56,8 @@ export interface GithubFake {
   ): void;
   /** The installation is gone, as when the App is uninstalled; its tokens stop working */
   removeInstallation(installationId: number): void;
+  /** GitHub suspends the installation (or lifts it); `/app/installations` reports it */
+  suspendInstallation(installationId: number, suspended?: boolean): void;
   /** A manifest code, as GitHub puts on the redirect; it converts once */
   issueManifestCode(): string;
   /** Repositories anyone may read, with or without a credential; every other one is private */
@@ -180,6 +182,7 @@ class GithubFakeServer implements GithubFake {
   private app: { appId: number; publicKey: string } | null = null;
   private installations = new Map<number, Set<string>>();
   private accounts = new Map<number, { login: string; type: string }>();
+  private suspended = new Set<number>();
   private manifestCodes = new Set<string>();
   private publicRepos = new Set<string>();
   private installationTokens = new Map<string, { installationId: number; expiresAt: number }>();
@@ -235,6 +238,11 @@ class GithubFakeServer implements GithubFake {
   removeInstallation(installationId: number): void {
     this.installations.delete(installationId);
     this.accounts.delete(installationId);
+  }
+
+  suspendInstallation(installationId: number, suspended = true): void {
+    if (suspended) this.suspended.add(installationId);
+    else this.suspended.delete(installationId);
   }
 
   issueManifestCode(): string {
@@ -424,7 +432,7 @@ class GithubFakeServer implements GithubFake {
           id,
           account: { ...this.accounts.get(id), id: 9000 + id },
           app_id: this.app?.appId,
-          suspended_at: null,
+          suspended_at: this.suspended.has(id) ? new Date(Date.now()).toISOString() : null,
         })),
       };
     }

@@ -2,7 +2,7 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 
 import { prisma } from '../config/database';
 import { encryptSecret, secretContext } from '../lib/secret-box';
-import { clearInstallationTokens } from '../modules/github/github-app.service';
+import { GITHUB_APP_ROW_ID } from '../modules/github/github-app.service';
 
 import type { GithubFake } from './github-fake';
 
@@ -26,7 +26,7 @@ export async function seedGithubApp(
   const webhookSecret = `whsec_${randomBytes(12).toString('hex')}`;
   const clientSecret = `cs_${randomBytes(12).toString('hex')}`;
   const seal = (field: string, plain: string) =>
-    encryptSecret(plain, secretContext('githubApp', field, '1'));
+    encryptSecret(plain, secretContext('githubApp', field, String(GITHUB_APP_ROW_ID)));
   const data = {
     appId,
     slug: 'acme-axiom',
@@ -39,8 +39,12 @@ export async function seedGithubApp(
     webhookSecret: seal('webhookSecret', webhookSecret),
     createdById: 'seed',
   };
-  await prisma.githubApp.upsert({ where: { id: 1 }, create: { id: 1, ...data }, update: data });
-  clearInstallationTokens();
+  await prisma.githubApp.upsert({
+    where: { id: GITHUB_APP_ROW_ID },
+    create: { id: GITHUB_APP_ROW_ID, ...data },
+    // A replaced App is a new generation, as a deleted and re-created one is
+    update: { ...data, createdAt: new Date() },
+  });
   opts.fake?.setApp({ appId, publicKey });
   return { privateKey, publicKey, webhookSecret };
 }

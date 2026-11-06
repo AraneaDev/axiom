@@ -42,7 +42,8 @@ describe('E2E: Full workflow', () => {
     await prisma.orgMembership.deleteMany({});
     await prisma.organization.deleteMany({});
     await prisma.refreshToken.deleteMany({});
-    await prisma.user.deleteMany({});
+    // The built-in integration user belongs to the schema, not to this test
+    await prisma.user.deleteMany({ where: { kind: 'PERSON' } });
     await prisma.$disconnect();
   });
 
