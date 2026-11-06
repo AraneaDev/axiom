@@ -74,7 +74,7 @@ export function useRealtimeInvalidation(): void {
           break;
 
         case 'issue:development-updated':
-          // Keyed by project and issue number: the event has the id, so the project's issue pages refetch
+          // The hydrate query is keyed by project and issue number, the event names issue ids: refetch the project's open issue pages
           queryClient.invalidateQueries({ queryKey: ['issue-hydrate', event.projectId] });
           break;
 

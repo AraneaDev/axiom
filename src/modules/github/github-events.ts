@@ -23,6 +23,8 @@ export type StoreMeta = {
   commitLinks?: Pick<SyncResult, 'linked' | 'removed' | 'driving'>;
   /** When GitHub says a push or deletion happened: an older one never overwrites a newer one */
   at?: Date | null;
+  /** The head a push moved from: with no (or an equal) time it must be the stored head */
+  before?: string | null;
 };
 
 type Sender = { id: number; login: string } | null;
@@ -84,6 +86,16 @@ async function linksOf(
     linked: rows.map((r) => r.issueId),
     driving: rows.filter((r) => drivesAutomation(r.sources)).map((r) => r.issueId),
   };
+}
+
+// The first statement of every store transaction. Unlinking deletes the link row and its children
+// cascade, so a store takes the link before its own rows, in that order too, and never waits on a
+// lock the unlink holds the other way round. False when the link is gone: nothing is stored.
+async function lockLink(tx: Client, repoLinkId: string): Promise<boolean> {
+  const rows = await tx.$queryRaw<
+    { id: string }[]
+  >`SELECT id FROM github_repo_links WHERE id = ${repoLinkId} FOR KEY SHARE`;
+  return rows.length > 0;
 }
 
 const union = (...lists: string[][]) => [...new Set(lists.flat())];
@@ -195,10 +207,17 @@ export async function storeBranch(
   meta: StoreMeta = {},
 ): Promise<GithubEventOutcome> {
   const link = await loadLink(repoLinkId);
+  const base = await outcomeBase(repoLinkId, link, sender, source, meta, {
+    event: branch.sha === null ? 'delete' : 'push',
+    action: null,
+  });
   const name = clean(branch.name);
   const at = meta.at ?? null;
   const stored = await retryOnRace(() =>
     prisma.$transaction(async (tx) => {
+      if (!(await lockLink(tx, repoLinkId))) {
+        return { row: null, created: false, links: null as SyncResult | null, stale: true };
+      }
       await tx.$queryRaw`SELECT id FROM github_branches WHERE "repoLinkId" = ${repoLinkId} AND name = ${name} FOR UPDATE`;
       const before = await tx.githubBranch.findUnique({
         where: { repoLinkId_name: { repoLinkId, name } },
@@ -206,6 +225,14 @@ export async function storeBranch(
       const nothing = { row: before, created: false, links: null as SyncResult | null };
       if (before?.lastPushedAt && at && at < before.lastPushedAt)
         return { ...nothing, stale: true };
+      // A delete event names no time: it deletes only a branch no ordered push has touched
+      if (branch.sha === null && !at && before?.lastPushedAt) return { ...nothing, stale: true };
+      // A push of the same second (or none named) is ordered by the head it moves from
+      if (branch.sha && meta.before != null && before?.headSha && !before.deletedAt) {
+        const sameTime =
+          !at || !before.lastPushedAt || at.getTime() === before.lastPushedAt.getTime();
+        if (sameTime && meta.before !== before.headSha) return { ...nothing, stale: true };
+      }
       let row = before;
       let created = false;
       if (branch.sha === null) {
@@ -241,10 +268,6 @@ export async function storeBranch(
     }),
   );
 
-  const base = await outcomeBase(repoLinkId, link, sender, source, meta, {
-    event: branch.sha === null ? 'delete' : 'push',
-    action: null,
-  });
   const commit = meta.commitLinks ?? { linked: [], removed: [], driving: [] };
   const own = stored.links ?? { added: [], removed: [], linked: [], driving: [] };
   const outcome: GithubEventOutcome = {
@@ -335,6 +358,10 @@ export async function storePullRequest(
 ): Promise<GithubEventOutcome> {
   const pr = pullRequestSchema.parse(pullRequest);
   const link = await loadLink(repoLinkId);
+  const base = await outcomeBase(repoLinkId, link, sender, source, meta, {
+    event: 'pull_request',
+    action: null,
+  });
   const author = await resolveGithubActor(pr.user ?? null);
   const reviewers = await reviewersOf(pr);
   const data = {
@@ -357,6 +384,7 @@ export async function storePullRequest(
 
   const stored = await retryOnRace(() =>
     prisma.$transaction(async (tx) => {
+      if (!(await lockLink(tx, repoLinkId))) return null;
       await tx.$queryRaw`SELECT id FROM github_pull_requests WHERE "repoLinkId" = ${repoLinkId} AND number = ${pr.number} FOR UPDATE`;
       const before = await tx.githubPullRequest.findUnique({
         where: { repoLinkId_number: { repoLinkId, number: pr.number } },
@@ -420,10 +448,7 @@ export async function storePullRequest(
     }),
   );
 
-  const base = await outcomeBase(repoLinkId, link, sender, source, meta, {
-    event: 'pull_request',
-    action: null,
-  });
+  if (!stored) return { ...base, projectId: '', transitions: [] };
   const outcome: GithubEventOutcome = {
     ...base,
     pullRequestId: stored.row.id,
@@ -464,6 +489,10 @@ export async function storeReview(
     select: { repoLinkId: true, headSha: true },
   });
   const link = await loadLink(pr.repoLinkId);
+  const base = await outcomeBase(pr.repoLinkId, link, sender, source, meta, {
+    event: 'pull_request_review',
+    action: null,
+  });
   const author = await resolveGithubActor(parsed.user ?? null);
   const data = {
     authorLogin: author.login,
@@ -475,12 +504,14 @@ export async function storeReview(
   };
   const id = String(parsed.id);
   const dismissed = data.state.toLowerCase() === 'dismissed';
-  const added = await prisma.$transaction(async (tx) => {
+  const stored = await prisma.$transaction(async (tx) => {
+    if (!(await lockLink(tx, pr.repoLinkId))) return null;
     const created = await tx.githubReview.createMany({
       data: [{ id, pullRequestId, ...data }],
       skipDuplicates: true,
     });
-    if (created.count > 0) return true;
+    const links = () => linksOf(tx, pr.repoLinkId, { type: 'PULL_REQUEST', key: pullRequestId });
+    if (created.count > 0) return { added: true, links: await links() };
     await tx.githubReview.updateMany({
       where: {
         id,
@@ -501,14 +532,11 @@ export async function storeReview(
         submittedAt: data.submittedAt,
       },
     });
-    return false;
+    return { added: false, links: await links() };
   });
 
-  const base = await outcomeBase(pr.repoLinkId, link, sender, source, meta, {
-    event: 'pull_request_review',
-    action: null,
-  });
-  const links = await linksOf(prisma, pr.repoLinkId, { type: 'PULL_REQUEST', key: pullRequestId });
+  if (!stored) return { ...base, projectId: '', transitions: [] };
+  const { added, links } = stored;
   const outcome: GithubEventOutcome = {
     ...base,
     pullRequestId,
@@ -538,12 +566,25 @@ async function storeCommits(
   commits: unknown[],
 ): Promise<SyncResult> {
   const total: SyncResult = { added: [], removed: [], linked: [], driving: [] };
-  for (const raw of commits) {
+  const parsedCommits = commits.flatMap((raw) => {
     const parsed = commitSchema.safeParse(raw);
-    if (!parsed.success) continue;
-    const commit = parsed.data;
+    return parsed.success ? [parsed.data] : [];
+  });
+  // The connected Axiom user of each author login (GitHub logins are case-insensitive)
+  const logins = [...new Set(parsedCommits.map((c) => c.author?.username).filter((l) => !!l))];
+  const accounts = logins.length
+    ? await prisma.githubAccount.findMany({
+        where: {
+          OR: logins.map((login) => ({ login: { equals: login!, mode: 'insensitive' as const } })),
+        },
+        select: { login: true, userId: true },
+      })
+    : [];
+  const userByLogin = new Map(accounts.map((a) => [a.login.toLowerCase(), a.userId]));
+  for (const commit of parsedCommits) {
     const links = await retryOnRace(() =>
       prisma.$transaction(async (tx) => {
+        if (!(await lockLink(tx, repoLinkId))) return null;
         const created = await tx.githubCommit.createMany({
           data: [
             {
@@ -551,6 +592,7 @@ async function storeCommits(
               sha: commit.id,
               message: cutUtf8(commit.message, COMMIT_MESSAGE_BYTES),
               authorLogin: commit.author?.username ?? null,
+              authorUserId: userByLogin.get((commit.author?.username ?? '').toLowerCase()) ?? null,
               htmlUrl: httpsOr(commit.url, `${repoUrl}/commit/${commit.id}`),
               committedAt: new Date(commit.timestamp),
             },
@@ -628,6 +670,7 @@ onGithubEvent('push', async (d) => {
     action: d.action,
     payload: d.payload,
     at: pushedAt(d.payload),
+    before: typeof d.payload.before === 'string' ? d.payload.before : null,
   };
   const sender = senderSchema.parse(d.payload.sender);
   if (parsed.data.deleted) {
@@ -656,8 +699,9 @@ for (const event of ['create', 'delete'] as const) {
       { name: parsed.data.ref, sha: event === 'create' ? '' : null },
       senderSchema.parse(d.payload.sender),
       'webhook',
-      // A delete event names no time of its own: it is ordered by when it arrived
-      { event, action: d.action, payload: d.payload, at: event === 'delete' ? d.receivedAt : null },
+      // A delete event names no time: it never writes one, and deletes only a branch no ordered
+      // push has touched (a push with `deleted` is the ordered delete)
+      { event, action: d.action, payload: d.payload, at: null },
     );
     return 'processed';
   });

@@ -18,6 +18,7 @@ import { postWebhook } from '../../test/github-webhook';
 import { deleteApp } from './github-app.service';
 import {
   onGithubOutcome,
+  storeBranch,
   storePullRequest,
   storeReview,
   type GithubEventOutcome,
@@ -512,6 +513,12 @@ describe('push, create and delete', () => {
       p.repository.pushed_at = seconds;
       p.after = sha;
     });
+  const deletePushAt = (seconds: number) =>
+    fixture('push', (p) => {
+      p.repository.pushed_at = seconds;
+      p.deleted = true;
+      p.commits = [];
+    });
   const branchRow = () => prisma.githubBranch.findFirstOrThrow({ where: { repoLinkId } });
 
   it('marks a deleted branch and keeps its links', async () => {
@@ -526,7 +533,7 @@ describe('push, create and delete', () => {
 
   it('brings a deleted branch back with a push newer than the delete, on the new head', async () => {
     await deliver('push', pushAt(1000, 'a'.repeat(40)));
-    await deliver('delete', fixture('delete-branch'));
+    await deliver('push', deletePushAt(2000));
     outcomes.length = 0;
     await deliver('push', pushAt(Math.floor(Date.now() / 1000) + 60, 'b'.repeat(40)));
     const back = await branchRow();
@@ -537,13 +544,96 @@ describe('push, create and delete', () => {
 
   it('skips a push older than the delete: the branch stays deleted', async () => {
     await deliver('push', pushAt(1000, 'a'.repeat(40)));
-    await deliver('delete', fixture('delete-branch'));
+    await deliver('push', deletePushAt(2000));
     outcomes.length = 0;
     await deliver('push', pushAt(1500, 'b'.repeat(40)));
     const row = await branchRow();
     expect(row.deletedAt).not.toBeNull();
     expect(row.headSha).toBe('a'.repeat(40));
     expect(transitionsOf()).toEqual([]);
+  });
+
+  it('lets a late delete event touch neither a branch with a stamped push nor its re-creation', async () => {
+    await deliver('push', pushAt(1000, 'a'.repeat(40)));
+    await deliver('push', deletePushAt(2000));
+    await deliver('push', pushAt(3000, 'b'.repeat(40)));
+    outcomes.length = 0;
+    await deliver('delete', fixture('delete-branch'));
+    const row = await branchRow();
+    expect(row.deletedAt).toBeNull();
+    expect(row.headSha).toBe('b'.repeat(40));
+    expect(row.lastPushedAt?.toISOString()).toBe(new Date(3_000_000).toISOString());
+  });
+
+  it('skips a push whose before is not the stored head when the second is the same', async () => {
+    const push = (before: string, after: string) =>
+      fixture('push', (p) => {
+        p.repository.pushed_at = 5000;
+        p.before = before;
+        p.after = after;
+      });
+    await deliver('push', push('0'.repeat(40), 'a'.repeat(40)));
+    await deliver('push', push('a'.repeat(40), 'b'.repeat(40)));
+    expect((await branchRow()).headSha).toBe('b'.repeat(40));
+    await deliver('push', push('a'.repeat(40), 'c'.repeat(40)));
+    expect((await branchRow()).headSha).toBe('b'.repeat(40));
+    // No time at all: the same rule
+    await deliver(
+      'push',
+      fixture('push', (p) => {
+        p.before = 'a'.repeat(40);
+        p.after = 'd'.repeat(40);
+      }),
+    );
+    expect((await branchRow()).headSha).toBe('b'.repeat(40));
+  });
+
+  it('ties a commit to the connected user of its author login', async () => {
+    const user = await createTestUser();
+    await prisma.githubAccount.create({
+      data: {
+        id: `acct-${user.id}`,
+        userId: user.id,
+        githubUserId: 7001,
+        login: 'Voorbeeld-Dev',
+        accessToken: 'unused',
+      },
+    });
+    try {
+      await deliver(
+        'push',
+        fixture('push', (p) => {
+          p.commits[1].author = { username: 'someone-else' };
+        }),
+      );
+      const commits = await prisma.githubCommit.findMany({ where: { repoLinkId } });
+      const by = Object.fromEntries(commits.map((c) => [c.sha[0], c.authorUserId]));
+      expect(by).toEqual({ '1': user.id, '2': null, '3': user.id });
+    } finally {
+      await prisma.githubAccount.deleteMany({ where: { userId: user.id } });
+    }
+  });
+
+  it('stores nothing and reports nothing for a link that is gone', async () => {
+    const goneId = await createLink(other, REPO_ID + 7);
+    await prisma.githubRepoLink.delete({ where: { id: goneId } });
+    const listener = vi.fn(async () => {});
+    const off = onGithubOutcome(listener);
+    try {
+      const pr = await storePullRequest(
+        goneId,
+        fixture('pull_request.opened').pull_request,
+        null,
+        'webhook',
+      );
+      const branch = await storeBranch(goneId, { name: 'x', sha: 'a'.repeat(40) }, null, 'webhook');
+      expect(pr.projectId).toBe('');
+      expect(branch.projectId).toBe('');
+      expect(listener).not.toHaveBeenCalled();
+      expect(await prisma.githubPullRequest.count({ where: { repoLinkId: goneId } })).toBe(0);
+    } finally {
+      off();
+    }
   });
 
   it('skips a push older than the stored head', async () => {
@@ -554,7 +644,7 @@ describe('push, create and delete', () => {
 
   it('never lets a create event bring a deleted branch back', async () => {
     await deliver('push', pushAt(1000, 'a'.repeat(40)));
-    await deliver('delete', fixture('delete-branch'));
+    await deliver('push', deletePushAt(2000));
     outcomes.length = 0;
     await deliver('create', fixture('create-branch'));
     expect((await branchRow()).deletedAt).not.toBeNull();
