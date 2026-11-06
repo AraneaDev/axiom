@@ -1977,7 +1977,7 @@ Create a wiki space. Requires `wiki:create_space` permission.
 
 List wiki spaces for a team. Requires `wiki:view` permission.
 
-**Response 200:** Array of wiki space objects.
+**Response 200:** Array of wiki space objects, only those you may view. Each carries `canManage`: whether you administer the space. The wiki home shows the space's permissions panel (a button on the space card, in a dialog) to those who do; the same endpoints back it: `GET`, `PUT` and `DELETE /api/wiki/spaces/:spaceId/permissions`.
 
 ### GET /api/wiki/spaces/:spaceId
 

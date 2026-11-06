@@ -32,6 +32,7 @@ interface WikiContextValue {
         name: string;
         description?: string;
         isArchived?: boolean;
+        canManage?: boolean;
         _count?: { pages: number };
       }>
     | undefined;

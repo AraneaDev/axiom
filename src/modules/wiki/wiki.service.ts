@@ -98,7 +98,10 @@ export async function listSpaces(teamId: string, includeArchived = false, userId
   if (!userId) return spaces;
   // Spaces whose own permissions leave the user out are not listed
   const allowed = await Promise.all(spaces.map((sp) => canAccessSpace(sp.id, userId, 'VIEW')));
-  return spaces.filter((_, i) => allowed[i]);
+  const visible = spaces.filter((_, i) => allowed[i]);
+  // Whether the user administers the space, for the UI to offer its permissions
+  const manages = await Promise.all(visible.map((sp) => canAccessSpace(sp.id, userId, 'ADMIN')));
+  return visible.map((sp, i) => ({ ...sp, canManage: manages[i] }));
 }
 
 /**

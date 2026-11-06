@@ -188,6 +188,8 @@ export interface WikiSpace {
   slug: string;
   description?: string;
   isArchived?: boolean;
+  /** Whether the current user administers the space (its permissions) */
+  canManage?: boolean;
   _count?: { pages: number };
 }
 

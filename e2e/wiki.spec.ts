@@ -56,4 +56,22 @@ test.describe('Wiki', () => {
     expect(content).toContain('- Review before merge');
     expect(content).not.toContain('<paragraph');
   });
+
+  test('a space admin manages the permissions of a space from the wiki home', async ({ page }) => {
+    await page.goto(WIKI_URL);
+    await page.getByTitle('Permissions of Docs').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('No custom permissions')).toBeVisible();
+
+    await test.step('add a permission for a team role', async () => {
+      await dialog.getByRole('button', { name: /add permission/i }).click();
+      await dialog.getByRole('button', { name: /add permission/i }).click();
+      await expect(dialog.getByText('MEMBER role')).toBeVisible();
+    });
+
+    await test.step('remove it again, so the space is as it was', async () => {
+      await dialog.getByTitle('Remove permission').click();
+      await expect(dialog.getByText('No custom permissions')).toBeVisible();
+    });
+  });
 });
