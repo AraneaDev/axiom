@@ -23,7 +23,12 @@ import { csrfGuard } from './middleware/csrfGuard';
 import { errorHandler } from './middleware/errorHandler';
 import { metricsCollector } from './middleware/metricsCollector';
 import { nulGuard } from './middleware/nulGuard';
-import { globalLimiter, authLimiter, searchLimiter } from './middleware/rate-limit.js';
+import {
+  globalLimiter,
+  authLimiter,
+  searchLimiter,
+  GITHUB_WEBHOOK_PATH,
+} from './middleware/rate-limit.js';
 import { requestLogger } from './middleware/requestLogger';
 import { require2fa } from './middleware/require2fa';
 import { mountStaticFrontend, resolveStaticDir } from './middleware/static-frontend';
@@ -66,6 +71,7 @@ import './modules/auth/auth.actions';
 import './modules/health/health.actions';
 import './modules/site-settings/site-settings.actions';
 import './modules/github/github-app.actions';
+import './modules/github/webhook.actions';
 import { createWebSocketServer } from './realtime/ws-server';
 import { logger } from './utils/logger';
 
@@ -108,6 +114,10 @@ app.use(metricsCollector);
 // PUT /api/uploads/:uploadId has its signature as credential and its own limits. It sits ahead of
 // the JSON parser, the CSRF guard and require2fa, and nothing else takes this way past them.
 app.use(signedUploadRouter);
+// POST /api/github/webhook is signed over the exact bytes GitHub sent, so its body stays a Buffer:
+// parsed and re-serialised JSON would not verify. GitHub caps a delivery at 25 MB. The signature
+// is checked in the action, before anything is parsed. express.json skips a body read here.
+app.use(GITHUB_WEBHOOK_PATH, express.raw({ type: '*/*', limit: '25mb' }));
 app.use(express.json({ limit: '5mb' }));
 app.use('/api', nulGuard);
 

@@ -4,7 +4,13 @@ import { env } from '../config/env.js';
 
 import { AppError } from './errorHandler.js';
 
-const skip = () => env.NODE_ENV === 'test';
+/**
+ * The limiters skip in tests, which would hide a limiter that is missing. A test that checks one
+ * sets `enforce` and puts it back after.
+ */
+export const rateLimitTesting = { enforce: false };
+
+const skip = () => env.NODE_ENV === 'test' && !rateLimitTesting.enforce;
 
 const errorMessage = (msg: string) => ({
   error: { message: msg, code: 'RATE_LIMITED' },
@@ -13,10 +19,21 @@ const errorMessage = (msg: string) => ({
 /** Global API limit: 300 req/min per IP. Mounted on /api only. */
 export const GLOBAL_LIMIT = { windowMs: 60_000, max: 300 } as const;
 
+/** GitHub's webhook calls: 1000 req/min per IP, counted on their own and not against the global limit */
+export const GITHUB_WEBHOOK_LIMIT = { windowMs: 60_000, max: 1000 } as const;
+export const GITHUB_WEBHOOK_PATH = '/api/github/webhook';
+
 export const globalLimiter = rateLimit({
   ...GLOBAL_LIMIT,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => skip() || req.baseUrl + req.path === GITHUB_WEBHOOK_PATH,
+});
+
+/** The webhook route's own limit, ahead of the signature check so a flood costs little */
+export const githubWebhookLimiter = rateLimit({
+  ...GITHUB_WEBHOOK_LIMIT,
+  message: errorMessage('Too many webhook deliveries, please try again later'),
   skip,
 });
 

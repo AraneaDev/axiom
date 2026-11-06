@@ -7,6 +7,7 @@ import {
   failStuckAgentApprovals,
 } from './modules/agent-approvals/agent-approvals.cleanup';
 import { cleanupExpiredUploads } from './modules/attachments/upload-intents.service';
+import { cleanupDeliveries, retryDueDeliveries } from './modules/github/webhook.service';
 import { logger } from './utils/logger';
 
 const UPLOAD_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
@@ -30,6 +31,15 @@ function runApprovalCleanup(): void {
   });
 }
 
+/** Retry the GitHub deliveries that are due and trim the log; a failure waits for the next round. */
+function runGithubDeliveryJobs(): void {
+  retryDueDeliveries()
+    .then(() => cleanupDeliveries())
+    .catch((err) => {
+      logger.error('GitHub delivery jobs failed', {}, err as Error);
+    });
+}
+
 async function main(): Promise<void> {
   let stopEmail: (() => Promise<void>) | null = null;
   if (process.env.SMTP_HOST) {
@@ -45,12 +55,16 @@ async function main(): Promise<void> {
   runApprovalCleanup();
   const approvalCleanup = setInterval(runApprovalCleanup, APPROVAL_CLEANUP_INTERVAL_MS);
 
+  runGithubDeliveryJobs();
+  const githubDeliveries = setInterval(runGithubDeliveryJobs, APPROVAL_CLEANUP_INTERVAL_MS);
+
   logger.info('Axiom worker running');
 
   const shutdown = async (signal: string) => {
     logger.info('Worker shutting down', { signal });
     clearInterval(uploadCleanup);
     clearInterval(approvalCleanup);
+    clearInterval(githubDeliveries);
     if (stopEmail) await stopEmail();
     await prisma.$disconnect();
     process.exit(0);

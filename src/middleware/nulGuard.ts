@@ -22,7 +22,9 @@ export function nulGuard(req: Request, res: Response, next: NextFunction) {
     next();
     return;
   }
-  if (/%00/.test(pathname) || containsNul(req.query) || containsNul(req.body)) {
+  // A Buffer is a raw body (the GitHub webhook's), kept as bytes for its signature: no text to scan
+  const text = Buffer.isBuffer(req.body) ? undefined : req.body;
+  if (/%00/.test(pathname) || containsNul(req.query) || containsNul(text)) {
     res.status(400).json({
       error: { message: 'Text may not contain a NUL character', code: 'INVALID_TEXT' },
     });

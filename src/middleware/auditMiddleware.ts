@@ -7,7 +7,7 @@ import { logAudit } from '../modules/audit/audit.service';
 import { normalizeApiPath } from './token-scopes';
 
 /** One path, many actions: executeAction writes a row per action for these (R21). */
-const AUDITED_PER_ACTION = new Set(['/api/mcp', '/api/act']);
+const AUDITED_PER_ACTION = new Set(['/api/mcp', '/api/act', '/api/github/webhook']);
 
 const METHOD_ACTION_MAP: Record<string, string> = {
   POST: 'create',

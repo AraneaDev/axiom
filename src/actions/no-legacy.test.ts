@@ -99,6 +99,8 @@ const API_MIDDLEWARE = [
   'corsMiddleware',
   'requestLogger',
   'metricsCollector',
+  // The GitHub webhook's body stays raw bytes for its signature; only that path matches
+  'rawParser',
   'jsonParser',
   'nulGuard',
   'requestContextMiddleware',

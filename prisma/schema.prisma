@@ -1387,3 +1387,30 @@ model GithubInstallation {
 
   @@map("github_installations")
 }
+
+enum GithubDeliveryStatus {
+  PENDING
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+/// One webhook delivery from GitHub (id is X-GitHub-Delivery), kept as the log and the retry queue
+model GithubDelivery {
+  id             String               @id
+  event          String
+  action         String?
+  installationId Int?
+  repoId         Int?
+  status         GithubDeliveryStatus @default(PENDING)
+  attempts       Int                  @default(0)
+  nextAttemptAt  DateTime?
+  error          String?
+  payload        Json?
+  receivedAt     DateTime             @default(now())
+  processedAt    DateTime?
+
+  @@index([status, nextAttemptAt])
+  @@index([repoId, receivedAt])
+  @@map("github_deliveries")
+}

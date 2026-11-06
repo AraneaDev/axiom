@@ -14,8 +14,10 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 // Paths exempt from CSRF, relative to the /api mount. The MCP endpoint only reads the
 // Authorization header, so a cross-site request carries no credential, and MCP clients don't
-// send this header.
-const CSRF_EXEMPT_PATHS = new Set(['/mcp']);
+// send this header. The GitHub webhook is called by GitHub's servers, which send no such header
+// and no cookie or token of the user's: its credential is the HMAC signature over the body, which
+// a cross-site form cannot produce.
+const CSRF_EXEMPT_PATHS = new Set(['/mcp', '/github/webhook']);
 
 /**
  * CSRF guard middleware requiring X-Requested-With header on mutations.

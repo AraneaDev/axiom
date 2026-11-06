@@ -1,0 +1,516 @@
+import { createHmac, randomUUID } from 'node:crypto';
+
+import request from 'supertest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { prisma } from '../../config/database';
+import app from '../../index';
+import { githubWebhookLimiter, globalLimiter, rateLimitTesting } from '../../middleware/rate-limit';
+import { seedGithubApp } from '../../test/github-seed';
+import { postWebhook } from '../../test/github-webhook';
+import { listenForRawRequests } from '../../test/raw-request';
+
+import { deleteApp } from './github-app.service';
+import { onGithubEvent } from './webhook-dispatch';
+import { cleanupDeliveries, processDelivery, retryDueDeliveries } from './webhook.service';
+
+const URL = '/api/github/webhook';
+let secret: string;
+/** Event names are unique per test: handlers stay registered for the whole file */
+const eventName = () => `t_${randomUUID().slice(0, 8)}`;
+const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+const row = (id: string) => prisma.githubDelivery.findUnique({ where: { id } });
+
+beforeAll(async () => {
+  secret = (await seedGithubApp()).webhookSecret;
+});
+
+beforeEach(async () => {
+  await prisma.githubDelivery.deleteMany();
+  await prisma.githubInstallation.deleteMany();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+afterAll(async () => {
+  await prisma.githubDelivery.deleteMany();
+  await prisma.githubInstallation.deleteMany();
+  await deleteApp().catch(() => undefined);
+});
+
+describe('signature', () => {
+  it('accepts a body signed over its exact bytes, whatever the spacing and order', async () => {
+    const event = eventName();
+    const handler = vi.fn(async () => 'processed' as const);
+    onGithubEvent(event, handler);
+    const res = await postWebhook(event, null, { rawBody: '{"b": 1,  "a":2}', deliveryId: 'd-1' });
+    expect(res.status).toBe(202);
+    expect(res.body).toEqual({ accepted: true });
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    expect(handler.mock.calls[0][0].payload).toEqual({ a: 2, b: 1 });
+    expect(handler.mock.calls[0][0]).toMatchObject({ deliveryId: 'd-1', event, action: null });
+  });
+
+  it('refuses a body with one changed byte and writes nothing', async () => {
+    const body = '{"b": 1,  "a":2}';
+    const signature = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+    const res = await request(app)
+      .post(URL)
+      .set('Content-Type', 'application/json')
+      .set('X-GitHub-Event', 'push')
+      .set('X-GitHub-Delivery', 'd-tampered')
+      .set('X-Hub-Signature-256', signature)
+      .send('{"b": 1,  "a":3}');
+    expect(res.status).toBe(401);
+    expect(await prisma.githubDelivery.count()).toBe(0);
+  });
+
+  it('refuses a missing, malformed or wrongly signed header', async () => {
+    const send = (signature?: string) => {
+      const req = request(app)
+        .post(URL)
+        .set('Content-Type', 'application/json')
+        .set('X-GitHub-Event', 'push')
+        .set('X-GitHub-Delivery', 'd-sig');
+      return (signature === undefined ? req : req.set('X-Hub-Signature-256', signature)).send('{}');
+    };
+    expect((await send()).status).toBe(401);
+    expect((await send('sha256=abc')).status).toBe(401);
+    expect((await send('sha1=' + 'a'.repeat(64))).status).toBe(401);
+    expect((await postWebhook('push', {}, { secret: 'another-secret' })).status).toBe(401);
+    expect(await prisma.githubDelivery.count()).toBe(0);
+  });
+
+  it('answers 404 when no App is set up, before it reads anything', async () => {
+    await deleteApp();
+    try {
+      const res = await postWebhook('push', {}, { secret });
+      expect(res.status).toBe(404);
+      expect(await prisma.githubDelivery.count()).toBe(0);
+    } finally {
+      secret = (await seedGithubApp()).webhookSecret;
+    }
+  });
+
+  it('needs no CSRF header and no sign-in', async () => {
+    const res = await postWebhook('ping', { zen: 'Keep it logically awesome.' });
+    expect(res.status).toBe(202);
+  });
+
+  it('answers 400 to a signed body without a delivery id or an event', async () => {
+    const body = '{}';
+    const signature = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+    const base = () =>
+      request(app)
+        .post(URL)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature);
+    expect((await base().set('X-GitHub-Event', 'push').send(body)).status).toBe(400);
+    expect((await base().set('X-GitHub-Delivery', 'd-x').send(body)).status).toBe(400);
+    expect(await prisma.githubDelivery.count()).toBe(0);
+  });
+
+  it('answers 400 to a signed body that is not a JSON object', async () => {
+    const res = await postWebhook('push', null, { rawBody: '[1,2]' });
+    expect(res.status).toBe(400);
+    expect((await postWebhook('push', null, { rawBody: 'nope' })).status).toBe(400);
+    expect(await prisma.githubDelivery.count()).toBe(0);
+  });
+
+  it('refuses a body over 25 MB with 413', async () => {
+    const big = Buffer.alloc(26 * 1024 * 1024, 0x61);
+    const res = await request(app)
+      .post(URL)
+      .set('Content-Type', 'application/json')
+      .set('X-GitHub-Event', 'push')
+      .set('X-GitHub-Delivery', 'd-big')
+      .set('X-Hub-Signature-256', 'sha256=' + '0'.repeat(64))
+      .send(big);
+    expect(res.status).toBe(413);
+    expect(await prisma.githubDelivery.count()).toBe(0);
+  });
+});
+
+describe('the delivery log', () => {
+  it('stores a ping as IGNORED and runs nothing', async () => {
+    const res = await postWebhook('ping', { zen: 'x' }, { deliveryId: 'd-ping' });
+    expect(res.status).toBe(202);
+    const stored = await row('d-ping');
+    expect(stored).toMatchObject({ status: 'IGNORED', event: 'ping', attempts: 0 });
+    expect(stored?.processedAt).not.toBeNull();
+  });
+
+  it('keeps event, action, installation and repository of the payload', async () => {
+    const event = eventName();
+    await postWebhook(
+      event,
+      { action: 'opened', installation: { id: 77 }, repository: { id: 4242 } },
+      { deliveryId: 'd-fields' },
+    );
+    expect(await row('d-fields')).toMatchObject({
+      event,
+      action: 'opened',
+      installationId: 77,
+      repoId: 4242,
+    });
+  });
+
+  it('answers a delivery id it has already stored with duplicate, and runs the handler once', async () => {
+    const event = eventName();
+    const handler = vi.fn(async () => 'processed' as const);
+    onGithubEvent(event, handler);
+    const first = await postWebhook(event, { n: 1 }, { deliveryId: 'd-dup' });
+    const second = await postWebhook(event, { n: 1 }, { deliveryId: 'd-dup' });
+    expect(first.status).toBe(202);
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ duplicate: true });
+    await settle();
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(await prisma.githubDelivery.count()).toBe(1);
+  });
+
+  it('counts parallel deliveries of one id as one, with no error', async () => {
+    const event = eventName();
+    const handler = vi.fn(async () => 'processed' as const);
+    onGithubEvent(event, handler);
+    const answers = await Promise.all(
+      Array.from({ length: 6 }, () => postWebhook(event, { n: 1 }, { deliveryId: 'd-race' })),
+    );
+    expect(answers.filter((r) => r.status === 202)).toHaveLength(1);
+    expect(answers.filter((r) => r.body.duplicate === true)).toHaveLength(5);
+    await settle();
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks a delivery nobody handles IGNORED and one that is handled PROCESSED', async () => {
+    const handled = eventName();
+    onGithubEvent(handled, async () => 'processed');
+    const skipped = eventName();
+    onGithubEvent(skipped, async () => 'ignored');
+    await postWebhook(handled, {}, { deliveryId: 'd-handled' });
+    await postWebhook(skipped, {}, { deliveryId: 'd-skipped' });
+    await postWebhook(eventName(), {}, { deliveryId: 'd-nobody' });
+    await vi.waitFor(async () => {
+      expect((await row('d-handled'))?.status).toBe('PROCESSED');
+      expect((await row('d-skipped'))?.status).toBe('IGNORED');
+      expect((await row('d-nobody'))?.status).toBe('IGNORED');
+    });
+    expect((await row('d-handled'))?.attempts).toBe(1);
+  });
+
+  it('runs several handlers of an event in registration order', async () => {
+    const event = eventName();
+    const order: string[] = [];
+    onGithubEvent(event, async () => {
+      order.push('first');
+      return 'ignored';
+    });
+    onGithubEvent(event, async () => {
+      order.push('second');
+      return 'processed';
+    });
+    await postWebhook(event, {}, { deliveryId: 'd-order' });
+    await vi.waitFor(async () => expect((await row('d-order'))?.status).toBe('PROCESSED'));
+    expect(order).toEqual(['first', 'second']);
+  });
+});
+
+describe('retries', () => {
+  it('fails once, waits a minute and succeeds on the retry', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-06T10:00:00Z'));
+    const event = eventName();
+    const handler = vi
+      .fn<() => Promise<'processed'>>()
+      .mockRejectedValueOnce(new Error('GitHub is down'))
+      .mockResolvedValue('processed');
+    onGithubEvent(event, handler);
+    await postWebhook(event, {}, { deliveryId: 'd-retry' });
+    await vi.waitFor(async () => expect((await row('d-retry'))?.status).toBe('FAILED'));
+    const failed = await row('d-retry');
+    expect(failed).toMatchObject({ attempts: 1, error: 'GitHub is down' });
+    expect(
+      Math.abs(failed!.nextAttemptAt!.getTime() - Date.parse('2026-11-06T10:01:00Z')),
+    ).toBeLessThan(2000);
+
+    expect(await retryDueDeliveries()).toBe(0);
+    vi.setSystemTime(new Date('2026-11-06T10:01:01Z'));
+    expect(await retryDueDeliveries()).toBe(1);
+    expect(await row('d-retry')).toMatchObject({ status: 'PROCESSED', attempts: 2 });
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it('backs off 1, 5, 15 and 60 minutes, then gives up after five attempts', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const start = new Date('2026-11-06T10:00:00Z');
+    vi.setSystemTime(start);
+    const event = eventName();
+    const handler = vi.fn(async (): Promise<'processed'> => {
+      throw new Error('still down');
+    });
+    onGithubEvent(event, handler);
+    await postWebhook(event, {}, { deliveryId: 'd-giveup' });
+    await vi.waitFor(async () => expect((await row('d-giveup'))?.attempts).toBe(1));
+    await vi.waitFor(async () => expect((await row('d-giveup'))?.status).toBe('FAILED'));
+    const minutes: Array<number | null> = [];
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const stored = await row('d-giveup');
+      expect(stored?.attempts).toBe(attempt);
+      const next = stored?.nextAttemptAt;
+      minutes.push(next ? Math.round((next.getTime() - Date.now()) / 60_000) : null);
+      if (!next) break;
+      vi.setSystemTime(new Date(next.getTime() + 1000));
+      await retryDueDeliveries();
+    }
+    expect(minutes).toEqual([1, 5, 15, 60, null]);
+    const final = await row('d-giveup');
+    expect(final).toMatchObject({ status: 'FAILED', attempts: 5, nextAttemptAt: null });
+    // Nothing picks it up again
+    vi.setSystemTime(new Date(start.getTime() + 24 * 3600_000));
+    expect(await retryDueDeliveries()).toBe(0);
+    await processDelivery('d-giveup');
+    expect(handler).toHaveBeenCalledTimes(5);
+  });
+
+  it('runs the handler once when two workers claim the same delivery', async () => {
+    const event = eventName();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const handler = vi.fn(async () => {
+      await gate;
+      return 'processed' as const;
+    });
+    onGithubEvent(event, handler);
+    await prisma.githubDelivery.create({
+      data: { id: 'd-claim', event, payload: {}, status: 'PENDING' },
+    });
+    const both = Promise.all([processDelivery('d-claim'), processDelivery('d-claim')]);
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    release();
+    await both;
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(await row('d-claim')).toMatchObject({ status: 'PROCESSED', attempts: 1 });
+  });
+
+  it('leases a claimed delivery for five minutes, so a crashed worker is retried later', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-06T10:00:00Z'));
+    const event = eventName();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    onGithubEvent(event, async () => {
+      await gate;
+      return 'processed';
+    });
+    await prisma.githubDelivery.create({ data: { id: 'd-lease', event, payload: {} } });
+    const running = processDelivery('d-lease');
+    await vi.waitFor(async () => {
+      const lease = (await row('d-lease'))?.nextAttemptAt;
+      expect(Math.abs((lease?.getTime() ?? 0) - Date.parse('2026-11-06T10:05:00Z'))).toBeLessThan(
+        2000,
+      );
+    });
+    expect(await retryDueDeliveries()).toBe(0);
+    release();
+    await running;
+  });
+
+  it('retries a delivery that stayed pending because the process died after storing it', async () => {
+    const event = eventName();
+    const handler = vi.fn(async () => 'processed' as const);
+    onGithubEvent(event, handler);
+    await prisma.githubDelivery.create({
+      data: { id: 'd-lost', event, payload: {}, receivedAt: new Date(Date.now() - 5 * 60_000) },
+    });
+    expect(await retryDueDeliveries()).toBe(1);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores the message only, cut to 500 characters, with no webhook secret in it', async () => {
+    const event = eventName();
+    onGithubEvent(event, async () => {
+      throw new Error(`boom ${secret} ${'x'.repeat(600)}`);
+    });
+    await postWebhook(event, {}, { deliveryId: 'd-secret' });
+    await vi.waitFor(async () => expect((await row('d-secret'))?.status).toBe('FAILED'));
+    const { error } = (await row('d-secret'))!;
+    expect(error).not.toContain(secret);
+    expect(error!.length).toBeLessThanOrEqual(500);
+    expect(error).toMatch(/^boom /);
+  });
+
+  it('scrubs a secret that the cut would have split', async () => {
+    const event = eventName();
+    onGithubEvent(event, async () => {
+      throw new Error(`${'y'.repeat(490)}${secret}`);
+    });
+    await postWebhook(event, {}, { deliveryId: 'd-split' });
+    await vi.waitFor(async () => expect((await row('d-split'))?.status).toBe('FAILED'));
+    const { error } = (await row('d-split'))!;
+    expect(error).not.toContain(secret.slice(0, 8));
+  });
+});
+
+describe('cleanup', () => {
+  it('clears payloads after 7 days on finished rows only, and deletes rows after 30 days', async () => {
+    const day = 24 * 3600_000;
+    const at = (days: number) => new Date(Date.now() - days * day);
+    const make = (
+      id: string,
+      status: 'PROCESSED' | 'IGNORED' | 'FAILED' | 'PENDING',
+      days: number,
+    ) =>
+      prisma.githubDelivery.create({
+        data: { id, event: 'push', status, payload: { a: 1 }, receivedAt: at(days) },
+      });
+    await make('old-done', 'PROCESSED', 8);
+    await make('old-ignored', 'IGNORED', 8);
+    await make('old-failed', 'FAILED', 8);
+    await make('old-pending', 'PENDING', 8);
+    await make('new-done', 'PROCESSED', 1);
+    await make('ancient', 'PROCESSED', 31);
+    await cleanupDeliveries();
+    expect((await row('old-done'))?.payload).toBeNull();
+    expect((await row('old-ignored'))?.payload).toBeNull();
+    expect((await row('old-failed'))?.payload).toEqual({ a: 1 });
+    expect((await row('old-pending'))?.payload).toEqual({ a: 1 });
+    expect((await row('new-done'))?.payload).toEqual({ a: 1 });
+    expect(await row('ancient')).toBeNull();
+  });
+});
+
+describe('installation events', () => {
+  const installation = (extra: object = {}) => ({
+    id: 5001,
+    account: { login: 'acme-labs', type: 'Organization' },
+    suspended_at: null,
+    ...extra,
+  });
+  const done = (id: string) =>
+    vi.waitFor(async () => expect(['PROCESSED', 'IGNORED']).toContain((await row(id))?.status));
+
+  it('creates the installation on created', async () => {
+    await postWebhook(
+      'installation',
+      { action: 'created', installation: installation() },
+      { deliveryId: 'i-1' },
+    );
+    await done('i-1');
+    expect(await prisma.githubInstallation.findUnique({ where: { id: 5001 } })).toMatchObject({
+      accountLogin: 'acme-labs',
+      accountType: 'Organization',
+      suspendedAt: null,
+    });
+  });
+
+  it('marks the installation gone on deleted, as the sync does for one GitHub no longer lists', async () => {
+    await prisma.githubInstallation.create({
+      data: { id: 5001, accountLogin: 'acme-labs', accountType: 'Organization' },
+    });
+    await postWebhook(
+      'installation',
+      { action: 'deleted', installation: installation() },
+      { deliveryId: 'i-2' },
+    );
+    await done('i-2');
+    const stored = await prisma.githubInstallation.findUnique({ where: { id: 5001 } });
+    expect(stored?.suspendedAt).not.toBeNull();
+  });
+
+  it('suspends and unsuspends', async () => {
+    await postWebhook(
+      'installation',
+      { action: 'suspend', installation: installation({ suspended_at: '2026-11-06T09:00:00Z' }) },
+      { deliveryId: 'i-3' },
+    );
+    await done('i-3');
+    expect(
+      (
+        await prisma.githubInstallation.findUnique({ where: { id: 5001 } })
+      )?.suspendedAt?.toISOString(),
+    ).toBe('2026-11-06T09:00:00.000Z');
+    await postWebhook(
+      'installation',
+      { action: 'unsuspend', installation: installation() },
+      { deliveryId: 'i-4' },
+    );
+    await done('i-4');
+    expect(
+      (await prisma.githubInstallation.findUnique({ where: { id: 5001 } }))?.suspendedAt,
+    ).toBeNull();
+  });
+
+  it('keeps the installation current on installation_repositories', async () => {
+    await postWebhook(
+      'installation_repositories',
+      {
+        action: 'added',
+        installation: installation({ account: { login: 'renamed-labs', type: 'Organization' } }),
+      },
+      { deliveryId: 'i-5' },
+    );
+    await done('i-5');
+    expect(
+      (await prisma.githubInstallation.findUnique({ where: { id: 5001 } }))?.accountLogin,
+    ).toBe('renamed-labs');
+  });
+
+  it('ignores an installation event without an installation', async () => {
+    await postWebhook('installation', { action: 'created' }, { deliveryId: 'i-6' });
+    await done('i-6');
+    expect((await row('i-6'))?.status).toBe('IGNORED');
+  });
+});
+
+/**
+ * Sends unsigned deliveries in parallel batches, so a thousand take seconds, not a minute.
+ * @param count How many to send
+ * @returns Their statuses
+ */
+async function flood(count: number): Promise<number[]> {
+  const statuses: number[] = [];
+  const server = await listenForRawRequests(app);
+  for (let sent = 0; sent < count; sent += 50) {
+    const batch = Array.from({ length: Math.min(50, count - sent) }, () =>
+      request(server).post(URL).set('X-GitHub-Event', 'push').send('{}'),
+    );
+    statuses.push(...(await Promise.all(batch)).map((r) => r.status));
+  }
+  server.close();
+  return statuses;
+}
+
+describe('rate limit', () => {
+  const clients = ['::ffff:127.0.0.1', '127.0.0.1', '::1'];
+  const reset = async () => {
+    for (const key of clients) {
+      await githubWebhookLimiter.resetKey(key);
+      await globalLimiter.resetKey(key);
+    }
+  };
+  beforeEach(async () => {
+    rateLimitTesting.enforce = true;
+    await reset();
+  });
+  afterEach(async () => {
+    await reset();
+    rateLimitTesting.enforce = false;
+  });
+
+  it('answers 429 to the 1001st request in a minute without counting other /api paths against it', async () => {
+    const get = () => request(app).get('/api/health');
+    // Other /api traffic from the same address does not use up the webhook's allowance
+    for (let i = 0; i < 5; i++) expect((await get()).status).not.toBe(429);
+    expect((await flood(1000)).filter((status) => status === 429)).toHaveLength(0);
+    expect(await flood(1)).toEqual([429]);
+    // The webhook traffic is not counted against the global limit either
+    expect((await get()).status).not.toBe(429);
+  }, 60_000);
+
+  it('does not count webhook requests against the global limit of 300', async () => {
+    await flood(320);
+    expect((await request(app).get('/api/health')).status).not.toBe(429);
+  }, 60_000);
+});
