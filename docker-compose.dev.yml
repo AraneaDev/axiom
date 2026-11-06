@@ -8,6 +8,8 @@ x-app-dev: &app-dev
     DATABASE_URL: postgresql://axiom:axiom_dev@db:5432/axiom?schema=public
     JWT_SECRET: axiom-dev-jwt-secret-change-in-production-must-be-32-chars
     JWT_REFRESH_SECRET: axiom-dev-refresh-secret-change-in-prod-32-chars-min
+    # Marked dev key: production refuses it as a placeholder
+    AXIOM_ENCRYPTION_KEY: AxiomDevPlaceholderKeyForLocalDevelopment00=
     PORT: 3000
     STORAGE_PATH: /data/uploads
     NODE_ENV: development

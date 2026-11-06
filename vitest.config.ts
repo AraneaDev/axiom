@@ -19,6 +19,8 @@ export default defineConfig({
       DATABASE_URL: 'postgresql://axiom:axiom_dev@localhost:5432/axiom_test?schema=public',
       JWT_SECRET: 'test-secret-must-be-at-least-32-characters-long',
       JWT_REFRESH_SECRET: 'test-refresh-secret-must-be-32-chars-long',
+      // Marked dev key (base64 of 32 bytes); production refuses it as a placeholder
+      AXIOM_ENCRYPTION_KEY: 'AxiomTestPlaceholderKeyForVitestRunsOnly000=',
       PORT: '3001',
       NODE_ENV: 'test',
       REDIS_URL: 'redis://:axiom_dev_redis@localhost:6379',

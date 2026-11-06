@@ -47,7 +47,10 @@ Edit `.env` and fill in all `[REQUIRED]` values. Generate secrets with:
 openssl rand -hex 32  # for JWT_SECRET
 openssl rand -hex 32  # for JWT_REFRESH_SECRET
 openssl rand -hex 32  # for REDIS_PASSWORD
+openssl rand -base64 32  # for AXIOM_ENCRYPTION_KEY
 ```
+
+`AXIOM_ENCRYPTION_KEY` is required: the app refuses to start without it, and in production it refuses the marked dev key that ships with the dev compose file. Back it up before you go further (see "Encryption key: backup and rotation" in section 7).
 
 Start the stack:
 
@@ -148,6 +151,22 @@ To restore:
 ```bash
 docker compose exec -T db psql -U axiom axiom < backup-2026-04-05.sql
 ```
+
+### Encryption key: backup and rotation
+
+Axiom encrypts the secrets it keeps (2FA secrets, the GitHub App's private key and secrets, connected GitHub tokens) with AES-256-GCM under `AXIOM_ENCRYPTION_KEY`. The key lives only in `.env` on the host, never in the database.
+
+**A database backup is useless without the key.** Restore a dump without it and every encrypted value is lost: users have to set up 2FA again and the GitHub App has to be created again. Back the key up apart from the database, for example in a password manager, so that one leaked backup does not hold both.
+
+To rotate the key:
+
+1. Generate a new key with `openssl rand -base64 32`.
+2. In `.env`, move the current value to `AXIOM_ENCRYPTION_KEY_PREVIOUS` and set the new one as `AXIOM_ENCRYPTION_KEY`.
+3. Restart the stack: `docker compose up -d`. Values under either key now read; new values are written under the new key.
+4. Re-encrypt the stored values under the new key: `docker compose exec api npm run secrets:rotate`. It prints counts per column, never values.
+5. Remove `AXIOM_ENCRYPTION_KEY_PREVIOUS` from `.env` and restart again.
+
+Back up the new key before step 5. Once the previous key is gone, a value that still sits under it cannot be read, so run step 4 to the end first.
 
 ### Uploads
 

@@ -29,6 +29,7 @@ jobs:
       DATABASE_URL: postgresql://axiom:axiom_dev@localhost:5432/axiom_test?schema=public
       JWT_SECRET: ci-test-jwt-secret-must-be-at-least-32-characters-long
       JWT_REFRESH_SECRET: ci-test-refresh-secret-must-be-at-least-32-chars
+      AXIOM_ENCRYPTION_KEY: AxiomCiPlaceholderKeyForGithubActionsOnly00=
       NODE_ENV: test
 
     steps:
