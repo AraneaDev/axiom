@@ -68,7 +68,10 @@ function sqlState(err: unknown): string | undefined {
       meta?: unknown;
     };
     for (const value of [fields.originalCode, fields.code]) {
-      if (typeof value === 'string' && /^[0-9A-Z]{5}$/.test(value)) return value;
+      // Prisma's own codes (P2007) share the shape: skip them and look further down
+      if (typeof value === 'string' && /^[0-9A-Z]{5}$/.test(value) && !/^P\d{4}$/.test(value)) {
+        return value;
+      }
     }
     const meta = fields.meta as { driverAdapterError?: unknown } | undefined;
     at = fields.cause ?? meta?.driverAdapterError;

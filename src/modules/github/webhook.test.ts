@@ -343,6 +343,25 @@ describe('the gate and the payload', () => {
     });
   });
 
+  it('sees the SQLSTATE under a Prisma P2007 error, as a lone surrogate throws it', async () => {
+    const refusal = Object.assign(new Error('invalid input syntax for type json'), {
+      code: 'P2007',
+      meta: { driverAdapterError: { cause: { kind: 'postgres', originalCode: '22P02' } } },
+    });
+    const create = vi.spyOn(prisma.githubDelivery, 'create').mockRejectedValueOnce(refusal);
+    try {
+      const res = await postWebhook(eventName(), {}, { deliveryId: 'd-refused-p2007' });
+      expect(res.status).toBe(202);
+    } finally {
+      create.mockRestore();
+    }
+    expect(await row('d-refused-p2007')).toMatchObject({
+      status: 'FAILED',
+      payload: null,
+      error: 'payload could not be stored',
+    });
+  });
+
   it('answers 500 and stores nothing for any other database error', async () => {
     const create = vi
       .spyOn(prisma.githubDelivery, 'create')
