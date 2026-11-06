@@ -59,8 +59,22 @@ export function registerGithubAuthResolver(kind: ResolvableKind, resolve: Resolv
  * @param path A path starting with a slash
  */
 export function githubWebUrl(path: string): string {
-  return `${webBase()}${path}`;
+  return `${webBase()}${checkedPath(path)}`;
 }
+
+/**
+ * A path to put after a base URL. Only `/` followed by something other than `/` is one:
+ * anything else (`@host/x`, `//host/x`, an absolute URL) could name another host, and the
+ * credential would follow it there.
+ * @param path The path a caller gave
+ */
+function checkedPath(path: string): string {
+  if (!/^\/(?!\/)/.test(path)) throw new Error('A GitHub path must start with a single "/"');
+  return path;
+}
+
+/** The API host: the only one a credential is ever sent to */
+const apiOrigin = () => new URL(apiBase()).origin;
 
 async function authorization(auth: GithubAuth): Promise<string | undefined> {
   if (auth.kind === 'none') return undefined;
@@ -72,7 +86,8 @@ async function authorization(auth: GithubAuth): Promise<string | undefined> {
 }
 
 function apiUrl(path: string, query?: Query): URL {
-  const url = new URL(/^https?:\/\//.test(path) ? path : `${apiBase()}${path}`);
+  const url = new URL(`${apiBase()}${checkedPath(path)}`);
+  if (url.origin !== apiOrigin()) throw new Error('A GitHub path must stay on the API host');
   for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, String(value));
   return url;
 }
@@ -82,7 +97,10 @@ interface SendOptions {
   body?: unknown;
   credential?: string;
   timeoutMs: number;
-  /** Send the credential after a redirect: only to the API host, or never */
+  /**
+   * Send the credential after a redirect: only to the API host, or never. The first request
+   * carries it only when it goes to the API host.
+   */
   authAfterRedirect: 'api-host' | 'never';
 }
 
@@ -94,11 +112,11 @@ interface SendOptions {
  */
 async function send(url: URL, opts: SendOptions): Promise<Response> {
   const signal = AbortSignal.timeout(opts.timeoutMs);
-  const apiOrigin = new URL(apiBase()).origin;
+  const api = apiOrigin();
   let target = url;
   let method: Method = opts.method;
   let body = opts.body;
-  let withAuth = true;
+  let withAuth = target.origin === api;
 
   for (let hop = 0; ; hop++) {
     const headers: Record<string, string> = { ...API_HEADERS };
@@ -121,7 +139,7 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
         path: target.pathname,
         status: timedOut ? 'timeout' : 'unreachable',
       });
-      throw githubUnavailable(timedOut);
+      throw githubUnavailable(timedOut ? 'timeout' : 'unreachable');
     }
 
     const location = response.headers.get('location');
@@ -129,7 +147,7 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
       logger.debug('github request', { method, path: target.pathname, status: response.status });
       await response.body?.cancel();
       target = new URL(location, target);
-      withAuth = opts.authAfterRedirect === 'api-host' && target.origin === apiOrigin;
+      withAuth = opts.authAfterRedirect === 'api-host' && target.origin === api;
       // 303, and 301 or 302 after a POST, turn into a GET as browsers do
       if (response.status === 303 || (method === 'POST' && response.status <= 302)) {
         method = 'GET';
@@ -144,20 +162,39 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
   }
 }
 
-async function readBody(response: Response): Promise<unknown> {
-  const text = await response.text();
+const isTimeout = (error: unknown) =>
+  error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+
+/**
+ * A success body: JSON when GitHub says it is JSON, text otherwise. A body that breaks off or
+ * does not parse is an error that says so.
+ * @param response GitHub's answer
+ */
+async function successBody(response: Response): Promise<unknown> {
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (error) {
+    throw githubUnavailable(isTimeout(error) ? 'timeout' : 'unreadable');
+  }
   if (!text) return null;
+  if (!(response.headers.get('content-type') ?? '').includes('json')) return text;
   try {
     return JSON.parse(text);
   } catch {
-    return text;
+    throw githubUnavailable('unreadable');
   }
 }
 
 async function failure(auth: GithubAuth, response: Response, credential?: string) {
   let body: unknown = null;
   try {
-    body = await readBody(response);
+    const text = await response.text();
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = text;
+    }
   } catch {
     // The status alone decides the error
   }
@@ -179,12 +216,7 @@ async function request<T>(
     authAfterRedirect: 'api-host',
   });
   if (!response.ok) throw await failure(auth, response, credential);
-  let data: unknown;
-  try {
-    data = await readBody(response);
-  } catch {
-    throw githubUnavailable(true);
-  }
+  const data = await successBody(response);
   return { status: response.status, data: data as T, headers: response.headers };
 }
 
@@ -249,6 +281,8 @@ export async function githubPaginate<T>(
     if (Array.isArray(list)) items.push(...(list as T[]));
     const next = nextLink(headers.get('link'));
     url = next ? new URL(next, url) : null;
+    // The next page carries the credential, so it has to be on the API host
+    if (url && url.origin !== apiOrigin()) throw githubUnavailable('off-host');
   }
   return { items, complete: url === null };
 }
@@ -285,8 +319,8 @@ export async function githubText(
         kept -= chunks.shift()!.byteLength;
       }
     }
-  } catch {
-    throw githubUnavailable(true);
+  } catch (error) {
+    throw githubUnavailable(isTimeout(error) ? 'timeout' : 'unreadable');
   }
   let tail = Buffer.concat(chunks);
   tail = tail.subarray(Math.max(0, tail.length - maxBytes));

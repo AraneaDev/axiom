@@ -31,9 +31,10 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CORS_ORIGIN: z.string().default('*'),
   STATIC_DIR: z.string().optional(),
-  // GitHub Enterprise Server or a test double would point these elsewhere
-  GITHUB_API_URL: z.url().default('https://api.github.com'),
-  GITHUB_WEB_URL: z.url().default('https://github.com'),
+  // GitHub Enterprise Server or a test double would point these elsewhere. http: is for a local
+  // double only; production refuses it below, since tokens travel on these
+  GITHUB_API_URL: z.url({ protocol: /^https?$/ }).default('https://api.github.com'),
+  GITHUB_WEB_URL: z.url({ protocol: /^https?$/ }).default('https://github.com'),
 });
 
 export const env = envSchema.parse(process.env);
@@ -54,6 +55,11 @@ if (env.NODE_ENV === 'production') {
       throw new Error(
         `Refusing to start: ${key} contains a placeholder value. Generate with: ${generate}`,
       );
+    }
+  }
+  for (const key of ['GITHUB_API_URL', 'GITHUB_WEB_URL'] as const) {
+    if (new URL(env[key]).protocol !== 'https:') {
+      throw new Error(`Refusing to start: ${key} must use https, tokens are sent to it`);
     }
   }
   // A key of one repeated byte (all zeros, say) is valid base64 of 32 bytes but no secret

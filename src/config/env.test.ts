@@ -141,4 +141,53 @@ describe('env', () => {
 
     expect(env.AXIOM_ENCRYPTION_KEY).toBe('AxiomDevPlaceholderKeyForLocalDevelopment00=');
   });
+
+  describe('GitHub URLs', () => {
+    const production = {
+      ...PRODUCTION_SECRETS,
+      NODE_ENV: 'production',
+      AXIOM_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+    };
+
+    it('default to github.com', async () => {
+      const { env } = await loadEnv({ GITHUB_API_URL: undefined, GITHUB_WEB_URL: undefined });
+
+      expect(env.GITHUB_API_URL).toBe('https://api.github.com');
+      expect(env.GITHUB_WEB_URL).toBe('https://github.com');
+    });
+
+    it.each(['GITHUB_API_URL', 'GITHUB_WEB_URL'])(
+      'production refuses http: for %s',
+      async (key) => {
+        await expect(loadEnv({ ...production, [key]: 'http://github.acme.test' })).rejects.toThrow(
+          new RegExp(`Refusing to start: ${key} must use https`),
+        );
+      },
+    );
+
+    it('production accepts https: for an Enterprise Server', async () => {
+      const { env } = await loadEnv({
+        ...production,
+        GITHUB_API_URL: 'https://github.acme.test/api/v3',
+        GITHUB_WEB_URL: 'https://github.acme.test',
+      });
+
+      expect(env.GITHUB_API_URL).toBe('https://github.acme.test/api/v3');
+    });
+
+    it('refuses a scheme other than http: and https: anywhere', async () => {
+      await expect(loadEnv({ GITHUB_API_URL: 'ftp://github.acme.test' })).rejects.toThrow(
+        /GITHUB_API_URL/,
+      );
+    });
+
+    it('accepts http: outside production, for a local double', async () => {
+      const { env } = await loadEnv({
+        NODE_ENV: 'development',
+        GITHUB_API_URL: 'http://127.0.0.1:9',
+      });
+
+      expect(env.GITHUB_API_URL).toBe('http://127.0.0.1:9');
+    });
+  });
 });

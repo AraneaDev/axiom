@@ -92,7 +92,7 @@ export function githubError(
       { retryAfterSeconds: seconds },
     );
   }
-  if (status === 401 || /bad credentials/i.test(message)) {
+  if (status === 401 || (status === 403 && /bad credentials/i.test(message))) {
     return kind === 'user'
       ? new AppError(
           409,
@@ -135,15 +135,19 @@ export function githubError(
   }
 }
 
+const UNAVAILABLE_MESSAGES = {
+  timeout: 'GitHub did not answer in time.',
+  unreachable: 'Could not reach GitHub.',
+  unreadable: 'GitHub answered, but the answer could not be read.',
+  'off-host': 'GitHub pointed the next page at another host, so it was not fetched.',
+} as const;
+
 /**
- * The AppError for a call that got no answer: a timeout or a network failure. The cause is not
- * attached, so nothing of the request rides along.
- * @param timedOut Whether the call ran out of time
+ * The AppError for a call without a usable answer: a timeout, a network failure, a body that
+ * breaks off or does not parse, or a next page on another host. The cause is not attached, so
+ * nothing of the request rides along.
+ * @param reason What went wrong
  */
-export function githubUnavailable(timedOut: boolean): AppError {
-  return new AppError(
-    502,
-    timedOut ? 'GitHub did not answer in time.' : 'Could not reach GitHub.',
-    'GITHUB_UNAVAILABLE',
-  );
+export function githubUnavailable(reason: keyof typeof UNAVAILABLE_MESSAGES): AppError {
+  return new AppError(502, UNAVAILABLE_MESSAGES[reason], 'GITHUB_UNAVAILABLE');
 }

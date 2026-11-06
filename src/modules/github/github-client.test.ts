@@ -1,6 +1,8 @@
 import { generateKeyPairSync, verify } from 'node:crypto';
+import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppError } from '../../middleware/errorHandler';
 import { useGithubFake } from '../../test/github-fake';
@@ -27,9 +29,12 @@ let installationToken = '';
 let userToken = '';
 
 beforeAll(() => {
-  fake.setAppPublicKey(publicKey);
+  fake.setApp({ appId: 1201, publicKey });
+  fake.addInstallation(4101, ['acme-labs/widget', 'acme-labs/gadget']);
+  fake.addInstallation(4102, ['acme-labs/gadget']);
+  fake.setPublicRepos(['acme-labs/gadget']);
   installationToken = fake.issueInstallationToken(INSTALLATION.installationId);
-  userToken = fake.issueUserToken('octo-dev');
+  userToken = fake.issueUserToken('octo-dev', ['acme-labs/widget']);
   registerGithubAuthResolver('app', async () => `Bearer ${appJwt(1201, privateKey)}`);
   registerGithubAuthResolver('installation', async () => `token ${installationToken}`);
   registerGithubAuthResolver('user', async () => `token ${userToken}`);
@@ -457,7 +462,7 @@ describe('the fake', () => {
     }
   });
 
-  it('issues an installation token to the App and accepts it afterwards', async () => {
+  it('issues an installation token to the App and scopes it to that installation', async () => {
     const { data } = await githubRequest<{ token: string; expires_at: string }>(
       { kind: 'app' },
       'POST',
@@ -467,21 +472,189 @@ describe('the fake', () => {
 
     registerGithubAuthResolver('installation', async () => `token ${data.token}`);
     try {
-      await githubRequest(
-        { kind: 'installation', installationId: 4102 },
-        'GET',
-        '/repos/acme-labs/widget',
-      );
+      const auth = { kind: 'installation', installationId: 4102 } as const;
+      await githubRequest(auth, 'GET', '/repos/acme-labs/gadget');
       expect(fake.requests[1].headers.authorization).toBe('installation:4102');
+
+      // A private repository outside the installation is invisible, as on GitHub
+      const outside = await thrown(githubRequest(auth, 'GET', '/repos/acme-labs/widget'));
+      expect(outside.code).toBe('GITHUB_NOT_FOUND');
+      // Writing there is no different
+      const write = await thrown(
+        githubRequest(auth, 'POST', '/repos/acme-labs/widget/issues', { body: {} }),
+      );
+      expect(write.code).toBe('GITHUB_NOT_FOUND');
+
+      const { items } = await githubPaginate<{ full_name: string }>(
+        auth,
+        '/installation/repositories',
+        { maxPages: 1, itemsKey: 'repositories' },
+      );
+      expect(items.map((r) => r.full_name)).toEqual(['acme-labs/gadget']);
     } finally {
       registerGithubAuthResolver('installation', async () => `token ${installationToken}`);
     }
   });
 
-  it('asks for a credential on API routes', async () => {
-    const error = await thrown(githubRequest({ kind: 'none' }, 'GET', '/repos/acme-labs/widget'));
+  it('refuses writes to a public repository the token cannot reach', async () => {
+    const userAuth = { kind: 'user', userId: 'u1' } as const;
+    const { data } = await githubRequest<{ full_name: string }>(
+      userAuth,
+      'GET',
+      '/repos/acme-labs/gadget',
+    );
+    expect(data.full_name).toBe('acme-labs/widget'); // the fixture body serves every repo
 
-    expect(error.code).toBe('GITHUB_APP_AUTH');
-    expect(fake.requests[0].headers.authorization).toBeUndefined();
+    const error = await thrown(
+      githubRequest(userAuth, 'POST', '/repos/acme-labs/gadget/issues', { body: {} }),
+    );
+    expect([error.statusCode, error.code]).toEqual([403, 'GITHUB_FORBIDDEN']);
+  });
+
+  it('answers 404 for an installation it does not have', async () => {
+    const error = await thrown(
+      githubRequest({ kind: 'app' }, 'POST', '/app/installations/9999/access_tokens'),
+    );
+
+    expect(error.code).toBe('GITHUB_NOT_FOUND');
+    expect(() => fake.issueInstallationToken(9999)).toThrow(/9999/);
+  });
+
+  it('refuses an App JWT whose issuer is another App', async () => {
+    registerGithubAuthResolver('app', async () => `Bearer ${appJwt(1202, privateKey)}`);
+    try {
+      const error = await thrown(githubRequest({ kind: 'app' }, 'GET', '/app'));
+      expect(error.code).toBe('GITHUB_APP_AUTH');
+      expect(fake.requests[0].headers.authorization).toBe('invalid');
+    } finally {
+      registerGithubAuthResolver('app', async () => `Bearer ${appJwt(1201, privateKey)}`);
+    }
+  });
+
+  it('answers calls without a credential as GitHub does', async () => {
+    const none = { kind: 'none' } as const;
+
+    const { data } = await githubRequest<{ full_name: string }>(
+      none,
+      'GET',
+      '/repos/acme-labs/gadget',
+    );
+    const privateRepo = await thrown(githubRequest(none, 'GET', '/repos/acme-labs/widget'));
+    const user = await thrown(githubRequest(none, 'GET', '/user'));
+    const app = await thrown(githubRequest(none, 'GET', '/app'));
+
+    expect(data.full_name).toBeDefined();
+    expect(privateRepo.code).toBe('GITHUB_NOT_FOUND');
+    expect(user.code).toBe('GITHUB_APP_AUTH');
+    expect(app.code).toBe('GITHUB_APP_AUTH');
+    expect(fake.requests.every((r) => r.headers.authorization === undefined)).toBe(true);
+  });
+});
+
+describe('the credential stays on the API host', () => {
+  let other: Server;
+  let otherUrl = '';
+  const seen: IncomingHttpHeaders[] = [];
+
+  beforeAll(async () => {
+    other = createServer((req, res) => {
+      seen.push(req.headers);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('[]');
+    });
+    await new Promise<void>((resolve) => other.listen(0, '127.0.0.1', resolve));
+    otherUrl = `http://127.0.0.1:${(other.address() as AddressInfo).port}`;
+  });
+
+  afterEach(() => {
+    seen.length = 0;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => other.close(() => resolve()));
+  });
+
+  it('refuses an absolute URL as a path', async () => {
+    await expect(
+      githubRequest(INSTALLATION, 'GET', `${otherUrl}/repos/acme-labs/widget`),
+    ).rejects.toThrow(/path/);
+    await expect(githubText(INSTALLATION, `${otherUrl}/logs`, 64)).rejects.toThrow(/path/);
+
+    expect(seen).toHaveLength(0);
+  });
+
+  it('refuses a path without a leading slash, which could name another host', async () => {
+    const hostile = `@${otherUrl.slice('http://'.length)}/repos/acme-labs/widget`;
+
+    await expect(githubRequest(INSTALLATION, 'GET', hostile)).rejects.toThrow(/path/);
+    await expect(githubPaginate(INSTALLATION, hostile, { maxPages: 1 })).rejects.toThrow(/path/);
+
+    expect(seen).toHaveLength(0);
+    expect(fake.requests).toHaveLength(0);
+  });
+
+  it('follows a redirect to another host without the Authorization header', async () => {
+    fake.on('GET /repos/acme-labs/widget', {
+      status: 302,
+      headers: { location: `${otherUrl}/elsewhere` },
+    });
+
+    await githubRequest(INSTALLATION, 'GET', '/repos/acme-labs/widget');
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0].authorization).toBeUndefined();
+  });
+
+  it('refuses a next page on another host', async () => {
+    fake.on('GET /repos/acme-labs/widget/issues', {
+      status: 200,
+      body: [{ number: 1 }],
+      headers: { link: `<${otherUrl}/repos/acme-labs/widget/issues?page=2>; rel="next"` },
+    });
+
+    const error = await thrown(
+      githubPaginate(INSTALLATION, '/repos/acme-labs/widget/issues', { maxPages: 3 }),
+    );
+
+    expect(error.code).toBe('GITHUB_UNAVAILABLE');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('githubWebUrl refuses a path without a leading slash', () => {
+    expect(() => githubWebUrl('evil.example/acme-labs')).toThrow(/path/);
+    expect(() => githubWebUrl('//evil.example/acme-labs')).toThrow(/path/);
+    expect(() => githubWebUrl('@evil.example/acme-labs')).toThrow(/path/);
+  });
+});
+
+describe('error details', () => {
+  it('reads "bad credentials" as an auth failure only at 401 and 403', async () => {
+    fake.on('POST /repos/acme-labs/widget/issues', {
+      status: 422,
+      body: { message: 'Bad credentials are not a valid label name' },
+    });
+    fake.on('GET /repos/acme-labs/widget', { status: 403, body: { message: 'Bad credentials' } });
+
+    const invalid = await thrown(
+      githubRequest(INSTALLATION, 'POST', '/repos/acme-labs/widget/issues', { body: {} }),
+    );
+    const forbidden = await thrown(githubRequest(INSTALLATION, 'GET', '/repos/acme-labs/widget'));
+
+    expect(invalid.code).toBe('GITHUB_INVALID');
+    expect(forbidden.code).toBe('GITHUB_APP_AUTH');
+  });
+
+  it('says so when an answer cannot be read', async () => {
+    fake.on('GET /repos/acme-labs/widget', {
+      status: 200,
+      body: '{"full_name": "acme-labs/wid',
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const error = await thrown(githubRequest(INSTALLATION, 'GET', '/repos/acme-labs/widget'));
+
+    expect(error.code).toBe('GITHUB_UNAVAILABLE');
+    expect(error.message).toMatch(/could not be read/);
+    expect(error.message).not.toMatch(/in time/);
   });
 });

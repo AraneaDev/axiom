@@ -43,13 +43,17 @@ export interface GithubFake {
   readonly requests: RecordedRequest[];
   /** Answers a route, ahead of the fixtures, until `reset`. `route` as `'GET /repos/:owner/:repo'` */
   on(route: string, reply: Handler): void;
-  /** The App's public key: `/app/*` calls need a JWT that verifies against it */
-  setAppPublicKey(publicKeyPem: string | null): void;
-  /** A `ghs_` token the fake accepts for that installation */
+  /** The App: `/app/*` calls need a JWT issued by this id that verifies against this key */
+  setApp(app: { appId: number; publicKey: string } | null): void;
+  /** An installation of the App and the repositories (`owner/name`) it was granted */
+  addInstallation(installationId: number, repos: string[]): void;
+  /** Repositories anyone may read, with or without a credential; every other one is private */
+  setPublicRepos(repos: string[]): void;
+  /** A `ghs_` token for an installation added before, reaching only that installation's repos */
   issueInstallationToken(installationId: number): string;
-  /** A `ghu_` token the fake accepts for that user */
-  issueUserToken(login: string): string;
-  /** Forgets recorded requests and `on` routes; keys and issued tokens stay */
+  /** A `ghu_` token for that user, reaching only the given repositories */
+  issueUserToken(login: string, repos: string[]): string;
+  /** Forgets recorded requests and `on` routes; the App, installations and tokens stay */
   reset(): void;
   close(): Promise<void>;
 }
@@ -101,11 +105,12 @@ function match(route: Route, method: string, segments: string[]): Record<string,
 const paramCount = (route: Route) => route.segments.filter((s) => s.startsWith(':')).length;
 
 /**
- * Verifies an RS256 JWT as GitHub does for an App: signature, algorithm and time window.
+ * Verifies an RS256 JWT as GitHub does for an App: signature, algorithm, issuer and time window.
  * @param token The JWT
  * @param publicKeyPem The App's public key
+ * @param appId The App's id, which must be the issuer
  */
-export function verifyAppJwt(token: string, publicKeyPem: string): boolean {
+export function verifyAppJwt(token: string, publicKeyPem: string, appId: number): boolean {
   const [header, payload, signature] = token.split('.');
   if (!header || !payload || !signature) return false;
   try {
@@ -116,7 +121,7 @@ export function verifyAppJwt(token: string, publicKeyPem: string): boolean {
       iss?: unknown;
     };
     const now = Date.now() / 1000;
-    if (head.alg !== 'RS256' || claims.iss === undefined) return false;
+    if (head.alg !== 'RS256' || String(claims.iss) !== String(appId)) return false;
     if (typeof claims.exp !== 'number' || claims.exp <= now) return false;
     if (typeof claims.iat !== 'number' || claims.iat > now + 60) return false;
     if (claims.exp - claims.iat > 600) return false;
@@ -132,6 +137,22 @@ export function verifyAppJwt(token: string, publicKeyPem: string): boolean {
 }
 
 const tokenOf = (prefix: string) => `${prefix}${randomBytes(27).toString('base64url')}`;
+const repoKey = (fullName: string) => fullName.toLowerCase();
+
+/** Who a request authenticated as, in the fake's eyes */
+interface Credential {
+  kind: 'none' | 'invalid' | 'basic' | 'app' | 'installation' | 'user';
+  /** What the recorded `authorization` header says: `app`, `installation:<id>`, `user:<prefix>` */
+  label?: string;
+  installationId?: number;
+  /** The repositories (lowercased `owner/name`) the credential reaches */
+  repos?: Set<string>;
+}
+
+const reply = (status: number, message: string): FakeReply => ({ status, body: { message } });
+const NOT_FOUND = reply(404, 'Not Found');
+const REQUIRES_AUTH = reply(401, 'Requires authentication');
+const NOT_ACCESSIBLE = reply(403, 'Resource not accessible by integration');
 
 class GithubFakeServer implements GithubFake {
   readonly requests: RecordedRequest[] = [];
@@ -139,9 +160,11 @@ class GithubFakeServer implements GithubFake {
   private baseUrl = '';
   private overrides: Route[] = [];
   private fixtures: Route[] = [];
-  private appPublicKey: string | null = null;
+  private app: { appId: number; publicKey: string } | null = null;
+  private installations = new Map<number, Set<string>>();
+  private publicRepos = new Set<string>();
   private installationTokens = new Map<string, number>();
-  private userTokens = new Map<string, string>();
+  private userTokens = new Map<string, Set<string>>();
 
   constructor(private readonly scenario: string) {}
 
@@ -171,19 +194,30 @@ class GithubFakeServer implements GithubFake {
     this.overrides.unshift(parseRoute(route, reply));
   }
 
-  setAppPublicKey(publicKeyPem: string | null): void {
-    this.appPublicKey = publicKeyPem;
+  setApp(app: { appId: number; publicKey: string } | null): void {
+    this.app = app;
+  }
+
+  addInstallation(installationId: number, repos: string[]): void {
+    this.installations.set(installationId, new Set(repos.map(repoKey)));
+  }
+
+  setPublicRepos(repos: string[]): void {
+    this.publicRepos = new Set(repos.map(repoKey));
   }
 
   issueInstallationToken(installationId: number): string {
+    if (!this.installations.has(installationId)) {
+      throw new Error(`The GitHub fake has no installation ${installationId}`);
+    }
     const token = tokenOf('ghs_');
     this.installationTokens.set(token, installationId);
     return token;
   }
 
-  issueUserToken(login: string): string {
+  issueUserToken(_login: string, repos: string[]): string {
     const token = tokenOf('ghu_');
-    this.userTokens.set(token, login);
+    this.userTokens.set(token, new Set(repos.map(repoKey)));
     return token;
   }
 
@@ -201,40 +235,69 @@ class GithubFakeServer implements GithubFake {
   }
 
   /**
-   * What the Authorization header is, in words a test can assert on
-   * @param header
+   * Who the Authorization header stands for. A token the fake did not issue, or a JWT that
+   * does not verify for the App, is `invalid`.
+   * @param header The Authorization header as sent
    */
-  private credentialKind(header: string | undefined): string | undefined {
-    if (header === undefined) return undefined;
+  private credentialOf(header: string | undefined): Credential {
+    if (header === undefined) return { kind: 'none' };
     const [scheme, value = ''] = header.split(/\s+/, 2);
-    if (/^basic$/i.test(scheme)) return 'basic';
+    if (/^basic$/i.test(scheme)) return { kind: 'basic', label: 'basic' };
     if (/^(token|bearer)$/i.test(scheme)) {
       const installationId = this.installationTokens.get(value);
-      if (installationId !== undefined) return `installation:${installationId}`;
-      if (this.userTokens.has(value)) return `user:${value.slice(0, 8)}`;
-      if (/^bearer$/i.test(scheme) && this.appPublicKey && verifyAppJwt(value, this.appPublicKey)) {
-        return 'app';
+      if (installationId !== undefined) {
+        return {
+          kind: 'installation',
+          label: `installation:${installationId}`,
+          installationId,
+          repos: this.installations.get(installationId),
+        };
+      }
+      const userRepos = this.userTokens.get(value);
+      if (userRepos) return { kind: 'user', label: `user:${value.slice(0, 8)}`, repos: userRepos };
+      const app = this.app;
+      if (/^bearer$/i.test(scheme) && app && verifyAppJwt(value, app.publicKey, app.appId)) {
+        return { kind: 'app', label: 'app' };
       }
     }
-    return 'invalid';
+    return { kind: 'invalid', label: 'invalid' };
   }
 
   /**
-   * Whether the credential may call this path, as GitHub decides it
-   * @param pathname
-   * @param kind
+   * GitHub's answer when the credential may not make this call, or null when it may. A wrong
+   * credential is 401 everywhere; no credential reads public data only; a token reaches the
+   * repositories it was granted, and reads public ones.
+   * @param method The HTTP method
+   * @param pathname The request path
+   * @param credential Who the request authenticated as
    */
-  private allowed(pathname: string, kind: string | undefined): boolean {
-    if (pathname.startsWith('/web/') || pathname.startsWith('/app-manifests/')) return true;
-    if (pathname === '/app' || pathname.startsWith('/app/')) return kind === 'app';
-    if (pathname.startsWith('/applications/')) return kind === 'basic';
+  private refusal(method: string, pathname: string, credential: Credential): FakeReply | null {
+    const { kind } = credential;
+    if (kind === 'invalid') return reply(401, 'Bad credentials');
+    if (pathname.startsWith('/web/') || pathname.startsWith('/app-manifests/')) return null;
+
+    const needs = (wanted: Credential['kind']) =>
+      kind === wanted ? null : kind === 'none' ? REQUIRES_AUTH : NOT_ACCESSIBLE;
+    if (pathname === '/app' || pathname.startsWith('/app/')) {
+      return kind === 'app' ? null : reply(401, 'A JSON web token could not be decoded');
+    }
+    if (kind === 'app') return NOT_ACCESSIBLE;
+    if (pathname.startsWith('/applications/')) return needs('basic');
     if (pathname === '/installation' || pathname.startsWith('/installation/')) {
-      return kind?.startsWith('installation:') ?? false;
+      return needs('installation');
     }
-    if (pathname === '/user' || pathname.startsWith('/user/')) {
-      return kind?.startsWith('user:') ?? false;
+    if (pathname === '/user' || pathname.startsWith('/user/')) return needs('user');
+
+    const repo = /^\/repos\/([^/]+)\/([^/]+)/.exec(pathname);
+    if (repo) {
+      const key = repoKey(`${decodeURIComponent(repo[1])}/${decodeURIComponent(repo[2])}`);
+      if (credential.repos?.has(key)) return null;
+      if (!this.publicRepos.has(key)) return NOT_FOUND;
+      if (method === 'GET' || method === 'HEAD') return null;
+      return kind === 'none' ? NOT_FOUND : NOT_ACCESSIBLE;
     }
-    return (kind?.startsWith('installation:') || kind?.startsWith('user:')) ?? false;
+    // Other paths (users, orgs, search) hold public data or nothing
+    return null;
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -254,9 +317,9 @@ class GithubFakeServer implements GithubFake {
       if (typeof value === 'string') headers[name] = value;
       else if (Array.isArray(value)) headers[name] = value.join(', ');
     }
-    const kind = this.credentialKind(headers.authorization);
-    if (kind === undefined) delete headers.authorization;
-    else headers.authorization = kind;
+    const credential = this.credentialOf(headers.authorization);
+    if (credential.label === undefined) delete headers.authorization;
+    else headers.authorization = credential.label;
 
     const recorded: RecordedRequest = {
       method: req.method ?? 'GET',
@@ -267,32 +330,33 @@ class GithubFakeServer implements GithubFake {
     };
     this.requests.push(recorded);
 
-    let reply: FakeReply;
-    if (!this.allowed(url.pathname, kind)) {
-      reply = { status: 401, body: { message: 'Bad credentials' } };
-    } else {
-      reply = this.builtIn(recorded) ?? this.fromRoutes(recorded);
-    }
-    if (reply.delayMs) await new Promise((resolve) => setTimeout(resolve, reply.delayMs));
+    const answer =
+      this.refusal(recorded.method, url.pathname, credential) ??
+      this.builtIn(recorded, credential) ??
+      this.fromRoutes(recorded);
+    if (answer.delayMs) await new Promise((resolve) => setTimeout(resolve, answer.delayMs));
     if (res.destroyed) return;
 
-    const isText = typeof reply.body === 'string' || Buffer.isBuffer(reply.body);
+    const isText = typeof answer.body === 'string' || Buffer.isBuffer(answer.body);
     const outHeaders: Record<string, string> = {
-      ...(reply.body !== undefined && !isText && { 'content-type': 'application/json' }),
-      ...reply.headers,
+      ...(answer.body !== undefined && !isText && { 'content-type': 'application/json' }),
+      ...answer.headers,
     };
-    res.writeHead(reply.status, outHeaders);
-    if (reply.body === undefined) res.end();
-    else res.end(isText ? reply.body : JSON.stringify(reply.body));
+    res.writeHead(answer.status, outHeaders);
+    if (answer.body === undefined) res.end();
+    else res.end(isText ? answer.body : JSON.stringify(answer.body));
   }
 
   /**
-   * Routes whose answer is state, not a fixture
-   * @param req
+   * Routes whose answer is state, not a fixture. `on` routes still win.
+   * @param req The recorded request
+   * @param credential Who the request authenticated as
    */
-  private builtIn(req: RecordedRequest): FakeReply | null {
+  private builtIn(req: RecordedRequest, credential: Credential): FakeReply | null {
+    if (this.overrideFor(req)) return null;
     const tokenRoute = /^\/app\/installations\/(\d+)\/access_tokens$/.exec(req.path);
-    if (req.method === 'POST' && tokenRoute && !this.overrideFor(req)) {
+    if (req.method === 'POST' && tokenRoute) {
+      if (!this.installations.has(Number(tokenRoute[1]))) return NOT_FOUND;
       return {
         status: 201,
         body: {
@@ -302,6 +366,16 @@ class GithubFakeServer implements GithubFake {
           repository_selection: 'selected',
         },
       };
+    }
+    // The installation's own repositories, out of the fixture list
+    if (req.method === 'GET' && req.path === '/installation/repositories') {
+      const answer = this.fromRoutes(req);
+      const body = answer.body as { repositories?: Array<{ full_name: string }> } | undefined;
+      if (!Array.isArray(body?.repositories)) return answer;
+      const repositories = body.repositories.filter((repo) =>
+        credential.repos?.has(repoKey(repo.full_name)),
+      );
+      return { ...answer, body: { ...body, total_count: repositories.length, repositories } };
     }
     return null;
   }
