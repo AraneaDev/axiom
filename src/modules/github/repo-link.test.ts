@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
@@ -105,6 +105,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   await seedGithubApp({ fake });
   fake.addInstallation(3301, [WIDGET, GADGET]);
+  fake.suspendInstallation(3301, false);
+  fake.setPublicRepos([]);
 });
 
 afterEach(async () => {
@@ -196,8 +198,9 @@ describe('githubRepo.link', () => {
     expect(await prisma.githubRepoLink.count()).toBe(0);
   });
 
-  it('answers 409 GITHUB_APP_NOT_INSTALLED with the install URL', async () => {
+  it('answers 409 GITHUB_APP_NOT_INSTALLED for a public repository without the App', async () => {
     fake.removeInstallation(3301);
+    fake.setPublicRepos([WIDGET]);
     await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
     const res = await request(app)
       .post(url(ctx.projectId))
@@ -209,6 +212,112 @@ describe('githubRepo.link', () => {
       'https://github.com/apps/acme-axiom/installations/new',
     );
     expect(await prisma.githubRepoLink.count()).toBe(0);
+  });
+
+  it('answers one 409 GITHUB_REPO_UNREACHABLE for a private repository without the App', async () => {
+    fake.removeInstallation(3301);
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_REPO_UNREACHABLE');
+    expect(res.body.error.message).toBe(
+      `${WIDGET} was not found, you have no access to it, or the GitHub App is not installed on it`,
+    );
+    expect(res.body.error.details.installUrl).toBe(
+      'https://github.com/apps/acme-axiom/installations/new',
+    );
+    // No App lookup after the user's 404: it would tell a stranger the repository exists
+    expect(fake.requests.map((r) => r.headers.authorization)).toEqual([
+      expect.stringMatching(/^user:/),
+    ]);
+  });
+
+  it('answers the same GITHUB_REPO_UNREACHABLE for a repository that does not exist', async () => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: 'acme-labs/nothing' });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_REPO_UNREACHABLE');
+  });
+
+  it('refuses a suspended installation with 409 GITHUB_APP_SUSPENDED', async () => {
+    fake.suspendInstallation(3301);
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_APP_SUSPENDED');
+    expect(res.body.error.message).toBe('The GitHub App installation for acme-labs is suspended');
+    expect(await prisma.githubRepoLink.count()).toBe(0);
+  });
+
+  it('checks that the project is linked before any call to GitHub', async () => {
+    await connectAccount(ctx.owner, [WIDGET, GADGET], [WIDGET, GADGET]);
+    await request(app).post(url(ctx.projectId)).set(as(ctx.owner)).send({ repo: WIDGET });
+    fake.requests.length = 0;
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: GADGET });
+    expect(res.body.error.code).toBe('GITHUB_PROJECT_LINKED');
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('lets one of two parallel links win and refuses the other', async () => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const [a, b] = await Promise.all([
+      request(app).post(url(ctx.projectId)).set(as(ctx.owner)).send({ repo: WIDGET }),
+      request(app).post(url(other.id)).set(as(ctx.owner)).send({ repo: WIDGET }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    expect([a, b].find((r) => r.status === 409)!.body.error.code).toBe('GITHUB_REPO_LINKED');
+    expect(await prisma.githubRepoLink.count()).toBe(1);
+  });
+
+  it.each([
+    ['the repository', 'GITHUB_REPO_LINKED'],
+    ['the project', 'GITHUB_PROJECT_LINKED'],
+  ])('names the constraint a lost race hit: %s', async (which, code) => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    // The row that wins lands after both pre-checks have looked
+    const winner =
+      which === 'the repository'
+        ? { projectId: other.id, repoId: 7301n, fullName: WIDGET }
+        : { projectId: ctx.projectId, repoId: 7999n, fullName: GADGET };
+    await prisma.githubRepoLink.create({
+      data: {
+        ...winner,
+        installationId: 3301n,
+        owner: 'acme-labs',
+        name: winner.fullName.split('/')[1],
+        defaultBranch: 'main',
+        htmlUrl: `https://github.com/${winner.fullName}`,
+        linkedById: ctx.owner.id,
+      },
+    });
+    const real = prisma.githubRepoLink.findUnique.bind(prisma.githubRepoLink);
+    let calls = 0;
+    const spy = vi
+      .spyOn(prisma.githubRepoLink, 'findUnique')
+      .mockImplementation(((args: never) =>
+        ++calls <= 2 ? Promise.resolve(null) : real(args)) as never);
+    try {
+      const res = await request(app)
+        .post(url(ctx.projectId))
+        .set(as(ctx.owner))
+        .send({ repo: WIDGET });
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe(code);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('answers 409 GITHUB_REPO_LINKED for a repository of another project, naming none', async () => {
@@ -260,10 +369,56 @@ describe('githubRepo.link', () => {
     expect(res.status).toBe(202);
     expect(res.body.status).toBe('pending_approval');
     expect(res.body.preview).toBe(
-      `Link GitHub repository ${WIDGET} to project ${'Test Project ghrl'}: everyone who can read the project will see its pull requests, reviews and CI logs`,
+      `Link GitHub repository ${WIDGET} to project ${ctx.projectPrefix} "Test Project ghrl": everyone who can read the project will see its pull requests, reviews and CI logs`,
     );
     expect(await prisma.githubRepoLink.count()).toBe(0);
     expect(fake.requests).toEqual([]);
+  });
+});
+
+describe('githubRepo.link by a token', () => {
+  const tokenHeaders = (raw: string) => ({ ...CSRF, Authorization: `Token ${raw}` });
+  const approve = (id: string) =>
+    request(app).post(`/api/agent-approvals/${id}/approve`).set(as(ctx.owner));
+
+  it('is refused with 403, not held, for a token of a team MEMBER', async () => {
+    await connectAccount(teamMember, [WIDGET], [WIDGET]);
+    const raw = await apiToken(teamMember.id, ['github:write']);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(tokenHeaders(raw))
+      .send({ repo: WIDGET });
+    expect(res.status).toBe(403);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('links when approved, as the requester', async () => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const raw = await apiToken(ctx.owner.id, ['github:write']);
+    const held = await request(app)
+      .post(url(ctx.projectId))
+      .set(tokenHeaders(raw))
+      .send({ repo: WIDGET });
+    expect(held.status).toBe(202);
+    const res = await approve(held.body.approvalId);
+    expect(res.status).toBeLessThan(300);
+    const link = await findRepoLinkByProject(ctx.projectId);
+    expect(link).toMatchObject({ fullName: WIDGET, linkedById: ctx.owner.id });
+  });
+
+  it('checks GitHub admin rights again at approval time', async () => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const raw = await apiToken(ctx.owner.id, ['github:write']);
+    const held = await request(app)
+      .post(url(ctx.projectId))
+      .set(tokenHeaders(raw))
+      .send({ repo: WIDGET });
+    expect(held.status).toBe(202);
+    // The person loses admin rights on GitHub while the call waits
+    await prisma.githubAccount.deleteMany();
+    await connectAccount(ctx.owner, [WIDGET], []);
+    await approve(held.body.approvalId);
+    expect(await prisma.githubRepoLink.count()).toBe(0);
   });
 });
 
@@ -321,7 +476,7 @@ describe('githubRepo.unlink', () => {
     expect(res.status).toBe(202);
     expect(res.body.status).toBe('pending_approval');
     expect(res.body.preview).toBe(
-      `Unlink ${WIDGET} from Test Project ghrl: its branches, pull requests and checks disappear from 0 issues`,
+      `Unlink ${WIDGET} from project ${ctx.projectPrefix} "Test Project ghrl": its branches, pull requests and checks disappear from 0 issues`,
     );
     expect(await prisma.githubRepoLink.count({ where: { projectId: ctx.projectId } })).toBe(1);
   });

@@ -469,7 +469,9 @@ class GithubFakeServer implements GithubFake {
     const repo = /^\/repos\/([^/]+)\/([^/]+)/.exec(pathname);
     if (repo) {
       const key = repoKey(`${decodeURIComponent(repo[1])}/${decodeURIComponent(repo[2])}`);
-      if (credential.repos?.has(key)) return null;
+      // A user token of the App reaches a private repository only where the App is installed
+      const held = [...this.installations.values()].some((repos) => repos.has(key));
+      if (credential.repos?.has(key) && (kind !== 'user' || held)) return null;
       if (!this.publicRepos.has(key)) return NOT_FOUND;
       if (method === 'GET' || method === 'HEAD') return null;
       return kind === 'none' ? NOT_FOUND : NOT_ACCESSIBLE;

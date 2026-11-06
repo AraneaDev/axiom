@@ -1,4 +1,4 @@
-import type { GithubRepoLink } from '@prisma/client';
+import { Prisma, type GithubRepoLink } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
@@ -18,7 +18,7 @@ type GithubRepository = {
   permissions?: { admin?: boolean };
 };
 
-type GithubRepoInstallation = { id: number };
+type GithubRepoInstallation = { id: number; suspended_at?: string | null };
 
 /**
  * The link of a GitHub repository, by the id GitHub gave it.
@@ -90,13 +90,29 @@ export async function getRepoLink(projectId: string) {
  */
 export async function linkRepo(userId: string, projectId: string, repo: string) {
   await requireGithubAccount(userId);
+  // The project's own state, which the caller may see: no GitHub call for an obvious refusal
+  if (await findRepoLinkByProject(projectId)) throw projectLinked();
   const path = `/repos/${repo.split('/').map(encodeURIComponent).join('/')}`;
 
   const { data: repository } = await githubRequest<GithubRepository>(
     { kind: 'user', userId },
     'GET',
     path,
-  );
+  ).catch(async (err: unknown) => {
+    // A person's token reaches a private repository only where the App is installed, so GitHub
+    // cannot tell "no such repository" from "not installed": one answer for all three, and no
+    // App lookup that would tell a stranger the repository exists
+    if (err instanceof AppError && err.statusCode === 404) {
+      const { installUrl } = await getStatus();
+      throw new AppError(
+        409,
+        `${repo} was not found, you have no access to it, or the GitHub App is not installed on it`,
+        'GITHUB_REPO_UNREACHABLE',
+        { installUrl },
+      );
+    }
+    throw err;
+  });
   if (repository.permissions?.admin !== true) {
     throw new AppError(
       403,
@@ -110,6 +126,7 @@ export async function linkRepo(userId: string, projectId: string, repo: string) 
     'GET',
     `${path}/installation`,
   ).catch(async (err: unknown) => {
+    // Only a public repository gets here without the App installed
     if (err instanceof AppError && err.statusCode === 404) {
       const { installUrl } = await getStatus();
       throw new AppError(
@@ -121,17 +138,15 @@ export async function linkRepo(userId: string, projectId: string, repo: string) 
     }
     throw err;
   });
-
-  if (await findRepoLinkByProject(projectId)) {
+  if (installation.data.suspended_at) {
     throw new AppError(
       409,
-      'This project is already linked to a repository. Unlink it first.',
-      'GITHUB_PROJECT_LINKED',
+      `The GitHub App installation for ${repository.owner.login} is suspended`,
+      'GITHUB_APP_SUSPENDED',
     );
   }
-  const repoLinkedElsewhere = () =>
-    new AppError(409, 'This repository is linked to another project', 'GITHUB_REPO_LINKED');
-  if (await findRepoLinkByRepoId(repository.id)) throw repoLinkedElsewhere();
+
+  if (await findRepoLinkByRepoId(repository.id)) throw repoLinked();
 
   try {
     const link = await prisma.githubRepoLink.create({
@@ -149,21 +164,20 @@ export async function linkRepo(userId: string, projectId: string, repo: string) 
     });
     return present(link);
   } catch (err) {
-    // Two links racing for one project or one repository: the unique indexes decide
-    if ((err as { code?: string }).code === 'P2002') {
-      const target = JSON.stringify((err as { meta?: unknown }).meta ?? '');
-      if (target.includes('projectId')) {
-        throw new AppError(
-          409,
-          'This project is already linked to a repository. Unlink it first.',
-          'GITHUB_PROJECT_LINKED',
-        );
-      }
-      throw repoLinkedElsewhere();
-    }
-    throw err;
+    if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+    // Two links raced; the unique indexes decided. Ask which one this project lost to.
+    throw (await findRepoLinkByProject(projectId)) ? projectLinked() : repoLinked();
   }
 }
+
+const projectLinked = () =>
+  new AppError(
+    409,
+    'This project is already linked to a repository. Unlink it first.',
+    'GITHUB_PROJECT_LINKED',
+  );
+const repoLinked = () =>
+  new AppError(409, 'This repository is linked to another project', 'GITHUB_REPO_LINKED');
 
 /**
  * Removes a project's link. What the later GitHub tables hold for it cascades from the row.

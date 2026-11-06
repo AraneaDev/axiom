@@ -1766,12 +1766,7 @@ export async function githubAppDelete(): Promise<string> {
  * @param repo The repository as asked, `owner/name`
  */
 export async function githubRepoLink(projectId: string, repo: string): Promise<string> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { name: true },
-  });
-  if (!project) throw new AppError(404, ERR.PROJECT_NOT_FOUND);
-  return `Link GitHub repository ${repo} to project ${project.name}: everyone who can read the project will see its pull requests, reviews and CI logs`;
+  return `Link GitHub repository ${repo} to ${await projectLabel(projectId)}: everyone who can read the project will see its pull requests, reviews and CI logs`;
 }
 
 /**
@@ -1781,10 +1776,10 @@ export async function githubRepoLink(projectId: string, repo: string): Promise<s
 export async function githubRepoUnlink(projectId: string): Promise<string> {
   const link = await prisma.githubRepoLink.findUnique({
     where: { projectId },
-    select: { id: true, fullName: true, project: { select: { name: true } } },
+    select: { id: true, fullName: true },
   });
   if (!link)
     throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
   const issues = await countLinkedIssues(link.id);
-  return `Unlink ${link.fullName} from ${link.project.name}: its branches, pull requests and checks disappear from ${issues} issues`;
+  return `Unlink ${link.fullName} from ${await projectLabel(projectId)}: its branches, pull requests and checks disappear from ${amount(issues, 'issue')}`;
 }
