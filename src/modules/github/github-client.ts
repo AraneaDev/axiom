@@ -22,6 +22,11 @@ type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 type Query = Record<string, string | number>;
 type ResolvableKind = Exclude<GithubAuth['kind'], 'none' | 'token'>;
 type Resolver = (auth: GithubAuth) => Promise<string>;
+/**
+ * Gives a new Authorization value after GitHub refused the one that was sent (401). It is told
+ * the value that was refused, so callers refused together can share one new credential.
+ */
+type Refresher = (auth: GithubAuth, refused: string) => Promise<string>;
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const TEXT_TIMEOUT_MS = 30_000;
@@ -34,6 +39,7 @@ const API_HEADERS = {
 
 let overrideUrls: { api: string; web: string } | null = null;
 const resolvers = new Map<ResolvableKind, Resolver>();
+const refreshers = new Map<ResolvableKind, Refresher>();
 
 const trimSlash = (url: string) => url.replace(/\/+$/, '');
 const apiBase = () => trimSlash(overrideUrls?.api ?? env.GITHUB_API_URL);
@@ -53,9 +59,20 @@ export function setGithubBaseUrls(urls: { api: string; web: string } | null): vo
  * registers `app` and `installation`, connected accounts register `user`.
  * @param kind The auth kind this resolver serves
  * @param resolve Gives the full header value, such as `token ghs_...`
+ * @param refresh
  */
-export function registerGithubAuthResolver(kind: ResolvableKind, resolve: Resolver): void {
+export function registerGithubAuthResolver(
+  kind: ResolvableKind,
+  resolve: Resolver,
+  refresh?: Refresher,
+): void {
   resolvers.set(kind, resolve);
+  if (refresh) refreshers.set(kind, refresh);
+}
+
+/** The auth kinds that have a resolver in this process */
+export function registeredGithubAuthKinds(): string[] {
+  return [...resolvers.keys()];
 }
 
 /**
@@ -86,7 +103,8 @@ export async function githubWebPost(
   try {
     response = await fetch(url, {
       method: 'POST',
-      headers: { ...API_HEADERS, 'content-type': 'application/json' },
+      // Without this the token endpoint answers form-encoded, not JSON
+      headers: { ...API_HEADERS, accept: 'application/json', 'content-type': 'application/json' },
       body: JSON.stringify(body),
       redirect: 'manual',
       signal,
@@ -287,14 +305,24 @@ async function request<T>(
   url: URL,
   opts: { body?: unknown; timeoutMs?: number },
 ): Promise<{ status: number; data: T; headers: Headers }> {
-  const credential = await authorization(auth);
-  const response = await send(url, {
-    method,
-    body: opts.body,
-    credential,
-    timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    authAfterRedirect: 'api-host',
-  });
+  let credential = await authorization(auth);
+  const attempt = () =>
+    send(url, {
+      method,
+      body: opts.body,
+      credential,
+      timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      authAfterRedirect: 'api-host',
+    });
+  let response = await attempt();
+  // A token GitHub refuses may only have been revoked early: renew it once and try again
+  const refresh =
+    auth.kind === 'none' || auth.kind === 'token' ? undefined : refreshers.get(auth.kind);
+  if (response.status === 401 && refresh && credential) {
+    await response.body?.cancel();
+    credential = await refresh(auth, credential);
+    response = await attempt();
+  }
   if (!response.ok) throw await failure(auth, response, credential);
   const data = await successBody(response);
   return { status: response.status, data: data as T, headers: response.headers };

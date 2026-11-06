@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,8 +16,10 @@ import { postWebhook } from '../../test/github-webhook';
 import { refreshUserToken } from './github-account.service';
 import { requireGithubAccount, resolveGithubActor } from './github-actor';
 import { getGithubAppSecrets } from './github-app.service';
-import { githubRequest } from './github-client';
+import { githubRequest, githubWebPost, registeredGithubAuthKinds } from './github-client';
+import { githubError } from './github-errors';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
+import { handlersFor } from './webhook-dispatch';
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
 const BASE = '/api/github/account';
@@ -238,13 +242,16 @@ describe('disconnecting', () => {
   it('deletes the row and asks GitHub to revoke the token with the App credentials', async () => {
     await connect(alice, 'octo-dev', 9101);
     const token = plain('accessToken', await accountOf(alice));
+    const refresh = plain('refreshToken', await accountOf(alice));
     const res = await request(app).delete(BASE).set(as(alice));
     expect(res.status).toBe(200);
     expect(await prisma.githubAccount.count()).toBe(0);
     const revoke = fake.requests.find((r) => r.method === 'DELETE');
-    expect(revoke?.path).toBe('/applications/Iv1.0a1b2c3d4e5f6a7b/token');
+    expect(revoke?.path).toBe('/applications/Iv1.0a1b2c3d4e5f6a7b/grant');
     expect(revoke?.headers.authorization).toBe('basic');
     expect(fake.isTokenValid(token)).toBe(false);
+    // The grant goes, so the refresh token dies with the access token
+    expect(fake.isTokenValid(refresh)).toBe(false);
   });
 
   it('still deletes when GitHub refuses, and logs no token', async () => {
@@ -259,7 +266,7 @@ describe('disconnecting', () => {
     await connect(alice, 'octo-dev', 9101);
     const row = await accountOf(alice);
     const secrets = [plain('accessToken', row), plain('refreshToken', row)];
-    fake.on('DELETE /applications/:client_id/token', {
+    fake.on('DELETE /applications/:client_id/grant', {
       status: 500,
       body: { message: secrets[0] },
     });
@@ -544,5 +551,241 @@ describe('secrecy', () => {
       expect(secret.length).toBeGreaterThan(8);
       expect(haystack).not.toContain(secret);
     }
+  });
+});
+
+describe('the token endpoint answers', () => {
+  it('in JSON because the client asks for it, and in a form when it does not', async () => {
+    const code = fake.issueAuthorizationCode('octo-dev');
+    const asked = await githubWebPost('/login/oauth/access_token', {
+      client_id: 'Iv1.0a1b2c3d4e5f6a7b',
+      client_secret: (await getGithubAppSecrets())!.clientSecret,
+      code: 'unknown',
+    });
+    expect(asked.data).toMatchObject({ error: 'bad_verification_code' });
+    const sent = fake.requests.at(-1)!;
+    expect(sent.headers.accept).toBe('application/json');
+    const plainAsk = await fetch(`${fake.url}/web/login/oauth/access_token`, {
+      method: 'POST',
+      headers: { accept: 'application/vnd.github+json', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        client_id: 'Iv1.0a1b2c3d4e5f6a7b',
+        client_secret: (await getGithubAppSecrets())!.clientSecret,
+        code,
+      }),
+    });
+    expect(plainAsk.headers.get('content-type')).toContain('application/x-www-form-urlencoded');
+    expect(await plainAsk.text()).toMatch(/^access_token=ghu_/);
+  });
+});
+
+describe('a revoke that is delivered late', () => {
+  it('keeps a connection made after the event was received', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    const before = new Date(Date.now() - 60_000);
+    // Revoke, then connect again: the row is replaced in place and keeps its createdAt
+    await prisma.githubAccount.deleteMany();
+    await connect(alice, 'octo-dev', 9101);
+    await prisma.githubAccount.update({
+      where: { userId: alice.id },
+      data: { createdAt: new Date(Date.now() - 3_600_000) },
+    });
+    const [handler] = handlersFor('github_app_authorization');
+    const result = await handler({
+      deliveryId: 'late',
+      event: 'github_app_authorization',
+      action: 'revoked',
+      installationId: null,
+      repoId: null,
+      payload: { action: 'revoked', sender: { id: 9101, login: 'octo-dev' } },
+      receivedAt: before,
+    });
+    expect(result).toBe('ignored');
+    expect(await prisma.githubAccount.count()).toBe(1);
+  });
+
+  it('sets connectedAt on every connect, a reconnect included', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    const first = (await accountOf(alice)).connectedAt;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await connect(alice, 'octo-dev', 9101);
+    expect((await accountOf(alice)).connectedAt.getTime()).toBeGreaterThan(first.getTime());
+  });
+});
+
+describe('the auth resolvers', () => {
+  it('are registered by one module that both processes import', () => {
+    expect(registeredGithubAuthKinds().sort()).toEqual(
+      ['app', 'installation', 'oauth-app', 'user'].sort(),
+    );
+    const root = path.join(__dirname, '../..');
+    for (const entry of ['index.ts', 'worker.ts']) {
+      expect(readFileSync(path.join(root, entry), 'utf8')).toContain(
+        './modules/github/github-resolvers',
+      );
+    }
+    for (const file of ['github-app.service.ts', 'github-account.service.ts']) {
+      expect(readFileSync(path.join(__dirname, file), 'utf8')).not.toContain(
+        'registerGithubAuthResolver(',
+      );
+    }
+  });
+});
+
+describe('a 401 means the connection was refused, not the App', () => {
+  it.each(['user', 'token', 'oauth-app'] as const)('for %s', (kind) => {
+    expect(githubError(kind, 401, new Headers(), { message: 'Bad credentials' })).toMatchObject({
+      statusCode: 409,
+      code: 'GITHUB_RECONNECT',
+    });
+  });
+  it('still blames the App for its own calls', () => {
+    expect(githubError('app', 401, new Headers(), null)).toMatchObject({ code: 'GITHUB_APP_AUTH' });
+  });
+});
+
+describe('a refresh that overlaps another change', () => {
+  const expireSoon = () =>
+    prisma.githubAccount.update({
+      where: { userId: alice.id },
+      data: { accessTokenExpiresAt: new Date(Date.now() + 60_000) },
+    });
+
+  it('does not overwrite a reconnect made during the GitHub call, and revokes what it rotated', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    await expireSoon();
+    fake.setRefreshDelay(500);
+    const running = refreshUserToken(alice.id);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    fake.setRefreshDelay(0);
+    expect((await connect(alice, 'review-bot', 9102)).res.status).toBe(200);
+    const token = await running;
+    const row = await accountOf(alice);
+    expect(row.login).toBe('review-bot');
+    // The caller gets the token of the current connection, not the one the refresh rotated
+    expect(token).toBe(plain('accessToken', row));
+    expect(fake.isTokenValid(token)).toBe(true);
+    const revokes = fake.requests.filter((r) => r.method === 'DELETE' && r.path.endsWith('/token'));
+    expect(revokes.length).toBeGreaterThan(0);
+  });
+
+  it('revokes what it rotated when the account was disconnected meanwhile', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    await expireSoon();
+    fake.setRefreshDelay(500);
+    const running = refreshUserToken(alice.id).catch((e) => e);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    fake.setRefreshDelay(0);
+    expect((await request(app).delete(BASE).set(as(alice))).status).toBe(200);
+    expect(await running).toMatchObject({ statusCode: 409, code: 'GITHUB_NOT_CONNECTED' });
+    expect(await prisma.githubAccount.count()).toBe(0);
+    expect(fake.requests.some((r) => r.method === 'DELETE' && r.path.endsWith('/token'))).toBe(
+      true,
+    );
+  });
+
+  it('skips the GitHub call, with a 503, when too little of the transaction is left', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    await expireSoon();
+    const err = await refreshUserToken(alice.id, prisma, { budgetMs: 2500 }).catch((e) => e);
+    expect(err).toMatchObject({ statusCode: 503 });
+    expect(fake.refreshGrants).toBe(0);
+    expect(await prisma.githubAccount.count()).toBe(1);
+  });
+
+  it('limits the GitHub call to the time left minus a margin', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    await expireSoon();
+    fake.setRefreshDelay(3500);
+    const started = Date.now();
+    const err = await refreshUserToken(alice.id, prisma, { budgetMs: 4000 }).catch((e) => e);
+    expect(err).toMatchObject({ statusCode: 502 });
+    expect(Date.now() - started).toBeLessThan(3000);
+    fake.setRefreshDelay(0);
+  });
+});
+
+describe('a token GitHub refuses at the API', () => {
+  it('is refreshed once and the call retried', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    fake.expireToken(plain('accessToken', await accountOf(alice)));
+    fake.reset();
+    const res = await githubRequest<{ login: string }>(
+      { kind: 'user', userId: alice.id },
+      'GET',
+      '/user',
+    );
+    expect(res.data.login).toBe('octo-dev');
+    expect(fake.refreshGrants).toBe(1);
+    const statuses = fake.requests.filter((r) => r.path === '/user');
+    expect(statuses).toHaveLength(2);
+  });
+
+  it('is refreshed once however many calls were refused together', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    fake.expireToken(plain('accessToken', await accountOf(alice)));
+    fake.setRefreshDelay(150);
+    const auth = { kind: 'user', userId: alice.id } as const;
+    await Promise.all([1, 2, 3].map(() => githubRequest(auth, 'GET', '/user')));
+    expect(fake.refreshGrants).toBe(1);
+    fake.setRefreshDelay(0);
+  });
+
+  it('ends the connection when the refresh fails too', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    fake.expireToken(plain('accessToken', await accountOf(alice)));
+    fake.revokeRefreshTokens('octo-dev');
+    const err = await githubRequest({ kind: 'user', userId: alice.id }, 'GET', '/user').catch(
+      (e) => e,
+    );
+    expect(err).toMatchObject({ statusCode: 409, code: 'GITHUB_RECONNECT' });
+    expect(await prisma.githubAccount.count()).toBe(0);
+    expect((await request(app).get(BASE).set(as(alice))).body).toEqual({ connected: false });
+  });
+});
+
+describe('connecting twice at the same time', () => {
+  it('lets the later one win and keeps the sealed tokens readable', async () => {
+    const real = prisma.githubAccount.create.bind(prisma.githubAccount);
+    let raced = false;
+    const spy = vi.spyOn(prisma.githubAccount, 'create').mockImplementation(((args: never) => {
+      if (raced) return real(args);
+      raced = true;
+      // The other tab's connect lands between our read and our insert
+      return real({
+        data: {
+          id: 'competing-row',
+          userId: alice.id,
+          githubUserId: 9101,
+          login: 'octo-dev',
+          accessToken: 'x',
+          connectedAt: new Date(),
+        },
+      } as never).then(() => real(args));
+    }) as never);
+    const res = (await connect(alice, 'octo-dev', 9101)).res;
+    spy.mockRestore();
+    expect(res.status).toBe(200);
+    const row = await accountOf(alice);
+    expect(row.id).toBe('competing-row');
+    expect(plain('accessToken', row)).toMatch(/^ghu_/);
+    expect(plain('refreshToken', row)).toMatch(/^ghr_/);
+  });
+
+  it('is never reported as a GitHub account taken by someone else', async () => {
+    const [a, b] = [await start(alice), await start(alice)];
+    const codes = [
+      fake.issueAuthorizationCode('octo-dev'),
+      fake.issueAuthorizationCode('octo-dev'),
+    ];
+    const results = await Promise.all([
+      post(`${BASE}/connect/complete`, alice, { code: codes[0], state: a.state }),
+      post(`${BASE}/connect/complete`, alice, { code: codes[1], state: b.state }),
+    ]);
+    for (const res of results) {
+      expect(res.body?.error?.code).not.toBe('GITHUB_ACCOUNT_TAKEN');
+    }
+    expect(await prisma.githubAccount.count()).toBe(1);
+    expect(plain('accessToken', await accountOf(alice))).toMatch(/^ghu_/);
   });
 });

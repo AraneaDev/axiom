@@ -10,14 +10,10 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
 import { getGithubAppSecrets, instanceOrigin } from './github-app.service';
-import {
-  githubRequest,
-  githubWebPost,
-  githubWebUrl,
-  registerGithubAuthResolver,
-} from './github-client';
+import { githubRequest, githubWebPost, githubWebUrl } from './github-client';
 import { githubUnavailable } from './github-errors';
 
+const STORE_ATTEMPTS = 3;
 const STATE_MINUTES = 10;
 const MAX_OPEN_STATES = 5;
 /** A token is refreshed once it expires within this long */
@@ -26,6 +22,9 @@ const REFRESH_MARGIN_MS = 5 * 60_000;
 const REFRESH_HTTP_TIMEOUT_MS = 8_000;
 const REFRESH_TX_TIMEOUT_MS = 15_000;
 const REFRESH_TX_MAX_WAIT_MS = 5_000;
+/** What stays of the transaction after the GitHub call: to write the answer and commit */
+const REFRESH_MARGIN_LEFT_MS = 2_000;
+const REFRESH_MIN_HTTP_MS = 1_000;
 
 const RECONNECT_MESSAGE = 'Your GitHub connection expired. Connect GitHub again in Settings.';
 const reconnect = () => new AppError(409, RECONNECT_MESSAGE, 'GITHUB_RECONNECT');
@@ -47,18 +46,7 @@ type TransactionRunner = {
 /** What `githubAccount.get` and the other actions answer: never a token */
 export type GithubAccountStatus = { connected: boolean; login?: string; githubUserId?: number };
 
-// ---- Credentials for the client
-
-registerGithubAuthResolver('oauth-app', async () => {
-  const app = await getGithubAppSecrets();
-  if (!app) throw new AppError(409, 'No GitHub App is set up', 'GITHUB_APP_MISSING');
-  return `Basic ${Buffer.from(`${app.clientId}:${app.clientSecret}`).toString('base64')}`;
-});
-
-registerGithubAuthResolver('user', async (auth) => {
-  if (auth.kind !== 'user') throw new Error('Not a user');
-  return `token ${await userToken(auth.userId)}`;
-});
+// ---- Credentials for the client (registered in github-resolvers.ts)
 
 type AccountTokens = {
   id: string;
@@ -77,7 +65,7 @@ const needsRefresh = (row: AccountTokens) =>
  * within 5 minutes.
  * @param userId The Axiom user
  */
-async function userToken(userId: string): Promise<string> {
+export async function userToken(userId: string): Promise<string> {
   const row = await prisma.githubAccount.findUnique({ where: { userId } });
   if (!row) throw notConnected();
   return needsRefresh(row)
@@ -141,27 +129,45 @@ const appAuthRefused = () =>
     'GITHUB_APP_AUTH',
   );
 
+/** How the refresh is run: tests narrow the budget, the GitHub call passes the token it was refused */
+type RefreshOptions = {
+  /** The access token GitHub refused: if the row holds another one, someone renewed it already */
+  rejected?: string;
+  /** The time the whole transaction may take (default 15 s) */
+  budgetMs?: number;
+};
+
 /**
  * Refreshes a user's access token, once however many processes ask: the work runs in a
  * transaction that holds an advisory lock for the user, and the row is read again after taking
  * it, so a process that waited finds the new token and skips the call. A refresh token that
- * GitHub refuses ends the connection.
+ * GitHub refuses ends the connection. The write is conditional on the token that was read, so
+ * a reconnect or a disconnect during the GitHub call is not overwritten: the rotated token is
+ * revoked instead.
  * @param userId The Axiom user
  * @param db The Prisma client to run on. Another process has another connection, so tests pass a
  *   second client to stand in for it
+ * @param opts `rejected` forces a refresh of a token GitHub refused; `budgetMs` is the time the
+ *   transaction may take
  * @returns The access token to use
- * @throws {AppError} 409 GITHUB_RECONNECT, 409 GITHUB_NOT_CONNECTED, 502 when GitHub fails
+ * @throws {AppError} 409 GITHUB_RECONNECT, 409 GITHUB_NOT_CONNECTED, 503 when too little of the
+ *   transaction is left to call GitHub, 502 when GitHub fails
  */
 export async function refreshUserToken(
   userId: string,
   db: TransactionRunner = prisma,
+  opts: RefreshOptions = {},
 ): Promise<string> {
+  const budget = opts.budgetMs ?? REFRESH_TX_TIMEOUT_MS;
+  const deadline = Date.now() + budget;
   const outcome = await db.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('github-refresh:' || ${userId}::text))`;
       const row = await tx.githubAccount.findUnique({ where: { userId } });
       if (!row) throw notConnected();
-      if (!needsRefresh(row)) return { token: open('accessToken', row.id, row.accessToken) };
+      const current = open('accessToken', row.id, row.accessToken);
+      const forced = opts.rejected !== undefined && current === opts.rejected;
+      if (!forced && !needsRefresh(row)) return { token: current };
 
       const now = Date.now();
       const canRefresh =
@@ -169,13 +175,20 @@ export async function refreshUserToken(
         (row.refreshTokenExpiresAt === null || row.refreshTokenExpiresAt.getTime() > now);
       if (!canRefresh) {
         // Still valid for a few minutes: use it. Else nothing can renew it.
-        if (row.accessTokenExpiresAt!.getTime() > now) {
-          return { token: open('accessToken', row.id, row.accessToken) };
-        }
+        if (!forced && row.accessTokenExpiresAt!.getTime() > now) return { token: current };
         await tx.githubAccount.delete({ where: { id: row.id } });
         return { gone: true as const };
       }
 
+      // The GitHub call must end inside the transaction, with room to write: a rotated token
+      // the transaction cannot store is lost
+      const httpTimeout = Math.min(
+        REFRESH_HTTP_TIMEOUT_MS,
+        deadline - now - REFRESH_MARGIN_LEFT_MS,
+      );
+      if (httpTimeout < REFRESH_MIN_HTTP_MS) {
+        throw new AppError(503, 'GitHub is busy. Try again in a moment.', 'GITHUB_BUSY');
+      }
       const app = await getGithubAppSecrets();
       if (!app) throw new AppError(409, 'No GitHub App is set up', 'GITHUB_APP_MISSING');
       const { status, data } = await githubWebPost(
@@ -186,7 +199,7 @@ export async function refreshUserToken(
           grant_type: 'refresh_token',
           refresh_token: open('refreshToken', row.id, row.refreshToken!),
         },
-        REFRESH_HTTP_TIMEOUT_MS,
+        httpTimeout,
       );
       let fresh: ReturnType<typeof readTokenReply>;
       try {
@@ -198,8 +211,9 @@ export async function refreshUserToken(
         await tx.githubAccount.delete({ where: { id: row.id } });
         return { gone: true as const };
       }
-      await tx.githubAccount.update({
-        where: { id: row.id },
+      // Only the row as it was read is updated: a reconnect or a disconnect since then wins
+      const { count } = await tx.githubAccount.updateMany({
+        where: { id: row.id, accessToken: row.accessToken },
         data: {
           accessToken: seal('accessToken', row.id, fresh.accessToken),
           accessTokenExpiresAt: fresh.accessTokenExpiresAt,
@@ -209,12 +223,18 @@ export async function refreshUserToken(
           refreshTokenExpiresAt: fresh.refreshTokenExpiresAt,
         },
       });
-      return { token: fresh.accessToken };
+      return count === 1 ? { token: fresh.accessToken } : { superseded: fresh.accessToken };
     },
-    { timeout: REFRESH_TX_TIMEOUT_MS, maxWait: REFRESH_TX_MAX_WAIT_MS },
+    { timeout: budget, maxWait: REFRESH_TX_MAX_WAIT_MS },
   );
   // Thrown after the commit, so the deletion stands
   if ('gone' in outcome) throw reconnect();
+  if ('superseded' in outcome) {
+    // What GitHub just rotated is nobody's: revoke it and use the connection that replaced it
+    const app = await prisma.githubApp.findFirst({ select: { clientId: true } });
+    if (app) await revokeToken(app.clientId, (outcome as { superseded: string }).superseded);
+    return userToken(userId);
+  }
   return outcome.token;
 }
 
@@ -285,13 +305,18 @@ const githubUserReply = z.object({ id: z.number().int(), login: z.string().min(1
  * GitHub's words, which may echo it) and changes nothing for the caller.
  * @param clientId The App's client id
  * @param accessToken The token to revoke
+ * @param what
  */
-async function revokeToken(clientId: string, accessToken: string): Promise<void> {
+async function revokeToken(
+  clientId: string,
+  accessToken: string,
+  what: 'token' | 'grant' = 'token',
+): Promise<void> {
   try {
     await githubRequest(
       { kind: 'oauth-app' },
       'DELETE',
-      `/applications/${encodeURIComponent(clientId)}/token`,
+      `/applications/${encodeURIComponent(clientId)}/${what}`,
       { body: { access_token: accessToken } },
     );
   } catch (err) {
@@ -376,41 +401,67 @@ export async function completeConnect(
     throw accountTaken();
   }
 
-  // The row id is part of the context the tokens are sealed with: the old row keeps its id
-  const existing = await prisma.githubAccount.findUnique({
-    where: { userId },
-    select: { id: true, accessToken: true },
-  });
-  const id = existing?.id ?? createId();
-  const sealed = {
-    githubUserId: me.data.id,
-    login: me.data.login,
-    accessToken: seal('accessToken', id, tokens.accessToken),
-    accessTokenExpiresAt: tokens.accessTokenExpiresAt,
-    refreshToken: tokens.refreshToken ? seal('refreshToken', id, tokens.refreshToken) : null,
-    refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
-  };
-  try {
-    await prisma.githubAccount.upsert({
+  // The row id is part of the context the tokens are sealed with, so a row that exists keeps its
+  // id and is updated; there is no upsert, which could update a row made a moment ago under an
+  // id the tokens were not sealed for. A row made or removed by another call in between is met
+  // by reading again: the later connect wins.
+  for (let attempt = 0; attempt < STORE_ATTEMPTS; attempt++) {
+    const existing = await prisma.githubAccount.findUnique({
       where: { userId },
-      create: { id, userId, ...sealed },
-      update: sealed,
+      select: { id: true, accessToken: true },
     });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      await revokeToken(app.clientId, tokens.accessToken);
-      throw accountTaken();
+    const id = existing?.id ?? createId();
+    const sealed = {
+      githubUserId: me.data.id,
+      login: me.data.login,
+      accessToken: seal('accessToken', id, tokens.accessToken),
+      accessTokenExpiresAt: tokens.accessTokenExpiresAt,
+      refreshToken: tokens.refreshToken ? seal('refreshToken', id, tokens.refreshToken) : null,
+      refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
+      connectedAt: new Date(),
+    };
+    try {
+      if (existing) {
+        const { count } = await prisma.githubAccount.updateMany({
+          where: { id, userId },
+          data: sealed,
+        });
+        if (count === 0) continue;
+        // A connection that replaces another one lets go of the old token
+        try {
+          await revokeToken(app.clientId, open('accessToken', id, existing.accessToken));
+        } catch {
+          // An old token that does not open is nothing to revoke: the new one is stored
+        }
+      } else {
+        await prisma.githubAccount.create({ data: { id, userId, ...sealed } });
+      }
+      return { connected: true, login: me.data.login, githubUserId: me.data.id };
+    } catch (err) {
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+      // Taken by another user's connection, or by this user's other tab: only the first is a refusal
+      const taken = await prisma.githubAccount.findUnique({
+        where: { githubUserId: me.data.id },
+        select: { userId: true },
+      });
+      if (taken && taken.userId !== userId) {
+        await revokeToken(app.clientId, tokens.accessToken);
+        throw accountTaken();
+      }
     }
-    throw err;
   }
-  // A connection that replaces another one lets go of the old token
-  if (existing) await revokeToken(app.clientId, open('accessToken', id, existing.accessToken));
-  return { connected: true, login: me.data.login, githubUserId: me.data.id };
+  await revokeToken(app.clientId, tokens.accessToken);
+  throw new AppError(
+    409,
+    'Another connection to GitHub is being made right now: try again',
+    'GITHUB_CONNECT_IN_PROGRESS',
+  );
 }
 
 /**
- * Removes the connection and asks GitHub to revoke the access token. The row goes first: a
- * revoke that fails does not keep it.
+ * Removes the connection and asks GitHub to revoke the person's whole grant of the App, so the
+ * refresh token dies with the access token. The row goes first: a revoke that fails does not
+ * keep it.
  * @param userId The person disconnecting
  */
 export async function disconnect(userId: string): Promise<GithubAccountStatus> {
@@ -419,7 +470,7 @@ export async function disconnect(userId: string): Promise<GithubAccountStatus> {
   const { count } = await prisma.githubAccount.deleteMany({ where: { id: row.id } });
   if (count === 1) {
     const app = await prisma.githubApp.findFirst({ select: { clientId: true } });
-    if (app) await revokeToken(app.clientId, open('accessToken', row.id, row.accessToken));
+    if (app) await revokeToken(app.clientId, open('accessToken', row.id, row.accessToken), 'grant');
   }
   return { connected: false };
 }

@@ -7,6 +7,7 @@ import {
   failStuckAgentApprovals,
 } from './modules/agent-approvals/agent-approvals.cleanup';
 import { cleanupExpiredUploads } from './modules/attachments/upload-intents.service';
+import './modules/github/github-resolvers';
 import './modules/github/webhook-handlers';
 import { cleanupDeliveries, retryDueDeliveries } from './modules/github/webhook.service';
 import { logger } from './utils/logger';

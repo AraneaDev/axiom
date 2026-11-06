@@ -1377,6 +1377,8 @@ model GithubAccount {
   accessTokenExpiresAt  DateTime?
   refreshToken          String?
   refreshTokenExpiresAt DateTime?
+  /// When this connection was last made: a reconnect sets it again, the row stays
+  connectedAt           DateTime  @default(now())
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)

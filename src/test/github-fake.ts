@@ -83,8 +83,10 @@ export interface GithubFake {
   setRefreshDelay(ms: number): void;
   /** Every refresh token of that login stops working: the next refresh gets `bad_refresh_token` */
   revokeRefreshTokens(login: string): void;
-  /** Whether the fake would still accept this user token */
+  /** Whether the fake would still accept this access token, or still honour this refresh token */
   isTokenValid(token: string): boolean;
+  /** An access token stops working (GitHub refuses it with 401), its refresh token stays good */
+  expireToken(token: string): void;
   /**
    * Installation tokens expire an hour after they are issued, by `Date.now()`, so a test that
    * fakes the clock (`vi.useFakeTimers({ toFake: ['Date'] })`) drives `expires_at` and the
@@ -332,7 +334,11 @@ class GithubFakeServer implements GithubFake {
   }
 
   isTokenValid(token: string): boolean {
-    return this.userTokens.has(token);
+    return this.userTokens.has(token) || this.refreshTokens.has(token);
+  }
+
+  expireToken(token: string): void {
+    this.userTokens.delete(token);
   }
 
   private idOf(login: string): number {
@@ -537,10 +543,12 @@ class GithubFakeServer implements GithubFake {
       };
     }
     if (req.method === 'POST' && req.path === '/web/login/oauth/access_token') {
-      return this.tokenEndpoint(req.body);
+      return this.tokenEndpoint(req.body, req.headers.accept ?? '');
     }
-    const revoke = /^\/applications\/([^/]+)\/token$/.exec(req.path);
-    if (req.method === 'DELETE' && revoke) return this.revokeToken(revoke[1], req.body, credential);
+    const revoke = /^\/applications\/([^/]+)\/(token|grant)$/.exec(req.path);
+    if (req.method === 'DELETE' && revoke) {
+      return this.revokeToken(revoke[1], revoke[2] === 'grant', req.body, credential);
+    }
     if (req.method === 'GET' && req.path === '/user' && credential.identity) {
       const found = this.fromRoutes(req);
       const body = found.body as Record<string, unknown> | undefined;
@@ -566,8 +574,22 @@ class GithubFakeServer implements GithubFake {
    * 200 with an `error`, as GitHub answers them. A refresh token works once: the grant hands
    * out a new one.
    * @param body The JSON body that was sent
+   * @param accept The Accept header: GitHub answers in JSON only when asked, else form-encoded
    */
-  private tokenEndpoint(body: unknown): FakeReply {
+  private tokenEndpoint(body: unknown, accept: string): FakeReply {
+    const answer = this.tokenAnswer(body);
+    if (accept.includes('application/json')) return answer;
+    const fields = Object.entries(answer.body as Record<string, unknown>).map(
+      ([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`,
+    );
+    return {
+      ...answer,
+      body: fields.join('&'),
+      headers: { 'content-type': 'application/x-www-form-urlencoded; charset=utf-8' },
+    };
+  }
+
+  private tokenAnswer(body: unknown): FakeReply {
     const input = (body ?? {}) as Record<string, string>;
     const refused = (error: string, description: string): FakeReply => ({
       status: 200,
@@ -620,12 +642,20 @@ class GithubFakeServer implements GithubFake {
   }
 
   /**
-   * `DELETE /applications/:client_id/token`: the token in the body stops working.
+   * `DELETE /applications/:client_id/token` revokes the token in the body;
+   * `.../grant` revokes the whole authorization of that token's user: every access token and
+   * every refresh token.
    * @param clientId The client id in the path
+   * @param wholeGrant Whether the path ends in `grant`
    * @param body The JSON body, `{ access_token }`
    * @param credential Who the request authenticated as (the App's client credentials)
    */
-  private revokeToken(clientId: string, body: unknown, credential: Credential): FakeReply {
+  private revokeToken(
+    clientId: string,
+    wholeGrant: boolean,
+    body: unknown,
+    credential: Credential,
+  ): FakeReply {
     const client = this.oauthClient;
     const sent = credential.basic;
     if (
@@ -637,7 +667,15 @@ class GithubFakeServer implements GithubFake {
       return reply(401, 'Bad credentials');
     }
     const token = (body as { access_token?: string } | undefined)?.access_token ?? '';
-    return this.userTokens.delete(token) ? { status: 204 } : NOT_FOUND;
+    const owner = this.userTokens.get(token);
+    if (!owner) return NOT_FOUND;
+    if (wholeGrant) {
+      for (const [other, entry] of this.userTokens) {
+        if (entry.login === owner.login) this.userTokens.delete(other);
+      }
+      this.revokeRefreshTokens(owner.login);
+    } else this.userTokens.delete(token);
+    return { status: 204 };
   }
 
   /**

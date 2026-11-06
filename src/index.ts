@@ -73,6 +73,7 @@ import './modules/auth/auth.actions';
 import './modules/health/health.actions';
 import './modules/site-settings/site-settings.actions';
 import './modules/github/github-account.actions';
+import './modules/github/github-resolvers';
 import './modules/github/github-app.actions';
 import './modules/github/webhook-handlers';
 import './modules/github/webhook.actions';

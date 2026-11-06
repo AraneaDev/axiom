@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "github_accounts" ADD COLUMN "connectedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

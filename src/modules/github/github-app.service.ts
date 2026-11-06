@@ -7,14 +7,8 @@ import { prisma } from '../../config/database';
 import { decryptSecret, encryptSecret, secretContext } from '../../lib/secret-box';
 import { AppError } from '../../middleware/errorHandler';
 
-import {
-  githubPaginate,
-  githubRequest,
-  githubWebUrl,
-  registerGithubAuthResolver,
-} from './github-client';
+import { githubPaginate, githubRequest, githubWebUrl } from './github-client';
 import { githubUnavailable } from './github-errors';
-import { appJwt } from './github-jwt';
 
 /** The App is one row, and its id is part of every context a secret of it is sealed with */
 export const GITHUB_APP_ROW_ID = 1;
@@ -135,7 +129,7 @@ export async function getGithubAppSecrets(): Promise<{
   };
 }
 
-// ---- Credentials for the client
+// ---- Credentials for the client (registered in github-resolvers.ts)
 
 // A token belongs to the App that minted it. The generation (appId and when the row was made)
 // is read from the database on every resolve, so a token of a forgotten or replaced App is
@@ -152,7 +146,7 @@ const tokenReply = z.object({ token: z.string().min(1), expires_at: z.string() }
  * one. Calls made at the same time share one request.
  * @param installationId GitHub's installation id
  */
-async function installationToken(installationId: number): Promise<string> {
+export async function installationToken(installationId: number): Promise<string> {
   const current = await prisma.githubApp.findUnique({
     where: { id: GITHUB_APP_ROW_ID },
     select: { appId: true, createdAt: true },
@@ -196,17 +190,6 @@ export function clearInstallationTokens(): void {
   installationTokens.clear();
   installationFetches.clear();
 }
-
-registerGithubAuthResolver('app', async () => {
-  const app = await getGithubAppSecrets();
-  if (!app) throw new AppError(409, 'No GitHub App is set up', 'GITHUB_APP_MISSING');
-  return `Bearer ${appJwt(app.appId, app.privateKey)}`;
-});
-
-registerGithubAuthResolver('installation', async (auth) => {
-  if (auth.kind !== 'installation') throw new Error('Not an installation');
-  return `token ${await installationToken(auth.installationId)}`;
-});
 
 // ---- Status
 
