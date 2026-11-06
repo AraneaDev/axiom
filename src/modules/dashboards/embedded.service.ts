@@ -63,6 +63,44 @@ function queryWidget(source: Pick<DashboardWidget, 'savedQueryId' | 'query'>): W
 }
 
 /**
+ * Render one block the page holds, with the reader's rights. The caller has checked that the embed
+ * is in the page's body and holds the render limit and the read slot.
+ * @param ctx - The reader
+ * @param embedId - The block's target as written in the Markdown
+ * @throws {AppError} 404 when the block names something that is gone; 400 for an inline query that
+ * is too long
+ */
+async function renderBlock(ctx: ActionContext, embedId: string) {
+  const target = parseQueryEmbedTarget(embedId);
+  if (!target) throw notOnPage();
+  const hidden: RenderRules = {
+    savedText: embeddedTextToRun,
+    errorOf: (widget, err) => hiddenWidgetError(widget.id, err),
+  };
+  switch (target.kind) {
+    case 'dashboard': {
+      const dashboard = await prisma.dashboard.findUnique({
+        where: { id: target.id },
+        select: { id: true },
+      });
+      if (!dashboard) throw notOnPage();
+      return renderWidgets(ctx, await widgetsOf(target.id), hidden);
+    }
+    case 'savedQuery':
+      return renderWidgets(ctx, [queryWidget({ savedQueryId: target.id, query: null })], hidden);
+    case 'inline':
+      // Its text is in the page they are reading, so the language's messages tell them nothing new
+      if (target.query.length > INLINE_QUERY_MAX) {
+        throw new AppError(400, 'This query is too long', 'INVALID_QUERY');
+      }
+      return renderWidgets(ctx, [queryWidget({ savedQueryId: null, query: target.query })], {
+        ...hidden,
+        errorOf: (widget, err) => widgetError(widget.id, err),
+      });
+  }
+}
+
+/**
  * Render a live block for someone who may read its page: the embed must be in the page's current
  * body, by the same parse the editor does. Counts once against the dashboards' render limit and
  * takes one read slot, whichever of the three it is.
@@ -79,35 +117,58 @@ export async function renderEmbedded(ctx: ActionContext, pageId: string, embedId
   if (!page?.body.includes(embedId) || !queryEmbedsIn(page.body).includes(embedId)) {
     throw notOnPage();
   }
-  const target = parseQueryEmbedTarget(embedId);
-  if (!target) throw notOnPage();
-
   await limitRender(ctx.userId);
-  return readSlots.run(ctx.userId, READS_BUSY, async () => {
-    const hidden: RenderRules = {
-      savedText: embeddedTextToRun,
-      errorOf: (widget, err) => hiddenWidgetError(widget.id, err),
-    };
-    switch (target.kind) {
-      case 'dashboard': {
-        const dashboard = await prisma.dashboard.findUnique({
-          where: { id: target.id },
-          select: { id: true },
-        });
-        if (!dashboard) throw notOnPage();
-        return renderWidgets(ctx, await widgetsOf(target.id), hidden);
-      }
-      case 'savedQuery':
-        return renderWidgets(ctx, [queryWidget({ savedQueryId: target.id, query: null })], hidden);
-      case 'inline':
-        // Its text is in the page they are reading, so the language's messages tell them nothing new
-        if (target.query.length > INLINE_QUERY_MAX) {
-          throw new AppError(400, 'This query is too long', 'INVALID_QUERY');
+  return readSlots.run(ctx.userId, READS_BUSY, () => renderBlock(ctx, embedId));
+}
+
+/** The most blocks one batch renders */
+export const EMBED_BATCH_MAX = 50;
+
+/**
+ * Render the live blocks of one page in one go. The whole page counts once against the render
+ * limit and takes one read slot. Each block is evaluated with the reader's rights and fails alone:
+ * a block that is not in the body, names something gone or is too long answers with its own error
+ * and leaves the others be.
+ * @param ctx - The reader, already through assertEmbedReadable
+ * @param pageId - The page
+ * @param embedIds - The blocks' targets as written in the Markdown; repeats are rendered once
+ * @returns One entry per distinct embedId, in order: the block, or the error it failed with
+ * @throws {AppError} 429 past the limit or the read cap
+ */
+export async function renderEmbeddedBatch(ctx: ActionContext, pageId: string, embedIds: string[]) {
+  const page = await prisma.page.findUnique({ where: { id: pageId }, select: { body: true } });
+  const body = page?.body ?? '';
+  const inBody = new Set(queryEmbedsIn(body));
+  const wanted = [...new Set(embedIds)];
+  const present = wanted.filter((embedId) => inBody.has(embedId));
+
+  // A page with none of them costs the reader nothing, as a single wrong guess does not
+  const rendered = new Map<
+    string,
+    Awaited<ReturnType<typeof renderBlock>> | ReturnType<typeof widgetError>
+  >();
+  if (present.length > 0) {
+    await limitRender(ctx.userId);
+    await readSlots.run(ctx.userId, READS_BUSY, async () => {
+      for (const embedId of present) {
+        try {
+          rendered.set(embedId, await renderBlock(ctx, embedId));
+        } catch (err) {
+          rendered.set(embedId, widgetError(embedId, err));
         }
-        return renderWidgets(ctx, [queryWidget({ savedQueryId: null, query: target.query })], {
-          ...hidden,
-          errorOf: (widget, err) => widgetError(widget.id, err),
-        });
-    }
-  });
+      }
+    });
+  }
+  return {
+    blocks: wanted.map((embedId) => {
+      const outcome = rendered.get(embedId);
+      if (outcome === undefined) return { embedId, ...notOnPageError() };
+      return 'error' in outcome ? { embedId, ...outcome } : { embedId, block: outcome };
+    }),
+  };
+}
+
+/** The entry of a block that is not on the page */
+function notOnPageError() {
+  return widgetError('block', notOnPage());
 }

@@ -76,6 +76,7 @@
   "dashboard.list": ["dashboards:read", "dashboards:write"],
   "dashboard.render": ["dashboards:read", "dashboards:write"],
   "dashboard.renderEmbedded": ["dashboards:read", "dashboards:write"],
+  "dashboard.renderEmbeddedBatch": ["dashboards:read", "dashboards:write"],
   "dashboard.update": ["dashboards:write"],
   "dashboardWidget.add": ["dashboards:write"],
   "dashboardWidget.remove": ["dashboards:write"],

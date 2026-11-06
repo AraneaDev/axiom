@@ -2664,7 +2664,7 @@ Scopes: `dashboards:read` and `dashboards:write`. Running a saved query also nee
 
 ### Dashboards
 
-Actions `dashboard.list`, `get`, `create`, `update`, `delete`, `render` and `renderEmbedded`, and `dashboardWidget.add`, `update`, `remove` and `reorder`. REST paths start at `/api/dashboards`: `/api/dashboards/:id/render`, `/api/dashboards/:id/widgets`, `PUT /api/dashboards/:id/widgets/order` and `POST /api/dashboards/embedded`. In the UI they live at `/dashboards` and `/dashboards/:id`; the personal page at `/dashboard` is a different thing. Sharing works as for saved queries. `layout` is `{ "columns": 1 to 4 }`.
+Actions `dashboard.list`, `get`, `create`, `update`, `delete`, `render`, `renderEmbedded` and `renderEmbeddedBatch`, and `dashboardWidget.add`, `update`, `remove` and `reorder`. REST paths start at `/api/dashboards`: `/api/dashboards/:id/render`, `/api/dashboards/:id/widgets`, `PUT /api/dashboards/:id/widgets/order`, `POST /api/dashboards/embedded` and `POST /api/dashboards/embedded/batch`. In the UI they live at `/dashboards` and `/dashboards/:id`; the personal page at `/dashboard` is a different thing. Sharing works as for saved queries. `layout` is `{ "columns": 1 to 4 }`.
 
 A widget has a `type`, a `title`, a source and `options`:
 
@@ -2694,6 +2694,8 @@ A line of its own in a page body, `:::query <target>:::`, shows live results in 
 | `inline:"<query>"` | A query written in the block, JSON-quoted so `"` and `:::` survive  |
 
 The page editor inserts one from the slash menu and edits it in a form, and view mode renders it too. A block inside a code block is plain text. The action `dashboard.renderEmbedded` (`pageId` and `embedId`, the target as written) renders one. Whoever can read the page sees the block, evaluated with their own rights, also when they cannot open the dashboard or saved query itself, because the author of the page chose to show it to its readers. What comes back is widget titles and results, never query text or sharing. A token needs `wiki:read` and, per widget, the scope of its data.
+
+The blocks of one page share one render budget. `dashboard.renderEmbeddedBatch` (`pageId` and `embedIds`, 1 to 50 targets as written) renders them in one request that counts once against the dashboards' render limit and takes one read slot, however many blocks the page has; the page view loads its blocks this way. It answers `{ "blocks": [{ "embedId", "block": { "widgets", "projectIds" } }] }`, one entry per distinct embedId in the order asked. Every block is evaluated with the reader's own rights and fails alone: an entry with `error: { status, code, message }` in place of `block` (404 for a block not in the body or whose target is gone, 400 for an inline query that is too long) leaves the other entries untouched. A page the reader cannot open answers `404` as a whole, and a missing `wiki:read` `403`.
 
 **Response 200:** Updated preferences array.
 

@@ -8,7 +8,13 @@ import { dashboardUpdate } from '../../actions/sharing-previews';
 import { queryRunOutput } from '../search/query.actions';
 
 import * as dashboardsService from './dashboards.service';
-import { assertEmbedReadable, EMBED_ID_MAX, renderEmbedded } from './embedded.service';
+import {
+  assertEmbedReadable,
+  EMBED_BATCH_MAX,
+  EMBED_ID_MAX,
+  renderEmbedded,
+  renderEmbeddedBatch,
+} from './embedded.service';
 
 const record = z.looseObject({ id: z.string() });
 const nothing = z.void();
@@ -226,6 +232,40 @@ const dashboardActions = [
     rest: { method: 'POST', path: `${DASHBOARDS}/embedded`, status: 200 },
     authorize: (ctx, { pageId }) => assertEmbedReadable(ctx, pageId),
     handler: async (ctx, input) => renderEmbedded(ctx, input.pageId, input.embedId),
+  }),
+  defineAction({
+    name: 'dashboard.renderEmbeddedBatch',
+    area: 'dashboards',
+    kind: 'read',
+    summary:
+      'Render the live blocks of a wiki page you can read in one call, up to 50: the whole page ' +
+      'counts once against the render limit. Each block is evaluated with your own rights as ' +
+      'dashboard.renderEmbedded does, and one that fails answers with its own error and leaves ' +
+      'the others be. embedIds are the texts of :::query <embedId>::: blocks in the current body. ' +
+      'Needs wiki:read as well, and each widget the scope of its data.',
+    target: embedTarget,
+    input: embedTarget.extend({
+      embedIds: z.array(z.string().min(1).max(EMBED_ID_MAX)).min(1).max(EMBED_BATCH_MAX),
+    }),
+    output: z.looseObject({
+      blocks: z.array(
+        z.looseObject({
+          embedId: z.string(),
+          block: z
+            .looseObject({
+              widgets: z.array(z.looseObject({ id: z.string(), title: z.string() })),
+              projectIds: z.array(z.string()),
+            })
+            .optional(),
+          error: z
+            .looseObject({ status: z.number(), code: z.string(), message: z.string() })
+            .optional(),
+        }),
+      ),
+    }),
+    rest: { method: 'POST', path: `${DASHBOARDS}/embedded/batch`, status: 200 },
+    authorize: (ctx, { pageId }) => assertEmbedReadable(ctx, pageId),
+    handler: async (ctx, input) => renderEmbeddedBatch(ctx, input.pageId, input.embedIds),
   }),
   defineAction({
     name: 'dashboardWidget.add',

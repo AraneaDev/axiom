@@ -131,6 +131,90 @@ export interface WidgetInput {
   query?: string | null;
 }
 
+/** One entry of a batch: the block, or the error it failed with on its own */
+interface EmbeddedBatchEntry {
+  embedId: string;
+  block?: EmbeddedBlock;
+  error?: { status: number; code: string; message: string };
+}
+
+/** The most blocks the server renders in one request */
+const EMBED_BATCH_MAX = 50;
+
+interface Waiting {
+  resolve: (block: EmbeddedBlock) => void;
+  reject: (err: unknown) => void;
+}
+
+/** Blocks asked for and not sent yet, by page, each embedId with everyone waiting on it */
+const embedQueue = new Map<string, Map<string, Waiting[]>>();
+
+/**
+ * Send what a page's blocks asked for in one request per 50, and hand every block its own answer.
+ * A block the server failed rejects alone, with the server's status; a request that fails rejects
+ * all of its blocks with the same error.
+ * @param pageId - The page
+ * @param asked - Its blocks and who waits on each
+ */
+async function flushEmbedded(pageId: string, asked: Map<string, Waiting[]>) {
+  const ids = [...asked.keys()];
+  for (let from = 0; from < ids.length; from += EMBED_BATCH_MAX) {
+    const embedIds = ids.slice(from, from + EMBED_BATCH_MAX);
+    try {
+      const { blocks } = await post<{ blocks: EmbeddedBatchEntry[] }>(
+        '/dashboards/embedded/batch',
+        {
+          pageId,
+          embedIds,
+        },
+      );
+      const byId = new Map(blocks.map((entry) => [entry.embedId, entry]));
+      for (const embedId of embedIds) {
+        const entry = byId.get(embedId);
+        const waiting = asked.get(embedId) ?? [];
+        if (entry?.block) {
+          waiting.forEach((w) => w.resolve(entry.block as EmbeddedBlock));
+        } else {
+          const failure = Object.assign(
+            new Error(entry?.error?.message ?? 'Could not load this block'),
+            {
+              status: entry?.error?.status ?? 500,
+              code: entry?.error?.code,
+            },
+          );
+          waiting.forEach((w) => w.reject(failure));
+        }
+      }
+    } catch (err) {
+      for (const embedId of embedIds) asked.get(embedId)?.forEach((w) => w.reject(err));
+    }
+  }
+}
+
+/**
+ * Ask for a block of a page. The blocks asked for in the same moment (a page mounts all of them
+ * together) go out as one request, so the page counts once against the render limit.
+ * @param pageId - The page
+ * @param embedId - The block's target as written in the Markdown
+ */
+function renderEmbeddedBatched(pageId: string, embedId: string): Promise<EmbeddedBlock> {
+  return new Promise((resolve, reject) => {
+    let asked = embedQueue.get(pageId);
+    if (!asked) {
+      const fresh = new Map<string, Waiting[]>();
+      asked = fresh;
+      embedQueue.set(pageId, fresh);
+      setTimeout(() => {
+        embedQueue.delete(pageId);
+        void flushEmbedded(pageId, fresh);
+      }, 0);
+    }
+    const waiting = asked.get(embedId) ?? [];
+    waiting.push({ resolve, reject });
+    asked.set(embedId, waiting);
+  });
+}
+
 /** As many rows as a widget shows by default, also for a query not embedded yet */
 const BLOCK_ROWS = 25;
 
@@ -153,8 +237,7 @@ export const dashboardsApi = {
    * @param pageId
    * @param embedId - The block's target as written in the Markdown
    */
-  renderEmbedded: (pageId: string, embedId: string) =>
-    post<EmbeddedBlock>('/dashboards/embedded', { pageId, embedId }),
+  renderEmbedded: (pageId: string, embedId: string) => renderEmbeddedBatched(pageId, embedId),
   /**
    * Run a saved query with the current user's rights.
    * @param id
