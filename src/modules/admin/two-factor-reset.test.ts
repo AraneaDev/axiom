@@ -124,6 +124,59 @@ describe('an admin resets a user 2FA', () => {
     });
   });
 
+  it('refuses to reset your own 2FA and says to use the normal disable', async () => {
+    await prisma.user.update({
+      where: { id: platformAdmin.id },
+      data: { twoFactorSecret: secret, twoFactorEnabled: true, twoFactorLastStep: 1 },
+    });
+    try {
+      const res = await request(app)
+        .post(resetPath(platformAdmin.id))
+        .set(CSRF)
+        .set('Authorization', `Bearer ${platformAdmin.token}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toMatch(/disable/i);
+      expect(res.body.error.message).toMatch(/code/i);
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: platformAdmin.id },
+        select: { twoFactorEnabled: true, twoFactorSecret: true },
+      });
+      expect(after).toEqual({ twoFactorEnabled: true, twoFactorSecret: secret });
+    } finally {
+      await prisma.user.update({
+        where: { id: platformAdmin.id },
+        data: { twoFactorSecret: null, twoFactorEnabled: false, twoFactorLastStep: null },
+      });
+    }
+  });
+
+  it('ends every session of the user, refresh tokens included', async () => {
+    const login = await request(app)
+      .post('/api/auth/login')
+      .set(CSRF)
+      .send({ login: member.email, password: PASSWORD });
+    expect(login.status).toBe(200);
+    await prisma.refreshToken.create({
+      data: {
+        userId: locked.id,
+        tokenHash: crypto.randomBytes(16).toString('hex'),
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    expect(await prisma.refreshToken.count({ where: { userId: locked.id } })).toBeGreaterThan(0);
+    expect(await prisma.refreshToken.count({ where: { userId: member.id } })).toBeGreaterThan(0);
+
+    const res = await request(app)
+      .post(resetPath(locked.id))
+      .set(CSRF)
+      .set('Authorization', `Bearer ${platformAdmin.token}`);
+    expect(res.status).toBe(200);
+
+    expect(await prisma.refreshToken.count({ where: { userId: locked.id } })).toBe(0);
+    // another user's sessions are left alone
+    expect(await prisma.refreshToken.count({ where: { userId: member.id } })).toBeGreaterThan(0);
+  });
+
   it('refuses a token, even a platform admin one, over REST and act, with no request', async () => {
     const raw = await tokenOf(platformAdmin.id, ['admin:write']);
     const viaRest = await request(app)

@@ -434,7 +434,7 @@ export default function UserManagement() {
           resetTwoFactorTarget && resetTwoFactorMutation.mutate(resetTwoFactorTarget.id)
         }
         title="Reset two-factor authentication"
-        description={`This turns off two-factor authentication for @${resetTwoFactorTarget?.username ?? ''}. They sign in with their password alone until they set it up again. Do this only when you know it is them asking.`}
+        description={`This turns off two-factor authentication for @${resetTwoFactorTarget?.username ?? ''} and signs them out everywhere. They sign in with their password and set it up again. Do this only when you know it is them asking.`}
         confirmLabel="Reset 2FA"
         variant="warning"
         loading={resetTwoFactorMutation.isPending}

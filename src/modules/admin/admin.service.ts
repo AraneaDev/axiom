@@ -275,19 +275,33 @@ export async function resetUserPassword(userId: string, newPassword: string) {
 
 /**
  * Turn off a user's 2FA, for someone locked out of their authenticator. Clears the secret, the flag
- * and the last accepted step, so the user signs in with their password and can enrol again.
+ * and the last accepted step, and ends every session of that user (refresh tokens and open
+ * sockets), so they sign in again and set 2FA up anew. Your own 2FA is not reset this way: you
+ * turn it off with a code.
  * @param actorId - The platform admin doing it, named in the audit row
  * @param userId - The user whose 2FA is reset
  * @returns Success
+ * @throws {AppError} 400 if the admin targets their own account
  * @throws {AppError} 404 if the user does not exist
  */
 export async function resetUserTwoFactor(actorId: string, userId: string) {
+  if (actorId === userId) {
+    throw new AppError(
+      400,
+      "You can't reset your own 2FA: use the normal disable with a code from your authenticator in your account settings",
+    );
+  }
   await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorLastStep: null },
-  });
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorLastStep: null },
+    }),
+    prisma.refreshToken.deleteMany({ where: { userId } }),
+  ]);
+  // Access tokens stay valid until they expire, and open sockets never re-authenticate
+  disconnectUser(userId);
   await logAudit({
     userId: actorId,
     action: '2fa_reset',
