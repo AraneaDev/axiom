@@ -268,7 +268,7 @@ Approving and rejecting (`agentApproval.approve`, `agentApproval.reject`) are we
 
 ### What stays web UI only
 
-These are never available to a token, and wait for nothing: login, refresh and logout, password reset and change, 2FA setup, deleting your own account, resetting another user's password, and approving or rejecting a request. An agent that could change a password or a 2FA setup behind an approval would be a takeover path.
+These are never available to a token, and wait for nothing: login, refresh and logout, password reset and change, 2FA setup, deleting your own account, resetting another user's password or 2FA, and approving or rejecting a request. An agent that could change a password or a 2FA setup behind an approval would be a takeover path.
 
 ### What a token never reaches
 

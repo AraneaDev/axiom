@@ -94,7 +94,7 @@ A scope no action uses can't be minted (`400`): `orgs:write`, `teams:write`, `pr
 | `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
 | `admin` | Orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and `/api/admin`. Every call waits for approval, see [Approvals](#approvals-for-token-calls) |
 
-Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (changing the profile, the password or 2FA) and resetting another user's password stay closed to tokens (`403`); reading the profile is open. Login, refresh, logout and the other sign-in routes are `uiOnly`: a session reaches them, a token never does, and `act` doesn't list them. Invite links are `tokenBlocked`: a normal action for your browser session, refused to every token. Creating a token with any other scope name returns `400`.
+Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (changing the profile, the password or 2FA) and resetting another user's password or 2FA stay closed to tokens (`403`); reading the profile is open. Login, refresh, logout and the other sign-in routes are `uiOnly`: a session reaches them, a token never does, and `act` doesn't list them. Invite links are `tokenBlocked`: a normal action for your browser session, refused to every token. Creating a token with any other scope name returns `400`.
 
 Tokens created before scopes per area were rewritten by migration and reach what they always reached: the old `issues:*` and `wiki:*` scopes became the set of area scopes that covers the same paths (`LEGACY_SCOPE_MAP` in `src/middleware/token-scopes.ts`).
 
@@ -448,14 +448,9 @@ Confirm 2FA setup or verify a TOTP code. **Auth required.**
 }
 ```
 
-**Response 200:**
+**Response 200:** `{ "enabled": true }`. A wrong code answers `400 Invalid 2FA code`.
 
-```json
-{
-  "message": "Two-factor authentication verified.",
-  "backupCodes": ["abc123", "def456"]
-}
-```
+A code counts once. Login, verify and disable accept the code of the current 30 second period or of the one before it, and refuse a code of a period at or before the last one accepted for that user, so a code seen over a shoulder can't be used again. If you lose your authenticator, a platform admin can turn 2FA off for you (`POST /api/admin/users/:userId/reset-2fa`).
 
 ### POST /api/auth/2fa/disable
 
@@ -469,13 +464,7 @@ Disable 2FA. **Auth required.**
 }
 ```
 
-**Response 200:**
-
-```json
-{
-  "message": "Two-factor authentication disabled."
-}
-```
+**Response 200:** `{ "enabled": false }`. A wrong or already used code answers `401 Invalid 2FA code`.
 
 ---
 
@@ -1896,7 +1885,7 @@ Create an automation rule.
 }
 ```
 
-The body is bounded and typed. An unknown trigger or action type answers `400`, and so does a field over its length or an action key no action type reads.
+The body is bounded and typed. An unknown trigger or action type answers `400`, and so does a field over its length or an action key no action type reads. That message names the key, for example `actions.0: no action type reads "colour": remove it from the action`, so a client saving a rule written elsewhere knows what to drop.
 
 | Field        | Type    | Description                                                                                                                                  |
 | ------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2929,15 +2918,17 @@ Reactivate a deactivated user account.
 
 ### POST /api/admin/users/:userId/reset-password
 
-Send a password reset email to a user.
+Set a new password for a user and end their sessions. Web UI only: a token is refused (403).
 
-**Response 200:**
+**Request body:** `{ "newPassword": "..." }` (8 to 128 characters).
 
-```json
-{
-  "message": "Password reset email sent."
-}
-```
+**Response 200:** `{ "success": true }`
+
+### POST /api/admin/users/:userId/reset-2fa
+
+Turn off a user's two-factor authentication, for someone locked out of their authenticator. Clears the secret, the enabled flag and the last accepted code step, and writes a `2fa_reset` audit row naming the admin. The user then signs in with their password alone and can set up 2FA again. Web UI only: a token is refused (403).
+
+**Response 200:** `{ "success": true }`
 
 ### GET /api/admin/settings
 
