@@ -81,6 +81,8 @@ test.describe('Wiki', () => {
       await dialog.getByRole('button', { name: /add permission/i }).click();
       await expect(dialog.getByText('@sarah-chen')).toBeVisible();
       await dialog.getByTitle('Remove permission').last().click();
+      // The removal lands before the next step counts what is left
+      await expect(dialog.getByTitle('Remove permission')).toHaveCount(1);
     });
 
     await test.step('remove it again, so the space is as it was', async () => {
