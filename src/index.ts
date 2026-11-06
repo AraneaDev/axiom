@@ -65,6 +65,7 @@ import './modules/links/links.actions';
 import './modules/auth/auth.actions';
 import './modules/health/health.actions';
 import './modules/site-settings/site-settings.actions';
+import './modules/github/github-app.actions';
 import { createWebSocketServer } from './realtime/ws-server';
 import { logger } from './utils/logger';
 

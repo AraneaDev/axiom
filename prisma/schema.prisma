@@ -1343,3 +1343,47 @@ model AgentPolicy {
 
   @@map("agent_policies")
 }
+
+/// The one GitHub App of this instance, made through GitHub's manifest flow. The row id is 1.
+/// clientSecret, privateKey and webhookSecret are sealed by the secret box (enc:v1:...) with the
+/// context githubApp.<field>:1.
+model GithubApp {
+  id            Int      @id @default(1)
+  appId         Int
+  slug          String
+  name          String
+  htmlUrl       String
+  ownerLogin    String
+  clientId      String
+  clientSecret  String
+  privateKey    String
+  webhookSecret String
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  @@map("github_apps")
+}
+
+/// A setup step started here and finished on GitHub's redirect. The state is single use.
+model GithubSetupState {
+  state     String   @id
+  userId    String
+  /// 'manifest' | 'user'
+  purpose   String
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("github_setup_states")
+}
+
+/// An installation of the App on a GitHub account (id as GitHub numbers it)
+model GithubInstallation {
+  id           Int       @id
+  accountLogin String
+  accountType  String
+  suspendedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("github_installations")
+}

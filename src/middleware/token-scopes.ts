@@ -24,6 +24,7 @@ export const SCOPE_AREAS = [
   'automation',
   'approvals',
   'admin',
+  'github',
 ] as const;
 export type ScopeArea = (typeof SCOPE_AREAS)[number];
 export type TokenScope = `${ScopeArea}:${'read' | 'write'}`;

@@ -75,8 +75,8 @@ describe('token scopes per area', () => {
   });
 
   it('has one read and one write scope per area', () => {
-    expect(SCOPE_AREAS).toHaveLength(14);
-    expect(TOKEN_SCOPES).toHaveLength(28);
+    expect(SCOPE_AREAS).toHaveLength(15);
+    expect(TOKEN_SCOPES).toHaveLength(30);
     for (const area of SCOPE_AREAS) {
       expect(TOKEN_SCOPES).toContain(`${area}:read`);
       expect(TOKEN_SCOPES).toContain(`${area}:write`);
@@ -93,6 +93,8 @@ describe('token scopes per area', () => {
       'dashboards:write',
       'admin:read',
       'admin:write',
+      'github:read',
+      'github:write',
     ] as const) {
       expect(everything).not.toContain(never);
     }

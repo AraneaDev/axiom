@@ -3,7 +3,7 @@
  * fixtures in `__fixtures__/github/<scenario>/` (base first, the scenario on top), checks
  * credentials the way GitHub does, and records every request, unknown routes included.
  */
-import { randomBytes, verify } from 'node:crypto';
+import { generateKeyPairSync, randomBytes, verify } from 'node:crypto';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -45,19 +45,36 @@ export interface GithubFake {
   on(route: string, reply: Handler): void;
   /** The App: `/app/*` calls need a JWT issued by this id that verifies against this key */
   setApp(app: { appId: number; publicKey: string } | null): void;
-  /** An installation of the App and the repositories (`owner/name`) it was granted */
-  addInstallation(installationId: number, repos: string[]): void;
+  /**
+   * An installation of the App and the repositories (`owner/name`) it was granted. The account
+   * is the owner of the first repository unless given.
+   */
+  addInstallation(
+    installationId: number,
+    repos: string[],
+    account?: { login: string; type: 'Organization' | 'User' },
+  ): void;
+  /** The installation is gone, as when the App is uninstalled; its tokens stop working */
+  removeInstallation(installationId: number): void;
+  /** A manifest code, as GitHub puts on the redirect; it converts once */
+  issueManifestCode(): string;
   /** Repositories anyone may read, with or without a credential; every other one is private */
   setPublicRepos(repos: string[]): void;
   /** A `ghs_` token for an installation added before, reaching only that installation's repos */
   issueInstallationToken(installationId: number): string;
   /** A `ghu_` token for that user, reaching only the given repositories */
   issueUserToken(login: string, repos: string[]): string;
+  /**
+   * Installation tokens expire an hour after they are issued, by `Date.now()`, so a test that
+   * fakes the clock (`vi.useFakeTimers({ toFake: ['Date'] })`) drives `expires_at` and the
+   * fake's refusal of an expired token alike.
+   */
   /** Forgets recorded requests and `on` routes; the App, installations and tokens stay */
   reset(): void;
   close(): Promise<void>;
 }
 
+const TOKEN_LIFETIME_MS = 60 * 60_000;
 const FIXTURES = path.join(__dirname, '__fixtures__', 'github');
 
 function parseRoute(route: string, handler: Handler): Route {
@@ -162,8 +179,10 @@ class GithubFakeServer implements GithubFake {
   private fixtures: Route[] = [];
   private app: { appId: number; publicKey: string } | null = null;
   private installations = new Map<number, Set<string>>();
+  private accounts = new Map<number, { login: string; type: string }>();
+  private manifestCodes = new Set<string>();
   private publicRepos = new Set<string>();
-  private installationTokens = new Map<string, number>();
+  private installationTokens = new Map<string, { installationId: number; expiresAt: number }>();
   private userTokens = new Map<string, Set<string>>();
 
   constructor(private readonly scenario: string) {}
@@ -198,8 +217,30 @@ class GithubFakeServer implements GithubFake {
     this.app = app;
   }
 
-  addInstallation(installationId: number, repos: string[]): void {
+  addInstallation(
+    installationId: number,
+    repos: string[],
+    account?: { login: string; type: 'Organization' | 'User' },
+  ): void {
     this.installations.set(installationId, new Set(repos.map(repoKey)));
+    this.accounts.set(
+      installationId,
+      account ?? {
+        login: repos[0]?.split('/')[0] ?? `account-${installationId}`,
+        type: 'Organization',
+      },
+    );
+  }
+
+  removeInstallation(installationId: number): void {
+    this.installations.delete(installationId);
+    this.accounts.delete(installationId);
+  }
+
+  issueManifestCode(): string {
+    const code = randomBytes(10).toString('hex');
+    this.manifestCodes.add(code);
+    return code;
   }
 
   setPublicRepos(repos: string[]): void {
@@ -211,7 +252,10 @@ class GithubFakeServer implements GithubFake {
       throw new Error(`The GitHub fake has no installation ${installationId}`);
     }
     const token = tokenOf('ghs_');
-    this.installationTokens.set(token, installationId);
+    this.installationTokens.set(token, {
+      installationId,
+      expiresAt: Date.now() + TOKEN_LIFETIME_MS,
+    });
     return token;
   }
 
@@ -244,8 +288,14 @@ class GithubFakeServer implements GithubFake {
     const [scheme, value = ''] = header.split(/\s+/, 2);
     if (/^basic$/i.test(scheme)) return { kind: 'basic', label: 'basic' };
     if (/^(token|bearer)$/i.test(scheme)) {
-      const installationId = this.installationTokens.get(value);
-      if (installationId !== undefined) {
+      const issued = this.installationTokens.get(value);
+      // An expired token, or one of an installation that is gone, is a bad credential
+      if (
+        issued &&
+        issued.expiresAt > Date.now() &&
+        this.installations.has(issued.installationId)
+      ) {
+        const { installationId } = issued;
         return {
           kind: 'installation',
           label: `installation:${installationId}`,
@@ -361,12 +411,25 @@ class GithubFakeServer implements GithubFake {
         status: 201,
         body: {
           token: this.issueInstallationToken(Number(tokenRoute[1])),
-          expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+          expires_at: new Date(Date.now() + TOKEN_LIFETIME_MS).toISOString(),
           permissions: { metadata: 'read', contents: 'write', pull_requests: 'write' },
           repository_selection: 'selected',
         },
       };
     }
+    if (req.method === 'GET' && req.path === '/app/installations') {
+      return {
+        status: 200,
+        body: [...this.installations.keys()].map((id) => ({
+          id,
+          account: { ...this.accounts.get(id), id: 9000 + id },
+          app_id: this.app?.appId,
+          suspended_at: null,
+        })),
+      };
+    }
+    const conversion = /^\/app-manifests\/([^/]+)\/conversions$/.exec(req.path);
+    if (req.method === 'POST' && conversion) return this.convertManifest(conversion[1]);
     // The installation's own repositories, out of the fixture list
     if (req.method === 'GET' && req.path === '/installation/repositories') {
       const answer = this.fromRoutes(req);
@@ -378,6 +441,28 @@ class GithubFakeServer implements GithubFake {
       return { ...answer, body: { ...body, total_count: repositories.length, repositories } };
     }
     return null;
+  }
+
+  /**
+   * The manifest conversion: the fixture's App with a fresh key pair, and the App registered
+   * with the fake so its JWTs verify. A code converts once, as on GitHub (404 after).
+   * @param code The code from the redirect
+   */
+  private convertManifest(code: string): FakeReply {
+    if (!this.manifestCodes.delete(code)) return NOT_FOUND;
+    const found = this.fixtures.find((route) =>
+      match(route, 'POST', ['app-manifests', code, 'conversions']),
+    );
+    const body = found?.handler as FakeReply | undefined;
+    if (!body?.body) return { status: 404, body: { message: 'Not Found' } };
+    const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    const app = body.body as { id: number };
+    this.app = { appId: app.id, publicKey };
+    return { ...body, body: { ...app, pem: privateKey } };
   }
 
   private overrideFor(req: RecordedRequest) {

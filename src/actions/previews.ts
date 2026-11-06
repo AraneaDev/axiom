@@ -1749,3 +1749,12 @@ export async function formFieldDelete(projectId: string, fieldId: string): Promi
     `of the form ${field.page.form.slug} in project ${field.page.form.project.prefix}`
   );
 }
+
+/**
+ * What forgetting the GitHub App costs, as the approver reads it.
+ */
+export async function githubAppDelete(): Promise<string> {
+  const app = await prisma.githubApp.findUnique({ where: { id: 1 }, select: { slug: true } });
+  if (!app) throw new AppError(404, 'No GitHub App is set up', 'NOT_FOUND');
+  return `Forget the GitHub App ${app.slug}: webhooks stop and every connected GitHub account is disconnected`;
+}

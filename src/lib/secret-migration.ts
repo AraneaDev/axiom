@@ -14,12 +14,18 @@ import {
 // it here, so a key rotation reaches every sealed value.
 export const ENCRYPTED_COLUMNS: Array<{ model: string; field: string }> = [
   { model: 'user', field: 'twoFactorSecret' },
+  { model: 'githubApp', field: 'clientSecret' },
+  { model: 'githubApp', field: 'privateKey' },
+  { model: 'githubApp', field: 'webhookSecret' },
 ];
 
 const BATCH = 500;
 const ENCRYPTED_PREFIX = 'enc:v1:';
 
-type Row = { id: string } & Record<string, string | null>;
+// A row id is a string, or an Int for a model such as GithubApp. The context a value is sealed
+// with holds the id as text, so String(id) gives the same context the owning service uses.
+type RowId = string | number;
+type Row = { id: RowId } & Record<string, RowId | null>;
 
 // The part of a Prisma delegate this module uses, so one loop serves every listed column
 interface SecretDelegate {
@@ -52,9 +58,9 @@ async function eachRow(
   delegate: SecretDelegate,
   field: string,
   where: Record<string, unknown>,
-  visit: (id: string, stored: string) => Promise<void>,
+  visit: (id: RowId, stored: string) => Promise<void>,
 ): Promise<void> {
-  let after: string | undefined;
+  let after: RowId | undefined;
   for (;;) {
     const rows = await delegate.findMany({
       where: { ...where, ...(after !== undefined && { id: { gt: after } }) },
@@ -87,9 +93,9 @@ export async function encryptPlainSecrets(): Promise<{ twoFactor: number }> {
       NOT: { twoFactorSecret: { startsWith: ENCRYPTED_PREFIX } },
     },
     async (id, plain) => {
-      const sealed = encryptSecret(plain, secretContext('user', 'twoFactorSecret', id));
+      const sealed = encryptSecret(plain, secretContext('user', 'twoFactorSecret', String(id)));
       const { count } = await prisma.user.updateMany({
-        where: { id, twoFactorSecret: plain },
+        where: { id: String(id), twoFactorSecret: plain },
         data: { twoFactorSecret: sealed },
       });
       twoFactor += count;
@@ -121,7 +127,7 @@ export async function reencryptAllSecrets(): Promise<Record<string, RotationCoun
       if (!needsReencrypt(stored)) return;
       let sealed: string;
       try {
-        const context = secretContext(model, field, id);
+        const context = secretContext(model, field, String(id));
         sealed = encryptSecret(decryptSecret(stored, context), context);
       } catch (err) {
         counts.failed += 1;

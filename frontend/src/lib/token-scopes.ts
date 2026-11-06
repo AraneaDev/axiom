@@ -27,6 +27,11 @@ export const SCOPE_GROUPS = [
     description: 'Approval gates, votes and your agent requests',
   },
   {
+    area: 'github',
+    label: 'GitHub',
+    description: 'The GitHub App of this installation and its installations',
+  },
+  {
     area: 'admin',
     label: 'Admin',
     description: 'Orgs, teams, projects, access and tokens. Each call waits for your approval',

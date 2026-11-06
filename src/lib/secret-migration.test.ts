@@ -179,3 +179,59 @@ describe('rotation re-encrypts under the current key', () => {
     }
   });
 });
+
+describe('rotation reaches a model whose id is an Int', () => {
+  it('lists the three GitHub App columns', () => {
+    for (const field of ['clientSecret', 'privateKey', 'webhookSecret']) {
+      expect(ENCRYPTED_COLUMNS).toContainEqual({ model: 'githubApp', field });
+    }
+  });
+
+  it('moves the App row to the current key with the context githubApp.<field>:1', async () => {
+    const testKey = process.env.AXIOM_ENCRYPTION_KEY!;
+    const oldKey = randomBytes(32).toString('base64');
+    const fields = ['clientSecret', 'privateKey', 'webhookSecret'] as const;
+    const plain = {
+      clientSecret: 'cs-plain-1',
+      privateKey: 'pem-plain-1',
+      webhookSecret: 'wh-plain-1',
+    };
+    const underOld = await withKeys(oldKey, undefined, async ({ box }) =>
+      Object.fromEntries(
+        fields.map((f) => [f, box.encryptSecret(plain[f], box.secretContext('githubApp', f, '1'))]),
+      ),
+    );
+    const saved = await prisma.githubApp.findUnique({ where: { id: 1 } });
+    expect(saved).toBeNull();
+    await prisma.githubApp.create({
+      data: {
+        id: 1,
+        appId: 1201,
+        slug: 'acme-axiom',
+        name: 'Axiom',
+        htmlUrl: 'https://github.com/apps/acme-axiom',
+        ownerLogin: 'acme-labs',
+        clientId: 'Iv1.x',
+        createdById: 'seed',
+        ...underOld,
+      } as never,
+    });
+    try {
+      const result = await withKeys(testKey, oldKey, async ({ migration }) =>
+        migration.reencryptAllSecrets(),
+      );
+      for (const field of fields) {
+        expect(result[`githubApp.${field}`]).toEqual({ reencrypted: 1, failed: 0 });
+      }
+      const row = await prisma.githubApp.findUniqueOrThrow({ where: { id: 1 } });
+      for (const field of fields) {
+        expect(needsReencrypt(row[field])).toBe(false);
+        expect(decryptSecret(row[field], secretContext('githubApp', field, '1'))).toBe(
+          plain[field],
+        );
+      }
+    } finally {
+      await prisma.githubApp.deleteMany();
+    }
+  });
+});
