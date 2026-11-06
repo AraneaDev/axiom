@@ -3,6 +3,12 @@ import { settled } from '../../utils/settled';
 import { listActivities } from '../activity/activity.service';
 import { listAttachments } from '../attachments/attachments.service';
 import { listFieldDefinitions } from '../custom-fields/custom-fields.service';
+import {
+  CHECKS_LIMIT,
+  DEVELOPMENT_LIMIT,
+  loadChecks,
+  loadDevelopment,
+} from '../github/github-reads';
 import { list as listSavedFilters } from '../saved-filters/saved-filters.service';
 import { listSprints } from '../sprints/sprints.service';
 
@@ -22,8 +28,17 @@ import { getIssue, getEpicProgress, listIssues } from './issues.service';
  * @param projectId - The project containing the issue
  * @param issueNumber - The issue number within the project
  * @param userId - The requesting user (used for vote status)
+ * @param include - The GitHub panels to add: `development` and `checks`
+ * @param githubCovered - Whether the caller may read GitHub data; without it the panels asked
+ *   for are named in `omittedIncludes`
  */
-export async function hydrateIssueDetail(projectId: string, issueNumber: number, userId: string) {
+export async function hydrateIssueDetail(
+  projectId: string,
+  issueNumber: number,
+  userId: string,
+  include: readonly ('development' | 'checks')[] = [],
+  githubCovered = true,
+) {
   // Primary lookup -- must succeed or 404
   const issue = await getIssue(projectId, issueNumber);
 
@@ -44,8 +59,18 @@ export async function hydrateIssueDetail(projectId: string, issueNumber: number,
     listFieldDefinitions(projectId),
   ]);
 
+  const asked = [...new Set(include)];
+  const github = githubCovered ? asked : [];
+  const [development, checks] = await Promise.all([
+    github.includes('development') ? loadDevelopment(issueId, DEVELOPMENT_LIMIT) : undefined,
+    github.includes('checks') ? loadChecks(issueId, CHECKS_LIMIT) : undefined,
+  ]);
+
   return {
     issue,
+    ...(development && { development }),
+    ...(checks && { checks }),
+    ...(!githubCovered && asked.length > 0 && { omittedIncludes: asked }),
     votes: settled(results[0], 'votes'),
     watchers: settled(results[1], 'watchers'),
     links: settled(results[2], 'links'),

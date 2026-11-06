@@ -100,6 +100,28 @@ describe('Issue Detail Hydrate API', () => {
     expect(res.body).toHaveProperty('customFields');
   });
 
+  it('adds the GitHub panels when asked for them, with no link as empty ones', async () => {
+    const get = (query: string) =>
+      request(app)
+        .get(`/api/projects/${projectId}/issues/${issueNumber}/hydrate${query}`)
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Requested-With', 'XMLHttpRequest');
+
+    const one = await get('?include=development');
+    expect(one.status).toBe(200);
+    expect(one.body.development).toEqual({
+      branches: { items: [], limit: 20, truncated: false },
+      pullRequests: { items: [], limit: 20, truncated: false },
+    });
+    expect(one.body).not.toHaveProperty('checks');
+
+    const both = await get('?include=development&include=checks');
+    expect(both.body.checks).toEqual({ items: [], limit: 50, truncated: false });
+    expect(both.body).toHaveProperty('development');
+
+    expect((await get('?include=comments')).status).toBe(400);
+  });
+
   it('should return 404 for non-existent issue', async () => {
     const res = await request(app)
       .get(`/api/projects/${projectId}/issues/99999/hydrate`)

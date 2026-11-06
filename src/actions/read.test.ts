@@ -74,6 +74,8 @@ const ALL_ISSUE_INCLUDES = [
   'worklogs',
   'children',
   'pages',
+  'development',
+  'checks',
 ];
 const ALL_PAGE_INCLUDES = [
   'children',
@@ -85,7 +87,7 @@ const ALL_PAGE_INCLUDES = [
 ];
 
 /** What a call may cost in statements: pinned from a measured run, with little room. */
-const STATEMENTS_50_KEYS = 1900;
+const STATEMENTS_50_KEYS = 1920;
 const STATEMENTS_ONE_KEY_30_SPACES = 190;
 
 describe('item.read', () => {
@@ -376,7 +378,11 @@ describe('item.read', () => {
         linkTypes: expect.arrayContaining(['EMBED', 'MENTION']),
       }),
     ]);
-    for (const name of ALL_ISSUE_INCLUDES) {
+    expect(data.development).toEqual({
+      branches: { items: [], limit: 20, truncated: false },
+      pullRequests: { items: [], limit: 20, truncated: false },
+    });
+    for (const name of ALL_ISSUE_INCLUDES.filter((n) => n !== 'development')) {
       expect(data[name]).toMatchObject({ truncated: false, limit: expect.any(Number) });
     }
   });
@@ -1297,6 +1303,167 @@ describe('item.read', () => {
     expect(text).not.toContain('leak@example.com');
     expect(text).not.toContain('secret/');
     expect(text).not.toContain('passwordHash');
+  });
+
+  describe('github includes', () => {
+    const SHA = 'a'.repeat(40);
+    let repoLinkId: string;
+    const prNumbers = [9001];
+
+    beforeAll(async () => {
+      repoLinkId = (
+        await prisma.githubRepoLink.create({
+          data: {
+            projectId: ctx.projectId,
+            repoId: 880_600n,
+            installationId: 1n,
+            owner: 'acme-labs',
+            name: 'widget',
+            fullName: 'acme-labs/widget',
+            defaultBranch: 'main',
+            htmlUrl: 'https://github.com/acme-labs/widget',
+            linkedById: ctx.owner.id,
+          },
+        })
+      ).id;
+      const pr = await prisma.githubPullRequest.create({
+        data: {
+          repoLinkId,
+          number: prNumbers[0],
+          title: 'Add the widget',
+          state: 'OPEN',
+          draft: false,
+          authorLogin: 'voorbeeld-dev',
+          authorUserId: member.id,
+          headRef: 'feature',
+          headSha: SHA,
+          baseRef: 'main',
+          requestedReviewers: [],
+          htmlUrl: 'https://github.com/acme-labs/widget/pull/9001',
+          openedAt: new Date('2026-11-01T10:00:00Z'),
+          githubUpdatedAt: new Date('2026-11-01T10:00:00Z'),
+        },
+      });
+      await prisma.githubIssueLink.create({
+        data: {
+          issueId,
+          repoLinkId,
+          targetType: 'PULL_REQUEST',
+          targetKey: pr.id,
+          sources: ['PR_TITLE'],
+        },
+      });
+      await prisma.githubCheckRun.create({
+        data: {
+          id: '9900001',
+          repoLinkId,
+          headSha: SHA,
+          name: 'test',
+          appSlug: 'github-actions',
+          status: 'completed',
+          conclusion: 'failure',
+          htmlUrl: 'https://github.com/acme-labs/widget/runs/9900001',
+          failedStep: 'Run tests',
+          logTail: 'x'.repeat(16_000),
+          githubUpdatedAt: new Date('2026-11-06T10:00:00Z'),
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.githubRepoLink.deleteMany({ where: { id: repoLinkId } });
+    });
+
+    it('reads the pull requests and the failed checks of an issue in a session', async () => {
+      const res = await readAs(member, { keys: [issueKey], include: ['development', 'checks'] });
+      expect(res.status).toBe(200);
+      const { data } = res.body.items[0];
+      expect(data.development.pullRequests.items).toEqual([
+        expect.objectContaining({
+          number: 9001,
+          author: {
+            login: 'voorbeeld-dev',
+            user: { id: member.id, displayName: expect.any(String) },
+          },
+        }),
+      ]);
+      expect(data.development.branches).toEqual({ items: [], limit: 20, truncated: false });
+      expect(data.checks.items).toEqual([
+        expect.objectContaining({ name: 'test', failedStep: 'Run tests', pullRequest: 9001 }),
+      ]);
+      expect(data.checks).toMatchObject({ limit: 50, truncated: false });
+    });
+
+    it('holds both back from a token without github:read, and says which', async () => {
+      const issuesOnly = await tokenWith(member, ['search:read', 'issues:read']);
+      const held = await readWithToken(issuesOnly, {
+        keys: [issueKey],
+        include: ['development', 'checks', 'comments'],
+      });
+      const { data } = held.body.items[0];
+      expect(data).not.toHaveProperty('development');
+      expect(data).not.toHaveProperty('checks');
+      expect(data.comments.items).toHaveLength(1);
+      expect(data.omittedIncludes).toEqual(['development', 'checks']);
+
+      const withGithub = await tokenWith(member, ['search:read', 'issues:read', 'github:read']);
+      const open = await readWithToken(withGithub, {
+        keys: [issueKey],
+        include: ['development', 'checks'],
+      });
+      const got = open.body.items[0].data;
+      expect(got.development.pullRequests.items).toHaveLength(1);
+      expect(got.checks.items).toHaveLength(1);
+      expect(got).not.toHaveProperty('omittedIncludes');
+    });
+
+    it('counts both against the 10 MB budget of the call', async () => {
+      // 50 runs of 16 KB on the head: about 800 KB per issue that is linked to it
+      await prisma.githubCheckRun.createMany({
+        data: Array.from({ length: 49 }, (_, i) => ({
+          id: String(9900100 + i),
+          repoLinkId,
+          headSha: SHA,
+          name: `job-${i}`,
+          appSlug: 'github-actions',
+          status: 'completed',
+          conclusion: 'failure',
+          htmlUrl: `https://github.com/acme-labs/widget/runs/${9900100 + i}`,
+          logTail: 'x'.repeat(16_000),
+          githubUpdatedAt: new Date('2026-11-06T10:00:00Z'),
+        })),
+      });
+      const pr = await prisma.githubPullRequest.findFirstOrThrow({ where: { repoLinkId } });
+      const issues = await Promise.all(Array.from({ length: 14 }, (_, i) => makeIssue(7000 + i)));
+      await prisma.githubIssueLink.createMany({
+        data: issues.map((issue) => ({
+          issueId: issue.id,
+          repoLinkId,
+          targetType: 'PULL_REQUEST' as const,
+          targetKey: pr.id,
+          sources: ['PR_TITLE' as const],
+        })),
+      });
+      try {
+        const keys = issues.map((issue) => `${prefix}-${issue.number}`);
+        const res = await readAs(member, { keys, include: ['checks'] });
+        expect(res.status).toBe(200);
+        expect(res.body.truncated).toBe(true);
+        const statuses = res.body.items.map((i: { data?: object; error?: { status: number } }) =>
+          i.data ? 'ok' : i.error?.status,
+        );
+        expect(statuses).toContain(413);
+        expect(statuses[0]).toBe('ok');
+        expect(Buffer.byteLength(JSON.stringify(res.body))).toBeLessThanOrEqual(
+          RESPONSE_BYTE_LIMIT + 1_000_000,
+        );
+      } finally {
+        await prisma.githubCheckRun.deleteMany({
+          where: { id: { gte: '9900100', lt: '9900200' } },
+        });
+        await prisma.issue.deleteMany({ where: { id: { in: issues.map((issue) => issue.id) } } });
+      }
+    });
   });
 
   describe('token scopes', () => {

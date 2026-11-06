@@ -97,7 +97,7 @@ function workflowRunOf(detailsUrl: string | null | undefined): string | null {
   }
 }
 
-const isFailed = (conclusion: string | null | undefined) =>
+export const isFailed = (conclusion: string | null | undefined) =>
   conclusion != null && FAILED_CONCLUSIONS.includes(conclusion);
 
 // GitHub's ids grow with time: a larger one is a newer run (a re-run has a new id)
@@ -106,7 +106,7 @@ function newerId(a: string, b: string): boolean {
   return a.length === b.length ? a > b : a.length > b.length;
 }
 
-type RunRow = {
+export type RunRow = {
   id: string;
   checkSuiteId: bigint | null;
   workflowRunId: string | null;
@@ -117,16 +117,14 @@ type RunRow = {
 };
 
 /**
- * The state of a set of runs. Only the newest run of each app, workflow run and name counts: a
- * re-run keeps its workflow run and has a new id. Without a workflow run the check suite stands
- * for it, without that the name alone. Two workflows' jobs of one name stay apart. Failed when
- * any counted run failed, else pending unless every one has completed as `success`, `neutral`
- * or `skipped`, else passed.
+ * The runs that count: only the newest run of each app, workflow run and name. A re-run keeps
+ * its workflow run and has a new id. Without a workflow run the check suite stands for it,
+ * without that the name alone. Two workflows' jobs of one name stay apart.
  * @param runs The runs of one commit
+ * @returns The runs that were not replaced, oldest first
  */
-function stateOfRuns(runs: RunRow[]): CheckState {
-  if (runs.length === 0) return 'none';
-  const counted: RunRow[] = [];
+export function newestRuns<T extends RunRow>(runs: T[]): T[] {
+  const counted: T[] = [];
   const ascending = [...runs].sort((a, b) => (newerId(a.id, b.id) ? 1 : -1));
   for (const run of ascending) {
     const replaces = (old: RunRow) => {
@@ -142,6 +140,17 @@ function stateOfRuns(runs: RunRow[]): CheckState {
     }
     counted.push(run);
   }
+  return counted;
+}
+
+/**
+ * The state of a set of runs. Failed when any counted run failed, else pending unless every one
+ * has completed as `success`, `neutral` or `skipped`, else passed.
+ * @param runs The runs of one commit
+ */
+function stateOfRuns(runs: RunRow[]): CheckState {
+  if (runs.length === 0) return 'none';
+  const counted = newestRuns(runs);
   if (counted.some((run) => isFailed(run.conclusion))) return 'failed';
   const passing = (run: RunRow) =>
     run.status === 'completed' &&

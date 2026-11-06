@@ -4,16 +4,18 @@
  * or the include that forces the extra call, never raising the budget.
  */
 import { execFile } from 'child_process';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
+import { readFileSync } from 'fs';
 import { rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../config/database';
+import '../modules/github/webhook-handlers';
 import { createPage } from '../modules/wiki/wiki.service';
 import {
   addMemberToContext,
@@ -22,12 +24,21 @@ import {
   type TestContext,
   type TestUser,
 } from '../test/factory';
+import { useGithubFake } from '../test/github-fake';
+import { seedGithubApp } from '../test/github-seed';
+import { postWebhook } from '../test/github-webhook';
 import { callTool, connectMcp, serveApp, tokenHeaderFor } from '../test/mcp-client';
 
 const storagePath = path.join(tmpdir(), `axiom-call-budget-${process.pid}`);
 process.env.STORAGE_PATH = storagePath;
 
 const TOKEN_NAME = 'budget-agent';
+const GITHUB_REPO_ID = 880_700;
+const INSTALLATION_ID = 4301;
+const HEAD_SHA = '1111111111111111111111111111111111111111';
+const FIXTURES = path.join(__dirname, '../test/__fixtures__/github');
+const fixture = (name: string) => JSON.parse(readFileSync(path.join(FIXTURES, name), 'utf8'));
+
 const png = Buffer.from('89504e470d0a1a0a', 'hex');
 
 /** A client whose callTool invocations are counted. */
@@ -37,6 +48,7 @@ interface CountedClient {
 }
 
 describe('call budgets for the developer loop', () => {
+  const fake = useGithubFake('checks');
   let ctx: TestContext;
   let member: TestUser;
   let base: string;
@@ -80,8 +92,37 @@ describe('call budgets for the developer loop', () => {
       data: { teamId: ctx.teamId, name: 'Budget', slug: spaceSlug },
     });
     spaceId = space.id;
+    await seedGithubApp({ fake });
+    fake.addInstallation(INSTALLATION_ID, ['acme-labs/widget']);
+    await prisma.githubRepoLink.create({
+      data: {
+        projectId: ctx.projectId,
+        repoId: BigInt(GITHUB_REPO_ID),
+        installationId: BigInt(INSTALLATION_ID),
+        owner: 'acme-labs',
+        name: 'widget',
+        fullName: 'acme-labs/widget',
+        defaultBranch: 'main',
+        htmlUrl: 'https://github.com/acme-labs/widget',
+        linkedById: ctx.owner.id,
+      },
+    });
     ({ base, close: closeServer } = await serveApp());
   });
+
+  /**
+   * Delivers a webhook and waits until it is decided
+   * @param event
+   * @param payload
+   */
+  async function deliver(event: string, payload: object) {
+    const deliveryId = randomUUID();
+    expect((await postWebhook(event, payload, { deliveryId })).status).toBe(202);
+    await vi.waitFor(async () => {
+      const row = await prisma.githubDelivery.findUniqueOrThrow({ where: { id: deliveryId } });
+      expect(row.status).toBe('PROCESSED');
+    });
+  }
 
   afterAll(async () => {
     await Promise.all(clients.map((c) => c.close()));
@@ -149,6 +190,90 @@ describe('call budgets for the developer loop', () => {
     const slugs = data.pages.items.map((p: { slug: string }) => p.slug).sort();
     expect(slugs).toEqual(['linked-page', 'mentioning-page']);
     expect(calls()).toBe(1);
+  });
+
+  it('picks up a ticket with its PRs, reviews and failed CI in 1 call', async () => {
+    const issue = await createIssue('Fix the widget');
+    const repository = {
+      id: GITHUB_REPO_ID,
+      name: 'widget',
+      full_name: 'acme-labs/widget',
+      html_url: 'https://github.com/acme-labs/widget',
+      owner: { login: 'acme-labs', id: 4001 },
+    };
+    const sender = { id: 7001, login: 'voorbeeld-dev' };
+    const pullRequest = {
+      ...fixture('events/pull_request.opened.json').pull_request,
+      number: 61,
+      title: 'Budget work',
+      body: '',
+      head: { ref: `${ctx.projectPrefix.toLowerCase()}-${issue.number}-budget`, sha: HEAD_SHA },
+    };
+    await deliver('pull_request', {
+      action: 'opened',
+      number: 61,
+      pull_request: pullRequest,
+      repository,
+      sender,
+      installation: { id: INSTALLATION_ID },
+    });
+    await deliver('pull_request_review', {
+      action: 'submitted',
+      review: fixture('events/pull_request_review.submitted.json').review,
+      pull_request: pullRequest,
+      repository,
+      sender: { id: 7002, login: 'review-bot' },
+      installation: { id: INSTALLATION_ID },
+    });
+    fake.setJobLog(4401, readFileSync(path.join(FIXTURES, 'checks/job-log.txt'), 'utf8'));
+    await deliver('check_run', {
+      action: 'completed',
+      check_run: {
+        id: 4401,
+        name: 'test',
+        head_sha: HEAD_SHA,
+        status: 'completed',
+        conclusion: 'failure',
+        started_at: '2026-11-06T10:00:05Z',
+        completed_at: '2026-11-06T10:03:05Z',
+        html_url: 'https://github.com/acme-labs/widget/runs/4401',
+        output: { title: null, summary: null, text: null },
+        app: { id: 15368, slug: 'github-actions', name: 'GitHub Actions' },
+      },
+      repository,
+      sender,
+      installation: { id: INSTALLATION_ID },
+    });
+
+    const { client, calls } = await counted(member);
+    const seen = fake.requests.length;
+    const answer = await callTool(client, 'read', {
+      keys: [issue.key],
+      include: ['development', 'checks'],
+    });
+    const used = calls();
+    const asked = fake.requests.length - seen;
+
+    expect(answer.isError).toBe(false);
+    const data = answer.data.items[0].data;
+    const [pr] = data.development.pullRequests.items;
+    expect(pr).toMatchObject({ number: 61, state: 'open', headSha: HEAD_SHA });
+    expect(pr.reviews).toEqual([
+      expect.objectContaining({ state: 'approved', body: 'Looks good' }),
+    ]);
+    const [check] = data.checks.items;
+    expect(check).toMatchObject({
+      pullRequest: 61,
+      name: 'test',
+      conclusion: 'failure',
+      failedStep: 'Run tests',
+    });
+    expect(check.logTail.split('\n').length).toBeLessThanOrEqual(100);
+    expect(Buffer.byteLength(check.logTail)).toBeLessThanOrEqual(16384);
+    expect(check.logTail).toContain('##[error]Process completed with exit code 1.');
+    expect(used).toBe(1);
+    // A read answers from what the webhooks stored
+    expect(asked).toBe(0);
   });
 
   it('finishes a ticket in 1 call: status, comment, time and the PR link', async () => {

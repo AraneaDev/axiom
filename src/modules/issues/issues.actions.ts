@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import * as previews from '../../actions/previews';
+import { coversArea } from '../../actions/read.service';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { checkProjectAccess, projectOf } from '../../middleware/requireProjectAccess';
@@ -35,6 +36,8 @@ import * as issuesService from './issues.service';
 const record = z.looseObject({ id: z.string() });
 const loose = z.looseObject({});
 const nothing = z.void();
+
+const hydrateInclude = z.enum(['development', 'checks']);
 
 const PROJECT = '/api/projects/:projectId';
 const ISSUE = `${PROJECT}/issues/:issueNumber`;
@@ -192,12 +195,21 @@ const issueActions = [
     kind: 'read',
     summary: 'The issue detail view in one call',
     target: projectTarget,
-    input: issueInput,
+    // The GitHub panels, when asked for: a repeated query value is a list
+    input: issueInput.extend({
+      include: z.union([hydrateInclude, z.array(hydrateInclude)]).optional(),
+    }),
     output: loose,
     rest: { method: 'GET', path: `${ISSUE}/hydrate` },
     authorize: read,
-    handler: async (ctx, { projectId, issueNumber }) =>
-      hydrateService.hydrateIssueDetail(projectId, issueNumber, ctx.userId),
+    handler: async (ctx, { projectId, issueNumber, include }) =>
+      hydrateService.hydrateIssueDetail(
+        projectId,
+        issueNumber,
+        ctx.userId,
+        include === undefined ? [] : [include].flat(),
+        coversArea(ctx, 'github'),
+      ),
   }),
   defineAction({
     name: 'issue.get',

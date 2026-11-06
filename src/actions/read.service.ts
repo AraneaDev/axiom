@@ -13,6 +13,12 @@ import { createUserSlots } from '../lib/user-slots';
 import { AppError } from '../middleware/errorHandler';
 import { checkProjectAccess } from '../middleware/requireProjectAccess';
 import { scopeAllows, type ScopeArea } from '../middleware/token-scopes';
+import {
+  CHECKS_LIMIT,
+  DEVELOPMENT_LIMIT,
+  loadChecks,
+  loadDevelopment,
+} from '../modules/github/github-reads';
 import { formatIssueKey } from '../utils/issue-key';
 import { logger } from '../utils/logger';
 import { PROJECT_URL_SELECT, SPACE_URL_SELECT } from '../utils/prisma-selects';
@@ -38,6 +44,8 @@ export const ISSUE_INCLUDES = [
   'worklogs',
   'children',
   'pages',
+  'development',
+  'checks',
 ] as const;
 export const PAGE_INCLUDES = [
   'children',
@@ -61,6 +69,8 @@ export const ISSUE_INCLUDE_LIMITS: Record<IssueInclude, number> = {
   worklogs: 100,
   children: 100,
   pages: 20,
+  development: DEVELOPMENT_LIMIT,
+  checks: CHECKS_LIMIT,
 };
 export const PAGE_INCLUDE_LIMITS: Record<PageInclude, number> = {
   children: 100,
@@ -461,6 +471,8 @@ const ISSUE_INCLUDE_LOADERS: {
     return capped(rows.map(issueSummary), limit);
   },
   pages: (issue, reader) => issuePages(issue, reader),
+  development: ({ id }) => loadDevelopment(id, ISSUE_INCLUDE_LIMITS.development),
+  checks: ({ id }) => loadChecks(id, ISSUE_INCLUDE_LIMITS.checks),
 };
 
 const PAGE_INCLUDE_LOADERS: {
@@ -574,6 +586,8 @@ const INCLUDE_AREA: Partial<Record<ReadInclude, ScopeArea>> = {
   attachments: 'files',
   pages: 'wiki',
   linkedIssues: 'issues',
+  development: 'github',
+  checks: 'github',
 };
 
 /**
@@ -581,7 +595,7 @@ const INCLUDE_AREA: Partial<Record<ReadInclude, ScopeArea>> = {
  * @param ctx - Who reads
  * @param area - The area
  */
-function coversArea(ctx: ActionContext, area: ScopeArea): boolean {
+export function coversArea(ctx: ActionContext, area: ScopeArea): boolean {
   return !isToken(ctx) || scopeAllows(ctx.scopes ?? [], area, 'read');
 }
 
