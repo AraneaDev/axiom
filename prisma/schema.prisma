@@ -313,22 +313,23 @@ enum Priority {
 }
 
 model Issue {
-  id         String       @id @default(cuid())
-  projectId  String
-  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  number     Int // sequential within project
-  title      String
-  body       String // markdown
-  type       IssueType    @default(TASK)
-  priority   Priority     @default(MEDIUM)
-  columnId   String?
-  column     BoardColumn? @relation(fields: [columnId], references: [id])
-  assigneeId String?
-  assignee   User?        @relation("assignee", fields: [assigneeId], references: [id])
-  creatorId  String
-  creator    User         @relation("creator", fields: [creatorId], references: [id])
-  dueDate    DateTime?
-  position   Int          @default(0) // ordering within column
+  id          String            @id @default(cuid())
+  githubLinks GithubIssueLink[]
+  projectId   String
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number      Int // sequential within project
+  title       String
+  body        String // markdown
+  type        IssueType         @default(TASK)
+  priority    Priority          @default(MEDIUM)
+  columnId    String?
+  column      BoardColumn?      @relation(fields: [columnId], references: [id])
+  assigneeId  String?
+  assignee    User?             @relation("assignee", fields: [assigneeId], references: [id])
+  creatorId   String
+  creator     User              @relation("creator", fields: [creatorId], references: [id])
+  dueDate     DateTime?
+  position    Int               @default(0) // ordering within column
 
   // Epic hierarchy & sprint planning
   parentId        String?
@@ -1443,9 +1444,9 @@ model GithubDelivery {
 /// The one GitHub repository a project is linked to (ids as GitHub numbers them). Deleting the
 /// link deletes what the later GitHub tables hold for it.
 model GithubRepoLink {
-  id                  String    @id @default(cuid())
-  projectId           String    @unique
-  repoId              BigInt    @unique
+  id                  String            @id @default(cuid())
+  projectId           String            @unique
+  repoId              BigInt            @unique
   installationId      BigInt
   owner               String
   name                String
@@ -1454,12 +1455,44 @@ model GithubRepoLink {
   htmlUrl             String
   /// Who linked it; no relation, so deleting that person does not block or unlink the project
   linkedById          String
-  createdAt           DateTime  @default(now())
+  createdAt           DateTime          @default(now())
   lastDeliveryAt      DateTime?
   lastReconciledAt    DateTime?
   lastReconcileError  String?
   reconcileLeaseUntil DateTime?
-  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project             Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issueLinks          GithubIssueLink[]
 
   @@map("github_repo_links")
+}
+
+enum GithubLinkTarget {
+  BRANCH
+  PULL_REQUEST
+  COMMIT
+}
+
+enum GithubLinkSource {
+  BRANCH_NAME
+  PR_TITLE
+  PR_BODY
+  COMMIT_MESSAGE
+}
+
+/// An issue named by a branch, pull request or commit, and which of its texts named it
+model GithubIssueLink {
+  id         String             @id @default(cuid())
+  issueId    String
+  repoLinkId String
+  targetType GithubLinkTarget
+  /// Branch id, pull request id or commit sha
+  targetKey  String
+  sources    GithubLinkSource[]
+  createdAt  DateTime           @default(now())
+  issue      Issue              @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  repoLink   GithubRepoLink     @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+
+  @@unique([issueId, targetType, targetKey])
+  @@index([repoLinkId, targetType, targetKey])
+  @@map("github_issue_links")
 }

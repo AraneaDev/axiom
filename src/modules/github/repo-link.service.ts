@@ -37,12 +37,17 @@ export async function findRepoLinkByProject(projectId: string): Promise<GithubRe
 }
 
 /**
- * How many issues of a link have GitHub branches, pull requests or checks to lose when it is
- * unlinked. Nothing records those until the issue links exist, so this is 0 for now.
- * @param _linkId The link
+ * How many issues of a link have GitHub branches, pull requests or commits to lose when it is
+ * unlinked: the distinct issues its issue links name.
+ * @param linkId The link
  */
-export async function countLinkedIssues(_linkId: string): Promise<number> {
-  return 0;
+export async function countLinkedIssues(linkId: string): Promise<number> {
+  const rows = await prisma.githubIssueLink.findMany({
+    where: { repoLinkId: linkId },
+    distinct: ['issueId'],
+    select: { issueId: true },
+  });
+  return rows.length;
 }
 
 /**
