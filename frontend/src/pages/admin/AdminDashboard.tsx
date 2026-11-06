@@ -8,6 +8,7 @@ import {
   CircleDot,
   Cpu,
   FileText,
+  GitBranch,
   Globe,
   HardDrive,
   Server,
@@ -251,6 +252,11 @@ export default function AdminDashboard() {
           <Link to="/admin/landing">
             <Button variant="outline" size="sm">
               <Globe className="h-4 w-4" /> Landing Page
+            </Button>
+          </Link>
+          <Link to="/admin/github">
+            <Button variant="outline" size="sm">
+              <GitBranch className="h-4 w-4" /> GitHub
             </Button>
           </Link>
           <Link to="/admin/security">

@@ -21,6 +21,17 @@ const SystemSettings = lazy(() => import('@/pages/admin/SystemSettings'));
 const AuditLogs = lazy(() => import('@/pages/admin/AuditLogs'));
 const LandingPageEditor = lazy(() => import('@/pages/admin/LandingPageEditor'));
 const SecuritySettings = lazy(() => import('@/pages/admin/SecuritySettings'));
+const GithubAccount = lazy(() => import('@/pages/settings/GithubAccount'));
+const GithubAccountCallback = lazy(() =>
+  import('@/pages/settings/GithubAccount').then((m) => ({ default: m.GithubAccountCallback })),
+);
+const GithubAppSettings = lazy(() => import('@/pages/admin/GithubAppSettings'));
+const GithubAppCreated = lazy(() =>
+  import('@/pages/admin/GithubAppSettings').then((m) => ({ default: m.GithubAppCreated })),
+);
+const GithubAppInstalled = lazy(() =>
+  import('@/pages/admin/GithubAppSettings').then((m) => ({ default: m.GithubAppInstalled })),
+);
 const NotificationInbox = lazy(() => import('@/pages/notifications/NotificationInbox'));
 
 /**
@@ -83,6 +94,8 @@ export function adminRoutes() {
         <Route path="connect-agent" element={<ConnectAgent />} />
         <Route path="notifications" element={<NotificationSettings />} />
         <Route path="agent-approvals" element={<AgentApprovalRules />} />
+        <Route path="github" element={<GithubAccount />} />
+        <Route path="github/callback" element={<GithubAccountCallback />} />
       </Route>
 
       {/* Admin */}
@@ -131,6 +144,31 @@ export function adminRoutes() {
         element={
           <ErrorBoundary>
             <SecuritySettings />
+          </ErrorBoundary>
+        }
+      />
+
+      <Route
+        path="/admin/github"
+        element={
+          <ErrorBoundary>
+            <GithubAppSettings />
+          </ErrorBoundary>
+        }
+      />
+      <Route
+        path="/admin/github/created"
+        element={
+          <ErrorBoundary>
+            <GithubAppCreated />
+          </ErrorBoundary>
+        }
+      />
+      <Route
+        path="/admin/github/installed"
+        element={
+          <ErrorBoundary>
+            <GithubAppInstalled />
           </ErrorBoundary>
         }
       />
