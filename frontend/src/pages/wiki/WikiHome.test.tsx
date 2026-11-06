@@ -14,6 +14,7 @@ vi.mock('@/api/wiki.api', () => ({ wikiApi: { updateSpace: vi.fn() } }));
 vi.mock('@/api/space-permissions.api', () => ({
   spacePermissionsApi: { list: vi.fn().mockResolvedValue([]), upsert: vi.fn(), remove: vi.fn() },
 }));
+vi.mock('@/api/teams.api', () => ({ teamsApi: { get: vi.fn() } }));
 vi.mock('./WikiLayout', () => ({
   useWikiContext: () => ({ spaces: spaces.value, currentTeam: { id: 't1' } }),
 }));

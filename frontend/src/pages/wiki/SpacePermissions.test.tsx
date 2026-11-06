@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/components/ui/Toast';
 
 const api = vi.hoisted(() => ({ list: vi.fn(), upsert: vi.fn(), remove: vi.fn() }));
+const teams = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock('@/api/teams.api', () => ({ teamsApi: teams }));
 vi.mock('@/api/space-permissions.api', () => ({ spacePermissionsApi: api }));
 
 import { SpacePermissions } from './SpacePermissions';
@@ -25,7 +27,7 @@ function renderPanel() {
   return render(
     <QueryClientProvider client={client}>
       <ToastProvider>
-        <SpacePermissions spaceId="s1" />
+        <SpacePermissions spaceId="s1" teamId="t1" />
       </ToastProvider>
     </QueryClientProvider>,
   );
@@ -35,6 +37,17 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.upsert.mockResolvedValue({});
   api.remove.mockResolvedValue(undefined);
+  teams.get.mockResolvedValue({
+    id: 't1',
+    members: [
+      {
+        id: 'm2',
+        userId: 'u2',
+        role: 'MEMBER',
+        user: { id: 'u2', username: 'joris', displayName: 'Joris Bakker' },
+      },
+    ],
+  });
 });
 
 describe('SpacePermissions', () => {
@@ -66,6 +79,19 @@ describe('SpacePermissions', () => {
     await userEvent.click(screen.getByRole('button', { name: /add permission/i }));
     await waitFor(() =>
       expect(api.upsert).toHaveBeenCalledWith('s1', { teamRole: 'MEMBER', level: 'VIEW' }),
+    );
+  });
+
+  it('grants a team member access by picking them by name', async () => {
+    api.list.mockResolvedValue([holder]);
+    renderPanel();
+    await userEvent.click(await screen.findByRole('button', { name: /^add$/i }));
+    await userEvent.click(screen.getByRole('button', { name: /team role/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Member' }));
+    await userEvent.click(await screen.findByRole('button', { name: /joris bakker/i }));
+    await userEvent.click(screen.getByRole('button', { name: /add permission/i }));
+    await waitFor(() =>
+      expect(api.upsert).toHaveBeenCalledWith('s1', { userId: 'u2', level: 'VIEW' }),
     );
   });
 });

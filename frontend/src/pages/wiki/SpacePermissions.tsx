@@ -8,9 +8,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Dropdown';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { Table, TableContainer, Thead, Tbody, Tr, TrHead, Th, Td } from '@/components/ui/Table';
+import { TeamMemberPicker } from '@/components/ui/TeamMemberPicker';
 import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 
 const LEVELS = ['VIEW', 'EDIT', 'ADMIN'] as const;
@@ -18,6 +18,8 @@ const TEAM_ROLES = ['ADMIN', 'MEMBER', 'VIEWER'] as const;
 
 interface SpacePermissionsProps {
   spaceId: string;
+  /** Team whose members can be granted access */
+  teamId: string;
 }
 
 /**
@@ -25,8 +27,9 @@ interface SpacePermissionsProps {
  * Shows existing permissions and allows adding/editing/removing them.
  * @param root0
  * @param root0.spaceId
+ * @param root0.teamId
  */
-export function SpacePermissions({ spaceId }: SpacePermissionsProps) {
+export function SpacePermissions({ spaceId, teamId }: SpacePermissionsProps) {
   const [newType, setNewType] = useState<'user' | 'role'>('role');
   const [newUserId, setNewUserId] = useState('');
   const [newTeamRole, setNewTeamRole] = useState<string>(TEAM_ROLES[1]);
@@ -183,16 +186,15 @@ export function SpacePermissions({ spaceId }: SpacePermissionsProps) {
               onChange={(val) => setNewType(val as 'user' | 'role')}
               options={[
                 { value: 'role', label: 'Team Role' },
-                { value: 'user', label: 'User ID' },
+                { value: 'user', label: 'Member' },
               ]}
             />
 
             {newType === 'user' ? (
-              <Input
-                type="text"
+              <TeamMemberPicker
+                teamId={teamId}
                 value={newUserId}
-                onChange={(e) => setNewUserId(e.target.value)}
-                placeholder="User ID"
+                onChange={setNewUserId}
                 className="flex-1"
               />
             ) : (

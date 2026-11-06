@@ -23,7 +23,11 @@ export default function WikiHome() {
   const { org, team: teamSlug } = useParams();
   const { spaces, currentTeam } = useWikiContext();
   const [showArchived, setShowArchived] = useState(false);
-  const [permissionsOf, setPermissionsOf] = useState<{ id: string; name: string } | null>(null);
+  const [permissionsOf, setPermissionsOf] = useState<{
+    id: string;
+    name: string;
+    teamId: string;
+  } | null>(null);
 
   const archiveMutation = useMutationWithToast(
     ({ spaceId, isArchived }: { spaceId: string; isArchived: boolean }) =>
@@ -99,7 +103,9 @@ export default function WikiHome() {
                     variant="ghost"
                     size="xs"
                     title={`Permissions of ${s.name}`}
-                    onClick={() => setPermissionsOf({ id: s.id, name: s.name })}
+                    onClick={() =>
+                      setPermissionsOf({ id: s.id, name: s.name, teamId: currentTeam?.id ?? '' })
+                    }
                   >
                     <Shield className="h-3.5 w-3.5" /> Permissions
                   </Button>
@@ -131,7 +137,9 @@ export default function WikiHome() {
         title={permissionsOf ? `${permissionsOf.name}: permissions` : undefined}
         size="lg"
       >
-        {permissionsOf && <SpacePermissions spaceId={permissionsOf.id} />}
+        {permissionsOf && (
+          <SpacePermissions spaceId={permissionsOf.id} teamId={permissionsOf.teamId} />
+        )}
       </Modal>
     </div>
   );

@@ -69,6 +69,20 @@ test.describe('Wiki', () => {
       await expect(dialog.getByText('MEMBER role')).toBeVisible();
     });
 
+    await test.step('add a permission for a member found by name', async () => {
+      await dialog.getByRole('button', { name: /^add$/i }).click();
+      await dialog.getByRole('button', { name: /team role/i }).click();
+      await dialog.getByRole('button', { name: 'Member', exact: true }).click();
+      await dialog.getByPlaceholder('Search members').fill('sarah');
+      await dialog
+        .getByRole('button', { name: /@sarah-chen/ })
+        .first()
+        .click();
+      await dialog.getByRole('button', { name: /add permission/i }).click();
+      await expect(dialog.getByText('@sarah-chen')).toBeVisible();
+      await dialog.getByTitle('Remove permission').last().click();
+    });
+
     await test.step('remove it again, so the space is as it was', async () => {
       await dialog.getByTitle('Remove permission').click();
       await expect(dialog.getByText('No custom permissions')).toBeVisible();
