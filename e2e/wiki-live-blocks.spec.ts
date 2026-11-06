@@ -88,7 +88,7 @@ test.describe('Live blocks in wiki pages', () => {
     await login(reader, DEMO_USERS.marcus);
     const answers: string[] = [];
     reader.on('response', (response) => {
-      if (response.url().endsWith('/api/dashboards/embedded')) {
+      if (/\/api\/dashboards\/embedded(\/batch)?$/.test(response.url())) {
         answers.push(response.url());
         void response.text().then((text) => answers.push(text));
       }

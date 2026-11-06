@@ -2932,7 +2932,7 @@ Set a new password for a user and end their sessions. Web UI only: a token is re
 
 ### POST /api/admin/users/:userId/reset-2fa
 
-Turn off a user's two-factor authentication, for someone locked out of their authenticator. Clears the secret, the enabled flag and the last accepted code step, ends every session of that user (refresh tokens deleted, open sockets closed) and writes a `2fa_reset` audit row naming the admin. The user signs in again with their password and sets up 2FA anew. You can't reset your own 2FA this way: it answers `400` and you use the normal disable (`POST /api/auth/2fa/disable`) with a code. Web UI only: a token is refused (403).
+Turn off a user's two-factor authentication, for someone locked out of their authenticator. Clears the secret, the enabled flag and the last accepted code step, ends every session of that user (refresh tokens are deleted and open sockets closed; an access token already issued runs out within 15 minutes) and writes a `2fa_reset` audit row naming the admin. The user signs in again with their password and sets up 2FA anew. You can't reset your own 2FA this way: it answers `400` and you use the normal disable (`POST /api/auth/2fa/disable`) with a code. Web UI only: a token is refused (403).
 
 **Response 200:** `{ "success": true }`
 

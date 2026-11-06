@@ -138,17 +138,19 @@ export const EMBED_BATCH_MAX = 50;
 export async function renderEmbeddedBatch(ctx: ActionContext, pageId: string, embedIds: string[]) {
   const page = await prisma.page.findUnique({ where: { id: pageId }, select: { body: true } });
   const body = page?.body ?? '';
-  const inBody = new Set(queryEmbedsIn(body));
   const wanted = [...new Set(embedIds)];
-  const present = wanted.filter((embedId) => inBody.has(embedId));
+  // The parse is the costly part: guesses that are not even text of the body do not get that far
+  const candidates = wanted.filter((embedId) => body.includes(embedId));
 
-  // A page with none of them costs the reader nothing, as a single wrong guess does not
   const rendered = new Map<
     string,
     Awaited<ReturnType<typeof renderBlock>> | ReturnType<typeof widgetError>
   >();
-  if (present.length > 0) {
+  if (candidates.length > 0) {
+    // Charged before the parse, once for the page
     await limitRender(ctx.userId);
+    const inBody = new Set(queryEmbedsIn(body));
+    const present = candidates.filter((embedId) => inBody.has(embedId));
     await readSlots.run(ctx.userId, READS_BUSY, async () => {
       for (const embedId of present) {
         try {
