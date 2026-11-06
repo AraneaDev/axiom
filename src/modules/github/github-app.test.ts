@@ -607,8 +607,14 @@ describe('syncing installations', () => {
       (await prisma.githubInstallation.findUniqueOrThrow({ where: { id: 4102 } })).accountType,
     ).toBe('User');
 
+    const firstSync = (await prisma.githubInstallation.findUniqueOrThrow({ where: { id: 4102 } }))
+      .lastEventAt;
+    expect(firstSync).not.toBeNull();
     fake.removeInstallation(4102);
     const second = await post(`${BASE}/installations/sync`, admin);
+    // Marking it gone is as fresh as the sync: a late older webhook event cannot undo it
+    const gone = await prisma.githubInstallation.findUniqueOrThrow({ where: { id: 4102 } });
+    expect(gone.lastEventAt!.getTime()).toBeGreaterThan(firstSync!.getTime());
     expect(second.body.installations).toEqual([
       { id: 4101, accountLogin: 'acme-labs', suspended: false },
       { id: 4102, accountLogin: 'octo-dev', suspended: true },

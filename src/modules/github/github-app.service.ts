@@ -401,7 +401,7 @@ export async function syncInstallations(): Promise<GithubAppStatus> {
     if (complete) {
       await tx.githubInstallation.updateMany({
         where: { id: { notIn: parsed.data.map((i) => i.id) }, suspendedAt: null },
-        data: { suspendedAt: now },
+        data: { suspendedAt: now, lastEventAt: now },
       });
     }
   });

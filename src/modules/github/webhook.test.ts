@@ -1,5 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
+import net from 'node:net';
 import path from 'node:path';
 
 import request from 'supertest';
@@ -275,29 +277,83 @@ describe('before the body is read', () => {
 });
 
 describe('the gate and the payload', () => {
-  it('answers 405 with Allow: POST to anything but a POST, before reading a body', async () => {
-    for (const method of ['put', 'patch', 'delete', 'get'] as const) {
-      const agent = request(app);
-      const res = await agent[method](URL)
-        .set('Content-Type', 'application/json')
-        .send(Buffer.alloc(26 * 1024 * 1024, 0x61));
-      expect(res.status).toBe(405);
-      expect(res.headers.allow).toBe('POST');
+  it('answers 405 with Allow: POST to anything but a POST, before the body is read', async () => {
+    // The head claims 25 MB and none is ever sent: only an answer given before the body is read
+    // can come back
+    const server = await listenForRawRequests(app);
+    try {
+      const { port } = server.address() as AddressInfo;
+      for (const method of ['PUT', 'PATCH', 'DELETE', 'GET']) {
+        const answer = await new Promise<string>((resolve, reject) => {
+          const socket = net.connect(port, '127.0.0.1', () => {
+            socket.write(
+              `${method} ${URL} HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n` +
+                `Content-Length: ${25 * 1024 * 1024}\r\nConnection: close\r\n\r\n{`,
+            );
+          });
+          let data = '';
+          socket.on('data', (chunk) => {
+            data += chunk.toString();
+            if (data.includes('\r\n\r\n')) {
+              socket.destroy();
+              resolve(data);
+            }
+          });
+          socket.on('error', reject);
+        });
+        expect(answer).toMatch(/^HTTP\/1\.1 405/);
+        expect(answer.toLowerCase()).toContain('allow: post');
+      }
+    } finally {
+      server.close();
     }
-  });
+  }, 5000);
 
-  it('stores a payload with a lone surrogate as FAILED without a payload, and answers 202', async () => {
+  it('stores lone surrogates as U+FFFD and keeps a valid pair', async () => {
     const res = await postWebhook(eventName(), null, {
       deliveryId: 'd-surrogate',
-      rawBody: '{"text":"cut \\ud83d here"}',
+      rawBody:
+        '{"hi":"a\\ud83db","lo":"a\\ude00b","pair":"\\ud83d\\ude00","two":"\\ud83d\\ud83d\\ude00"}',
     });
     expect(res.status).toBe(202);
-    expect(await row('d-surrogate')).toMatchObject({
+    expect((await row('d-surrogate'))?.payload).toEqual({
+      hi: 'a\uFFFDb',
+      lo: 'a\uFFFDb',
+      pair: '\u{1F600}',
+      two: '\uFFFD\u{1F600}',
+    });
+  });
+
+  it('stores the delivery without a payload when Postgres refuses its text, and logs it', async () => {
+    const refusal = Object.assign(new Error('unsupported Unicode escape sequence'), {
+      cause: { kind: 'postgres', originalCode: '22P05' },
+    });
+    const create = vi.spyOn(prisma.githubDelivery, 'create').mockRejectedValueOnce(refusal);
+    try {
+      const res = await postWebhook(eventName(), {}, { deliveryId: 'd-refused' });
+      expect(res.status).toBe(202);
+    } finally {
+      create.mockRestore();
+    }
+    expect(await row('d-refused')).toMatchObject({
       status: 'FAILED',
       payload: null,
       error: 'payload could not be stored',
       nextAttemptAt: null,
     });
+  });
+
+  it('answers 500 and stores nothing for any other database error', async () => {
+    const create = vi
+      .spyOn(prisma.githubDelivery, 'create')
+      .mockRejectedValueOnce(new Error('connection terminated'));
+    try {
+      const res = await postWebhook(eventName(), {}, { deliveryId: 'd-fault' });
+      expect(res.status).toBe(500);
+    } finally {
+      create.mockRestore();
+    }
+    expect(await row('d-fault')).toBeNull();
   });
 });
 
@@ -726,6 +782,23 @@ describe('installation events', () => {
     await processDelivery('s-old');
     expect((await row('s-old'))?.status).toBe('IGNORED');
     expect((await lastEvent()).suspendedAt).toBeNull();
+  });
+
+  it('applies a newer event even when an older one created the row after the first attempt', async () => {
+    await stored('r-old', new Date(T), 'created');
+    await stored('r-new', new Date(T + 5), 'suspend', { suspended_at: '2026-11-06T08:59:00Z' });
+    await processDelivery('r-old');
+    // The newer event's first conditional update ran before that row existed
+    const update = vi
+      .spyOn(prisma.githubInstallation, 'updateMany')
+      .mockResolvedValueOnce({ count: 0 });
+    try {
+      await processDelivery('r-new');
+    } finally {
+      update.mockRestore();
+    }
+    expect((await row('r-new'))?.status).toBe('PROCESSED');
+    expect((await lastEvent()).suspendedAt).not.toBeNull();
   });
 
   it('ignores an installation event without an installation', async () => {

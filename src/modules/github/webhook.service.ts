@@ -38,12 +38,46 @@ function validSignature(raw: Buffer, header: string | undefined, secret: string)
 }
 
 /**
- * The JSON text with each escaped NUL (`\u0000`) replaced by U+FFFD: Postgres jsonb refuses NUL.
- * Done after the signature was checked. An escaped backslash followed by "u0000" is kept as is.
+ * The JSON text made storable: each escaped NUL (`\u0000`) and each unpaired surrogate escape
+ * (a high one not followed by a low one, or a low one on its own) is replaced by U+FFFD, since
+ * Postgres jsonb refuses both. A valid pair is kept. Done after the signature was checked. An
+ * escaped backslash followed by "u0000" is text, not an escape, and is kept as is.
  * @param text The body
  */
-const withoutNul = (text: string): string =>
-  text.replace(/\\(?:\\|u0000)/g, (match) => (match === '\\\\' ? match : '\uFFFD'));
+const storableJson = (text: string): string =>
+  text.replace(
+    /\\(?:\\|(u[dD][89abAB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2})|u([0-9a-fA-F]{4}))/g,
+    (match, pair: string | undefined, single: string | undefined) => {
+      if (pair || single === undefined) return match;
+      const code = parseInt(single, 16);
+      return code === 0 || (code >= 0xd800 && code <= 0xdfff) ? '\uFFFD' : match;
+    },
+  );
+
+/**
+ * The SQLSTATE of a database error, wherever the driver adapter puts it.
+ * @param err What the insert threw
+ */
+function sqlState(err: unknown): string | undefined {
+  let at: unknown = err;
+  for (let depth = 0; depth < 4 && typeof at === 'object' && at !== null; depth++) {
+    const fields = at as {
+      originalCode?: unknown;
+      code?: unknown;
+      cause?: unknown;
+      meta?: unknown;
+    };
+    for (const value of [fields.originalCode, fields.code]) {
+      if (typeof value === 'string' && /^[0-9A-Z]{5}$/.test(value)) return value;
+    }
+    const meta = fields.meta as { driverAdapterError?: unknown } | undefined;
+    at = fields.cause ?? meta?.driverAdapterError;
+  }
+  return undefined;
+}
+
+/** Postgres refused the text of a JSON value: invalid text representation, untranslatable escape */
+const JSON_TEXT_REFUSALS = new Set(['22P02', '22P05']);
 
 const idOf = (value: unknown): number | null => {
   const id = (value as { id?: unknown } | null | undefined)?.id;
@@ -84,7 +118,7 @@ export async function receive(
   }
   let payload: unknown;
   try {
-    payload = JSON.parse(withoutNul(raw.toString('utf8')));
+    payload = JSON.parse(storableJson(raw.toString('utf8')));
   } catch {
     throw new AppError(400, 'The body is not valid JSON', 'INVALID_JSON');
   }
@@ -110,23 +144,22 @@ export async function receive(
   } catch (err) {
     // The unique key is the duplicate check: no read ahead of it, so two copies cannot both pass
     if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
-      // Postgres refused the payload's text (a lone surrogate, say): keep the delivery in the
-      // log without it, as given up, and answer GitHub as for any other. Anything else, such as
-      // a database that is down, still fails the call so GitHub sees it.
-      try {
-        await prisma.githubDelivery.create({
-          data: {
-            id: deliveryId,
-            event,
-            action: null,
-            status: 'FAILED',
-            error: 'payload could not be stored',
-            processedAt: new Date(),
-          },
-        });
-      } catch {
-        throw err;
-      }
+      // Only a refusal of the payload's text is kept in the log as given up, without the payload.
+      // Anything else (a timeout, a dropped connection) fails the call, so GitHub sees it and
+      // the delivery is not lost.
+      const state = sqlState(err);
+      if (!state || !JSON_TEXT_REFUSALS.has(state)) throw err;
+      logger.warn('GitHub payload refused by the database', { deliveryId, sqlState: state });
+      await prisma.githubDelivery.create({
+        data: {
+          id: deliveryId,
+          event,
+          action: null,
+          status: 'FAILED',
+          error: 'payload could not be stored',
+          processedAt: new Date(),
+        },
+      });
       return { accepted: true };
     }
     // GitHub's "Redeliver" reuses the id. One that gave up for good runs again, once: the reset

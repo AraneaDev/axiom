@@ -52,9 +52,6 @@ async function writeInstallation(
       data: { ...data, lastEventAt: d.receivedAt },
     });
   if ((await apply()).count > 0) return 'processed';
-  if (await prisma.githubInstallation.findUnique({ where: { id: installation.id } })) {
-    return 'ignored';
-  }
   try {
     await prisma.githubInstallation.create({
       data: { id: installation.id, ...data, lastEventAt: d.receivedAt },
@@ -62,7 +59,7 @@ async function writeInstallation(
     return 'processed';
   } catch (err) {
     if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
-    // Created by another delivery in the meantime: this one is judged against it
+    // The row exists (made by another delivery in the meantime, or newer than this event): judged against it
     return (await apply()).count > 0 ? 'processed' : 'ignored';
   }
 }
