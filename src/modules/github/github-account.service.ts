@@ -174,8 +174,11 @@ export async function refreshUserToken(
         row.refreshToken !== null &&
         (row.refreshTokenExpiresAt === null || row.refreshTokenExpiresAt.getTime() > now);
       if (!canRefresh) {
+        // A 401 alone proves little (GitHub has answered valid tokens wrongly): with nothing to
+        // renew it with, the person is asked to reconnect and the row stays
+        if (forced) return { reconnect: true as const };
         // Still valid for a few minutes: use it. Else nothing can renew it.
-        if (!forced && row.accessTokenExpiresAt!.getTime() > now) return { token: current };
+        if (row.accessTokenExpiresAt!.getTime() > now) return { token: current };
         await tx.githubAccount.delete({ where: { id: row.id } });
         return { gone: true as const };
       }
@@ -228,7 +231,7 @@ export async function refreshUserToken(
     { timeout: budget, maxWait: REFRESH_TX_MAX_WAIT_MS },
   );
   // Thrown after the commit, so the deletion stands
-  if ('gone' in outcome) throw reconnect();
+  if ('gone' in outcome || 'reconnect' in outcome) throw reconnect();
   if ('superseded' in outcome) {
     // What GitHub just rotated is nobody's: revoke it and use the connection that replaced it
     const app = await prisma.githubApp.findFirst({ select: { clientId: true } });

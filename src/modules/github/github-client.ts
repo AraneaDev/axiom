@@ -38,6 +38,8 @@ const API_HEADERS = {
 };
 
 let overrideUrls: { api: string; web: string } | null = null;
+// Responses that went out with the credential attached and are the final answer of their chain
+const credentialed = new WeakSet<Response>();
 const resolvers = new Map<ResolvableKind, Resolver>();
 const refreshers = new Map<ResolvableKind, Refresher>();
 
@@ -256,6 +258,7 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
       path: loggablePath(target.pathname),
       status: response.status,
     });
+    if (opts.credential && withAuth) credentialed.add(response);
     return response;
   }
 }
@@ -318,7 +321,8 @@ async function request<T>(
   // A token GitHub refuses may only have been revoked early: renew it once and try again
   const refresh =
     auth.kind === 'none' || auth.kind === 'token' ? undefined : refreshers.get(auth.kind);
-  if (response.status === 401 && refresh && credential) {
+  // Only a 401 from the API host, to a request that carried the token, says anything about it
+  if (response.status === 401 && refresh && credential && credentialed.has(response)) {
     await response.body?.cancel();
     credential = await refresh(auth, credential);
     response = await attempt();

@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 
 import request from 'supertest';
@@ -633,10 +635,16 @@ describe('the auth resolvers', () => {
 });
 
 describe('a 401 means the connection was refused, not the App', () => {
-  it.each(['user', 'token', 'oauth-app'] as const)('for %s', (kind) => {
+  it.each(['user', 'token'] as const)('for %s', (kind) => {
     expect(githubError(kind, 401, new Headers(), { message: 'Bad credentials' })).toMatchObject({
       statusCode: 409,
       code: 'GITHUB_RECONNECT',
+    });
+  });
+  it('blames the App for a refused client secret (oauth-app)', () => {
+    expect(githubError('oauth-app', 401, new Headers(), null)).toMatchObject({
+      statusCode: 502,
+      code: 'GITHUB_APP_AUTH',
     });
   });
   it('still blames the App for its own calls', () => {
@@ -787,5 +795,43 @@ describe('connecting twice at the same time', () => {
     }
     expect(await prisma.githubAccount.count()).toBe(1);
     expect(plain('accessToken', await accountOf(alice))).toMatch(/^ghu_/);
+  });
+});
+
+describe('a 401 that proves nothing about the token', () => {
+  it('keeps an account with no refresh token and asks to reconnect', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    await prisma.githubAccount.update({
+      where: { userId: alice.id },
+      data: { refreshToken: null, refreshTokenExpiresAt: null, accessTokenExpiresAt: null },
+    });
+    fake.expireToken(plain('accessToken', await accountOf(alice)));
+    const err = await githubRequest({ kind: 'user', userId: alice.id }, 'GET', '/user').catch(
+      (e) => e,
+    );
+    expect(err).toMatchObject({ statusCode: 409, code: 'GITHUB_RECONNECT' });
+    expect(await prisma.githubAccount.count()).toBe(1);
+    expect(fake.refreshGrants).toBe(0);
+  });
+
+  it('does not refresh after a redirect to another host answered 401', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    const other = createServer((_req, res) => {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end('{"message":"Bad credentials"}');
+    });
+    await new Promise<void>((resolve) => other.listen(0, '127.0.0.1', resolve));
+    try {
+      const url = `http://127.0.0.1:${(other.address() as AddressInfo).port}/x`;
+      fake.on('GET /user', { status: 302, headers: { location: url } });
+      await githubRequest({ kind: 'user', userId: alice.id }, 'GET', '/user').catch(
+        () => undefined,
+      );
+      expect(fake.refreshGrants).toBe(0);
+      expect(await prisma.githubAccount.count()).toBe(1);
+    } finally {
+      other.closeAllConnections();
+      await new Promise((resolve) => other.close(resolve));
+    }
   });
 });

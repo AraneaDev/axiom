@@ -93,9 +93,9 @@ export function githubError(
     );
   }
   if (status === 401 || (status === 403 && /bad credentials/i.test(message))) {
-    // A person's token, or the App's client credentials used for a person's grant: the
-    // person's connection is what GitHub refused. Only the App's own calls blame the App.
-    return kind === 'user' || kind === 'token' || kind === 'oauth-app'
+    // A person's token: their connection is what GitHub refused. The App's own calls, and its
+    // client secret (oauth-app), blame the App.
+    return kind === 'user' || kind === 'token'
       ? new AppError(
           409,
           'Your GitHub connection expired. Connect GitHub again in Settings.',
