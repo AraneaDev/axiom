@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 import { generateSecret, generateSync } from 'otplib';
 import request from 'supertest';
@@ -233,5 +234,56 @@ describe('rotation reaches a model whose id is an Int', () => {
     } finally {
       await prisma.githubApp.deleteMany();
     }
+  });
+});
+
+describe('rotation reaches the connected GitHub accounts', () => {
+  it('re-seals both tokens, and the account service opens them afterwards', async () => {
+    const testKey = process.env.AXIOM_ENCRYPTION_KEY!;
+    const oldKey = randomBytes(32).toString('base64');
+    const user = await newUser();
+    const id = `acct-${user.id}`;
+    const underOld = await withKeys(oldKey, undefined, async ({ box }) => ({
+      accessToken: box.encryptSecret(
+        'ghu_plain_access',
+        box.secretContext('githubAccount', 'accessToken', id),
+      ),
+      refreshToken: box.encryptSecret(
+        'ghr_plain_refresh',
+        box.secretContext('githubAccount', 'refreshToken', id),
+      ),
+    }));
+    await prisma.githubAccount.create({
+      data: { id, userId: user.id, githubUserId: 5_000_000_000n, login: 'octo-dev', ...underOld },
+    });
+    try {
+      const result = await withKeys(testKey, oldKey, async ({ migration }) =>
+        migration.reencryptAllSecrets(),
+      );
+      expect(result['githubAccount.accessToken']).toEqual({ reencrypted: 1, failed: 0 });
+      expect(result['githubAccount.refreshToken']).toEqual({ reencrypted: 1, failed: 0 });
+      const row = await prisma.githubAccount.findUniqueOrThrow({ where: { id } });
+      expect(needsReencrypt(row.accessToken)).toBe(false);
+      expect(needsReencrypt(row.refreshToken!)).toBe(false);
+      const { userToken } = await import('../modules/github/github-account.service');
+      expect(await userToken(user.id)).toBe('ghu_plain_access');
+    } finally {
+      await prisma.githubAccount.deleteMany({ where: { id } });
+    }
+  });
+});
+
+describe('every sealed column is listed', () => {
+  it('lists exactly the columns the schema marks with // enc', () => {
+    const marked: Array<{ model: string; field: string }> = [];
+    let model = '';
+    for (const line of readFileSync('prisma/schema.prisma', 'utf8').split('\n')) {
+      const start = /^model (\w+) \{/.exec(line);
+      if (start) model = start[1].charAt(0).toLowerCase() + start[1].slice(1);
+      const field = /^\s+(\w+)\s+\S+.*\/\/ enc\s*$/.exec(line);
+      if (field) marked.push({ model, field: field[1] });
+    }
+    const key = (c: { model: string; field: string }) => `${c.model}.${c.field}`;
+    expect(marked.map(key).sort()).toEqual(ENCRYPTED_COLUMNS.map(key).sort());
   });
 });

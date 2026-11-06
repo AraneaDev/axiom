@@ -9,9 +9,9 @@ import { decryptSecret, encryptSecret, secretContext } from '../../lib/secret-bo
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
-import { getGithubAppSecrets, instanceOrigin } from './github-app.service';
+import { getGithubAppSecrets, githubAppGeneration, instanceOrigin } from './github-app.service';
 import { githubRequest, githubWebPost, githubWebUrl } from './github-client';
-import { githubUnavailable } from './github-errors';
+import { githubIdJson, githubUnavailable, openGithubSecret } from './github-errors';
 
 const STORE_ATTEMPTS = 3;
 const STATE_MINUTES = 10;
@@ -33,7 +33,7 @@ type TokenField = 'accessToken' | 'refreshToken';
 const seal = (field: TokenField, id: string, plain: string) =>
   encryptSecret(plain, secretContext('githubAccount', field, id));
 const open = (field: TokenField, id: string, stored: string) =>
-  decryptSecret(stored, secretContext('githubAccount', field, id));
+  openGithubSecret(() => decryptSecret(stored, secretContext('githubAccount', field, id)));
 
 /** The part of a Prisma client the refresh needs: a transaction on one connection */
 type TransactionRunner = {
@@ -44,7 +44,11 @@ type TransactionRunner = {
 };
 
 /** What `githubAccount.get` and the other actions answer: never a token */
-export type GithubAccountStatus = { connected: boolean; login?: string; githubUserId?: number };
+export type GithubAccountStatus = {
+  connected: boolean;
+  login?: string;
+  githubUserId?: number | string;
+};
 
 // ---- Credentials for the client (registered in github-resolvers.ts)
 
@@ -214,19 +218,27 @@ export async function refreshUserToken(
         await tx.githubAccount.delete({ where: { id: row.id } });
         return { gone: true as const };
       }
-      // Only the row as it was read is updated: a reconnect or a disconnect since then wins
-      const { count } = await tx.githubAccount.updateMany({
-        where: { id: row.id, accessToken: row.accessToken },
-        data: {
-          accessToken: seal('accessToken', row.id, fresh.accessToken),
-          accessTokenExpiresAt: fresh.accessTokenExpiresAt,
-          refreshToken: fresh.refreshToken
-            ? seal('refreshToken', row.id, fresh.refreshToken)
-            : null,
-          refreshTokenExpiresAt: fresh.refreshTokenExpiresAt,
-        },
-      });
-      return count === 1 ? { token: fresh.accessToken } : { superseded: fresh.accessToken };
+      // Only the connection as it was read is updated: a reconnect or a disconnect since then
+      // wins. The test is on the token, not on its sealed text: `secrets:rotate` may have sealed
+      // the same token again during the GitHub call, and that is no lost race. The write is
+      // conditional on the sealed text just read, so the check is read again if it moved.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const latest = await tx.githubAccount.findUnique({ where: { id: row.id } });
+        if (!latest || open('accessToken', latest.id, latest.accessToken) !== current) break;
+        const { count } = await tx.githubAccount.updateMany({
+          where: { id: row.id, accessToken: latest.accessToken },
+          data: {
+            accessToken: seal('accessToken', row.id, fresh.accessToken),
+            accessTokenExpiresAt: fresh.accessTokenExpiresAt,
+            refreshToken: fresh.refreshToken
+              ? seal('refreshToken', row.id, fresh.refreshToken)
+              : null,
+            refreshTokenExpiresAt: fresh.refreshTokenExpiresAt,
+          },
+        });
+        if (count === 1) return { token: fresh.accessToken };
+      }
+      return { superseded: fresh.accessToken };
     },
     { timeout: budget, maxWait: REFRESH_TX_MAX_WAIT_MS },
   );
@@ -253,7 +265,7 @@ export async function getAccount(userId: string): Promise<GithubAccountStatus> {
     select: { login: true, githubUserId: true },
   });
   return row
-    ? { connected: true, login: row.login, githubUserId: row.githubUserId }
+    ? { connected: true, login: row.login, githubUserId: githubIdJson(row.githubUserId) }
     : { connected: false };
 }
 
@@ -361,6 +373,7 @@ export async function completeConnect(
   }
   const app = await getGithubAppSecrets();
   if (!app) throw new AppError(409, 'No GitHub App is set up', 'GITHUB_APP_MISSING');
+  const generation = await githubAppGeneration();
 
   const { status, data } = await githubWebPost('/login/oauth/access_token', {
     client_id: app.clientId,
@@ -409,6 +422,16 @@ export async function completeConnect(
   // id the tokens were not sealed for. A row made or removed by another call in between is met
   // by reading again: the later connect wins.
   for (let attempt = 0; attempt < STORE_ATTEMPTS; attempt++) {
+    // The App may have been forgotten, or replaced, while GitHub was asked: the token is of the
+    // App that is gone, so nothing is stored
+    if ((await githubAppGeneration()) !== generation) {
+      await revokeToken(app.clientId, tokens.accessToken);
+      throw new AppError(
+        409,
+        'The GitHub App changed while you connected: connect again',
+        'GITHUB_APP_MISSING',
+      );
+    }
     const existing = await prisma.githubAccount.findUnique({
       where: { userId },
       select: { id: true, accessToken: true },
@@ -473,7 +496,18 @@ export async function disconnect(userId: string): Promise<GithubAccountStatus> {
   const { count } = await prisma.githubAccount.deleteMany({ where: { id: row.id } });
   if (count === 1) {
     const app = await prisma.githubApp.findFirst({ select: { clientId: true } });
-    if (app) await revokeToken(app.clientId, open('accessToken', row.id, row.accessToken), 'grant');
+    if (app) {
+      let token: string | null = null;
+      try {
+        token = open('accessToken', row.id, row.accessToken);
+      } catch (err) {
+        // A token that does not open cannot be revoked: the connection is gone all the same
+        logger.warn('github token revoke skipped', {
+          code: err instanceof AppError ? err.code : undefined,
+        });
+      }
+      if (token !== null) await revokeToken(app.clientId, token, 'grant');
+    }
   }
   return { connected: false };
 }

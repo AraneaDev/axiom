@@ -23,7 +23,7 @@ model User {
 
   // 2FA
   twoFactorEnabled  Boolean @default(false)
-  twoFactorSecret   String?
+  twoFactorSecret   String? // enc
   /// The TOTP time step of the last accepted code: a code of that step or earlier is refused
   twoFactorLastStep Int?
 
@@ -1350,15 +1350,15 @@ model AgentPolicy {
 /// context githubApp.<field>:1.
 model GithubApp {
   id            Int      @id @default(1)
-  appId         Int
+  appId         BigInt
   slug          String
   name          String
   htmlUrl       String
   ownerLogin    String
   clientId      String
-  clientSecret  String
-  privateKey    String
-  webhookSecret String
+  clientSecret  String // enc
+  privateKey    String // enc
+  webhookSecret String // enc
   createdById   String
   createdAt     DateTime @default(now())
 
@@ -1371,11 +1371,11 @@ model GithubApp {
 model GithubAccount {
   id                    String    @id @default(cuid())
   userId                String    @unique
-  githubUserId          Int       @unique
+  githubUserId          BigInt    @unique
   login                 String
-  accessToken           String
+  accessToken           String // enc
   accessTokenExpiresAt  DateTime?
-  refreshToken          String?
+  refreshToken          String? // enc
   refreshTokenExpiresAt DateTime?
   /// When this connection was last made: a reconnect sets it again, the row stays
   connectedAt           DateTime  @default(now())
@@ -1400,7 +1400,7 @@ model GithubSetupState {
 
 /// An installation of the App on a GitHub account (id as GitHub numbers it)
 model GithubInstallation {
-  id           Int       @id
+  id           BigInt    @id
   accountLogin String
   accountType  String
   suspendedAt  DateTime?
@@ -1424,8 +1424,8 @@ model GithubDelivery {
   id             String               @id
   event          String
   action         String?
-  installationId Int?
-  repoId         Int?
+  installationId BigInt?
+  repoId         BigInt?
   status         GithubDeliveryStatus @default(PENDING)
   attempts       Int                  @default(0)
   nextAttemptAt  DateTime?

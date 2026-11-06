@@ -30,6 +30,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  // Tests place deliveries at fixed times: the App is older than all of them
+  await prisma.githubApp.updateMany({ data: { createdAt: new Date(0) } });
   await prisma.githubDelivery.deleteMany();
   await prisma.githubInstallation.deleteMany();
 });
@@ -137,6 +139,26 @@ describe('signature', () => {
   });
 });
 
+describe('ids above 2^31', () => {
+  it('stores an installation and a repository id that int4 could not hold', async () => {
+    const event = eventName();
+    const res = await postWebhook(
+      event,
+      {
+        action: 'opened',
+        installation: { id: 3_100_000_000 },
+        repository: { id: 9_007_199_254_740_000 },
+      },
+      { deliveryId: 'd-big' },
+    );
+    expect(res.status).toBe(202);
+    expect(await row('d-big')).toMatchObject({
+      installationId: 3_100_000_000n,
+      repoId: 9_007_199_254_740_000n,
+    });
+  });
+});
+
 describe('the delivery log', () => {
   it('stores a ping as IGNORED and runs nothing', async () => {
     const res = await postWebhook('ping', { zen: 'x' }, { deliveryId: 'd-ping' });
@@ -156,8 +178,8 @@ describe('the delivery log', () => {
     expect(await row('d-fields')).toMatchObject({
       event,
       action: 'opened',
-      installationId: 77,
-      repoId: 4242,
+      installationId: 77n,
+      repoId: 4242n,
     });
   });
 
@@ -876,4 +898,66 @@ describe('rate limit', () => {
     await flood(320);
     expect((await request(app).get('/api/health')).status).not.toBe(429);
   }, 60_000);
+});
+
+describe('a forgotten App', () => {
+  const installationDelivery = (id: string, extra: object = {}) =>
+    prisma.githubDelivery.create({
+      data: {
+        id,
+        event: 'installation',
+        action: 'created',
+        installationId: 7001,
+        payload: {
+          action: 'created',
+          installation: { id: 7001, account: { login: 'acme-labs', type: 'Organization' } },
+        },
+        ...extra,
+      },
+    });
+
+  afterEach(async () => {
+    // The tests below forget the App: the other tests of this file need one
+    secret = (await seedGithubApp()).webhookSecret;
+  });
+
+  it('ignores the open deliveries, and a new App does not bring their installations back', async () => {
+    await installationDelivery('f-pending', { status: 'PENDING' });
+    await installationDelivery('f-failed', {
+      status: 'FAILED',
+      attempts: 1,
+      nextAttemptAt: new Date(Date.now() - 1000),
+      error: 'boom',
+    });
+    await installationDelivery('f-done', { status: 'PROCESSED', processedAt: new Date() });
+    await deleteApp();
+    for (const id of ['f-pending', 'f-failed']) {
+      expect(await row(id)).toMatchObject({
+        status: 'IGNORED',
+        error: 'App forgotten',
+        nextAttemptAt: null,
+      });
+    }
+    expect((await row('f-done'))?.status).toBe('PROCESSED');
+
+    await seedGithubApp();
+    await retryDueDeliveries();
+    expect(await prisma.githubInstallation.count()).toBe(0);
+  });
+
+  it('ignores a delivery when no App exists', async () => {
+    await installationDelivery('f-none');
+    await prisma.githubApp.deleteMany();
+    await processDelivery('f-none');
+    expect(await row('f-none')).toMatchObject({ status: 'IGNORED', error: 'App forgotten' });
+    expect(await prisma.githubInstallation.count()).toBe(0);
+  });
+
+  it('ignores a delivery that was received before the current App was made', async () => {
+    await prisma.githubApp.updateMany({ data: { createdAt: new Date() } });
+    await installationDelivery('f-old', { receivedAt: new Date(Date.now() - 3_600_000) });
+    await processDelivery('f-old');
+    expect(await row('f-old')).toMatchObject({ status: 'IGNORED', error: 'App forgotten' });
+    expect(await prisma.githubInstallation.count()).toBe(0);
+  });
 });

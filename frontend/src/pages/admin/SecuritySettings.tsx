@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Save } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { siteSettingsApi } from '@/api/site-settings.api';
 import type { SiteSettings } from '@/api/site-settings.api';
@@ -54,6 +54,7 @@ function SecuritySettingsSkeleton() {
 
 function SecuritySettingsForm({ settings }: { settings: SiteSettings }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [registrationMode, setRegistrationMode] = useState<SiteSettings['registrationMode']>(
     settings.registrationMode,
   );
@@ -83,11 +84,9 @@ function SecuritySettingsForm({ settings }: { settings: SiteSettings }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/admin">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
+            <ArrowLeft className="h-4 w-4" /> Back to admin
+          </Button>
           <div>
             <h1 className="h2">Security Settings</h1>
             <p className="text-sm text-text-secondary mt-0.5">

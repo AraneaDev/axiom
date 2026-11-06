@@ -645,6 +645,40 @@ describe('syncing installations', () => {
   });
 });
 
+describe('starting the manifest in production', () => {
+  const original = { env: process.env.NODE_ENV, front: process.env.FRONTEND_URL };
+  afterEach(() => {
+    vi.stubEnv('NODE_ENV', original.env ?? 'test');
+    if (original.front === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = original.front;
+    vi.unstubAllEnvs();
+  });
+
+  it.each([[undefined], ['http://axiom.acme.test'], ['not a url']])(
+    'refuses with 409 when FRONTEND_URL is %s',
+    async (front) => {
+      vi.stubEnv('NODE_ENV', 'production');
+      if (front === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = front;
+      const res = await post(`${BASE}/manifest`, admin);
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('GITHUB_FRONTEND_URL_REQUIRED');
+      expect(res.body.error.message).toContain('FRONTEND_URL');
+      expect(await prisma.githubSetupState.count({ where: { userId: admin.id } })).toBe(0);
+    },
+  );
+
+  it('starts with an https FRONTEND_URL', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.FRONTEND_URL = 'https://axiom.acme.test';
+    const res = await post(`${BASE}/manifest`, admin);
+    expect(res.status).toBe(200);
+    expect(res.body.manifest.hook_attributes.url).toBe(
+      'https://axiom.acme.test/api/github/webhook',
+    );
+  });
+});
+
 describe('forgetting the App', () => {
   it('deletes the App and its installations, and says GitHub still has it', async () => {
     await seedGithubApp({ fake });

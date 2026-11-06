@@ -6,7 +6,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
-import { getGithubAppSecrets } from './github-app.service';
+import { GITHUB_APP_ROW_ID, getGithubAppSecrets } from './github-app.service';
 import { handlersFor, type GithubDeliveryContext } from './webhook-dispatch';
 
 const MAX_ATTEMPTS = 5;
@@ -231,12 +231,29 @@ export async function processDelivery(id: string): Promise<void> {
   if (claim.count === 0) return;
   const row = await prisma.githubDelivery.findUnique({ where: { id } });
   if (!row) return;
+  // A delivery of an App that was forgotten (or came before the current one) is not this App's
+  const app = await prisma.githubApp.findUnique({
+    where: { id: GITHUB_APP_ROW_ID },
+    select: { createdAt: true },
+  });
+  if (!app || row.receivedAt < app.createdAt) {
+    await prisma.githubDelivery.updateMany({
+      where: { id, attempts: row.attempts },
+      data: {
+        status: 'IGNORED',
+        processedAt: new Date(),
+        nextAttemptAt: null,
+        error: 'App forgotten',
+      },
+    });
+    return;
+  }
   const context: GithubDeliveryContext = {
     deliveryId: row.id,
     event: row.event,
     action: row.action,
-    installationId: row.installationId,
-    repoId: row.repoId,
+    installationId: row.installationId === null ? null : Number(row.installationId),
+    repoId: row.repoId === null ? null : Number(row.repoId),
     payload: (row.payload ?? {}) as Record<string, unknown>,
     receivedAt: row.receivedAt,
   };

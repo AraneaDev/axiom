@@ -1,7 +1,8 @@
 import { del, get, post } from './client';
 
 export interface GithubInstallation {
-  id: number;
+  /** A number; a string only for an id above 2^53 - 1 */
+  id: number | string;
   accountLogin: string;
   suspended: boolean;
 }
@@ -23,6 +24,7 @@ export interface GithubManifestStart {
 export interface GithubAccountStatus {
   connected: boolean;
   login?: string;
+  githubUserId?: number | string;
 }
 
 /** The query keys of the App's status and of your own account */

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ExternalLink, GitBranch, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
+import { Navigate, useNavigate, useSearchParams } from 'react-router';
 
 import { GITHUB_APP_KEY, githubAppApi } from '@/api/github.api';
 import type { GithubAppStatus } from '@/api/github.api';
@@ -18,13 +18,12 @@ import { useRunOnce } from '@/hooks/useRunOnce';
 import { useAuthStore } from '@/stores/auth.store';
 
 function Header({ subtitle }: { subtitle: string }) {
+  const navigate = useNavigate();
   return (
     <div className="flex items-center gap-3">
-      <Link to="/admin">
-        <Button variant="ghost" size="sm" title="Back to admin" aria-label="Back to admin">
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-      </Link>
+      <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
+        <ArrowLeft className="h-4 w-4" /> Back to admin
+      </Button>
       <div>
         <h1 className="h2">GitHub App</h1>
         <p className="text-sm text-text-secondary mt-0.5">{subtitle}</p>
@@ -250,11 +249,9 @@ export function GithubAppCreated() {
         <>
           <ErrorAlert error={result.error} fallback="Could not finish the setup" />
           <div>
-            <Link to="/admin/github">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="h-4 w-4" /> Back to GitHub App
-              </Button>
-            </Link>
+            <Button variant="outline" size="sm" onClick={() => navigate('/admin/github')}>
+              <ArrowLeft className="h-4 w-4" /> Back to GitHub App
+            </Button>
           </div>
         </>
       )}
@@ -274,11 +271,9 @@ export function GithubAppCreated() {
                 </Button>
               </a>
             )}
-            <Link to="/admin/github">
-              <Button variant="outline" size="sm">
-                <GitBranch className="h-4 w-4" /> Go to the App
-              </Button>
-            </Link>
+            <Button variant="outline" size="sm" onClick={() => navigate('/admin/github')}>
+              <GitBranch className="h-4 w-4" /> Go to the App
+            </Button>
           </div>
         </Card>
       )}
@@ -308,11 +303,9 @@ export function GithubAppInstalled() {
         <>
           <ErrorAlert error={result.error} fallback="Could not read the installations" />
           <div>
-            <Link to="/admin/github">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="h-4 w-4" /> Back to GitHub App
-              </Button>
-            </Link>
+            <Button variant="outline" size="sm" onClick={() => navigate('/admin/github')}>
+              <ArrowLeft className="h-4 w-4" /> Back to GitHub App
+            </Button>
           </div>
         </>
       )}

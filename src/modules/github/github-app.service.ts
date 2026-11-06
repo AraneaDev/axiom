@@ -8,7 +8,7 @@ import { decryptSecret, encryptSecret, secretContext } from '../../lib/secret-bo
 import { AppError } from '../../middleware/errorHandler';
 
 import { githubPaginate, githubRequest, githubWebUrl } from './github-client';
-import { githubUnavailable } from './github-errors';
+import { githubIdJson, githubUnavailable, openGithubSecret } from './github-errors';
 
 /** The App is one row, and its id is part of every context a secret of it is sealed with */
 export const GITHUB_APP_ROW_ID = 1;
@@ -30,7 +30,9 @@ export const sealGithubAppSecret = (field: SecretField, plain: string) =>
   encryptSecret(plain, secretContext('githubApp', field, String(GITHUB_APP_ROW_ID)));
 const sealed = sealGithubAppSecret;
 const opened = (field: SecretField, stored: string) =>
-  decryptSecret(stored, secretContext('githubApp', field, String(GITHUB_APP_ROW_ID)));
+  openGithubSecret(() =>
+    decryptSecret(stored, secretContext('githubApp', field, String(GITHUB_APP_ROW_ID))),
+  );
 
 const appExists = () =>
   new AppError(
@@ -45,7 +47,8 @@ export type GithubAppStatus = {
   slug?: string;
   htmlUrl?: string;
   installUrl?: string;
-  installations: Array<{ id: number; accountLogin: string; suspended: boolean }>;
+  /** `id` is a number, or a string in the (unseen) case that GitHub's id exceeds 2^53 - 1 */
+  installations: Array<{ id: number | string; accountLogin: string; suspended: boolean }>;
 };
 
 /**
@@ -126,7 +129,7 @@ export async function getGithubAppSecrets(): Promise<{
   const row = await prisma.githubApp.findUnique({ where: { id: GITHUB_APP_ROW_ID } });
   if (!row) return null;
   return {
-    appId: row.appId,
+    appId: Number(row.appId),
     slug: row.slug,
     clientId: row.clientId,
     clientSecret: opened('clientSecret', row.clientSecret),
@@ -190,6 +193,19 @@ export async function installationToken(installationId: number): Promise<string>
   return fetching;
 }
 
+/**
+ * Which App row exists: its id and when it was made. A different value later means the App was
+ * forgotten or replaced in between.
+ * @returns The generation, or null when no App is set up
+ */
+export async function githubAppGeneration(): Promise<string | null> {
+  const row = await prisma.githubApp.findUnique({
+    where: { id: GITHUB_APP_ROW_ID },
+    select: { appId: true, createdAt: true },
+  });
+  return row ? `${row.appId}:${row.createdAt.getTime()}` : null;
+}
+
 /** Forgets every cached installation token and every fetch in flight (the App changed) */
 export function clearInstallationTokens(): void {
   cacheEpoch += 1;
@@ -212,7 +228,7 @@ export async function getStatus(): Promise<GithubAppStatus> {
     htmlUrl: app.htmlUrl,
     installUrl: `${app.htmlUrl.replace(/\/+$/, '')}/installations/new`,
     installations: installations.map((i) => ({
-      id: i.id,
+      id: githubIdJson(i.id),
       accountLogin: i.accountLogin,
       suspended: i.suspendedAt !== null,
     })),
@@ -230,6 +246,23 @@ export async function getStatus(): Promise<GithubAppStatus> {
 export async function startManifest(userId: string, organization?: string) {
   if (organization !== undefined && !GITHUB_LOGIN_PATTERN.test(organization)) {
     throw new AppError(400, 'That is not a GitHub organization name', 'VALIDATION_ERROR');
+  }
+  // GitHub is told to call this origin back: localhost, or plain http, would make an App that
+  // can never reach this instance, and only deleting it on GitHub repairs that
+  if (process.env.NODE_ENV === 'production') {
+    let secure = false;
+    try {
+      secure = new URL(process.env.FRONTEND_URL ?? '').protocol === 'https:';
+    } catch {
+      // Unset or not a URL
+    }
+    if (!secure) {
+      throw new AppError(
+        409,
+        'FRONTEND_URL must be set to the public https address of this instance before the GitHub App is created, because GitHub is told to call back there. Set it in .env and restart the API',
+        'GITHUB_FRONTEND_URL_REQUIRED',
+      );
+    }
   }
   if (await prisma.githubApp.findUnique({ where: { id: GITHUB_APP_ROW_ID } })) {
     throw appExists();
@@ -409,6 +442,16 @@ export async function deleteApp() {
     // Their tokens belong to this App: no other App can refresh them
     await tx.githubAccount.deleteMany();
     await tx.githubSetupState.deleteMany();
+    // Deliveries of this App that are still open would write its installations back
+    await tx.githubDelivery.updateMany({
+      where: { status: { in: ['PENDING', 'FAILED'] } },
+      data: {
+        status: 'IGNORED',
+        nextAttemptAt: null,
+        error: 'App forgotten',
+        processedAt: new Date(),
+      },
+    });
     return tx.githubApp.deleteMany({ where: { id: GITHUB_APP_ROW_ID } });
   });
   if (count === 0) throw new AppError(404, 'No GitHub App is set up', 'NOT_FOUND');

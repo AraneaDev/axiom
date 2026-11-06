@@ -29,7 +29,7 @@ export const SCOPE_GROUPS = [
   {
     area: 'github',
     label: 'GitHub',
-    description: 'The GitHub App of this installation and its installations',
+    description: "Your connected GitHub account and this instance's GitHub App",
   },
   {
     area: 'admin',

@@ -35,7 +35,7 @@ export async function requireGithubAccount(
       'GITHUB_NOT_CONNECTED',
     );
   }
-  return account;
+  return { githubUserId: Number(account.githubUserId), login: account.login };
 }
 
 /**

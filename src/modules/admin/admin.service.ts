@@ -2,14 +2,18 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import _path from 'path';
 
+import type { Prisma } from '@prisma/client';
+
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { AppError } from '../../middleware/errorHandler';
 import { disconnectUser, revokeLiveAccess } from '../../realtime/access-revocation';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { logger } from '../../utils/logger';
 import { parseServicePagination } from '../../utils/pagination';
 import { logAudit } from '../audit/audit.service';
+import { disconnect as disconnectGithub } from '../github/github-account.service';
 import { isIntegrationUser } from '../github/integration-user';
 import { assertNotLastOwnerTx } from '../orgs/org-roles';
 
@@ -223,12 +227,25 @@ export async function deleteUser(userId: string) {
   await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   // Deleting the last OWNER of an org would leave it unmanageable: transfer ownership first
-  await prisma.$transaction(async (tx) => {
+  const guardLastOwner = async (tx: Prisma.TransactionClient) => {
     const owned = await tx.orgMembership.findMany({ where: { userId, role: 'OWNER' } });
     for (const m of owned) {
       await tx.$queryRaw`SELECT id FROM org_memberships WHERE "orgId" = ${m.orgId} AND role = 'OWNER' FOR UPDATE`;
       await assertNotLastOwnerTx(tx, m.orgId);
     }
+  };
+  await prisma.$transaction(guardLastOwner);
+  // The row cascades with the user, and the grant at GitHub would outlive it: revoked first, on
+  // a best-effort basis, and only for a delete that is going to happen
+  try {
+    await disconnectGithub(userId);
+  } catch (err) {
+    logger.warn('github grant not revoked on user delete', {
+      code: err instanceof AppError ? err.code : undefined,
+    });
+  }
+  await prisma.$transaction(async (tx) => {
+    await guardLastOwner(tx);
     await tx.user.delete({ where: { id: userId } });
   });
   // Live sockets authenticated before the delete: close them

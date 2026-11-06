@@ -10,7 +10,11 @@ import * as service from './github-app.service';
 const status = z.looseObject({
   configured: z.boolean(),
   installations: z.array(
-    z.looseObject({ id: z.number(), accountLogin: z.string(), suspended: z.boolean() }),
+    z.looseObject({
+      id: z.union([z.number(), z.string()]),
+      accountLogin: z.string(),
+      suspended: z.boolean(),
+    }),
   ),
 });
 const noInput = z.object({});

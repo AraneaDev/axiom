@@ -136,6 +136,10 @@ docker compose up -d --build
 
 The `migrate` container runs Prisma migrations before the other containers start.
 
+This release needs `AXIOM_ENCRYPTION_KEY` in `.env`, and backed up, before you run `docker compose up -d --build`. Compose stops with a clear message when it is missing.
+
+`migrate` also encrypts the 2FA secrets that are still plain. Once that has happened, rolling back to an older image breaks 2FA sign-in for everyone who has it enabled, because the old code reads the encrypted values as plain secrets.
+
 ---
 
 ## 7. Backups
@@ -179,7 +183,20 @@ docker run --rm -v axiom_uploads:/data -v $(pwd):/backup alpine \
 
 ---
 
-## 8. Logs
+## 8. GitHub
+
+The GitHub App is set up once, by a platform admin, at `/admin/github`.
+
+- **`FRONTEND_URL`:** set it in `.env` to the public https address of this instance (for example `https://axiom.example.com`) before you create the App. GitHub is told to call back at that address, and creating the App fails with a 409 in production until it is set. An App created with the wrong address can only be repaired by deleting it on GitHub.
+- **Webhook:** GitHub must be able to reach `/api/github/webhook` from the internet. Pass that path through your reverse proxy, and don't put it behind a login or an IP allow-list that excludes GitHub.
+- **Setup:** open `/admin/github` as a platform admin and follow the steps. The App is private, so it can be installed only on the account or organization that owns it. GitHub's form lets you rename the App.
+- **GitHub Enterprise Server:** set `GITHUB_API_URL` and `GITHUB_WEB_URL` in `.env` to the API and web addresses of your server. In production both must be https. They default to `https://api.github.com` and `https://github.com`.
+
+Forgetting the App in Axiom does not delete it on GitHub: delete it there under Settings, Developer settings, GitHub Apps.
+
+---
+
+## 9. Logs
 
 ```bash
 docker compose logs -f api     # Backend logs
@@ -195,7 +212,7 @@ docker compose logs -f
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Problem | Diagnostic Step |
 |---------|----------------|

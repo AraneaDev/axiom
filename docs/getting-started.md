@@ -127,6 +127,8 @@ Copy `.env.example` to `.env`. The table below describes each variable.
 | `JWT_REFRESH_SECRET` | `change-me-to-another-random-secret` | Yes | Secret for signing refresh tokens. Must be at least 32 characters in production. |
 | `AXIOM_ENCRYPTION_KEY` | marked dev key in `.env.example` | Yes | Key that encrypts stored secrets (2FA, GitHub App and tokens). Base64 of 32 bytes: `openssl rand -base64 32`. The app won't start without it, and in production it refuses the dev key. Back it up apart from the database: without it the encrypted values can't be read. |
 | `AXIOM_ENCRYPTION_KEY_PREVIOUS` | _(empty)_ | No | The old key, set only while you rotate. See [Deployment](deployment.md#encryption-key-backup-and-rotation). |
+| `GITHUB_API_URL` | `https://api.github.com` | No | The GitHub API address. Set it only for GitHub Enterprise Server. In production it must be https. |
+| `GITHUB_WEB_URL` | `https://github.com` | No | The GitHub web address. Set it only for GitHub Enterprise Server. In production it must be https. |
 | `PORT` | `3000` | No | Port the Express API listens on. |
 | `NODE_ENV` | `development` | No | `development`, `test`, or `production`. Controls logging verbosity and error detail. |
 | `CORS_ORIGIN` | `http://localhost:7000` | Yes | Allowed origin(s) for CORS. Use `*` in dev only. Set to your domain in production. |

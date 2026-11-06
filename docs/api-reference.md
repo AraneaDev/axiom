@@ -2996,7 +2996,7 @@ Get a single audit log entry.
 
 ## GitHub
 
-The GitHub App is set up once per instance by an admin, and each user connects their own GitHub account. All of these are actions in the `github` area. Everything except the two reads is `uiOnly`, so a token never reaches it. The App routes are also `admin: true`.
+The GitHub App is set up once per instance by an admin, and each user connects their own GitHub account. All of these are actions in the `github` area. Everything except the two reads is `uiOnly`, so a token never reaches it. The App routes are also `admin: true`, except `githubApp.status`.
 
 | Action | Route | Needs | Does |
 |--------|-------|-------|------|

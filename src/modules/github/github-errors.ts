@@ -1,3 +1,4 @@
+import { SecretBoxError } from '../../lib/secret-box';
 import { AppError } from '../../middleware/errorHandler';
 
 /** Who a failed call was made as: decides what a 401 means for the caller */
@@ -155,4 +156,30 @@ const UNAVAILABLE_MESSAGES = {
  */
 export function githubUnavailable(reason: keyof typeof UNAVAILABLE_MESSAGES): AppError {
   return new AppError(502, UNAVAILABLE_MESSAGES[reason], 'GITHUB_UNAVAILABLE');
+}
+
+/**
+ * The id of a GitHub row as JSON carries it. GitHub's ids are 64 bit and stored as BigInt; one
+ * that a JSON number holds exactly (up to 2^53 - 1) is a number, a larger one is a string.
+ * @param id The stored id
+ */
+export const githubIdJson = (id: bigint): number | string =>
+  id <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(id) : id.toString();
+
+/**
+ * Runs a read of a stored GitHub secret. One that does not open (the key changed, or the row
+ * was restored without it) answers a coded 409 the admin can act on, not a bare 500.
+ * @param read Opens the secret
+ */
+export function openGithubSecret<T>(read: () => T): T {
+  try {
+    return read();
+  } catch (err) {
+    if (!(err instanceof SecretBoxError)) throw err;
+    throw new AppError(
+      409,
+      'A stored GitHub secret cannot be read with the configured encryption key. Restore the key, or forget the GitHub App and set it up again',
+      'GITHUB_SECRET_UNREADABLE',
+    );
+  }
 }

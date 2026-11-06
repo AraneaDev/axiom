@@ -9,15 +9,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { createPrismaClient, prisma } from '../../config/database';
 import app from '../../index';
-import { decryptSecret, secretContext } from '../../lib/secret-box';
+import { decryptSecret, encryptSecret, secretContext } from '../../lib/secret-box';
 import { createTestUser, type TestUser } from '../../test/factory';
 import { useGithubFake } from '../../test/github-fake';
 import { seedGithubApp } from '../../test/github-seed';
 import { postWebhook } from '../../test/github-webhook';
+import { deleteUser } from '../admin/admin.service';
 
-import { refreshUserToken } from './github-account.service';
+import { refreshUserToken, userToken } from './github-account.service';
 import { requireGithubAccount, resolveGithubActor } from './github-actor';
-import { getGithubAppSecrets } from './github-app.service';
+import { deleteApp, getGithubAppSecrets } from './github-app.service';
 import { githubRequest, githubWebPost, registeredGithubAuthKinds } from './github-client';
 import { githubError } from './github-errors';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
@@ -833,5 +834,142 @@ describe('a 401 that proves nothing about the token', () => {
       other.closeAllConnections();
       await new Promise((resolve) => other.close(resolve));
     }
+  });
+});
+
+describe('ids above 2^31', () => {
+  it('connects a GitHub user whose id int4 could not hold, and answers it as a number', async () => {
+    const big = 3_100_000_000;
+    const res = (await connect(alice, 'octo-dev', big)).res;
+    expect(res.status).toBe(200);
+    expect(res.body.githubUserId).toBe(big);
+    expect((await accountOf(alice)).githubUserId).toBe(BigInt(big));
+    expect((await request(app).get(BASE).set(as(alice))).body.githubUserId).toBe(big);
+    expect(await requireGithubAccount(alice.id)).toEqual({ githubUserId: big, login: 'octo-dev' });
+    expect((await resolveGithubActor({ id: big, login: 'octo-dev' })).userId).toBe(alice.id);
+  });
+});
+
+describe('a key rotation during a refresh', () => {
+  it('is no lost race: the token is the same, only sealed again', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    await prisma.githubAccount.update({
+      where: { userId: alice.id },
+      data: { accessTokenExpiresAt: new Date(Date.now() + 60_000) },
+    });
+    const before = await accountOf(alice);
+    const oldToken = plain('accessToken', before);
+    fake.setRefreshDelay(400);
+    const running = refreshUserToken(alice.id);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    // What secrets:rotate does: the same token, sealed again (new nonce, so new text)
+    await prisma.githubAccount.update({
+      where: { id: before.id },
+      data: {
+        accessToken: encryptSecret(
+          oldToken,
+          secretContext('githubAccount', 'accessToken', before.id),
+        ),
+      },
+    });
+    expect((await accountOf(alice)).accessToken).not.toBe(before.accessToken);
+    const token = await running;
+    const after = await accountOf(alice);
+    expect(token).not.toBe(oldToken);
+    expect(plain('accessToken', after)).toBe(token);
+    expect(fake.requests.some((r) => r.method === 'DELETE' && r.path.endsWith('/token'))).toBe(
+      false,
+    );
+    expect(fake.isTokenValid(token)).toBe(true);
+  });
+});
+
+describe('a stored secret that does not open', () => {
+  const garble = (id: string) =>
+    encryptSecret('x', secretContext('githubAccount', 'accessToken', `${id}-other`));
+
+  it('answers 409 GITHUB_SECRET_UNREADABLE for a token, not a 500', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    const row = await accountOf(alice);
+    await prisma.githubAccount.update({
+      where: { id: row.id },
+      data: { accessToken: garble(row.id) },
+    });
+    await expect(userToken(alice.id)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'GITHUB_SECRET_UNREADABLE',
+    });
+  });
+
+  it('answers 409 GITHUB_SECRET_UNREADABLE to a webhook when the App secret does not open', async () => {
+    await prisma.githubApp.update({
+      where: { id: 1 },
+      data: { webhookSecret: encryptSecret('x', secretContext('githubApp', 'webhookSecret', '2')) },
+    });
+    const res = await postWebhook('push', {}, { secret: 'anything' });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_SECRET_UNREADABLE');
+  });
+
+  it('disconnects all the same: the row goes, the revoke is skipped, the answer is 200', async () => {
+    await connect(alice, 'octo-dev', 9101);
+    const row = await accountOf(alice);
+    await prisma.githubAccount.update({
+      where: { id: row.id },
+      data: { accessToken: garble(row.id) },
+    });
+    fake.requests.length = 0;
+    const res = await request(app).delete(BASE).set(as(alice));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ connected: false });
+    expect(await prisma.githubAccount.count()).toBe(0);
+    expect(fake.requests.filter((r) => r.method === 'DELETE')).toHaveLength(0);
+  });
+});
+
+describe('deleting a user', () => {
+  it('revokes the GitHub grant before the account cascades away', async () => {
+    const doomed = await createTestUser();
+    await connect(doomed, 'octo-doomed', 9201);
+    const token = plain('accessToken', await accountOf(doomed));
+    await deleteUser(doomed.id);
+    expect(await prisma.user.count({ where: { id: doomed.id } })).toBe(0);
+    expect(await prisma.githubAccount.count({ where: { githubUserId: 9201 } })).toBe(0);
+    expect(fake.requests.some((r) => r.method === 'DELETE' && r.path.endsWith('/grant'))).toBe(
+      true,
+    );
+    expect(fake.isTokenValid(token)).toBe(false);
+  });
+
+  it('deletes all the same when the revoke cannot run', async () => {
+    const doomed = await createTestUser();
+    await connect(doomed, 'octo-doomed', 9202);
+    const row = await accountOf(doomed);
+    await prisma.githubAccount.update({
+      where: { id: row.id },
+      data: {
+        accessToken: encryptSecret('x', secretContext('githubAccount', 'accessToken', 'other')),
+      },
+    });
+    await deleteUser(doomed.id);
+    expect(await prisma.user.count({ where: { id: doomed.id } })).toBe(0);
+  });
+});
+
+describe('a connect that finishes after the App was forgotten', () => {
+  it('stores nothing and revokes the token it got', async () => {
+    const { state } = await start(alice);
+    const code = fake.issueAuthorizationCode('octo-dev', { githubUserId: 9301 });
+    fake.on('GET /user', { status: 200, body: { id: 9301, login: 'octo-dev' }, delayMs: 400 });
+    // supertest sends on then(): start it now
+    const running = Promise.resolve(
+      request(app).post(`${BASE}/connect/complete`).set(as(alice)).send({ code, state }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await deleteApp();
+    const res = await running;
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_APP_MISSING');
+    expect(await prisma.githubAccount.count()).toBe(0);
   });
 });
