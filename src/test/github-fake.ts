@@ -62,6 +62,8 @@ export interface GithubFake {
   issueManifestCode(): string;
   /** Repositories anyone may read, with or without a credential; every other one is private */
   setPublicRepos(repos: string[]): void;
+  /** Every installation token issued so far for that installation stops working (GitHub revoked them early: 401) */
+  revokeInstallationTokens(installationId: number): void;
   /** A `ghs_` token for an installation added before, reaching only that installation's repos */
   issueInstallationToken(installationId: number): string;
   /**
@@ -96,11 +98,22 @@ export interface GithubFake {
    * fakes the clock (`vi.useFakeTimers({ toFake: ['Date'] })`) drives `expires_at` and the
    * fake's refusal of an expired token alike.
    */
-  /** Forgets recorded requests, `on` routes and the refresh counter and delay; the rest stays */
+  /**
+   * A job's log, as GitHub serves it: `GET /repos/:o/:r/actions/jobs/:id/logs` answers 302 to a
+   * signed URL on another origin (`localhost`, not the API's `127.0.0.1`) that serves the text
+   * as `text/plain` and refuses a request that carries an Authorization header, as blob storage
+   * does. `not-found` and `gone` (expired logs) are answered by the API itself, `slow` makes the
+   * blob host take {@link SLOW_BLOB_MS} before it answers. Forgotten by `reset`.
+   */
+  setJobLog(jobId: number, text: string, mode?: JobLogMode): void;
+  /** Forgets recorded requests, `on` routes, job logs and the refresh counter and delay; the rest stays */
   reset(): void;
   close(): Promise<void>;
 }
 
+export type JobLogMode = 'ok' | 'not-found' | 'gone' | 'slow';
+/** How long the blob host holds a `slow` log back */
+export const SLOW_BLOB_MS = 400;
 const TOKEN_LIFETIME_MS = 60 * 60_000;
 /** A user token from the OAuth endpoint lives 8 hours, as GitHub's do */
 const USER_TOKEN_LIFETIME_MS = 8 * 60 * 60_000;
@@ -229,6 +242,7 @@ class GithubFakeServer implements GithubFake {
   private userIds = new Map<string, number>([['octo-dev', 9101]]);
   private oauthClient: { clientId: string; clientSecret: string } | null = null;
   private refreshDelayMs = 0;
+  private jobLogs = new Map<number, { text: string; mode: JobLogMode }>();
   refreshGrants = 0;
 
   constructor(private readonly scenario: string) {}
@@ -377,9 +391,20 @@ class GithubFakeServer implements GithubFake {
     return token;
   }
 
+  revokeInstallationTokens(installationId: number): void {
+    for (const [token, issued] of this.installationTokens) {
+      if (issued.installationId === installationId) this.installationTokens.delete(token);
+    }
+  }
+
+  setJobLog(jobId: number, text: string, mode: JobLogMode = 'ok'): void {
+    this.jobLogs.set(jobId, { text, mode });
+  }
+
   reset(): void {
     this.requests.length = 0;
     this.overrides = [];
+    this.jobLogs.clear();
     this.refreshGrants = 0;
     this.refreshDelayMs = 0;
   }
@@ -536,6 +561,8 @@ class GithubFakeServer implements GithubFake {
    */
   private builtIn(req: RecordedRequest, credential: Credential): FakeReply | null {
     if (this.overrideFor(req)) return null;
+    const jobLog = this.jobLogAnswer(req, credential);
+    if (jobLog) return jobLog;
     const tokenRoute = /^\/app\/installations\/(\d+)\/access_tokens$/.exec(req.path);
     if (req.method === 'POST' && tokenRoute) {
       if (!this.installations.has(Number(tokenRoute[1]))) return NOT_FOUND;
@@ -600,6 +627,41 @@ class GithubFakeServer implements GithubFake {
       return { ...answer, body: { ...body, total_count: repositories.length, repositories } };
     }
     return null;
+  }
+
+  /**
+   * The job log routes: the API's redirect to the blob host, and the blob host's text.
+   * @param req The recorded request
+   * @param credential Who the request authenticated as
+   */
+  private jobLogAnswer(req: RecordedRequest, credential: Credential): FakeReply | null {
+    if (req.method !== 'GET') return null;
+    const api = /^\/repos\/([^/]+)\/([^/]+)\/actions\/jobs\/(\d+)\/logs$/.exec(req.path);
+    if (api) {
+      const log = this.jobLogs.get(Number(api[3]));
+      if (!log) return NOT_FOUND;
+      if (log.mode === 'not-found') return NOT_FOUND;
+      if (log.mode === 'gone') return reply(410, 'Logs expired');
+      const blob = this.baseUrl.replace('127.0.0.1', 'localhost');
+      const signature = randomBytes(8).toString('hex');
+      return {
+        status: 302,
+        headers: { location: `${blob}/blob/job-logs/${api[3]}?sig=${signature}` },
+      };
+    }
+    const blob = /^\/blob\/job-logs\/(\d+)$/.exec(req.path);
+    if (!blob) return null;
+    // Blob storage takes its authority from the signed URL and refuses a second one
+    if (credential.kind !== 'none')
+      return reply(403, 'Authentication information is given in multiple places');
+    const log = this.jobLogs.get(Number(blob[1]));
+    if (!log) return NOT_FOUND;
+    return {
+      status: 200,
+      body: log.text,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+      delayMs: log.mode === 'slow' ? SLOW_BLOB_MS : undefined,
+    };
   }
 
   /**

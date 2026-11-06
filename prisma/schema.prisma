@@ -1465,6 +1465,7 @@ model GithubRepoLink {
   branches            GithubBranch[]
   pullRequests        GithubPullRequest[]
   commits             GithubCommit[]
+  checkRuns           GithubCheckRun[]
 
   @@map("github_repo_links")
 }
@@ -1584,4 +1585,32 @@ model GithubCommit {
 
   @@id([repoLinkId, sha])
   @@map("github_commits")
+}
+
+/// A check run of a commit: the failed step and the end of its log are kept, so an agent reading
+/// a ticket sees why CI failed
+model GithubCheckRun {
+  /// GitHub's check run id (for GitHub Actions also the job id)
+  id              String         @id
+  repoLinkId      String
+  headSha         String
+  name            String
+  appSlug         String
+  /// Actions runs: from the job, for re-running the workflow
+  workflowRunId   String?
+  status          String
+  conclusion      String?
+  htmlUrl         String
+  startedAt       DateTime?
+  completedAt     DateTime?
+  failedStep      String?
+  logTail         String?
+  logTruncated    Boolean        @default(false)
+  logUnavailable  Boolean        @default(false)
+  /// When the newest payload applied says it changed: an older one never overwrites it
+  githubUpdatedAt DateTime
+  repoLink        GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+
+  @@index([repoLinkId, headSha])
+  @@map("github_check_runs")
 }

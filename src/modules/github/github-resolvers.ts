@@ -5,7 +5,11 @@
 import { AppError } from '../../middleware/errorHandler';
 
 import { refreshUserToken, userToken } from './github-account.service';
-import { getGithubAppSecrets, installationToken } from './github-app.service';
+import {
+  getGithubAppSecrets,
+  installationToken,
+  renewInstallationToken,
+} from './github-app.service';
 import { registerGithubAuthResolver } from './github-client';
 import { appJwt } from './github-jwt';
 
@@ -15,10 +19,19 @@ registerGithubAuthResolver('app', async () => {
   return `Bearer ${appJwt(app.appId, app.privateKey)}`;
 });
 
-registerGithubAuthResolver('installation', async (auth) => {
-  if (auth.kind !== 'installation') throw new Error('Not an installation');
-  return `token ${await installationToken(auth.installationId)}`;
-});
+registerGithubAuthResolver(
+  'installation',
+  async (auth) => {
+    if (auth.kind !== 'installation') throw new Error('Not an installation');
+    return `token ${await installationToken(auth.installationId)}`;
+  },
+  // GitHub refused the token (revoked early): forget it and mint a new one, once per call
+  async (auth, refused) => {
+    if (auth.kind !== 'installation') throw new Error('Not an installation');
+    const rejected = refused.replace(/^token\s+/, '');
+    return `token ${await renewInstallationToken(auth.installationId, rejected)}`;
+  },
+);
 
 registerGithubAuthResolver('oauth-app', async () => {
   const app = await getGithubAppSecrets();

@@ -1,0 +1,300 @@
+2026-11-06T10:00:00.1123456Z Current runner version: '2.321.0'
+2026-11-06T10:00:00.2123456Z ##[group]Runner Image Provisioner
+2026-11-06T10:00:00.3123456Z Hosted Compute Agent
+2026-11-06T10:00:00.4123456Z Version: 20261001.1
+2026-11-06T10:00:00.5123456Z ##[endgroup]
+2026-11-06T10:00:00.6123456Z ##[group]Operating System
+2026-11-06T10:00:00.7123456Z Ubuntu
+2026-11-06T10:00:00.8123456Z 24.04.1 LTS
+2026-11-06T10:00:00.9123456Z ##[endgroup]
+2026-11-06T10:00:01.0123456Z ##[group]Run actions/checkout@v4
+2026-11-06T10:00:01.1123456Z with:
+2026-11-06T10:00:01.2123456Z   repository: acme-labs/widget
+2026-11-06T10:00:01.3123456Z   ref: refs/pull/17/merge
+2026-11-06T10:00:01.4123456Z ##[endgroup]
+2026-11-06T10:00:01.5123456Z Syncing repository: acme-labs/widget
+2026-11-06T10:00:01.6123456Z Fetching the repository
+2026-11-06T10:00:01.7123456Z Checking out the ref
+2026-11-06T10:00:01.8123456Z ##[group]Run npm ci
+2026-11-06T10:00:01.9123456Z npm ci
+2026-11-06T10:00:02.0123456Z shell: /usr/bin/bash -e {0}
+2026-11-06T10:00:02.1123456Z ##[endgroup]
+2026-11-06T10:00:02.2123456Z added 412 packages in 9s
+2026-11-06T10:00:02.3123456Z ##[group]Run npm test
+2026-11-06T10:00:02.4123456Z npm test
+2026-11-06T10:00:02.5123456Z shell: /usr/bin/bash -e {0}
+2026-11-06T10:00:02.6123456Z ##[endgroup]
+2026-11-06T10:00:02.7123456Z 
+2026-11-06T10:00:02.8123456Z > widget@1.4.0 test
+2026-11-06T10:00:02.9123456Z > vitest run
+2026-11-06T10:00:03.0123456Z 
+2026-11-06T10:00:03.1123456Z [32m PASS[0m src/widget/part-001.test.ts (2 tests)
+2026-11-06T10:00:03.2123456Z [32m PASS[0m src/widget/part-002.test.ts (3 tests)
+2026-11-06T10:00:03.3123456Z [32m PASS[0m src/widget/part-003.test.ts (4 tests)
+2026-11-06T10:00:03.4123456Z [32m PASS[0m src/widget/part-004.test.ts (5 tests)
+2026-11-06T10:00:03.5123456Z [32m PASS[0m src/widget/part-005.test.ts (6 tests)
+2026-11-06T10:00:03.6123456Z [32m PASS[0m src/widget/part-006.test.ts (7 tests)
+2026-11-06T10:00:03.7123456Z [32m PASS[0m src/widget/part-007.test.ts (1 tests)
+2026-11-06T10:00:03.8123456Z [32m PASS[0m src/widget/part-008.test.ts (2 tests)
+2026-11-06T10:00:03.9123456Z [32m PASS[0m src/widget/part-009.test.ts (3 tests)
+2026-11-06T10:00:04.0123456Z [32m PASS[0m src/widget/part-010.test.ts (4 tests)
+2026-11-06T10:00:04.1123456Z [32m PASS[0m src/widget/part-011.test.ts (5 tests)
+2026-11-06T10:00:04.2123456Z [32m PASS[0m src/widget/part-012.test.ts (6 tests)
+2026-11-06T10:00:04.3123456Z [32m PASS[0m src/widget/part-013.test.ts (7 tests)
+2026-11-06T10:00:04.4123456Z [32m PASS[0m src/widget/part-014.test.ts (1 tests)
+2026-11-06T10:00:04.5123456Z [32m PASS[0m src/widget/part-015.test.ts (2 tests)
+2026-11-06T10:00:04.6123456Z [32m PASS[0m src/widget/part-016.test.ts (3 tests)
+2026-11-06T10:00:04.7123456Z [32m PASS[0m src/widget/part-017.test.ts (4 tests)
+2026-11-06T10:00:04.8123456Z [32m PASS[0m src/widget/part-018.test.ts (5 tests)
+2026-11-06T10:00:04.9123456Z [32m PASS[0m src/widget/part-019.test.ts (6 tests)
+2026-11-06T10:00:05.0123456Z [32m PASS[0m src/widget/part-020.test.ts (7 tests)
+2026-11-06T10:00:05.1123456Z [32m PASS[0m src/widget/part-021.test.ts (1 tests)
+2026-11-06T10:00:05.2123456Z [32m PASS[0m src/widget/part-022.test.ts (2 tests)
+2026-11-06T10:00:05.3123456Z [32m PASS[0m src/widget/part-023.test.ts (3 tests)
+2026-11-06T10:00:05.4123456Z [32m PASS[0m src/widget/part-024.test.ts (4 tests)
+2026-11-06T10:00:05.5123456Z [32m PASS[0m src/widget/part-025.test.ts (5 tests)
+2026-11-06T10:00:05.6123456Z [32m PASS[0m src/widget/part-026.test.ts (6 tests)
+2026-11-06T10:00:05.7123456Z [32m PASS[0m src/widget/part-027.test.ts (7 tests)
+2026-11-06T10:00:05.8123456Z [32m PASS[0m src/widget/part-028.test.ts (1 tests)
+2026-11-06T10:00:05.9123456Z [32m PASS[0m src/widget/part-029.test.ts (2 tests)
+2026-11-06T10:00:06.0123456Z [32m PASS[0m src/widget/part-030.test.ts (3 tests)
+2026-11-06T10:00:06.1123456Z [32m PASS[0m src/widget/part-031.test.ts (4 tests)
+2026-11-06T10:00:06.2123456Z [32m PASS[0m src/widget/part-032.test.ts (5 tests)
+2026-11-06T10:00:06.3123456Z [32m PASS[0m src/widget/part-033.test.ts (6 tests)
+2026-11-06T10:00:06.4123456Z [32m PASS[0m src/widget/part-034.test.ts (7 tests)
+2026-11-06T10:00:06.5123456Z [32m PASS[0m src/widget/part-035.test.ts (1 tests)
+2026-11-06T10:00:06.6123456Z [32m PASS[0m src/widget/part-036.test.ts (2 tests)
+2026-11-06T10:00:06.7123456Z [32m PASS[0m src/widget/part-037.test.ts (3 tests)
+2026-11-06T10:00:06.8123456Z [32m PASS[0m src/widget/part-038.test.ts (4 tests)
+2026-11-06T10:00:06.9123456Z [32m PASS[0m src/widget/part-039.test.ts (5 tests)
+2026-11-06T10:00:07.0123456Z [32m PASS[0m src/widget/part-040.test.ts (6 tests)
+2026-11-06T10:00:07.1123456Z [32m PASS[0m src/widget/part-041.test.ts (7 tests)
+2026-11-06T10:00:07.2123456Z [32m PASS[0m src/widget/part-042.test.ts (1 tests)
+2026-11-06T10:00:07.3123456Z [32m PASS[0m src/widget/part-043.test.ts (2 tests)
+2026-11-06T10:00:07.4123456Z [32m PASS[0m src/widget/part-044.test.ts (3 tests)
+2026-11-06T10:00:07.5123456Z [32m PASS[0m src/widget/part-045.test.ts (4 tests)
+2026-11-06T10:00:07.6123456Z [32m PASS[0m src/widget/part-046.test.ts (5 tests)
+2026-11-06T10:00:07.7123456Z [32m PASS[0m src/widget/part-047.test.ts (6 tests)
+2026-11-06T10:00:07.8123456Z [32m PASS[0m src/widget/part-048.test.ts (7 tests)
+2026-11-06T10:00:07.9123456Z [32m PASS[0m src/widget/part-049.test.ts (1 tests)
+2026-11-06T10:00:08.0123456Z [32m PASS[0m src/widget/part-050.test.ts (2 tests)
+2026-11-06T10:00:08.1123456Z [32m PASS[0m src/widget/part-051.test.ts (3 tests)
+2026-11-06T10:00:08.2123456Z [32m PASS[0m src/widget/part-052.test.ts (4 tests)
+2026-11-06T10:00:08.3123456Z [32m PASS[0m src/widget/part-053.test.ts (5 tests)
+2026-11-06T10:00:08.4123456Z [32m PASS[0m src/widget/part-054.test.ts (6 tests)
+2026-11-06T10:00:08.5123456Z [32m PASS[0m src/widget/part-055.test.ts (7 tests)
+2026-11-06T10:00:08.6123456Z [32m PASS[0m src/widget/part-056.test.ts (1 tests)
+2026-11-06T10:00:08.7123456Z [32m PASS[0m src/widget/part-057.test.ts (2 tests)
+2026-11-06T10:00:08.8123456Z [32m PASS[0m src/widget/part-058.test.ts (3 tests)
+2026-11-06T10:00:08.9123456Z [32m PASS[0m src/widget/part-059.test.ts (4 tests)
+2026-11-06T10:00:09.0123456Z [31;1mFAIL[0m src/widget/render.test.ts > render > draws the frame
+2026-11-06T10:00:09.1123456Z AssertionError: expected 3 to equal 4
+2026-11-06T10:00:09.2123456Z [32m PASS[0m src/widget/part-062.test.ts (7 tests)
+2026-11-06T10:00:09.3123456Z [32m PASS[0m src/widget/part-063.test.ts (1 tests)
+2026-11-06T10:00:09.4123456Z [32m PASS[0m src/widget/part-064.test.ts (2 tests)
+2026-11-06T10:00:09.5123456Z [32m PASS[0m src/widget/part-065.test.ts (3 tests)
+2026-11-06T10:00:09.6123456Z [32m PASS[0m src/widget/part-066.test.ts (4 tests)
+2026-11-06T10:00:09.7123456Z [32m PASS[0m src/widget/part-067.test.ts (5 tests)
+2026-11-06T10:00:09.8123456Z [32m PASS[0m src/widget/part-068.test.ts (6 tests)
+2026-11-06T10:00:09.9123456Z [32m PASS[0m src/widget/part-069.test.ts (7 tests)
+2026-11-06T10:00:10.0123456Z [32m PASS[0m src/widget/part-070.test.ts (1 tests)
+2026-11-06T10:00:10.1123456Z [32m PASS[0m src/widget/part-071.test.ts (2 tests)
+2026-11-06T10:00:10.2123456Z [32m PASS[0m src/widget/part-072.test.ts (3 tests)
+2026-11-06T10:00:10.3123456Z [32m PASS[0m src/widget/part-073.test.ts (4 tests)
+2026-11-06T10:00:10.4123456Z [32m PASS[0m src/widget/part-074.test.ts (5 tests)
+2026-11-06T10:00:10.5123456Z [32m PASS[0m src/widget/part-075.test.ts (6 tests)
+2026-11-06T10:00:10.6123456Z [32m PASS[0m src/widget/part-076.test.ts (7 tests)
+2026-11-06T10:00:10.7123456Z [32m PASS[0m src/widget/part-077.test.ts (1 tests)
+2026-11-06T10:00:10.8123456Z [32m PASS[0m src/widget/part-078.test.ts (2 tests)
+2026-11-06T10:00:10.9123456Z [32m PASS[0m src/widget/part-079.test.ts (3 tests)
+2026-11-06T10:00:11.0123456Z [32m PASS[0m src/widget/part-080.test.ts (4 tests)
+2026-11-06T10:00:11.1123456Z [32m PASS[0m src/widget/part-081.test.ts (5 tests)
+2026-11-06T10:00:11.2123456Z [32m PASS[0m src/widget/part-082.test.ts (6 tests)
+2026-11-06T10:00:11.3123456Z [32m PASS[0m src/widget/part-083.test.ts (7 tests)
+2026-11-06T10:00:11.4123456Z [32m PASS[0m src/widget/part-084.test.ts (1 tests)
+2026-11-06T10:00:11.5123456Z [32m PASS[0m src/widget/part-085.test.ts (2 tests)
+2026-11-06T10:00:11.6123456Z [32m PASS[0m src/widget/part-086.test.ts (3 tests)
+2026-11-06T10:00:11.7123456Z [32m PASS[0m src/widget/part-087.test.ts (4 tests)
+2026-11-06T10:00:11.8123456Z [32m PASS[0m src/widget/part-088.test.ts (5 tests)
+2026-11-06T10:00:11.9123456Z [32m PASS[0m src/widget/part-089.test.ts (6 tests)
+2026-11-06T10:00:12.0123456Z [32m PASS[0m src/widget/part-090.test.ts (7 tests)
+2026-11-06T10:00:12.1123456Z [32m PASS[0m src/widget/part-091.test.ts (1 tests)
+2026-11-06T10:00:12.2123456Z [32m PASS[0m src/widget/part-092.test.ts (2 tests)
+2026-11-06T10:00:12.3123456Z [32m PASS[0m src/widget/part-093.test.ts (3 tests)
+2026-11-06T10:00:12.4123456Z [32m PASS[0m src/widget/part-094.test.ts (4 tests)
+2026-11-06T10:00:12.5123456Z [32m PASS[0m src/widget/part-095.test.ts (5 tests)
+2026-11-06T10:00:12.6123456Z [32m PASS[0m src/widget/part-096.test.ts (6 tests)
+2026-11-06T10:00:12.7123456Z [32m PASS[0m src/widget/part-097.test.ts (7 tests)
+2026-11-06T10:00:12.8123456Z [32m PASS[0m src/widget/part-098.test.ts (1 tests)
+2026-11-06T10:00:12.9123456Z [32m PASS[0m src/widget/part-099.test.ts (2 tests)
+2026-11-06T10:00:13.0123456Z [32m PASS[0m src/widget/part-100.test.ts (3 tests)
+2026-11-06T10:00:13.1123456Z [32m PASS[0m src/widget/part-101.test.ts (4 tests)
+2026-11-06T10:00:13.2123456Z [32m PASS[0m src/widget/part-102.test.ts (5 tests)
+2026-11-06T10:00:13.3123456Z [32m PASS[0m src/widget/part-103.test.ts (6 tests)
+2026-11-06T10:00:13.4123456Z [32m PASS[0m src/widget/part-104.test.ts (7 tests)
+2026-11-06T10:00:13.5123456Z [32m PASS[0m src/widget/part-105.test.ts (1 tests)
+2026-11-06T10:00:13.6123456Z [32m PASS[0m src/widget/part-106.test.ts (2 tests)
+2026-11-06T10:00:13.7123456Z [32m PASS[0m src/widget/part-107.test.ts (3 tests)
+2026-11-06T10:00:13.8123456Z [32m PASS[0m src/widget/part-108.test.ts (4 tests)
+2026-11-06T10:00:13.9123456Z [32m PASS[0m src/widget/part-109.test.ts (5 tests)
+2026-11-06T10:00:14.0123456Z [32m PASS[0m src/widget/part-110.test.ts (6 tests)
+2026-11-06T10:00:14.1123456Z [32m PASS[0m src/widget/part-111.test.ts (7 tests)
+2026-11-06T10:00:14.2123456Z [32m PASS[0m src/widget/part-112.test.ts (1 tests)
+2026-11-06T10:00:14.3123456Z [32m PASS[0m src/widget/part-113.test.ts (2 tests)
+2026-11-06T10:00:14.4123456Z [32m PASS[0m src/widget/part-114.test.ts (3 tests)
+2026-11-06T10:00:14.5123456Z [32m PASS[0m src/widget/part-115.test.ts (4 tests)
+2026-11-06T10:00:14.6123456Z [32m PASS[0m src/widget/part-116.test.ts (5 tests)
+2026-11-06T10:00:14.7123456Z [32m PASS[0m src/widget/part-117.test.ts (6 tests)
+2026-11-06T10:00:14.8123456Z [32m PASS[0m src/widget/part-118.test.ts (7 tests)
+2026-11-06T10:00:14.9123456Z [32m PASS[0m src/widget/part-119.test.ts (1 tests)
+2026-11-06T10:00:15.0123456Z [32m PASS[0m src/widget/part-120.test.ts (2 tests)
+2026-11-06T10:00:15.1123456Z [32m PASS[0m src/widget/part-121.test.ts (3 tests)
+2026-11-06T10:00:15.2123456Z [32m PASS[0m src/widget/part-122.test.ts (4 tests)
+2026-11-06T10:00:15.3123456Z [32m PASS[0m src/widget/part-123.test.ts (5 tests)
+2026-11-06T10:00:15.4123456Z [32m PASS[0m src/widget/part-124.test.ts (6 tests)
+2026-11-06T10:00:15.5123456Z [32m PASS[0m src/widget/part-125.test.ts (7 tests)
+2026-11-06T10:00:15.6123456Z [32m PASS[0m src/widget/part-126.test.ts (1 tests)
+2026-11-06T10:00:15.7123456Z [32m PASS[0m src/widget/part-127.test.ts (2 tests)
+2026-11-06T10:00:15.8123456Z [32m PASS[0m src/widget/part-128.test.ts (3 tests)
+2026-11-06T10:00:15.9123456Z [32m PASS[0m src/widget/part-129.test.ts (4 tests)
+2026-11-06T10:00:16.0123456Z [32m PASS[0m src/widget/part-130.test.ts (5 tests)
+2026-11-06T10:00:16.1123456Z [32m PASS[0m src/widget/part-131.test.ts (6 tests)
+2026-11-06T10:00:16.2123456Z [32m PASS[0m src/widget/part-132.test.ts (7 tests)
+2026-11-06T10:00:16.3123456Z [32m PASS[0m src/widget/part-133.test.ts (1 tests)
+2026-11-06T10:00:16.4123456Z [32m PASS[0m src/widget/part-134.test.ts (2 tests)
+2026-11-06T10:00:16.5123456Z [32m PASS[0m src/widget/part-135.test.ts (3 tests)
+2026-11-06T10:00:16.6123456Z [32m PASS[0m src/widget/part-136.test.ts (4 tests)
+2026-11-06T10:00:16.7123456Z [32m PASS[0m src/widget/part-137.test.ts (5 tests)
+2026-11-06T10:00:16.8123456Z [32m PASS[0m src/widget/part-138.test.ts (6 tests)
+2026-11-06T10:00:16.9123456Z [32m PASS[0m src/widget/part-139.test.ts (7 tests)
+2026-11-06T10:00:17.0123456Z [32m PASS[0m src/widget/part-140.test.ts (1 tests)
+2026-11-06T10:00:17.1123456Z [32m PASS[0m src/widget/part-141.test.ts (2 tests)
+2026-11-06T10:00:17.2123456Z [32m PASS[0m src/widget/part-142.test.ts (3 tests)
+2026-11-06T10:00:17.3123456Z [32m PASS[0m src/widget/part-143.test.ts (4 tests)
+2026-11-06T10:00:17.4123456Z [32m PASS[0m src/widget/part-144.test.ts (5 tests)
+2026-11-06T10:00:17.5123456Z [32m PASS[0m src/widget/part-145.test.ts (6 tests)
+2026-11-06T10:00:17.6123456Z [32m PASS[0m src/widget/part-146.test.ts (7 tests)
+2026-11-06T10:00:17.7123456Z [32m PASS[0m src/widget/part-147.test.ts (1 tests)
+2026-11-06T10:00:17.8123456Z [32m PASS[0m src/widget/part-148.test.ts (2 tests)
+2026-11-06T10:00:17.9123456Z [32m PASS[0m src/widget/part-149.test.ts (3 tests)
+2026-11-06T10:00:18.0123456Z [32m PASS[0m src/widget/part-150.test.ts (4 tests)
+2026-11-06T10:00:18.1123456Z [32m PASS[0m src/widget/part-151.test.ts (5 tests)
+2026-11-06T10:00:18.2123456Z [32m PASS[0m src/widget/part-152.test.ts (6 tests)
+2026-11-06T10:00:18.3123456Z [32m PASS[0m src/widget/part-153.test.ts (7 tests)
+2026-11-06T10:00:18.4123456Z [32m PASS[0m src/widget/part-154.test.ts (1 tests)
+2026-11-06T10:00:18.5123456Z [32m PASS[0m src/widget/part-155.test.ts (2 tests)
+2026-11-06T10:00:18.6123456Z [32m PASS[0m src/widget/part-156.test.ts (3 tests)
+2026-11-06T10:00:18.7123456Z [32m PASS[0m src/widget/part-157.test.ts (4 tests)
+2026-11-06T10:00:18.8123456Z [32m PASS[0m src/widget/part-158.test.ts (5 tests)
+2026-11-06T10:00:18.9123456Z [32m PASS[0m src/widget/part-159.test.ts (6 tests)
+2026-11-06T10:00:19.0123456Z [32m PASS[0m src/widget/part-160.test.ts (7 tests)
+2026-11-06T10:00:19.1123456Z [32m PASS[0m src/widget/part-161.test.ts (1 tests)
+2026-11-06T10:00:19.2123456Z [32m PASS[0m src/widget/part-162.test.ts (2 tests)
+2026-11-06T10:00:19.3123456Z [32m PASS[0m src/widget/part-163.test.ts (3 tests)
+2026-11-06T10:00:19.4123456Z [32m PASS[0m src/widget/part-164.test.ts (4 tests)
+2026-11-06T10:00:19.5123456Z [32m PASS[0m src/widget/part-165.test.ts (5 tests)
+2026-11-06T10:00:19.6123456Z [32m PASS[0m src/widget/part-166.test.ts (6 tests)
+2026-11-06T10:00:19.7123456Z [32m PASS[0m src/widget/part-167.test.ts (7 tests)
+2026-11-06T10:00:19.8123456Z [32m PASS[0m src/widget/part-168.test.ts (1 tests)
+2026-11-06T10:00:19.9123456Z [32m PASS[0m src/widget/part-169.test.ts (2 tests)
+2026-11-06T10:00:20.0123456Z [32m PASS[0m src/widget/part-170.test.ts (3 tests)
+2026-11-06T10:00:20.1123456Z [32m PASS[0m src/widget/part-171.test.ts (4 tests)
+2026-11-06T10:00:20.2123456Z [32m PASS[0m src/widget/part-172.test.ts (5 tests)
+2026-11-06T10:00:20.3123456Z [32m PASS[0m src/widget/part-173.test.ts (6 tests)
+2026-11-06T10:00:20.4123456Z [32m PASS[0m src/widget/part-174.test.ts (7 tests)
+2026-11-06T10:00:20.5123456Z [32m PASS[0m src/widget/part-175.test.ts (1 tests)
+2026-11-06T10:00:20.6123456Z [32m PASS[0m src/widget/part-176.test.ts (2 tests)
+2026-11-06T10:00:20.7123456Z [32m PASS[0m src/widget/part-177.test.ts (3 tests)
+2026-11-06T10:00:20.8123456Z [32m PASS[0m src/widget/part-178.test.ts (4 tests)
+2026-11-06T10:00:20.9123456Z [32m PASS[0m src/widget/part-179.test.ts (5 tests)
+2026-11-06T10:00:21.0123456Z [32m PASS[0m src/widget/part-180.test.ts (6 tests)
+2026-11-06T10:00:21.1123456Z [32m PASS[0m src/widget/part-181.test.ts (7 tests)
+2026-11-06T10:00:21.2123456Z [32m PASS[0m src/widget/part-182.test.ts (1 tests)
+2026-11-06T10:00:21.3123456Z [32m PASS[0m src/widget/part-183.test.ts (2 tests)
+2026-11-06T10:00:21.4123456Z [32m PASS[0m src/widget/part-184.test.ts (3 tests)
+2026-11-06T10:00:21.5123456Z [32m PASS[0m src/widget/part-185.test.ts (4 tests)
+2026-11-06T10:00:21.6123456Z [32m PASS[0m src/widget/part-186.test.ts (5 tests)
+2026-11-06T10:00:21.7123456Z [32m PASS[0m src/widget/part-187.test.ts (6 tests)
+2026-11-06T10:00:21.8123456Z [32m PASS[0m src/widget/part-188.test.ts (7 tests)
+2026-11-06T10:00:21.9123456Z [32m PASS[0m src/widget/part-189.test.ts (1 tests)
+2026-11-06T10:00:22.0123456Z [32m PASS[0m src/widget/part-190.test.ts (2 tests)
+2026-11-06T10:00:22.1123456Z [32m PASS[0m src/widget/part-191.test.ts (3 tests)
+2026-11-06T10:00:22.2123456Z [32m PASS[0m src/widget/part-192.test.ts (4 tests)
+2026-11-06T10:00:22.3123456Z [32m PASS[0m src/widget/part-193.test.ts (5 tests)
+2026-11-06T10:00:22.4123456Z [32m PASS[0m src/widget/part-194.test.ts (6 tests)
+2026-11-06T10:00:22.5123456Z [32m PASS[0m src/widget/part-195.test.ts (7 tests)
+2026-11-06T10:00:22.6123456Z [32m PASS[0m src/widget/part-196.test.ts (1 tests)
+2026-11-06T10:00:22.7123456Z [32m PASS[0m src/widget/part-197.test.ts (2 tests)
+2026-11-06T10:00:22.8123456Z [32m PASS[0m src/widget/part-198.test.ts (3 tests)
+2026-11-06T10:00:22.9123456Z [32m PASS[0m src/widget/part-199.test.ts (4 tests)
+2026-11-06T10:00:23.0123456Z [32m PASS[0m src/widget/part-200.test.ts (5 tests)
+2026-11-06T10:00:23.1123456Z [32m PASS[0m src/widget/part-201.test.ts (6 tests)
+2026-11-06T10:00:23.2123456Z [32m PASS[0m src/widget/part-202.test.ts (7 tests)
+2026-11-06T10:00:23.3123456Z [32m PASS[0m src/widget/part-203.test.ts (1 tests)
+2026-11-06T10:00:23.4123456Z [32m PASS[0m src/widget/part-204.test.ts (2 tests)
+2026-11-06T10:00:23.5123456Z [32m PASS[0m src/widget/part-205.test.ts (3 tests)
+2026-11-06T10:00:23.6123456Z [32m PASS[0m src/widget/part-206.test.ts (4 tests)
+2026-11-06T10:00:23.7123456Z [32m PASS[0m src/widget/part-207.test.ts (5 tests)
+2026-11-06T10:00:23.8123456Z [32m PASS[0m src/widget/part-208.test.ts (6 tests)
+2026-11-06T10:00:23.9123456Z [32m PASS[0m src/widget/part-209.test.ts (7 tests)
+2026-11-06T10:00:24.0123456Z [32m PASS[0m src/widget/part-210.test.ts (1 tests)
+2026-11-06T10:00:24.1123456Z [32m PASS[0m src/widget/part-211.test.ts (2 tests)
+2026-11-06T10:00:24.2123456Z [32m PASS[0m src/widget/part-212.test.ts (3 tests)
+2026-11-06T10:00:24.3123456Z [32m PASS[0m src/widget/part-213.test.ts (4 tests)
+2026-11-06T10:00:24.4123456Z [32m PASS[0m src/widget/part-214.test.ts (5 tests)
+2026-11-06T10:00:24.5123456Z [32m PASS[0m src/widget/part-215.test.ts (6 tests)
+2026-11-06T10:00:24.6123456Z [32m PASS[0m src/widget/part-216.test.ts (7 tests)
+2026-11-06T10:00:24.7123456Z [32m PASS[0m src/widget/part-217.test.ts (1 tests)
+2026-11-06T10:00:24.8123456Z [32m PASS[0m src/widget/part-218.test.ts (2 tests)
+2026-11-06T10:00:24.9123456Z [32m PASS[0m src/widget/part-219.test.ts (3 tests)
+2026-11-06T10:00:25.0123456Z [32m PASS[0m src/widget/part-220.test.ts (4 tests)
+2026-11-06T10:00:25.1123456Z [32m PASS[0m src/widget/part-221.test.ts (5 tests)
+2026-11-06T10:00:25.2123456Z [32m PASS[0m src/widget/part-222.test.ts (6 tests)
+2026-11-06T10:00:25.3123456Z [32m PASS[0m src/widget/part-223.test.ts (7 tests)
+2026-11-06T10:00:25.4123456Z [32m PASS[0m src/widget/part-224.test.ts (1 tests)
+2026-11-06T10:00:25.5123456Z [32m PASS[0m src/widget/part-225.test.ts (2 tests)
+2026-11-06T10:00:25.6123456Z [32m PASS[0m src/widget/part-226.test.ts (3 tests)
+2026-11-06T10:00:25.7123456Z [32m PASS[0m src/widget/part-227.test.ts (4 tests)
+2026-11-06T10:00:25.8123456Z [32m PASS[0m src/widget/part-228.test.ts (5 tests)
+2026-11-06T10:00:25.9123456Z [32m PASS[0m src/widget/part-229.test.ts (6 tests)
+2026-11-06T10:00:26.0123456Z [32m PASS[0m src/widget/part-230.test.ts (7 tests)
+2026-11-06T10:00:26.1123456Z [32m PASS[0m src/widget/part-231.test.ts (1 tests)
+2026-11-06T10:00:26.2123456Z [32m PASS[0m src/widget/part-232.test.ts (2 tests)
+2026-11-06T10:00:26.3123456Z [32m PASS[0m src/widget/part-233.test.ts (3 tests)
+2026-11-06T10:00:26.4123456Z [32m PASS[0m src/widget/part-234.test.ts (4 tests)
+2026-11-06T10:00:26.5123456Z [32m PASS[0m src/widget/part-235.test.ts (5 tests)
+2026-11-06T10:00:26.6123456Z [32m PASS[0m src/widget/part-236.test.ts (6 tests)
+2026-11-06T10:00:26.7123456Z [32m PASS[0m src/widget/part-237.test.ts (7 tests)
+2026-11-06T10:00:26.8123456Z Test Files  1 failed | 237 passed
+2026-11-06T10:00:26.9123456Z      Tests  1 failed | 118 passed
+2026-11-06T10:00:27.0123456Z ##[error]Process completed with exit code 1.
+2026-11-06T10:00:27.1123456Z ##[group]Post Run actions/checkout
+2026-11-06T10:00:27.2123456Z Post job cleanup.
+2026-11-06T10:00:27.3123456Z [command]/usr/bin/git version
+2026-11-06T10:00:27.4123456Z git version 2.47.0
+2026-11-06T10:00:27.5123456Z Temporarily overriding HOME
+2026-11-06T10:00:27.6123456Z [command]/usr/bin/git config --local --name-only --get-regexp core.sshCommand
+2026-11-06T10:00:27.7123456Z ##[endgroup]
+2026-11-06T10:00:27.8123456Z Cleaning up orphan processes
+2026-11-06T10:00:27.9123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.0123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.1123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.2123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.3123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.4123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.5123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.6123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.7123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.8123456Z Cleaning up orphan processes
+2026-11-06T10:00:28.9123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.0123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.1123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.2123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.3123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.4123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.5123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.6123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.7123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.8123456Z Cleaning up orphan processes
+2026-11-06T10:00:29.9123456Z Cleaning up orphan processes
+2026-11-06T10:00:30.0123456Z Cleaning up orphan processes

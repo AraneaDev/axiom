@@ -27,28 +27,49 @@ export type StoreMeta = {
   before?: string | null;
 };
 
-type Sender = { id: number; login: string } | null;
+/** Who did it on GitHub */
+export type Sender = { id: number; login: string } | null;
 type Client = Prisma.TransactionClient;
 
 // Postgres refuses NUL in text, and a delivery that fails on it would fail on every retry
-const clean = (text: string) => text.replaceAll('\u0000', '');
+/** @param text The text to make storable */
+export const clean = (text: string) => text.replaceAll('\u0000', '');
 const text = z.string().transform(clean);
 
 const FALLBACK_HOST = 'https://github.com/';
 
-// GitHub's link if it is an https one (it ends up in an href), else the one built from the repo
-function httpsOr(url: string, fallback: string): string {
+/**
+ * GitHub's link if it is an https one (it ends up in an href), else the one built from the repo.
+ * @param url The link GitHub gave
+ * @param fallback The link to use instead
+ */
+export function httpsOr(url: string, fallback: string): string {
   return /^https:\/\/[^\s]+$/i.test(url) ? url : fallback;
 }
 
-async function loadLink(repoLinkId: string) {
+/**
+ * The project and the web address of a repository link.
+ * @param repoLinkId The repository link
+ */
+export async function loadLink(repoLinkId: string) {
   return prisma.githubRepoLink.findUnique({
     where: { id: repoLinkId },
     select: { projectId: true, htmlUrl: true },
   });
 }
 
-async function outcomeBase(
+/**
+ * The part of an outcome every store shares: the actor is resolved here, before any transaction.
+ * @param repoLinkId The repository link
+ * @param link What `loadLink` found, null when the link is gone
+ * @param sender Who did it on GitHub
+ * @param source What brought the change in
+ * @param meta The event behind the change
+ * @param defaults The event and action to use when the meta names none
+ * @param defaults.event
+ * @param defaults.action
+ */
+export async function outcomeBase(
   repoLinkId: string,
   link: { projectId: string } | null,
   sender: Sender,
@@ -88,21 +109,30 @@ async function linksOf(
   };
 }
 
-// The first statement of every store transaction. Unlinking deletes the link row and its children
-// cascade, so a store takes the link before its own rows, in that order too, and never waits on a
-// lock the unlink holds the other way round. False when the link is gone: nothing is stored.
-async function lockLink(tx: Client, repoLinkId: string): Promise<boolean> {
+/**
+ * The first statement of every store transaction. Unlinking deletes the link row and its children
+ * cascade, so a store takes the link before its own rows, in that order too, and never waits on a
+ * lock the unlink holds the other way round.
+ * @param tx The transaction
+ * @param repoLinkId The repository link
+ * @returns False when the link is gone: nothing is stored
+ */
+export async function lockLink(tx: Client, repoLinkId: string): Promise<boolean> {
   const rows = await tx.$queryRaw<
     { id: string }[]
   >`SELECT id FROM github_repo_links WHERE id = ${repoLinkId} FOR KEY SHARE`;
   return rows.length > 0;
 }
 
-const union = (...lists: string[][]) => [...new Set(lists.flat())];
+/** @param lists Lists of ids */
+export const union = (...lists: string[][]) => [...new Set(lists.flat())];
 
-// Runs a store once more when two calls raced to create the same row and the other won; the
-// failed attempt rolled back whole, so the second one starts from what the winner stored
-async function retryOnRace<T>(run: () => Promise<T>): Promise<T> {
+/**
+ * Runs a store once more when two calls raced to create the same row and the other won; the
+ * failed attempt rolled back whole, so the second one starts from what the winner stored.
+ * @param run The store
+ */
+export async function retryOnRace<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (err) {
@@ -179,7 +209,7 @@ const commitSchema = z.object({
   author: z.object({ username: text.nullish() }).nullish(),
 });
 
-const senderSchema = githubUser.nullable().catch(null);
+export const senderSchema = githubUser.nullable().catch(null);
 
 // ---- Branches
 
@@ -624,7 +654,7 @@ async function storeCommits(
  * the new link's business), with its `lastDeliveryAt` set; null when the repository has none.
  * @param d The delivery
  */
-async function linkOf(d: GithubDeliveryContext) {
+export async function linkOf(d: GithubDeliveryContext) {
   if (d.repoId === null) return null;
   const link = await findRepoLinkByRepoId(d.repoId);
   if (!link) return null;

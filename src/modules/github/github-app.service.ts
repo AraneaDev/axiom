@@ -194,6 +194,23 @@ export async function installationToken(installationId: number): Promise<string>
 }
 
 /**
+ * A new token for an installation whose token GitHub refused (revoked early, say). The cached
+ * token is dropped only if it is the refused one: a call refused together with another finds the
+ * new token the first one fetched, and calls made at the same time share one request.
+ * @param installationId GitHub's installation id
+ * @param refused The token GitHub refused
+ */
+export async function renewInstallationToken(
+  installationId: number,
+  refused: string,
+): Promise<string> {
+  if (installationTokens.get(installationId)?.token === refused) {
+    installationTokens.delete(installationId);
+  }
+  return installationToken(installationId);
+}
+
+/**
  * Which App row exists: its id and when it was made. A different value later means the App was
  * forgotten or replaced in between.
  * @returns The generation, or null when no App is set up

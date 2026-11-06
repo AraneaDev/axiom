@@ -420,30 +420,49 @@ export async function githubText(
   path: string,
   maxBytes: number,
 ): Promise<string> {
-  const credential = await authorization(auth);
-  const response = await send(apiUrl(path), {
-    method: 'GET',
-    credential,
-    timeoutMs: TEXT_TIMEOUT_MS,
-    authAfterRedirect: 'never',
-  });
+  let credential = await authorization(auth);
+  const url = apiUrl(path);
+  const attempt = () =>
+    send(url, {
+      method: 'GET',
+      credential,
+      timeoutMs: TEXT_TIMEOUT_MS,
+      authAfterRedirect: 'never',
+    });
+  let response = await attempt();
+  // As in `request`: a 401 from the API host to a request that carried the token is renewed once
+  const refresh =
+    auth.kind === 'none' || auth.kind === 'token' ? undefined : refreshers.get(auth.kind);
+  if (response.status === 401 && refresh && credential && credentialed.has(response)) {
+    await response.body?.cancel();
+    credential = await refresh(auth, credential);
+    response = await attempt();
+  }
   if (!response.ok) throw await failure(auth, response, credential);
 
+  // A rolling window: the head of what has arrived is trimmed away as soon as the rest fits the
+  // cap, so no more than `maxBytes` and the chunk being read are ever held
   const chunks: Buffer[] = [];
   let kept = 0;
   try {
     for await (const chunk of response.body ?? []) {
-      chunks.push(Buffer.from(chunk));
-      kept += chunk.byteLength;
-      while (chunks.length > 1 && kept - chunks[0].byteLength >= maxBytes) {
-        kept -= chunks.shift()!.byteLength;
+      const bytes = Buffer.from(chunk);
+      chunks.push(bytes);
+      kept += bytes.byteLength;
+      while (kept > maxBytes) {
+        const excess = kept - maxBytes;
+        if (chunks[0].byteLength <= excess) {
+          kept -= chunks.shift()!.byteLength;
+        } else {
+          chunks[0] = chunks[0].subarray(excess);
+          kept -= excess;
+        }
       }
     }
   } catch (error) {
     throw githubUnavailable(isTimeout(error) ? 'timeout' : 'unreadable');
   }
-  let tail = Buffer.concat(chunks);
-  tail = tail.subarray(Math.max(0, tail.length - maxBytes));
+  const tail = Buffer.concat(chunks);
   // Cutting may split a character: drop UTF-8 continuation bytes at the start
   let start = 0;
   while (start < tail.length && start < 3 && (tail[start] & 0xc0) === 0x80) start++;

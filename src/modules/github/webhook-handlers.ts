@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { prisma } from '../../config/database';
 
+import './checks.service';
 import './github-events';
 import './github-realtime';
 import { onGithubEvent, type GithubDeliveryContext } from './webhook-dispatch';
