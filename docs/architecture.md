@@ -425,7 +425,7 @@ graph LR
 | `comment:added` | New comment | `project:{projectId}` |
 | `board:moved` | Column change | `project:{projectId}` |
 | `issue:links-updated` | Wiki page linked to or unlinked from an issue | `issue:{issueId}` |
-| `issue:development-updated` | GitHub branches, pull requests or commits of an issue changed | `project:{projectId}` |
+| `issue:development-updated` | GitHub branches, pull requests or commits of some issues changed (`issueIds`) | `project:{projectId}` |
 | `wiki:updated` | Page save | `wiki:{spaceId}` |
 | `notification` | Any notification | `user:{userId}` |
 

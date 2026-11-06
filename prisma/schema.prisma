@@ -1502,15 +1502,17 @@ model GithubIssueLink {
 
 /// A branch of a linked repository; `deletedAt` marks one deleted on GitHub (its issue links stay)
 model GithubBranch {
-  id         String         @id @default(cuid())
-  repoLinkId String
-  name       String
+  id           String         @id @default(cuid())
+  repoLinkId   String
+  name         String
   /// Empty while only a `create` event has been seen: that payload carries no commit
-  headSha    String
-  deletedAt  DateTime?
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
-  repoLink   GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+  headSha      String
+  deletedAt    DateTime?
+  /// When GitHub says the newest push or deletion applied happened: an older one is skipped
+  lastPushedAt DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  repoLink     GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
 
   @@unique([repoLinkId, name])
   @@map("github_branches")

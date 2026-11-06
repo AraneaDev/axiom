@@ -147,7 +147,7 @@ describe('pull_request', () => {
       headRef: `${ctx.projectPrefix.toLowerCase()}-1-x`,
       baseRef: 'main',
     });
-    expect(pr.requestedReviewers).toEqual([{ login: 'review-bot' }]);
+    expect(pr.requestedReviewers).toEqual([{ login: 'review-bot', githubId: 7002 }]);
     const links = await linksOf('PULL_REQUEST', pr.id);
     expect(Object.fromEntries(links.map((l) => [l.issueId, l.sources]))).toEqual({
       [issueIds[1]]: ['BRANCH_NAME'],
@@ -277,6 +277,155 @@ describe('pull_request', () => {
     expect(transitionsOf().filter((t) => t === 'pr_merged')).toHaveLength(1);
   });
 
+  const prPayload = (mutate: (pr: Payload) => void = () => {}) =>
+    fixture('pull_request.opened', (p) => mutate(p.pull_request))
+      .pull_request as PullRequestPayload;
+
+  it('ends with the links of the newest title when two deliveries race, and reports once', async () => {
+    for (let n = 40; n < 46; n++) {
+      const older = prPayload((pr) => {
+        pr.number = n;
+        pr.title = `${ctx.projectPrefix}-1 older`;
+        pr.body = '';
+        pr.head.ref = 'x';
+        pr.updated_at = '2026-11-01T10:00:00Z';
+      });
+      const newer = prPayload((pr) => {
+        pr.number = n;
+        pr.title = `${ctx.projectPrefix}-2 newer`;
+        pr.body = '';
+        pr.head.ref = 'x';
+        pr.updated_at = '2026-11-01T10:05:00Z';
+      });
+      outcomes.length = 0;
+      await Promise.all([
+        storePullRequest(repoLinkId, newer, null, 'webhook'),
+        storePullRequest(repoLinkId, older, null, 'webhook'),
+      ]);
+      const row = await prisma.githubPullRequest.findFirstOrThrow({
+        where: { repoLinkId, number: n },
+      });
+      expect(row.title).toContain('newer');
+      expect((await linksOf('PULL_REQUEST', row.id)).map((l) => l.issueId)).toEqual([issueIds[2]]);
+      expect(transitionsOf().filter((t) => t === 'pr_opened')).toHaveLength(1);
+    }
+  });
+
+  it.each([
+    ['open', {}, 'pr_opened'],
+    ['merged', { state: 'closed', merged: true, merged_at: '2026-11-01T11:00:00Z' }, 'pr_merged'],
+    ['closed', { state: 'closed', closed_at: '2026-11-01T11:00:00Z' }, 'pr_closed'],
+  ])('reports the transition of the state a new %s PR is stored in', async (_name, patch, want) => {
+    const outcome = await storePullRequest(
+      repoLinkId,
+      prPayload((pr) => Object.assign(pr, patch, { requested_reviewers: [] })),
+      null,
+      'webhook',
+    );
+    expect(outcome.transitions).toEqual([want]);
+  });
+
+  it('never moves a merged PR out of MERGED, not even by a payload of the same second', async () => {
+    await storePullRequest(
+      repoLinkId,
+      fixture('pull_request.closed-merged').pull_request as PullRequestPayload,
+      null,
+      'webhook',
+    );
+    outcomes.length = 0;
+    for (const updated of ['2026-11-02T09:00:00Z', '2026-11-03T09:00:00Z']) {
+      const late = await storePullRequest(
+        repoLinkId,
+        prPayload((pr) => {
+          pr.updated_at = updated;
+        }),
+        null,
+        'webhook',
+      );
+      expect(late.transitions).toEqual([]);
+    }
+    const [pr] = await prs();
+    expect(pr.state).toBe('MERGED');
+    expect(pr.mergeCommitSha).toBe('2'.repeat(40));
+    expect(transitionsOf()).toEqual([]);
+  });
+
+  it('keeps the mergeable state when a payload carries none', async () => {
+    await deliver('pull_request', fixture('pull_request.opened'));
+    expect((await prs())[0].mergeableState).toBe('clean');
+    await deliver(
+      'pull_request_review',
+      fixture('pull_request_review.submitted', (p) => {
+        delete p.pull_request.mergeable_state;
+        p.pull_request.updated_at = '2026-11-01T13:00:00Z';
+      }),
+    );
+    expect((await prs())[0].mergeableState).toBe('clean');
+  });
+
+  it('compares requested reviewers by GitHub id: a renamed reviewer is not added again', async () => {
+    await storePullRequest(repoLinkId, prPayload(), null, 'webhook');
+    const outcome = await storePullRequest(
+      repoLinkId,
+      prPayload((pr) => {
+        pr.requested_reviewers = [{ id: 7002, login: 'review-bot-renamed' }];
+        pr.updated_at = '2026-11-01T10:30:00Z';
+      }),
+      null,
+      'webhook',
+    );
+    expect(outcome.transitions).toEqual([]);
+    const added = await storePullRequest(
+      repoLinkId,
+      prPayload((pr) => {
+        pr.requested_reviewers = [
+          { id: 7002, login: 'review-bot-renamed' },
+          { id: 7003, login: 'second-reviewer' },
+        ];
+        pr.updated_at = '2026-11-01T10:40:00Z';
+      }),
+      null,
+      'webhook',
+    );
+    expect(added.transitions).toEqual(['reviewers_added']);
+  });
+
+  it('stores only https links, and builds the link from the repository otherwise', async () => {
+    await storePullRequest(
+      repoLinkId,
+      prPayload((pr) => {
+        pr.html_url = 'javascript:alert(1)';
+      }),
+      null,
+      'webhook',
+    );
+    expect((await prs())[0].htmlUrl).toBe('https://github.com/acme-labs/widget/pull/17');
+    await deliver(
+      'push',
+      fixture('push', (p) => {
+        p.commits[0].url = 'data:text/html,x';
+      }),
+    );
+    const commit = await prisma.githubCommit.findFirstOrThrow({
+      where: { repoLinkId, sha: '1'.repeat(40) },
+    });
+    expect(commit.htmlUrl).toBe(`https://github.com/acme-labs/widget/commit/${'1'.repeat(40)}`);
+  });
+
+  it('strips NUL characters from titles, refs and logins', async () => {
+    await storePullRequest(
+      repoLinkId,
+      prPayload((pr) => {
+        pr.title = 'a\u0000b';
+        pr.head.ref = 'r\u0000ef';
+        pr.user = { id: 9998, login: 'lo\u0000gin' };
+      }),
+      null,
+      'webhook',
+    );
+    expect((await prs())[0]).toMatchObject({ title: 'ab', headRef: 'ref', authorLogin: 'login' });
+  });
+
   it('is ignored for a repository nobody linked', async () => {
     const status = await deliver(
       'pull_request',
@@ -358,21 +507,65 @@ describe('push, create and delete', () => {
     expect(transitionsOf()).toEqual([]);
   });
 
-  it('marks a deleted branch and keeps its links; a new push brings it back', async () => {
+  const pushAt = (seconds: number, sha: string) =>
+    fixture('push', (p) => {
+      p.repository.pushed_at = seconds;
+      p.after = sha;
+    });
+  const branchRow = () => prisma.githubBranch.findFirstOrThrow({ where: { repoLinkId } });
+
+  it('marks a deleted branch and keeps its links', async () => {
     await deliver('push', fixture('push'));
-    const branch = await prisma.githubBranch.findFirstOrThrow({ where: { repoLinkId } });
-    outcomes.length = 0;
+    const branch = await branchRow();
     await deliver('delete', fixture('delete-branch'));
-    const gone = await prisma.githubBranch.findUniqueOrThrow({ where: { id: branch.id } });
+    const gone = await branchRow();
     expect(gone.deletedAt).not.toBeNull();
     expect(gone.headSha).toBe('3'.repeat(40));
     expect(await linksOf('BRANCH', branch.id)).toHaveLength(1);
+  });
+
+  it('brings a deleted branch back with a push newer than the delete, on the new head', async () => {
+    await deliver('push', pushAt(1000, 'a'.repeat(40)));
+    await deliver('delete', fixture('delete-branch'));
     outcomes.length = 0;
-    await deliver('push', fixture('push'));
-    expect(
-      (await prisma.githubBranch.findUniqueOrThrow({ where: { id: branch.id } })).deletedAt,
-    ).toBeNull();
+    await deliver('push', pushAt(Math.floor(Date.now() / 1000) + 60, 'b'.repeat(40)));
+    const back = await branchRow();
+    expect(back.deletedAt).toBeNull();
+    expect(back.headSha).toBe('b'.repeat(40));
     expect(transitionsOf()).toEqual(['branch_created']);
+  });
+
+  it('skips a push older than the delete: the branch stays deleted', async () => {
+    await deliver('push', pushAt(1000, 'a'.repeat(40)));
+    await deliver('delete', fixture('delete-branch'));
+    outcomes.length = 0;
+    await deliver('push', pushAt(1500, 'b'.repeat(40)));
+    const row = await branchRow();
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.headSha).toBe('a'.repeat(40));
+    expect(transitionsOf()).toEqual([]);
+  });
+
+  it('skips a push older than the stored head', async () => {
+    await deliver('push', pushAt(2000, 'a'.repeat(40)));
+    await deliver('push', pushAt(1000, 'b'.repeat(40)));
+    expect((await branchRow()).headSha).toBe('a'.repeat(40));
+  });
+
+  it('never lets a create event bring a deleted branch back', async () => {
+    await deliver('push', pushAt(1000, 'a'.repeat(40)));
+    await deliver('delete', fixture('delete-branch'));
+    outcomes.length = 0;
+    await deliver('create', fixture('create-branch'));
+    expect((await branchRow()).deletedAt).not.toBeNull();
+    expect(transitionsOf()).toEqual([]);
+  });
+
+  it('does not sync a commit it has stored before', async () => {
+    await deliver('push', fixture('push'));
+    await prisma.githubIssueLink.deleteMany({ where: { repoLinkId, targetType: 'COMMIT' } });
+    await deliver('push', fixture('push'));
+    expect(await linksOf('COMMIT')).toHaveLength(0);
   });
 
   it('ignores a push to something other than a branch', async () => {
@@ -416,6 +609,40 @@ describe('pull_request_review', () => {
     expect(transitionsOf()).not.toContain('review_added');
   });
 
+  it('never sets a dismissed review back to its earlier state', async () => {
+    await deliver('pull_request_review', fixture('pull_request_review.submitted'));
+    await deliver(
+      'pull_request_review',
+      fixture('pull_request_review.submitted', (p) => {
+        p.action = 'dismissed';
+        p.review.state = 'dismissed';
+      }),
+    );
+    expect((await prisma.githubReview.findUniqueOrThrow({ where: { id: '5001' } })).state).toBe(
+      'dismissed',
+    );
+    // A `submitted` delivered late, with the review's own submitted_at
+    await deliver('pull_request_review', fixture('pull_request_review.submitted'));
+    expect((await prisma.githubReview.findUniqueOrThrow({ where: { id: '5001' } })).state).toBe(
+      'dismissed',
+    );
+  });
+
+  it('lets a later state of a review replace an earlier one', async () => {
+    await deliver('pull_request_review', fixture('pull_request_review.submitted'));
+    await deliver(
+      'pull_request_review',
+      fixture('pull_request_review.submitted', (p) => {
+        p.action = 'edited';
+        p.review.state = 'changes_requested';
+        p.review.submitted_at = '2026-11-01T12:00:05Z';
+      }),
+    );
+    expect((await prisma.githubReview.findUniqueOrThrow({ where: { id: '5001' } })).state).toBe(
+      'changes_requested',
+    );
+  });
+
   it('stores a review of a PR it has not seen yet', async () => {
     await deliver('pull_request_review', fixture('pull_request_review.submitted'));
     expect(await prs()).toHaveLength(1);
@@ -444,17 +671,17 @@ describe('pull_request_review', () => {
 });
 
 describe('listeners', () => {
-  it('broadcasts issue:development-updated to the project room for each linked issue', async () => {
+  it('broadcasts issue:development-updated once to the project room, naming every linked issue', async () => {
     const spy = vi.spyOn(broadcast, 'broadcastToRoom').mockImplementation(() => {});
     try {
       await deliver('pull_request', fixture('pull_request.opened'));
-      await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
+      await vi.waitFor(() => expect(spy).toHaveBeenCalled());
       const calls = spy.mock.calls.filter(([, e]) => e.type === 'issue:development-updated');
-      expect(calls.map(([room]) => room)).toEqual(Array(3).fill(`project:${ctx.projectId}`));
-      expect(calls.map(([, e]) => (e as { issueId: string }).issueId).sort()).toEqual(
-        Object.values(issueIds).sort(),
-      );
-      expect(calls[0][1]).toMatchObject({ projectId: ctx.projectId });
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toBe(`project:${ctx.projectId}`);
+      const event = calls[0][1] as { projectId: string; issueIds: string[] };
+      expect(event.projectId).toBe(ctx.projectId);
+      expect(event.issueIds.slice().sort()).toEqual(Object.values(issueIds).slice().sort());
     } finally {
       spy.mockRestore();
     }
@@ -463,7 +690,7 @@ describe('listeners', () => {
   it('counts the delivery as processed when a listener throws, and logs without the payload', async () => {
     const { logger } = await import('../../utils/logger');
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-    onGithubOutcome(async () => {
+    const off = onGithubOutcome(async () => {
       throw new Error('listener broke');
     });
     try {
@@ -471,6 +698,7 @@ describe('listeners', () => {
       expect(warn).toHaveBeenCalled();
       expect(JSON.stringify(warn.mock.calls)).not.toContain('voorbeeld-dev');
     } finally {
+      off();
       warn.mockRestore();
     }
   });

@@ -10,7 +10,7 @@ export type RealtimeEvent =
   | { type: 'issue:updated'; projectId: string; issueId: string }
   | { type: 'issue:created'; projectId: string; issueId: string }
   | { type: 'issue:links-updated'; issueId: string }
-  | { type: 'issue:development-updated'; projectId: string; issueId: string }
+  | { type: 'issue:development-updated'; projectId: string; issueIds: string[] }
   | { type: 'comment:added'; projectId: string; issueId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
   | { type: 'sprint:updated'; projectId: string; sprintId: string }

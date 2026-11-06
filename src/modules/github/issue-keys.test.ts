@@ -38,6 +38,17 @@ describe('extractIssueNumbers', () => {
     expect(found[19]).toBe(20);
   });
 
+  it('does not read a key glued to a letter or digit of any script', () => {
+    expect(extractIssueNumbers('éAXM-4', 'AXM')).toEqual([]);
+    expect(extractIssueNumbers('AXM-5ü', 'AXM')).toEqual([]);
+    expect(extractIssueNumbers('٣AXM-4', 'AXM')).toEqual([]);
+    expect(extractIssueNumbers('(AXM-4), «axm-5»', 'AXM')).toEqual([4, 5]);
+  });
+
+  it('reads a leading zero as the number it spells', () => {
+    expect(extractIssueNumbers('AXM-007 and AXM-7', 'AXM')).toEqual([7]);
+  });
+
   it('escapes regex characters in a prefix', () => {
     expect(extractIssueNumbers('AXM-1 A.M-2 A+M-3', 'A.M')).toEqual([2]);
     expect(extractIssueNumbers('A+M-3', 'A+M')).toEqual([3]);
@@ -150,7 +161,36 @@ describe('syncLinks', () => {
     });
     expect(res.linked).toEqual([]);
     expect(await prisma.githubIssueLink.count({ where: { targetKey: 'pr-3' } })).toBe(0);
-    expect(foreignIssueId).toBeTruthy();
+    expect(await prisma.githubIssueLink.count({ where: { issueId: foreignIssueId } })).toBe(0);
+  });
+
+  it('keeps at most 20 issues per target across all its texts', async () => {
+    const numbers = Array.from({ length: 30 }, (_, i) => 100 + i);
+    for (const n of numbers) await makeIssue(ctx.projectId, n);
+    const keys = (from: number, to: number) =>
+      numbers
+        .slice(from, to)
+        .map((n) => `${prefix()}-${n}`)
+        .join(' ');
+    const res = await syncLinks(repoLinkId, target('pr-cap'), {
+      BRANCH_NAME: keys(0, 12),
+      PR_TITLE: keys(10, 22),
+      PR_BODY: keys(20, 30),
+    });
+    expect(res.linked).toHaveLength(20);
+    expect(await prisma.githubIssueLink.count({ where: { targetKey: 'pr-cap' } })).toBe(20);
+    await prisma.githubIssueLink.deleteMany({ where: { targetKey: 'pr-cap' } });
+  });
+
+  it('runs inside the caller transaction: a rollback takes the links with it', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const res = await syncLinks(repoLinkId, target('pr-tx'), { PR_TITLE: `${prefix()}-1` }, tx);
+        expect(res.added).toEqual([issueIds[1]]);
+        throw new Error('roll back');
+      }),
+    ).rejects.toThrow('roll back');
+    expect(await prisma.githubIssueLink.count({ where: { targetKey: 'pr-tx' } })).toBe(0);
   });
 
   it('links a commit through its message only', async () => {

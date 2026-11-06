@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 import { SecretBoxError } from '../../lib/secret-box';
 import { AppError } from '../../middleware/errorHandler';
 
@@ -182,4 +184,12 @@ export function openGithubSecret<T>(read: () => T): T {
       'GITHUB_SECRET_UNREADABLE',
     );
   }
+}
+
+/**
+ * Whether a database call failed on a unique key: two writers raced to create the same row.
+ * @param err What was thrown
+ */
+export function isUniqueViolation(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 }

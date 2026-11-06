@@ -1,76 +1,18 @@
-import { Prisma, type GithubPrState } from '@prisma/client';
+import type { GithubPrState, Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
-import { logger } from '../../utils/logger';
 
-import { resolveGithubActor, type GithubActor } from './github-actor';
+import { resolveGithubActor } from './github-actor';
+import { isUniqueViolation } from './github-errors';
+import { reportOutcome, type GithubEventOutcome, type GithubTransition } from './github-outcomes';
 import { drivesAutomation } from './issue-keys';
 import { syncLinks, type LinkTarget, type SyncResult } from './issue-links.service';
 import { findRepoLinkByRepoId } from './repo-link.service';
 import { onGithubEvent, type GithubDeliveryContext } from './webhook-dispatch';
 
-// ---- Outcomes
-
-export type GithubTransition =
-  | 'pr_opened'
-  | 'pr_reopened'
-  | 'pr_ready_for_review'
-  | 'pr_merged'
-  | 'pr_closed'
-  | 'reviewers_added'
-  | 'review_added'
-  | 'branch_created'
-  | 'checks_failed'
-  | 'checks_passed';
-
-/** What one stored change did, told to every listener once the change is committed */
-export type GithubEventOutcome = {
-  repoLinkId: string;
-  projectId: string;
-  event: string;
-  action: string | null;
-  source: 'webhook' | 'reconcile' | 'action';
-  pullRequestId?: string;
-  branchId?: string;
-  headSha?: string;
-  actor: GithubActor;
-  /** The issues the changed branch, pull request or commits name now */
-  linkedIssueIds: string[];
-  /** The issues that stopped being named by this change (their development panel changed too) */
-  removedIssueIds: string[];
-  /** The linked issues named through a branch name or a PR title */
-  drivingIssueIds: string[];
-  transitions: GithubTransition[];
-  payload: Record<string, unknown>;
-};
-
-type OutcomeListener = (outcome: GithubEventOutcome) => Promise<void>;
-const listeners: OutcomeListener[] = [];
-
-/**
- * Registers a listener for stored changes. Listeners run in registration order after the change
- * is committed. One that throws is logged (without the payload) and does not fail the delivery.
- * @param listener Told each outcome
- */
-export function onGithubOutcome(listener: OutcomeListener): void {
-  listeners.push(listener);
-}
-
-async function report(outcome: GithubEventOutcome): Promise<void> {
-  for (const listener of listeners) {
-    try {
-      await listener(outcome);
-    } catch (err) {
-      logger.warn('github outcome listener failed', {
-        repoLinkId: outcome.repoLinkId,
-        event: outcome.event,
-        action: outcome.action,
-        error: err instanceof Error ? err.message : 'unknown',
-      });
-    }
-  }
-}
+export { onGithubOutcome } from './github-outcomes';
+export type { GithubEventOutcome, GithubTransition } from './github-outcomes';
 
 /** Where a store call comes from, and what it was told of the event behind it */
 export type StoreMeta = {
@@ -79,21 +21,39 @@ export type StoreMeta = {
   payload?: Record<string, unknown>;
   /** Issues the commits of the same push named: they join the outcome of the branch */
   commitLinks?: Pick<SyncResult, 'linked' | 'removed' | 'driving'>;
+  /** When GitHub says a push or deletion happened: an older one never overwrites a newer one */
+  at?: Date | null;
 };
 
 type Sender = { id: number; login: string } | null;
+type Client = Prisma.TransactionClient;
+
+// Postgres refuses NUL in text, and a delivery that fails on it would fail on every retry
+const clean = (text: string) => text.replaceAll('\u0000', '');
+const text = z.string().transform(clean);
+
+const FALLBACK_HOST = 'https://github.com/';
+
+// GitHub's link if it is an https one (it ends up in an href), else the one built from the repo
+function httpsOr(url: string, fallback: string): string {
+  return /^https:\/\/[^\s]+$/i.test(url) ? url : fallback;
+}
+
+async function loadLink(repoLinkId: string) {
+  return prisma.githubRepoLink.findUnique({
+    where: { id: repoLinkId },
+    select: { projectId: true, htmlUrl: true },
+  });
+}
 
 async function outcomeBase(
   repoLinkId: string,
+  link: { projectId: string } | null,
   sender: Sender,
   source: GithubEventOutcome['source'],
   meta: StoreMeta,
   defaults: { event: string; action: string | null },
 ): Promise<Omit<GithubEventOutcome, 'transitions'>> {
-  const link = await prisma.githubRepoLink.findUnique({
-    where: { id: repoLinkId },
-    select: { projectId: true },
-  });
   return {
     repoLinkId,
     projectId: link?.projectId ?? '',
@@ -109,8 +69,12 @@ async function outcomeBase(
 }
 
 // The issues a target is linked to now, and those linked through a driving source
-async function linksOf(repoLinkId: string, target: LinkTarget): Promise<SyncResult> {
-  const rows = await prisma.githubIssueLink.findMany({
+async function linksOf(
+  client: Client | typeof prisma,
+  repoLinkId: string,
+  target: LinkTarget,
+): Promise<SyncResult> {
+  const rows = await client.githubIssueLink.findMany({
     where: { repoLinkId, targetType: target.type, targetKey: target.key },
     select: { issueId: true, sources: true },
   });
@@ -124,10 +88,8 @@ async function linksOf(repoLinkId: string, target: LinkTarget): Promise<SyncResu
 
 const union = (...lists: string[][]) => [...new Set(lists.flat())];
 
-const isUniqueViolation = (err: unknown) =>
-  err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
-
-// Runs a store once more when two calls raced to create the same row and the other won
+// Runs a store once more when two calls raced to create the same row and the other won; the
+// failed attempt rolled back whole, so the second one starts from what the winner stored
 async function retryOnRace<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
@@ -142,11 +104,11 @@ async function retryOnRace<T>(run: () => Promise<T>): Promise<T> {
 /**
  * Cuts a text to at most a number of bytes of UTF-8 without splitting a character, and drops NUL
  * characters, which the database refuses.
- * @param text The text
+ * @param value The text
  * @param maxBytes The most bytes to keep
  */
-export function cutUtf8(text: string, maxBytes: number): string {
-  const bytes = Buffer.from(text.replaceAll('\u0000', ''), 'utf8');
+export function cutUtf8(value: string, maxBytes: number): string {
+  const bytes = Buffer.from(clean(value), 'utf8');
   if (bytes.length <= maxBytes) return bytes.toString('utf8');
   let end = maxBytes;
   // A continuation byte (10xxxxxx) at the cut means the character straddles it: leave it out
@@ -160,20 +122,20 @@ const COMMIT_MESSAGE_BYTES = 2048;
 // ---- Payloads
 
 const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'not a date');
-const githubUser = z.object({ id: z.number().int(), login: z.string().min(1) });
+const githubUser = z.object({ id: z.number().int(), login: text.pipe(z.string().min(1)) });
 
 const pullRequestSchema = z.object({
   number: z.number().int().positive(),
-  title: z.string(),
-  body: z.string().nullish(),
+  title: text,
+  body: text.nullish(),
   state: z.enum(['open', 'closed']),
   draft: z.boolean().nullish(),
   merged: z.boolean().nullish(),
   user: githubUser.nullish(),
-  head: z.object({ ref: z.string(), sha: z.string() }),
-  base: z.object({ ref: z.string() }),
-  mergeable_state: z.string().nullish(),
-  merge_commit_sha: z.string().nullish(),
+  head: z.object({ ref: text, sha: text }),
+  base: z.object({ ref: text }),
+  mergeable_state: text.nullish(),
+  merge_commit_sha: text.nullish(),
   requested_reviewers: z.array(githubUser).nullish(),
   html_url: z.string(),
   created_at: timestamp,
@@ -188,9 +150,9 @@ export type PullRequestPayload = z.input<typeof pullRequestSchema>;
 const reviewSchema = z.object({
   id: z.number().int(),
   user: githubUser.nullish(),
-  state: z.string(),
+  state: text,
   body: z.string().nullish(),
-  commit_id: z.string(),
+  commit_id: text,
   submitted_at: timestamp.nullish(),
 });
 
@@ -198,11 +160,11 @@ const reviewSchema = z.object({
 export type ReviewPayload = z.input<typeof reviewSchema>;
 
 const commitSchema = z.object({
-  id: z.string().min(1),
+  id: text.pipe(z.string().min(1)),
   message: z.string(),
   timestamp,
   url: z.string(),
-  author: z.object({ username: z.string().nullish() }).nullish(),
+  author: z.object({ username: text.nullish() }).nullish(),
 });
 
 const senderSchema = githubUser.nullable().catch(null);
@@ -211,7 +173,10 @@ const senderSchema = githubUser.nullable().catch(null);
 
 /**
  * Stores a branch: created or moved to a new head, or marked deleted. The branch name is synced
- * as the `BRANCH_NAME` of the branch's issue links, except for a deletion, which keeps them.
+ * as the `BRANCH_NAME` of the branch's issue links (in the same transaction), except for a
+ * deletion, which keeps them. A push or deletion older than the newest one applied (`meta.at`)
+ * changes nothing; a `create` event never brings a deleted branch back (a re-created branch
+ * also gets a push, which does).
  * @param repoLinkId The repository link
  * @param branch The name and the head
  * @param branch.name The branch name
@@ -229,49 +194,59 @@ export async function storeBranch(
   source: GithubEventOutcome['source'],
   meta: StoreMeta = {},
 ): Promise<GithubEventOutcome> {
+  const link = await loadLink(repoLinkId);
+  const name = clean(branch.name);
+  const at = meta.at ?? null;
   const stored = await retryOnRace(() =>
     prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM github_branches WHERE "repoLinkId" = ${repoLinkId} AND name = ${branch.name} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM github_branches WHERE "repoLinkId" = ${repoLinkId} AND name = ${name} FOR UPDATE`;
       const before = await tx.githubBranch.findUnique({
-        where: { repoLinkId_name: { repoLinkId, name: branch.name } },
+        where: { repoLinkId_name: { repoLinkId, name } },
       });
+      const nothing = { row: before, created: false, links: null as SyncResult | null };
+      if (before?.lastPushedAt && at && at < before.lastPushedAt)
+        return { ...nothing, stale: true };
+      let row = before;
+      let created = false;
       if (branch.sha === null) {
-        if (!before) return { row: null, created: false };
-        const row = before.deletedAt
-          ? before
-          : await tx.githubBranch.update({
-              where: { id: before.id },
-              data: { deletedAt: new Date() },
-            });
-        return { row, created: false };
-      }
-      if (!before) {
-        const row = await tx.githubBranch.create({
-          data: { repoLinkId, name: branch.name, headSha: branch.sha },
+        if (!before) return { ...nothing, stale: false };
+        row = await tx.githubBranch.update({
+          where: { id: before.id },
+          data: {
+            deletedAt: before.deletedAt ?? new Date(),
+            lastPushedAt: at ?? before.lastPushedAt,
+          },
         });
-        return { row, created: true };
+      } else if (!before) {
+        row = await tx.githubBranch.create({
+          data: { repoLinkId, name, headSha: branch.sha, lastPushedAt: at },
+        });
+        created = true;
+      } else if (branch.sha === '') {
+        // A create event: it names no head, and a deleted branch stays deleted
+        row = before;
+      } else {
+        row = await tx.githubBranch.update({
+          where: { id: before.id },
+          data: { headSha: branch.sha, deletedAt: null, lastPushedAt: at ?? before.lastPushedAt },
+        });
+        created = before.deletedAt !== null;
       }
-      const row = await tx.githubBranch.update({
-        where: { id: before.id },
-        data: { headSha: branch.sha || before.headSha, deletedAt: null },
-      });
-      return { row, created: before.deletedAt !== null };
+      const target: LinkTarget = { type: 'BRANCH', key: row.id };
+      const links =
+        branch.sha === null || row.deletedAt
+          ? await linksOf(tx, repoLinkId, target)
+          : await syncLinks(repoLinkId, target, { BRANCH_NAME: name }, tx);
+      return { row, created, links, stale: false };
     }),
   );
 
-  const base = await outcomeBase(repoLinkId, sender, source, meta, {
+  const base = await outcomeBase(repoLinkId, link, sender, source, meta, {
     event: branch.sha === null ? 'delete' : 'push',
     action: null,
   });
   const commit = meta.commitLinks ?? { linked: [], removed: [], driving: [] };
-  let own: SyncResult = { added: [], removed: [], linked: [], driving: [] };
-  if (stored.row) {
-    const target: LinkTarget = { type: 'BRANCH', key: stored.row.id };
-    own =
-      branch.sha === null
-        ? await linksOf(repoLinkId, target)
-        : await syncLinks(repoLinkId, target, { BRANCH_NAME: branch.name });
-  }
+  const own = stored.links ?? { added: [], removed: [], linked: [], driving: [] };
   const outcome: GithubEventOutcome = {
     ...base,
     branchId: stored.row?.id,
@@ -281,7 +256,7 @@ export async function storeBranch(
     drivingIssueIds: union(own.driving, commit.driving),
     transitions: stored.created ? ['branch_created'] : [],
   };
-  await report(outcome);
+  if (!stored.stale) await reportOutcome(outcome);
   return outcome;
 }
 
@@ -292,7 +267,7 @@ const stateOf = (pr: z.infer<typeof pullRequestSchema>): GithubPrState => {
   return pr.merged || pr.merged_at ? 'MERGED' : 'CLOSED';
 };
 
-type StoredReviewer = { login: string; userId?: string };
+type StoredReviewer = { login: string; githubId?: number; userId?: string };
 
 async function reviewersOf(pr: z.infer<typeof pullRequestSchema>): Promise<StoredReviewer[]> {
   const users = pr.requested_reviewers ?? [];
@@ -304,7 +279,7 @@ async function reviewersOf(pr: z.infer<typeof pullRequestSchema>): Promise<Store
   const byId = new Map(accounts.map((a) => [Number(a.githubUserId), a.userId]));
   return users.map((u) => {
     const userId = byId.get(u.id);
-    return userId ? { login: u.login, userId } : { login: u.login };
+    return { login: u.login, githubId: u.id, ...(userId ? { userId } : {}) };
   });
 }
 
@@ -312,29 +287,38 @@ function prTransitions(
   before: { state: GithubPrState; draft: boolean; requestedReviewers: unknown } | null,
   after: { state: GithubPrState; draft: boolean; requestedReviewers: unknown },
 ): GithubTransition[] {
-  const logins = (value: unknown) =>
-    new Set(((value as StoredReviewer[] | null) ?? []).map((r) => r.login));
   const out: GithubTransition[] = [];
-  if (!before) out.push('pr_opened');
-  else if (before.state !== after.state) {
+  if (!before) {
+    // A row stored for the first time reports the state it is stored in
+    out.push(
+      after.state === 'OPEN' ? 'pr_opened' : after.state === 'MERGED' ? 'pr_merged' : 'pr_closed',
+    );
+  } else if (before.state !== after.state) {
     if (after.state === 'MERGED') out.push('pr_merged');
     else if (after.state === 'CLOSED') out.push('pr_closed');
     else out.push('pr_reopened');
   } else if (before.draft && !after.draft && after.state === 'OPEN') {
     out.push('pr_ready_for_review');
   }
-  const known = logins(before?.requestedReviewers);
-  if ([...logins(after.requestedReviewers)].some((login) => !known.has(login))) {
-    out.push('reviewers_added');
-  }
+  const known = (before?.requestedReviewers as StoredReviewer[] | null) ?? [];
+  const knownIds = new Set(known.map((r) => r.githubId).filter((id) => id !== undefined));
+  const knownLogins = new Set(known.map((r) => r.login));
+  // By GitHub id (a renamed reviewer is the same one), by login for a row stored without ids
+  const added = ((after.requestedReviewers as StoredReviewer[] | null) ?? []).some(
+    (r) => !(r.githubId !== undefined && knownIds.has(r.githubId)) && !knownLogins.has(r.login),
+  );
+  if (added) out.push('reviewers_added');
   return out;
 }
 
 /**
- * Stores a pull request and syncs its issue links (branch name, title and body). A payload
- * older than the stored `githubUpdatedAt` changes nothing. The row is locked while it is read
- * and written, so the transitions come from the row before and after and two deliveries of the
- * same change report it once.
+ * Stores a pull request and syncs its issue links (branch name, title and body) in the same
+ * transaction. The row is locked while it is read, written and synced, so the links match the
+ * stored row, the transitions come from the row before and after, and two deliveries of the
+ * same change report it once. A payload older than the stored `githubUpdatedAt` changes
+ * nothing, and a merged PR stays merged: GitHub cannot reopen it, so a payload that says
+ * otherwise is an old one (`updated_at` has a resolution of one second). Likewise a closed PR is
+ * not reopened by a payload of the same second.
  * @param repoLinkId The repository link
  * @param pullRequest GitHub's pull request object
  * @param sender Who did it on GitHub
@@ -350,6 +334,7 @@ export async function storePullRequest(
   meta: StoreMeta = {},
 ): Promise<GithubEventOutcome> {
   const pr = pullRequestSchema.parse(pullRequest);
+  const link = await loadLink(repoLinkId);
   const author = await resolveGithubActor(pr.user ?? null);
   const reviewers = await reviewersOf(pr);
   const data = {
@@ -361,10 +346,9 @@ export async function storePullRequest(
     headRef: pr.head.ref,
     headSha: pr.head.sha,
     baseRef: pr.base.ref,
-    mergeableState: pr.mergeable_state ?? null,
     mergeCommitSha: pr.merge_commit_sha ?? null,
     requestedReviewers: reviewers,
-    htmlUrl: pr.html_url,
+    htmlUrl: httpsOr(pr.html_url, `${link?.htmlUrl ?? FALLBACK_HOST}/pull/${pr.number}`),
     openedAt: new Date(pr.created_at),
     mergedAt: pr.merged_at ? new Date(pr.merged_at) : null,
     closedAt: pr.closed_at ? new Date(pr.closed_at) : null,
@@ -377,45 +361,79 @@ export async function storePullRequest(
       const before = await tx.githubPullRequest.findUnique({
         where: { repoLinkId_number: { repoLinkId, number: pr.number } },
       });
+      const target = (id: string): LinkTarget => ({ type: 'PULL_REQUEST', key: id });
+      const sync = (id: string) =>
+        syncLinks(
+          repoLinkId,
+          target(id),
+          { BRANCH_NAME: pr.head.ref, PR_TITLE: pr.title, PR_BODY: pr.body ?? '' },
+          tx,
+        );
       if (!before) {
         const row = await tx.githubPullRequest.create({
-          data: { ...data, repoLinkId, number: pr.number },
+          data: {
+            ...data,
+            mergeableState: pr.mergeable_state ?? null,
+            repoLinkId,
+            number: pr.number,
+          },
         });
-        return { row, stale: false, transitions: prTransitions(null, row) };
+        return {
+          row,
+          stale: false,
+          transitions: prTransitions(null, row),
+          links: await sync(row.id),
+        };
       }
-      // One conditional write: an older payload matches nothing
-      const written = await tx.githubPullRequest.updateMany({
-        where: { id: before.id, githubUpdatedAt: { lte: data.githubUpdatedAt } },
-        data,
-      });
-      if (written.count === 0) return { row: before, stale: true, transitions: [] };
+      const sameSecond = data.githubUpdatedAt.getTime() === before.githubUpdatedAt.getTime();
+      const leavesFinal =
+        data.state !== before.state &&
+        (before.state === 'MERGED' || (before.state === 'CLOSED' && sameSecond));
+      // One conditional write: an older payload matches nothing, nor does one that would move a
+      // merged PR
+      const written = leavesFinal
+        ? { count: 0 }
+        : await tx.githubPullRequest.updateMany({
+            where: {
+              id: before.id,
+              githubUpdatedAt: { lte: data.githubUpdatedAt },
+              ...(data.state === 'MERGED' ? {} : { state: { not: 'MERGED' } }),
+            },
+            // A payload without a mergeable state (a review's) leaves the stored one alone
+            data: { ...data, mergeableState: pr.mergeable_state ?? undefined },
+          });
+      if (written.count === 0) {
+        return {
+          row: before,
+          stale: true,
+          transitions: [] as GithubTransition[],
+          links: await linksOf(tx, repoLinkId, target(before.id)),
+        };
+      }
       const row = await tx.githubPullRequest.findUniqueOrThrow({ where: { id: before.id } });
-      return { row, stale: false, transitions: prTransitions(before, row) };
+      return {
+        row,
+        stale: false,
+        transitions: prTransitions(before, row),
+        links: await sync(row.id),
+      };
     }),
   );
 
-  const base = await outcomeBase(repoLinkId, sender, source, meta, {
+  const base = await outcomeBase(repoLinkId, link, sender, source, meta, {
     event: 'pull_request',
     action: null,
   });
-  const target: LinkTarget = { type: 'PULL_REQUEST', key: stored.row.id };
-  const links = stored.stale
-    ? await linksOf(repoLinkId, target)
-    : await syncLinks(repoLinkId, target, {
-        BRANCH_NAME: pr.head.ref,
-        PR_TITLE: pr.title,
-        PR_BODY: pr.body ?? '',
-      });
   const outcome: GithubEventOutcome = {
     ...base,
     pullRequestId: stored.row.id,
     headSha: stored.row.headSha,
-    linkedIssueIds: links.linked,
-    removedIssueIds: links.removed,
-    drivingIssueIds: links.driving,
+    linkedIssueIds: stored.links.linked,
+    removedIssueIds: stored.links.removed,
+    drivingIssueIds: stored.links.driving,
     transitions: stored.transitions,
   };
-  if (!stored.stale) await report(outcome);
+  if (!stored.stale) await reportOutcome(outcome);
   return outcome;
 }
 
@@ -423,7 +441,9 @@ export async function storePullRequest(
 
 /**
  * Stores a review of a pull request: new, or changed by an edit or a dismissal. The first time a
- * review id is stored it reports `review_added`; the insert decides who was first.
+ * review id is stored it reports `review_added`; the insert decides who was first. An existing
+ * review is replaced only by a later `submitted_at`, or at the same time by a state that does not
+ * rank lower: a dismissed review is never set back by a `submitted` that arrives late.
  * @param pullRequestId The stored pull request
  * @param review GitHub's review object
  * @param sender Who did it on GitHub
@@ -443,6 +463,7 @@ export async function storeReview(
     where: { id: pullRequestId },
     select: { repoLinkId: true, headSha: true },
   });
+  const link = await loadLink(pr.repoLinkId);
   const author = await resolveGithubActor(parsed.user ?? null);
   const data = {
     authorLogin: author.login,
@@ -453,6 +474,7 @@ export async function storeReview(
     submittedAt: parsed.submitted_at ? new Date(parsed.submitted_at) : new Date(),
   };
   const id = String(parsed.id);
+  const dismissed = data.state.toLowerCase() === 'dismissed';
   const added = await prisma.$transaction(async (tx) => {
     const created = await tx.githubReview.createMany({
       data: [{ id, pullRequestId, ...data }],
@@ -460,17 +482,33 @@ export async function storeReview(
     });
     if (created.count > 0) return true;
     await tx.githubReview.updateMany({
-      where: { id, pullRequestId },
-      data: { state: data.state, body: data.body, commitSha: data.commitSha },
+      where: {
+        id,
+        pullRequestId,
+        OR: [
+          { submittedAt: { lt: data.submittedAt } },
+          {
+            submittedAt: data.submittedAt,
+            // Dismissed ranks above every other state
+            ...(dismissed ? {} : { NOT: { state: { equals: 'dismissed', mode: 'insensitive' } } }),
+          },
+        ],
+      },
+      data: {
+        state: data.state,
+        body: data.body,
+        commitSha: data.commitSha,
+        submittedAt: data.submittedAt,
+      },
     });
     return false;
   });
 
-  const base = await outcomeBase(pr.repoLinkId, sender, source, meta, {
+  const base = await outcomeBase(pr.repoLinkId, link, sender, source, meta, {
     event: 'pull_request_review',
     action: null,
   });
-  const links = await linksOf(pr.repoLinkId, { type: 'PULL_REQUEST', key: pullRequestId });
+  const links = await linksOf(prisma, pr.repoLinkId, { type: 'PULL_REQUEST', key: pullRequestId });
   const outcome: GithubEventOutcome = {
     ...base,
     pullRequestId,
@@ -479,41 +517,56 @@ export async function storeReview(
     drivingIssueIds: links.driving,
     transitions: added ? ['review_added'] : [],
   };
-  await report(outcome);
+  await reportOutcome(outcome);
   return outcome;
 }
 
 // ---- Commits
 
 /**
- * Stores the commits of a push and syncs each one's issue links from its message. Commits are
- * keyed by sha, so a commit seen again is the same row.
+ * Stores the commits of a push and syncs each new one's issue links from its message. Commits
+ * are keyed by sha and never change, so one stored before is left alone (a merge pushes its
+ * commits again). A commit and its links are stored in one transaction.
  * @param repoLinkId The repository link
+ * @param repoUrl The repository's link on GitHub, for a commit link that is not https
  * @param commits GitHub's `commits` of a push; one that cannot be read is skipped
- * @returns The issues the commits named, were no longer named by, and are named by through a driving source
+ * @returns The issues the new commits named, through the `COMMIT_MESSAGE` source
  */
-async function storeCommits(repoLinkId: string, commits: unknown[]): Promise<SyncResult> {
+async function storeCommits(
+  repoLinkId: string,
+  repoUrl: string,
+  commits: unknown[],
+): Promise<SyncResult> {
   const total: SyncResult = { added: [], removed: [], linked: [], driving: [] };
   for (const raw of commits) {
     const parsed = commitSchema.safeParse(raw);
     if (!parsed.success) continue;
     const commit = parsed.data;
-    const data = {
-      message: cutUtf8(commit.message, COMMIT_MESSAGE_BYTES),
-      authorLogin: commit.author?.username ?? null,
-      htmlUrl: commit.url,
-      committedAt: new Date(commit.timestamp),
-    };
-    await prisma.githubCommit.upsert({
-      where: { repoLinkId_sha: { repoLinkId, sha: commit.id } },
-      create: { repoLinkId, sha: commit.id, ...data },
-      update: data,
-    });
-    const links = await syncLinks(
-      repoLinkId,
-      { type: 'COMMIT', key: commit.id },
-      { COMMIT_MESSAGE: commit.message },
+    const links = await retryOnRace(() =>
+      prisma.$transaction(async (tx) => {
+        const created = await tx.githubCommit.createMany({
+          data: [
+            {
+              repoLinkId,
+              sha: commit.id,
+              message: cutUtf8(commit.message, COMMIT_MESSAGE_BYTES),
+              authorLogin: commit.author?.username ?? null,
+              htmlUrl: httpsOr(commit.url, `${repoUrl}/commit/${commit.id}`),
+              committedAt: new Date(commit.timestamp),
+            },
+          ],
+          skipDuplicates: true,
+        });
+        if (created.count === 0) return null;
+        return syncLinks(
+          repoLinkId,
+          { type: 'COMMIT', key: commit.id },
+          { COMMIT_MESSAGE: clean(commit.message) },
+          tx,
+        );
+      }),
     );
+    if (!links) continue;
     total.added = union(total.added, links.added);
     total.removed = union(total.removed, links.removed);
     total.linked = union(total.linked, links.linked);
@@ -542,6 +595,22 @@ async function linkOf(d: GithubDeliveryContext) {
 
 const BRANCH_PREFIX = 'refs/heads/';
 
+// `repository.pushed_at` is a unix time in a push event and an ISO text elsewhere
+function pushedAt(payload: Record<string, unknown>): Date | null {
+  const repository = payload.repository as { pushed_at?: unknown } | undefined;
+  const headCommit = payload.head_commit as { timestamp?: unknown } | null | undefined;
+  for (const value of [repository?.pushed_at, headCommit?.timestamp]) {
+    const date =
+      typeof value === 'number'
+        ? new Date(value * 1000)
+        : typeof value === 'string'
+          ? new Date(value)
+          : null;
+    if (date && !Number.isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
 const pushSchema = z.object({
   ref: z.string(),
   deleted: z.boolean().nullish(),
@@ -554,13 +623,18 @@ onGithubEvent('push', async (d) => {
   const link = await linkOf(d);
   if (!link) return 'ignored';
   const name = parsed.data.ref.slice(BRANCH_PREFIX.length);
-  const meta: StoreMeta = { event: 'push', action: d.action, payload: d.payload };
+  const meta: StoreMeta = {
+    event: 'push',
+    action: d.action,
+    payload: d.payload,
+    at: pushedAt(d.payload),
+  };
   const sender = senderSchema.parse(d.payload.sender);
   if (parsed.data.deleted) {
     await storeBranch(link.id, { name, sha: null }, sender, 'webhook', meta);
     return 'processed';
   }
-  const commitLinks = await storeCommits(link.id, parsed.data.commits ?? []);
+  const commitLinks = await storeCommits(link.id, link.htmlUrl, parsed.data.commits ?? []);
   const after = z.string().min(1).safeParse(d.payload.after);
   await storeBranch(link.id, { name, sha: after.success ? after.data : '' }, sender, 'webhook', {
     ...meta,
@@ -582,7 +656,8 @@ for (const event of ['create', 'delete'] as const) {
       { name: parsed.data.ref, sha: event === 'create' ? '' : null },
       senderSchema.parse(d.payload.sender),
       'webhook',
-      { event, action: d.action, payload: d.payload },
+      // A delete event names no time of its own: it is ordered by when it arrived
+      { event, action: d.action, payload: d.payload, at: event === 'delete' ? d.receivedAt : null },
     );
     return 'processed';
   });
