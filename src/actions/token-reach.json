@@ -9,6 +9,7 @@
   "adminUser.list": ["admin:read", "admin:write"],
   "adminUser.reactivate": ["admin:write"],
   "adminUser.resetPassword": [],
+  "adminUser.resetTwoFactor": [],
   "adminUser.update": ["admin:write"],
   "agentApproval.approve": [],
   "agentApproval.get": ["approvals:read", "approvals:write"],

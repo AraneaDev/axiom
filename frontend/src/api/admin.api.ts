@@ -70,6 +70,8 @@ export const adminApi = {
     post<{ success: boolean }>(`/admin/users/${userId}/reactivate`, {}),
   resetPassword: (userId: string, newPassword: string) =>
     post<{ success: boolean }>(`/admin/users/${userId}/reset-password`, { newPassword }),
+  resetTwoFactor: (userId: string) =>
+    post<{ success: boolean }>(`/admin/users/${userId}/reset-2fa`, {}),
 
   getSettings: () => get<SystemSettings>('/admin/settings'),
 };

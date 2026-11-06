@@ -59,7 +59,7 @@ export function ConfirmDialog({
           Cancel
         </Button>
         <Button variant="danger" size="sm" onClick={onConfirm} disabled={loading}>
-          {loading ? <Spinner className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+          {loading ? <Spinner className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
           {confirmLabel}
         </Button>
       </ModalFooter>

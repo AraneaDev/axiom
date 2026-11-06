@@ -11,6 +11,7 @@ import {
   UserX,
   UserCheck,
   KeyRound,
+  ShieldOff,
   AlertTriangle,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -179,6 +180,7 @@ export default function UserManagement() {
   const [viewUser, setViewUser] = useState<AdminUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
   const [resetPasswordTarget, setResetPasswordTarget] = useState<AdminUser | null>(null);
+  const [resetTwoFactorTarget, setResetTwoFactorTarget] = useState<AdminUser | null>(null);
 
   const toast = useToast();
 
@@ -198,6 +200,16 @@ export default function UserManagement() {
     invalidateKeys: [['admin', 'users']],
     onSuccess: () => setDeleteTarget(null),
   });
+
+  const resetTwoFactorMutation = useMutationWithToast(
+    (userId: string) => adminApi.resetTwoFactor(userId),
+    {
+      successMessage: 'Two-factor authentication turned off',
+      errorMessage: 'Failed to reset two-factor authentication',
+      invalidateKeys: [['admin', 'users']],
+      onSuccess: () => setResetTwoFactorTarget(null),
+    },
+  );
 
   const deactivateMutation = useMutationWithToast(
     ({ userId, deactivated }: { userId: string; deactivated: boolean }) =>
@@ -355,6 +367,17 @@ export default function UserManagement() {
                       >
                         <KeyRound className="h-4 w-4" />
                       </Button>
+                      {user.twoFactorEnabled && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setResetTwoFactorTarget(user)}
+                          title="Reset two-factor authentication"
+                          className="text-warning hover:text-warning"
+                        >
+                          <ShieldOff className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -404,6 +427,18 @@ export default function UserManagement() {
         />
       )}
       {viewUser && <UserDetailModal user={viewUser} onClose={() => setViewUser(null)} />}
+      <ConfirmDialog
+        open={!!resetTwoFactorTarget}
+        onClose={() => setResetTwoFactorTarget(null)}
+        onConfirm={() =>
+          resetTwoFactorTarget && resetTwoFactorMutation.mutate(resetTwoFactorTarget.id)
+        }
+        title="Reset two-factor authentication"
+        description={`This turns off two-factor authentication for @${resetTwoFactorTarget?.username ?? ''}. They sign in with their password alone until they set it up again. Do this only when you know it is them asking.`}
+        confirmLabel="Reset 2FA"
+        variant="warning"
+        loading={resetTwoFactorMutation.isPending}
+      />
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}

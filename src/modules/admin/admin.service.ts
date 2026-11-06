@@ -9,6 +9,7 @@ import { disconnectUser, revokeLiveAccess } from '../../realtime/access-revocati
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
+import { logAudit } from '../audit/audit.service';
 import { assertNotLastOwnerTx } from '../orgs/org-roles';
 
 // ─── Admin Check ────────────────────────────────────────────
@@ -268,6 +269,31 @@ export async function resetUserPassword(userId: string, newPassword: string) {
     prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
     prisma.refreshToken.deleteMany({ where: { userId } }),
   ]);
+
+  return { success: true };
+}
+
+/**
+ * Turn off a user's 2FA, for someone locked out of their authenticator. Clears the secret, the flag
+ * and the last accepted step, so the user signs in with their password and can enrol again.
+ * @param actorId - The platform admin doing it, named in the audit row
+ * @param userId - The user whose 2FA is reset
+ * @returns Success
+ * @throws {AppError} 404 if the user does not exist
+ */
+export async function resetUserTwoFactor(actorId: string, userId: string) {
+  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorLastStep: null },
+  });
+  await logAudit({
+    userId: actorId,
+    action: '2fa_reset',
+    resourceType: 'user',
+    resourceId: userId,
+  });
 
   return { success: true };
 }

@@ -183,6 +183,22 @@ registerActions([
       adminService.resetUserPassword(userId, newPassword),
   }),
   defineAction({
+    name: 'adminUser.resetTwoFactor',
+    // For a user locked out of their authenticator. Turning off someone's second factor stays a
+    // person's act (A16), so a token never reaches it, approved or not
+    uiOnly: true,
+    admin: true,
+    noOrg: true,
+    area: 'admin',
+    kind: 'write',
+    summary: "Turn off a user's two-factor authentication. Only a platform admin, in the web UI",
+    input: userTarget,
+    output: success,
+    rest: { method: 'POST', path: '/api/admin/users/:userId/reset-2fa', status: 200 },
+    authorize: platformAdmin,
+    handler: async (ctx, { userId }) => adminService.resetUserTwoFactor(ctx.userId, userId),
+  }),
+  defineAction({
     name: 'auditLog.list',
     admin: true,
     area: 'admin',
