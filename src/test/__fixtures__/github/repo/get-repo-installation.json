@@ -1,0 +1,11 @@
+{
+  "route": "GET /repos/:owner/:repo/installation",
+  "status": 200,
+  "body": {
+    "id": 3301,
+    "account": { "login": "acme-labs", "id": 5101, "type": "Organization" },
+    "app_id": 1201,
+    "repository_selection": "selected",
+    "suspended_at": null
+  }
+}

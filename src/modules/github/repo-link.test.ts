@@ -1,0 +1,328 @@
+import crypto from 'node:crypto';
+
+import request from 'supertest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { prisma } from '../../config/database';
+import app from '../../index';
+import { encryptSecret, secretContext } from '../../lib/secret-box';
+import {
+  addMemberToContext,
+  cleanupTestContext,
+  createTestContext,
+  createTestUser,
+  type TestContext,
+  type TestUser,
+} from '../../test/factory';
+import { useGithubFake } from '../../test/github-fake';
+import { seedGithubApp } from '../../test/github-seed';
+
+import { findRepoLinkByProject, findRepoLinkByRepoId } from './repo-link.service';
+
+const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
+const WIDGET = 'acme-labs/widget';
+const GADGET = 'acme-labs/gadget';
+const fake = useGithubFake('repo');
+
+let ctx: TestContext;
+let other: { id: string };
+let teamMember: TestUser;
+let teamAdmin: TestUser;
+let viewer: TestUser;
+let outsider: TestUser;
+
+const as = (user: TestUser) => ({ ...CSRF, Authorization: `Bearer ${user.token}` });
+const url = (projectId: string) => `/api/projects/${projectId}/github`;
+
+/**
+ * Connects a user's GitHub account with a token that reaches the repositories and has admin
+ * rights on some.
+ * @param user - Who connects
+ * @param repos - The repositories the token reaches
+ * @param admin - The ones the person has admin rights on
+ */
+async function connectAccount(user: TestUser, repos: string[], admin: string[]) {
+  const id = `acct-${user.id}`;
+  const token = fake.issueUserToken('octo-dev', repos, { admin });
+  await prisma.githubAccount.create({
+    data: {
+      id,
+      userId: user.id,
+      githubUserId: 9101,
+      login: 'octo-dev',
+      accessToken: encryptSecret(token, secretContext('githubAccount', 'accessToken', id)),
+    },
+  });
+}
+
+/**
+ * An API token for a user, as an agent holds it.
+ * @param userId - Its user
+ * @param scopes - Its scopes
+ */
+async function apiToken(userId: string, scopes: string[]): Promise<string> {
+  const raw = `tk_${crypto.randomBytes(24).toString('hex')}`;
+  await prisma.apiToken.create({
+    data: {
+      userId,
+      name: 'github-agent',
+      scopes,
+      prefix: raw.slice(0, 11),
+      tokenHash: crypto.createHash('sha256').update(raw).digest('hex'),
+    },
+  });
+  return raw;
+}
+
+beforeAll(async () => {
+  ctx = await createTestContext('ghrl');
+  teamMember = await addMemberToContext(ctx);
+  teamAdmin = await createTestUser();
+  await prisma.orgMembership.create({
+    data: { orgId: ctx.orgId, userId: teamAdmin.id, role: 'MEMBER' },
+  });
+  await prisma.teamMembership.create({
+    data: { teamId: ctx.teamId, userId: teamAdmin.id, role: 'ADMIN' },
+  });
+  viewer = await createTestUser();
+  await prisma.orgMembership.create({
+    data: { orgId: ctx.orgId, userId: viewer.id, role: 'VIEWER' },
+  });
+  await prisma.teamMembership.create({
+    data: { teamId: ctx.teamId, userId: viewer.id, role: 'VIEWER' },
+  });
+  outsider = await createTestUser();
+  other = await prisma.project.create({
+    data: {
+      name: 'Second project',
+      slug: 'second-ghrl',
+      prefix: 'SGH',
+      teamId: ctx.teamId,
+    },
+  });
+});
+
+beforeEach(async () => {
+  await seedGithubApp({ fake });
+  fake.addInstallation(3301, [WIDGET, GADGET]);
+});
+
+afterEach(async () => {
+  await prisma.githubRepoLink.deleteMany();
+  await prisma.githubAccount.deleteMany();
+  await prisma.apiToken.deleteMany({
+    where: { userId: { in: [ctx.owner.id, teamAdmin.id, teamMember.id] } },
+  });
+  await prisma.githubApp.deleteMany();
+});
+
+afterAll(async () => {
+  await prisma.project.deleteMany({ where: { id: other.id } });
+  const ids = [teamMember.id, teamAdmin.id, viewer.id, outsider.id];
+  await cleanupTestContext(ctx);
+  await prisma.user.deleteMany({ where: { id: { in: ids } } });
+});
+
+describe('githubRepo.link', () => {
+  it('links a repository for a team admin who has admin rights on it', async () => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(res.status).toBeLessThan(300);
+    expect(res.body).toMatchObject({
+      repoFullName: WIDGET,
+      htmlUrl: 'https://github.com/acme-labs/widget',
+      defaultBranch: 'main',
+      linkedBy: { id: ctx.owner.id },
+    });
+    expect(typeof res.body.createdAt).toBe('string');
+    const link = await findRepoLinkByProject(ctx.projectId);
+    expect(link).toMatchObject({
+      owner: 'acme-labs',
+      name: 'widget',
+      fullName: WIDGET,
+      installationId: 3301n,
+      linkedById: ctx.owner.id,
+    });
+    expect((await findRepoLinkByRepoId(Number(link!.repoId)))?.projectId).toBe(ctx.projectId);
+    // The user's rights were checked as the user, the installation as the App
+    expect(fake.requests.map((r) => `${r.method} ${r.path} ${r.headers.authorization}`)).toEqual([
+      expect.stringMatching(/^GET \/repos\/acme-labs\/widget user:/),
+      'GET /repos/acme-labs/widget/installation app',
+    ]);
+  });
+
+  it('lets a team ADMIN who is only an org member link', async () => {
+    await connectAccount(teamAdmin, [WIDGET], [WIDGET]);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(teamAdmin))
+      .send({ repo: WIDGET });
+    expect(res.status).toBeLessThan(300);
+  });
+
+  it('turns a team MEMBER away before any call to GitHub', async () => {
+    await connectAccount(teamMember, [WIDGET], [WIDGET]);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(teamMember))
+      .send({ repo: WIDGET });
+    expect(res.status).toBe(403);
+    expect(fake.requests).toEqual([]);
+    expect(await prisma.githubRepoLink.count()).toBe(0);
+  });
+
+  it('answers 409 GITHUB_NOT_CONNECTED without a connected account', async () => {
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_NOT_CONNECTED');
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('answers 403 GITHUB_NOT_REPO_ADMIN when the person is no admin of the repository', async () => {
+    await connectAccount(ctx.owner, [WIDGET], []);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('GITHUB_NOT_REPO_ADMIN');
+    expect(res.body.error.message).toBe(`Linking needs admin rights on ${WIDGET} on GitHub`);
+    expect(await prisma.githubRepoLink.count()).toBe(0);
+  });
+
+  it('answers 409 GITHUB_APP_NOT_INSTALLED with the install URL', async () => {
+    fake.removeInstallation(3301);
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_APP_NOT_INSTALLED');
+    expect(res.body.error.details.installUrl).toBe(
+      'https://github.com/apps/acme-axiom/installations/new',
+    );
+    expect(await prisma.githubRepoLink.count()).toBe(0);
+  });
+
+  it('answers 409 GITHUB_REPO_LINKED for a repository of another project, naming none', async () => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    await request(app).post(url(other.id)).set(as(ctx.owner)).send({ repo: WIDGET });
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_REPO_LINKED');
+    expect(res.body.error.message).toBe('This repository is linked to another project');
+    expect(JSON.stringify(res.body)).not.toContain('Second project');
+    expect(JSON.stringify(res.body)).not.toContain(other.id);
+  });
+
+  it('answers 409 GITHUB_PROJECT_LINKED for a second repository on one project', async () => {
+    await connectAccount(ctx.owner, [WIDGET, GADGET], [WIDGET, GADGET]);
+    const first = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(first.status).toBeLessThan(300);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: GADGET });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_PROJECT_LINKED');
+    expect((await findRepoLinkByProject(ctx.projectId))?.fullName).toBe(WIDGET);
+  });
+
+  it('rejects a repository that is no owner/name', async () => {
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: 'https://github.com/acme-labs/widget' });
+    expect(res.status).toBe(400);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('holds a token call for approval and links nothing', async () => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const raw = await apiToken(ctx.owner.id, ['github:write']);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set({ ...CSRF, Authorization: `Token ${raw}` })
+      .send({ repo: WIDGET });
+    expect(res.status).toBe(202);
+    expect(res.body.status).toBe('pending_approval');
+    expect(res.body.preview).toBe(
+      `Link GitHub repository ${WIDGET} to project ${'Test Project ghrl'}: everyone who can read the project will see its pull requests, reviews and CI logs`,
+    );
+    expect(await prisma.githubRepoLink.count()).toBe(0);
+    expect(fake.requests).toEqual([]);
+  });
+});
+
+describe('githubRepo.get', () => {
+  it('answers null when nothing is linked, and the link to a VIEWER', async () => {
+    const empty = await request(app).get(url(ctx.projectId)).set(as(viewer));
+    expect(empty.status).toBe(200);
+    expect(empty.body).toBeNull();
+
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    await request(app).post(url(ctx.projectId)).set(as(ctx.owner)).send({ repo: WIDGET });
+    const res = await request(app).get(url(ctx.projectId)).set(as(viewer));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      repoFullName: WIDGET,
+      htmlUrl: 'https://github.com/acme-labs/widget',
+      defaultBranch: 'main',
+    });
+    expect(res.body.linkedBy.id).toBe(ctx.owner.id);
+    expect(typeof res.body.createdAt).toBe('string');
+  });
+
+  it('is closed to someone outside the team', async () => {
+    const res = await request(app).get(url(ctx.projectId)).set(as(outsider));
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('githubRepo.unlink', () => {
+  it('deletes the link, and the repository can be linked to another project', async () => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    await request(app).post(url(ctx.projectId)).set(as(ctx.owner)).send({ repo: WIDGET });
+    const res = await request(app).delete(url(ctx.projectId)).set(as(ctx.owner));
+    expect(res.status).toBeLessThan(300);
+    expect(await prisma.githubRepoLink.count({ where: { projectId: ctx.projectId } })).toBe(0);
+
+    const again = await request(app).post(url(other.id)).set(as(ctx.owner)).send({ repo: WIDGET });
+    expect(again.status).toBeLessThan(300);
+    expect(await prisma.githubRepoLink.count()).toBe(1);
+    expect(await findRepoLinkByProject(ctx.projectId)).toBeNull();
+  });
+
+  it('turns a team MEMBER away', async () => {
+    const res = await request(app).delete(url(ctx.projectId)).set(as(teamMember));
+    expect(res.status).toBe(403);
+  });
+
+  it('holds a token call for approval with a preview, and keeps the link', async () => {
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    await request(app).post(url(ctx.projectId)).set(as(ctx.owner)).send({ repo: WIDGET });
+    const raw = await apiToken(ctx.owner.id, ['github:write']);
+    const res = await request(app)
+      .delete(url(ctx.projectId))
+      .set({ ...CSRF, Authorization: `Token ${raw}` });
+    expect(res.status).toBe(202);
+    expect(res.body.status).toBe('pending_approval');
+    expect(res.body.preview).toBe(
+      `Unlink ${WIDGET} from Test Project ghrl: its branches, pull requests and checks disappear from 0 issues`,
+    );
+    expect(await prisma.githubRepoLink.count({ where: { projectId: ctx.projectId } })).toBe(1);
+  });
+});

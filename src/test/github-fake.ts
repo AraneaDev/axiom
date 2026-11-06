@@ -64,8 +64,12 @@ export interface GithubFake {
   setPublicRepos(repos: string[]): void;
   /** A `ghs_` token for an installation added before, reaching only that installation's repos */
   issueInstallationToken(installationId: number): string;
-  /** A `ghu_` token for that user, reaching only the given repositories */
-  issueUserToken(login: string, repos: string[]): string;
+  /**
+   * A `ghu_` token for that user, reaching only the given repositories. `GET /repos/:owner/:repo`
+   * answers the repository under the asked name, with `permissions.admin: true` for the ones in
+   * `opts.admin` and false for the rest. Without `opts.admin` it answers the fixture as it is.
+   */
+  issueUserToken(login: string, repos: string[], opts?: { admin?: string[] }): string;
   /**
    * The App's OAuth client credentials, which the token endpoint and the revoke call check.
    * With none set, any are accepted.
@@ -193,6 +197,8 @@ interface Credential {
   installationId?: number;
   /** The repositories (lowercased `owner/name`) the credential reaches */
   repos?: Set<string>;
+  /** For `user`: the repositories (lowercased) the person has admin rights on */
+  admin?: Set<string>;
 }
 
 const reply = (status: number, message: string): FakeReply => ({ status, body: { message } });
@@ -215,8 +221,9 @@ class GithubFakeServer implements GithubFake {
   private installationTokens = new Map<string, { installationId: number; expiresAt: number }>();
   private userTokens = new Map<
     string,
-    { repos: Set<string>; login: string; id: number; expiresAt: number | null }
+    { repos: Set<string>; admin?: Set<string>; login: string; id: number; expiresAt: number | null }
   >();
+  private repoIds = new Map<string, number>();
   private refreshTokens = new Map<string, { login: string; id: number; repos: string[] }>();
   private authCodes = new Map<string, { login: string; id: number; repos: string[] }>();
   private userIds = new Map<string, number>([['octo-dev', 9101]]);
@@ -305,8 +312,8 @@ class GithubFakeServer implements GithubFake {
     return token;
   }
 
-  issueUserToken(login: string, repos: string[]): string {
-    return this.mintUserToken(login, this.idOf(login), repos, null);
+  issueUserToken(login: string, repos: string[], opts: { admin?: string[] } = {}): string {
+    return this.mintUserToken(login, this.idOf(login), repos, null, opts.admin);
   }
 
   setOAuthClient(client: { clientId: string; clientSecret: string } | null): void {
@@ -355,10 +362,12 @@ class GithubFakeServer implements GithubFake {
     id: number,
     repos: string[],
     lifetimeMs: number | null,
+    admin?: string[],
   ): string {
     const token = tokenOf('ghu_');
     this.userTokens.set(token, {
       repos: new Set(repos.map(repoKey)),
+      admin: admin ? new Set(admin.map(repoKey)) : undefined,
       login,
       id,
       expiresAt: lifetimeMs === null ? null : Date.now() + lifetimeMs,
@@ -416,6 +425,7 @@ class GithubFakeServer implements GithubFake {
           kind: 'user',
           label: `user:${value.slice(0, 8)}`,
           repos: user.repos,
+          admin: user.admin,
           identity: { login: user.login, id: user.id },
         };
       }
@@ -443,6 +453,10 @@ class GithubFakeServer implements GithubFake {
     const needs = (wanted: Credential['kind']) =>
       kind === wanted ? null : kind === 'none' ? REQUIRES_AUTH : NOT_ACCESSIBLE;
     if (pathname === '/app' || pathname.startsWith('/app/')) {
+      return kind === 'app' ? null : reply(401, 'A JSON web token could not be decoded');
+    }
+    // The App's own view of a repository is a JWT call, as on GitHub
+    if (/^\/repos\/[^/]+\/[^/]+\/installation$/.test(pathname)) {
       return kind === 'app' ? null : reply(401, 'A JSON web token could not be decoded');
     }
     if (kind === 'app') return NOT_ACCESSIBLE;
@@ -554,6 +568,21 @@ class GithubFakeServer implements GithubFake {
       const body = found.body as Record<string, unknown> | undefined;
       return { ...found, body: { ...body, ...credential.identity } };
     }
+    const installed = /^\/repos\/([^/]+)\/([^/]+)\/installation$/.exec(req.path);
+    if (req.method === 'GET' && installed) {
+      return this.repoInstallation(
+        `${decodeURIComponent(installed[1])}/${decodeURIComponent(installed[2])}`,
+        req,
+      );
+    }
+    const repoRead = /^\/repos\/([^/]+)\/([^/]+)$/.exec(req.path);
+    if (req.method === 'GET' && repoRead && credential.kind === 'user') {
+      return this.repoForUser(
+        `${decodeURIComponent(repoRead[1])}/${decodeURIComponent(repoRead[2])}`,
+        req,
+        credential,
+      );
+    }
     const conversion = /^\/app-manifests\/([^/]+)\/conversions$/.exec(req.path);
     if (req.method === 'POST' && conversion) return this.convertManifest(conversion[1]);
     // The installation's own repositories, out of the fixture list
@@ -567,6 +596,70 @@ class GithubFakeServer implements GithubFake {
       return { ...answer, body: { ...body, total_count: repositories.length, repositories } };
     }
     return null;
+  }
+
+  /**
+   * `GET /repos/:owner/:repo/installation`: the installation that reaches the repository, 404
+   * when the App is not installed on it.
+   * @param fullName The repository as `owner/name`
+   * @param req The recorded request, for the fixture the answer is shaped like
+   */
+  private repoInstallation(fullName: string, req: RecordedRequest): FakeReply {
+    const shape = (this.fromRoutes(req).body ?? {}) as Record<string, unknown>;
+    const key = repoKey(fullName);
+    for (const [id, repos] of this.installations) {
+      if (!repos.has(key)) continue;
+      const account = this.accounts.get(id);
+      return {
+        status: 200,
+        body: {
+          ...shape,
+          id,
+          account: { login: account?.login, type: account?.type, id: 9000 + id },
+          app_id: this.app?.appId,
+          suspended_at: this.suspended.get(id) ?? null,
+        },
+      };
+    }
+    return NOT_FOUND;
+  }
+
+  /**
+   * `GET /repos/:owner/:repo` for a user token: the fixture's repository under the asked name,
+   * with `permissions.admin` as the token was issued. The fixture's own repository keeps its id.
+   * @param fullName The repository as asked
+   * @param req The recorded request
+   * @param credential The user token's credential
+   */
+  private repoForUser(fullName: string, req: RecordedRequest, credential: Credential): FakeReply {
+    const found = this.fromRoutes(req);
+    // A token issued without `admin` gets the fixture as it is
+    if (!credential.admin) return found;
+    const body = found.body as
+      | (Record<string, unknown> & { owner?: object; permissions?: object })
+      | undefined;
+    if (found.status !== 200 || !body) return found;
+    const key = repoKey(fullName);
+    let id = body.id as number;
+    if (repoKey(String(body.full_name)) !== key) {
+      id = this.repoIds.get(key) ?? 7400 + this.repoIds.size;
+      this.repoIds.set(key, id);
+    }
+    const [owner, name] = fullName.split('/');
+    const isAdmin = credential.admin?.has(key) === true;
+    return {
+      ...found,
+      body: {
+        ...body,
+        id,
+        name,
+        full_name: fullName,
+        html_url: `https://github.com/${fullName}`,
+        url: `https://api.github.com/repos/${fullName}`,
+        owner: { ...body.owner, login: owner, html_url: `https://github.com/${owner}` },
+        permissions: { ...body.permissions, admin: isAdmin, maintain: isAdmin },
+      },
+    };
   }
 
   /**

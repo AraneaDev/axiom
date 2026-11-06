@@ -10,6 +10,7 @@
 import { prisma } from '../config/database';
 import { loggableExternalUrl } from '../lib/request-path';
 import { AppError } from '../middleware/errorHandler';
+import { countLinkedIssues } from '../modules/github/repo-link.service';
 import { assertIssueRefsInProject } from '../modules/issues/issue-references';
 import { ERR } from '../utils/error-messages';
 import { findOrThrow } from '../utils/find-or-throw';
@@ -1757,4 +1758,33 @@ export async function githubAppDelete(): Promise<string> {
   const app = await prisma.githubApp.findUnique({ where: { id: 1 }, select: { slug: true } });
   if (!app) throw new AppError(404, 'No GitHub App is set up', 'NOT_FOUND');
   return `Forget the GitHub App ${app.slug}: webhooks stop and every connected GitHub account is disconnected`;
+}
+
+/**
+ * What linking a GitHub repository to a project shows, as the approver reads it.
+ * @param projectId The project
+ * @param repo The repository as asked, `owner/name`
+ */
+export async function githubRepoLink(projectId: string, repo: string): Promise<string> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true },
+  });
+  if (!project) throw new AppError(404, ERR.PROJECT_NOT_FOUND);
+  return `Link GitHub repository ${repo} to project ${project.name}: everyone who can read the project will see its pull requests, reviews and CI logs`;
+}
+
+/**
+ * What unlinking a project's GitHub repository costs, as the approver reads it.
+ * @param projectId The project
+ */
+export async function githubRepoUnlink(projectId: string): Promise<string> {
+  const link = await prisma.githubRepoLink.findUnique({
+    where: { projectId },
+    select: { id: true, fullName: true, project: { select: { name: true } } },
+  });
+  if (!link)
+    throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
+  const issues = await countLinkedIssues(link.id);
+  return `Unlink ${link.fullName} from ${link.project.name}: its branches, pull requests and checks disappear from ${issues} issues`;
 }

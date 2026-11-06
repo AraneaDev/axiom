@@ -9,9 +9,9 @@ datasource db {
 // ─── Identity & Auth ────────────────────────────────────────
 
 model User {
-  id           String  @id @default(cuid())
-  email        String  @unique
-  username     String  @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
   displayName  String
   passwordHash String
   avatarUrl    String?
@@ -243,13 +243,14 @@ model TeamMembership {
 // ─── Projects & Issues ──────────────────────────────────────
 
 model Project {
-  id          String  @id @default(cuid())
-  teamId      String
-  team        Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  name        String
-  slug        String
-  description String? // markdown
-  prefix      String // issue key prefix, e.g. "TICK"
+  id             String          @id @default(cuid())
+  githubRepoLink GithubRepoLink?
+  teamId         String
+  team           Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  name           String
+  slug           String
+  description    String? // markdown
+  prefix         String // issue key prefix, e.g. "TICK"
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1437,4 +1438,28 @@ model GithubDelivery {
   @@index([status, nextAttemptAt])
   @@index([repoId, receivedAt])
   @@map("github_deliveries")
+}
+
+/// The one GitHub repository a project is linked to (ids as GitHub numbers them). Deleting the
+/// link deletes what the later GitHub tables hold for it.
+model GithubRepoLink {
+  id                  String    @id @default(cuid())
+  projectId           String    @unique
+  repoId              BigInt    @unique
+  installationId      BigInt
+  owner               String
+  name                String
+  fullName            String
+  defaultBranch       String
+  htmlUrl             String
+  /// Who linked it; no relation, so deleting that person does not block or unlink the project
+  linkedById          String
+  createdAt           DateTime  @default(now())
+  lastDeliveryAt      DateTime?
+  lastReconciledAt    DateTime?
+  lastReconcileError  String?
+  reconcileLeaseUntil DateTime?
+  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("github_repo_links")
 }
