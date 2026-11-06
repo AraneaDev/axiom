@@ -70,7 +70,7 @@ cd frontend && npm install && cd ..
 cp .env.example .env
 ```
 
-Edit `.env` as needed. See the [Environment Variables](#environment-variables) section for details on each variable.
+`.env.example` carries a marked dev value for `AXIOM_ENCRYPTION_KEY`, so the app starts locally. Edit `.env` as needed. See the [Environment Variables](#environment-variables) section for details on each variable.
 
 ### 3. Start PostgreSQL and Redis
 
@@ -125,6 +125,8 @@ Copy `.env.example` to `.env`. The table below describes each variable.
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/axiom?schema=public` | Yes | PostgreSQL connection string pointing to the `axiom` database. |
 | `JWT_SECRET` | `change-me-to-a-random-secret` | Yes | Secret for signing access tokens. Must be at least 32 characters in production. |
 | `JWT_REFRESH_SECRET` | `change-me-to-another-random-secret` | Yes | Secret for signing refresh tokens. Must be at least 32 characters in production. |
+| `AXIOM_ENCRYPTION_KEY` | marked dev key in `.env.example` | Yes | Key that encrypts stored secrets (2FA, GitHub App and tokens). Base64 of 32 bytes: `openssl rand -base64 32`. The app won't start without it, and in production it refuses the dev key. Back it up apart from the database: without it the encrypted values can't be read. |
+| `AXIOM_ENCRYPTION_KEY_PREVIOUS` | _(empty)_ | No | The old key, set only while you rotate. See [Deployment](deployment.md#encryption-key-backup-and-rotation). |
 | `PORT` | `3000` | No | Port the Express API listens on. |
 | `NODE_ENV` | `development` | No | `development`, `test`, or `production`. Controls logging verbosity and error detail. |
 | `CORS_ORIGIN` | `http://localhost:7000` | Yes | Allowed origin(s) for CORS. Use `*` in dev only. Set to your domain in production. |

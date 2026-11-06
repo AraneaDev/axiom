@@ -92,6 +92,7 @@ A scope no action uses can't be minted (`400`): `orgs:write`, `teams:write`, `pr
 | `forms`      | `/api/projects/:id/forms`, `intake`                                                                                                                                                                           |
 | `automation` | `/api/projects/:id/automation-rules`                                                                                                                                                                          |
 | `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
+| `github` | `githubApp.status` and `githubAccount.get`, read only today. Writes are web UI only |
 | `admin` | Orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and `/api/admin`. Every call waits for approval, see [Approvals](#approvals-for-token-calls) |
 
 Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (changing the profile, the password or 2FA) and resetting another user's password or 2FA stay closed to tokens (`403`); reading the profile is open. Login, refresh, logout and the other sign-in routes are `uiOnly`: a session reaches them, a token never does, and `act` doesn't list them. Invite links are `tokenBlocked`: a normal action for your browser session, refused to every token. Creating a token with any other scope name returns `400`.
@@ -2990,6 +2991,32 @@ List audit log entries.
 Get a single audit log entry.
 
 **Response 200:** Full audit log object.
+
+---
+
+## GitHub
+
+The GitHub App is set up once per instance by an admin, and each user connects their own GitHub account. All of these are actions in the `github` area. Everything except the two reads is `uiOnly`, so a token never reaches it. The App routes are also `admin: true`.
+
+| Action | Route | Needs | Does |
+|--------|-------|-------|------|
+| `githubApp.status` | `GET /api/github/app` | `github:read` | The App's name, URL and installations. Never a secret. |
+| `githubApp.startManifest` | `POST /api/github/app/manifest` | web UI, admin | Starts the manifest flow and returns the form GitHub receives. |
+| `githubApp.completeManifest` | `POST /api/github/app/manifest/complete` | web UI, admin | Exchanges GitHub's code for the App's credentials and stores them encrypted. |
+| `githubApp.syncInstallations` | `POST /api/github/app/installations/sync` | web UI, admin | Reads the installations from GitHub and marks the ones it no longer lists as suspended. |
+| `githubApp.delete` | `DELETE /api/github/app` | web UI, admin | Removes the App and every connected account. |
+| `githubAccount.get` | `GET /api/github/account` | `github:read` | Whether you have connected a GitHub account, and as which login. |
+| `githubAccount.startConnect` | `POST /api/github/account/connect` | web UI | Returns the GitHub authorization URL. |
+| `githubAccount.completeConnect` | `POST /api/github/account/connect/complete` | web UI | Exchanges the code and stores your tokens encrypted. |
+| `githubAccount.disconnect` | `DELETE /api/github/account` | web UI | Revokes the grant at GitHub and deletes your tokens. |
+
+GitHub's manifest form lets the admin rename the App. Names are unique across GitHub and capped at 34 characters, so Axiom shortens a long host in the suggested name.
+
+### POST /api/github/webhook
+
+Receives GitHub's deliveries. It has no session or token: the `X-Hub-Signature-256` HMAC over the raw body, made with the webhook secret, is the only proof. The request is rate limited and the signature headers are checked before the body is read. Anything but `POST` answers `405`, no App configured `404`, a missing or malformed signature `401`, a missing event or delivery id `400`.
+
+A valid delivery answers `202 { accepted: true }`; one already seen answers `200 { duplicate: true }`. The work happens after the answer. Each delivery is kept in a log with its status. A failed handler is retried with backoff up to 5 attempts, after which the row is marked failed. The worker removes old payloads. Handlers register with `onGithubEvent(event, handler)` in `src/modules/github/webhook-handlers.ts`.
 
 ---
 

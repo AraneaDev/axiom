@@ -166,6 +166,8 @@ OpenAPI and `describe` are generated from the same definitions, so documentation
 - `src/email/` — BullMQ-backed email queue (started only when `SMTP_HOST` is set)
 - `src/actions/` — The action registry: `defineAction`, `registerActions`, `executeAction`, the REST adapter, `act` batches, keys and `item.read`. Modules declare their actions in `*.actions.ts`
 - `src/mcp/` — The MCP server: five tools (`search`, `read`, `describe`, `act`, `upload`) over the registry, stateless Streamable HTTP
+- `src/modules/github/`, The GitHub integration: one client module (`github-client.ts`, which checks every host it calls), the App set up through GitHub's manifest flow, the webhook and its delivery log, and users' connected accounts. Auth resolvers (`github-resolvers.ts`) and webhook handlers (`webhook-handlers.ts`) are imported by both `index.ts` and `worker.ts`
+- `src/lib/secret-box.ts`, `src/lib/secret-migration.ts`, Encryption of stored secrets and re-encryption on key rotation
 - `src/lib/openapi/` — OpenAPI and the `/api/docs` page, generated from the registry
 - `src/lib/` — Shared cross-cutting libraries (query engine, etc.)
 - `src/utils/` — Logger, Pandoc export, param helpers, validation
@@ -374,7 +376,7 @@ Refresh tokens are stored as SHA-256 hashes in the `refresh_tokens` table with a
 
 ### Two-Factor Authentication (TOTP)
 
-Users can enable TOTP 2FA. The TOTP secret is stored on the `User` record (`twoFactorSecret`). When `twoFactorEnabled` is true, the login endpoint returns an error with `code: 'TWO_FACTOR_REQUIRED'` and the client must re-submit with a `twoFactorCode`. The `otplib` library handles TOTP generation and verification.
+Users can enable TOTP 2FA. The TOTP secret is stored on the `User` record (`twoFactorSecret`). When `twoFactorEnabled` is true, the login endpoint returns an error with `code: 'TWO_FACTOR_REQUIRED'` and the client must re-submit with a `twoFactorCode`. The `otplib` library handles TOTP generation and verification. The secret is stored encrypted (see [Secrets and Credentials](#secrets-and-credentials)).
 
 ### Authorization (RBAC)
 
@@ -622,6 +624,15 @@ There is no guard middleware on routes. Every route is an action's binding, and 
 - `JWT_SECRET` and `JWT_REFRESH_SECRET` must each be at least 32 characters
 - API token raw values are never stored; only their SHA-256 hashes are persisted in `api_tokens`
 - Refresh tokens are stored as SHA-256 hashes with an expiry timestamp in `refresh_tokens`
+- `AXIOM_ENCRYPTION_KEY` (base64, 32 bytes) seals the secrets Axiom has to read back: 2FA secrets, the GitHub App's private key, client secret and webhook secret, and connected GitHub tokens. The format is AES-256-GCM, `enc:v1:<kid>:<iv>:<tag>:<ciphertext>`, with the key id bound as additional data. `AXIOM_ENCRYPTION_KEY_PREVIOUS` is optional and only for rotation, and `npm run secrets:rotate` re-encrypts the stored values. Losing the key means the encrypted values can't be read. Back it up apart from the database ([Deployment](deployment.md#encryption-key-backup-and-rotation))
+
+### GitHub integration
+
+The GitHub client in `src/modules/github/` is the only code that calls GitHub. It accepts only the configured API and web hosts, never follows a redirect to another host, and logs paths without query strings. Credentials are chosen by auth kind (`app`, `installation`, `user`, `oauth-app`), each served by a resolver. Tests run against a recorded fake server in `src/test/github-fake.ts`, never against github.com.
+
+- **App:** an admin creates it from `/admin/github` through GitHub's manifest flow. The private key, client secret and webhook secret are stored encrypted. Installations are kept in `GithubInstallation` and updated by webhooks and a manual sync. An integration user named "GitHub" is the author of anything Axiom does on behalf of nobody.
+- **Webhook path:** `POST /api/github/webhook` is mounted before the body parser, behind a rate limiter and a gate that checks the method, the signature headers and the App, and then reads the raw body. The HMAC is checked on the raw bytes. Each delivery is stored in `GithubDelivery` (unique on the delivery id) and processed after the `202`. A claim with a 5 minute lease stops two workers taking one row. Failures retry with backoff up to 5 times; the worker retries due rows every minute and cleans up old payloads.
+- **Connected accounts:** each user connects from `/settings/github`. Access and refresh tokens are stored encrypted. A token that expires within 5 minutes is refreshed under a Postgres advisory lock per user, because GitHub's refresh tokens are single use. Disconnecting revokes the grant at GitHub. A refresh GitHub refuses deletes the connection and the next call answers `409 GITHUB_RECONNECT`.
 
 ---
 
