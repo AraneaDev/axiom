@@ -31,6 +31,9 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CORS_ORIGIN: z.string().default('*'),
   STATIC_DIR: z.string().optional(),
+  // GitHub Enterprise Server or a test double would point these elsewhere
+  GITHUB_API_URL: z.url().default('https://api.github.com'),
+  GITHUB_WEB_URL: z.url().default('https://github.com'),
 });
 
 export const env = envSchema.parse(process.env);

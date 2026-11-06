@@ -1,0 +1,17 @@
+{
+  "route": "GET /user",
+  "status": 200,
+  "body": {
+    "login": "octo-dev",
+    "id": 9101,
+    "node_id": "MDQ6VXNlcjkxMDE=",
+    "avatar_url": "https://avatars.githubusercontent.com/u/9101?v=4",
+    "html_url": "https://github.com/octo-dev",
+    "type": "User",
+    "site_admin": false,
+    "name": "Octo Dev",
+    "company": "Acme Labs",
+    "created_at": "2024-03-01T12:00:00Z",
+    "updated_at": "2026-10-20T12:00:00Z"
+  }
+}
