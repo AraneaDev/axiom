@@ -188,4 +188,59 @@ describe('logTail', () => {
     expect(logTail('')).toEqual({ text: '', truncated: false });
     expect(logTail('\r\n')).toEqual({ text: '', truncated: false });
   });
+
+  it('does not let an unfinished OSC reach across lines to the next bell', () => {
+    const raw = `title ${ESC}]0;never closed\nsecond line\nthird\u0007 line`;
+    const { text } = logTail(raw);
+    expect(text.split('\n')[1]).toBe('second line');
+    expect(text.split('\n')).toHaveLength(3);
+    expect(text).toContain('second line');
+  });
+
+  describe('text that could make the log read differently than it is', () => {
+    it.each([
+      ['BEL', '\u0007'],
+      ['BS', '\u0008'],
+      ['VT', '\u000B'],
+      ['FF', '\u000C'],
+      ['SO', '\u000E'],
+      ['US', '\u001F'],
+      ['DEL', '\u007F'],
+    ])('strips the C0 control %s', (_name, char) => {
+      expect(logTail(`a${char}b`).text).toBe('ab');
+    });
+
+    it.each([
+      ['PAD', '\u0080'],
+      ['NEL', '\u0085'],
+      ['CSI (8-bit)', '\u009B'],
+      ['OSC (8-bit)', '\u009D'],
+      ['APC', '\u009F'],
+    ])('strips the C1 control %s', (_name, char) => {
+      expect(logTail(`a${char}b`).text).toBe('ab');
+    });
+
+    it.each([
+      ['LRE', '\u202A'],
+      ['RLE', '\u202B'],
+      ['PDF', '\u202C'],
+      ['LRO', '\u202D'],
+      ['RLO', '\u202E'],
+      ['LRI', '\u2066'],
+      ['RLI', '\u2067'],
+      ['FSI', '\u2068'],
+      ['PDI', '\u2069'],
+    ])('strips the bidi control %s', (_name, char) => {
+      expect(logTail(`pass${char}fail`).text).toBe('passfail');
+    });
+
+    it('keeps tabs and newlines, and ordinary text beside the stripped ones', () => {
+      expect(logTail('col1\tcol2\nrow\u0007 two é 日本').text).toBe('col1\tcol2\nrow two é 日本');
+    });
+
+    it('strips them from a line that is cut to the byte cap too', () => {
+      const raw = `${'\u202E'.repeat(10)}${'a'.repeat(20_000)}`;
+      expect(logTail(raw).text).toBe('a'.repeat(LOG_TAIL_LIMITS.bytes));
+    });
+  });
 });

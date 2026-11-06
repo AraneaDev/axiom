@@ -102,16 +102,17 @@ export interface GithubFake {
    * A job's log, as GitHub serves it: `GET /repos/:o/:r/actions/jobs/:id/logs` answers 302 to a
    * signed URL on another origin (`localhost`, not the API's `127.0.0.1`) that serves the text
    * as `text/plain` and refuses a request that carries an Authorization header, as blob storage
-   * does. `not-found` and `gone` (expired logs) are answered by the API itself, `slow` makes the
-   * blob host take {@link SLOW_BLOB_MS} before it answers. Forgotten by `reset`.
+   * does. The blob host honours `Range: bytes=-N` with a 206, except in `no-range` mode, where it
+   * answers 200 with everything. `not-found` and `gone` (expired logs) are answered by the API
+   * itself, `slow` makes the blob host take {@link SLOW_BLOB_MS} before it answers. Forgotten by `reset`.
    */
-  setJobLog(jobId: number, text: string, mode?: JobLogMode): void;
+  setJobLog(jobId: number, text: string | Buffer, mode?: JobLogMode): void;
   /** Forgets recorded requests, `on` routes, job logs and the refresh counter and delay; the rest stays */
   reset(): void;
   close(): Promise<void>;
 }
 
-export type JobLogMode = 'ok' | 'not-found' | 'gone' | 'slow';
+export type JobLogMode = 'ok' | 'not-found' | 'gone' | 'slow' | 'no-range';
 /** How long the blob host holds a `slow` log back */
 export const SLOW_BLOB_MS = 400;
 const TOKEN_LIFETIME_MS = 60 * 60_000;
@@ -242,7 +243,7 @@ class GithubFakeServer implements GithubFake {
   private userIds = new Map<string, number>([['octo-dev', 9101]]);
   private oauthClient: { clientId: string; clientSecret: string } | null = null;
   private refreshDelayMs = 0;
-  private jobLogs = new Map<number, { text: string; mode: JobLogMode }>();
+  private jobLogs = new Map<number, { text: string | Buffer; mode: JobLogMode }>();
   refreshGrants = 0;
 
   constructor(private readonly scenario: string) {}
@@ -397,7 +398,7 @@ class GithubFakeServer implements GithubFake {
     }
   }
 
-  setJobLog(jobId: number, text: string, mode: JobLogMode = 'ok'): void {
+  setJobLog(jobId: number, text: string | Buffer, mode: JobLogMode = 'ok'): void {
     this.jobLogs.set(jobId, { text, mode });
   }
 
@@ -656,12 +657,23 @@ class GithubFakeServer implements GithubFake {
       return reply(403, 'Authentication information is given in multiple places');
     const log = this.jobLogs.get(Number(blob[1]));
     if (!log) return NOT_FOUND;
-    return {
-      status: 200,
-      body: log.text,
-      headers: { 'content-type': 'text/plain; charset=utf-8' },
-      delayMs: log.mode === 'slow' ? SLOW_BLOB_MS : undefined,
-    };
+    const delayMs = log.mode === 'slow' ? SLOW_BLOB_MS : undefined;
+    const headers = { 'content-type': 'text/plain; charset=utf-8' };
+    const wanted = /^bytes=-(\d+)$/.exec(req.headers.range ?? '');
+    const bytes = typeof log.text === 'string' ? Buffer.from(log.text, 'utf8') : log.text;
+    if (wanted && log.mode !== 'no-range' && bytes.length > Number(wanted[1])) {
+      const start = bytes.length - Number(wanted[1]);
+      return {
+        status: 206,
+        body: bytes.subarray(start),
+        headers: {
+          ...headers,
+          'content-range': `bytes ${start}-${bytes.length - 1}/${bytes.length}`,
+        },
+        delayMs,
+      };
+    }
+    return { status: 200, body: bytes, headers, delayMs };
   }
 
   /**

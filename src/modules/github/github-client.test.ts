@@ -386,6 +386,55 @@ describe('githubText', () => {
     expect(redirected.headers.authorization).toBeUndefined();
   });
 
+  it('never sends the token back to the API host after the chain left it', async () => {
+    fake.on('GET /repos/acme-labs/widget/actions/jobs/3/logs', {
+      status: 302,
+      headers: { location: `${fake.url.replace('127.0.0.1', 'localhost')}/web/hop` },
+    });
+    // The storage host sends the download on to the API host
+    fake.on('GET /web/hop', {
+      status: 302,
+      headers: { location: `${fake.url}/repos/acme-labs/gadget` },
+    });
+
+    const text = await githubText(
+      INSTALLATION,
+      '/repos/acme-labs/widget/actions/jobs/3/logs',
+      4096,
+    );
+
+    expect(text).toContain('full_name');
+    const back = fake.requests.find((r) => r.path === '/repos/acme-labs/gadget');
+    expect(back).toBeDefined();
+    expect(back!.headers.authorization).toBeUndefined();
+  });
+
+  it('reads no more than 64 KB of an error body', async () => {
+    fake.on('GET /repos/acme-labs/widget/actions/jobs/5/logs', {
+      status: 500,
+      body: 'x'.repeat(2_000_000),
+    });
+
+    const error = await thrown(
+      githubText(INSTALLATION, '/repos/acme-labs/widget/actions/jobs/5/logs', 64),
+    );
+
+    expect(error.code).toBe('GITHUB_UNAVAILABLE');
+  });
+
+  it('maps an expired resource (410) to its own code', async () => {
+    fake.on('GET /repos/acme-labs/widget/actions/jobs/6/logs', {
+      status: 410,
+      body: { message: 'Logs expired' },
+    });
+
+    const error = await thrown(
+      githubText(INSTALLATION, '/repos/acme-labs/widget/actions/jobs/6/logs', 64),
+    );
+
+    expect([error.statusCode, error.code]).toEqual([410, 'GITHUB_GONE']);
+  });
+
   it('maps an error answer like any other call', async () => {
     const error = await thrown(
       githubText(INSTALLATION, '/repos/acme-labs/widget/actions/jobs/2/logs', 64),

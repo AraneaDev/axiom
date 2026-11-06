@@ -18,7 +18,7 @@ import {
   type CheckRunPayload,
 } from './checks.service';
 import { clearInstallationTokens } from './github-app.service';
-import { githubRequest, githubText } from './github-client';
+import { githubRequest, githubText, githubTextTail } from './github-client';
 import { onGithubOutcome, type GithubEventOutcome } from './github-events';
 import './github-resolvers';
 import { LOG_TAIL_LIMITS } from './log-tail';
@@ -85,14 +85,20 @@ const stored = (id = JOB_ID) => prisma.githubCheckRun.findUnique({ where: { id: 
 const requestsTo = (fragment: string) => fake.requests.filter((r) => r.path.includes(fragment));
 const transitions = () => outcomes.flatMap((o) => o.transitions);
 
-async function seedRun(id: number, sha: string, status: string, conclusion: string | null) {
+async function seedRun(
+  id: number,
+  sha: string,
+  status: string,
+  conclusion: string | null,
+  opts: { name?: string; appSlug?: string; logCheckedAt?: Date | null } = {},
+) {
   await prisma.githubCheckRun.create({
     data: {
       id: String(id),
       repoLinkId,
       headSha: sha,
-      name: `job ${id}`,
-      appSlug: 'github-actions',
+      name: opts.name ?? `job ${id}`,
+      appSlug: opts.appSlug ?? 'github-actions',
       status,
       conclusion,
       htmlUrl: `https://github.com/acme-labs/widget/runs/${id}`,
@@ -189,47 +195,231 @@ describe('GitHub Actions runs', () => {
     expect((await stored())?.logUnavailable).toBe(false);
   });
 
+  it('asks for the end of the log only, and stores the log of a small one whole', async () => {
+    await deliver(event(checkRun()));
+
+    const [blob] = requestsTo('/blob/');
+    expect(blob.headers.range).toBe(`bytes=-${LOG_TAIL_LIMITS.downloadBytes}`);
+    // The first API request carries no range
+    expect(requestsTo('/actions/jobs/')[0].headers.range).toBeUndefined();
+  });
+
+  it('streams a log from a blob host that ignores the range', async () => {
+    fake.setJobLog(JOB_ID, LOG, 'no-range');
+
+    await deliver(event(checkRun()));
+
+    expect(requestsTo('/blob/')[0].headers.range).toBeDefined();
+    expect((await stored())?.logTail).toContain('##[error]Process completed');
+  });
+});
+
+describe('logs that cannot be had', () => {
+  const HOUR = 60 * 60_000;
+  const logRoute = 'GET /repos/:owner/:repo/actions/jobs/:job_id/logs';
+  const jobRoute = 'GET /repos/:owner/:repo/actions/jobs/:job_id';
+  const asked = () => requestsTo('/actions/jobs/').length;
+  const ago = (ms: number) => new Date(Date.now() - ms);
+
   it.each([
-    ['gone', 'a 410 for expired logs'],
-    ['not-found', 'a 404'],
-  ] as const)(
-    'marks the log unavailable on %s and still processes the delivery (%s)',
-    async (mode) => {
-      fake.setJobLog(JOB_ID, LOG, mode);
+    ['gone', 'gone'],
+    ['not-found', 'not_found'],
+  ] as const)('gives up for good on %s: reason %s, never fetched again', async (mode, reason) => {
+    fake.setJobLog(JOB_ID, LOG, mode);
 
-      expect(await deliver(event(checkRun()))).toBe('PROCESSED');
-
-      expect(await stored()).toMatchObject({
-        failedStep: 'Run tests',
-        logTail: null,
-        logUnavailable: true,
-        conclusion: 'failure',
-      });
-    },
-  );
-
-  it('marks the log unavailable when GitHub fails on the job or the log, without failing the delivery', async () => {
-    fake.on('GET /repos/:owner/:repo/actions/jobs/:job_id', {
-      status: 502,
-      body: { message: 'Bad gateway' },
-    });
     expect(await deliver(event(checkRun()))).toBe('PROCESSED');
-    expect(await stored()).toMatchObject({ failedStep: null, logTail: null, logUnavailable: true });
-
-    fake.reset();
-    fake.setJobLog(4402, LOG);
-    fake.on('GET /repos/:owner/:repo/actions/jobs/:job_id/logs', {
-      status: 503,
-      body: { message: 'Down' },
-    });
-    expect(await deliver(event(checkRun({ id: 4402 })))).toBe('PROCESSED');
-    expect(await stored(4402)).toMatchObject({
+    expect(await stored()).toMatchObject({
       failedStep: 'Run tests',
       logTail: null,
       logUnavailable: true,
+      logUnavailableReason: reason,
+      conclusion: 'failure',
+    });
+    expect((await stored())?.logCheckedAt).toBeInstanceOf(Date);
+
+    // Even a long time later, with the log back, it is not asked for again
+    await prisma.githubCheckRun.update({
+      where: { id: String(JOB_ID) },
+      data: { logCheckedAt: ago(48 * HOUR) },
+    });
+    fake.setJobLog(JOB_ID, LOG);
+    const before = asked();
+    await deliver(event(checkRun()));
+    expect(asked()).toBe(before);
+    expect(await stored()).toMatchObject({ logUnavailable: true, logTail: null });
+  });
+
+  it('marks a missing job as not found', async () => {
+    fake.on(jobRoute, { status: 404, body: { message: 'Not Found' } });
+
+    await deliver(event(checkRun()));
+
+    expect(await stored()).toMatchObject({
+      failedStep: null,
+      logUnavailable: true,
+      logUnavailableReason: 'not_found',
     });
   });
 
+  it.each([
+    ['forbidden', { status: 403, body: { message: 'Resource not accessible by integration' } }],
+    ['unavailable', { status: 502, body: { message: 'Bad gateway' } }],
+  ] as const)('keeps a %s log retryable, once an hour', async (reason, answer) => {
+    fake.on(logRoute, answer);
+
+    expect(await deliver(event(checkRun()))).toBe('PROCESSED');
+    expect(await stored()).toMatchObject({
+      failedStep: 'Run tests',
+      logTail: null,
+      logUnavailable: true,
+      logUnavailableReason: reason,
+    });
+    const checkedAt = (await stored())!.logCheckedAt!;
+    expect(Date.now() - checkedAt.getTime()).toBeLessThan(60_000);
+
+    // A second event within the hour does not ask again
+    const before = asked();
+    await deliver(event(checkRun()));
+    expect(asked()).toBe(before);
+
+    // An hour later it does, and a log that is there now replaces the mark
+    fake.reset();
+    fake.setJobLog(JOB_ID, LOG);
+    await prisma.githubCheckRun.update({
+      where: { id: String(JOB_ID) },
+      data: { logCheckedAt: ago(HOUR + 1000) },
+    });
+    await deliver(event(checkRun()));
+    expect(await stored()).toMatchObject({
+      failedStep: 'Run tests',
+      logUnavailable: false,
+      logUnavailableReason: null,
+    });
+    expect((await stored())?.logTail).toContain('##[error]Process completed');
+    expect((await stored())!.logCheckedAt!.getTime()).toBeGreaterThan(checkedAt.getTime());
+  });
+
+  it('marks a job call that is forbidden, and a job call that fails', async () => {
+    fake.on(jobRoute, { status: 403, body: { message: 'Resource not accessible by integration' } });
+    await deliver(event(checkRun()));
+    expect(await stored()).toMatchObject({
+      logUnavailable: true,
+      logUnavailableReason: 'forbidden',
+    });
+
+    fake.reset();
+    fake.on(jobRoute, { status: 503, body: { message: 'Down' } });
+    await deliver(event(checkRun({ id: 4402 })));
+    expect(await stored(4402)).toMatchObject({
+      logUnavailable: true,
+      logUnavailableReason: 'unavailable',
+    });
+  });
+
+  it('keeps throwing on a rate limit, so the delivery is retried, and then gets the log', async () => {
+    fake.on(logRoute, {
+      status: 403,
+      body: { message: 'API rate limit exceeded' },
+      headers: { 'x-ratelimit-remaining': '0', 'retry-after': '30' },
+    });
+
+    const error = await recordCheckRun(repoLinkId, checkRun(), AUTH).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe('GITHUB_RATE_LIMITED');
+    // The run is stored, but not as a log that is gone
+    expect(await stored()).toMatchObject({
+      conclusion: 'failure',
+      logUnavailable: false,
+      logTail: null,
+      logCheckedAt: null,
+    });
+
+    fake.reset();
+    fake.setJobLog(JOB_ID, LOG);
+    await recordCheckRun(repoLinkId, checkRun(), AUTH);
+    expect((await stored())?.logTail).toContain('##[error]Process completed');
+    // The failure was reported when the run was stored, and is not reported again
+    expect(transitions()).toEqual(['checks_failed']);
+  });
+
+  it('does not put the details on a run that changed while its log was on the way', async () => {
+    fake.setJobLog(JOB_ID, LOG, 'slow');
+    const failing = recordCheckRun(repoLinkId, checkRun(), AUTH);
+    await vi.waitFor(() => expect(requestsTo('/blob/').length).toBeGreaterThan(0));
+
+    await recordCheckRun(
+      repoLinkId,
+      checkRun({ conclusion: 'success', completed_at: '2026-11-06T10:09:00Z' }),
+      AUTH,
+    );
+    await failing;
+
+    expect(await stored()).toMatchObject({
+      conclusion: 'success',
+      failedStep: null,
+      logTail: null,
+      logUnavailable: false,
+    });
+  });
+
+  it('reports the outcome even when asking for the log throws', async () => {
+    fake.on(logRoute, {
+      status: 429,
+      body: { message: 'Slow down' },
+      headers: { 'retry-after': '30' },
+    });
+
+    await recordCheckRun(repoLinkId, checkRun(), AUTH).catch(() => undefined);
+
+    expect(transitions()).toEqual(['checks_failed']);
+  });
+});
+
+describe('the size of what is downloaded', () => {
+  const path = `/repos/acme-labs/widget/actions/jobs/${JOB_ID}/logs`;
+
+  it('says the start was dropped from the bytes, not from the decoded text', async () => {
+    // Bytes that are not UTF-8 decode to U+FFFD, which is longer than the byte it stands for
+    const junk = Buffer.alloc(LOG_TAIL_LIMITS.downloadBytes - 10, 0xff);
+    fake.setJobLog(JOB_ID, junk, 'no-range');
+
+    const { text, truncated } = await githubTextTail(AUTH, path, LOG_TAIL_LIMITS.downloadBytes);
+
+    expect(Buffer.byteLength(text)).toBeGreaterThan(LOG_TAIL_LIMITS.downloadBytes);
+    expect(truncated).toBe(false);
+  });
+
+  it.each(['ok', 'no-range'] as const)('says it when the start was dropped (%s)', async (mode) => {
+    fake.setJobLog(JOB_ID, 'x'.repeat(5000), mode);
+
+    const { text, truncated } = await githubTextTail(AUTH, path, 1000);
+
+    expect(text).toBe('x'.repeat(1000));
+    expect(truncated).toBe(true);
+  });
+
+  it('says it did not, for a text that fits', async () => {
+    fake.setJobLog(JOB_ID, 'short', 'ok');
+    expect(await githubTextTail(AUTH, path, 1000)).toEqual({ text: 'short', truncated: false });
+  });
+
+  it('starts a range cut in the middle of a character on the next one', async () => {
+    fake.setJobLog(JOB_ID, `${'a'.repeat(10)}${'€'.repeat(2000)}`, 'ok');
+
+    const { text } = await githubTextTail(AUTH, path, 1000);
+
+    expect(text).not.toContain('\uFFFD');
+    expect([...text].every((c) => c === '€')).toBe(true);
+  });
+
+  it('reads an empty log', async () => {
+    fake.setJobLog(JOB_ID, '', 'ok');
+    expect(await githubTextTail(AUTH, path, 1000)).toEqual({ text: '', truncated: false });
+  });
+});
+
+describe('GitHub Actions runs, more', () => {
   it('waits for a slow blob host and keeps the log', async () => {
     fake.setJobLog(JOB_ID, LOG, 'slow');
     const started = Date.now();
@@ -442,6 +632,29 @@ describe('older and newer payloads', () => {
     expect(await stored()).toMatchObject({ status: 'completed', conclusion: 'success' });
   });
 
+  it.each(['queued', 'in_progress'])(
+    'does not move a completed run back to %s, whatever the later payload says',
+    async (status) => {
+      await deliver(event(checkRun({ conclusion: 'failure' })));
+      outcomes.length = 0;
+
+      await deliver(
+        event(
+          checkRun({
+            status,
+            conclusion: null,
+            started_at: '2026-11-06T10:30:00Z',
+            completed_at: null,
+          }),
+          'rerequested',
+        ),
+      );
+
+      expect(await stored()).toMatchObject({ status: 'completed', conclusion: 'failure' });
+      expect(outcomes).toHaveLength(0);
+    },
+  );
+
   it('takes a queued run on to running and to completed', async () => {
     await deliver(
       event(
@@ -497,9 +710,32 @@ describe('checkStateOf', () => {
     expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
   });
 
+  it.each(['success', 'neutral', 'skipped'])('counts %s as passing', async (conclusion) => {
+    await seedRun(1, SHA_A, 'completed', conclusion);
+
+    expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+  });
+
+  it.each(['cancelled', 'action_required', 'stale', 'a_conclusion_github_adds_later'])(
+    'keeps the commit pending for %s',
+    async (conclusion) => {
+      await seedRun(1, SHA_A, 'completed', 'success');
+      await seedRun(2, SHA_A, 'completed', conclusion);
+
+      expect(await checkStateOf(repoLinkId, SHA_A)).toBe('pending');
+    },
+  );
+
   it.each(FAILED_CONCLUSIONS)('is failed for %s', async (conclusion) => {
     await seedRun(1, SHA_A, 'completed', 'success');
     await seedRun(2, SHA_A, 'completed', conclusion);
+
+    expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+  });
+
+  it('is failed before it is pending', async () => {
+    await seedRun(1, SHA_A, 'completed', 'cancelled');
+    await seedRun(2, SHA_A, 'completed', 'failure');
 
     expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
   });
@@ -510,6 +746,47 @@ describe('checkStateOf', () => {
 
     expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
     expect(await checkStateOf('some-other-link', SHA_B)).toBe('none');
+  });
+
+  describe('a re-run replaces the run it repeats', () => {
+    it('counts only the newest run of a name, so a passing re-run clears the failure', async () => {
+      await seedRun(10, SHA_A, 'completed', 'failure', { name: 'test' });
+      await seedRun(11, SHA_A, 'completed', 'success', { name: 'test' });
+
+      expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+    });
+
+    it('does not let an older run hide a newer failure', async () => {
+      await seedRun(10, SHA_A, 'completed', 'success', { name: 'test' });
+      await seedRun(11, SHA_A, 'completed', 'failure', { name: 'test' });
+
+      expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+    });
+
+    it('is pending while the re-run is going', async () => {
+      await seedRun(10, SHA_A, 'completed', 'failure', { name: 'test' });
+      await seedRun(11, SHA_A, 'queued', null, { name: 'test' });
+
+      expect(await checkStateOf(repoLinkId, SHA_A)).toBe('pending');
+    });
+
+    it('compares ids as numbers, not as text', async () => {
+      await seedRun(9, SHA_A, 'completed', 'failure', { name: 'test' });
+      await seedRun(10, SHA_A, 'completed', 'success', { name: 'test' });
+
+      expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+    });
+
+    it('keeps other names, and other apps with the same name, apart', async () => {
+      await seedRun(10, SHA_A, 'completed', 'failure', { name: 'build' });
+      await seedRun(11, SHA_A, 'completed', 'success', { name: 'test' });
+      expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+
+      await prisma.githubCheckRun.deleteMany({ where: { repoLinkId } });
+      await seedRun(10, SHA_A, 'completed', 'failure', { name: 'test', appSlug: 'acme-ci' });
+      await seedRun(11, SHA_A, 'completed', 'success', { name: 'test' });
+      expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+    });
   });
 });
 
@@ -564,12 +841,32 @@ describe('transitions', () => {
       ),
     );
     expect(transitions()).toEqual([]);
-    await deliver(event(checkRun({ id: 4441, conclusion: 'success' })));
+    await deliver(event(checkRun({ id: 4441, name: 'build', conclusion: 'success' })));
     expect(transitions()).toEqual([]);
     await deliver(
       event(checkRun({ id: 4440, conclusion: 'failure', app: { id: 1, slug: 'acme-ci' } })),
     );
     expect(transitions()).toEqual(['checks_failed']);
+  });
+
+  it('reports checks_passed once when a re-run of the failed job passes', async () => {
+    await deliver(event(checkRun({ id: 4470, conclusion: 'failure' })));
+    expect(transitions()).toEqual(['checks_failed']);
+    outcomes.length = 0;
+
+    await deliver(event(checkRun({ id: 4471, conclusion: 'success' })));
+    expect(transitions()).toEqual(['checks_passed']);
+    await deliver(event(checkRun({ id: 4471, conclusion: 'success' })));
+    await deliver(event(checkRun({ id: 4472, name: 'lint', conclusion: 'success' })));
+    expect(transitions()).toEqual(['checks_passed']);
+    expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+  });
+
+  it('reports checks_failed again when the re-run fails after a pass', async () => {
+    await deliver(event(checkRun({ id: 4480, conclusion: 'success' })));
+    await deliver(event(checkRun({ id: 4481, conclusion: 'failure' })));
+
+    expect(transitions()).toEqual(['checks_passed', 'checks_failed']);
   });
 
   it('keeps commits apart', async () => {

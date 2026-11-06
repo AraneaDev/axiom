@@ -4,37 +4,44 @@ import { z } from 'zod';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
-import { githubRequest, githubText, type GithubAuth } from './github-client';
+import { githubRequest, githubTextTail, type GithubAuth } from './github-client';
+import { reportOutcome, type GithubEventOutcome, type GithubTransition } from './github-outcomes';
 import {
   clean,
   cutUtf8,
   httpsOr,
-  linkOf,
   lockLink,
   outcomeBase,
   retryOnRace,
   senderSchema,
+  text,
+  timestamp,
+  touchLinkDelivery,
   type Sender,
-} from './github-events';
-import { reportOutcome, type GithubEventOutcome, type GithubTransition } from './github-outcomes';
+} from './github-store';
 import { drivesAutomation } from './issue-keys';
-import { LOG_TAIL_LIMITS, logTail } from './log-tail';
+import { LOG_TAIL_LIMITS, logTail, plainText } from './log-tail';
 import { onGithubEvent } from './webhook-dispatch';
 
 /** The conclusions that make a check run a failure */
 export const FAILED_CONCLUSIONS = ['failure', 'timed_out', 'startup_failure'];
 
-/** The state of the check runs of one commit */
+/** The conclusions that count as passing: any other finished run keeps the commit pending */
+const PASSING_CONCLUSIONS = ['success', 'neutral', 'skipped'];
+
+/** The state of the check runs of a commit */
 export type CheckState = 'pending' | 'failed' | 'passed' | 'none';
+
+/** Why a log could not be had. The first two are final, the others are tried again */
+export type LogUnavailableReason = 'not_found' | 'gone' | 'forbidden' | 'unavailable';
 
 const ACTIONS_APP = 'github-actions';
 const NAME_BYTES = 512;
 const SLUG_BYTES = 128;
+/** How long a log that could not be had for a passing reason is left alone */
+export const LOG_RETRY_MS = 60 * 60_000;
 
 type Client = Prisma.TransactionClient | typeof prisma;
-
-const text = z.string().transform(clean);
-const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'not a date');
 
 const checkRunSchema = z.object({
   id: z.number().int().positive(),
@@ -65,20 +72,48 @@ type FailureDetails = {
   logTail: string | null;
   logTruncated: boolean;
   logUnavailable: boolean;
+  logUnavailableReason: LogUnavailableReason | null;
+  logCheckedAt: Date | null;
 };
 
 const isFailed = (conclusion: string | null | undefined) =>
   conclusion != null && FAILED_CONCLUSIONS.includes(conclusion);
 
+// GitHub's ids grow with time: a larger one is a newer run (a re-run has a new id)
+function newerId(a: string, b: string): boolean {
+  if (/^\d+$/.test(a) && /^\d+$/.test(b)) return BigInt(a) > BigInt(b);
+  return a.length === b.length ? a > b : a.length > b.length;
+}
+
+type RunRow = {
+  id: string;
+  appSlug: string;
+  name: string;
+  status: string;
+  conclusion: string | null;
+};
+
 /**
- * The state of a set of runs: failed when any run failed, else pending while any is not
- * completed, else passed.
- * @param runs Status and conclusion of each run
+ * The state of a set of runs. Only the newest run of each app and name counts, since a re-run
+ * replaces the run it repeats. Failed when any of them failed, else pending unless every one
+ * has completed as `success`, `neutral` or `skipped`, else passed.
+ * @param runs The runs of one commit
  */
-function stateOfRuns(runs: { status: string; conclusion: string | null }[]): CheckState {
+function stateOfRuns(runs: RunRow[]): CheckState {
   if (runs.length === 0) return 'none';
-  if (runs.some((run) => isFailed(run.conclusion))) return 'failed';
-  return runs.some((run) => run.status !== 'completed') ? 'pending' : 'passed';
+  const newest = new Map<string, RunRow>();
+  for (const run of runs) {
+    const key = `${run.appSlug}\u0000${run.name}`;
+    const seen = newest.get(key);
+    if (!seen || newerId(run.id, seen.id)) newest.set(key, run);
+  }
+  const counted = [...newest.values()];
+  if (counted.some((run) => isFailed(run.conclusion))) return 'failed';
+  const passing = (run: RunRow) =>
+    run.status === 'completed' &&
+    run.conclusion !== null &&
+    PASSING_CONCLUSIONS.includes(run.conclusion);
+  return counted.every(passing) ? 'passed' : 'pending';
 }
 
 /**
@@ -86,8 +121,10 @@ function stateOfRuns(runs: { status: string; conclusion: string | null }[]): Che
  * @param repoLinkId The repository link
  * @param headSha The commit
  * @param client A transaction, to read the state as that transaction sees it
- * @returns `failed` when any run's conclusion is in `FAILED_CONCLUSIONS`, `passed` when all
- *   completed and none failed, `pending` otherwise, `none` when the commit has no runs
+ * @returns `failed` when the newest run of any app and name has a conclusion in
+ *   `FAILED_CONCLUSIONS`; `passed` when every one of those completed as success, neutral or
+ *   skipped; `pending` otherwise (a run still going, or cancelled, action_required, stale or a
+ *   conclusion not known here); `none` when the commit has no runs
  */
 export async function checkStateOf(
   repoLinkId: string,
@@ -96,7 +133,7 @@ export async function checkStateOf(
 ): Promise<CheckState> {
   const runs = await client.githubCheckRun.findMany({
     where: { repoLinkId, headSha },
-    select: { status: true, conclusion: true },
+    select: { id: true, appSlug: true, name: true, status: true, conclusion: true },
   });
   return stateOfRuns(runs);
 }
@@ -104,14 +141,23 @@ export async function checkStateOf(
 // How far a run has come: a late payload for an earlier stage never takes it back
 const rankOf = (status: string) => (status === 'completed' ? 2 : status === 'in_progress' ? 1 : 0);
 
-// GitHub says the log is gone or cannot be had right now: not worth failing a delivery for
-const logGone = (err: unknown) =>
-  err instanceof AppError && (err.code === 'GITHUB_NOT_FOUND' || err.code === 'GITHUB_UNAVAILABLE');
+const REASONS: Record<string, LogUnavailableReason> = {
+  GITHUB_NOT_FOUND: 'not_found',
+  GITHUB_GONE: 'gone',
+  GITHUB_FORBIDDEN: 'forbidden',
+  GITHUB_UNAVAILABLE: 'unavailable',
+};
+
+// Why GitHub cannot give the log, or undefined for an error that is not about the log (a rate
+// limit, the App's own credentials): those throw, so the delivery is retried
+function reasonOf(err: unknown): LogUnavailableReason | undefined {
+  return err instanceof AppError && err.code ? REASONS[err.code] : undefined;
+}
 
 /**
  * The failed step and the end of the log of a GitHub Actions job. A check run of Actions has
- * the id of its job. A job or log that GitHub does not have (404, 410) or cannot give (5xx,
- * timeout) is `logUnavailable`, not an error.
+ * the id of its job. A job or log that GitHub does not have (404, 410), will not give (403) or
+ * cannot give now (5xx, timeout) is `logUnavailable` with the reason, not an error.
  * @param link The repository
  * @param link.owner
  * @param link.name
@@ -129,6 +175,8 @@ async function actionsDetails(
     logTail: null,
     logTruncated: false,
     logUnavailable: false,
+    logUnavailableReason: null,
+    logCheckedAt: new Date(),
   };
   const jobPath = `/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.name)}/actions/jobs/${jobId}`;
   try {
@@ -136,18 +184,19 @@ async function actionsDetails(
     const job = jobSchema.safeParse(data);
     if (job.success) {
       const step = job.data.steps?.find((s) => s.conclusion === 'failure');
-      details.failedStep = step ? cutUtf8(step.name, NAME_BYTES) : null;
+      details.failedStep = step ? cutUtf8(plainText(step.name), NAME_BYTES) : null;
       details.workflowRunId = job.data.run_id == null ? null : String(job.data.run_id);
     }
-    const raw = await githubText(auth, `${jobPath}/logs`, LOG_TAIL_LIMITS.downloadBytes);
-    const tail = logTail(raw);
+    const raw = await githubTextTail(auth, `${jobPath}/logs`, LOG_TAIL_LIMITS.downloadBytes);
+    const tail = logTail(raw.text);
     details.logTail = tail.text === '' ? null : clean(tail.text);
-    // The download keeps the last `downloadBytes`: a log that fills it was cut at the front
-    details.logTruncated =
-      tail.truncated || Buffer.byteLength(raw) >= LOG_TAIL_LIMITS.downloadBytes - 3;
+    // `raw.truncated` is counted in bytes by the download: the log began before what was kept
+    details.logTruncated = tail.truncated || raw.truncated;
   } catch (err) {
-    if (!logGone(err)) throw err;
+    const reason = reasonOf(err);
+    if (!reason) throw err;
     details.logUnavailable = true;
+    details.logUnavailableReason = reason;
   }
   return details;
 }
@@ -160,16 +209,25 @@ function outputDetails(run: z.infer<typeof checkRunSchema>): FailureDetails {
   const { title, summary, text: body } = run.output ?? {};
   const tail = logTail(`${summary ?? ''}\n${body ?? ''}`.trim());
   return {
-    failedStep: title ? cutUtf8(title, NAME_BYTES) : null,
+    failedStep: title ? cutUtf8(plainText(title), NAME_BYTES) : null,
     workflowRunId: null,
     logTail: tail.text === '' ? null : clean(tail.text),
     logTruncated: tail.truncated,
     logUnavailable: false,
+    logUnavailableReason: null,
+    logCheckedAt: null,
   };
 }
 
 const hasDetails = (row: GithubCheckRun) =>
   row.failedStep !== null || row.logTail !== null || row.logUnavailable;
+
+// A log that could not be had for a passing reason is asked for again after an hour
+function retryable(row: GithubCheckRun, now = Date.now()): boolean {
+  if (!row.logUnavailable) return false;
+  if (row.logUnavailableReason === 'not_found' || row.logUnavailableReason === 'gone') return false;
+  return row.logCheckedAt === null || now - row.logCheckedAt.getTime() >= LOG_RETRY_MS;
+}
 
 /** Where a stored check run comes from, and what it was told of the event behind it */
 export type CheckRunMeta = {
@@ -183,10 +241,13 @@ export type CheckRunMeta = {
 
 /**
  * Stores a check run and reports the outcome. A payload for a run that is further along, or the
- * same stage and older, changes nothing. For a newly failed run the failed step and the end of
- * the log are fetched first (Actions) or read from the output (other apps). The transitions
- * (`checks_failed`, `checks_passed`) are decided inside the transaction that writes the run, under
- * a lock on the commit, so two runs stored together report a change of state once.
+ * same stage and older, changes nothing. The run is written first, and the transitions
+ * (`checks_failed`, `checks_passed`) are decided in that transaction, under a lock on the commit,
+ * so two runs stored together report a change of state once. For a newly failed run the failed
+ * step and the end of the log are then fetched (Actions) and written to that row, only if it is
+ * still the row that was stored; other apps' output is read from the payload. A log that could
+ * not be had for a passing reason is asked for again by a later event, after an hour. The outcome
+ * is reported once the fetch is over, also when it threw, so a retried delivery loses nothing.
  * @param repoLinkId The repository link
  * @param checkRun GitHub's check run object
  * @param auth Who asks GitHub for the job and its log
@@ -222,26 +283,16 @@ export async function storeCheckRun(
 
   const conclusion = run.conclusion ?? null;
   const failed = isFailed(conclusion);
+  const isActions = (run.app?.slug ?? '') === ACTIONS_APP;
   const at = run.completed_at
     ? new Date(run.completed_at)
     : run.started_at
       ? new Date(run.started_at)
       : (meta.at ?? new Date());
-  const ranked = (before: GithubCheckRun | null) =>
+  const superseded = (before: GithubCheckRun | null) =>
     before !== null &&
     (rankOf(run.status) < rankOf(before.status) ||
       (rankOf(run.status) === rankOf(before.status) && at < before.githubUpdatedAt));
-
-  // GitHub is asked once per failure: not for a payload that changes nothing, not again for one
-  // that repeats a failure already stored with its details
-  const known = await prisma.githubCheckRun.findUnique({ where: { id } });
-  const isActions = (run.app?.slug ?? '') === ACTIONS_APP;
-  let details: FailureDetails | null = null;
-  if (failed && !ranked(known)) {
-    const done = known && known.conclusion === conclusion && hasDetails(known);
-    if (!isActions) details = outputDetails(run);
-    else if (!done) details = await actionsDetails(link, run.id, auth);
-  }
 
   const stored = await retryOnRace(() =>
     prisma.$transaction(async (tx) => {
@@ -249,15 +300,18 @@ export async function storeCheckRun(
       // Runs of one commit are stored one at a time, so each sees the state the last one left
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${repoLinkId}:${run.head_sha}`}, 0))`;
       const before = await tx.githubCheckRun.findUnique({ where: { id } });
-      if (ranked(before)) return { row: before, stale: true, transitions: [] };
+      if (superseded(before)) return { row: before, stale: true, transitions: [], fetch: false };
 
-      const keep = !details && before && failed && before.conclusion === conclusion ? before : null;
+      // A repeated failure keeps what is stored of its log; another app's output is in the payload
+      const same = before && failed && before.conclusion === conclusion ? before : null;
+      const own = failed && !isActions ? outputDetails(run) : null;
+      const fetch = failed && isActions && (!same || !hasDetails(same) || retryable(same));
       const data = {
         repoLinkId,
         headSha: run.head_sha,
-        name: cutUtf8(run.name, NAME_BYTES),
-        appSlug: cutUtf8(run.app?.slug ?? '', SLUG_BYTES),
-        workflowRunId: details?.workflowRunId ?? keep?.workflowRunId ?? null,
+        name: cutUtf8(plainText(run.name), NAME_BYTES),
+        appSlug: cutUtf8(plainText(run.app?.slug ?? ''), SLUG_BYTES),
+        workflowRunId: own?.workflowRunId ?? same?.workflowRunId ?? null,
         status: run.status,
         conclusion,
         htmlUrl: httpsOr(
@@ -266,10 +320,12 @@ export async function storeCheckRun(
         ),
         startedAt: run.started_at ? new Date(run.started_at) : null,
         completedAt: run.completed_at ? new Date(run.completed_at) : null,
-        failedStep: details?.failedStep ?? keep?.failedStep ?? null,
-        logTail: details?.logTail ?? keep?.logTail ?? null,
-        logTruncated: details?.logTruncated ?? keep?.logTruncated ?? false,
-        logUnavailable: details?.logUnavailable ?? keep?.logUnavailable ?? false,
+        failedStep: own ? own.failedStep : (same?.failedStep ?? null),
+        logTail: own ? own.logTail : (same?.logTail ?? null),
+        logTruncated: own ? own.logTruncated : (same?.logTruncated ?? false),
+        logUnavailable: same?.logUnavailable ?? false,
+        logUnavailableReason: same?.logUnavailableReason ?? null,
+        logCheckedAt: same?.logCheckedAt ?? null,
         githubUpdatedAt: at,
       };
       const stateBefore = await checkStateOf(repoLinkId, run.head_sha, tx);
@@ -282,32 +338,59 @@ export async function storeCheckRun(
       const transitions: GithubTransition[] = [];
       if (stateAfter === 'failed' && stateBefore !== 'failed') transitions.push('checks_failed');
       if (stateAfter === 'passed' && stateBefore !== 'passed') transitions.push('checks_passed');
-      return { row, stale: false, transitions };
+
+      // Read with the write, so a failure to read them cannot lose the transition
+      const pullRequests = await tx.githubPullRequest.findMany({
+        where: { repoLinkId, headSha: run.head_sha },
+        select: { id: true },
+        orderBy: { number: 'asc' },
+      });
+      const links =
+        pullRequests.length === 0
+          ? []
+          : await tx.githubIssueLink.findMany({
+              where: {
+                repoLinkId,
+                targetType: 'PULL_REQUEST',
+                targetKey: { in: pullRequests.map((pr) => pr.id) },
+              },
+              select: { issueId: true, sources: true },
+            });
+      return { row, stale: false, transitions, fetch, pullRequests, links };
     }),
   );
   if (!stored) return gone;
 
-  const pullRequests = await prisma.githubPullRequest.findMany({
-    where: { repoLinkId, headSha: run.head_sha },
-    select: { id: true },
-    orderBy: { number: 'asc' },
-  });
-  const links =
-    pullRequests.length === 0
-      ? []
-      : await prisma.githubIssueLink.findMany({
-          where: {
-            repoLinkId,
-            targetType: 'PULL_REQUEST',
-            targetKey: { in: pullRequests.map((pr) => pr.id) },
-          },
-          select: { issueId: true, sources: true },
-        });
+  let row = stored.row;
+  let fetchError: unknown = null;
+  if (stored.fetch && row) {
+    try {
+      const details = await actionsDetails(link, run.id, auth);
+      // Only if the row is still the one stored above: a newer payload keeps its own state
+      const { count } = await prisma.githubCheckRun.updateMany({
+        where: { id, conclusion, status: 'completed', githubUpdatedAt: row.githubUpdatedAt },
+        data: {
+          failedStep: details.failedStep ?? row.failedStep,
+          workflowRunId: details.workflowRunId ?? row.workflowRunId,
+          logTail: details.logTail,
+          logTruncated: details.logTruncated,
+          logUnavailable: details.logUnavailable,
+          logUnavailableReason: details.logUnavailableReason,
+          logCheckedAt: details.logCheckedAt,
+        },
+      });
+      if (count > 0) row = (await prisma.githubCheckRun.findUnique({ where: { id } })) ?? row;
+    } catch (err) {
+      fetchError = err;
+    }
+  }
+
+  const links = stored.links ?? [];
   const outcome: GithubEventOutcome = {
     ...base,
     event: 'check_run',
     headSha: run.head_sha,
-    pullRequestId: pullRequests[0]?.id,
+    pullRequestId: stored.pullRequests?.[0]?.id,
     linkedIssueIds: [...new Set(links.map((l) => l.issueId))],
     drivingIssueIds: [
       ...new Set(links.filter((l) => drivesAutomation(l.sources)).map((l) => l.issueId)),
@@ -315,7 +398,8 @@ export async function storeCheckRun(
     transitions: stored.transitions,
   };
   if (!stored.stale) await reportOutcome(outcome);
-  return { row: stored.row, outcome, stale: stored.stale };
+  if (fetchError) throw fetchError;
+  return { row, outcome, stale: stored.stale };
 }
 
 /**
@@ -342,7 +426,7 @@ const checkRunEventSchema = z.object({ check_run: checkRunSchema });
 onGithubEvent('check_run', async (d) => {
   if (!d.action || !CHECK_ACTIONS.has(d.action)) return 'ignored';
   if (!checkRunEventSchema.safeParse(d.payload).success) return 'ignored';
-  const link = await linkOf(d);
+  const link = await touchLinkDelivery(d);
   if (!link) return 'ignored';
   await storeCheckRun(
     link.id,

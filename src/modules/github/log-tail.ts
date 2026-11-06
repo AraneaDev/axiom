@@ -3,18 +3,31 @@ export const LOG_TAIL_LIMITS = { lines: 100, bytes: 16384, downloadBytes: 1_048_
 
 const ESC = '\u001b';
 // Complete sequences: OSC (ended by BEL or ESC \), CSI, a charset choice, and any other two-byte escape
-const OSC = new RegExp(`${ESC}\\][^\\u0007${ESC}]*(?:\\u0007|${ESC}\\\\)`, 'g');
+const OSC = new RegExp(`${ESC}\\][^\\u0007${ESC}\\n]*(?:\\u0007|${ESC}\\\\)`, 'g');
 const CSI = new RegExp(`${ESC}\\[[0-9:;<=>?]*[ -/]*[@-~]`, 'g');
 const CHARSET = new RegExp(`${ESC}[()*+][0-9A-Za-z]`, 'g');
 const TWO_BYTE = new RegExp(`${ESC}[@-Z\\\\^_0-9=>]`, 'g');
 // What a cut left of one at the end of a line, and any escape that is still around
 const UNFINISHED = new RegExp(`${ESC}(?:[\\[\\]][^\\n]*)?$`);
-const LONE_ESCAPE = new RegExp(ESC, 'g');
+// What is left of the control characters: all of C0 but tab and newline, DEL, all of C1 (U+009B
+// is an 8-bit CSI), and the bidi overrides and isolates, which make text read differently than
+// it is written. The CI run that wrote the log is not trusted.
+// eslint-disable-next-line no-control-regex -- control characters are the point
+const CONTROLS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g;
 // GitHub puts the time on every line: 2026-11-06T10:00:00.1234567Z
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z /;
 
 const isPostLine = (line: string) =>
   line.startsWith('##[group]Post ') || line === 'Post job cleanup.';
+
+/**
+ * A text without control characters (tab and newline stay) and without bidi overrides, for text
+ * written by whoever controls a CI run, such as a step name.
+ * @param value The text
+ */
+export function plainText(value: string): string {
+  return value.replace(CONTROLS, '');
+}
 
 /**
  * The last piece of a line a terminal would have shown after its carriage returns.
@@ -46,7 +59,7 @@ function lastBytes(line: string, maxBytes: number): string {
  * cleanup. Then the last 100 lines are kept, and of those the last 16384 bytes, cut at a line
  * (or, for a single line, at a UTF-8 character).
  * @param raw The log as GitHub serves it
- * @returns The tail, and whether anything beyond the clean-up was dropped
+ * @returns The tail, and whether any line, or part of one, was dropped (post-job lines count)
  */
 export function logTail(raw: string): { text: string; truncated: boolean } {
   const plain = raw
@@ -58,7 +71,7 @@ export function logTail(raw: string): { text: string; truncated: boolean } {
     .replace(TWO_BYTE, '');
   let lines = plain.split('\n').map((line) => {
     const unfinished = line.replace(/\r$/, '').replace(UNFINISHED, '');
-    return afterCarriageReturns(unfinished).replace(LONE_ESCAPE, '').replace(TIMESTAMP, '');
+    return plainText(afterCarriageReturns(unfinished)).replace(TIMESTAMP, '');
   });
   if (lines.at(-1) === '') lines.pop();
   let truncated = false;

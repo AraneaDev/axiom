@@ -184,6 +184,8 @@ interface SendOptions {
    * carries it only when it goes to the API host.
    */
   authAfterRedirect: 'api-host' | 'never';
+  /** A Range header for the requests after the first one: the host a redirect leads to */
+  rangeAfterRedirect?: string;
 }
 
 /**
@@ -213,6 +215,7 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
   for (let hop = 0; ; hop++) {
     const headers: Record<string, string> = { ...API_HEADERS };
     if (opts.credential && withAuth) headers.authorization = opts.credential;
+    if (opts.rangeAfterRedirect && hop > 0) headers.range = opts.rangeAfterRedirect;
     if (body !== undefined) headers['content-type'] = 'application/json';
 
     let response: Response;
@@ -295,10 +298,28 @@ async function successBody(response: Response): Promise<unknown> {
   }
 }
 
+// The most of an error body that is read: a message is short, and the rest is not wanted
+const ERROR_BODY_BYTES = 64 * 1024;
+
+async function readCapped(response: Response, maxBytes: number): Promise<string> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of response.body ?? []) {
+    const bytes = Buffer.from(chunk);
+    chunks.push(bytes.subarray(0, maxBytes - size));
+    size += bytes.byteLength;
+    if (size >= maxBytes) {
+      await response.body?.cancel();
+      break;
+    }
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 async function failure(auth: GithubAuth, response: Response, credential?: string) {
   let body: unknown = null;
   try {
-    const text = await response.text();
+    const text = await readCapped(response, ERROR_BODY_BYTES);
     try {
       body = text ? JSON.parse(text) : null;
     } catch {
@@ -409,8 +430,7 @@ export async function githubPaginate<T>(
 
 /**
  * A text download, such as a job log: GitHub answers with a redirect to storage, which is
- * followed without the Authorization header. The body is streamed and only its last
- * `maxBytes` are kept.
+ * followed without the Authorization header. Only the last `maxBytes` are kept.
  * @param auth Who the call is made as
  * @param path The API path that redirects to the text
  * @param maxBytes The most bytes to keep, counted from the end
@@ -420,28 +440,52 @@ export async function githubText(
   path: string,
   maxBytes: number,
 ): Promise<string> {
+  return (await githubTextTail(auth, path, maxBytes)).text;
+}
+
+/**
+ * Like `githubText`, and tells whether the start of the text was left out. The storage request
+ * asks for just the last `maxBytes` (`Range: bytes=-N`); a host that answers 200 anyway is
+ * streamed through a rolling window, so no more than `maxBytes` and the chunk being read are held.
+ * @param auth Who the call is made as
+ * @param path The API path that redirects to the text
+ * @param maxBytes The most bytes to keep, counted from the end
+ * @returns The text, and whether bytes before it were dropped
+ */
+export async function githubTextTail(
+  auth: GithubAuth,
+  path: string,
+  maxBytes: number,
+): Promise<{ text: string; truncated: boolean }> {
   let credential = await authorization(auth);
   const url = apiUrl(path);
-  const attempt = () =>
+  const attempt = (range: boolean) =>
     send(url, {
       method: 'GET',
       credential,
       timeoutMs: TEXT_TIMEOUT_MS,
       authAfterRedirect: 'never',
+      rangeAfterRedirect: range ? `bytes=-${maxBytes}` : undefined,
     });
-  let response = await attempt();
+  let response = await attempt(true);
   // As in `request`: a 401 from the API host to a request that carried the token is renewed once
   const refresh =
     auth.kind === 'none' || auth.kind === 'token' ? undefined : refreshers.get(auth.kind);
   if (response.status === 401 && refresh && credential && credentialed.has(response)) {
     await response.body?.cancel();
     credential = await refresh(auth, credential);
-    response = await attempt();
+    response = await attempt(true);
+  }
+  // A range the host cannot serve (an empty text): ask for all of it
+  if (response.status === 416) {
+    await response.body?.cancel();
+    response = await attempt(false);
   }
   if (!response.ok) throw await failure(auth, response, credential);
 
-  // A rolling window: the head of what has arrived is trimmed away as soon as the rest fits the
-  // cap, so no more than `maxBytes` and the chunk being read are ever held
+  // `Content-Range: bytes 100-199/200` : bytes before the first one were left out
+  const rangeStart = /^bytes\s+(\d+)-/.exec(response.headers.get('content-range') ?? '');
+  let truncated = response.status === 206 && (rangeStart === null || Number(rangeStart[1]) > 0);
   const chunks: Buffer[] = [];
   let kept = 0;
   try {
@@ -450,6 +494,7 @@ export async function githubText(
       chunks.push(bytes);
       kept += bytes.byteLength;
       while (kept > maxBytes) {
+        truncated = true;
         const excess = kept - maxBytes;
         if (chunks[0].byteLength <= excess) {
           kept -= chunks.shift()!.byteLength;
@@ -465,6 +510,6 @@ export async function githubText(
   const tail = Buffer.concat(chunks);
   // Cutting may split a character: drop UTF-8 continuation bytes at the start
   let start = 0;
-  while (start < tail.length && start < 3 && (tail[start] & 0xc0) === 0x80) start++;
-  return tail.subarray(start).toString('utf8');
+  if (truncated) while (start < tail.length && start < 3 && (tail[start] & 0xc0) === 0x80) start++;
+  return { text: tail.subarray(start).toString('utf8'), truncated };
 }

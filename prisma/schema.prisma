@@ -1591,25 +1591,29 @@ model GithubCommit {
 /// a ticket sees why CI failed
 model GithubCheckRun {
   /// GitHub's check run id (for GitHub Actions also the job id)
-  id              String         @id
-  repoLinkId      String
-  headSha         String
-  name            String
-  appSlug         String
+  id                   String         @id
+  repoLinkId           String
+  headSha              String
+  name                 String
+  appSlug              String
   /// Actions runs: from the job, for re-running the workflow
-  workflowRunId   String?
-  status          String
-  conclusion      String?
-  htmlUrl         String
-  startedAt       DateTime?
-  completedAt     DateTime?
-  failedStep      String?
-  logTail         String?
-  logTruncated    Boolean        @default(false)
-  logUnavailable  Boolean        @default(false)
+  workflowRunId        String?
+  status               String
+  conclusion           String?
+  htmlUrl              String
+  startedAt            DateTime?
+  completedAt          DateTime?
+  failedStep           String?
+  logTail              String?
+  logTruncated         Boolean        @default(false)
+  logUnavailable       Boolean        @default(false)
+  /// Why: not_found and gone are final; forbidden and unavailable are tried again (once an hour)
+  logUnavailableReason String?
+  /// When the log was last asked for
+  logCheckedAt         DateTime?
   /// When the newest payload applied says it changed: an older one never overwrites it
-  githubUpdatedAt DateTime
-  repoLink        GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+  githubUpdatedAt      DateTime
+  repoLink             GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
 
   @@index([repoLinkId, headSha])
   @@map("github_check_runs")

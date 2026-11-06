@@ -4,12 +4,26 @@ import { z } from 'zod';
 import { prisma } from '../../config/database';
 
 import { resolveGithubActor } from './github-actor';
-import { isUniqueViolation } from './github-errors';
 import { reportOutcome, type GithubEventOutcome, type GithubTransition } from './github-outcomes';
+import {
+  clean,
+  cutUtf8,
+  githubUser,
+  httpsOr,
+  loadLink,
+  lockLink,
+  outcomeBase,
+  retryOnRace,
+  senderSchema,
+  text,
+  timestamp,
+  touchLinkDelivery,
+  union,
+  type Sender,
+} from './github-store';
 import { drivesAutomation } from './issue-keys';
 import { syncLinks, type LinkTarget, type SyncResult } from './issue-links.service';
-import { findRepoLinkByRepoId } from './repo-link.service';
-import { onGithubEvent, type GithubDeliveryContext } from './webhook-dispatch';
+import { onGithubEvent } from './webhook-dispatch';
 
 export { onGithubOutcome } from './github-outcomes';
 export type { GithubEventOutcome, GithubTransition } from './github-outcomes';
@@ -27,69 +41,9 @@ export type StoreMeta = {
   before?: string | null;
 };
 
-/** Who did it on GitHub */
-export type Sender = { id: number; login: string } | null;
 type Client = Prisma.TransactionClient;
 
-// Postgres refuses NUL in text, and a delivery that fails on it would fail on every retry
-/** @param text The text to make storable */
-export const clean = (text: string) => text.replaceAll('\u0000', '');
-const text = z.string().transform(clean);
-
 const FALLBACK_HOST = 'https://github.com/';
-
-/**
- * GitHub's link if it is an https one (it ends up in an href), else the one built from the repo.
- * @param url The link GitHub gave
- * @param fallback The link to use instead
- */
-export function httpsOr(url: string, fallback: string): string {
-  return /^https:\/\/[^\s]+$/i.test(url) ? url : fallback;
-}
-
-/**
- * The project and the web address of a repository link.
- * @param repoLinkId The repository link
- */
-export async function loadLink(repoLinkId: string) {
-  return prisma.githubRepoLink.findUnique({
-    where: { id: repoLinkId },
-    select: { projectId: true, htmlUrl: true },
-  });
-}
-
-/**
- * The part of an outcome every store shares: the actor is resolved here, before any transaction.
- * @param repoLinkId The repository link
- * @param link What `loadLink` found, null when the link is gone
- * @param sender Who did it on GitHub
- * @param source What brought the change in
- * @param meta The event behind the change
- * @param defaults The event and action to use when the meta names none
- * @param defaults.event
- * @param defaults.action
- */
-export async function outcomeBase(
-  repoLinkId: string,
-  link: { projectId: string } | null,
-  sender: Sender,
-  source: GithubEventOutcome['source'],
-  meta: StoreMeta,
-  defaults: { event: string; action: string | null },
-): Promise<Omit<GithubEventOutcome, 'transitions'>> {
-  return {
-    repoLinkId,
-    projectId: link?.projectId ?? '',
-    event: meta.event ?? defaults.event,
-    action: meta.action === undefined ? defaults.action : meta.action,
-    source,
-    actor: await resolveGithubActor(sender),
-    linkedIssueIds: [],
-    removedIssueIds: [],
-    drivingIssueIds: [],
-    payload: meta.payload ?? {},
-  };
-}
 
 // The issues a target is linked to now, and those linked through a driving source
 async function linksOf(
@@ -109,62 +63,12 @@ async function linksOf(
   };
 }
 
-/**
- * The first statement of every store transaction. Unlinking deletes the link row and its children
- * cascade, so a store takes the link before its own rows, in that order too, and never waits on a
- * lock the unlink holds the other way round.
- * @param tx The transaction
- * @param repoLinkId The repository link
- * @returns False when the link is gone: nothing is stored
- */
-export async function lockLink(tx: Client, repoLinkId: string): Promise<boolean> {
-  const rows = await tx.$queryRaw<
-    { id: string }[]
-  >`SELECT id FROM github_repo_links WHERE id = ${repoLinkId} FOR KEY SHARE`;
-  return rows.length > 0;
-}
-
-/** @param lists Lists of ids */
-export const union = (...lists: string[][]) => [...new Set(lists.flat())];
-
-/**
- * Runs a store once more when two calls raced to create the same row and the other won; the
- * failed attempt rolled back whole, so the second one starts from what the winner stored.
- * @param run The store
- */
-export async function retryOnRace<T>(run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (err) {
-    if (!isUniqueViolation(err)) throw err;
-    return run();
-  }
-}
-
 // ---- Text
-
-/**
- * Cuts a text to at most a number of bytes of UTF-8 without splitting a character, and drops NUL
- * characters, which the database refuses.
- * @param value The text
- * @param maxBytes The most bytes to keep
- */
-export function cutUtf8(value: string, maxBytes: number): string {
-  const bytes = Buffer.from(clean(value), 'utf8');
-  if (bytes.length <= maxBytes) return bytes.toString('utf8');
-  let end = maxBytes;
-  // A continuation byte (10xxxxxx) at the cut means the character straddles it: leave it out
-  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
-  return bytes.subarray(0, end).toString('utf8');
-}
 
 const REVIEW_BODY_BYTES = 4096;
 const COMMIT_MESSAGE_BYTES = 2048;
 
 // ---- Payloads
-
-const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'not a date');
-const githubUser = z.object({ id: z.number().int(), login: text.pipe(z.string().min(1)) });
 
 const pullRequestSchema = z.object({
   number: z.number().int().positive(),
@@ -208,8 +112,6 @@ const commitSchema = z.object({
   url: z.string(),
   author: z.object({ username: text.nullish() }).nullish(),
 });
-
-export const senderSchema = githubUser.nullable().catch(null);
 
 // ---- Branches
 
@@ -649,22 +551,6 @@ async function storeCommits(
 
 // ---- Handlers
 
-/**
- * The link of a delivery's repository as it is now (a link replaced since the delivery arrived is
- * the new link's business), with its `lastDeliveryAt` set; null when the repository has none.
- * @param d The delivery
- */
-export async function linkOf(d: GithubDeliveryContext) {
-  if (d.repoId === null) return null;
-  const link = await findRepoLinkByRepoId(d.repoId);
-  if (!link) return null;
-  await prisma.githubRepoLink.updateMany({
-    where: { id: link.id },
-    data: { lastDeliveryAt: new Date() },
-  });
-  return link;
-}
-
 const BRANCH_PREFIX = 'refs/heads/';
 
 // `repository.pushed_at` is a unix time in a push event and an ISO text elsewhere
@@ -692,7 +578,7 @@ const pushSchema = z.object({
 onGithubEvent('push', async (d) => {
   const parsed = pushSchema.safeParse(d.payload);
   if (!parsed.success || !parsed.data.ref.startsWith(BRANCH_PREFIX)) return 'ignored';
-  const link = await linkOf(d);
+  const link = await touchLinkDelivery(d);
   if (!link) return 'ignored';
   const name = parsed.data.ref.slice(BRANCH_PREFIX.length);
   const meta: StoreMeta = {
@@ -722,7 +608,7 @@ for (const event of ['create', 'delete'] as const) {
   onGithubEvent(event, async (d) => {
     const parsed = refEventSchema.safeParse(d.payload);
     if (!parsed.success || parsed.data.ref_type !== 'branch') return 'ignored';
-    const link = await linkOf(d);
+    const link = await touchLinkDelivery(d);
     if (!link) return 'ignored';
     await storeBranch(
       link.id,
@@ -742,7 +628,7 @@ const pullRequestEventSchema = z.object({ pull_request: pullRequestSchema });
 onGithubEvent('pull_request', async (d) => {
   const parsed = pullRequestEventSchema.safeParse(d.payload);
   if (!parsed.success) return 'ignored';
-  const link = await linkOf(d);
+  const link = await touchLinkDelivery(d);
   if (!link) return 'ignored';
   await storePullRequest(
     link.id,
@@ -761,7 +647,7 @@ onGithubEvent('pull_request_review', async (d) => {
   if (!d.action || !REVIEW_ACTIONS.has(d.action)) return 'ignored';
   const parsed = reviewEventSchema.safeParse(d.payload);
   if (!parsed.success) return 'ignored';
-  const link = await linkOf(d);
+  const link = await touchLinkDelivery(d);
   if (!link) return 'ignored';
   const sender = senderSchema.parse(d.payload.sender);
   const meta: StoreMeta = { event: 'pull_request_review', action: d.action, payload: d.payload };
