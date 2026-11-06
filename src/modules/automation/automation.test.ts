@@ -126,6 +126,18 @@ describe('Automation API', () => {
     expect(res.body.name).toBe('Updated rule name');
   });
 
+  it('5b. names the key no action type reads when an update carries one', async () => {
+    const res = await request(app)
+      .patch(`/api/projects/${projectId}/automation-rules/${ruleId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set(XHR)
+      .send({ actions: [{ type: 'add_comment', body: 'Hi', colour: 'red' }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe(
+      'actions.0: no action type reads "colour": remove it from the action',
+    );
+  });
+
   it('6. should create a second rule with conditions', async () => {
     const res = await request(app)
       .post(`/api/projects/${projectId}/automation-rules`)

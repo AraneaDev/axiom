@@ -61,22 +61,31 @@ const condition = z.object({
  * Each type reads its own fields (see AutomationAction). A key none of them reads is refused,
  * so a misspelled field answers 400 instead of storing an action that does nothing.
  */
-const action = z.strictObject({
-  type: z.enum(ACTION_TYPES),
-  columnId: z.string().max(64).optional(),
-  userId: z.string().max(64).optional(),
-  name: z.string().max(200).optional(),
-  body: TEXT.optional(),
-  field: z.string().max(100).optional(),
-  value: z.string().max(5000).optional(),
-  title: z.string().max(500).optional(),
-  to: z.string().max(500).optional(),
-  subject: z.string().max(500).optional(),
-  url: z.string().max(2000).optional(),
-  method: z.string().max(10).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  data: z.record(z.string(), z.unknown()).optional(),
-});
+const action = z.strictObject(
+  {
+    type: z.enum(ACTION_TYPES),
+    columnId: z.string().max(64).optional(),
+    userId: z.string().max(64).optional(),
+    name: z.string().max(200).optional(),
+    body: TEXT.optional(),
+    field: z.string().max(100).optional(),
+    value: z.string().max(5000).optional(),
+    title: z.string().max(500).optional(),
+    to: z.string().max(500).optional(),
+    subject: z.string().max(500).optional(),
+    url: z.string().max(2000).optional(),
+    method: z.string().max(10).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    data: z.record(z.string(), z.unknown()).optional(),
+  },
+  {
+    // Name the key, so a client saving a rule written elsewhere knows what to drop
+    error: (issue) =>
+      issue.code === 'unrecognized_keys'
+        ? `no action type reads ${issue.keys.map((key) => `"${key}"`).join(', ')}: remove it from the action`
+        : undefined,
+  },
+);
 
 const ruleFields = {
   name: z.string().min(1).max(200),
