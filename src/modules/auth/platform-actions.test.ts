@@ -70,7 +70,6 @@ describe('the route table of the platform group', () => {
       'auth.register',
       'auth.resetPassword',
       'health.check',
-      'health.metrics',
       'siteSettings.get',
     ]);
   });
@@ -97,7 +96,7 @@ describe('the platform group over REST', () => {
     const res = await request(app).get('/api/health');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('healthy');
-    expect((await request(app).get('/api/health/metrics')).body.totalRequests).toBeTypeOf('number');
+    expect((await request(app).get('/api/health/metrics')).status).toBe(401);
   });
 
   it('answers the site settings with no credential and keeps the write for a platform admin', async () => {

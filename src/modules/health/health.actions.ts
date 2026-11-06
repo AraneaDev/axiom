@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-import { definePublicAction } from '../../actions/define';
+import { platformAdmin } from '../../actions/authorize';
+import { defineAction, definePublicAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 
@@ -8,9 +9,9 @@ import { metrics } from './health.metrics';
 import * as healthService from './health.service';
 
 /**
- * The health check and the request counters. Both are open to anyone, as the container check and
- * the load balancer call them with no credential; the handlers read no user (ctx.userId is
- * undefined) and neither is open to a token.
+ * The health check is open to anyone, as the container check and the load balancer call it with no
+ * credential; its handler reads no user (ctx.userId is undefined). The request counters are for a
+ * platform admin. Neither is open to a token.
  */
 const noTarget = z.object({});
 const nothing = z.void();
@@ -33,16 +34,17 @@ registerActions([
       ctx.http.res.status(report.status === 'unhealthy' ? 503 : 200).json(report);
     },
   }),
-  definePublicAction({
+  defineAction({
     name: 'health.metrics',
     uiOnly: true,
+    admin: true,
     area: 'admin',
     kind: 'read',
-    summary: 'Read the request counters since the server started',
+    summary: 'Read the request counters since the server started (platform admins)',
     input: noTarget,
     output: z.looseObject({ totalRequests: z.number() }),
-    rest: { method: 'GET', path: '/api/health/metrics', public: true },
-    authorize: async () => {},
+    rest: { method: 'GET', path: '/api/health/metrics' },
+    authorize: platformAdmin,
     handler: async () => ({ ...metrics.snapshot() }),
   }),
 ]);

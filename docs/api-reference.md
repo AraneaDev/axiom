@@ -281,6 +281,10 @@ Check API health. No authentication required.
 }
 ```
 
+### GET /api/health/metrics
+
+The request counters since the server started (`totalRequests`, status code counts, average duration). Needs a platform admin: an anonymous call answers `401`, a signed-in user who is not a platform admin `403`. Closed to tokens. The plain `/api/health` above stays public for the container check and load balancers.
+
 ---
 
 ## Authentication

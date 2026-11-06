@@ -24,7 +24,6 @@ const EXEMPT_REQUESTS = new Set([
   'POST /auth/register',
   'GET /site-settings',
   'GET /health',
-  'GET /health/metrics',
   'GET /users/me',
 ]);
 
