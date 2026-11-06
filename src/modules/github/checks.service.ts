@@ -52,6 +52,7 @@ const checkRunSchema = z.object({
   started_at: timestamp.nullish(),
   completed_at: timestamp.nullish(),
   html_url: z.string().nullish(),
+  details_url: z.string().nullish(),
   output: z
     .object({ title: text.nullish(), summary: text.nullish(), text: text.nullish() })
     .nullish(),
@@ -77,6 +78,25 @@ type FailureDetails = {
   logCheckedAt: Date | null;
 };
 
+// `https://github.com/o/r/actions/runs/<run_id>/job/<job_id>`: a re-run keeps the run id
+const ACTIONS_RUN_PATH = /^\/[^/]+\/[^/]+\/actions\/runs\/(\d+)(?:\/|$)/;
+
+/**
+ * The workflow run an Actions check run belongs to, from its details URL.
+ * @param detailsUrl GitHub's `details_url`
+ * @returns The run id, or null when the URL is not an Actions run's
+ */
+function workflowRunOf(detailsUrl: string | null | undefined): string | null {
+  if (!detailsUrl) return null;
+  try {
+    const url = new URL(detailsUrl);
+    if (url.protocol !== 'https:') return null;
+    return ACTIONS_RUN_PATH.exec(url.pathname)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const isFailed = (conclusion: string | null | undefined) =>
   conclusion != null && FAILED_CONCLUSIONS.includes(conclusion);
 
@@ -97,12 +117,11 @@ type RunRow = {
 };
 
 /**
- * The state of a set of runs. Only the newest run of each app, check suite and name counts, since
- * a re-run (same suite, new id) replaces the run it repeats while two workflows' jobs of one name
- * stay apart. A run without a suite falls back to its workflow run, then to the name alone: a
- * newer run replaces older ones of the same app and name unless both name different workflow
- * runs. Failed when any counted run failed, else pending unless every one has completed as
- * `success`, `neutral` or `skipped`, else passed.
+ * The state of a set of runs. Only the newest run of each app, workflow run and name counts: a
+ * re-run keeps its workflow run and has a new id. Without a workflow run the check suite stands
+ * for it, without that the name alone. Two workflows' jobs of one name stay apart. Failed when
+ * any counted run failed, else pending unless every one has completed as `success`, `neutral`
+ * or `skipped`, else passed.
  * @param runs The runs of one commit
  */
 function stateOfRuns(runs: RunRow[]): CheckState {
@@ -112,10 +131,11 @@ function stateOfRuns(runs: RunRow[]): CheckState {
   for (const run of ascending) {
     const replaces = (old: RunRow) => {
       if (old.appSlug !== run.appSlug || old.name !== run.name) return false;
-      if (old.checkSuiteId !== null || run.checkSuiteId !== null) {
+      if (old.workflowRunId && run.workflowRunId) return old.workflowRunId === run.workflowRunId;
+      if (old.checkSuiteId !== null && run.checkSuiteId !== null) {
         return old.checkSuiteId === run.checkSuiteId;
       }
-      return !old.workflowRunId || !run.workflowRunId || old.workflowRunId === run.workflowRunId;
+      return true;
     };
     for (let at = counted.length - 1; at >= 0; at--) {
       if (replaces(counted[at])) counted.splice(at, 1);
@@ -306,6 +326,7 @@ export async function storeCheckRun(
   const conclusion = run.conclusion ?? null;
   const failed = isFailed(conclusion);
   const isActions = (run.app?.slug ?? '') === ACTIONS_APP;
+  const runId = isActions ? workflowRunOf(run.details_url) : null;
   const at = run.completed_at
     ? new Date(run.completed_at)
     : run.started_at
@@ -334,7 +355,8 @@ export async function storeCheckRun(
         name: cutUtf8(plainText(run.name), NAME_BYTES),
         appSlug: cutUtf8(plainText(run.app?.slug ?? ''), SLUG_BYTES),
         checkSuiteId: run.check_suite ? BigInt(run.check_suite.id) : (before?.checkSuiteId ?? null),
-        workflowRunId: own?.workflowRunId ?? same?.workflowRunId ?? null,
+        workflowRunId:
+          runId ?? own?.workflowRunId ?? same?.workflowRunId ?? before?.workflowRunId ?? null,
         status: run.status,
         conclusion,
         htmlUrl: httpsOr(

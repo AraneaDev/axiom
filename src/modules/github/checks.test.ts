@@ -825,6 +825,140 @@ describe('checkStateOf', () => {
         expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
       });
 
+      it('lets a re-run attempt in another suite replace its run when the workflow run is the same', async () => {
+        await seedRun(10, SHA_A, 'completed', 'failure', {
+          name: 'build',
+          checkSuiteId: 501,
+          workflowRunId: '900',
+        });
+        await seedRun(11, SHA_A, 'completed', 'success', {
+          name: 'build',
+          checkSuiteId: 503,
+          workflowRunId: '900',
+        });
+
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+      });
+
+      it('keeps two workflows with a build job apart, with or without suites', async () => {
+        await seedRun(10, SHA_A, 'completed', 'failure', { name: 'build', workflowRunId: '900' });
+        await seedRun(11, SHA_A, 'completed', 'success', { name: 'build', workflowRunId: '901' });
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+
+        await prisma.githubCheckRun.deleteMany({ where: { repoLinkId } });
+        await seedRun(10, SHA_A, 'completed', 'failure', {
+          name: 'build',
+          checkSuiteId: 501,
+          workflowRunId: '900',
+        });
+        await seedRun(11, SHA_A, 'completed', 'success', {
+          name: 'build',
+          checkSuiteId: 502,
+          workflowRunId: '901',
+        });
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+      });
+
+      it('takes the workflow run of an Actions run from details_url on every event', async () => {
+        const url = (run: number, job: number) =>
+          `https://github.com/acme-labs/widget/actions/runs/${run}/job/${job}`;
+        await deliver(
+          event(checkRun({ id: 4700, conclusion: 'success', details_url: url(88100, 4700) })),
+        );
+        expect(await stored(4700)).toMatchObject({ workflowRunId: '88100' });
+        await deliver(
+          event(
+            checkRun({
+              id: 4701,
+              status: 'queued',
+              conclusion: null,
+              started_at: null,
+              completed_at: null,
+              details_url: url(88100, 4701),
+            }),
+            'created',
+          ),
+        );
+        expect(await stored(4701)).toMatchObject({ workflowRunId: '88100' });
+      });
+
+      it('ignores a details_url of another app, and one that does not match, and uses the suite', async () => {
+        await deliver(
+          event(
+            checkRun({
+              id: 4710,
+              conclusion: 'success',
+              details_url: 'https://example.test/actions/other/12',
+              check_suite: { id: 811 },
+            }),
+          ),
+        );
+        await deliver(
+          event(
+            checkRun({
+              id: 4711,
+              name: 'lint',
+              conclusion: 'success',
+              app: { id: 1, slug: 'acme-ci' },
+              details_url: 'https://github.com/acme-labs/widget/actions/runs/77/job/1',
+            }),
+          ),
+        );
+        expect(await stored(4710)).toMatchObject({ workflowRunId: null, checkSuiteId: 811n });
+        expect(await stored(4711)).toMatchObject({ workflowRunId: null });
+
+        // The suite decides: a failing run of another suite is not replaced by 4710
+        await deliver(
+          event(
+            checkRun({
+              id: 4712,
+              conclusion: 'failure',
+              check_suite: { id: 812 },
+              details_url: 'nonsense',
+            }),
+          ),
+        );
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+        await deliver(
+          event(
+            checkRun({
+              id: 4713,
+              conclusion: 'success',
+              check_suite: { id: 812 },
+              details_url: 'nonsense',
+            }),
+          ),
+        );
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+      });
+
+      it('reports a re-run attempt that passes in a new suite as checks_passed once', async () => {
+        const url = (job: number) =>
+          `https://github.com/acme-labs/widget/actions/runs/88100/job/${job}`;
+        await deliver(
+          event(
+            checkRun({
+              id: 4720,
+              conclusion: 'failure',
+              check_suite: { id: 821 },
+              details_url: url(4720),
+            }),
+          ),
+        );
+        await deliver(
+          event(
+            checkRun({
+              id: 4721,
+              conclusion: 'success',
+              check_suite: { id: 822 },
+              details_url: url(4721),
+            }),
+          ),
+        );
+
+        expect(transitions()).toEqual(['checks_failed', 'checks_passed']);
+      });
+
       it('stores the suite of the payload, and a push and a pull_request workflow report as they should', async () => {
         const run = (id: number, suite: number, conclusion: string) =>
           checkRun({
