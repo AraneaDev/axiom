@@ -15,6 +15,8 @@ model User {
   displayName  String
   passwordHash String
   avatarUrl    String?
+  /// PERSON signs in; INTEGRATION is a built-in author for events from another system and never does
+  kind         UserKind @default(PERSON)
 
   // Platform admin
   isAdmin Boolean @default(false)
@@ -162,6 +164,11 @@ model Organization {
   agentPolicy  AgentPolicy?
 
   @@map("organizations")
+}
+
+enum UserKind {
+  PERSON
+  INTEGRATION
 }
 
 enum OrgRole {

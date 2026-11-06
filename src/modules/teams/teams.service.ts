@@ -8,6 +8,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parsePagination, parseServicePagination, paginatedResponse } from '../../utils/pagination';
 import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
+import { isIntegrationUser } from '../github/integration-user';
 import { viewablePageIdFilter } from '../search/search-access';
 import { canAccessSpace } from '../wiki/space-permissions.service';
 
@@ -207,6 +208,9 @@ export async function addTeamMember(
   userId: string,
   role: TeamRole = TeamRole.MEMBER,
 ) {
+  if (isIntegrationUser(userId)) {
+    throw new AppError(400, 'The GitHub integration user cannot join a team');
+  }
   await checkUnique('teamMembership', { userId, teamId }, 'User is already a team member');
 
   // Verify user is in the org

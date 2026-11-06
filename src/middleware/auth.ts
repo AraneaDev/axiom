@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { getRequestContext } from '../lib/request-context';
+import { isIntegrationUser } from '../modules/github/integration-user';
 
 import { AppError } from './errorHandler';
 
@@ -45,7 +46,9 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
       const apiToken = await prisma.apiToken.findUnique({ where: { tokenHash } });
-      if (!apiToken) throw new AppError(401, 'Invalid API token', 'INVALID_TOKEN');
+      if (!apiToken || isIntegrationUser(apiToken.userId)) {
+        throw new AppError(401, 'Invalid API token', 'INVALID_TOKEN');
+      }
       if (apiToken.expiresAt && apiToken.expiresAt < new Date()) {
         throw new AppError(401, 'API token expired', 'TOKEN_EXPIRED');
       }
@@ -83,6 +86,9 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     if (header.startsWith('Bearer ')) {
       const token = header.slice(7);
       const payload = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
+      if (isIntegrationUser(payload.userId)) {
+        throw new AppError(401, 'Invalid token', 'INVALID_TOKEN');
+      }
 
       const jwtUser = await prisma.user.findUnique({
         where: { id: payload.userId },

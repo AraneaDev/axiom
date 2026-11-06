@@ -1,9 +1,11 @@
 import { prisma } from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
 import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { checkUnique } from '../../utils/check-unique';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { isIntegrationUser } from '../github/integration-user';
 
 import {
   assertCanGrantOrgRole,
@@ -171,6 +173,9 @@ export async function addOrgMember(
   actorId?: string,
 ) {
   await assertOrgExists(orgId);
+  if (isIntegrationUser(userId)) {
+    throw new AppError(400, 'The GitHub integration user cannot join an organization');
+  }
   if (actorId) await assertCanGrantOrgRole(orgId, actorId, role);
   await checkUnique('orgMembership', { userId, orgId }, 'User is already a member');
 

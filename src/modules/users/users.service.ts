@@ -11,6 +11,7 @@ import {
   TEAM_ORG_SELECT,
   USER_WITH_AVATAR_SELECT,
 } from '../../utils/prisma-selects';
+import { isIntegrationUser } from '../github/integration-user';
 
 // ─── Profile ────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ export async function searchUsers(query: string, searcherId: string, limit = 10)
   const { take } = parseServicePagination({ limit });
   return prisma.user.findMany({
     where: {
+      kind: 'PERSON',
       OR: [
         { username: { contains: query, mode: 'insensitive' } },
         { displayName: { contains: query, mode: 'insensitive' } },
@@ -309,6 +311,9 @@ export async function createApiToken(
     expiresInDays?: number;
   },
 ) {
+  if (isIntegrationUser(userId)) {
+    throw new AppError(400, 'The GitHub integration user cannot have API tokens');
+  }
   if (!data.scopes.every(isMintableScope)) {
     throw new AppError(400, 'Unknown token scope, or one no action uses yet');
   }

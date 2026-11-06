@@ -20,9 +20,17 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import { logAudit } from '../audit/audit.service';
+import { isIntegrationUser } from '../github/integration-user';
 import { redeemableInviteRole } from '../orgs/org-roles';
 
 const SALT_ROUNDS = 12;
+
+let refusedHash: Promise<string> | undefined;
+/** A bcrypt hash nobody knows the password of, made once: what a refused account is compared with */
+function refusedAccountHash(): Promise<string> {
+  refusedHash ??= bcrypt.hash(crypto.randomBytes(16).toString('hex'), SALT_ROUNDS);
+  return refusedHash;
+}
 const ACCESS_TOKEN_TTL = '4h';
 const REFRESH_TOKEN_TTL_DAYS = 30;
 
@@ -291,7 +299,15 @@ export async function login(data: { login: string; password: string; twoFactorCo
   });
   if (!user) throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
 
-  const valid = await bcrypt.compare(data.password, user.passwordHash);
+  // The integration user has no password hash to compare with: it is checked against a real
+  // bcrypt hash, so the refusal takes as long as a wrong password and reads the same
+  let valid: boolean;
+  if (isIntegrationUser(user.id)) {
+    await bcrypt.compare(data.password, await refusedAccountHash());
+    valid = false;
+  } else {
+    valid = await bcrypt.compare(data.password, user.passwordHash);
+  }
   if (!valid) {
     logAudit({
       userId: user.id,
@@ -364,7 +380,7 @@ export async function refresh(refreshTokenValue: string) {
   const tokenHash = crypto.createHash('sha256').update(refreshTokenValue).digest('hex');
 
   const stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
-  if (!stored || stored.expiresAt < new Date()) {
+  if (!stored || stored.expiresAt < new Date() || isIntegrationUser(stored.userId)) {
     throw new AppError(401, 'Invalid or expired refresh token', 'INVALID_REFRESH');
   }
 
@@ -516,7 +532,7 @@ const PASSWORD_RESET_TTL_HOURS = 1;
  */
 export async function requestPasswordReset(email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) return { success: true };
+  if (!user || isIntegrationUser(user.id)) return { success: true };
 
   logAudit({
     userId: user.id,

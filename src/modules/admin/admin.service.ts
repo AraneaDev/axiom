@@ -10,6 +10,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { parseServicePagination } from '../../utils/pagination';
 import { logAudit } from '../audit/audit.service';
+import { isIntegrationUser } from '../github/integration-user';
 import { assertNotLastOwnerTx } from '../orgs/org-roles';
 
 // ─── Admin Check ────────────────────────────────────────────
@@ -25,6 +26,17 @@ export async function isUserAdmin(userId: string): Promise<boolean> {
     select: { isAdmin: true },
   });
   return user?.isAdmin === true;
+}
+
+/**
+ * The built-in GitHub user is shown but never changed: no role, password, deactivation or delete.
+ * @param userId - The user the admin acts on
+ * @throws {AppError} 400 for the integration user
+ */
+function assertNotIntegrationUser(userId: string) {
+  if (isIntegrationUser(userId)) {
+    throw new AppError(400, 'The GitHub integration user is built in and cannot be changed');
+  }
 }
 
 // ─── System Stats ───────────────────────────────────────────
@@ -113,6 +125,7 @@ export async function listUsers(opts: { search?: string; limit?: number; offset?
         displayName: true,
         avatarUrl: true,
         isAdmin: true,
+        kind: true,
         twoFactorEnabled: true,
         createdAt: true,
         deactivatedAt: true,
@@ -148,6 +161,7 @@ export async function getUser(userId: string) {
         displayName: true,
         avatarUrl: true,
         isAdmin: true,
+        kind: true,
         twoFactorEnabled: true,
         createdAt: true,
         deactivatedAt: true,
@@ -177,6 +191,7 @@ export async function getUser(userId: string) {
  * @param data.disabled
  */
 export async function updateUser(userId: string, data: { role?: string; disabled?: boolean }) {
+  assertNotIntegrationUser(userId);
   await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   // Update org membership role if provided. In every org where the user is the last OWNER,
@@ -204,6 +219,7 @@ export async function updateUser(userId: string, data: { role?: string; disabled
  * @param userId
  */
 export async function deleteUser(userId: string) {
+  assertNotIntegrationUser(userId);
   await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   // Deleting the last OWNER of an org would leave it unmanageable: transfer ownership first
@@ -225,6 +241,7 @@ export async function deleteUser(userId: string) {
  * @param userId
  */
 export async function deactivateUser(userId: string) {
+  assertNotIntegrationUser(userId);
   const user = await findOrThrow(
     prisma.user.findUnique({ where: { id: userId } }),
     ERR.USER_NOT_FOUND,
@@ -245,6 +262,7 @@ export async function deactivateUser(userId: string) {
  * @param userId
  */
 export async function reactivateUser(userId: string) {
+  assertNotIntegrationUser(userId);
   await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   await prisma.user.update({
@@ -260,6 +278,7 @@ export async function reactivateUser(userId: string) {
  * @param newPassword
  */
 export async function resetUserPassword(userId: string, newPassword: string) {
+  assertNotIntegrationUser(userId);
   await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
 
   const bcrypt = await import('bcryptjs');
@@ -285,6 +304,7 @@ export async function resetUserPassword(userId: string, newPassword: string) {
  * @throws {AppError} 404 if the user does not exist
  */
 export async function resetUserTwoFactor(actorId: string, userId: string) {
+  assertNotIntegrationUser(userId);
   if (actorId === userId) {
     throw new AppError(
       400,
