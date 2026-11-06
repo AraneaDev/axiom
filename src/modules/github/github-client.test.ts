@@ -555,12 +555,25 @@ describe('the credential stays on the API host', () => {
   let other: Server;
   let otherUrl = '';
   const seen: IncomingHttpHeaders[] = [];
+  const bodies: string[] = [];
+  // The other host's answer: 200 with an empty list unless a test sends it elsewhere
+  let otherRedirect: { status: number; location: string } | null = null;
 
   beforeAll(async () => {
     other = createServer((req, res) => {
       seen.push(req.headers);
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end('[]');
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        bodies.push(Buffer.concat(chunks).toString('utf8'));
+        if (otherRedirect) {
+          res.writeHead(otherRedirect.status, { location: otherRedirect.location });
+          res.end();
+          return;
+        }
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end('[]');
+      });
     });
     await new Promise<void>((resolve) => other.listen(0, '127.0.0.1', resolve));
     otherUrl = `http://127.0.0.1:${(other.address() as AddressInfo).port}`;
@@ -568,6 +581,50 @@ describe('the credential stays on the API host', () => {
 
   afterEach(() => {
     seen.length = 0;
+    bodies.length = 0;
+    otherRedirect = null;
+  });
+
+  it('never sends the token again once a redirect left the API host', async () => {
+    fake.on('GET /repos/acme-labs/widget', {
+      status: 302,
+      headers: { location: `${otherUrl}/hop` },
+    });
+    // Back to a public repository, which answers without a token
+    otherRedirect = { status: 307, location: `${fake.url}/repos/acme-labs/gadget/back` };
+    fake.on('GET /repos/acme-labs/gadget/back', { status: 200, body: { back: true } });
+
+    const { data } = await githubRequest<{ back: boolean }>(
+      INSTALLATION,
+      'GET',
+      '/repos/acme-labs/widget',
+    );
+
+    expect(data).toEqual({ back: true });
+    expect(seen).toHaveLength(1);
+    expect(seen[0].authorization).toBeUndefined();
+    const [first, last] = fake.requests;
+    expect(first.headers.authorization).toBe(`installation:${INSTALLATION.installationId}`);
+    expect(last.path).toBe('/repos/acme-labs/gadget/back');
+    expect(last.headers.authorization).toBeUndefined();
+  });
+
+  it.each([307, 308])('refuses a %i to another host, so the body stays home', async (status) => {
+    fake.on('POST /repos/acme-labs/widget/issues', {
+      status,
+      headers: { location: `${otherUrl}/issues` },
+    });
+
+    const error = await thrown(
+      githubRequest(INSTALLATION, 'POST', '/repos/acme-labs/widget/issues', {
+        body: { title: 'Secret plans of acme-labs' },
+      }),
+    );
+
+    expect(error.code).toBe('GITHUB_UNAVAILABLE');
+    expect(error.message).toMatch(/another host/);
+    expect(seen).toHaveLength(0);
+    expect(bodies.join('')).not.toContain('Secret plans');
   });
 
   afterAll(async () => {

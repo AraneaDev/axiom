@@ -117,6 +117,7 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
   let method: Method = opts.method;
   let body = opts.body;
   let withAuth = target.origin === api;
+  let leftApi = !withAuth;
 
   for (let hop = 0; ; hop++) {
     const headers: Record<string, string> = { ...API_HEADERS };
@@ -147,12 +148,20 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
       logger.debug('github request', { method, path: target.pathname, status: response.status });
       await response.body?.cancel();
       target = new URL(location, target);
-      withAuth = opts.authAfterRedirect === 'api-host' && target.origin === api;
       // 303, and 301 or 302 after a POST, turn into a GET as browsers do
       if (response.status === 303 || (method === 'POST' && response.status <= 302)) {
         method = 'GET';
         body = undefined;
       }
+      if (target.origin !== api) {
+        // A 307 or 308 repeats the request, body and all: never to another host
+        if (response.status === 307 || response.status === 308 || body !== undefined) {
+          throw githubUnavailable('redirected-off-host');
+        }
+        leftApi = true;
+      }
+      // Once the chain has left the API host, nothing after it gets the token, even back there
+      withAuth = opts.authAfterRedirect === 'api-host' && !leftApi;
       continue;
     }
 

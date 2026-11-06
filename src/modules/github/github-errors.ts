@@ -140,11 +140,14 @@ const UNAVAILABLE_MESSAGES = {
   unreachable: 'Could not reach GitHub.',
   unreadable: 'GitHub answered, but the answer could not be read.',
   'off-host': 'GitHub pointed the next page at another host, so it was not fetched.',
+  'redirected-off-host':
+    'GitHub redirected the request with its body to another host, so it was not followed.',
 } as const;
 
 /**
  * The AppError for a call without a usable answer: a timeout, a network failure, a body that
- * breaks off or does not parse, or a next page on another host. The cause is not attached, so
+ * breaks off or does not parse, a next page on another host, or a redirect that would carry
+ * a body to another host. The cause is not attached, so
  * nothing of the request rides along.
  * @param reason What went wrong
  */
