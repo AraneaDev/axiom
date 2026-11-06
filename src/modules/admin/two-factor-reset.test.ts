@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getAction } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import app from '../../index';
+import { encryptSecret, secretContext } from '../../lib/secret-box';
 import { createTestUser, type TestUser } from '../../test/factory';
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
@@ -48,7 +49,8 @@ describe('an admin resets a user 2FA', () => {
   });
 
   beforeEach(async () => {
-    secret = generateSecret();
+    // As the database keeps it: sealed to the user
+    secret = encryptSecret(generateSecret(), secretContext('user', 'twoFactorSecret', locked.id));
     await prisma.user.update({
       where: { id: locked.id },
       data: { twoFactorSecret: secret, twoFactorEnabled: true, twoFactorLastStep: 1 },

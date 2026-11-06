@@ -93,6 +93,30 @@ describe('secret box', () => {
     expect(() => box.decryptSecret(stored, '')).toThrow(/context/);
   });
 
+  it('a context without a real id, or with whitespace, is refused on both sides', async () => {
+    const box = await loadBox(keyA);
+    const stored = box.encryptSecret('value', CONTEXT);
+    const bad = [
+      'user.twoFactorSecret:undefined',
+      'user.twoFactorSecret:null',
+      'user.twoFactorSecret:',
+      'user.twoFactorSecret',
+      ':41',
+      'user.twoFactorSecret: 41',
+      'user.twoFactorSecret:41 ',
+      'user two.FactorSecret:41',
+      'user.twoFactorSecret:4\n1',
+    ];
+    for (const context of bad) {
+      expect(() => box.encryptSecret('value', context), context).toThrow(/context/);
+      expect(() => box.decryptSecret(stored, context), context).toThrow(/context/);
+    }
+    expect(box.secretContext('user', 'twoFactorSecret', 'cm0abc123')).toBe(
+      'user.twoFactorSecret:cm0abc123',
+    );
+    expect(() => box.secretContext('user', 'twoFactorSecret', '')).toThrow(/context/);
+  });
+
   it('a flipped ciphertext byte throws auth-failed', async () => {
     const box = await loadBox(keyA);
     const parts = box.encryptSecret('tamper target', CONTEXT).split(':');

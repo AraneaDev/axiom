@@ -7,16 +7,62 @@ import { generateSecret, generateURI, verifySync } from 'otplib';
 
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
+import {
+  SecretBoxError,
+  decryptSecret,
+  encryptSecret,
+  isEncrypted,
+  secretContext,
+} from '../../lib/secret-box';
 import type { AuthPayload } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { logger } from '../../utils/logger';
 import { logAudit } from '../audit/audit.service';
 import { redeemableInviteRole } from '../orgs/org-roles';
 
 const SALT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '4h';
 const REFRESH_TOKEN_TTL_DAYS = 30;
+
+/**
+ * The context a user's 2FA secret is sealed with.
+ * @param userId - The user
+ * @returns The context
+ */
+function twoFactorContext(userId: string): string {
+  return secretContext('user', 'twoFactorSecret', userId);
+}
+
+/**
+ * The plain TOTP secret behind a stored value. A value that does not open (left in plain
+ * text, damaged, sealed for another user or under a key no longer configured) answers a
+ * defined 500 and a log line naming the user and the reason, never the value.
+ * @param userId - The user the secret belongs to
+ * @param stored - The value as the database keeps it
+ * @returns The plain secret
+ * @throws {AppError} 500 TWO_FACTOR_UNREADABLE if the value does not open
+ */
+function openTwoFactorSecret(userId: string, stored: string): string {
+  let reason: string;
+  if (!isEncrypted(stored)) {
+    reason = 'plaintext';
+  } else {
+    try {
+      return decryptSecret(stored, twoFactorContext(userId));
+    } catch (err) {
+      if (!(err instanceof SecretBoxError)) throw err;
+      reason = err.reason;
+    }
+  }
+  logger.error('2FA secret cannot be opened', { userId, reason });
+  throw new AppError(
+    500,
+    '2FA cannot be checked for this account. Ask an administrator to reset it.',
+    'TWO_FACTOR_UNREADABLE',
+  );
+}
 
 /**
  * Check a TOTP code against a user's secret and spend it, so it can't be used again.
@@ -27,7 +73,7 @@ const REFRESH_TOKEN_TTL_DAYS = 30;
  * @param user - The user, with the step of their last accepted code
  * @param user.id
  * @param user.twoFactorLastStep
- * @param secret - The user's stored TOTP secret
+ * @param secret - The user's TOTP secret, opened
  * @param token - The six-digit code the user typed
  * @returns Whether the code was valid and not used before
  */
@@ -209,7 +255,8 @@ export async function login(data: { login: string; password: string; twoFactorCo
     if (!user.twoFactorSecret) {
       throw new AppError(500, '2FA misconfigured');
     }
-    if (!(await spendTotp(user, user.twoFactorSecret, data.twoFactorCode))) {
+    const secret = openTwoFactorSecret(user.id, user.twoFactorSecret);
+    if (!(await spendTotp(user, secret, data.twoFactorCode))) {
       throw new AppError(401, 'Invalid 2FA code', 'INVALID_TWO_FACTOR');
     }
   }
@@ -324,7 +371,10 @@ export async function enableTwoFactor(userId: string) {
   // Store secret (not yet enabled — user must verify first)
   await prisma.user.update({
     where: { id: userId },
-    data: { twoFactorSecret: secret, twoFactorLastStep: null },
+    data: {
+      twoFactorSecret: encryptSecret(secret, twoFactorContext(userId)),
+      twoFactorLastStep: null,
+    },
   });
 
   return { secret, otpauthUrl };
@@ -343,7 +393,8 @@ export async function verifyAndActivateTwoFactor(userId: string, code: string) {
     throw new AppError(400, 'Call enable-2fa first');
   }
 
-  if (!(await spendTotp(user, user.twoFactorSecret, code))) {
+  const secret = openTwoFactorSecret(user.id, user.twoFactorSecret);
+  if (!(await spendTotp(user, secret, code))) {
     throw new AppError(400, 'Invalid 2FA code');
   }
 
@@ -378,7 +429,8 @@ export async function disableTwoFactor(userId: string, code: string) {
     throw new AppError(400, '2FA not enabled');
   }
 
-  if (!(await spendTotp(user, user.twoFactorSecret, code))) {
+  const secret = openTwoFactorSecret(user.id, user.twoFactorSecret);
+  if (!(await spendTotp(user, secret, code))) {
     throw new AppError(401, 'Invalid 2FA code');
   }
 

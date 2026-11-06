@@ -17,6 +17,7 @@
     "db:seed:voorbeeld": "tsx scripts/seed-voorbeeld.ts",
     "db:seed": "tsx scripts/seed-demo.ts && tsx scripts/seed-voorbeeld.ts",
     "db:seed:prod": "tsx scripts/seed-production.ts",
+    "secrets:rotate": "tsx scripts/rotate-secrets.ts",
     "test": "node scripts/build-editor-core.mjs --if-stale && vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",

@@ -50,10 +50,35 @@ function keyFor(kid: string): InstanceKey | null {
   return null;
 }
 
+// <model>.<field>:<row id>. No whitespace anywhere, and an id that is really there: a
+// template literal over a missing id gives ':undefined' or ':null', which would bind every
+// such row to one shared context
+const CONTEXT_SHAPE = /^[A-Za-z][\w.]*:[\w.-]+$/;
+const MISSING_IDS = new Set(['undefined', 'null']);
+
+function assertContext(context: string): void {
+  const id = context.slice(context.lastIndexOf(':') + 1);
+  if (!CONTEXT_SHAPE.test(context) || MISSING_IDS.has(id)) {
+    throw new Error('A secret context must look like <model>.<field>:<id>');
+  }
+}
+
+/**
+ * The context a column's value is sealed with, for example `user.twoFactorSecret:<userId>`.
+ * @param model The Prisma model, as its client delegate is named (`user`).
+ * @param field The column's field name (`twoFactorSecret`).
+ * @param id The row id.
+ */
+export function secretContext(model: string, field: string, id: string): string {
+  const context = `${model}.${field}:${id}`;
+  assertContext(context);
+  return context;
+}
+
 // The additional data binds the format, the key and the caller's context (the row and
 // column the value belongs to), so a sealed value copied to another row does not open
 function additionalData(kid: string, context: string): Buffer {
-  if (!context) throw new Error('A secret context is required');
+  assertContext(context);
   return Buffer.from(`${PREFIX}${kid}\n${context}`, 'utf8');
 }
 
@@ -87,7 +112,7 @@ export function encryptSecret(plain: string, context: string): string {
  * @param context The context the value was sealed with.
  */
 export function decryptSecret(stored: string, context: string): string {
-  if (!context) throw new Error('A secret context is required');
+  assertContext(context);
   if (!isEncrypted(stored)) throw new SecretBoxError('malformed');
   const parts = stored.split(':');
   if (parts.length !== 6) throw new SecretBoxError('malformed');

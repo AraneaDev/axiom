@@ -1,10 +1,12 @@
 import { generateSecret, generateSync } from 'otplib';
 import request from 'supertest';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
+import { decryptSecret, encryptSecret, secretContext } from '../../lib/secret-box';
 import { createTestUser, type TestUser } from '../../test/factory';
+import { logger } from '../../utils/logger';
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
 const PASSWORD = 'testpassword123';
@@ -30,6 +32,26 @@ function oldCode(secret: string): string {
   return generateSync({ secret, epoch: Math.floor(Date.now() / 1000) - 600 });
 }
 
+/**
+ * A TOTP secret as the database keeps it: sealed to its user.
+ * @param userId - Its user
+ * @param secret - The plain TOTP secret
+ * @returns The stored value
+ */
+function sealed(userId: string, secret: string): string {
+  return encryptSecret(secret, secretContext('user', 'twoFactorSecret', userId));
+}
+
+/**
+ * The plain TOTP secret behind a stored value.
+ * @param userId - Its user
+ * @param stored - The stored value
+ * @returns The plain secret
+ */
+function opened(userId: string, stored: string | null): string {
+  return decryptSecret(stored ?? '', secretContext('user', 'twoFactorSecret', userId));
+}
+
 const users: TestUser[] = [];
 
 afterAll(async () => {
@@ -51,7 +73,10 @@ describe('two-factor codes are checked', () => {
 
   describe('verify (activates 2FA)', () => {
     beforeEach(async () => {
-      await prisma.user.update({ where: { id: user.id }, data: { twoFactorSecret: secret } });
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { twoFactorSecret: sealed(user.id, secret) },
+      });
     });
 
     const verify = (code: string) =>
@@ -85,7 +110,7 @@ describe('two-factor codes are checked', () => {
     beforeEach(async () => {
       await prisma.user.update({
         where: { id: user.id },
-        data: { twoFactorSecret: secret, twoFactorEnabled: true },
+        data: { twoFactorSecret: sealed(user.id, secret), twoFactorEnabled: true },
       });
     });
 
@@ -127,7 +152,7 @@ describe('two-factor codes are checked', () => {
       expect(res.body.error.message).toBe('Invalid 2FA code');
       const stored = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
       expect(stored.twoFactorEnabled).toBe(true);
-      expect(stored.twoFactorSecret).toBe(secret);
+      expect(opened(user.id, stored.twoFactorSecret)).toBe(secret);
     });
 
     it('disable accepts the right code and clears the secret', async () => {
@@ -162,7 +187,7 @@ describe('a two-factor code is accepted once', () => {
   const enable = () =>
     prisma.user.update({
       where: { id: user.id },
-      data: { twoFactorSecret: secret, twoFactorEnabled: true },
+      data: { twoFactorSecret: sealed(user.id, secret), twoFactorEnabled: true },
     });
 
   it('login refuses the code a login already used', async () => {
@@ -176,7 +201,10 @@ describe('a two-factor code is accepted once', () => {
   });
 
   it('verify refuses the code a verify already used', async () => {
-    await prisma.user.update({ where: { id: user.id }, data: { twoFactorSecret: secret } });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: sealed(user.id, secret) },
+    });
     const code = generateSync({ secret });
     expect((await authed('/api/auth/2fa/verify', code)).status).toBe(200);
     const again = await authed('/api/auth/2fa/verify', code);
@@ -185,7 +213,10 @@ describe('a two-factor code is accepted once', () => {
   });
 
   it('a login refuses the code that turned 2FA on', async () => {
-    await prisma.user.update({ where: { id: user.id }, data: { twoFactorSecret: secret } });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: sealed(user.id, secret) },
+    });
     const code = generateSync({ secret });
     expect((await authed('/api/auth/2fa/verify', code)).status).toBe(200);
     expect((await login(code)).status).toBe(401);
@@ -200,12 +231,79 @@ describe('a two-factor code is accepted once', () => {
     expect(again.body.error.message).toBe('Invalid 2FA code');
     const stored = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(stored.twoFactorEnabled).toBe(true);
-    expect(stored.twoFactorSecret).toBe(secret);
+    expect(opened(user.id, stored.twoFactorSecret)).toBe(secret);
   });
 
   it('refuses the code of the next period, which only a clock ahead of the server would show', async () => {
     await enable();
     const next = generateSync({ secret, epoch: Math.floor(Date.now() / 1000) + 30 });
     expect((await login(next)).status).toBe(401);
+  });
+});
+
+describe('a 2FA secret that cannot be opened', () => {
+  let user: TestUser;
+  let secret: string;
+
+  beforeEach(async () => {
+    user = await createTestUser();
+    users.push(user);
+    secret = generateSecret();
+  });
+
+  const login = (twoFactorCode: string) =>
+    request(app)
+      .post('/api/auth/login')
+      .set(CSRF)
+      .send({ login: user.email, password: PASSWORD, twoFactorCode });
+
+  it.each([
+    ['sealed to another user', (other: string, s: string) => sealed(other, s), 'auth-failed'],
+    ['still plain', (_other: string, s: string) => s, 'plaintext'],
+    ['damaged', () => 'enc:v1:00000000:a:b', 'malformed'],
+  ])(
+    'login answers 500 TWO_FACTOR_UNREADABLE for a secret %s, logs the reason, never the value',
+    async (_label, store, reason) => {
+      const stored = store(`${user.id}x`, secret);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { twoFactorSecret: stored, twoFactorEnabled: true },
+      });
+      const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      try {
+        const res = await login(generateSync({ secret }));
+        expect(res.status).toBe(500);
+        expect(res.body.error.code).toBe('TWO_FACTOR_UNREADABLE');
+        expect(res.body.accessToken).toBeUndefined();
+        const body = JSON.stringify(res.body);
+        const logged = JSON.stringify(error.mock.calls);
+        expect(logged).toContain(user.id);
+        expect(logged).toContain(reason);
+        for (const value of [secret, stored]) {
+          expect(body).not.toContain(value);
+          expect(logged).not.toContain(value);
+        }
+      } finally {
+        error.mockRestore();
+      }
+    },
+  );
+
+  it('disable answers the same and leaves 2FA on', async () => {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: sealed(`${user.id}x`, secret), twoFactorEnabled: true },
+    });
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const res = await request(app)
+      .post('/api/auth/2fa/disable')
+      .set(CSRF)
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ code: generateSync({ secret }) });
+    error.mockRestore();
+    expect(res.status).toBe(500);
+    expect(res.body.error.code).toBe('TWO_FACTOR_UNREADABLE');
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(stored.twoFactorEnabled).toBe(true);
   });
 });
