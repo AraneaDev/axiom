@@ -8,6 +8,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 import type { AuthPayload } from '../middleware/auth';
+import { isIntegrationUser } from '../modules/github/integration-user';
 import { logger } from '../utils/logger';
 
 import {
@@ -75,7 +76,7 @@ function extractUserId(req: IncomingMessage): string | null {
     if (!token) return null;
 
     const payload = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
-    return payload.userId;
+    return isIntegrationUser(payload.userId) ? null : payload.userId;
   } catch {
     return null;
   }

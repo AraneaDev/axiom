@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest
 import WebSocket, { WebSocketServer } from 'ws';
 
 import { prisma } from '../config/database';
+import { GITHUB_INTEGRATION_USER_ID } from '../modules/github/integration-user';
 import { setSpacePermission } from '../modules/wiki/space-permissions.service';
 import { deletePage, updatePage } from '../modules/wiki/wiki.service';
 import { tokenFor, waitFor } from '../test/collab-client';
@@ -596,5 +597,21 @@ describe('Realtime room authorization', () => {
       info.mockRestore();
       await Promise.all(clients.splice(0).map((c) => c.close()));
     }
+  });
+
+  it.each(['/ws', '/ws/wiki/anypage'])('answers 401 on %s like an invalid token', async (path) => {
+    const attempt = (token: string) =>
+      new Promise<number>((resolve) => {
+        const ws = new WebSocket(`${baseUrl}${path}?token=${token}`);
+        ws.once('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0));
+        ws.once('open', () => {
+          ws.close();
+          resolve(101);
+        });
+        ws.once('error', () => undefined);
+      });
+    const invalid = await attempt('not-a-jwt');
+    expect(invalid).toBe(401);
+    expect(await attempt(tokenFor(GITHUB_INTEGRATION_USER_ID))).toBe(invalid);
   });
 });

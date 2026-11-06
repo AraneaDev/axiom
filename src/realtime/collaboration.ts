@@ -29,6 +29,7 @@ import { env } from '../config/env';
 import { loadEditorCore, markdownToYFragment, yFragmentToMarkdown } from '../lib/editor-core';
 import type { AuthPayload } from '../middleware/auth';
 import { checkWikiSpaceOrgAccess } from '../middleware/rbac';
+import { isIntegrationUser } from '../modules/github/integration-user';
 import { restoredVersionOf } from '../modules/wiki/page-versions';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
@@ -172,7 +173,7 @@ function extractAuth(req: IncomingMessage): { userId: string } | null {
     if (!token) return null;
 
     const payload = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
-    return { userId: payload.userId };
+    return isIntegrationUser(payload.userId) ? null : { userId: payload.userId };
   } catch {
     return null;
   }
