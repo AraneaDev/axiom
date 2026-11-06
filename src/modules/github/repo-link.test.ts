@@ -104,8 +104,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await seedGithubApp({ fake });
+  fake.removeInstallation(3301);
   fake.addInstallation(3301, [WIDGET, GADGET]);
-  fake.suspendInstallation(3301, false);
   fake.setPublicRepos([]);
 });
 
@@ -315,6 +315,12 @@ describe('githubRepo.link', () => {
         .send({ repo: WIDGET });
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe(code);
+      // Both pre-checks and the re-query ran, and both GitHub calls were made: the insert raced
+      expect(spy).toHaveBeenCalledTimes(3);
+      expect(fake.requests.map((r) => r.headers.authorization)).toEqual([
+        expect.stringMatching(/^user:/),
+        'app',
+      ]);
     } finally {
       spy.mockRestore();
     }
@@ -417,7 +423,8 @@ describe('githubRepo.link by a token', () => {
     // The person loses admin rights on GitHub while the call waits
     await prisma.githubAccount.deleteMany();
     await connectAccount(ctx.owner, [WIDGET], []);
-    await approve(held.body.approvalId);
+    const res = await approve(held.body.approvalId);
+    expect(JSON.stringify(res.body)).toContain('GITHUB_NOT_REPO_ADMIN');
     expect(await prisma.githubRepoLink.count()).toBe(0);
   });
 });

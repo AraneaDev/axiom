@@ -281,6 +281,8 @@ class GithubFakeServer implements GithubFake {
   removeInstallation(installationId: number): void {
     this.installations.delete(installationId);
     this.accounts.delete(installationId);
+    // GitHub never reuses an installation id: one added again starts fresh
+    this.suspended.delete(installationId);
   }
 
   suspendInstallation(installationId: number, suspended = true): void {

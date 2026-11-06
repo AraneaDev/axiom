@@ -626,12 +626,15 @@ describe('syncing installations', () => {
   it('follows GitHub suspending an installation and lifting it again', async () => {
     await seedGithubApp({ fake });
     fake.addInstallation(4101, ['acme-labs/widget']);
-    fake.suspendInstallation(4101);
-    const suspended = await post(`${BASE}/installations/sync`, admin);
-    expect(suspended.body.installations).toEqual([
-      { id: 4101, accountLogin: 'acme-labs', suspended: true },
-    ]);
-    fake.suspendInstallation(4101, false);
+    try {
+      fake.suspendInstallation(4101);
+      const suspended = await post(`${BASE}/installations/sync`, admin);
+      expect(suspended.body.installations).toEqual([
+        { id: 4101, accountLogin: 'acme-labs', suspended: true },
+      ]);
+    } finally {
+      fake.suspendInstallation(4101, false);
+    }
     const active = await post(`${BASE}/installations/sync`, admin);
     expect(active.body.installations).toEqual([
       { id: 4101, accountLogin: 'acme-labs', suspended: false },
