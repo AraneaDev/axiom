@@ -12,6 +12,23 @@ const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const DECRYPT_ERROR = 'Secret cannot be decrypted with the configured keys';
 
+/** Why a stored value did not open. Safe to log: it names no key, value or plaintext. */
+export type SecretBoxFailure = 'unknown-key' | 'malformed' | 'auth-failed';
+
+/** A stored secret that cannot be opened. The message is the same for every reason. */
+export class SecretBoxError extends Error {
+  readonly reason: SecretBoxFailure;
+
+  /**
+   * @param reason Why the value did not open.
+   */
+  constructor(reason: SecretBoxFailure) {
+    super(DECRYPT_ERROR);
+    this.name = 'SecretBoxError';
+    this.reason = reason;
+  }
+}
+
 interface InstanceKey {
   kid: string;
   key: Buffer;
@@ -33,19 +50,24 @@ function keyFor(kid: string): InstanceKey | null {
   return null;
 }
 
-// The prefix and kid are bound as additional data, so a value cannot be relabelled
-function additionalData(kid: string): Buffer {
-  return Buffer.from(`${PREFIX}${kid}`, 'utf8');
+// The additional data binds the format, the key and the caller's context (the row and
+// column the value belongs to), so a sealed value copied to another row does not open
+function additionalData(kid: string, context: string): Buffer {
+  if (!context) throw new Error('A secret context is required');
+  return Buffer.from(`${PREFIX}${kid}\n${context}`, 'utf8');
 }
 
 /**
  * Seals a value under the current key, with a fresh random IV each time.
  * @param plain The secret to store.
+ * @param context Where the value lives, for example `user.twoFactorSecret:<userId>`. The same
+ * context must be passed to decryptSecret.
  */
-export function encryptSecret(plain: string): string {
+export function encryptSecret(plain: string, context: string): string {
+  const aad = additionalData(currentKey.kid, context);
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', currentKey.key, iv);
-  cipher.setAAD(additionalData(currentKey.kid));
+  cipher.setAAD(aad);
   const ciphertext = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return [
@@ -59,25 +81,28 @@ export function encryptSecret(plain: string): string {
 }
 
 /**
- * Opens a value sealed under the current or the previous key. Any failure (unknown kid,
- * malformed value, failed tag) throws one message that carries no part of the value.
+ * Opens a value sealed under the current or the previous key. Any failure throws a
+ * SecretBoxError whose message carries no part of the value and whose reason says why.
  * @param stored A value encryptSecret produced.
+ * @param context The context the value was sealed with.
  */
-export function decryptSecret(stored: string): string {
-  if (!isEncrypted(stored)) throw new Error(DECRYPT_ERROR);
+export function decryptSecret(stored: string, context: string): string {
+  if (!context) throw new Error('A secret context is required');
+  if (!isEncrypted(stored)) throw new SecretBoxError('malformed');
   const parts = stored.split(':');
-  if (parts.length !== 6) throw new Error(DECRYPT_ERROR);
+  if (parts.length !== 6) throw new SecretBoxError('malformed');
   const [, , kid, ivPart, tagPart, ciphertextPart] = parts;
-  const key = keyFor(kid);
-  if (!key) throw new Error(DECRYPT_ERROR);
 
   const iv = Buffer.from(ivPart, 'base64url');
   const tag = Buffer.from(tagPart, 'base64url');
-  if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) throw new Error(DECRYPT_ERROR);
+  if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) throw new SecretBoxError('malformed');
+
+  const key = keyFor(kid);
+  if (!key) throw new SecretBoxError('unknown-key');
 
   try {
     const decipher = createDecipheriv('aes-256-gcm', key.key, iv, { authTagLength: TAG_BYTES });
-    decipher.setAAD(additionalData(kid));
+    decipher.setAAD(additionalData(kid, context));
     decipher.setAuthTag(tag);
     const plain = Buffer.concat([
       decipher.update(Buffer.from(ciphertextPart, 'base64url')),
@@ -85,8 +110,8 @@ export function decryptSecret(stored: string): string {
     ]);
     return plain.toString('utf8');
   } catch {
-    // The crypto error is dropped on purpose: one message for every failure
-    throw new Error(DECRYPT_ERROR);
+    // The crypto error is dropped on purpose: it says nothing the reason does not
+    throw new SecretBoxError('auth-failed');
   }
 }
 
@@ -100,7 +125,8 @@ export function isEncrypted(stored: string): boolean {
 
 /**
  * True for a value sealed under a key other than the current one. A plaintext value is
- * not encrypted at all: callers check isEncrypted for that.
+ * not encrypted at all: callers check isEncrypted for that. A malformed value or one under
+ * an unknown key also answers true, and decryptSecret then throws for it.
  * @param stored The value as kept in the database.
  */
 export function needsReencrypt(stored: string): boolean {

@@ -107,6 +107,32 @@ describe('env', () => {
     ).rejects.toThrow(/AXIOM_ENCRYPTION_KEY_PREVIOUS contains a placeholder value/);
   });
 
+  it('an empty previous key means no previous key', async () => {
+    const { env } = await loadEnv({ AXIOM_ENCRYPTION_KEY_PREVIOUS: '' });
+
+    expect(env.AXIOM_ENCRYPTION_KEY_PREVIOUS).toBeUndefined();
+  });
+
+  it('refuses a key of one repeated byte in production', async () => {
+    for (const byte of [0x00, 0x41]) {
+      await expect(
+        loadEnv({
+          ...PRODUCTION_SECRETS,
+          NODE_ENV: 'production',
+          AXIOM_ENCRYPTION_KEY: Buffer.alloc(32, byte).toString('base64'),
+        }),
+      ).rejects.toThrow(/Refusing to start: AXIOM_ENCRYPTION_KEY is one repeated byte/);
+    }
+    await expect(
+      loadEnv({
+        ...PRODUCTION_SECRETS,
+        NODE_ENV: 'production',
+        AXIOM_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+        AXIOM_ENCRYPTION_KEY_PREVIOUS: Buffer.alloc(32, 0).toString('base64'),
+      }),
+    ).rejects.toThrow(/Refusing to start: AXIOM_ENCRYPTION_KEY_PREVIOUS is one repeated byte/);
+  });
+
   it('accepts the marked dev key outside production', async () => {
     const { env } = await loadEnv({
       NODE_ENV: 'development',

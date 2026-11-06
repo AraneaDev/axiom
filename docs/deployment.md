@@ -168,6 +168,8 @@ To rotate the key:
 
 Back up the new key before step 5. Once the previous key is gone, a value that still sits under it cannot be read, so run step 4 to the end first.
 
+Removing the previous key from `.env` does not end its life. Every database backup taken before the rotation is still sealed under it, so keep each retired key for as long as you keep backups taken under it. To restore such a backup, restore the dump, set its key as `AXIOM_ENCRYPTION_KEY_PREVIOUS` next to the current `AXIOM_ENCRYPTION_KEY`, restart, run `docker compose exec api npm run secrets:rotate` to move its values under the current key, then remove the previous key again.
+
 ### Uploads
 
 ```bash

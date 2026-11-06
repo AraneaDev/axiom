@@ -22,7 +22,11 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   AXIOM_ENCRYPTION_KEY: encryptionKey('AXIOM_ENCRYPTION_KEY'),
-  AXIOM_ENCRYPTION_KEY_PREVIOUS: encryptionKey('AXIOM_ENCRYPTION_KEY_PREVIOUS').optional(),
+  // Empty means unset: what rotation step 5 or a compose passthrough of an unset var leaves
+  AXIOM_ENCRYPTION_KEY_PREVIOUS: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    encryptionKey('AXIOM_ENCRYPTION_KEY_PREVIOUS').optional(),
+  ),
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CORS_ORIGIN: z.string().default('*'),
@@ -46,6 +50,17 @@ if (env.NODE_ENV === 'production') {
     if (value !== undefined && placeholderPattern.test(value)) {
       throw new Error(
         `Refusing to start: ${key} contains a placeholder value. Generate with: ${generate}`,
+      );
+    }
+  }
+  // A key of one repeated byte (all zeros, say) is valid base64 of 32 bytes but no secret
+  for (const key of ['AXIOM_ENCRYPTION_KEY', 'AXIOM_ENCRYPTION_KEY_PREVIOUS'] as const) {
+    const value = env[key];
+    if (value === undefined) continue;
+    const bytes = Buffer.from(value, 'base64');
+    if (bytes.every((byte) => byte === bytes[0])) {
+      throw new Error(
+        `Refusing to start: ${key} is one repeated byte. Generate with: openssl rand -base64 32`,
       );
     }
   }

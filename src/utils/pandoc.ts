@@ -94,12 +94,22 @@ export const PANDOC_FORMATS: Record<string, FormatInfo> = {
   plain: { mime: 'text/plain', ext: '.txt', binary: false },
 };
 
+// pandoc reads user content, so it gets only what it needs to run: never the instance
+// secrets (JWT, encryption keys, database URL) in process.env
+function pandocEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const name of ['PATH', 'HOME', 'LANG'] as const) {
+    if (process.env[name] !== undefined) env[name] = process.env[name];
+  }
+  return env;
+}
+
 /**
  *
  */
 export function checkPandocInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile('pandoc', ['--version'], (err) => {
+    execFile('pandoc', ['--version'], { env: pandocEnv() }, (err) => {
       resolve(!err);
     });
   });
@@ -138,7 +148,7 @@ export async function convertMarkdown(
       args.push('--pdf-engine=weasyprint');
     }
 
-    const child = spawn('pandoc', args);
+    const child = spawn('pandoc', args, { env: pandocEnv() });
 
     let stderrData = '';
 
