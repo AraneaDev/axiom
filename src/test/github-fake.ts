@@ -182,7 +182,7 @@ class GithubFakeServer implements GithubFake {
   private app: { appId: number; publicKey: string } | null = null;
   private installations = new Map<number, Set<string>>();
   private accounts = new Map<number, { login: string; type: string }>();
-  private suspended = new Set<number>();
+  private suspended = new Map<number, string>();
   private manifestCodes = new Set<string>();
   private publicRepos = new Set<string>();
   private installationTokens = new Map<string, { installationId: number; expiresAt: number }>();
@@ -241,8 +241,10 @@ class GithubFakeServer implements GithubFake {
   }
 
   suspendInstallation(installationId: number, suspended = true): void {
-    if (suspended) this.suspended.add(installationId);
-    else this.suspended.delete(installationId);
+    if (suspended) {
+      if (!this.suspended.has(installationId))
+        this.suspended.set(installationId, new Date(Date.now()).toISOString());
+    } else this.suspended.delete(installationId);
   }
 
   issueManifestCode(): string {
@@ -432,7 +434,7 @@ class GithubFakeServer implements GithubFake {
           id,
           account: { ...this.accounts.get(id), id: 9000 + id },
           app_id: this.app?.appId,
-          suspended_at: this.suspended.has(id) ? new Date(Date.now()).toISOString() : null,
+          suspended_at: this.suspended.get(id) ?? null,
         })),
       };
     }

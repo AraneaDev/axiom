@@ -2,7 +2,7 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 
 import { prisma } from '../config/database';
 import { encryptSecret, secretContext } from '../lib/secret-box';
-import { GITHUB_APP_ROW_ID } from '../modules/github/github-app.service';
+import { GITHUB_APP_ROW_ID, clearInstallationTokens } from '../modules/github/github-app.service';
 
 import type { GithubFake } from './github-fake';
 
@@ -45,6 +45,8 @@ export async function seedGithubApp(
     // A replaced App is a new generation, as a deleted and re-created one is
     update: { ...data, createdAt: new Date() },
   });
+  // Two seeds in one millisecond would share a generation: never serve the last one's tokens
+  clearInstallationTokens();
   opts.fake?.setApp({ appId, publicKey });
   return { privateKey, publicKey, webhookSecret };
 }
