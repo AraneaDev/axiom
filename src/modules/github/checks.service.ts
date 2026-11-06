@@ -56,6 +56,7 @@ const checkRunSchema = z.object({
     .object({ title: text.nullish(), summary: text.nullish(), text: text.nullish() })
     .nullish(),
   app: z.object({ slug: text.nullish() }).nullish(),
+  check_suite: z.object({ id: z.number().int().positive() }).nullish(),
 });
 
 /** GitHub's check run object, as far as it is read */
@@ -87,6 +88,8 @@ function newerId(a: string, b: string): boolean {
 
 type RunRow = {
   id: string;
+  checkSuiteId: bigint | null;
+  workflowRunId: string | null;
   appSlug: string;
   name: string;
   status: string;
@@ -94,20 +97,31 @@ type RunRow = {
 };
 
 /**
- * The state of a set of runs. Only the newest run of each app and name counts, since a re-run
- * replaces the run it repeats. Failed when any of them failed, else pending unless every one
- * has completed as `success`, `neutral` or `skipped`, else passed.
+ * The state of a set of runs. Only the newest run of each app, check suite and name counts, since
+ * a re-run (same suite, new id) replaces the run it repeats while two workflows' jobs of one name
+ * stay apart. A run without a suite falls back to its workflow run, then to the name alone: a
+ * newer run replaces older ones of the same app and name unless both name different workflow
+ * runs. Failed when any counted run failed, else pending unless every one has completed as
+ * `success`, `neutral` or `skipped`, else passed.
  * @param runs The runs of one commit
  */
 function stateOfRuns(runs: RunRow[]): CheckState {
   if (runs.length === 0) return 'none';
-  const newest = new Map<string, RunRow>();
-  for (const run of runs) {
-    const key = `${run.appSlug}\u0000${run.name}`;
-    const seen = newest.get(key);
-    if (!seen || newerId(run.id, seen.id)) newest.set(key, run);
+  const counted: RunRow[] = [];
+  const ascending = [...runs].sort((a, b) => (newerId(a.id, b.id) ? 1 : -1));
+  for (const run of ascending) {
+    const replaces = (old: RunRow) => {
+      if (old.appSlug !== run.appSlug || old.name !== run.name) return false;
+      if (old.checkSuiteId !== null || run.checkSuiteId !== null) {
+        return old.checkSuiteId === run.checkSuiteId;
+      }
+      return !old.workflowRunId || !run.workflowRunId || old.workflowRunId === run.workflowRunId;
+    };
+    for (let at = counted.length - 1; at >= 0; at--) {
+      if (replaces(counted[at])) counted.splice(at, 1);
+    }
+    counted.push(run);
   }
-  const counted = [...newest.values()];
   if (counted.some((run) => isFailed(run.conclusion))) return 'failed';
   const passing = (run: RunRow) =>
     run.status === 'completed' &&
@@ -121,7 +135,7 @@ function stateOfRuns(runs: RunRow[]): CheckState {
  * @param repoLinkId The repository link
  * @param headSha The commit
  * @param client A transaction, to read the state as that transaction sees it
- * @returns `failed` when the newest run of any app and name has a conclusion in
+ * @returns `failed` when the newest run of any app, check suite and name has a conclusion in
  *   `FAILED_CONCLUSIONS`; `passed` when every one of those completed as success, neutral or
  *   skipped; `pending` otherwise (a run still going, or cancelled, action_required, stale or a
  *   conclusion not known here); `none` when the commit has no runs
@@ -133,7 +147,15 @@ export async function checkStateOf(
 ): Promise<CheckState> {
   const runs = await client.githubCheckRun.findMany({
     where: { repoLinkId, headSha },
-    select: { id: true, appSlug: true, name: true, status: true, conclusion: true },
+    select: {
+      id: true,
+      checkSuiteId: true,
+      workflowRunId: true,
+      appSlug: true,
+      name: true,
+      status: true,
+      conclusion: true,
+    },
   });
   return stateOfRuns(runs);
 }
@@ -311,6 +333,7 @@ export async function storeCheckRun(
         headSha: run.head_sha,
         name: cutUtf8(plainText(run.name), NAME_BYTES),
         appSlug: cutUtf8(plainText(run.app?.slug ?? ''), SLUG_BYTES),
+        checkSuiteId: run.check_suite ? BigInt(run.check_suite.id) : (before?.checkSuiteId ?? null),
         workflowRunId: own?.workflowRunId ?? same?.workflowRunId ?? null,
         status: run.status,
         conclusion,

@@ -1597,6 +1597,8 @@ model GithubCheckRun {
   name                 String
   appSlug              String
   /// Actions runs: from the job, for re-running the workflow
+  /// The check suite (for Actions the workflow run): a re-run stays in it, so it replaces its earlier run
+  checkSuiteId         BigInt?
   workflowRunId        String?
   status               String
   conclusion           String?

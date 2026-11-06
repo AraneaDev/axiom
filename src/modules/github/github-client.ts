@@ -308,10 +308,8 @@ async function readCapped(response: Response, maxBytes: number): Promise<string>
     const bytes = Buffer.from(chunk);
     chunks.push(bytes.subarray(0, maxBytes - size));
     size += bytes.byteLength;
-    if (size >= maxBytes) {
-      await response.body?.cancel();
-      break;
-    }
+    // Leaving the loop cancels the stream; cancelling it from inside would fail, it is locked
+    if (size >= maxBytes) break;
   }
   return Buffer.concat(chunks).toString('utf8');
 }
@@ -483,9 +481,22 @@ export async function githubTextTail(
   }
   if (!response.ok) throw await failure(auth, response, credential);
 
-  // `Content-Range: bytes 100-199/200` : bytes before the first one were left out
-  const rangeStart = /^bytes\s+(\d+)-/.exec(response.headers.get('content-range') ?? '');
-  let truncated = response.status === 206 && (rangeStart === null || Number(rangeStart[1]) > 0);
+  // `Content-Range: bytes 100-199/200`: it is the tail only when it ends at the last byte
+  let truncated = false;
+  if (response.status === 206) {
+    const range = /^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/.exec(
+      response.headers.get('content-range') ?? '',
+    );
+    const isTail = range !== null && range[3] !== '*' && Number(range[2]) + 1 === Number(range[3]);
+    if (!isTail) {
+      // A host that answered with some other part: ask for all of it and keep the end
+      await response.body?.cancel();
+      response = await attempt(false);
+      if (!response.ok) throw await failure(auth, response, credential);
+    } else {
+      truncated = Number(range[1]) > 0;
+    }
+  }
   const chunks: Buffer[] = [];
   let kept = 0;
   try {

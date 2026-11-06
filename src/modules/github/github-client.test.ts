@@ -422,6 +422,22 @@ describe('githubText', () => {
     expect(error.code).toBe('GITHUB_UNAVAILABLE');
   });
 
+  it('still reads the message of an error body over the cap', async () => {
+    fake.on('GET /repos/acme-labs/widget/actions/jobs/7/logs', {
+      status: 403,
+      body: {
+        message: 'You have exceeded a secondary rate limit. Please wait a few minutes.',
+        padding: 'x'.repeat(200_000),
+      },
+    });
+
+    const error = await thrown(
+      githubText(INSTALLATION, '/repos/acme-labs/widget/actions/jobs/7/logs', 64),
+    );
+
+    expect(error.code).toBe('GITHUB_RATE_LIMITED');
+  });
+
   it('maps an expired resource (410) to its own code', async () => {
     fake.on('GET /repos/acme-labs/widget/actions/jobs/6/logs', {
       status: 410,

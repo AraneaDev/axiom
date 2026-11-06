@@ -90,7 +90,13 @@ async function seedRun(
   sha: string,
   status: string,
   conclusion: string | null,
-  opts: { name?: string; appSlug?: string; logCheckedAt?: Date | null } = {},
+  opts: {
+    name?: string;
+    appSlug?: string;
+    logCheckedAt?: Date | null;
+    checkSuiteId?: number;
+    workflowRunId?: string;
+  } = {},
 ) {
   await prisma.githubCheckRun.create({
     data: {
@@ -101,6 +107,8 @@ async function seedRun(
       appSlug: opts.appSlug ?? 'github-actions',
       status,
       conclusion,
+      checkSuiteId: opts.checkSuiteId === undefined ? null : BigInt(opts.checkSuiteId),
+      workflowRunId: opts.workflowRunId ?? null,
       htmlUrl: `https://github.com/acme-labs/widget/runs/${id}`,
       githubUpdatedAt: new Date('2026-11-06T10:00:00Z'),
     },
@@ -411,6 +419,17 @@ describe('the size of what is downloaded', () => {
 
     expect(text).not.toContain('\uFFFD');
     expect([...text].every((c) => c === '€')).toBe(true);
+  });
+
+  it('does not take the head of a log for its tail', async () => {
+    const log = Array.from({ length: 400 }, (_, i) => `line ${i}`).join('\n');
+    fake.setJobLog(JOB_ID, log, 'head-range');
+
+    const { text, truncated } = await githubTextTail(AUTH, path, 1000);
+
+    expect(log.endsWith(text)).toBe(true);
+    expect(text.endsWith('line 399')).toBe(true);
+    expect(truncated).toBe(true);
   });
 
   it('reads an empty log', async () => {
@@ -775,6 +794,57 @@ describe('checkStateOf', () => {
       await seedRun(10, SHA_A, 'completed', 'success', { name: 'test' });
 
       expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+    });
+
+    describe('per check suite', () => {
+      it('keeps the build jobs of two workflows apart: a failing one is not hidden by a passing one', async () => {
+        await seedRun(10, SHA_A, 'completed', 'failure', { name: 'build', checkSuiteId: 501 }); // push
+        await seedRun(11, SHA_A, 'completed', 'success', { name: 'build', checkSuiteId: 502 }); // pull_request
+
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+      });
+
+      it('lets a re-run in the same suite replace its earlier run', async () => {
+        await seedRun(10, SHA_A, 'completed', 'failure', { name: 'build', checkSuiteId: 501 });
+        await seedRun(11, SHA_A, 'completed', 'success', { name: 'build', checkSuiteId: 502 });
+        await seedRun(12, SHA_A, 'completed', 'success', { name: 'build', checkSuiteId: 501 });
+
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+      });
+
+      it('falls back to the workflow run, then to the name, without a suite', async () => {
+        await seedRun(10, SHA_A, 'completed', 'failure', { name: 'build', workflowRunId: '900' });
+        await seedRun(11, SHA_A, 'completed', 'success', { name: 'build', workflowRunId: '901' });
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+        await seedRun(12, SHA_A, 'completed', 'success', { name: 'build', workflowRunId: '900' });
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+
+        await prisma.githubCheckRun.deleteMany({ where: { repoLinkId } });
+        await seedRun(20, SHA_A, 'completed', 'failure', { name: 'build' });
+        await seedRun(21, SHA_A, 'completed', 'success', { name: 'build' });
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+      });
+
+      it('stores the suite of the payload, and a push and a pull_request workflow report as they should', async () => {
+        const run = (id: number, suite: number, conclusion: string) =>
+          checkRun({
+            id,
+            name: 'build',
+            conclusion,
+            check_suite: { id: suite },
+            app: { id: 1, slug: 'acme-ci' },
+          });
+
+        await deliver(event(run(4600, 701, 'failure')));
+        await deliver(event(run(4601, 702, 'success')));
+        expect(await stored(4600)).toMatchObject({ checkSuiteId: 701n });
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('failed');
+        expect(transitions()).toEqual(['checks_failed']);
+
+        await deliver(event(run(4602, 701, 'success')));
+        expect(await checkStateOf(repoLinkId, SHA_A)).toBe('passed');
+        expect(transitions()).toEqual(['checks_failed', 'checks_passed']);
+      });
     });
 
     it('keeps other names, and other apps with the same name, apart', async () => {

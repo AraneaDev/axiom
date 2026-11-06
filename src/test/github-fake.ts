@@ -102,7 +102,7 @@ export interface GithubFake {
    * A job's log, as GitHub serves it: `GET /repos/:o/:r/actions/jobs/:id/logs` answers 302 to a
    * signed URL on another origin (`localhost`, not the API's `127.0.0.1`) that serves the text
    * as `text/plain` and refuses a request that carries an Authorization header, as blob storage
-   * does. The blob host honours `Range: bytes=-N` with a 206, except in `no-range` mode, where it
+   * does. The blob host honours `Range: bytes=-N` with a 206, except in `no-range` mode (200, everything) and `head-range` mode (206 with the start of the file), where it
    * answers 200 with everything. `not-found` and `gone` (expired logs) are answered by the API
    * itself, `slow` makes the blob host take {@link SLOW_BLOB_MS} before it answers. Forgotten by `reset`.
    */
@@ -112,7 +112,7 @@ export interface GithubFake {
   close(): Promise<void>;
 }
 
-export type JobLogMode = 'ok' | 'not-found' | 'gone' | 'slow' | 'no-range';
+export type JobLogMode = 'ok' | 'not-found' | 'gone' | 'slow' | 'no-range' | 'head-range';
 /** How long the blob host holds a `slow` log back */
 export const SLOW_BLOB_MS = 400;
 const TOKEN_LIFETIME_MS = 60 * 60_000;
@@ -661,6 +661,16 @@ class GithubFakeServer implements GithubFake {
     const headers = { 'content-type': 'text/plain; charset=utf-8' };
     const wanted = /^bytes=-(\d+)$/.exec(req.headers.range ?? '');
     const bytes = typeof log.text === 'string' ? Buffer.from(log.text, 'utf8') : log.text;
+    if (wanted && log.mode === 'head-range' && bytes.length > Number(wanted[1])) {
+      // A host that answers a suffix range with the start of the file
+      const end = Number(wanted[1]);
+      return {
+        status: 206,
+        body: bytes.subarray(0, end),
+        headers: { ...headers, 'content-range': `bytes 0-${end - 1}/${bytes.length}` },
+        delayMs,
+      };
+    }
     if (wanted && log.mode !== 'no-range' && bytes.length > Number(wanted[1])) {
       const start = bytes.length - Number(wanted[1]);
       return {
