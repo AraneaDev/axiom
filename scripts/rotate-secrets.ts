@@ -15,4 +15,8 @@ import { resolve } from 'path';
 const source = resolve(__dirname, '../src/rotate-secrets.ts');
 const built = resolve(__dirname, '../dist/rotate-secrets.js');
 
-void import(existsSync(source) ? source : built);
+import(existsSync(source) ? source : built).catch((err: Error) => {
+  // A missing build or a broken entry: one line, without the paths of a stack
+  console.error(`secrets:rotate could not start: ${err.name}: ${err.message.split('\n')[0]}`);
+  process.exit(1);
+});

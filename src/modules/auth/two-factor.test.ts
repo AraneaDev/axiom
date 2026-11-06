@@ -259,7 +259,7 @@ describe('a 2FA secret that cannot be opened', () => {
 
   it.each([
     ['sealed to another user', (other: string, s: string) => sealed(other, s), 'auth-failed'],
-    ['still plain', (_other: string, s: string) => s, 'plaintext'],
+    ['that is not base32', () => 'not a base32 secret', 'plaintext-unusable'],
     ['damaged', () => 'enc:v1:00000000:a:b', 'malformed'],
   ])(
     'login answers 500 TWO_FACTOR_UNREADABLE for a secret %s, logs the reason, never the value',
@@ -305,5 +305,77 @@ describe('a 2FA secret that cannot be opened', () => {
     expect(res.body.error.code).toBe('TWO_FACTOR_UNREADABLE');
     const stored = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(stored.twoFactorEnabled).toBe(true);
+  });
+});
+
+describe('a 2FA secret still in plain text', () => {
+  let user: TestUser;
+  let secret: string;
+
+  beforeEach(async () => {
+    user = await createTestUser();
+    users.push(user);
+    secret = generateSecret();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: secret, twoFactorEnabled: true },
+    });
+  });
+
+  const login = (twoFactorCode: string) =>
+    request(app)
+      .post('/api/auth/login')
+      .set(CSRF)
+      .send({ login: user.email, password: PASSWORD, twoFactorCode });
+
+  const storedSecret = async () =>
+    (await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).twoFactorSecret;
+
+  it('login accepts the right code once and seals the secret, logging without the value', async () => {
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+    try {
+      const res = await login(generateSync({ secret }));
+      expect(res.status).toBe(200);
+      expect(typeof res.body.accessToken).toBe('string');
+      const stored = await storedSecret();
+      expect(stored!.startsWith('enc:v1:')).toBe(true);
+      expect(opened(user.id, stored)).toBe(secret);
+      const logged = JSON.stringify(info.mock.calls);
+      expect(logged).toContain('sealed');
+      expect(logged).toContain(user.id);
+      expect(logged).not.toContain(secret);
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it('login refuses a wrong code with 401 and leaves the secret as it was', async () => {
+    const res = await login(wrongCode(secret));
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('INVALID_TWO_FACTOR');
+    expect(await storedSecret()).toBe(secret);
+  });
+});
+
+describe('verify on a pending setup that cannot be opened', () => {
+  it('answers TWO_FACTOR_UNREADABLE and says to start the setup again', async () => {
+    const user = await createTestUser();
+    users.push(user);
+    const secret = generateSecret();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorSecret: sealed(`${user.id}x`, secret) },
+    });
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const res = await request(app)
+      .post('/api/auth/2fa/verify')
+      .set(CSRF)
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ code: generateSync({ secret }) });
+    error.mockRestore();
+    expect(res.status).toBe(500);
+    expect(res.body.error.code).toBe('TWO_FACTOR_UNREADABLE');
+    expect(res.body.error.message).toMatch(/start .*setup again/i);
+    expect(res.body.error.message).not.toMatch(/administrator/i);
   });
 });

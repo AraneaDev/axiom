@@ -35,33 +35,67 @@ function twoFactorContext(userId: string): string {
   return secretContext('user', 'twoFactorSecret', userId);
 }
 
+const UNREADABLE_ADMIN =
+  '2FA cannot be checked for this account. Ask an administrator to reset it.';
+const UNREADABLE_SETUP = 'This 2FA setup cannot be read. Start the setup again.';
+
 /**
- * The plain TOTP secret behind a stored value. A value that does not open (left in plain
- * text, damaged, sealed for another user or under a key no longer configured) answers a
- * defined 500 and a log line naming the user and the reason, never the value.
+ * Answers a stored 2FA secret that does not open: a log line naming the user and the
+ * reason, never the value, and a defined 500.
  * @param userId - The user the secret belongs to
- * @param stored - The value as the database keeps it
- * @returns The plain secret
- * @throws {AppError} 500 TWO_FACTOR_UNREADABLE if the value does not open
+ * @param reason - Why it did not open
+ * @param message - What the user is told to do
+ * @throws {AppError} 500 TWO_FACTOR_UNREADABLE
  */
-function openTwoFactorSecret(userId: string, stored: string): string {
-  let reason: string;
-  if (!isEncrypted(stored)) {
-    reason = 'plaintext';
-  } else {
+function unreadableTwoFactor(userId: string, reason: string, message: string): never {
+  logger.error('2FA secret cannot be opened', { userId, reason });
+  throw new AppError(500, message, 'TWO_FACTOR_UNREADABLE');
+}
+
+/**
+ * Checks and spends a code against a stored 2FA secret. A sealed value is opened with the
+ * user's context. A value still in plain text (a setup that finished while the migration
+ * ran) is checked as is and, on a right code, sealed in the same request; the write is
+ * conditional on the plain value, so two requests racing can't seal it twice. A value that
+ * does not open answers a defined 500 (see unreadableTwoFactor).
+ * @param user - The user, with the step of their last accepted code
+ * @param user.id
+ * @param user.twoFactorLastStep
+ * @param stored - The value as the database keeps it
+ * @param code - The six-digit code the user typed
+ * @param unreadable - What the user is told when the value does not open
+ * @returns Whether the code was valid and not used before
+ */
+async function checkTwoFactorCode(
+  user: { id: string; twoFactorLastStep: number | null },
+  stored: string,
+  code: string,
+  unreadable: string,
+): Promise<boolean> {
+  if (isEncrypted(stored)) {
+    let secret: string;
     try {
-      return decryptSecret(stored, twoFactorContext(userId));
+      secret = decryptSecret(stored, twoFactorContext(user.id));
     } catch (err) {
       if (!(err instanceof SecretBoxError)) throw err;
-      reason = err.reason;
+      return unreadableTwoFactor(user.id, err.reason, unreadable);
     }
+    return spendTotp(user, secret, code);
   }
-  logger.error('2FA secret cannot be opened', { userId, reason });
-  throw new AppError(
-    500,
-    '2FA cannot be checked for this account. Ask an administrator to reset it.',
-    'TWO_FACTOR_UNREADABLE',
-  );
+
+  // A plain value that is not base32 was never a usable secret
+  if (!/^[A-Z2-7]+=*$/i.test(stored)) {
+    return unreadableTwoFactor(user.id, 'plaintext-unusable', unreadable);
+  }
+  const spent = await spendTotp(user, stored, code);
+  if (spent) {
+    const { count } = await prisma.user.updateMany({
+      where: { id: user.id, twoFactorSecret: stored },
+      data: { twoFactorSecret: encryptSecret(stored, twoFactorContext(user.id)) },
+    });
+    if (count === 1) logger.info('Plain 2FA secret sealed on use', { userId: user.id });
+  }
+  return spent;
 }
 
 /**
@@ -255,8 +289,9 @@ export async function login(data: { login: string; password: string; twoFactorCo
     if (!user.twoFactorSecret) {
       throw new AppError(500, '2FA misconfigured');
     }
-    const secret = openTwoFactorSecret(user.id, user.twoFactorSecret);
-    if (!(await spendTotp(user, secret, data.twoFactorCode))) {
+    if (
+      !(await checkTwoFactorCode(user, user.twoFactorSecret, data.twoFactorCode, UNREADABLE_ADMIN))
+    ) {
       throw new AppError(401, 'Invalid 2FA code', 'INVALID_TWO_FACTOR');
     }
   }
@@ -393,8 +428,7 @@ export async function verifyAndActivateTwoFactor(userId: string, code: string) {
     throw new AppError(400, 'Call enable-2fa first');
   }
 
-  const secret = openTwoFactorSecret(user.id, user.twoFactorSecret);
-  if (!(await spendTotp(user, secret, code))) {
+  if (!(await checkTwoFactorCode(user, user.twoFactorSecret, code, UNREADABLE_SETUP))) {
     throw new AppError(400, 'Invalid 2FA code');
   }
 
@@ -429,8 +463,7 @@ export async function disableTwoFactor(userId: string, code: string) {
     throw new AppError(400, '2FA not enabled');
   }
 
-  const secret = openTwoFactorSecret(user.id, user.twoFactorSecret);
-  if (!(await spendTotp(user, secret, code))) {
+  if (!(await checkTwoFactorCode(user, user.twoFactorSecret, code, UNREADABLE_ADMIN))) {
     throw new AppError(401, 'Invalid 2FA code');
   }
 
