@@ -6,7 +6,11 @@ import { logAudit } from '../modules/audit/audit.service';
 
 import { normalizeApiPath } from './token-scopes';
 
-/** One path, many actions: executeAction writes a row per action for these (R21). */
+/**
+ * One path, many actions: executeAction writes a row per action for the first two (R21). The
+ * GitHub webhook is public and writes no audit row at all, neither here nor per action: the
+ * delivery log is its record, and an unauthenticated caller must not cost a write per request.
+ */
 const AUDITED_PER_ACTION = new Set(['/api/mcp', '/api/act', '/api/github/webhook']);
 
 const METHOD_ACTION_MAP: Record<string, string> = {

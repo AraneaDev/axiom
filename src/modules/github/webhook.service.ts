@@ -1,14 +1,13 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { Prisma } from '@prisma/client';
-import { z } from 'zod';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
 import { getGithubAppSecrets } from './github-app.service';
-import { handlersFor, onGithubEvent, type GithubDeliveryContext } from './webhook-dispatch';
+import { handlersFor, type GithubDeliveryContext } from './webhook-dispatch';
 
 const MAX_ATTEMPTS = 5;
 /** Minutes to wait after the first, second, third and fourth failed attempt */
@@ -37,6 +36,14 @@ function validSignature(raw: Buffer, header: string | undefined, secret: string)
   const expected = createHmac('sha256', secret).update(raw).digest();
   return timingSafeEqual(expected, Buffer.from(header.slice('sha256='.length), 'hex'));
 }
+
+/**
+ * The JSON text with each escaped NUL (`\u0000`) replaced by U+FFFD: Postgres jsonb refuses NUL.
+ * Done after the signature was checked. An escaped backslash followed by "u0000" is kept as is.
+ * @param text The body
+ */
+const withoutNul = (text: string): string =>
+  text.replace(/\\(?:\\|u0000)/g, (match) => (match === '\\\\' ? match : '\uFFFD'));
 
 const idOf = (value: unknown): number | null => {
   const id = (value as { id?: unknown } | null | undefined)?.id;
@@ -77,7 +84,7 @@ export async function receive(
   }
   let payload: unknown;
   try {
-    payload = JSON.parse(raw.toString('utf8'));
+    payload = JSON.parse(withoutNul(raw.toString('utf8')));
   } catch {
     throw new AppError(400, 'The body is not valid JSON', 'INVALID_JSON');
   }
@@ -86,6 +93,7 @@ export async function receive(
   }
   const fields = payload as Record<string, unknown>;
   const ping = event === 'ping';
+  let rerun = false;
   try {
     await prisma.githubDelivery.create({
       data: {
@@ -101,12 +109,23 @@ export async function receive(
     });
   } catch (err) {
     // The unique key is the duplicate check: no read ahead of it, so two copies cannot both pass
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      return { duplicate: true };
-    }
-    throw err;
+    if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+    // GitHub's "Redeliver" reuses the id. One that gave up for good runs again, once: the reset
+    // only matches while it is still in that state
+    const reset = await prisma.githubDelivery.updateMany({
+      where: { id: deliveryId, status: 'FAILED', nextAttemptAt: null },
+      data: {
+        status: 'PENDING',
+        attempts: 0,
+        error: null,
+        processedAt: null,
+        payload: payload as Prisma.InputJsonObject,
+      },
+    });
+    if (reset.count === 0) return { duplicate: true };
+    rerun = true;
   }
-  if (!ping) {
+  if (!ping || rerun) {
     setImmediate(() => {
       processDelivery(deliveryId).catch((err: unknown) => {
         logger.error('GitHub delivery failed to run', { deliveryId }, err as Error);
@@ -164,14 +183,17 @@ export async function processDelivery(id: string): Promise<void> {
     installationId: row.installationId,
     repoId: row.repoId,
     payload: (row.payload ?? {}) as Record<string, unknown>,
+    receivedAt: row.receivedAt,
   };
   try {
     let processed = false;
     for (const handler of handlersFor(row.event)) {
       if ((await handler(context)) === 'processed') processed = true;
     }
-    await prisma.githubDelivery.update({
-      where: { id },
+    // Only while this is still the claimed attempt: a run that outlived its lease must not
+    // overwrite the run that claimed the delivery after it
+    await prisma.githubDelivery.updateMany({
+      where: { id, attempts: row.attempts },
       data: {
         status: processed ? 'PROCESSED' : 'IGNORED',
         processedAt: new Date(),
@@ -181,8 +203,8 @@ export async function processDelivery(id: string): Promise<void> {
     });
   } catch (err) {
     const wait = BACKOFF_MINUTES[row.attempts - 1];
-    await prisma.githubDelivery.update({
-      where: { id },
+    await prisma.githubDelivery.updateMany({
+      where: { id, attempts: row.attempts },
       data: {
         status: 'FAILED',
         error: await errorText(err),
@@ -200,6 +222,20 @@ export async function processDelivery(id: string): Promise<void> {
  */
 export async function retryDueDeliveries(limit = 50): Promise<number> {
   const now = new Date();
+  // A 5th attempt that never finished (the process died): its lease ran out and no claim can
+  // take it again, so it ends here
+  await prisma.githubDelivery.updateMany({
+    where: {
+      status: { in: ['PENDING', 'FAILED'] },
+      attempts: { gte: MAX_ATTEMPTS },
+      nextAttemptAt: { lte: now },
+    },
+    data: {
+      status: 'FAILED',
+      nextAttemptAt: null,
+      error: `gave up after ${MAX_ATTEMPTS} attempts`,
+    },
+  });
   const due = await prisma.githubDelivery.findMany({
     where: {
       status: { in: ['PENDING', 'FAILED'] },
@@ -221,12 +257,12 @@ export async function retryDueDeliveries(limit = 50): Promise<number> {
   return due.length;
 }
 
-/** Drops the payload of finished deliveries after 7 days and deletes every delivery after 30. */
+/** Drops the payload of finished and failed deliveries after 7 days and deletes every delivery after 30. */
 export async function cleanupDeliveries(): Promise<void> {
   const now = Date.now();
   await prisma.githubDelivery.updateMany({
     where: {
-      status: { in: ['PROCESSED', 'IGNORED'] },
+      status: { in: ['PROCESSED', 'IGNORED', 'FAILED'] },
       receivedAt: { lt: new Date(now - PAYLOAD_DAYS * DAY_MS) },
       NOT: { payload: { equals: Prisma.DbNull } },
     },
@@ -236,61 +272,3 @@ export async function cleanupDeliveries(): Promise<void> {
     where: { receivedAt: { lt: new Date(now - ROW_DAYS * DAY_MS) } },
   });
 }
-
-// ---- Installation events
-
-const installationPayload = z.object({
-  action: z.string().optional(),
-  installation: z.object({
-    id: z.number().int(),
-    account: z.object({ login: z.string().min(1), type: z.string().min(1) }),
-    suspended_at: z.string().nullish(),
-  }),
-});
-
-/**
- * Keeps an installation as the payload says, as `syncInstallations` writes it. A payload that is
- * not an installation's is none of this handler's business.
- * @param d The delivery
- * @param suspendedAt What to store as the suspension: the payload's, now, or none
- */
-async function writeInstallation(
-  d: GithubDeliveryContext,
-  suspendedAt: (fromPayload: Date | null) => Date | null,
-): Promise<'processed' | 'ignored'> {
-  const parsed = installationPayload.safeParse(d.payload);
-  if (!parsed.success) return 'ignored';
-  const { installation } = parsed.data;
-  const fromPayload = installation.suspended_at ? new Date(installation.suspended_at) : null;
-  const data = {
-    accountLogin: installation.account.login,
-    accountType: installation.account.type,
-    suspendedAt: suspendedAt(fromPayload),
-  };
-  await prisma.githubInstallation.upsert({
-    where: { id: installation.id },
-    create: { id: installation.id, ...data },
-    update: data,
-  });
-  return 'processed';
-}
-
-onGithubEvent('installation', (d) => {
-  switch (d.action) {
-    // GitHub no longer has it: marked suspended, as the sync marks an installation it no longer lists
-    case 'deleted':
-      return writeInstallation(d, () => new Date());
-    case 'suspend':
-      return writeInstallation(d, (fromPayload) => fromPayload ?? new Date());
-    case 'unsuspend':
-      return writeInstallation(d, () => null);
-    case 'created':
-      return writeInstallation(d, (fromPayload) => fromPayload);
-    default:
-      return Promise.resolve('ignored');
-  }
-});
-
-onGithubEvent('installation_repositories', (d) =>
-  writeInstallation(d, (fromPayload) => fromPayload),
-);

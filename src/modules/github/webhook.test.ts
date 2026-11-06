@@ -1,4 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +13,7 @@ import { postWebhook } from '../../test/github-webhook';
 import { listenForRawRequests } from '../../test/raw-request';
 
 import { deleteApp } from './github-app.service';
-import { onGithubEvent } from './webhook-dispatch';
+import { onGithubEvent, registeredGithubEvents } from './webhook-dispatch';
 import { cleanupDeliveries, processDelivery, retryDueDeliveries } from './webhook.service';
 
 const URL = '/api/github/webhook';
@@ -217,6 +219,170 @@ describe('the delivery log', () => {
   });
 });
 
+describe('before the body is read', () => {
+  const big = () => Buffer.alloc(26 * 1024 * 1024, 0x61);
+  const goodSignature = 'sha256=' + '0'.repeat(64);
+  const send = (headers: Record<string, string>) => {
+    let req = request(app).post(URL).set('Content-Type', 'application/json');
+    for (const [name, value] of Object.entries(headers)) req = req.set(name, value);
+    return req.send(big());
+  };
+  const full = {
+    'X-GitHub-Event': 'push',
+    'X-GitHub-Delivery': 'd-gate',
+    'X-Hub-Signature-256': goodSignature,
+  };
+
+  it('answers 404 to an oversized body when no App is set up, not 413', async () => {
+    await deleteApp();
+    try {
+      expect((await send(full)).status).toBe(404);
+    } finally {
+      secret = (await seedGithubApp()).webhookSecret;
+    }
+  });
+
+  it('answers 401, not 413, to an oversized body with a missing or malformed signature', async () => {
+    const { 'X-Hub-Signature-256': _gone, ...without } = full;
+    expect((await send(without)).status).toBe(401);
+    expect((await send({ ...full, 'X-Hub-Signature-256': 'sha256=zz' })).status).toBe(401);
+  });
+
+  it('answers 400, not 413, to an oversized body without an event or delivery id', async () => {
+    const { 'X-GitHub-Event': _event, ...noEvent } = full;
+    const { 'X-GitHub-Delivery': _delivery, ...noDelivery } = full;
+    expect((await send(noEvent)).status).toBe(400);
+    expect((await send(noDelivery)).status).toBe(400);
+  });
+
+  it('counts a flood against the limiter before the gate looks at it', async () => {
+    rateLimitTesting.enforce = true;
+    try {
+      for (const key of ['::ffff:127.0.0.1', '127.0.0.1', '::1']) {
+        await githubWebhookLimiter.resetKey(key);
+      }
+      const statuses = await flood(1001);
+      expect(statuses.filter((status) => status === 429)).toHaveLength(1);
+      // Refused before the gate: 401 for the first 1000, never a body read
+      expect(statuses.filter((status) => status === 401)).toHaveLength(1000);
+    } finally {
+      for (const key of ['::ffff:127.0.0.1', '127.0.0.1', '::1']) {
+        await githubWebhookLimiter.resetKey(key);
+      }
+      rateLimitTesting.enforce = false;
+    }
+  }, 60_000);
+});
+
+describe('handler registry', () => {
+  it('registers the installation events in one module that both processes import', () => {
+    expect(registeredGithubEvents()).toEqual(
+      expect.arrayContaining(['installation', 'installation_repositories']),
+    );
+    const root = path.join(__dirname, '../..');
+    for (const entry of ['index.ts', 'worker.ts']) {
+      expect(readFileSync(path.join(root, entry), 'utf8')).toContain(
+        './modules/github/webhook-handlers',
+      );
+    }
+    // The service registers nothing itself, so a process cannot see a different set
+    expect(readFileSync(path.join(__dirname, 'webhook.service.ts'), 'utf8')).not.toContain(
+      'onGithubEvent(',
+    );
+  });
+});
+
+describe('stuck and replayed deliveries', () => {
+  it('ends a delivery whose 5th attempt never finished: FAILED, no retry, with the reason', async () => {
+    await prisma.githubDelivery.create({
+      data: {
+        id: 'd-stuck',
+        event: 'push',
+        payload: {},
+        status: 'PENDING',
+        attempts: 5,
+        nextAttemptAt: new Date(Date.now() - 1000),
+      },
+    });
+    await prisma.githubDelivery.create({
+      data: {
+        id: 'd-running',
+        event: 'push',
+        payload: {},
+        status: 'PENDING',
+        attempts: 5,
+        nextAttemptAt: new Date(Date.now() + 4 * 60_000),
+      },
+    });
+    await retryDueDeliveries();
+    expect(await row('d-stuck')).toMatchObject({
+      status: 'FAILED',
+      nextAttemptAt: null,
+      error: 'gave up after 5 attempts',
+    });
+    expect((await row('d-running'))?.status).toBe('PENDING');
+  });
+
+  it('runs a redelivery of a finally failed delivery again, and answers other duplicates as before', async () => {
+    const event = eventName();
+    const handler = vi.fn(async () => 'processed' as const);
+    onGithubEvent(event, handler);
+    await prisma.githubDelivery.create({
+      data: { id: 'd-redo', event, payload: {}, status: 'FAILED', attempts: 5, error: 'x' },
+    });
+    const again = await postWebhook(event, { n: 2 }, { deliveryId: 'd-redo' });
+    expect(again.status).toBe(202);
+    await vi.waitFor(async () => expect((await row('d-redo'))?.status).toBe('PROCESSED'));
+    expect(await row('d-redo')).toMatchObject({ attempts: 1, error: null });
+    expect(handler).toHaveBeenCalledTimes(1);
+    // Now processed: a second redelivery is a plain duplicate
+    expect((await postWebhook(event, { n: 2 }, { deliveryId: 'd-redo' })).body).toEqual({
+      duplicate: true,
+    });
+    // A failed one that still has a retry time is a duplicate too
+    await prisma.githubDelivery.create({
+      data: {
+        id: 'd-soon',
+        event,
+        payload: {},
+        status: 'FAILED',
+        attempts: 1,
+        nextAttemptAt: new Date(Date.now() + 60_000),
+      },
+    });
+    expect((await postWebhook(event, {}, { deliveryId: 'd-soon' })).body).toEqual({
+      duplicate: true,
+    });
+  });
+
+  it('does not let a stale run overwrite a delivery that another run has claimed since', async () => {
+    const event = eventName();
+    onGithubEvent(event, async () => {
+      await prisma.githubDelivery.update({ where: { id: 'd-stale' }, data: { attempts: 4 } });
+      return 'processed';
+    });
+    await prisma.githubDelivery.create({ data: { id: 'd-stale', event, payload: {} } });
+    await processDelivery('d-stale');
+    expect((await row('d-stale'))?.status).toBe('PENDING');
+  });
+});
+
+describe('a NUL in the payload', () => {
+  it('is stored with the character replaced, and a literal backslash text is kept', async () => {
+    const event = eventName();
+    const res = await postWebhook(event, null, {
+      deliveryId: 'd-nul',
+      rawBody: '{"a":"x\\u0000y","b":"p\\\\u0000q","k\\u0000":1}',
+    });
+    expect(res.status).toBe(202);
+    expect((await row('d-nul'))?.payload).toEqual({
+      a: 'x\uFFFDy',
+      b: 'p\\u0000q',
+      'k\uFFFD': 1,
+    });
+  });
+});
+
 describe('retries', () => {
   it('fails once, waits a minute and succeeds on the retry', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -354,7 +520,7 @@ describe('retries', () => {
 });
 
 describe('cleanup', () => {
-  it('clears payloads after 7 days on finished rows only, and deletes rows after 30 days', async () => {
+  it('clears payloads after 7 days on finished and failed rows, not pending ones, and deletes rows after 30 days', async () => {
     const day = 24 * 3600_000;
     const at = (days: number) => new Date(Date.now() - days * day);
     const make = (
@@ -369,14 +535,16 @@ describe('cleanup', () => {
     await make('old-ignored', 'IGNORED', 8);
     await make('old-failed', 'FAILED', 8);
     await make('old-pending', 'PENDING', 8);
+    await make('new-failed', 'FAILED', 1);
     await make('new-done', 'PROCESSED', 1);
     await make('ancient', 'PROCESSED', 31);
     await cleanupDeliveries();
     expect((await row('old-done'))?.payload).toBeNull();
     expect((await row('old-ignored'))?.payload).toBeNull();
-    expect((await row('old-failed'))?.payload).toEqual({ a: 1 });
+    expect((await row('old-failed'))?.payload).toBeNull();
     expect((await row('old-pending'))?.payload).toEqual({ a: 1 });
     expect((await row('new-done'))?.payload).toEqual({ a: 1 });
+    expect((await row('new-failed'))?.payload).toEqual({ a: 1 });
     expect(await row('ancient')).toBeNull();
   });
 });
@@ -455,6 +623,28 @@ describe('installation events', () => {
     expect(
       (await prisma.githubInstallation.findUnique({ where: { id: 5001 } }))?.accountLogin,
     ).toBe('renamed-labs');
+  });
+
+  it('ignores an event that is older than the row, so a late created cannot bring back a deleted one', async () => {
+    const created = await prisma.githubInstallation.create({
+      data: {
+        id: 5001,
+        accountLogin: 'acme-labs',
+        accountType: 'Organization',
+        suspendedAt: new Date('2026-11-06T08:00:00Z'),
+      },
+    });
+    await prisma.$executeRaw`UPDATE github_installations SET "updatedAt" = now() + interval '1 hour' WHERE id = ${created.id}`;
+    await postWebhook(
+      'installation',
+      { action: 'created', installation: installation() },
+      { deliveryId: 'i-old' },
+    );
+    await done('i-old');
+    expect((await row('i-old'))?.status).toBe('IGNORED');
+    expect(
+      (await prisma.githubInstallation.findUnique({ where: { id: 5001 } }))?.suspendedAt,
+    ).not.toBeNull();
   });
 
   it('ignores an installation event without an installation', async () => {

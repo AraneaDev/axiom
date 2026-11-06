@@ -19,7 +19,12 @@ import { csrfGuard } from '../middleware/csrfGuard';
 import { errorHandler } from '../middleware/errorHandler';
 import { metricsCollector } from '../middleware/metricsCollector';
 import { nulGuard } from '../middleware/nulGuard';
-import { authLimiter, globalLimiter, searchLimiter } from '../middleware/rate-limit';
+import {
+  authLimiter,
+  githubWebhookLimiter,
+  globalLimiter,
+  searchLimiter,
+} from '../middleware/rate-limit';
 import { requestLogger } from '../middleware/requestLogger';
 import { require2fa } from '../middleware/require2fa';
 import * as tokenScopes from '../middleware/token-scopes';
@@ -99,7 +104,10 @@ const API_MIDDLEWARE = [
   'corsMiddleware',
   'requestLogger',
   'metricsCollector',
-  // The GitHub webhook's body stays raw bytes for its signature; only that path matches
+  // The GitHub webhook path only: counted and gated before its body is read, which stays raw
+  // bytes for the signature
+  'githubWebhookLimiter',
+  'githubWebhookGate',
   'rawParser',
   'jsonParser',
   'nulGuard',
@@ -131,6 +139,7 @@ const KNOWN_MIDDLEWARE = new Map<unknown, string>([
   [globalLimiter, 'globalLimiter'],
   [authLimiter, 'authLimiter'],
   [searchLimiter, 'searchLimiter'],
+  [githubWebhookLimiter, 'githubWebhookLimiter'],
   [csrfGuard, 'csrfGuard'],
   [require2fa, 'require2fa'],
   [auditMiddleware, 'auditMiddleware'],

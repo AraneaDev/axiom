@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { definePublicAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
-import { githubWebhookLimiter } from '../../middleware/rate-limit';
 
 import * as service from './webhook.service';
 
@@ -28,7 +27,6 @@ registerActions([
       public: true,
       raw: true,
       emptyBody: true,
-      rateLimit: githubWebhookLimiter,
     },
     authorize: async () => {},
     handler: async (ctx) => {

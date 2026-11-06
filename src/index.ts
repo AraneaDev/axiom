@@ -28,12 +28,14 @@ import {
   authLimiter,
   searchLimiter,
   GITHUB_WEBHOOK_PATH,
+  githubWebhookLimiter,
 } from './middleware/rate-limit.js';
 import { requestLogger } from './middleware/requestLogger';
 import { require2fa } from './middleware/require2fa';
 import { mountStaticFrontend, resolveStaticDir } from './middleware/static-frontend';
 import { signedUploadRouter } from './modules/attachments/attachments.routes';
 import { parseTrustProxy } from './modules/forms/client-ip';
+import { githubWebhookGate } from './modules/github/webhook-gate';
 import './actions/read.actions';
 import './modules/attachments/attachments.actions';
 import './modules/issues/issues.actions';
@@ -71,6 +73,7 @@ import './modules/auth/auth.actions';
 import './modules/health/health.actions';
 import './modules/site-settings/site-settings.actions';
 import './modules/github/github-app.actions';
+import './modules/github/webhook-handlers';
 import './modules/github/webhook.actions';
 import { createWebSocketServer } from './realtime/ws-server';
 import { logger } from './utils/logger';
@@ -117,7 +120,14 @@ app.use(signedUploadRouter);
 // POST /api/github/webhook is signed over the exact bytes GitHub sent, so its body stays a Buffer:
 // parsed and re-serialised JSON would not verify. GitHub caps a delivery at 25 MB. The signature
 // is checked in the action, before anything is parsed. express.json skips a body read here.
-app.use(GITHUB_WEBHOOK_PATH, express.raw({ type: '*/*', limit: '25mb' }));
+// The limiter and the gate go first: a caller that is counted out or refused is answered before
+// the server reads any of its body.
+app.use(
+  GITHUB_WEBHOOK_PATH,
+  githubWebhookLimiter,
+  githubWebhookGate,
+  express.raw({ type: '*/*', limit: '25mb' }),
+);
 app.use(express.json({ limit: '5mb' }));
 app.use('/api', nulGuard);
 
