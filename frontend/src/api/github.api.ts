@@ -48,3 +48,131 @@ export const githubAccountApi = {
     post<GithubAccountStatus>('/github/account/connect/complete', { code, state }),
   disconnect: () => del<GithubAccountStatus>('/github/account'),
 };
+
+/** A person on GitHub; `user` is the Axiom account it maps to, inside the org */
+export interface GithubPerson {
+  login: string;
+  user: { id: string; displayName: string } | null;
+}
+
+export interface GithubBranchView {
+  name: string;
+  url: string;
+  headSha: string;
+  deleted: boolean;
+}
+
+export interface GithubReviewView {
+  author: GithubPerson;
+  state: string;
+  body: string;
+  submittedAt: string;
+}
+
+export type GithubPrState = 'open' | 'closed' | 'merged';
+
+export interface GithubPullRequestView {
+  number: number;
+  title: string;
+  state: GithubPrState;
+  draft: boolean;
+  url: string;
+  author: GithubPerson;
+  headRef: string;
+  baseRef: string;
+  headSha: string;
+  mergeableState: string | null;
+  requestedReviewers: GithubPerson[];
+  reviews: GithubReviewView[];
+}
+
+export interface GithubCheckView {
+  pullRequest: number | null;
+  pullRequests: number[];
+  headSha: string;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  url: string;
+  failedStep: string | null;
+  logTail: string | null;
+  logTruncated: boolean;
+  logUnavailable: boolean;
+}
+
+interface Capped<T> {
+  items: T[];
+  limit: number;
+  truncated: boolean;
+}
+
+/** The `development` and `checks` includes of the issue read */
+export interface IssueDevelopment {
+  development?: {
+    branches: Capped<GithubBranchView>;
+    pullRequests: Capped<GithubPullRequestView>;
+  };
+  checks?: Capped<GithubCheckView>;
+}
+
+export interface GithubRepoLink {
+  id: string;
+  projectId: string;
+  repoFullName: string;
+  owner: string;
+  name: string;
+  htmlUrl: string;
+  defaultBranch: string;
+  linkedBy: { id: string; username: string; displayName: string } | null;
+  createdAt: string;
+}
+
+export interface GithubDeliveryFailure {
+  deliveryId: string;
+  event: string;
+  action: string | null;
+  error: string | null;
+  attempts: number;
+  receivedAt: string;
+}
+
+export interface GithubLinkHealth {
+  linked: boolean;
+  repoFullName?: string;
+  appInstalled: boolean;
+  installationSuspended: boolean;
+  appSecretUnreadable: boolean;
+  lastDeliveryAt: string | null;
+  lastReconciledAt: string | null;
+  lastReconcileError: string | null;
+  recentFailures: GithubDeliveryFailure[];
+}
+
+export const githubRepoKey = (projectId: string | undefined) => ['github-repo', projectId];
+export const githubHealthKey = (projectId: string | undefined) => ['github-health', projectId];
+/**
+ * Under `['issue-hydrate', projectId]`, which the realtime event `issue:development-updated` refetches
+ * @param projectId
+ * @param issueNumber
+ */
+export const issueDevelopmentKey = (
+  projectId: string | undefined,
+  issueNumber: string | undefined,
+) => ['issue-hydrate', projectId, issueNumber, 'development'];
+
+export const githubRepoApi = {
+  get: (projectId: string) => get<GithubRepoLink | null>(`/projects/${projectId}/github`),
+  link: (projectId: string, repo: string) =>
+    post<GithubRepoLink>(`/projects/${projectId}/github`, { repo }),
+  unlink: (projectId: string) => del<{ unlinked: boolean }>(`/projects/${projectId}/github`),
+  reconcile: (projectId: string) =>
+    post<{ complete: boolean }>(`/projects/${projectId}/github/reconcile`, {}),
+  health: (projectId: string) => get<GithubLinkHealth>(`/projects/${projectId}/github/health`),
+};
+
+export const githubDevelopmentApi = {
+  issue: (projectId: string, issueNumber: number) =>
+    get<IssueDevelopment>(
+      `/projects/${projectId}/issues/${issueNumber}/hydrate?include=development&include=checks`,
+    ),
+};

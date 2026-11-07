@@ -2,11 +2,13 @@
 const TWO_FACTOR_SETUP_PATH = '/setup-2fa';
 const API_BASE = '/api';
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
     public code?: string,
+    /** What the error carries besides its message, such as a link to follow */
+    public details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -134,7 +136,12 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
       return Promise.reject(new Error(body.error.message));
     }
 
-    throw new ApiError(res.status, body.error?.message ?? 'Request failed', body.error?.code);
+    throw new ApiError(
+      res.status,
+      body.error?.message ?? 'Request failed',
+      body.error?.code,
+      body.error?.details,
+    );
   }
 
   if (res.status === 204) return undefined as T;
@@ -239,7 +246,12 @@ export async function apiFormData<T = unknown>(
       return Promise.reject(new Error(body.error.message));
     }
 
-    throw new ApiError(res.status, body.error?.message ?? 'Request failed', body.error?.code);
+    throw new ApiError(
+      res.status,
+      body.error?.message ?? 'Request failed',
+      body.error?.code,
+      body.error?.details,
+    );
   }
 
   if (res.status === 204) return undefined as T;

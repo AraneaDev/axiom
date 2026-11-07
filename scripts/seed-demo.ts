@@ -20,6 +20,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
+import { seedGithubDemo } from './seed-github-demo';
 import { seedPageMentions } from './seed-page-mentions';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -255,6 +256,17 @@ async function main() {
     totalIssues++;
   }
   console.warn(`        ${totalIssues} issues`);
+
+  // A linked repository with a pull request and a failed check, on the one issue in progress
+  const githubIssue = createdIssues.find((i) => i.title === 'Dark mode support');
+  if (githubIssue) {
+    await seedGithubDemo(prisma, {
+      projectId: project.id,
+      issueId: githubIssue.id,
+      linkedById: users['tim'].id,
+    });
+    console.warn('        GitHub: acme-labs/widget linked to "Dark mode support"');
+  }
 
   // ────────────────────────────────────────────────────────────
   // 6. Comments

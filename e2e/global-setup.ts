@@ -4,6 +4,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
+import { seedGithubDemo } from '../scripts/seed-github-demo';
+
 const E2E_DB_URL = 'postgresql://axiom:axiom_dev@localhost:5432/axiom_e2e?schema=public';
 
 export default async function globalSetup() {
@@ -204,6 +206,16 @@ export default async function globalSetup() {
         },
       });
     }
+
+    // A linked demo repository on PLAT-1, with a pull request and a failed check
+    const ciIssue = await prisma.issue.findFirstOrThrow({
+      where: { projectId: project.id, number: 1 },
+    });
+    await seedGithubDemo(prisma, {
+      projectId: project.id,
+      issueId: ciIssue.id,
+      linkedById: admin.id,
+    });
 
     // Sprints: an active one holding PLAT-1 and PLAT-2, a planned one holding PLAT-4
     const day = 24 * 60 * 60 * 1000;

@@ -27,6 +27,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { IssueBodySection } from './IssueBodySection';
 import { IssueDetailComments } from './IssueDetailComments';
 import { IssueDetailSidebar } from './IssueDetailSidebar';
+import { IssueDevelopmentPanel } from './IssueDevelopmentPanel';
 import { IssueHeader } from './IssueHeader';
 
 /**
@@ -311,6 +312,12 @@ export default function IssueDetail() {
           }}
           onCancel={() => bodyDraftState.cancel()}
         />
+
+        {currentProject?.id && num && (
+          <div className="mb-8">
+            <IssueDevelopmentPanel projectId={currentProject.id} issueNumber={num} />
+          </div>
+        )}
 
         {/* Attachments */}
         <div className="mb-8">

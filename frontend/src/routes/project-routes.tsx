@@ -17,6 +17,7 @@ const TimeReport = lazy(() => import('@/pages/projects/TimeReport'));
 const CustomFieldSettings = lazy(() => import('@/pages/projects/CustomFieldSettings'));
 const WorkflowEditor = lazy(() => import('@/pages/projects/WorkflowEditor'));
 const ApprovalsSettings = lazy(() => import('@/pages/projects/ApprovalsSettings'));
+const GithubSettings = lazy(() => import('@/pages/projects/GithubSettings'));
 const FormsSettings = lazy(() => import('@/pages/projects/FormsSettings'));
 const FormBuilderPage = lazy(() => import('@/pages/projects/FormBuilderPage'));
 const AutomationRules = lazy(() => import('@/pages/projects/AutomationRules'));
@@ -192,6 +193,7 @@ export function projectRoutes() {
           <Route path="automation" element={<AutomationRules />} />
           <Route path="workflow" element={<WorkflowEditor />} />
           <Route path="approvals" element={<ApprovalsSettings />} />
+          <Route path="github" element={<GithubSettings />} />
           <Route path="forms" element={<FormsSettings />} />
           <Route path="forms/:formId" element={<FormBuilderPage />} />
         </Route>
