@@ -1447,32 +1447,34 @@ model GithubDelivery {
 /// The one GitHub repository a project is linked to (ids as GitHub numbers them). Deleting the
 /// link deletes what the later GitHub tables hold for it.
 model GithubRepoLink {
-  id                  String              @id @default(cuid())
-  projectId           String              @unique
-  repoId              BigInt              @unique
-  installationId      BigInt
-  owner               String
-  name                String
-  fullName            String
-  defaultBranch       String
-  htmlUrl             String
+  id                    String              @id @default(cuid())
+  projectId             String              @unique
+  repoId                BigInt              @unique
+  installationId        BigInt
+  owner                 String
+  name                  String
+  fullName              String
+  defaultBranch         String
+  htmlUrl               String
   /// Who linked it; no relation, so deleting that person does not block or unlink the project
-  linkedById          String
-  createdAt           DateTime            @default(now())
-  lastDeliveryAt      DateTime?
-  lastReconciledAt    DateTime?
-  lastReconcileError  String?
-  reconcileLeaseUntil DateTime?
+  linkedById            String
+  createdAt             DateTime            @default(now())
+  lastDeliveryAt        DateTime?
+  lastReconciledAt      DateTime?
+  lastReconcileError    String?
+  reconcileLeaseUntil   DateTime?
   /// Who holds the lease: only that run extends or clears it
-  reconcileLeaseToken String?
+  reconcileLeaseToken   String?
   /// Why the last reconcile did not read everything (null when it did)
-  lastReconcileNote   String?
-  project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  issueLinks          GithubIssueLink[]
-  branches            GithubBranch[]
-  pullRequests        GithubPullRequest[]
-  commits             GithubCommit[]
-  checkRuns           GithubCheckRun[]
+  lastReconcileNote     String?
+  /// When the default rules were made for this link; set once, so a rule the team deleted never returns
+  defaultRulesCreatedAt DateTime?
+  project               Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issueLinks            GithubIssueLink[]
+  branches              GithubBranch[]
+  pullRequests          GithubPullRequest[]
+  commits               GithubCommit[]
+  checkRuns             GithubCheckRun[]
 
   @@map("github_repo_links")
 }

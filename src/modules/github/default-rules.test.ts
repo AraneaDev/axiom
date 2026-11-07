@@ -1,0 +1,299 @@
+import { randomUUID } from 'node:crypto';
+
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { prisma } from '../../config/database';
+import { cleanupTestContext, createTestContext, type TestContext } from '../../test/factory';
+import { useGithubFake } from '../../test/github-fake';
+import { seedGithubApp } from '../../test/github-seed';
+import { postWebhook } from '../../test/github-webhook';
+import { createRule } from '../automation/automation.service';
+
+import {
+  applyDefaultGithubRules,
+  createDefaultGithubRules,
+  ensureDefaultGithubRules,
+} from './default-rules';
+import './github-resolvers';
+import './webhook-handlers';
+
+const REPO_ID = 880_800;
+const INSTALLATION_ID = 4801;
+const SHA = '3333333333333333333333333333333333333333';
+const NAMES = {
+  opened: 'GitHub: PR opened moves to In review',
+  merged: 'GitHub: PR merged moves to done',
+  checks: 'GitHub: comment when checks fail',
+};
+
+const fake = useGithubFake('checks');
+let ctx: TestContext;
+let p: string;
+let repoLinkId: string;
+let columns: Record<string, string>;
+let todoIssue: string;
+let doneIssue: string;
+
+type Payload = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+const repository = {
+  id: REPO_ID,
+  name: 'widget',
+  full_name: 'acme-labs/widget',
+  html_url: 'https://github.com/acme-labs/widget',
+  owner: { login: 'acme-labs', id: 4001 },
+};
+const sender = { id: 7001, login: 'voorbeeld-dev' };
+
+const pull = (number: number, over: Payload = {}): Payload => ({
+  number,
+  title: 'Add the widget',
+  body: null,
+  state: 'open',
+  draft: false,
+  merged: false,
+  user: sender,
+  head: { ref: `${p}-${number}-x`, sha: SHA },
+  base: { ref: 'main' },
+  requested_reviewers: [],
+  html_url: `https://github.com/acme-labs/widget/pull/${number}`,
+  created_at: '2026-11-06T09:00:00Z',
+  updated_at: '2026-11-06T10:00:00Z',
+  merged_at: null,
+  closed_at: null,
+  ...over,
+});
+
+async function prEvent(action: string, payload: Payload) {
+  const deliveryId = randomUUID();
+  expect(
+    (
+      await postWebhook(
+        'pull_request',
+        { action, number: payload.number, pull_request: payload, repository, sender },
+        { deliveryId },
+      )
+    ).status,
+  ).toBe(202);
+  await expect
+    .poll(
+      async () =>
+        (await prisma.githubDelivery.findUniqueOrThrow({ where: { id: deliveryId } })).status,
+    )
+    .not.toBe('PENDING');
+}
+
+/**
+ * Gives the project these columns (names; the last flagged ones are done), two issues named by
+ * number 1 and 2 in the project, and a link with no default rules yet.
+ * @param names The column names in order
+ * @param done The names that are done columns
+ */
+async function setup(names: string[], done: string[]) {
+  await prisma.automationRule.deleteMany({ where: { projectId: ctx.projectId } });
+  await prisma.issue.updateMany({ where: { projectId: ctx.projectId }, data: { columnId: null } });
+  await prisma.boardColumn.deleteMany({ where: { projectId: ctx.projectId } });
+  columns = {};
+  for (const [position, name] of names.entries()) {
+    columns[name] = (
+      await prisma.boardColumn.create({
+        data: { projectId: ctx.projectId, name, position, isDone: done.includes(name) },
+      })
+    ).id;
+  }
+  await prisma.githubRepoLink.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
+  repoLinkId = (
+    await prisma.githubRepoLink.create({
+      data: {
+        projectId: ctx.projectId,
+        repoId: BigInt(REPO_ID),
+        installationId: BigInt(INSTALLATION_ID),
+        owner: 'acme-labs',
+        name: 'widget',
+        fullName: 'acme-labs/widget',
+        defaultBranch: 'main',
+        htmlUrl: 'https://github.com/acme-labs/widget',
+        linkedById: ctx.owner.id,
+        lastReconciledAt: new Date(),
+        createdAt: new Date('2026-11-01T00:00:00Z'),
+      },
+    })
+  ).id;
+  await prisma.comment.deleteMany({ where: { issue: { projectId: ctx.projectId } } });
+  await prisma.githubAutomationMark.deleteMany({ where: { issue: { projectId: ctx.projectId } } });
+}
+
+const names = async () =>
+  (
+    await prisma.automationRule.findMany({
+      where: { projectId: ctx.projectId },
+      orderBy: { name: 'asc' },
+    })
+  ).map((r) => r.name);
+const columnOf = async (id: string) =>
+  (await prisma.issue.findUniqueOrThrow({ where: { id } })).columnId;
+
+beforeAll(async () => {
+  await seedGithubApp({ fake });
+  fake.addInstallation(INSTALLATION_ID, ['acme-labs/widget']);
+  ctx = await createTestContext('gdr1');
+  p = ctx.projectPrefix.toLowerCase();
+  for (const n of [1, 2]) {
+    const row = await prisma.issue.create({
+      data: {
+        projectId: ctx.projectId,
+        number: n,
+        title: `Issue ${n}`,
+        body: '',
+        creatorId: ctx.owner.id,
+      },
+    });
+    if (n === 1) todoIssue = row.id;
+    else doneIssue = row.id;
+  }
+});
+
+beforeEach(async () => {
+  await prisma.githubAccount.deleteMany();
+  await prisma.githubInstallation.deleteMany();
+  await prisma.githubInstallation.create({
+    data: { id: BigInt(INSTALLATION_ID), accountLogin: 'acme-labs', accountType: 'Organization' },
+  });
+  await prisma.githubDelivery.deleteMany();
+});
+
+afterAll(async () => {
+  await prisma.githubRepoLink.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
+  await prisma.githubInstallation.deleteMany();
+  await cleanupTestContext(ctx);
+});
+
+describe('default rules on link', () => {
+  it('creates three rules for To Do, In Review and Done, and a PR opened on a To Do issue moves to In Review', async () => {
+    await setup(['To Do', 'In Review', 'Done'], ['Done']);
+    expect(await applyDefaultGithubRules(repoLinkId)).toEqual([
+      NAMES.opened,
+      NAMES.merged,
+      NAMES.checks,
+    ]);
+    expect(await names()).toEqual(Object.values(NAMES).sort());
+    const rules = await prisma.automationRule.findMany({ where: { projectId: ctx.projectId } });
+    const byName = (n: string) => rules.find((r) => r.name === n)!;
+    expect(byName(NAMES.opened)).toMatchObject({
+      trigger: 'pr:opened',
+      condition: 'status NOT IN ("Done")',
+      actions: [{ type: 'set_status', columnId: columns['In Review'] }],
+    });
+    expect(byName(NAMES.merged)).toMatchObject({
+      trigger: 'pr:merged',
+      actions: [
+        { type: 'set_status', columnId: columns.Done },
+        { type: 'add_comment', body: 'Merged in {{github.pr.url}}' },
+      ],
+    });
+    expect(byName(NAMES.checks)).toMatchObject({
+      trigger: 'checks:failed',
+      actions: [
+        {
+          type: 'add_comment',
+          body: 'Checks failed on {{github.pr.url}} at {{github.checks.headSha}}: {{github.checks.failedNames}}',
+        },
+      ],
+    });
+    expect(
+      (await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } }))
+        .defaultRulesCreatedAt,
+    ).not.toBeNull();
+
+    await prisma.issue.update({ where: { id: todoIssue }, data: { columnId: columns['To Do'] } });
+    await prEvent('opened', pull(31, { head: { ref: `${p}-1-x`, sha: SHA } }));
+    expect(await columnOf(todoIssue)).toBe(columns['In Review']);
+  });
+
+  it('leaves an issue that is already done in Done when a PR opens on it', async () => {
+    await setup(['To Do', 'In Review', 'Done'], ['Done']);
+    await applyDefaultGithubRules(repoLinkId);
+    await prisma.issue.update({ where: { id: doneIssue }, data: { columnId: columns.Done } });
+    await prEvent('opened', pull(32, { head: { ref: `${p}-2-x`, sha: SHA } }));
+    expect(await columnOf(doneIssue)).toBe(columns.Done);
+  });
+
+  it('makes two rules for a project without an In review column', async () => {
+    await setup(['To Do', 'In Progress', 'Done'], ['Done']);
+    expect((await applyDefaultGithubRules(repoLinkId)).sort()).toEqual(
+      [NAMES.checks, NAMES.merged].sort(),
+    );
+    expect(await names()).toEqual([NAMES.checks, NAMES.merged].sort());
+  });
+
+  it('matches the In review column by trimmed, case-insensitive name and leaves the condition out when nothing is done', async () => {
+    await setup(['To Do', '  in REVIEW '], []);
+    await applyDefaultGithubRules(repoLinkId);
+    const opened = await prisma.automationRule.findFirstOrThrow({
+      where: { projectId: ctx.projectId, name: NAMES.opened },
+    });
+    expect(opened.condition).toBeNull();
+    expect(opened.actions).toEqual([{ type: 'set_status', columnId: columns['  in REVIEW '] }]);
+    const merged = await prisma.automationRule.findFirstOrThrow({
+      where: { projectId: ctx.projectId, name: NAMES.merged },
+    });
+    expect(merged.actions).toEqual([{ type: 'add_comment', body: 'Merged in {{github.pr.url}}' }]);
+  });
+
+  it('moves a merged PR to the lowest done column and comments the URL', async () => {
+    await setup(['To Do', 'Released', 'Done'], ['Done', 'Released']);
+    await createDefaultGithubRules(ctx.projectId);
+    await prEvent('opened', pull(33, { head: { ref: `${p}-1-x`, sha: SHA } }));
+    await prEvent(
+      'closed',
+      pull(33, {
+        head: { ref: `${p}-1-x`, sha: SHA },
+        state: 'closed',
+        merged: true,
+        merged_at: '2026-11-06T11:00:00Z',
+        closed_at: '2026-11-06T11:00:00Z',
+        updated_at: '2026-11-06T11:00:00Z',
+      }),
+    );
+    expect(await columnOf(todoIssue)).toBe(columns.Released);
+    const bodies = (await prisma.comment.findMany({ where: { issueId: todoIssue } })).map(
+      (c) => c.body,
+    );
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatch(/^Merged in https?\\?:\/\/github\.com\/acme-labs\/widget\/pull\/33$/);
+  });
+
+  it('does not bring back a deleted rule', async () => {
+    await setup(['To Do', 'In Review', 'Done'], ['Done']);
+    await applyDefaultGithubRules(repoLinkId);
+    await prisma.automationRule.deleteMany({
+      where: { projectId: ctx.projectId, name: NAMES.checks },
+    });
+    expect(await ensureDefaultGithubRules()).toBe(0);
+    expect(await applyDefaultGithubRules(repoLinkId)).toEqual([]);
+    expect(await names()).toEqual([NAMES.opened, NAMES.merged].sort());
+  });
+
+  it('gives a link made before this shipped its rules, once', async () => {
+    await setup(['To Do', 'In Review', 'Done'], ['Done']);
+    expect(await ensureDefaultGithubRules()).toBeGreaterThanOrEqual(1);
+    expect(await names()).toEqual(Object.values(NAMES).sort());
+    expect(await ensureDefaultGithubRules()).toBe(0);
+    expect(await names()).toHaveLength(3);
+  });
+
+  it('creates the rules once when two callers race', async () => {
+    await setup(['To Do', 'In Review', 'Done'], ['Done']);
+    await Promise.all([applyDefaultGithubRules(repoLinkId), applyDefaultGithubRules(repoLinkId)]);
+    expect(await names()).toHaveLength(3);
+  });
+
+  it('goes through the rule validation: a failing rule leaves the link unmarked, to try again', async () => {
+    await setup(['To Do', 'In Review', 'Done'], ['Done']);
+    // The project is gone for the rule service: createRule refuses
+    await expect(
+      createRule('does-not-exist', { name: 'x', trigger: 'pr:opened', actions: [] }),
+    ).rejects.toThrow();
+    await expect(createDefaultGithubRules('does-not-exist')).rejects.toThrow();
+  });
+});

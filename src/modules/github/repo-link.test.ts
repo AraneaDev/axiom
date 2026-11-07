@@ -172,6 +172,33 @@ describe('githubRepo.link', () => {
     ]);
   });
 
+  it('makes the default GitHub rules once, before the first reconcile, and still links when they fail', async () => {
+    await prisma.automationRule.deleteMany({ where: { projectId: ctx.projectId } });
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const res = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(res.status).toBeLessThan(300);
+    const rules = await prisma.automationRule.findMany({ where: { projectId: ctx.projectId } });
+    expect(rules.map((r) => r.name)).toEqual(
+      expect.arrayContaining([
+        'GitHub: PR merged moves to done',
+        'GitHub: comment when checks fail',
+      ]),
+    );
+    const link = await findRepoLinkByProject(ctx.projectId);
+    expect(link?.defaultRulesCreatedAt).not.toBeNull();
+    // Unlinking resets nothing; a new link is a new row and gets the rules again
+    await prisma.automationRule.deleteMany({ where: { projectId: ctx.projectId } });
+    await prisma.githubRepoLink.deleteMany({ where: { projectId: ctx.projectId } });
+    await request(app).post(url(ctx.projectId)).set(as(ctx.owner)).send({ repo: WIDGET });
+    expect(
+      await prisma.automationRule.count({ where: { projectId: ctx.projectId } }),
+    ).toBeGreaterThanOrEqual(2);
+    await prisma.automationRule.deleteMany({ where: { projectId: ctx.projectId } });
+  });
+
   it('records the installation, so the link is read by the worker and by a manual reconcile', async () => {
     await prisma.githubInstallation.deleteMany();
     await connectAccount(ctx.owner, [WIDGET], [WIDGET]);

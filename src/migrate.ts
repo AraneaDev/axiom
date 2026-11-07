@@ -4,6 +4,7 @@ import { execFileSync } from 'child_process';
 
 import { prisma } from './config/database';
 import { encryptPlainSecrets } from './lib/secret-migration';
+import { ensureDefaultGithubRules } from './modules/github/default-rules';
 import { logger } from './utils/logger';
 
 async function main(): Promise<void> {
@@ -11,6 +12,9 @@ async function main(): Promise<void> {
   // Secrets kept in plain text before the instance key existed; a no-op once they are sealed
   const { twoFactor } = await encryptPlainSecrets();
   if (twoFactor > 0) logger.info('Encrypted plain 2FA secrets', { count: twoFactor });
+  // Links made before the default GitHub rules existed; each link is served once
+  const links = await ensureDefaultGithubRules();
+  if (links > 0) logger.info('Created default GitHub rules', { links });
 }
 
 main()

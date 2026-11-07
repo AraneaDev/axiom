@@ -2,7 +2,9 @@ import { Prisma, type GithubRepoLink } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
 
+import { applyDefaultGithubRules } from './default-rules';
 import { requireGithubAccount } from './github-actor';
 import { getGithubAppSecrets, getStatus, githubAppGeneration } from './github-app.service';
 import { githubRequest } from './github-client';
@@ -204,6 +206,14 @@ export async function linkRepo(userId: string, projectId: string, repo: string) 
         htmlUrl: repository.html_url,
         linkedById: userId,
       },
+    });
+    // Before the first reconcile, which may find pull requests the rules should already see. A
+    // failure is logged and left for the next deploy's migrate step; it never undoes the link.
+    await applyDefaultGithubRules(link.id).catch((err: unknown) => {
+      logger.warn('default github rules not created', {
+        projectId,
+        error: err instanceof Error ? err.message : 'unknown',
+      });
     });
     return present(link);
   } catch (err) {
