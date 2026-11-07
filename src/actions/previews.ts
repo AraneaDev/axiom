@@ -10,6 +10,12 @@
 import { prisma } from '../config/database';
 import { loggableExternalUrl } from '../lib/request-path';
 import { AppError } from '../middleware/errorHandler';
+import {
+  assertRefName,
+  issueRepo,
+  linkedBranch,
+  linkedPullRequest,
+} from '../modules/github/github-actions.helpers';
 import { countLinkedIssues } from '../modules/github/repo-link.service';
 import { assertIssueRefsInProject } from '../modules/issues/issue-references';
 import { ERR } from '../utils/error-messages';
@@ -1782,4 +1788,82 @@ export async function githubRepoUnlink(projectId: string): Promise<string> {
     throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
   const issues = await countLinkedIssues(link.id);
   return `Unlink ${link.fullName} from ${await projectLabel(projectId)}: its branches, pull requests and checks disappear from ${amount(issues, 'issue')}`;
+}
+
+const SHORT_SHA = 7;
+
+/** Why the default branch is never deleted from Axiom */
+export const DEFAULT_BRANCH_MESSAGE = "The repository's default branch can't be deleted from Axiom";
+
+/**
+ * What merging a pull request does, as the approver reads it. The title is quoted and bounded;
+ * the number, the repository, the branches, the commit and the issue key identify the request.
+ * @param projectId The project
+ * @param issueNumber The issue's number
+ * @param pullNumber The pull request's number
+ * @param headSha The head commit the merge is asked for
+ * @param method How the commits are merged
+ * @throws {AppError} 404 for a pull request that is not linked to the issue
+ */
+export async function githubPrMerge(
+  projectId: string,
+  issueNumber: number,
+  pullNumber: number,
+  headSha: string,
+  method: string,
+): Promise<string> {
+  const { issue, link } = await issueRepo(projectId, issueNumber);
+  const pr = await linkedPullRequest(issue.id, link.id, pullNumber);
+  return (
+    `Merge pull request #${pr.number} ${quoted(pr.title)} in ${link.fullName} ` +
+    `(${pr.headRef} into ${pr.baseRef}) at ${headSha.slice(0, SHORT_SHA)} using ${method}, ` +
+    `linked to ${issue.key}`
+  );
+}
+
+/**
+ * What closing a pull request without merging does, as the approver reads it.
+ * @param projectId The project
+ * @param issueNumber The issue's number
+ * @param pullNumber The pull request's number
+ * @throws {AppError} 404 for a pull request that is not linked to the issue
+ */
+export async function githubPrClose(
+  projectId: string,
+  issueNumber: number,
+  pullNumber: number,
+): Promise<string> {
+  const { issue, link } = await issueRepo(projectId, issueNumber);
+  const pr = await linkedPullRequest(issue.id, link.id, pullNumber);
+  return `Close pull request #${pr.number} ${quoted(pr.title)} in ${link.fullName} without merging, linked to ${issue.key}`;
+}
+
+/**
+ * What deleting a branch does, as the approver reads it: GitHub closes the open pull request
+ * that has the branch as its head.
+ * @param projectId The project
+ * @param issueNumber The issue's number
+ * @param branch The branch name
+ * @throws {AppError} 400 for the default branch, 404 for a branch that is not linked to the issue
+ */
+export async function githubBranchDelete(
+  projectId: string,
+  issueNumber: number,
+  branch: string,
+): Promise<string> {
+  assertRefName(branch);
+  const { issue, link } = await issueRepo(projectId, issueNumber);
+  if (branch === link.defaultBranch) {
+    throw new AppError(400, DEFAULT_BRANCH_MESSAGE, 'GITHUB_DEFAULT_BRANCH');
+  }
+  const row = await linkedBranch(issue.id, link.id, branch);
+  const open = await prisma.githubPullRequest.findFirst({
+    where: { repoLinkId: link.id, headRef: row.name, state: 'OPEN' },
+    select: { number: true },
+    orderBy: { number: 'asc' },
+  });
+  return (
+    `Delete branch ${row.name} in ${link.fullName}, linked to ${issue.key}` +
+    (open ? `; this closes open pull request #${open.number}` : '')
+  );
 }

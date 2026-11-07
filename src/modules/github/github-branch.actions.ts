@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineAction } from '../../actions/define';
+import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
@@ -12,6 +13,7 @@ import {
   githubWrite,
   issueRepo,
   issueTarget,
+  linkedBranch,
   refPath,
   userAuth,
 } from './github-actions.helpers';
@@ -21,6 +23,8 @@ import { storeBranch } from './github-events';
 const refReply = z.object({ object: z.object({ sha: z.string().min(1) }) });
 
 const PATH = '/api/projects/:projectId/issues/:issueNumber/github/branches';
+
+const branchTarget = issueTarget.extend({ branch: z.string().min(1).max(200) });
 
 registerActions([
   defineAction({
@@ -102,6 +106,63 @@ registerActions([
         });
       });
       return { name, url: `${link.htmlUrl}/tree/${refPath(name)}`, headSha };
+    },
+  }),
+
+  defineAction({
+    name: 'githubBranch.delete',
+    area: 'github',
+    kind: 'write',
+    destructive: true,
+    summary:
+      'Delete a branch linked to an issue on the linked GitHub repository, as your own GitHub ' +
+      'account. GitHub closes an open pull request that has the branch as its head. The ' +
+      "repository's default branch is refused. A token's call waits for approval in the web UI.",
+    target: branchTarget,
+    input: branchTarget,
+    output: z.looseObject({ name: z.string(), deleted: z.boolean() }),
+    preview: (_ctx, { projectId, issueNumber, branch }) =>
+      previews.githubBranchDelete(projectId, issueNumber, branch),
+    rest: { method: 'DELETE', path: `${PATH}/:branch` },
+    authorize: githubWrite,
+    handler: async (ctx, { projectId, issueNumber, branch }) => {
+      assertRefName(branch);
+      const { issue, link } = await issueRepo(projectId, issueNumber);
+      if (branch === link.defaultBranch) {
+        throw new AppError(400, previews.DEFAULT_BRANCH_MESSAGE, 'GITHUB_DEFAULT_BRANCH');
+      }
+      const row = await linkedBranch(issue.id, link.id, branch);
+      const { auth, account } = await userAuth(ctx);
+      const repo = `/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.name)}`;
+      await githubRequest<unknown>(
+        auth,
+        'DELETE',
+        `${repo}/git/refs/heads/${refPath(row.name)}`,
+      ).catch((err: unknown) => {
+        // A branch that is already gone on GitHub is what the caller wanted
+        if (
+          err instanceof AppError &&
+          err.code === 'GITHUB_INVALID' &&
+          /does not exist/i.test(err.message)
+        ) {
+          return null;
+        }
+        throw err;
+      });
+      // The branch is gone on GitHub either way; a store that fails is repaired by the webhook
+      await storeBranch(
+        link.id,
+        { name: row.name, sha: null },
+        { id: account.githubUserId, login: account.login },
+        'action',
+      ).catch((err: unknown) => {
+        logger.warn('github branch deleted but not stored', {
+          repoLinkId: link.id,
+          branch: row.name,
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      });
+      return { name: row.name, deleted: true };
     },
   }),
 ]);

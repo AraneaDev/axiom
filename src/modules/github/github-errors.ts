@@ -155,6 +155,12 @@ export function githubError(
       );
     case 410:
       return new AppError(410, 'GitHub no longer has this resource.', 'GITHUB_GONE');
+    case 405:
+      return new AppError(
+        405,
+        `GitHub does not allow this right now.${plainReason(message)}`,
+        'GITHUB_NOT_ALLOWED',
+      );
     case 409:
       return new AppError(
         409,

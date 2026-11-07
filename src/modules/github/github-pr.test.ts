@@ -396,6 +396,7 @@ describe('githubPr.open', () => {
         headRef: headOf(),
         state: 'open',
       });
+      expect(res.body.stored).toBe(false);
       expect(await prisma.githubPullRequest.count()).toBe(0);
       expect(warn).toHaveBeenCalledWith(
         'github pull request changed but not stored',
@@ -404,6 +405,20 @@ describe('githubPr.open', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('marks the view stored: false on update and requestReviewers when the store failed', async () => {
+    await connectAccount(member);
+    await existingPull(4, headOf(), `${key} Fix`);
+    const broken = { ...prPayload(4, headOf(), `${key} Fix`), created_at: 'not a date' };
+    fake.on('PATCH /repos/:owner/:repo/pulls/:n', { status: 200, body: broken });
+    const updated = await update(member, 4, { title: `${key} Fixed` });
+    expect(updated.status).toBe(200);
+    expect(updated.body.stored).toBe(false);
+    fake.on('POST /repos/:owner/:repo/pulls/:n/requested_reviewers', { status: 201, body: broken });
+    const asked = await reviewers(member, 4, { logins: ['octo-rev'] });
+    expect(asked.status).toBe(201);
+    expect(asked.body.stored).toBe(false);
   });
 
   it('answers 201 when the follow-up GET fails after a successful write', async () => {
@@ -851,6 +866,70 @@ describe('githubChecks.rerun', () => {
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('GITHUB_FORBIDDEN');
     expect(res.body.error.message).toContain('Resource not accessible by integration');
+  });
+
+  it("answers GitHub's refusal, not a 201, when the one Actions run is refused and only other-app failures remain", async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    await run(31, 'deploy-preview', 'failure', { appSlug: 'acme-ci', suite: 7n });
+    fake.on('POST /repos/:owner/:repo/actions/runs/:id/rerun-failed-jobs', {
+      status: 403,
+      body: { message: 'Resource not accessible by integration' },
+    });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('GITHUB_FORBIDDEN');
+    expect(res.body.error.message).toContain('Resource not accessible by integration');
+  });
+
+  it('shows the not-rerunnable checks to a caller who has not connected GitHub, with no request', async () => {
+    await prisma.githubAccount.deleteMany({ where: { userId: member.id } });
+    await run(31, 'deploy-preview', 'failure', { appSlug: 'acme-ci', suite: 7n });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(201);
+    expect(res.body.rerun).toEqual([]);
+    expect(res.body.notRerunnable).toHaveLength(1);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('still asks for a GitHub connection when there are Actions jobs to re-run', async () => {
+    await prisma.githubAccount.deleteMany({ where: { userId: member.id } });
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_NOT_CONNECTED');
+  });
+
+  it('stops at a rate limit and reports the runs not tried as refused with that reason', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    await run(21, 'e2e', 'failure', { workflowRunId: '901' });
+    await run(22, 'lint', 'failure', { workflowRunId: '902' });
+    fake.on('POST /repos/:owner/:repo/actions/runs/:id/rerun-failed-jobs', (_req, params) =>
+      params.id === '900'
+        ? { status: 201, body: {} }
+        : { status: 429, body: { message: 'Slow down' }, headers: { 'retry-after': '30' } },
+    );
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(201);
+    expect(res.body.rerun).toEqual([{ name: 'unit', via: 'workflow' }]);
+    expect(res.body.refused.map((r: { name: string }) => r.name)).toEqual(['e2e', 'lint']);
+    for (const r of res.body.refused) expect(r.message).toContain('rate limit');
+    expect(calls()).toEqual([
+      'POST /actions/runs/900/rerun-failed-jobs',
+      'POST /actions/runs/901/rerun-failed-jobs',
+    ]);
+  });
+
+  it('stops when the GitHub connection has expired', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    await run(21, 'e2e', 'failure', { workflowRunId: '901' });
+    fake.on('POST /repos/:owner/:repo/actions/runs/:id/rerun-failed-jobs', {
+      status: 401,
+      body: { message: 'Bad credentials' },
+    });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_RECONNECT');
+    expect(calls()).toEqual(['POST /actions/runs/900/rerun-failed-jobs']);
   });
 
   it('answers 404 when GitHub does not know the workflow run', async () => {

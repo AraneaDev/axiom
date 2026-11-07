@@ -728,7 +728,9 @@ class GithubFakeServer implements GithubFake {
    * @param credential Who the request authenticated as
    */
   private gitRefAnswer(req: RecordedRequest, credential: Credential): FakeReply | null {
-    const match = /^\/repos\/([^/]+)\/([^/]+)\/git\/(ref\/heads\/.+|refs)$/.exec(req.path);
+    const match = /^\/repos\/([^/]+)\/([^/]+)\/git\/(ref\/heads\/.+|refs\/heads\/.+|refs)$/.exec(
+      req.path,
+    );
     if (!match) return null;
     const key = repoKey(`${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`);
     const heads = this.gitRefs.get(key);
@@ -747,6 +749,17 @@ class GithubFakeServer implements GithubFake {
       const name = match[3].slice('ref/heads/'.length).split('/').map(decodeURIComponent).join('/');
       const sha = heads.get(name);
       return sha ? { status: 200, body: shape(name, sha) } : NOT_FOUND;
+    }
+    if (req.method === 'DELETE' && match[3].startsWith('refs/heads/')) {
+      if (credential.push && !credential.push.has(key)) return NOT_ACCESSIBLE;
+      const name = match[3]
+        .slice('refs/heads/'.length)
+        .split('/')
+        .map(decodeURIComponent)
+        .join('/');
+      // GitHub answers 422 for a ref that is not there, and 204 without a body for one deleted
+      if (!heads.delete(name)) return reply(422, 'Reference does not exist');
+      return { status: 204 };
     }
     if (req.method === 'POST' && match[3] === 'refs') {
       if (credential.push && !credential.push.has(key)) return NOT_ACCESSIBLE;
@@ -774,14 +787,16 @@ class GithubFakeServer implements GithubFake {
    */
   private repoWriteAnswer(req: RecordedRequest, credential: Credential): FakeReply | null {
     const match = /^\/repos\/([^/]+)\/([^/]+)\/(.+)$/.exec(req.path);
-    if (!match || !['POST', 'PATCH'].includes(req.method)) return null;
+    if (!match || !['POST', 'PATCH', 'PUT'].includes(req.method)) return null;
     const rest = match[3];
     const open = /^pulls\/(\d+)$/.exec(rest);
     const reviewers = /^pulls\/(\d+)\/requested_reviewers$/.exec(rest);
     const comment = /^issues\/(\d+)\/comments$/.exec(rest);
     const rerun = /^actions\/runs\/(\d+)\/rerun-failed-jobs$/.exec(rest);
     const rerequest = /^check-runs\/(\d+)\/rerequest$/.exec(rest);
+    const merge = /^pulls\/(\d+)\/merge$/.exec(rest);
     const known =
+      (req.method === 'PUT' && merge) ||
       (req.method === 'POST' && (rest === 'pulls' || reviewers || comment || rerun || rerequest)) ||
       (req.method === 'PATCH' && open);
     if (!known) return null;
@@ -884,9 +899,39 @@ class GithubFakeServer implements GithubFake {
       return { status: 201, body: created };
     }
 
-    const number = Number((open ?? reviewers)?.[1]);
+    const number = Number((open ?? reviewers ?? merge)?.[1]);
     const found = pulls.find((pr) => Number(pr.number) === number);
     if (!found) return NOT_FOUND;
+    if (merge) {
+      // As GitHub answers: 405 for a pull request that cannot be merged, 409 when `sha` is not
+      // the head any more, 422 for a merge method it does not know
+      if (found.state !== 'open' || found.mergeable === false) {
+        return reply(405, 'Pull Request is not mergeable');
+      }
+      if (typeof body.sha === 'string' && body.sha !== (found.head as { sha: string }).sha) {
+        return reply(409, 'Head branch was modified. Review and try the merge again.');
+      }
+      if (
+        body.merge_method !== undefined &&
+        !['merge', 'squash', 'rebase'].includes(String(body.merge_method))
+      ) {
+        return invalid('merge_method');
+      }
+      this.commentIds += 1;
+      const mergeSha = this.commentIds.toString(16).padStart(40, '0');
+      Object.assign(found, {
+        state: 'closed',
+        merged: true,
+        merged_at: now,
+        closed_at: now,
+        updated_at: now,
+        merge_commit_sha: mergeSha,
+      });
+      return {
+        status: 200,
+        body: { sha: mergeSha, merged: true, message: 'Pull Request successfully merged' },
+      };
+    }
     if (reviewers) {
       const logins = Array.isArray(body.reviewers) ? (body.reviewers as string[]) : [];
       const author = (found.user as { login?: string } | undefined)?.login;
@@ -933,6 +978,10 @@ class GithubFakeServer implements GithubFake {
     }
     if (typeof body.title === 'string') found.title = body.title;
     if (typeof body.body === 'string') found.body = body.body;
+    if (body.state === 'closed' || body.state === 'open') {
+      found.state = body.state;
+      found.closed_at = body.state === 'closed' ? now : null;
+    }
     if (typeof body.base === 'string') {
       if (heads && !heads.has(body.base)) return invalid('base');
       found.base = { ref: body.base };

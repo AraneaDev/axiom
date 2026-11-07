@@ -28,6 +28,9 @@ const MUST_BE_DESTRUCTIVE = [
   'savedQuery.delete',
   'page.delete',
   'pageIssueLink.remove',
+  'githubPr.merge',
+  'githubPr.close',
+  'githubBranch.delete',
 ];
 
 /** Actions that take a list of ids and must count it against the bulk threshold. */

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineAction } from '../../actions/define';
+import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
@@ -85,6 +86,8 @@ async function prRepo(projectId: string, issueNumber: number) {
  * @param account.login
  * @param number The pull request's number
  * @param answer What GitHub answered with
+ * @param opts Options
+ * @param opts.refetch Fetch the pull request even when the answer is a whole object (after a merge or close)
  * @returns The stored pull request as a view
  */
 async function storeAndView(
@@ -93,16 +96,19 @@ async function storeAndView(
   account: { githubUserId: number; login: string },
   number: number,
   answer: unknown,
+  opts: { refetch?: boolean } = {},
 ): Promise<PullRequestView> {
   let payload = completePull.safeParse(answer);
-  if (!payload.success) {
+  // After a merge or a close the stored copy is what GitHub says now, never what was stored before
+  if (!payload.success || opts.refetch) {
     // The write succeeded: a failed GET only costs the stored copy
     const fetched = await githubRequest<unknown>(
       auth,
       'GET',
       `${repoPath(link)}/pulls/${number}`,
     ).catch(() => null);
-    if (fetched) payload = completePull.safeParse(fetched.data);
+    const fresh = fetched ? completePull.safeParse(fetched.data) : null;
+    if (fresh?.success) payload = fresh;
   }
   let storedOk = false;
   if (payload.success) {
@@ -133,11 +139,14 @@ async function storeAndView(
 
 /**
  * A pull request view built from GitHub's own object, for when the stored row could not be
- * written. People are not resolved to Axiom users and there are no reviews.
+ * written; `stored: false` says so. People are not resolved to Axiom users and there are no reviews.
  * @param link The repository link
  * @param raw What GitHub answered with, as far as it is there
  */
-function viewFromAnswer(link: Link, raw: Record<string, unknown>): PullRequestView {
+function viewFromAnswer(
+  link: Link,
+  raw: Record<string, unknown>,
+): PullRequestView & { stored: false } {
   const text = (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback);
   const ref = (v: unknown) => text((v as { ref?: unknown } | null)?.ref);
   const login = (v: unknown) => text((v as { login?: unknown } | null)?.login, 'ghost');
@@ -145,6 +154,7 @@ function viewFromAnswer(link: Link, raw: Record<string, unknown>): PullRequestVi
   const html = text(raw.html_url);
   const reviewers = Array.isArray(raw.requested_reviewers) ? raw.requested_reviewers : [];
   return {
+    stored: false,
     number,
     title: text(raw.title),
     state:
@@ -387,6 +397,106 @@ registerActions([
   }),
 
   defineAction({
+    name: 'githubPr.merge',
+    area: 'github',
+    kind: 'write',
+    destructive: true,
+    summary:
+      'Merge a pull request linked to an issue, as your own GitHub account. headSha is the head ' +
+      "commit you reviewed: if the branch has moved, nothing is merged. A token's call waits " +
+      'for approval in the web UI, and the merge goes with the headSha that was asked for.',
+    target: pullTarget,
+    input: pullTarget.extend({
+      headSha: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/)
+        .describe('The full head commit of the pull request, 40 lower-case hex digits'),
+      method: z.enum(['merge', 'squash', 'rebase']).default('merge'),
+      commitTitle: z.string().min(1).max(MAX_TITLE).optional(),
+      commitMessage: z.string().max(MAX_TEXT).optional(),
+    }),
+    output: pullView,
+    preview: (_ctx, { projectId, issueNumber, pullNumber: number, headSha, method }) =>
+      previews.githubPrMerge(projectId, issueNumber, number, headSha, method),
+    rest: { method: 'PUT', path: `${PULLS}/:pullNumber/merge` },
+    authorize: githubWrite,
+    handler: async (
+      ctx,
+      { projectId, issueNumber, pullNumber: number, headSha, method, commitTitle, commitMessage },
+    ) => {
+      const { issue, link } = await prRepo(projectId, issueNumber);
+      await linkedPullRequest(issue.id, link.id, number);
+      const { auth, account } = await userAuth(ctx);
+      const merged = await githubRequest<unknown>(
+        auth,
+        'PUT',
+        `${repoPath(link)}/pulls/${number}/merge`,
+        {
+          body: {
+            sha: headSha,
+            merge_method: method,
+            ...(commitTitle !== undefined && { commit_title: commitTitle }),
+            ...(commitMessage !== undefined && { commit_message: commitMessage }),
+          },
+        },
+      ).catch((err: unknown) => {
+        if (err instanceof AppError && err.code === 'GITHUB_CONFLICT') {
+          throw new AppError(
+            409,
+            'The pull request has new commits since this merge was requested',
+            'GITHUB_HEAD_MOVED',
+          );
+        }
+        if (err instanceof AppError && err.code === 'GITHUB_NOT_ALLOWED') {
+          throw new AppError(409, err.message, 'GITHUB_NOT_MERGEABLE');
+        }
+        throw err;
+      });
+      if ((merged.data as { merged?: unknown } | null)?.merged !== true) {
+        throw new AppError(409, 'GitHub did not merge the pull request', 'GITHUB_NOT_MERGEABLE');
+      }
+      // What is stored is what GitHub says after the merge, fetched now
+      return storeAndView(
+        auth,
+        link,
+        account,
+        number,
+        { merged: true, state: 'closed' },
+        { refetch: true },
+      );
+    },
+  }),
+
+  defineAction({
+    name: 'githubPr.close',
+    area: 'github',
+    kind: 'write',
+    destructive: true,
+    summary:
+      'Close a pull request linked to an issue without merging it, as your own GitHub account. ' +
+      "A token's call waits for approval in the web UI.",
+    target: pullTarget,
+    input: pullTarget,
+    output: pullView,
+    preview: (_ctx, { projectId, issueNumber, pullNumber: number }) =>
+      previews.githubPrClose(projectId, issueNumber, number),
+    rest: { method: 'POST', path: `${PULLS}/:pullNumber/close` },
+    authorize: githubWrite,
+    handler: async (ctx, { projectId, issueNumber, pullNumber: number }) => {
+      const { issue, link } = await prRepo(projectId, issueNumber);
+      await linkedPullRequest(issue.id, link.id, number);
+      const { auth, account } = await userAuth(ctx);
+      const closed = await githubRequest<unknown>(
+        auth,
+        'PATCH',
+        `${repoPath(link)}/pulls/${number}`,
+        { body: { state: 'closed' } },
+      );
+      return storeAndView(auth, link, account, number, closed.data, { refetch: true });
+    },
+  }),
+
+  defineAction({
     name: 'githubChecks.rerun',
     area: 'github',
     kind: 'write',
@@ -437,34 +547,41 @@ registerActions([
           url: run.htmlUrl.startsWith('https://') ? run.htmlUrl : '',
           reason: NOT_RERUNNABLE,
         }));
-      const { auth } = await userAuth(ctx);
-      const repo = repoPath(link);
       const rerun: Array<{ name: string; via: 'workflow' }> = [];
       const refused: Array<{ name: string; message: string }> = [];
       let firstRefusal: AppError | null = null;
-      for (const id of new Set(actions.map((run) => run.workflowRunId as string))) {
-        const names = actions.filter((run) => run.workflowRunId === id).map((run) => run.name);
-        try {
-          await githubRequest<unknown>(
-            auth,
-            'POST',
-            `${repo}/actions/runs/${encodeURIComponent(id)}/rerun-failed-jobs`,
-          );
-          rerun.push(...names.map((name) => ({ name, via: 'workflow' as const })));
-        } catch (err) {
-          if (!(err instanceof AppError)) throw err;
-          firstRefusal ??= err;
-          refused.push(...names.map((name) => ({ name, message: err.message })));
+      // A connection is needed only for jobs to re-run: without any, the caller still sees the list
+      if (actions.length) {
+        const { auth } = await userAuth(ctx);
+        const repo = repoPath(link);
+        const runIds = [...new Set(actions.map((run) => run.workflowRunId as string))];
+        const namesOf = (id: string) =>
+          actions.filter((run) => run.workflowRunId === id).map((run) => run.name);
+        for (const [index, id] of runIds.entries()) {
+          const names = namesOf(id);
+          try {
+            await githubRequest<unknown>(
+              auth,
+              'POST',
+              `${repo}/actions/runs/${encodeURIComponent(id)}/rerun-failed-jobs`,
+            );
+            rerun.push(...names.map((name) => ({ name, via: 'workflow' as const })));
+          } catch (err) {
+            if (!(err instanceof AppError)) throw err;
+            firstRefusal ??= err;
+            refused.push(...names.map((name) => ({ name, message: err.message })));
+            if (err.code === 'GITHUB_RATE_LIMITED' || err.code === 'GITHUB_RECONNECT') {
+              // Every further request would be refused the same way: the rest are not tried
+              for (const left of runIds.slice(index + 1)) {
+                refused.push(...namesOf(left).map((name) => ({ name, message: err.message })));
+              }
+              break;
+            }
+          }
         }
       }
-      if (!rerun.length && !notRerunnable.length) {
-        if (firstRefusal) throw firstRefusal;
-        throw new AppError(
-          409,
-          'No check of this pull request has failed, so there is nothing to re-run',
-          'GITHUB_NOTHING_TO_RERUN',
-        );
-      }
+      // Nothing re-run and a refusal to show: GitHub's reason, not a list that hides it
+      if (!rerun.length && firstRefusal) throw firstRefusal;
       return { rerun, refused, notRerunnable };
     },
   }),
