@@ -635,6 +635,15 @@ The GitHub client in `src/modules/github/` is the only code that calls GitHub. I
 - **Webhook path:** `POST /api/github/webhook` is mounted before the body parser, behind a rate limiter and a gate that checks the method, the signature headers and the App, and then reads the raw body. The HMAC is checked on the raw bytes. Each delivery is stored in `GithubDelivery` (unique on the delivery id) and processed after the `202`. A claim with a 5 minute lease stops two workers taking one row. Failures retry with backoff up to 5 times; the worker retries due rows every minute and cleans up old payloads.
 - **Connected accounts:** each user connects from `/settings/github`. Access and refresh tokens are stored encrypted. A token that expires within 5 minutes is refreshed under a Postgres advisory lock per user, because GitHub's refresh tokens are single use. Disconnecting revokes the grant at GitHub. A refresh GitHub refuses deletes the connection and the refused call answers `409 GITHUB_RECONNECT`; the next one answers `409 GITHUB_NOT_CONNECTED`. A stored secret that the configured key cannot open answers `409 GITHUB_SECRET_UNREADABLE`. GitHub's ids are stored as `BigInt` and appear in JSON as numbers (a string only above 2^53 - 1).
 
+**Repo links and reads.** A project links to one repository (`GithubRepoLink`). Linking needs team ADMIN, a connected account with admin rights on the repository, and an installed App. Deliveries flow in one direction:
+
+1. A webhook is stored, acknowledged, and handled by the worker or the API (`webhook-handlers.ts` imports every handler for both processes).
+2. The handler finds issue keys in the branch name, pull request title and body, or commit message, and writes the branch, pull request, review, commit or check run tables. Ordering rules decide what a write may change: an older payload never overwrites newer state, and MERGED is final. A failing step's log tail is downloaded once (100 lines, 16 KB).
+3. Reads (`development` and `checks` includes, the Development panel) come from those tables only and make no GitHub call. Only branch names and pull request titles raise automation outcomes.
+4. Reconciliation (`reconcile.service.ts`) runs every 15 minutes per link, and on demand with a 1 minute cooldown. It lists open pull requests, check runs and branches within a call budget, under a lease, and feeds the same store functions. `githubRepo.health` reports how it went.
+
+Events from the worker reach browsers through a Redis channel (`axiom:realtime`, `src/realtime/bridge.ts`): the worker publishes, each API process subscribes and broadcasts `issue:development-updated`. The API broadcasts its own events directly, so a browser never hears one twice. With Redis down, worker events are dropped until it returns.
+
 ---
 
 ## Development Infrastructure

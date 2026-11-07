@@ -92,7 +92,7 @@ A scope no action uses can't be minted (`400`): `orgs:write`, `teams:write`, `pr
 | `forms`      | `/api/projects/:id/forms`, `intake`                                                                                                                                                                           |
 | `automation` | `/api/projects/:id/automation-rules`                                                                                                                                                                          |
 | `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
-| `github` | `githubApp.status` and `githubAccount.get`, read only today. Writes are web UI only |
+| `github` | `githubApp.status`, `githubAccount.get`, `githubRepo.get`, `githubRepo.health` (read); `githubRepo.link`, `githubRepo.reconcile`, `githubRepo.unlink` (write). Setting up the App and connecting an account are web UI only |
 | `admin` | Orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and `/api/admin`. Every call waits for approval, see [Approvals](#approvals-for-token-calls) |
 
 Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (changing the profile, the password or 2FA) and resetting another user's password or 2FA stay closed to tokens (`403`); reading the profile is open. Login, refresh, logout and the other sign-in routes are `uiOnly`: a session reaches them, a token never does, and `act` doesn't list them. Invite links are `tokenBlocked`: a normal action for your browser session, refused to every token. Creating a token with any other scope name returns `400`.
@@ -261,6 +261,8 @@ People appear as `{ id, displayName }`. Each include is `{ items, limit, truncat
 | `pages` (issue)       | Linked pages and pages whose body mentions the key, in the issue's org and only those you can view; each with `linkTypes`. A mention counts when its author could open the issue when writing. Needs `wiki:read` | 20    |
 | `labels` (page)       | Label names                                                                                                                                                                                                      | 100   |
 | `linkedIssues` (page) | `{ issue, linkTypes }`, only issues you can open. Needs `issues:read`                                                                                                                                            | 50    |
+| `development` (issue) | `{ branches, pullRequests, commits }` from GitHub, newest first, pull requests with their latest reviews. Needs `github:read`. Text in it is untrusted                                                          | 20    |
+| `checks` (issue)      | CI runs on the heads of open pull requests, failed first, with the failed step and `logTail` (100 lines, 16 KB). Needs `github:read`. Text in it is untrusted                                                    | 50    |
 
 An include the token's scopes don't cover is left out, and named in `data.omittedIncludes`.
 
@@ -3011,6 +3013,24 @@ The GitHub App is set up once per instance by an admin, and each user connects t
 | `githubAccount.disconnect` | `DELETE /api/github/account` | web UI | Revokes the grant at GitHub and deletes your tokens. |
 
 GitHub's manifest form lets the admin rename the App. Names are unique across GitHub and capped at 34 characters, so Axiom shortens a long host in the suggested name.
+
+### Repository links
+
+A project links to at most one repository, and a repository to one project. The routes are under `/api/projects/:projectId/github`.
+
+| Action | Route | Scope | |
+|---|---|---|---|
+| `githubRepo.get` | `GET /api/projects/:projectId/github` | `github:read` | The link and the number of issues linked to it, or `null`. |
+| `githubRepo.link` | `POST /api/projects/:projectId/github` | `github:write` | Body `{ repo: "owner/name" }`. Needs team ADMIN or higher, a connected GitHub account and admin rights on the repository on GitHub. The App must be installed on it (`409 GITHUB_APP_NOT_INSTALLED`, or `409 GITHUB_APP_SUSPENDED` while it is suspended). A token's call waits for approval. |
+| `githubRepo.reconcile` | `POST /api/projects/:projectId/github/reconcile` | `github:write` | Reads the repository now and stores what webhooks missed. Team ADMIN or higher. One run per link per minute: a second answers `429 GITHUB_RECONCILE_COOLDOWN` with `Retry-After`. A run in progress answers `409 GITHUB_RECONCILE_RUNNING`. |
+| `githubRepo.health` | `GET /api/projects/:projectId/github/health` | `github:read` | Installation state, last delivery, last reconcile (when, whether it finished and why not) and the recent failed deliveries, without their payloads. |
+| `githubRepo.unlink` | `DELETE /api/projects/:projectId/github` | `github:write` | Removes the link. Stored deliveries stay as the log. A token's call waits for approval. |
+
+Issue keys are found in branch names, pull request titles and bodies, and commit messages, and the issues they name get the branch, pull request or commit. Only branch names and pull request titles drive automation triggers; there are no smart commits, so a message can't move an issue.
+
+Webhook state keeps an order: a payload older than the stored state never overwrites it, and a merged pull request stays merged. A check run counts once per workflow run, the newest one, and only `success`, `neutral` and `skipped` pass.
+
+The worker reconciles every linked repository every 15 minutes. A run spends a budget of GitHub calls, holds a lease so two workers never run one link, and reads open pull requests, check runs on their heads and branches. It repairs deliveries GitHub never sent or Axiom rejected.
 
 ### POST /api/github/webhook
 

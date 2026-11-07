@@ -192,6 +192,10 @@ The GitHub App is set up once, by a platform admin, at `/admin/github`.
 - **Setup:** open `/admin/github` as a platform admin and follow the steps. The App is private, so it can be installed only on the account or organization that owns it. GitHub's form lets you rename the App.
 - **GitHub Enterprise Server:** set `GITHUB_API_URL` and `GITHUB_WEB_URL` in `.env` to the API and web addresses of your server. In production both must be https. They default to `https://api.github.com` and `https://github.com`.
 
+- **Redis:** reconciliation runs in the worker and its realtime events travel over Redis. Redis must be up for worker events (retried deliveries, reconcile results) to reach browsers; while it is down they are dropped, and the page shows the change on the next load.
+- **Reconciliation:** the worker reads every linked repository every 15 minutes, so it needs to reach the GitHub API. A project's `GitHub` settings page shows when it last ran and what failed.
+- **Demo seed:** `npm run db:seed` links the demo project to a fake repository on `github.invalid`, so no real account is referenced. Its links don't open on github.com, and reconciliation leaves it alone.
+
 Forgetting the App in Axiom does not delete it on GitHub: delete it there under Settings, Developer settings, GitHub Apps.
 
 ---
