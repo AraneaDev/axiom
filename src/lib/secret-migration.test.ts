@@ -202,8 +202,8 @@ describe('rotation reaches a model whose id is an Int', () => {
         fields.map((f) => [f, box.encryptSecret(plain[f], box.secretContext('githubApp', f, '1'))]),
       ),
     );
-    const saved = await prisma.githubApp.findUnique({ where: { id: 1 } });
-    expect(saved).toBeNull();
+    // The App row is shared by every GitHub test file: start from none, whatever ran before
+    await prisma.githubApp.deleteMany({});
     await prisma.githubApp.create({
       data: {
         id: 1,

@@ -40,7 +40,13 @@ export async function seedGithubDemo(
 ): Promise<'seeded' | 'skipped'> {
   const now = new Date();
   const existing = await prisma.githubRepoLink.findUnique({ where: { projectId: ids.projectId } });
-  if (existing && existing.repoId === LEGACY_DEMO_REPO_ID) {
+  // Only the old demo row itself: a real repository can have id 910000001, never this whole shape
+  if (
+    existing &&
+    existing.repoId === LEGACY_DEMO_REPO_ID &&
+    existing.installationId === 910000002n &&
+    existing.fullName === 'acme-labs/widget'
+  ) {
     await prisma.githubRepoLink.update({
       where: { id: existing.id },
       data: { repoId: DEMO_REPO_ID, installationId: DEMO_INSTALLATION_ID },
