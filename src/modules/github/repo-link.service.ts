@@ -51,6 +51,19 @@ export async function countLinkedIssues(linkId: string): Promise<number> {
 }
 
 /**
+ * Whether the installation a link reads through is known and not removed. A link whose App is
+ * gone cannot be read: every call would fail.
+ * @param installationId The link's installation
+ */
+export async function installationUsable(installationId: bigint): Promise<boolean> {
+  const row = await prisma.githubInstallation.findUnique({
+    where: { id: installationId },
+    select: { removedAt: true },
+  });
+  return row !== null && row.removedAt === null;
+}
+
+/**
  * A link as the actions answer it. `linkedBy` is null when that person is gone.
  * @param link The stored link
  */
@@ -80,7 +93,10 @@ async function present(link: GithubRepoLink) {
  */
 export async function getRepoLink(projectId: string) {
   const link = await findRepoLinkByProject(projectId);
-  return link ? present(link) : null;
+  // The count lets the unlink dialog say what it takes away
+  return link
+    ? { ...(await present(link)), linkedIssueCount: await countLinkedIssues(link.id) }
+    : null;
 }
 
 /**
@@ -228,6 +244,7 @@ export async function getLinkHealth(projectId: string) {
     return {
       linked: false,
       appInstalled: false,
+      installationRemoved: false,
       installationSuspended: false,
       appSecretUnreadable: secretsUnreadable,
       lastDeliveryAt: null,
@@ -262,6 +279,7 @@ export async function getLinkHealth(projectId: string) {
     linked: true,
     repoFullName: link.fullName,
     appInstalled: installation !== null && installation.removedAt === null,
+    installationRemoved: installation?.removedAt != null,
     installationSuspended: installation?.suspendedAt != null,
     appSecretUnreadable: secretsUnreadable,
     lastDeliveryAt: link.lastDeliveryAt?.toISOString() ?? null,

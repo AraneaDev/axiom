@@ -74,8 +74,11 @@ export function useRealtimeInvalidation(): void {
           break;
 
         case 'issue:development-updated':
-          // The hydrate query is keyed by project and issue number, the event names issue ids: refetch the project's open issue pages
-          queryClient.invalidateQueries({ queryKey: ['issue-hydrate', event.projectId] });
+          // The panels are keyed by project and issue number, the event names issue ids: refetch the
+          // project's open panels, and the link itself, which a project-level change alters
+          queryClient.invalidateQueries({ queryKey: ['issue-development', event.projectId] });
+          queryClient.invalidateQueries({ queryKey: ['github-repo', event.projectId] });
+          queryClient.invalidateQueries({ queryKey: ['github-health', event.projectId] });
           break;
 
         case 'comment:added':

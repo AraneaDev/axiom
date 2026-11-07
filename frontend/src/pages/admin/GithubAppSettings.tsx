@@ -180,7 +180,9 @@ function Configured({ status }: { status: GithubAppStatus }) {
                 <Tr key={installation.id}>
                   <Td>{installation.accountLogin}</Td>
                   <Td>
-                    {installation.suspended ? (
+                    {installation.removed ? (
+                      <Badge variant="danger">Removed</Badge>
+                    ) : installation.suspended ? (
                       <Badge variant="warning">Suspended</Badge>
                     ) : (
                       <Badge variant="success">Active</Badge>

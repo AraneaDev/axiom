@@ -11,6 +11,7 @@ import { reconcileRepo } from './reconcile.service';
 import * as service from './repo-link.service';
 
 const link = z.looseObject({ repoFullName: z.string(), htmlUrl: z.string() });
+const linkWithCount = link.extend({ linkedIssueCount: z.number() });
 const RECONCILE_COOLDOWN_MS = 60_000;
 const PATH = '/api/projects/:projectId/github';
 
@@ -33,7 +34,7 @@ registerActions([
     summary: 'Read the GitHub repository a project is linked to, or null',
     target: projectTarget,
     input: projectTarget,
-    output: link.nullable(),
+    output: linkWithCount.nullable(),
     rest: { method: 'GET', path: PATH },
     authorize: read,
     handler: async (_ctx, { projectId }) => service.getRepoLink(projectId),
@@ -84,6 +85,14 @@ registerActions([
       const link = await service.findRepoLinkByProject(projectId);
       if (!link) {
         throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
+      }
+      // Without its installation the App cannot read the repository; health says which case it is
+      if (!(await service.installationUsable(link.installationId))) {
+        throw new AppError(
+          409,
+          'The GitHub App is not installed for this repository any more. Install it again, then reconcile.',
+          'GITHUB_APP_NOT_INSTALLED',
+        );
       }
       // The worker reads every link every 15 minutes: a manual run is for seeing a change now,
       // not for spending 300 GitHub calls in a loop

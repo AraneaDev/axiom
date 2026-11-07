@@ -168,7 +168,7 @@ function CheckRow({ check }: { check: GithubCheckView }) {
         <button
           type="button"
           aria-expanded={open}
-          aria-controls={detailsId}
+          aria-controls={open ? detailsId : undefined}
           onClick={() => setOpen((v) => !v)}
           className="flex w-full items-center gap-2 px-5 py-2 text-sm hover:bg-surface-secondary"
         >

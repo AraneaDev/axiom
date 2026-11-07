@@ -32,7 +32,7 @@ import { PageLoader, Spinner } from '@/components/ui/Spinner';
 import { Table, TableContainer, Tbody, Td, Th, Thead, TrHead, Tr } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
 import { useProjectContext } from '@/hooks/useProjectContext';
-import { EXTERNAL_LINK, httpsHref } from '@/lib/github-links';
+import { EXTERNAL_LINK, httpsHref, unlinkPreview } from '@/lib/github-links';
 import { formatRelative } from '@/lib/utils';
 
 const HELP_ITEMS = [
@@ -60,6 +60,19 @@ const HELP_ITEMS = [
 function installUrlOf(error: unknown): string | undefined {
   const details = (error as { details?: Record<string, unknown> } | null)?.details;
   return httpsHref(typeof details?.installUrl === 'string' ? details.installUrl : undefined);
+}
+
+/**
+ * The cooldown's refusal, with the time after which the next run is allowed
+ * @param error
+ */
+function withRetryTime(error: unknown): unknown {
+  const e = error as { code?: string; details?: Record<string, unknown>; message?: string } | null;
+  const wait = e?.details?.retryAfter;
+  if (e?.code !== 'GITHUB_RECONCILE_COOLDOWN' || typeof wait !== 'number') return error;
+  return new Error(
+    `${e.message ?? 'Reconciled a moment ago.'} Try again in ${wait} ${wait === 1 ? 'second' : 'seconds'}.`,
+  );
 }
 
 function InstallLink({ href }: { href: string }) {
@@ -187,7 +200,14 @@ function HealthCard({ health }: { health: GithubLinkHealth }) {
         </Warning>
       )}
       {!health.appInstalled && (
-        <Warning>The GitHub App is no longer installed for this repository.</Warning>
+        <Warning>
+          {health.installationRemoved
+            ? 'The GitHub App is no longer installed for this repository. Axiom stops reading it until you install the App again.'
+            : 'The GitHub App is not installed for this repository, so Axiom cannot read it.'}
+        </Warning>
+      )}
+      {!health.reconcileComplete && health.reconcileIncompleteReason && (
+        <Warning>{`The last reconcile is incomplete: ${health.reconcileIncompleteReason}`}</Warning>
       )}
       {health.installationSuspended && (
         <Warning>
@@ -249,11 +269,11 @@ function HealthCard({ health }: { health: GithubLinkHealth }) {
 
 function LinkedView({
   projectId,
-  projectName,
+  project,
   link,
 }: {
   projectId: string;
-  projectName: string;
+  project: { prefix: string; name: string };
   link: GithubRepoLink;
 }) {
   const queryClient = useQueryClient();
@@ -327,7 +347,10 @@ function LinkedView({
         </div>
       </Card>
       {reconcile.isError && (
-        <ErrorAlert error={reconcile.error} fallback="Could not read the repository" />
+        <ErrorAlert
+          error={withRetryTime(reconcile.error)}
+          fallback="Could not read the repository"
+        />
       )}
       {unlink.isError && (
         <ErrorAlert error={unlink.error} fallback="Could not unlink the repository" />
@@ -341,7 +364,7 @@ function LinkedView({
         onConfirm={() => unlink.mutate()}
         loading={unlink.isPending}
         title="Unlink this repository?"
-        description={`Unlink ${link.repoFullName} from ${projectName}: its branches, pull requests and checks disappear from the issues that show them.`}
+        description={unlinkPreview(link.repoFullName, project, link.linkedIssueCount)}
         confirmLabel="Unlink"
       />
     </>
@@ -389,7 +412,10 @@ export default function GithubSettings() {
         {projectId && repo.data && (
           <LinkedView
             projectId={projectId}
-            projectName={currentProject?.name ?? 'this project'}
+            project={{
+              prefix: currentProject?.prefix ?? '',
+              name: currentProject?.name ?? 'this project',
+            }}
             link={repo.data}
           />
         )}

@@ -8,7 +8,7 @@ const dev = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@/api/github.api', () => ({
   githubRepoKey: (id: string) => ['github-repo', id],
-  issueDevelopmentKey: (id: string, n: string) => ['issue-hydrate', id, n, 'development'],
+  issueDevelopmentKey: (id: string, n: string) => ['issue-development', id, n],
   githubRepoApi: repo,
   githubDevelopmentApi: dev,
 }));
@@ -180,6 +180,39 @@ describe('IssueDevelopmentPanel', () => {
     expect(container.querySelector('a[href^="javascript"]')).toBeNull();
     expect(within(screen.getByLabelText('Log tail')).queryByRole('img')).toBeNull();
     expect(screen.getByLabelText('Log tail').textContent).toBe(evil);
+  });
+
+  it('shows a URL that is not https as plain text, never as a link', async () => {
+    dev.issue.mockResolvedValue({
+      development: {
+        branches: capped([
+          { name: 'odd-branch', url: 'javascript:alert(1)', headSha: 'a', deleted: false },
+        ]),
+        pullRequests: capped([pr({ url: '/relative/pull/42' })]),
+      },
+      checks: capped([check({ url: 'http://github.invalid/run' })]),
+    });
+    const { container } = render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <IssueDevelopmentPanel projectId="p1" issueNumber="7" />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('#42')).toBeInTheDocument();
+    expect(screen.getByText('odd-branch')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /build/ }));
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it('points aria-controls only at a region that is mounted', async () => {
+    show();
+    const row = await screen.findByRole('button', { name: /build/ });
+    expect(row).not.toHaveAttribute('aria-controls');
+    await userEvent.click(row);
+    const id = row.getAttribute('aria-controls');
+    expect(id).toBeTruthy();
+    expect(document.getElementById(id!)).not.toBeNull();
   });
 
   it('opens GitHub links safely in a new tab', async () => {

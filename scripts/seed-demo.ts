@@ -260,12 +260,14 @@ async function main() {
   // A linked repository with a pull request and a failed check, on the one issue in progress
   const githubIssue = createdIssues.find((i) => i.title === 'Dark mode support');
   if (githubIssue) {
-    await seedGithubDemo(prisma, {
+    const outcome = await seedGithubDemo(prisma, {
       projectId: project.id,
       issueId: githubIssue.id,
       linkedById: users['tim'].id,
     });
-    console.warn('        GitHub: acme-labs/widget linked to "Dark mode support"');
+    if (outcome === 'seeded') {
+      console.warn('        GitHub: acme-labs/widget linked to "Dark mode support"');
+    }
   }
 
   // ────────────────────────────────────────────────────────────

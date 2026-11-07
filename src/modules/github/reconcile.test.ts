@@ -137,8 +137,14 @@ beforeAll(async () => {
   });
 });
 
+const installationRow = { accountLogin: 'acme-labs', accountType: 'Organization' };
+
 beforeEach(async () => {
   outcomes.length = 0;
+  // A link is read only while its installation is known and not removed
+  await prisma.githubInstallation.create({
+    data: { id: BigInt(INSTALLATION_ID), ...installationRow },
+  });
   fake.setJobLog(JOB_ID, LOG);
   await prisma.githubRepoLink.update({
     where: { id: repoLinkId },
@@ -407,6 +413,24 @@ describe('reconcileRepo', () => {
 });
 
 describe('reconcileDueRepos', () => {
+  it.each([
+    ['no installation row', () => prisma.githubInstallation.deleteMany()],
+    [
+      'a removed installation',
+      () =>
+        prisma.githubInstallation.update({
+          where: { id: BigInt(INSTALLATION_ID) },
+          data: { removedAt: new Date() },
+        }),
+    ],
+  ])('leaves out a due link with %s', async (_name, spoil) => {
+    await spoil();
+    expect(await dueRepoLinkIds(1000)).not.toContain(repoLinkId);
+    const before = requestsTo('/').length;
+    await reconcileDueRepos(1000);
+    expect(requestsTo('/').length).toBe(before);
+  });
+
   it('takes a repo reconciled 20 minutes ago and skips one reconciled 5 minutes ago', async () => {
     const minutes = (m: number) => new Date(Date.now() - m * 60_000);
     await prisma.githubRepoLink.update({
@@ -480,9 +504,6 @@ describe('githubRepo.reconcile and githubRepo.health', () => {
   });
 
   it('lists a failed delivery of this repo and never shows its payload', async () => {
-    await prisma.githubInstallation.create({
-      data: { id: BigInt(INSTALLATION_ID), accountLogin: 'acme-labs', accountType: 'Organization' },
-    });
     await prisma.githubDelivery.createMany({
       data: [
         {
@@ -532,16 +553,12 @@ describe('githubRepo.reconcile and githubRepo.health', () => {
   });
 
   it('reports an installation that is suspended or gone', async () => {
+    await prisma.githubInstallation.deleteMany();
     const gone = await request(app).get(url('health')).set(asOwner());
     expect(gone.body).toMatchObject({ linked: true, appInstalled: false });
 
     await prisma.githubInstallation.create({
-      data: {
-        id: BigInt(INSTALLATION_ID),
-        accountLogin: 'acme-labs',
-        accountType: 'Organization',
-        suspendedAt: new Date(),
-      },
+      data: { id: BigInt(INSTALLATION_ID), ...installationRow, suspendedAt: new Date() },
     });
     const suspended = await request(app).get(url('health')).set(asOwner());
     expect(suspended.body).toMatchObject({ appInstalled: true, installationSuspended: true });
@@ -829,6 +846,30 @@ describe('the manual reconcile and links made through the action', () => {
     expect(again.body.error.details.retryAfter).toBeLessThanOrEqual(60);
   });
 
+  it.each([
+    ['unknown', () => prisma.githubInstallation.deleteMany()],
+    [
+      'removed',
+      () =>
+        prisma.githubInstallation.update({
+          where: { id: BigInt(INSTALLATION_ID) },
+          data: { removedAt: new Date() },
+        }),
+    ],
+  ])('answers 409 GITHUB_APP_NOT_INSTALLED when the installation is %s', async (_n, spoil) => {
+    await spoil();
+    const before = fake.requests.length;
+    const res = await request(app).post(url()).set(asOwner()).send({});
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_APP_NOT_INSTALLED');
+    expect(fake.requests.length).toBe(before);
+    const health = await request(app)
+      .get(`/api/projects/${ctx.projectId}/github/health`)
+      .set(asOwner());
+    expect(health.body.appInstalled).toBe(false);
+    expect(health.body.installationRemoved).toBe(spoil.toString().includes('removedAt'));
+  });
+
   it('really reconciles a link made through githubRepo.link', async () => {
     const linked = await createTestContext('rec4');
     const accountId = `acct-${linked.owner.id}`;
@@ -886,16 +927,13 @@ describe('health of the installation and the secrets', () => {
       .set({ ...CSRF, Authorization: `Bearer ${ctx.owner.token}` });
 
   it('tells a removed installation from a suspended one', async () => {
-    await prisma.githubInstallation.create({
-      data: {
-        id: BigInt(INSTALLATION_ID),
-        accountLogin: 'acme-labs',
-        accountType: 'Organization',
-        removedAt: new Date(),
-      },
+    await prisma.githubInstallation.update({
+      where: { id: BigInt(INSTALLATION_ID) },
+      data: { removedAt: new Date() },
     });
     expect((await health()).body).toMatchObject({
       appInstalled: false,
+      installationRemoved: true,
       installationSuspended: false,
     });
   });

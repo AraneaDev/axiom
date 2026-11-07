@@ -457,6 +457,41 @@ describe('githubRepo.get', () => {
     });
     expect(res.body.linkedBy.id).toBe(ctx.owner.id);
     expect(typeof res.body.createdAt).toBe('string');
+    expect(res.body.linkedIssueCount).toBe(0);
+
+    const link = await prisma.githubRepoLink.findFirstOrThrow({
+      where: { projectId: ctx.projectId },
+    });
+    const issue = await prisma.issue.create({
+      data: {
+        projectId: ctx.projectId,
+        number: 1,
+        title: 'One',
+        body: '',
+        creatorId: ctx.owner.id,
+      },
+    });
+    await prisma.githubIssueLink.create({
+      data: {
+        issueId: issue.id,
+        repoLinkId: link.id,
+        targetType: 'BRANCH',
+        targetKey: 'b1',
+        sources: [],
+      },
+    });
+    await prisma.githubIssueLink.create({
+      data: {
+        issueId: issue.id,
+        repoLinkId: link.id,
+        targetType: 'BRANCH',
+        targetKey: 'b2',
+        sources: [],
+      },
+    });
+    const counted = await request(app).get(url(ctx.projectId)).set(as(viewer));
+    // Distinct issues, not links
+    expect(counted.body.linkedIssueCount).toBe(1);
   });
 
   it('is closed to someone outside the team', async () => {

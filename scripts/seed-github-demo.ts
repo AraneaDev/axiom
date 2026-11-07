@@ -7,7 +7,9 @@
 import type { PrismaClient } from '@prisma/client';
 
 const REPO = { owner: 'acme-labs', name: 'widget' } as const;
-const HTML_URL = `https://github.com/${REPO.owner}/${REPO.name}`;
+// `.invalid` never resolves: the demo points at no real account
+const HTML_URL = `https://github.invalid/${REPO.owner}/${REPO.name}`;
+const DEMO_REPO_ID = 910000001n;
 const HEAD_SHA = '3f2a9c71d0b84e56a1c7e2f09b8d4a6c5e1f7b30';
 const BRANCH = 'feature/widget-cache';
 
@@ -26,18 +28,25 @@ const LOG_TAIL = [
  * @param ids.projectId - The project to link.
  * @param ids.issueId - The issue the branch and pull request name.
  * @param ids.linkedById - The user shown as the one who linked the repository.
+ * @returns `skipped` when the project is linked to some other repository, else `seeded`.
  */
 export async function seedGithubDemo(
   prisma: PrismaClient,
   ids: { projectId: string; issueId: string; linkedById: string },
-) {
+): Promise<'seeded' | 'skipped'> {
   const now = new Date();
+  const existing = await prisma.githubRepoLink.findUnique({ where: { projectId: ids.projectId } });
+  if (existing && existing.repoId !== DEMO_REPO_ID) {
+    console.warn(`        GitHub: project is linked to ${existing.fullName}, demo data skipped`);
+    return 'skipped';
+  }
+  // An existing demo link keeps its reconcile fields; only the invented URLs are brought up to date
   const link = await prisma.githubRepoLink.upsert({
     where: { projectId: ids.projectId },
-    update: { lastReconciledAt: now, lastReconcileError: null },
+    update: { htmlUrl: HTML_URL },
     create: {
       projectId: ids.projectId,
-      repoId: 910000001n,
+      repoId: DEMO_REPO_ID,
       installationId: 910000002n,
       owner: REPO.owner,
       name: REPO.name,
@@ -58,7 +67,7 @@ export async function seedGithubDemo(
 
   const pr = await prisma.githubPullRequest.upsert({
     where: { repoLinkId_number: { repoLinkId: link.id, number: 42 } },
-    update: {},
+    update: { htmlUrl: `${HTML_URL}/pull/42` },
     create: {
       repoLinkId: link.id,
       number: 42,
@@ -93,7 +102,7 @@ export async function seedGithubDemo(
 
   await prisma.githubCheckRun.upsert({
     where: { id: '910000201' },
-    update: {},
+    update: { htmlUrl: `${HTML_URL}/actions/runs/910000301/job/910000201` },
     create: {
       id: '910000201',
       repoLinkId: link.id,
@@ -129,4 +138,5 @@ export async function seedGithubDemo(
       },
     });
   }
+  return 'seeded';
 }

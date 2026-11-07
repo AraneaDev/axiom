@@ -12,7 +12,7 @@ const fetchMock = vi.hoisted(() => {
   return fn;
 });
 
-import { getBlob, setTokens } from './client';
+import { ApiError, api, getBlob, setTokens } from './client';
 
 const json = (status: number, body: unknown) =>
   ({ ok: status < 400, status, json: async () => body }) as Response;
@@ -54,5 +54,32 @@ describe('getBlob', () => {
   it('throws an error carrying the status, which the query retry predicate reads', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 404 } as Response);
     await expect(getBlob('/api/attachments/a')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('api errors', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    setTokens('access', 'refresh');
+  });
+
+  it('carries the message, code and details of the server error', async () => {
+    fetchMock.mockResolvedValue(
+      json(409, {
+        error: {
+          message: 'Not installed',
+          code: 'GITHUB_APP_NOT_INSTALLED',
+          details: { installUrl: 'https://github.com/apps/x/installations/new' },
+        },
+      }),
+    );
+    const error = await api('/projects/p/github').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({
+      status: 409,
+      message: 'Not installed',
+      code: 'GITHUB_APP_NOT_INSTALLED',
+      details: { installUrl: 'https://github.com/apps/x/installations/new' },
+    });
   });
 });

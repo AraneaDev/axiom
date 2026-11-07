@@ -26,7 +26,7 @@ vi.mock('@/api/github.api', () => ({
 }));
 vi.mock('@/hooks/useProjectContext', () => ({
   useProjectContext: () => ({
-    currentProject: { id: 'p1', name: 'Widget board' },
+    currentProject: { id: 'p1', name: 'Widget board', prefix: 'WGT' },
     org: 'acme',
     teamSlug: 'core',
     projectSlug: 'widget',
@@ -58,13 +58,17 @@ const linked = {
   defaultBranch: 'main',
   linkedBy: { id: 'u1', username: 'mira', displayName: 'Mira Dev' },
   createdAt: '2026-11-01T10:00:00Z',
+  linkedIssueCount: 3,
 };
 const health = {
   linked: true,
   repoFullName: 'acme-labs/widget',
   appInstalled: true,
+  installationRemoved: false,
   installationSuspended: false,
   appSecretUnreadable: false,
+  reconcileComplete: true,
+  reconcileIncompleteReason: null,
   lastDeliveryAt: '2026-11-05T10:00:00Z',
   lastReconciledAt: '2026-11-05T11:00:00Z',
   lastReconcileError: null,
@@ -214,6 +218,59 @@ describe('GithubSettings', () => {
       expect(screen.getByText(/secret .* cannot be read/i)).toBeInTheDocument();
     });
 
+    it('says one issue in the singular and quotes a name safely', async () => {
+      repo.get.mockResolvedValue({ ...linked, linkedIssueCount: 1 });
+      show();
+      await userEvent.click(await screen.findByRole('button', { name: 'Unlink' }));
+      expect(screen.getByText(/disappear from 1 issue$/)).toBeInTheDocument();
+    });
+
+    it('says a repository that was removed is not installed any more, not suspended', async () => {
+      repo.health.mockResolvedValue({
+        ...health,
+        appInstalled: false,
+        installationRemoved: true,
+        installationSuspended: false,
+      });
+      show();
+      expect(await screen.findByText(/no longer installed/i)).toBeInTheDocument();
+      expect(screen.queryByText(/is suspended/i)).toBeNull();
+    });
+
+    it('says when the App was never seen on this installation', async () => {
+      repo.health.mockResolvedValue({ ...health, appInstalled: false });
+      show();
+      expect(await screen.findByText(/not installed/i)).toBeInTheDocument();
+    });
+
+    it('shows an incomplete reconcile with its reason', async () => {
+      repo.health.mockResolvedValue({
+        ...health,
+        reconcileComplete: false,
+        reconcileIncompleteReason: 'Only the first 500 pull requests were read',
+      });
+      show();
+      expect(await screen.findByText(/reconcile is incomplete/i)).toBeInTheDocument();
+      expect(screen.getByText(/first 500 pull requests/)).toBeInTheDocument();
+    });
+
+    it('shows the cooldown with its retry time', async () => {
+      repo.reconcile.mockRejectedValue(
+        new WithDetails(
+          'This repository was reconciled a moment ago.',
+          'GITHUB_RECONCILE_COOLDOWN',
+          {
+            retryAfter: 42,
+          },
+        ),
+      );
+      show();
+      await userEvent.click(await screen.findByRole('button', { name: 'Reconcile now' }));
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('reconciled a moment ago');
+      expect(alert).toHaveTextContent('42 seconds');
+    });
+
     it('reconciles now', async () => {
       repo.reconcile.mockResolvedValue({ complete: true });
       show();
@@ -234,7 +291,11 @@ describe('GithubSettings', () => {
       repo.unlink.mockResolvedValue({ unlinked: true });
       show();
       await userEvent.click(await screen.findByRole('button', { name: 'Unlink' }));
-      expect(screen.getByText(/unlink acme-labs\/widget from widget board/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'Unlink acme-labs/widget from project WGT "Widget board": its branches, pull requests and checks disappear from 3 issues',
+        ),
+      ).toBeInTheDocument();
       expect(repo.unlink).not.toHaveBeenCalled();
       const dialog = screen.getByRole('dialog');
       await userEvent.click(within(dialog).getByRole('button', { name: 'Unlink' }));

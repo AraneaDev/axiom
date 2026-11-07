@@ -417,8 +417,14 @@ export async function reconcileRepo(
  */
 export async function dueRepoLinkIds(limit: number): Promise<string[]> {
   const now = new Date();
+  // Links whose installation is unknown or removed would fail every round
+  const usable = await prisma.githubInstallation.findMany({
+    where: { removedAt: null },
+    select: { id: true },
+  });
   const rows = await prisma.githubRepoLink.findMany({
     where: {
+      installationId: { in: usable.map((i) => i.id) },
       OR: [
         { lastReconciledAt: null },
         { lastReconciledAt: { lt: new Date(now.getTime() - RECONCILE_INTERVAL_MS) } },

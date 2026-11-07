@@ -5,6 +5,8 @@ export interface GithubInstallation {
   id: number | string;
   accountLogin: string;
   suspended: boolean;
+  /** GitHub no longer has it: uninstalled, as opposed to suspended */
+  removed: boolean;
 }
 
 export interface GithubAppStatus {
@@ -125,6 +127,8 @@ export interface GithubRepoLink {
   defaultBranch: string;
   linkedBy: { id: string; username: string; displayName: string } | null;
   createdAt: string;
+  /** How many issues have branches, pull requests or checks from this link */
+  linkedIssueCount: number;
 }
 
 export interface GithubDeliveryFailure {
@@ -140,11 +144,15 @@ export interface GithubLinkHealth {
   linked: boolean;
   repoFullName?: string;
   appInstalled: boolean;
+  /** The installation was removed on GitHub (appInstalled is false too) */
+  installationRemoved: boolean;
   installationSuspended: boolean;
   appSecretUnreadable: boolean;
   lastDeliveryAt: string | null;
   lastReconciledAt: string | null;
   lastReconcileError: string | null;
+  reconcileComplete: boolean;
+  reconcileIncompleteReason: string | null;
   recentFailures: GithubDeliveryFailure[];
 }
 
@@ -158,7 +166,7 @@ export const githubHealthKey = (projectId: string | undefined) => ['github-healt
 export const issueDevelopmentKey = (
   projectId: string | undefined,
   issueNumber: string | undefined,
-) => ['issue-hydrate', projectId, issueNumber, 'development'];
+) => ['issue-development', projectId, issueNumber];
 
 export const githubRepoApi = {
   get: (projectId: string) => get<GithubRepoLink | null>(`/projects/${projectId}/github`),

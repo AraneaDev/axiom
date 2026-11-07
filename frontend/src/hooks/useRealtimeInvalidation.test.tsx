@@ -33,8 +33,9 @@ vi.mock('@/api/projects.api', () => ({
 vi.mock('@/components/layout/ProjectNavBar', () => ({ ProjectNavBar: () => null }));
 
 import { ProjectLayout } from '@/components/layout/ProjectLayout';
+import { useRealtimeListener } from '@/hooks/useWebSocket';
 
-import { useRealtimeRoom } from './useRealtimeInvalidation';
+import { useRealtimeInvalidation, useRealtimeRoom } from './useRealtimeInvalidation';
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -89,5 +90,28 @@ describe('realtime room subscriptions', () => {
     await waitFor(() => expect(mockSubscribe).toHaveBeenCalledWith(['project:proj-42']));
     const rooms = mockSubscribe.mock.calls.flatMap((c) => c[0] as string[]);
     expect(rooms).toEqual(['project:proj-42']);
+  });
+});
+
+describe('issue:development-updated', () => {
+  it('refetches the development panels and the repository link of that project only', () => {
+    const qc = new QueryClient();
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    vi.mocked(useRealtimeListener).mockClear();
+    renderHook(() => useRealtimeInvalidation(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={qc}>
+          <MemoryRouter>{children}</MemoryRouter>
+        </QueryClientProvider>
+      ),
+    });
+    const listener = vi.mocked(useRealtimeListener).mock.calls[0][0] as (e: unknown) => void;
+
+    listener({ type: 'issue:development-updated', projectId: 'p1', issueIds: ['i1'] });
+
+    const keys = spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey);
+    expect(keys).toContainEqual(['issue-development', 'p1']);
+    expect(keys).toContainEqual(['github-repo', 'p1']);
+    expect(keys).not.toContainEqual(['issue-hydrate', 'p1']);
   });
 });

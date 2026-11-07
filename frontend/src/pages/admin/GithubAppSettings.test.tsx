@@ -51,8 +51,9 @@ const configured = {
   htmlUrl: 'https://github.com/apps/axiom-test',
   installUrl: 'https://github.com/apps/axiom-test/installations/new',
   installations: [
-    { id: 1, accountLogin: 'acme-co', suspended: false },
-    { id: 2, accountLogin: 'old-org', suspended: true },
+    { id: 1, accountLogin: 'acme-co', suspended: false, removed: false },
+    { id: 2, accountLogin: 'old-org', suspended: true, removed: false },
+    { id: 3, accountLogin: 'gone-org', suspended: true, removed: true },
   ],
 };
 
@@ -98,7 +99,9 @@ describe('GithubAppSettings', () => {
     show('/admin/github');
     expect(await screen.findByText('axiom-test')).toBeInTheDocument();
     expect(screen.getByText('acme-co')).toBeInTheDocument();
+    // A removed installation reads as removed, even when it was suspended before
     expect(screen.getByText('Suspended')).toBeInTheDocument();
+    expect(screen.getByText('Removed')).toBeInTheDocument();
     api.syncInstallations.mockResolvedValue(configured);
     await user.click(screen.getByRole('button', { name: /refresh installations/i }));
     await waitFor(() => expect(api.syncInstallations).toHaveBeenCalledTimes(1));
