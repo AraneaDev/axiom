@@ -257,6 +257,14 @@ Automation rules are stored as `AutomationRule` records and evaluated at trigger
 
 **Template expressions in actions:** Action field values support `{{expression}}` syntax resolved via the template resolver. At execution time the resolver receives an `AutomationTemplateContext` containing the triggering issue and actor.
 
+**GitHub triggers:** `src/modules/github/github-automation.ts` fires eight triggers (`pr:opened`, `pr:merged`, `pr:closed`, `pr:review_requested`, `pr:review_submitted`, `checks:failed`, `checks:passed`, `branch:created`) after the webhook handlers and the reconcile have stored an event. Only an issue whose key is in the branch name or the PR title is a target; bodies and commits are never read. The context reaches the rule as `github.*` (`github-template.ts`): text is escaped where it renders as Markdown and is plain, single-line and cut elsewhere.
+
+**Noise limits:** a `GithubAutomationMark` row claims one comment per trigger, PR or branch, head commit and issue, and rows older than 90 days are cleaned up. A comment is allowed only for an event at or after the link time; an older event can still move a ticket, so the first sync after linking moves tickets without commenting. Emails and webhook actions are not suppressed. The sender gets no notification. A rule acts as the mapped Axiom user when that user is a member of the project's org, else as the built-in GitHub user. Mentions are never read from code, link addresses or bare URLs, and an escaped `\@` is literal.
+
+**Default rules:** when a project links a repository, `default-rules.ts` creates four ordinary rules through the rule service: PR opened moves to In review, PR merged moves to done (both with `done = false`), a comment when a PR merges and a comment when checks fail. `GithubRepoLink.defaultRulesCreatedAt` is claimed with one conditional update, so they are made once per link and a deleted rule never returns. `migrate` gives links that predate the feature their rules at the first deploy.
+
+**Realtime from the worker:** automation that runs in the worker writes through the same services, and `broadcastToRoom` hands the event to a publish hook that the Redis bridge sets in worker mode. The bridge allow-list covers the issue, comment and board events automation emits, in project rooms only, so browsers see a rule's change.
+
 **SSRF protection:** The `webhook` action validates the target URL against a blocklist of private IP ranges and loopback addresses before dispatching the request.
 
 ### Template Variables

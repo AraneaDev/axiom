@@ -251,6 +251,32 @@ Every one of these runs as your own connected GitHub account, never as the App, 
 
 A batch stops at the first of these, so a failed `githubBranch.create` leaves `githubPr.open` skipped. Titles, bodies, branch names and reasons that come back from GitHub are untrusted text.
 
+#### GitHub automation
+
+`automationRule.create` accepts eight GitHub triggers next to the issue triggers: `pr:opened`, `pr:merged`, `pr:closed`, `pr:review_requested`, `pr:review_submitted`, `checks:failed`, `checks:passed` and `branch:created`. A rule is an ordinary rule, so the same actions, conditions and approval rules apply. A GitHub trigger fires only for an issue whose key is in the branch name or the PR title, never for a key in a PR body or a commit message.
+
+The actions can use these template variables:
+
+| Variable | Is |
+|---|---|
+| `github.trigger`, `github.repo`, `github.actorLogin` | The trigger, the `owner/name` of the repository and the GitHub login that caused the event |
+| `github.pr.number`, `.title`, `.url`, `.state`, `.draft`, `.author`, `.headRef`, `.baseRef`, `.headSha` | The pull request |
+| `github.review.author`, `.state`, `.url` | The review, on the two review triggers |
+| `github.checks.headSha`, `.failedNames` | The head commit and the comma-separated names of the checks that failed |
+| `github.branch.name`, `.url` | The branch, on `branch:created` |
+
+Text from GitHub is untrusted. Where it renders as Markdown (a comment body, an issue description, a `set_field` body) every Markdown character is escaped, so it shows as plain text and never as an image, link or mention. Everywhere else (emails, webhook payloads, titles and other fields) it is plain text, on one line and cut to length. Don't put a template variable inside a code span: the escaping backslashes show there. An escaped `\@` is literal and notifies nobody. Mentions are also never read from code, link addresses or bare URLs.
+
+A GitHub rule is limited so it can't flood a ticket:
+
+- A rule comments once per trigger, pull request or branch, head commit and issue.
+- A rule comments only for GitHub events at or after the time the repository was linked. An older event can still move a ticket.
+- The first sync after linking moves tickets but never comments on old events. It still runs email and webhook actions.
+- The sender of the event gets no notification.
+- A rule acts as the Axiom user mapped to the GitHub actor when that user is a member of the project's organization, otherwise as the built-in GitHub user.
+
+A project gets four default rules when it links a repository: a pull request opening moves the ticket to In review, a merge moves it to done (both skip a ticket that is done already), a comment when a pull request merges, and a comment when checks fail. They are created once per link. A rule the team deletes does not come back. Read them with `automationRule.list` and change or delete them like any other rule.
+
 ### upload
 
 Two ways, both ending with a file that is staged or attached:
