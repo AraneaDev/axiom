@@ -435,7 +435,11 @@ async function executeActions(
         case 'set_field':
           if (action.field && action.value !== undefined) {
             // Allowlisted content fields and the project's custom fields only (set-field.ts)
-            const resolvedValue = resolveTemplate(String(action.value), templateCtx);
+            // The description renders Markdown; custom TEXT fields are plain inputs and stay raw
+            const resolvedValue = resolveTemplate(
+              String(action.value),
+              action.field === 'body' ? markdownCtx : templateCtx,
+            );
             await applySetField(projectId, issue.id, action.field, resolvedValue);
           }
           break;

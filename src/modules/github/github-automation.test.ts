@@ -743,3 +743,36 @@ describe('round 2', () => {
     expect(await comments(issue1)).toHaveLength(0);
   });
 });
+
+describe('round 3', () => {
+  it('escapes GitHub text written to the issue description', async () => {
+    await rule('pr:opened', [
+      { type: 'set_field', field: 'body', value: 'Follow-up for {{github.pr.title}}' },
+    ]);
+    await prEvent(
+      'opened',
+      pr({ title: '![x](https://tracker.invalid/a) [go](https://phish.invalid)' }),
+    );
+    const { body } = await prisma.issue.findUniqueOrThrow({ where: { id: issue1 } });
+    expect(body).toBe(
+      'Follow-up for \\!\\[x\\]\\(https\\://tracker\\.invalid/a\\) \\[go\\]\\(https\\://phish\\.invalid\\)',
+    );
+    expect(body).not.toMatch(/(^|[^\\])[![]/);
+  });
+
+  it('does not announce the review requests of an old merged PR first stored by a later webhook', async () => {
+    await rule('pr:review_requested', say('asked'));
+    await prEvent(
+      'edited',
+      pr({
+        ...OLD,
+        state: 'closed',
+        merged: true,
+        merged_at: '2026-10-01T11:00:00Z',
+        closed_at: '2026-10-01T11:00:00Z',
+        requested_reviewers: [{ id: 7002, login: 'review-bot' }],
+      }),
+    );
+    expect(await comments(issue1)).toHaveLength(0);
+  });
+});

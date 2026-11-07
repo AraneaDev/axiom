@@ -65,3 +65,19 @@ describe('parseIssueRefs', () => {
     expect(parseIssueRefs('See #AXM-123')).toEqual([{ prefix: 'AXM', number: 123 }]);
   });
 });
+
+describe('escaped sigils', () => {
+  it('skips a mention preceded by an odd number of backslashes', () => {
+    expect(parseMentions('\\@tim')).toEqual([]);
+    expect(parseMentions('hi \\\\@tim')).toEqual(['tim']);
+    expect(parseMentions('\\@tim and @sam')).toEqual(['sam']);
+    expect(parseMentions('@tim')).toEqual(['tim']);
+  });
+
+  it('skips an issue reference preceded by an odd number of backslashes', () => {
+    expect(parseIssueRefs('\\^AXM-1')).toEqual([]);
+    expect(parseIssueRefs('\\#AXM-1')).toEqual([]);
+    expect(parseIssueRefs('\\\\^AXM-1')).toEqual([{ prefix: 'AXM', number: 1 }]);
+    expect(parseIssueRefs('^AXM-1')).toEqual([{ prefix: 'AXM', number: 1 }]);
+  });
+});

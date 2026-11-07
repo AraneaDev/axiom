@@ -162,13 +162,12 @@ async function contextOf(
       eventAt = pr?.closedAt ?? pr?.githubUpdatedAt ?? null;
       break;
     case 'reviewers_added':
-      // A webhook is told as it happens; a reconcile found it some time after
-      // The requests of a PR stored for the first time are as old as the PR
-      eventAt = outcome.transitions.includes('pr_opened')
-        ? (pr?.openedAt ?? null)
-        : outcome.source === 'reconcile'
-          ? (pr?.githubUpdatedAt ?? null)
-          : new Date();
+      // Only a webhook that says reviewers were requested dates it now; any other event that
+      // carries the request (a first store, a merge, an edit) saw requests as old as the PR
+      eventAt =
+        outcome.source !== 'reconcile' && outcome.action === 'review_requested'
+          ? new Date()
+          : (pr?.openedAt ?? null);
       break;
     case 'review_added': {
       if (!pr) return null;
