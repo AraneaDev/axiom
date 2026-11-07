@@ -8,7 +8,12 @@ const dev = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@/api/github.api', () => ({
   githubRepoKey: (id: string) => ['github-repo', id],
-  issueDevelopmentKey: (id: string, n: string) => ['issue-development', id, n],
+  issueDevelopmentKey: (id: string, n: string, issueId: string) => [
+    'issue-development',
+    id,
+    n,
+    issueId,
+  ],
   githubRepoApi: repo,
   githubDevelopmentApi: dev,
 }));
@@ -71,7 +76,7 @@ function show() {
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
-      <IssueDevelopmentPanel projectId="p1" issueNumber="7" />
+      <IssueDevelopmentPanel projectId="p1" issueNumber="7" issueId="i7" />
     </QueryClientProvider>,
   );
 }
@@ -169,7 +174,7 @@ describe('IssueDevelopmentPanel', () => {
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
-        <IssueDevelopmentPanel projectId="p1" issueNumber="7" />
+        <IssueDevelopmentPanel projectId="p1" issueNumber="7" issueId="i7" />
       </QueryClientProvider>,
     );
     const title = await screen.findAllByText(evil);
@@ -196,7 +201,7 @@ describe('IssueDevelopmentPanel', () => {
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
-        <IssueDevelopmentPanel projectId="p1" issueNumber="7" />
+        <IssueDevelopmentPanel projectId="p1" issueNumber="7" issueId="i7" />
       </QueryClientProvider>,
     );
     expect(await screen.findByText('#42')).toBeInTheDocument();
@@ -239,7 +244,7 @@ describe('IssueDevelopmentPanel', () => {
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
-        <IssueDevelopmentPanel projectId="p1" issueNumber="7" />
+        <IssueDevelopmentPanel projectId="p1" issueNumber="7" issueId="i7" />
       </QueryClientProvider>,
     );
     await vi.waitFor(() => expect(repo.get).toHaveBeenCalled());

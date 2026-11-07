@@ -208,6 +208,32 @@ describe('pull_request', () => {
     expect(outcomes.at(-1)!.linkedIssueIds.sort()).toEqual([issueIds[1], issueIds[3]].sort());
   });
 
+  it('forgets the misses a reconcile counted when an open payload is applied, not when a stale one arrives', async () => {
+    await deliver('pull_request', fixture('pull_request.opened'));
+    const [pr] = await prs();
+    const misses = async () =>
+      (await prisma.githubPullRequest.findUniqueOrThrow({ where: { id: pr.id } })).reconcileMisses;
+    await prisma.githubPullRequest.update({ where: { id: pr.id }, data: { reconcileMisses: 2 } });
+
+    await deliver(
+      'pull_request',
+      fixture('pull_request.opened', (p) => {
+        p.action = 'synchronize';
+        p.pull_request.updated_at = '2026-11-01T09:00:00Z';
+      }),
+    );
+    expect(await misses()).toBe(2);
+
+    await deliver(
+      'pull_request',
+      fixture('pull_request.opened', (p) => {
+        p.action = 'edited';
+        p.pull_request.updated_at = '2026-11-01T11:00:00Z';
+      }),
+    );
+    expect(await misses()).toBe(0);
+  });
+
   it('changes nothing for a delivery older than the stored state', async () => {
     await deliver('pull_request', fixture('pull_request.opened'));
     await deliver(

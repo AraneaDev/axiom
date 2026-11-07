@@ -94,8 +94,11 @@ describe('realtime room subscriptions', () => {
 });
 
 describe('issue:development-updated', () => {
-  it('refetches the development panels and the repository link of that project only', () => {
+  function setup() {
     const qc = new QueryClient();
+    qc.setQueryData(['issue-development', 'p1', '1', 'i1'], { id: 'one' });
+    qc.setQueryData(['issue-development', 'p1', '2', 'i2'], { id: 'two' });
+    qc.setQueryData(['issue-development', 'p2', '1', 'i1'], { id: 'other project' });
     const spy = vi.spyOn(qc, 'invalidateQueries');
     vi.mocked(useRealtimeListener).mockClear();
     renderHook(() => useRealtimeInvalidation(), {
@@ -106,6 +109,11 @@ describe('issue:development-updated', () => {
       ),
     });
     const listener = vi.mocked(useRealtimeListener).mock.calls[0][0] as (e: unknown) => void;
+    return { qc, spy, listener };
+  }
+
+  it('refetches the repository link and the panels of the issues named only', () => {
+    const { qc, spy, listener } = setup();
 
     listener({ type: 'issue:development-updated', projectId: 'p1', issueIds: ['i1'] });
 
@@ -113,5 +121,9 @@ describe('issue:development-updated', () => {
     expect(keys).toContainEqual(['issue-development', 'p1']);
     expect(keys).toContainEqual(['github-repo', 'p1']);
     expect(keys).not.toContainEqual(['issue-hydrate', 'p1']);
+    const state = (key: unknown[]) => qc.getQueryState(key)?.isInvalidated;
+    expect(state(['issue-development', 'p1', '1', 'i1'])).toBe(true);
+    expect(state(['issue-development', 'p1', '2', 'i2'])).toBe(false);
+    expect(state(['issue-development', 'p2', '1', 'i1'])).toBe(false);
   });
 });

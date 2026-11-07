@@ -370,7 +370,12 @@ export async function storePullRequest(
               ...(data.state === 'MERGED' ? {} : { state: { not: 'MERGED' } }),
             },
             // A payload without a mergeable state (a review's) leaves the stored one alone
-            data: { ...data, mergeableState: pr.mergeable_state ?? undefined },
+            data: {
+              ...data,
+              mergeableState: pr.mergeable_state ?? undefined,
+              // GitHub lists it as open, so the misses a reconcile counted for it were wrong
+              ...(data.state === 'OPEN' ? { reconcileMisses: 0 } : {}),
+            },
           });
       if (written.count === 0) {
         return {

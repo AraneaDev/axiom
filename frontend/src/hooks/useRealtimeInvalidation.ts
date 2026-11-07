@@ -74,9 +74,13 @@ export function useRealtimeInvalidation(): void {
           break;
 
         case 'issue:development-updated':
-          // The panels are keyed by project and issue number, the event names issue ids: refetch the
-          // project's open panels, and the link itself, which a project-level change alters
-          queryClient.invalidateQueries({ queryKey: ['issue-development', event.projectId] });
+          // A panel's key ends in its issue id: only the panels of the issues named are refetched,
+          // as each refetch is a whole hydrate. The link itself is refetched too, as a
+          // project-level change alters it
+          queryClient.invalidateQueries({
+            queryKey: ['issue-development', event.projectId],
+            predicate: (query) => event.issueIds.includes(String(query.queryKey[3])),
+          });
           queryClient.invalidateQueries({ queryKey: ['github-repo', event.projectId] });
           queryClient.invalidateQueries({ queryKey: ['github-health', event.projectId] });
           break;

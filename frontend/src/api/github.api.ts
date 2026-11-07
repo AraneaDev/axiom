@@ -159,14 +159,17 @@ export interface GithubLinkHealth {
 export const githubRepoKey = (projectId: string | undefined) => ['github-repo', projectId];
 export const githubHealthKey = (projectId: string | undefined) => ['github-health', projectId];
 /**
- * Under `['issue-hydrate', projectId]`, which the realtime event `issue:development-updated` refetches
+ * The panel of one issue, under `['issue-development', projectId]`. The issue id is last because
+ * the realtime event `issue:development-updated` names issue ids, and refetches only those panels.
  * @param projectId
  * @param issueNumber
+ * @param issueId
  */
 export const issueDevelopmentKey = (
   projectId: string | undefined,
   issueNumber: string | undefined,
-) => ['issue-development', projectId, issueNumber];
+  issueId: string | undefined,
+) => ['issue-development', projectId, issueNumber, issueId];
 
 export const githubRepoApi = {
   get: (projectId: string) => get<GithubRepoLink | null>(`/projects/${projectId}/github`),
@@ -174,7 +177,7 @@ export const githubRepoApi = {
     post<GithubRepoLink>(`/projects/${projectId}/github`, { repo }),
   unlink: (projectId: string) => del<{ unlinked: boolean }>(`/projects/${projectId}/github`),
   reconcile: (projectId: string) =>
-    post<{ complete: boolean }>(`/projects/${projectId}/github/reconcile`, {}),
+    post<{ started: boolean }>(`/projects/${projectId}/github/reconcile`, {}),
   health: (projectId: string) => get<GithubLinkHealth>(`/projects/${projectId}/github/health`),
 };
 

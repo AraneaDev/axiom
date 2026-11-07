@@ -9,7 +9,11 @@ import type { PrismaClient } from '@prisma/client';
 const REPO = { owner: 'acme-labs', name: 'widget' } as const;
 // `.invalid` never resolves: the demo points at no real account
 const HTML_URL = `https://github.invalid/${REPO.owner}/${REPO.name}`;
-const DEMO_REPO_ID = 910000001n;
+// Negative ids: GitHub issues positive ones only, so a real delivery can never land in the demo
+const DEMO_REPO_ID = -910000001n;
+const DEMO_INSTALLATION_ID = -910000002n;
+// The ids the demo used before it went negative; such a link is brought over
+const LEGACY_DEMO_REPO_ID = 910000001n;
 const HEAD_SHA = '3f2a9c71d0b84e56a1c7e2f09b8d4a6c5e1f7b30';
 const BRANCH = 'feature/widget-cache';
 
@@ -36,6 +40,13 @@ export async function seedGithubDemo(
 ): Promise<'seeded' | 'skipped'> {
   const now = new Date();
   const existing = await prisma.githubRepoLink.findUnique({ where: { projectId: ids.projectId } });
+  if (existing && existing.repoId === LEGACY_DEMO_REPO_ID) {
+    await prisma.githubRepoLink.update({
+      where: { id: existing.id },
+      data: { repoId: DEMO_REPO_ID, installationId: DEMO_INSTALLATION_ID },
+    });
+    existing.repoId = DEMO_REPO_ID;
+  }
   if (existing && existing.repoId !== DEMO_REPO_ID) {
     console.warn(`        GitHub: project is linked to ${existing.fullName}, demo data skipped`);
     return 'skipped';
@@ -47,7 +58,7 @@ export async function seedGithubDemo(
     create: {
       projectId: ids.projectId,
       repoId: DEMO_REPO_ID,
-      installationId: 910000002n,
+      installationId: DEMO_INSTALLATION_ID,
       owner: REPO.owner,
       name: REPO.name,
       fullName: `${REPO.owner}/${REPO.name}`,

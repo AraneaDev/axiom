@@ -315,7 +315,11 @@ export default function IssueDetail() {
 
         {currentProject?.id && num && (
           <div className="mb-8">
-            <IssueDevelopmentPanel projectId={currentProject.id} issueNumber={num} />
+            <IssueDevelopmentPanel
+              projectId={currentProject.id}
+              issueNumber={num}
+              issueId={issue.id}
+            />
           </div>
         )}
 

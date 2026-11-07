@@ -225,6 +225,8 @@ interface IssueDevelopmentPanelProps {
   projectId: string;
   /** The issue number from the URL */
   issueNumber: string;
+  /** The issue id, which `issue:development-updated` names */
+  issueId: string;
 }
 
 /**
@@ -233,15 +235,20 @@ interface IssueDevelopmentPanelProps {
  * @param props - Panel props.
  * @param props.projectId - The issue's project.
  * @param props.issueNumber - The issue number.
+ * @param props.issueId - The issue id.
  */
-export function IssueDevelopmentPanel({ projectId, issueNumber }: IssueDevelopmentPanelProps) {
+export function IssueDevelopmentPanel({
+  projectId,
+  issueNumber,
+  issueId,
+}: IssueDevelopmentPanelProps) {
   const repo = useQuery({
     queryKey: githubRepoKey(projectId),
     queryFn: () => githubRepoApi.get(projectId),
   });
   const linked = !!repo.data;
   const dev = useQuery({
-    queryKey: issueDevelopmentKey(projectId, issueNumber),
+    queryKey: issueDevelopmentKey(projectId, issueNumber, issueId),
     queryFn: () => githubDevelopmentApi.issue(projectId, parseInt(issueNumber)),
     enabled: linked,
     staleTime: 30_000,

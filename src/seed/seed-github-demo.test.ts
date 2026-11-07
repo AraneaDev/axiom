@@ -62,6 +62,9 @@ describe('seedGithubDemo', () => {
     const link = await prisma.githubRepoLink.findUniqueOrThrow({
       where: { projectId: ctx.projectId },
     });
+    // Ids GitHub can never issue, so a real delivery never lands in the demo project
+    expect(link.repoId < 0n).toBe(true);
+    expect(link.installationId < 0n).toBe(true);
     // Reconcile fields of an existing link stay as they are on a re-run
     const marker = new Date('2026-11-02T10:00:00Z');
     await prisma.githubRepoLink.update({
@@ -91,5 +94,20 @@ describe('seedGithubDemo', () => {
       ),
     ];
     for (const url of urls) expect(url).toMatch(/^https:\/\/github\.invalid\/acme-labs\/widget/);
+  });
+
+  it('brings a demo link with the old positive ids over to the negative ones', async () => {
+    await prisma.githubRepoLink.update({
+      where: { projectId: ctx.projectId },
+      data: { repoId: 910000001n, installationId: 910000002n },
+    });
+
+    expect(await seedGithubDemo(prisma, ids())).toBe('seeded');
+
+    const link = await prisma.githubRepoLink.findUniqueOrThrow({
+      where: { projectId: ctx.projectId },
+    });
+    expect(link.repoId).toBe(-910000001n);
+    expect(link.installationId).toBe(-910000002n);
   });
 });
