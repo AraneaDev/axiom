@@ -23,6 +23,7 @@ const SHA = '3333333333333333333333333333333333333333';
 const NAMES = {
   opened: 'GitHub: PR opened moves to In review',
   merged: 'GitHub: PR merged moves to done',
+  mergeComment: 'GitHub: comment when a PR merges',
   checks: 'GitHub: comment when checks fail',
 };
 
@@ -189,6 +190,7 @@ describe('default rules on link', () => {
     expect(await applyDefaultGithubRules(repoLinkId)).toEqual([
       NAMES.opened,
       NAMES.merged,
+      NAMES.mergeComment,
       NAMES.checks,
     ]);
     expect(await names()).toEqual(Object.values(NAMES).sort());
@@ -202,11 +204,14 @@ describe('default rules on link', () => {
     expect(byName(NAMES.merged)).toMatchObject({
       trigger: 'pr:merged',
       condition: 'done = false',
-      actions: [
-        { type: 'set_status', columnId: columns.Done },
-        { type: 'add_comment', body: 'Merged in {{github.pr.url}}' },
-      ],
+      actions: [{ type: 'set_status', columnId: columns.Done }],
     });
+    const comment = byName(NAMES.mergeComment);
+    expect(comment).toMatchObject({
+      trigger: 'pr:merged',
+      actions: [{ type: 'add_comment', body: 'Merged in {{github.pr.url}}' }],
+    });
+    expect(comment.condition).toBeNull();
     expect(byName(NAMES.checks)).toMatchObject({
       trigger: 'checks:failed',
       actions: [
@@ -234,12 +239,12 @@ describe('default rules on link', () => {
     expect(await columnOf(doneIssue)).toBe(columns.Done);
   });
 
-  it('makes two rules for a project without an In review column', async () => {
+  it('makes three rules for a project without an In review column', async () => {
     await setup(['To Do', 'In Progress', 'Done'], ['Done']);
     expect((await applyDefaultGithubRules(repoLinkId)).sort()).toEqual(
-      [NAMES.checks, NAMES.merged].sort(),
+      [NAMES.checks, NAMES.merged, NAMES.mergeComment].sort(),
     );
-    expect(await names()).toEqual([NAMES.checks, NAMES.merged].sort());
+    expect(await names()).toEqual([NAMES.checks, NAMES.merged, NAMES.mergeComment].sort());
   });
 
   it('matches the In review column by trimmed, case-insensitive name and keeps the done condition when nothing is done', async () => {
@@ -250,10 +255,8 @@ describe('default rules on link', () => {
     });
     expect(opened.condition).toBe('done = false');
     expect(opened.actions).toEqual([{ type: 'set_status', columnId: columns['  in REVIEW '] }]);
-    const merged = await prisma.automationRule.findFirstOrThrow({
-      where: { projectId: ctx.projectId, name: NAMES.merged },
-    });
-    expect(merged.actions).toEqual([{ type: 'add_comment', body: 'Merged in {{github.pr.url}}' }]);
+    // No done column: nothing to move to, so no move rule; the comment rule stays
+    expect(await names()).toEqual([NAMES.opened, NAMES.mergeComment, NAMES.checks].sort());
   });
 
   it('moves a merged PR to the lowest done column and comments the URL', async () => {
@@ -279,6 +282,30 @@ describe('default rules on link', () => {
     expect(bodies[0]).toMatch(/^Merged in https?\\?:\/\/github\.com\/acme-labs\/widget\/pull\/33$/);
   });
 
+  it('comments on a merge for a ticket that is already done, and leaves it where it is', async () => {
+    await setup(['To Do', 'Released', 'Done'], ['Done', 'Released']);
+    await applyDefaultGithubRules(repoLinkId);
+    await prisma.issue.update({ where: { id: doneIssue }, data: { columnId: columns.Released } });
+    await prEvent('opened', pull(36, { head: { ref: `${p}-2-x`, sha: SHA } }));
+    await prEvent(
+      'closed',
+      pull(36, {
+        head: { ref: `${p}-2-x`, sha: SHA },
+        state: 'closed',
+        merged: true,
+        merged_at: '2026-11-06T11:00:00Z',
+        closed_at: '2026-11-06T11:00:00Z',
+        updated_at: '2026-11-06T11:00:00Z',
+      }),
+    );
+    expect(await columnOf(doneIssue)).toBe(columns.Released);
+    const bodies = (await prisma.comment.findMany({ where: { issueId: doneIssue } })).map(
+      (c) => c.body,
+    );
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatch(/^Merged in /);
+  });
+
   it('does not bring back a deleted rule', async () => {
     await setup(['To Do', 'In Review', 'Done'], ['Done']);
     await applyDefaultGithubRules(repoLinkId);
@@ -287,7 +314,7 @@ describe('default rules on link', () => {
     });
     expect(await ensureDefaultGithubRules()).toBe(0);
     expect(await applyDefaultGithubRules(repoLinkId)).toEqual([]);
-    expect(await names()).toEqual([NAMES.opened, NAMES.merged].sort());
+    expect(await names()).toEqual([NAMES.opened, NAMES.merged, NAMES.mergeComment].sort());
   });
 
   it('gives a link made before this shipped its rules, once', async () => {
@@ -295,13 +322,13 @@ describe('default rules on link', () => {
     expect(await ensureDefaultGithubRules()).toBeGreaterThanOrEqual(1);
     expect(await names()).toEqual(Object.values(NAMES).sort());
     expect(await ensureDefaultGithubRules()).toBe(0);
-    expect(await names()).toHaveLength(3);
+    expect(await names()).toHaveLength(4);
   });
 
   it('creates the rules once when two callers race', async () => {
     await setup(['To Do', 'In Review', 'Done'], ['Done']);
     await Promise.all([applyDefaultGithubRules(repoLinkId), applyDefaultGithubRules(repoLinkId)]);
-    expect(await names()).toHaveLength(3);
+    expect(await names()).toHaveLength(4);
   });
 
   it('goes through the rule validation: a failing rule leaves the link unmarked, to try again', async () => {

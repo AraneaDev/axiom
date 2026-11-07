@@ -35,6 +35,10 @@ function visible(tokens: Token[], separator: string): string {
   return out;
 }
 
+// A link whose text is its own address reads as an autolink, as the frontend renders it
+const isAddress = (link: { text: string; href: string }) =>
+  link.text === link.href || `mailto:${link.text}` === link.href;
+
 function textOf(token: Node): string {
   switch (token.type) {
     case 'code':
@@ -50,7 +54,9 @@ function textOf(token: Node): string {
       return '\n';
     case 'link':
       // `[text](url)` counts its text; an autolink or a bare URL is the address itself
-      return token.raw.startsWith('[') ? visible(token.tokens ?? [], '') : ' ';
+      return token.raw.startsWith('[') && !isAddress(token as Node & { text: string; href: string })
+        ? visible(token.tokens ?? [], '')
+        : ' ';
     case 'table':
       return [...(token.header ?? []), ...(token.rows ?? []).flat()]
         .map((cell) => visible(cell.tokens, ''))

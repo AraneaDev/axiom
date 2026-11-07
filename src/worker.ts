@@ -1,6 +1,7 @@
 import './config/load-env';
 
 import { prisma } from './config/database';
+import { assertRedisEnabled } from './config/redis-guard';
 import {
   clearDecidedAgentApprovals,
   expireAgentApprovals,
@@ -77,6 +78,7 @@ function runGithubMarkCleanup(): void {
 }
 
 async function main(): Promise<void> {
+  assertRedisEnabled();
   // The worker has no sockets: what it stores reaches browsers through the API over Redis
   setRealtimeMode('redis');
 

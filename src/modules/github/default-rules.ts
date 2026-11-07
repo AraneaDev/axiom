@@ -36,14 +36,19 @@ async function defaultRules(projectId: string): Promise<DefaultRule[]> {
     });
   }
   // A ticket already done, in whichever done column, is left where it is
+  if (done.length) {
+    rules.push({
+      name: 'GitHub: PR merged moves to done',
+      trigger: 'pr:merged',
+      condition: NOT_DONE,
+      actions: [{ type: 'set_status', columnId: done[0].id }],
+    });
+  }
+  // Its own rule, so a merge on a ticket that is done already still says where it merged
   rules.push({
-    name: 'GitHub: PR merged moves to done',
+    name: 'GitHub: comment when a PR merges',
     trigger: 'pr:merged',
-    condition: NOT_DONE,
-    actions: [
-      ...(done.length ? [{ type: 'set_status' as const, columnId: done[0].id }] : []),
-      { type: 'add_comment', body: 'Merged in {{github.pr.url}}' },
-    ],
+    actions: [{ type: 'add_comment', body: 'Merged in {{github.pr.url}}' }],
   });
   rules.push({
     name: 'GitHub: comment when checks fail',

@@ -80,6 +80,11 @@ describe('parseMentions reads text, not markup', () => {
     expect(parseMentions('@gus https://x.invalid/@tim')).toEqual(['gus']);
   });
 
+  it('gives no mention for a link whose text is its own address', () => {
+    expect(parseMentions('[https://x.invalid/@tim](https://x.invalid/@tim)')).toEqual([]);
+    expect(parseMentions('[a@b.invalid](mailto:a@b.invalid)')).toEqual([]);
+  });
+
   it('reads two mentions joined by a hyphen', () => {
     expect(parseMentions('@frank-@gina')).toEqual(['frank-', 'gina']);
   });

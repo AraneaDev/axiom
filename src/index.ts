@@ -9,6 +9,7 @@ import { listActions } from './actions/registry';
 import { mountActions } from './actions/rest';
 import { prisma } from './config/database';
 import { env } from './config/env';
+import { assertRedisEnabled } from './config/redis-guard';
 import { openApiRouter } from './lib/openapi';
 import { requestContextMiddleware } from './lib/request-context';
 import {
@@ -200,6 +201,7 @@ app.use(errorHandler);
 
 // Only listen when run directly (not imported by tests)
 if (require.main === module) {
+  assertRedisEnabled();
   const server = createServer(app);
   server.timeout = 30000;
   server.keepAliveTimeout = 65000;
