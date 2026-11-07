@@ -261,8 +261,8 @@ People appear as `{ id, displayName }`. Each include is `{ items, limit, truncat
 | `pages` (issue)       | Linked pages and pages whose body mentions the key, in the issue's org and only those you can view; each with `linkTypes`. A mention counts when its author could open the issue when writing. Needs `wiki:read` | 20    |
 | `labels` (page)       | Label names                                                                                                                                                                                                      | 100   |
 | `linkedIssues` (page) | `{ issue, linkTypes }`, only issues you can open. Needs `issues:read`                                                                                                                                            | 50    |
-| `development` (issue) | `{ branches, pullRequests, commits }` from GitHub, newest first, pull requests with their latest reviews. Needs `github:read`. Text in it is untrusted                                                          | 20    |
-| `checks` (issue)      | CI runs on the heads of open pull requests, failed first, with the failed step and `logTail` (100 lines, 16 KB). Needs `github:read`. Text in it is untrusted                                                    | 50    |
+| `development` (issue) | `{ branches, pullRequests }` from GitHub, newest first, pull requests with their latest reviews. Needs `github:read`. Text in it is untrusted                                                          | 20    |
+| `checks` (issue)      | CI runs on the heads of open pull requests (the heads of its live branches when none is open), failed first, with the failed step and `logTail` (100 lines, 16 KB). Needs `github:read`. Text in it is untrusted                                                    | 50    |
 
 An include the token's scopes don't cover is left out, and named in `data.omittedIncludes`.
 
@@ -3022,15 +3022,15 @@ A project links to at most one repository, and a repository to one project. The 
 |---|---|---|---|
 | `githubRepo.get` | `GET /api/projects/:projectId/github` | `github:read` | The link and the number of issues linked to it, or `null`. |
 | `githubRepo.link` | `POST /api/projects/:projectId/github` | `github:write` | Body `{ repo: "owner/name" }`. Needs team ADMIN or higher, a connected GitHub account and admin rights on the repository on GitHub. The App must be installed on it (`409 GITHUB_APP_NOT_INSTALLED`, or `409 GITHUB_APP_SUSPENDED` while it is suspended). A token's call waits for approval. |
-| `githubRepo.reconcile` | `POST /api/projects/:projectId/github/reconcile` | `github:write` | Reads the repository now and stores what webhooks missed. Team ADMIN or higher. One run per link per minute: a second answers `429 GITHUB_RECONCILE_COOLDOWN` with `Retry-After`. A run in progress answers `409 GITHUB_RECONCILE_RUNNING`. |
+| `githubRepo.reconcile` | `POST /api/projects/:projectId/github/reconcile` | `github:write` | Starts reading the repository now and answers `{ started: true }` at once; the run goes on after the answer and its result shows in `githubRepo.health`. Team ADMIN or higher. One run per link per minute: a second answers `429 GITHUB_RECONCILE_COOLDOWN` with `Retry-After`. A run in progress answers `409 GITHUB_RECONCILE_RUNNING`, and a removed or suspended installation answers `409 GITHUB_APP_NOT_INSTALLED` or `409 GITHUB_APP_SUSPENDED`. |
 | `githubRepo.health` | `GET /api/projects/:projectId/github/health` | `github:read` | Installation state, last delivery, last reconcile (when, whether it finished and why not) and the recent failed deliveries, without their payloads. |
-| `githubRepo.unlink` | `DELETE /api/projects/:projectId/github` | `github:write` | Removes the link. Stored deliveries stay as the log. A token's call waits for approval. |
+| `githubRepo.unlink` | `DELETE /api/projects/:projectId/github` | `github:write` | Removes the link. Stored deliveries stay as the log. A token's call waits for approval, unless your org relaxed destructive approvals. |
 
-Issue keys are found in branch names, pull request titles and bodies, and commit messages, and the issues they name get the branch, pull request or commit. Only branch names and pull request titles drive automation triggers; there are no smart commits, so a message can't move an issue.
+Issue keys are found in branch names, pull request titles and bodies, and commit messages, and the issues they name get the branch, pull request or commit. Every change raises an outcome, but only branch names and pull request titles decide which issues drive automation triggers; there are no smart commits, so a message can't move an issue.
 
-Webhook state keeps an order: a payload older than the stored state never overwrites it, and a merged pull request stays merged. A check run counts once per workflow run, the newest one, and only `success`, `neutral` and `skipped` pass.
+Webhook state keeps an order: a payload older than the stored state never overwrites it, and a merged pull request stays merged. A check run counts once per job name in a workflow run (the newest attempt), and only `success`, `neutral` and `skipped` pass.
 
-The worker reconciles every linked repository every 15 minutes. A run spends a budget of GitHub calls, holds a lease so two workers never run one link, and reads open pull requests, check runs on their heads and branches. It repairs deliveries GitHub never sent or Axiom rejected.
+The worker reconciles every linked repository every 15 minutes, leaving out links whose installation is removed or suspended. A run spends a budget of GitHub calls, holds a lease so two workers never run one link, and reads open pull requests, check runs on their heads and branches. It repairs deliveries GitHub never sent or Axiom rejected.
 
 ### POST /api/github/webhook
 

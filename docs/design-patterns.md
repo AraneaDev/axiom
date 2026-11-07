@@ -391,7 +391,7 @@ Import the file in `src/index.ts` above `mountActions`. Rules every action follo
 - **Area and kind** give the token scope, `<area>:read` or `<area>:write`. They also name the action in the docs and the audit log.
 - **Authorize first.** `target` holds only the ids `authorize` needs, and `input` extends it with `target.extend({...})`, so a refused caller gets 403 or 404 whatever the body holds.
 - **Handlers call services**, never raw Prisma for a write.
-- **Typed input.** Ids use `strictInt` or a bounded string; no top-level `z.unknown()` or `z.any()`; a value that may repeat, or arrive as JSON from MCP, uses `queryText` or `queryCount` (read with `firstQueryText`; R16).
+- **Typed input.** Ids use `strictInt` or a bounded string; no top-level `z.unknown()` or `z.any()`; a value that may repeat, or arrive as JSON from MCP, uses `queryText` or `queryCount` (read with `firstQueryText`; R16), or a typed value-or-array union such as `issue.hydrate`'s include.
 - **Token reach by flag.** `destructive` and `destructiveWhen(input)` (destructive for some inputs only), `permissionChange(input)` (always waits), `admin` (always waits), `bulkCount`, `crossContainer`, `uiOnly` (never a token) and `tokenBlocked` (a session only). `openToReadOf` opens an action on the caller's own state to a read scope of several areas (rule R18: reads, and writes that belong to no org). A waiting action also declares a `preview`.
 - **Public routes.** An action with no sign-in (public forms, health) is declared with `definePublicAction` and a `rest` binding with `public: true`. Its context has no `userId`.
 - **Token reach is frozen.** `src/actions/token-reach.json` lists the scopes that reach each action. Change it in the same commit as any change of reach.
