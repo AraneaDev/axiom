@@ -225,6 +225,24 @@ export function countGithubCalls<T>(
   return callCounters.run(counter, work);
 }
 
+/**
+ * Runs work whose requests a run shares with other callers (one token fetch that concurrent
+ * callers wait on). They are added to the counter of the run that started it, but never refused
+ * by its limit: the callers waiting on it belong to other runs and must not fail for the budget
+ * of the one that happened to be first.
+ * @param work The work
+ */
+export async function withoutGithubCallLimit<T>(work: () => Promise<T>): Promise<T> {
+  const outer = callCounters.getStore();
+  if (!outer) return work();
+  const inner: CallCounter = { calls: 0 };
+  try {
+    return await callCounters.run(inner, work);
+  } finally {
+    outer.calls += inner.calls;
+  }
+}
+
 async function send(url: URL, opts: SendOptions): Promise<Response> {
   const signal = AbortSignal.timeout(opts.timeoutMs);
   const api = apiOrigin();

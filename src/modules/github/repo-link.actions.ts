@@ -7,7 +7,7 @@ import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
-import { reconcileRepo } from './reconcile.service';
+import { claimReconcile, reconcileRepo } from './reconcile.service';
 import * as service from './repo-link.service';
 
 const link = z.looseObject({ repoFullName: z.string(), htmlUrl: z.string() });
@@ -78,7 +78,7 @@ registerActions([
     summary: 'Read the linked GitHub repository now and store what the webhooks missed',
     target: projectTarget,
     input: projectTarget,
-    output: z.looseObject({ complete: z.boolean() }),
+    output: z.looseObject({ started: z.boolean() }),
     rest: { method: 'POST', path: `${PATH}/reconcile` },
     authorize: manage,
     handler: async (_ctx, { projectId }) => {
@@ -87,11 +87,19 @@ registerActions([
         throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
       }
       // Without its installation the App cannot read the repository; health says which case it is
-      if (!(await service.installationUsable(link.installationId))) {
+      const installation = await service.installationState(link.installationId);
+      if (installation === 'missing') {
         throw new AppError(
           409,
           'The GitHub App is not installed for this repository any more. Install it again, then reconcile.',
           'GITHUB_APP_NOT_INSTALLED',
+        );
+      }
+      if (installation === 'suspended') {
+        throw new AppError(
+          409,
+          'The GitHub App installation for this repository is suspended. Unsuspend it on GitHub, then reconcile.',
+          'GITHUB_APP_SUSPENDED',
         );
       }
       // The worker reads every link every 15 minutes: a manual run is for seeing a change now,
@@ -102,12 +110,24 @@ registerActions([
       if (wait && wait > 0) {
         throw new AppError(
           429,
-          'This repository was reconciled a moment ago. Try again in a minute.',
+          'This repository was reconciled a moment ago.',
           'GITHUB_RECONCILE_COOLDOWN',
           { retryAfter: Math.ceil(wait / 1000), retryAfterSeconds: Math.ceil(wait / 1000) },
         );
       }
-      return reconcileRepo(link.id);
+      // The lease is claimed now, so a run that is going answers 409 here. A run makes up to 300
+      // GitHub calls, longer than the server waits for a response: it carries on after the answer
+      // and records its result on the link, which health shows.
+      const run = await claimReconcile(link.id);
+      setImmediate(() => {
+        run().catch((err: unknown) => {
+          logger.warn('manual github reconcile failed', {
+            repoLinkId: link.id,
+            error: err instanceof Error ? err.message : 'unknown',
+          });
+        });
+      });
+      return { started: true };
     },
   }),
   defineAction({

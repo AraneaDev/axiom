@@ -162,8 +162,33 @@ export async function reconcileRepo(
   repoLinkId: string,
   opts: { callBudget?: number } = {},
 ): Promise<ReconcileResult> {
+  return (await claimReconcile(repoLinkId, opts))();
+}
+
+/**
+ * Claims the lease of a link now and hands back the run, so a caller can answer 404 or 409 at
+ * once and let the run carry on after its response. The returned function must be called: the
+ * lease is released only by the run that holds it (or when it runs out).
+ * @param repoLinkId The link
+ * @param opts `callBudget` overrides the default budget
+ * @param opts.callBudget
+ * @returns The run, which resolves to what reconcileRepo resolves to
+ * @throws {AppError} 404 when the link is gone, 409 GITHUB_RECONCILE_RUNNING while another run holds it
+ */
+export async function claimReconcile(
+  repoLinkId: string,
+  opts: { callBudget?: number } = {},
+): Promise<() => Promise<ReconcileResult>> {
   const token = randomUUID();
   await claimLease(repoLinkId, token);
+  return () => runReconcile(repoLinkId, token, opts);
+}
+
+async function runReconcile(
+  repoLinkId: string,
+  token: string,
+  opts: { callBudget?: number },
+): Promise<ReconcileResult> {
   const budget = opts.callBudget ?? RECONCILE_CALL_BUDGET;
   // The limit is hard: the client refuses the request that would be the one past the budget
   const counter = { calls: 0, limit: budget };
@@ -469,9 +494,9 @@ export async function reconcileRepo(
  */
 export async function dueRepoLinkIds(limit: number): Promise<string[]> {
   const now = new Date();
-  // Links whose installation is unknown or removed would fail every round
+  // Links whose installation is unknown, removed or suspended would fail every round
   const usable = await prisma.githubInstallation.findMany({
-    where: { removedAt: null },
+    where: { removedAt: null, suspendedAt: null },
     select: { id: true },
   });
   const rows = await prisma.githubRepoLink.findMany({

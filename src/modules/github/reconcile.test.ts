@@ -113,6 +113,17 @@ async function seedPr(n: number, over: Partial<Record<string, unknown>> = {}) {
 
 const requestsTo = (fragment: string) => fake.requests.filter((r) => r.path.includes(fragment));
 
+// A manual reconcile goes on after its answer: waits until the run has recorded its end
+const runEnded = () =>
+  vi.waitFor(
+    async () => {
+      const link = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } });
+      expect(link.lastReconciledAt).not.toBeNull();
+      expect(link.reconcileLeaseUntil).toBeNull();
+    },
+    { timeout: 8000 },
+  );
+
 beforeAll(async () => {
   await seedGithubApp({ fake });
   fake.addInstallation(INSTALLATION_ID, ['acme-labs/widget']);
@@ -424,6 +435,14 @@ describe('reconcileDueRepos', () => {
           data: { removedAt: new Date() },
         }),
     ],
+    [
+      'a suspended installation',
+      () =>
+        prisma.githubInstallation.update({
+          where: { id: BigInt(INSTALLATION_ID) },
+          data: { suspendedAt: new Date() },
+        }),
+    ],
   ])('leaves out a due link with %s', async (_name, spoil) => {
     await spoil();
     expect(await dueRepoLinkIds(1000)).not.toContain(repoLinkId);
@@ -488,7 +507,9 @@ describe('githubRepo.reconcile and githubRepo.health', () => {
 
     const ok = await request(app).post(url('reconcile')).set(asOwner()).send({});
     expect(ok.status).toBe(201);
-    expect(ok.body).toMatchObject({ pullRequests: 1, complete: true });
+    expect(ok.body).toEqual({ started: true });
+    await runEnded();
+    expect(await prisma.githubPullRequest.count({ where: { repoLinkId } })).toBe(1);
   });
 
   it('answers 404 when the project is not linked', async () => {
@@ -968,14 +989,57 @@ describe('the manual reconcile and links made through the action', () => {
   it('refuses a second run within a minute with 429 and a retry time', async () => {
     fake.setRepoLists('acme-labs/widget', { pulls: [], branches: [], checkRuns: {} });
     expect((await request(app).post(url()).set(asOwner()).send({})).status).toBe(201);
+    await runEnded();
 
     const again = await request(app).post(url()).set(asOwner()).send({});
 
     expect(again.status).toBe(429);
     expect(again.body.error.code).toBe('GITHUB_RECONCILE_COOLDOWN');
+    // The page appends its own "Try again in N seconds": the server's message must not say it too
+    expect(again.body.error.message).not.toMatch(/try again/i);
     expect(again.body.error.details.retryAfter).toBeGreaterThan(0);
     expect(again.body.error.details.retryAfter).toBeLessThanOrEqual(60);
     expect(Number(again.headers['retry-after'])).toBe(again.body.error.details.retryAfter);
+  });
+
+  it('answers at once while the run goes on, and a second call meanwhile gets 409', async () => {
+    fake.on('GET /repos/:owner/:repo/pulls', { status: 200, body: [pr(6)], delayMs: 1500 });
+    fake.setRepoLists('acme-labs/widget', { branches: [], checkRuns: {} });
+
+    const started = Date.now();
+    const first = await request(app).post(url()).set(asOwner()).send({});
+    expect(first.status).toBe(201);
+    expect(first.body).toEqual({ started: true });
+    expect(Date.now() - started).toBeLessThan(1200);
+    // The run is still reading: it holds the lease and has stored nothing yet
+    expect(
+      (await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } }))
+        .reconcileLeaseUntil,
+    ).not.toBeNull();
+    expect(await prisma.githubPullRequest.count({ where: { repoLinkId } })).toBe(0);
+
+    const second = await request(app).post(url()).set(asOwner()).send({});
+    expect(second.status).toBe(409);
+    expect(second.body.error.code).toBe('GITHUB_RECONCILE_RUNNING');
+
+    await runEnded();
+    expect(await prisma.githubPullRequest.count({ where: { repoLinkId } })).toBe(1);
+  });
+
+  it('answers 409 GITHUB_APP_SUSPENDED for a suspended installation and reads nothing', async () => {
+    await prisma.githubInstallation.update({
+      where: { id: BigInt(INSTALLATION_ID) },
+      data: { suspendedAt: new Date() },
+    });
+    const before = fake.requests.length;
+    const res = await request(app).post(url()).set(asOwner()).send({});
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_APP_SUSPENDED');
+    expect(fake.requests.length).toBe(before);
+    const health = await request(app)
+      .get(`/api/projects/${ctx.projectId}/github/health`)
+      .set(asOwner());
+    expect(health.body.installationSuspended).toBe(true);
   });
 
   it.each([

@@ -18,7 +18,12 @@ import {
   deleteApp,
   getGithubAppSecrets,
 } from './github-app.service';
-import { githubRequest, setGithubBaseUrls } from './github-client';
+import {
+  countGithubCalls,
+  GITHUB_CALL_LIMIT,
+  githubRequest,
+  setGithubBaseUrls,
+} from './github-client';
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
 const BASE = '/api/github/app';
@@ -536,6 +541,37 @@ describe('installation tokens', () => {
     await Promise.all(
       [1, 2, 3].map(() => githubRequest<unknown>(auth, 'GET', '/repos/acme-labs/widget')),
     );
+    expect(posts()).toHaveLength(1);
+  });
+
+  it('never refuses the shared token fetch for the budget of the run that started it', async () => {
+    await seedGithubApp({ fake });
+    fake.addInstallation(4104, ['acme-labs/widget']);
+    fake.on('POST /app/installations/:id/access_tokens', {
+      status: 201,
+      delayMs: 200,
+      body: {
+        token: fake.issueInstallationToken(4104),
+        expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+      },
+    });
+    const auth = { kind: 'installation', installationId: 4104 } as const;
+    // A run whose budget is spent already starts the fetch; another caller waits on it
+    const spent = { calls: 0, limit: 0 };
+    const starter = countGithubCalls(spent, () =>
+      githubRequest<unknown>(auth, 'GET', '/repos/acme-labs/widget'),
+    );
+    const starterOutcome = starter.then(
+      () => null,
+      (err: unknown) => err,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const waiting = githubRequest<unknown>(auth, 'GET', '/repos/acme-labs/widget');
+
+    expect((await waiting).status).toBe(200);
+    // The starter's own repository call is refused; the fetch it started is counted, not refused
+    expect(await starterOutcome).toMatchObject({ code: GITHUB_CALL_LIMIT });
+    expect(spent.calls).toBe(1);
     expect(posts()).toHaveLength(1);
   });
 

@@ -7,7 +7,12 @@ import { prisma } from '../../config/database';
 import { decryptSecret, encryptSecret, secretContext } from '../../lib/secret-box';
 import { AppError } from '../../middleware/errorHandler';
 
-import { githubPaginate, githubRequest, githubWebUrl } from './github-client';
+import {
+  githubPaginate,
+  githubRequest,
+  githubWebUrl,
+  withoutGithubCallLimit,
+} from './github-client';
 import { githubIdJson, githubUnavailable, openGithubSecret } from './github-errors';
 
 /** The App is one row, and its id is part of every context a secret of it is sealed with */
@@ -180,10 +185,13 @@ export async function installationToken(installationId: number): Promise<string>
   if (running) return running;
   const epoch = cacheEpoch;
   const fetching = (async () => {
-    const { data } = await githubRequest<unknown>(
-      { kind: 'app' },
-      'POST',
-      `/app/installations/${installationId}/access_tokens`,
+    // Other callers wait on this fetch: the limit of the run that started it must not refuse it
+    const { data } = await withoutGithubCallLimit(() =>
+      githubRequest<unknown>(
+        { kind: 'app' },
+        'POST',
+        `/app/installations/${installationId}/access_tokens`,
+      ),
     );
     const parsed = tokenReply.safeParse(data);
     const expiresAt = parsed.success ? Date.parse(parsed.data.expires_at) : Number.NaN;

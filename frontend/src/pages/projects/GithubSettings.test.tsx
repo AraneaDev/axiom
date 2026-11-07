@@ -269,14 +269,22 @@ describe('GithubSettings', () => {
       const alert = await screen.findByRole('alert');
       expect(alert).toHaveTextContent('reconciled a moment ago');
       expect(alert).toHaveTextContent('42 seconds');
+      // The server's message and the retry time together say it once
+      expect(alert.textContent?.match(/try again/gi)).toHaveLength(1);
     });
 
-    it('reconciles now', async () => {
-      repo.reconcile.mockResolvedValue({ complete: true });
+    it('says the reconcile started and reads the health again a moment later', async () => {
+      repo.reconcile.mockResolvedValue({ started: true });
       show();
-      await userEvent.click(await screen.findByRole('button', { name: 'Reconcile now' }));
+      await screen.findByRole('button', { name: 'Reconcile now' });
+      const callsBefore = repo.health.mock.calls.length;
+      await userEvent.click(screen.getByRole('button', { name: 'Reconcile now' }));
       await waitFor(() => expect(repo.reconcile).toHaveBeenCalledWith('p1'));
-    });
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Reconcile started'));
+      await waitFor(() => expect(repo.health.mock.calls.length).toBeGreaterThan(callsBefore), {
+        timeout: 5000,
+      });
+    }, 10_000);
 
     it('shows a running reconcile by its message', async () => {
       repo.reconcile.mockRejectedValue(

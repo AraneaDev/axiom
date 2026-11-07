@@ -75,6 +75,9 @@ function withRetryTime(error: unknown): unknown {
   );
 }
 
+// How long after a reconcile started the health is read again
+const REFRESH_AFTER_START_MS = 3000;
+
 function InstallLink({ href }: { href: string }) {
   return (
     <a href={href} {...EXTERNAL_LINK} className={buttonClasses('outline', 'sm')}>
@@ -289,13 +292,11 @@ function LinkedView({
   };
   const reconcile = useMutation({
     mutationFn: () => githubRepoApi.reconcile(projectId),
-    onSuccess: async (result) => {
-      await refresh();
-      toast.success(
-        result.complete
-          ? 'Repository read again'
-          : 'Read part of the repository, the next round continues',
-      );
+    onSuccess: () => {
+      // The run goes on after the answer: health shows its result once it has finished, through
+      // the realtime event, the next refetch, or this look a moment later
+      toast.success('Reconcile started');
+      window.setTimeout(() => void refresh(), REFRESH_AFTER_START_MS);
     },
   });
   const unlink = useMutation({

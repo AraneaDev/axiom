@@ -55,16 +55,20 @@ export async function countLinkedIssues(linkId: string): Promise<number> {
 }
 
 /**
- * Whether the installation a link reads through is known and not removed. A link whose App is
- * gone cannot be read: every call would fail.
+ * Whether the installation a link reads through can be read with: known, not removed and not
+ * suspended. A link whose App is gone or suspended fails every call.
  * @param installationId The link's installation
+ * @returns `usable`, `missing` (unknown or removed) or `suspended`
  */
-export async function installationUsable(installationId: bigint): Promise<boolean> {
+export async function installationState(
+  installationId: bigint,
+): Promise<'usable' | 'missing' | 'suspended'> {
   const row = await prisma.githubInstallation.findUnique({
     where: { id: installationId },
-    select: { removedAt: true },
+    select: { removedAt: true, suspendedAt: true },
   });
-  return row !== null && row.removedAt === null;
+  if (!row || row.removedAt !== null) return 'missing';
+  return row.suspendedAt !== null ? 'suspended' : 'usable';
 }
 
 /**

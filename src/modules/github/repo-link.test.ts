@@ -27,6 +27,10 @@ vi.mock('./reconcile.service', () => ({
     reconcile.repoLinkIds.push(repoLinkId);
     return { pullRequests: 0, checkRuns: 0, branches: 0, calls: 0, complete: true, reason: null };
   },
+  claimReconcile: async (repoLinkId: string) => async () => {
+    reconcile.repoLinkIds.push(repoLinkId);
+    return { pullRequests: 0, checkRuns: 0, branches: 0, calls: 0, complete: true, reason: null };
+  },
 }));
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
