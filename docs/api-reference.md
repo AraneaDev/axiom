@@ -268,7 +268,7 @@ An include the token's scopes don't cover is left out, and named in `data.omitte
 
 ### GitHub branches, pull requests and checks
 
-Each acts as the caller's own connected GitHub account on the repository linked to the issue's project, and needs `github:write` and `issue:edit`. `:issueNumber` is the number in the key (`42` for `AXM-42`). The same actions run through `POST /api/act` and the MCP server, see [GitHub actions](axiom-mcp-server.md#github-actions) for inputs, `headSha` and the error codes.
+Each acts as the caller's own connected GitHub account on the repository linked to the issue's project, and needs `issue:edit`; a token also needs `github:write`, a browser session needs no scope. `:issueNumber` is the number in the key (`42` for `AXM-42`). A `/` in `:branch` is sent as `%2F` (`feature/axm-42` becomes `feature%2Faxm-42`). The same actions run through `POST /api/act` and the MCP server, see [GitHub actions](axiom-mcp-server.md#github-actions) for inputs, `headSha` and the error codes.
 
 | Route | Action | Token call |
 |---|---|---|
@@ -282,7 +282,7 @@ Each acts as the caller's own connected GitHub account on the repository linked 
 | `POST .../github/pulls/:pullNumber/close` | `githubPr.close` | Waits for approval |
 | `POST .../github/pulls/:pullNumber/checks/rerun` | `githubChecks.rerun` (GitHub Actions jobs only) | Runs |
 
-A waiting call answers `202` with `status: "pending_approval"`. A moved head answers `409 GITHUB_HEAD_MOVED`, a connection that is missing `409 GITHUB_NOT_CONNECTED`.
+A waiting call answers `202` with `status: "pending_approval"`. Merge, close and branch delete always wait for a token: no org or user policy lifts it. A moved head answers `409 GITHUB_HEAD_MOVED`, a connection that is missing `409 GITHUB_NOT_CONNECTED`.
 
 ---
 

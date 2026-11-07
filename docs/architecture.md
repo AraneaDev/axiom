@@ -20,7 +20,7 @@
 
 ## System Overview
 
-Axiom is a self-hosted Jira and Confluence replacement built for agents: issue tracking, sprints and boards, a collaborative wiki, and an MCP server so agents can work in the same projects you do. A GitHub integration is planned for the code side. It is built as a monorepo with a Node.js/Express API backend and a React single-page application frontend.
+Axiom is a self-hosted Jira and Confluence replacement built for agents: issue tracking, sprints and boards, a collaborative wiki, and an MCP server so agents can work in the same projects you do. A GitHub integration links one repository per project for the code side. It is built as a monorepo with a Node.js/Express API backend and a React single-page application frontend.
 
 **Key versions:**
 - Node.js 25

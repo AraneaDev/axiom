@@ -189,6 +189,7 @@ The GitHub App is set up once, by a platform admin, at `/admin/github`.
 
 - **`FRONTEND_URL`:** set it in `.env` to the public https address of this instance (for example `https://axiom.example.com`) before you create the App. GitHub is told to call back at that address, and creating the App fails with a 409 in production until it is set. An App created with the wrong address can only be repaired by deleting it on GitHub.
 - **Webhook:** GitHub must be able to reach `/api/github/webhook` from the internet. Pass that path through your reverse proxy, and don't put it behind a login or an IP allow-list that excludes GitHub.
+- **Events:** the App subscribes to the events Axiom reads, including `repository`, which keeps a renamed, transferred or re-defaulted repository current. An App created before that event was added keeps its old list: its admin must tick **Repository** under Settings, Developer settings, GitHub Apps, Permissions & events, Subscribe to events. Until then Axiom learns of such a change at the next reconcile.
 - **Setup:** open `/admin/github` as a platform admin and follow the steps. The App is private, so it can be installed only on the account or organization that owns it. GitHub's form lets you rename the App.
 - **GitHub Enterprise Server:** set `GITHUB_API_URL` and `GITHUB_WEB_URL` in `.env` to the API and web addresses of your server. In production both must be https. They default to `https://api.github.com` and `https://github.com`.
 

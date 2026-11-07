@@ -157,27 +157,35 @@ Nine actions work a ticket on GitHub without `gh` or a git checkout. Each takes 
 | Action | Does | Waits for approval |
 |---|---|---|
 | `githubBranch.create` | Creates a branch for the issue | No |
-| `githubBranch.delete` | Deletes a branch of the issue | Yes |
+| `githubBranch.delete` | Deletes a branch of the issue | Always |
 | `githubPr.open` | Opens a pull request | No |
 | `githubPr.update` | Changes title, body or base | No |
 | `githubPr.requestReviewers` | Requests reviews | No |
 | `githubPr.comment` | Comments on the pull request | No |
-| `githubPr.merge` | Merges the pull request | Yes |
-| `githubPr.close` | Closes it without merging | Yes |
+| `githubPr.merge` | Merges the pull request | Always |
+| `githubPr.close` | Closes it without merging | Always |
 | `githubChecks.rerun` | Re-runs the failed checks | No |
 
-Create the branch and open the pull request in one batch. A branch name must contain the issue key, and without `name` it is `<key>-<title>` in lower case. `head` is the branch name alone: a head in a fork (`owner:branch`) is not supported.
+A branch name must contain the issue key, and without `name` it is `<key>-<title>` in lower case. `head` is the branch name alone: a head in a fork (`owner:branch`) is not supported.
+
+The loop takes four Axiom calls with git work in between, because GitHub refuses a pull request for a branch that has no commit of its own (`409 GITHUB_NO_COMMITS`):
+
+1. Create the branch with `githubBranch.create` (one `act` call).
+2. Commit and push to it with git, outside Axiom.
+3. Open the pull request with `githubPr.open` (one `act` call). It answers the pull request number.
+4. Read the issue with `development` to see the pull request (and request reviewers, comment or re-run checks in a batch with the number), then merge with `githubPr.merge`, which waits for approval.
+
+```json
+{ "action": "githubBranch.create", "key": "AXM-42", "input": { "name": "axm-42-fix-login" } }
+```
+
+After the push, open the pull request:
 
 ```json
 {
-  "batch": [
-    { "action": "githubBranch.create", "key": "AXM-42", "input": { "name": "axm-42-fix-login" } },
-    {
-      "action": "githubPr.open",
-      "key": "AXM-42",
-      "input": { "head": "axm-42-fix-login", "title": "AXM-42 Fix the login timeout" }
-    }
-  ]
+  "action": "githubPr.open",
+  "key": "AXM-42",
+  "input": { "head": "axm-42-fix-login", "title": "AXM-42 Fix the login timeout" }
 }
 ```
 
@@ -206,7 +214,7 @@ Merging needs `headSha`, the full 40 character commit of the head you reviewed. 
 }
 ```
 
-`method` is `merge` (the default), `squash` or `rebase`. A token's merge, close and branch delete run nothing and answer `202 pending_approval` (see [Approvals](#approvals)); a person approves in the web UI and the call then goes to GitHub with the `headSha` that was asked for. The default branch is never deleted (`400 GITHUB_DEFAULT_BRANCH`, with no approval row).
+`method` is `merge` (the default), `squash` or `rebase`. A token's merge, close and branch delete run nothing and answer `202 pending_approval` (see [Approvals](#approvals)); a person approves in the web UI and the call then goes to GitHub with the `headSha` that was asked for. These three always wait: no org or user policy lifts it, not even an org that relaxed destructive approvals. A browser session runs them at once. The default branch is never deleted (`400 GITHUB_DEFAULT_BRANCH`, with no approval row).
 
 `githubChecks.rerun` answers `{ rerun, refused, notRerunnable }`. It re-runs the failed jobs of GitHub Actions runs only. A failed check of any other app is listed in `notRerunnable` with its link, because only the app that created a check can re-run it. A job GitHub refused is in `refused` with the reason.
 
@@ -229,7 +237,17 @@ Every one of these runs as your own connected GitHub account, never as the App, 
 | `GITHUB_NOT_FOUND` | 404 | GitHub has no such resource, or you can't see it |
 | `GITHUB_NOT_ALLOWED`, `GITHUB_CONFLICT` | 409 | GitHub does not allow it now, or reported a conflict |
 | `GITHUB_INVALID` | 422 | GitHub rejected the request |
+| `GITHUB_NO_COMMITS` | 409 | The branch has no commit of its own yet; push one with git, then open the pull request |
+| `GITHUB_GONE` | 410 | GitHub no longer has this resource |
 | `GITHUB_RATE_LIMITED` | 503 | GitHub's rate limit; `details.retryAfterSeconds` says when |
+| `GITHUB_UNAVAILABLE` | 502 | GitHub did not answer, or answered with something Axiom could not use |
+| `GITHUB_APP_AUTH` | 502 | GitHub refused the credentials of the GitHub App |
+| `GITHUB_SECRET_UNREADABLE` | 409 | A stored secret can't be read with the configured encryption key |
+| `INVALID_BRANCH_NAME` | 400 | Not a valid branch name; a head in a fork (`owner:branch`) is not supported |
+| `PULL_REQUEST_MUST_NAME_ISSUE` | 400 | The head branch or the title must contain the issue key |
+| `NOTHING_TO_UPDATE` | 400 | `githubPr.update` was given no title, body or base |
+| `INVALID_REVIEWERS` | 400 | A reviewer is not a GitHub login, or the list is not valid |
+| `REVIEWER_NOT_CONNECTED` | 400 | A reviewer is not connected to GitHub or not in this organization |
 
 A batch stops at the first of these, so a failed `githubBranch.create` leaves `githubPr.open` skipped. Titles, bodies, branch names and reasons that come back from GitHub are untrusted text.
 
