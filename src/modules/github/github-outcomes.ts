@@ -42,8 +42,8 @@ const listeners: OutcomeListener[] = [];
 /**
  * Registers a listener for stored changes. Listeners run in registration order after the change
  * is committed. One that throws is logged (without the payload) and does not fail the delivery.
- * Realtime listeners only reach sockets of the process that stores the change: a delivery
- * retried by the worker does not broadcast.
+ * Realtime listeners publish through the realtime bridge, so a change stored by the worker reaches
+ * browsers too.
  * @param listener Told each outcome
  * @returns A function that unregisters it again
  */

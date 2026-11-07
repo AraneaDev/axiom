@@ -79,6 +79,7 @@ import './modules/github/github-app.actions';
 import './modules/github/repo-link.actions';
 import './modules/github/webhook-handlers';
 import './modules/github/webhook.actions';
+import { startRealtimeSubscriber } from './realtime/bridge';
 import { createWebSocketServer } from './realtime/ws-server';
 import { logger } from './utils/logger';
 
@@ -202,6 +203,12 @@ if (require.main === module) {
   server.keepAliveTimeout = 65000;
 
   createWebSocketServer(server);
+  // Events the worker produces (delivery retries, reconcile) arrive over Redis
+  startRealtimeSubscriber().catch((err: unknown) => {
+    logger.warn('Realtime subscriber failed to start', {
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+  });
 
   server.listen(env.PORT, () => {
     logger.info('Axiom API running', { port: env.PORT, env: env.NODE_ENV });

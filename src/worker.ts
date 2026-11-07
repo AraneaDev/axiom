@@ -9,7 +9,9 @@ import {
 import { cleanupExpiredUploads } from './modules/attachments/upload-intents.service';
 import './modules/github/github-resolvers';
 import './modules/github/webhook-handlers';
+import { reconcileDueRepos } from './modules/github/reconcile.service';
 import { cleanupDeliveries, retryDueDeliveries } from './modules/github/webhook.service';
+import { setRealtimeMode } from './realtime/bridge';
 import { logger } from './utils/logger';
 
 const UPLOAD_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
@@ -42,7 +44,17 @@ function runGithubDeliveryJobs(): void {
     });
 }
 
+/** Reconcile the linked repositories that are due; a failure is on the link and waits for its next round. */
+function runGithubReconcile(): void {
+  reconcileDueRepos().catch((err) => {
+    logger.error('GitHub reconcile failed', {}, err as Error);
+  });
+}
+
 async function main(): Promise<void> {
+  // The worker has no sockets: what it stores reaches browsers through the API over Redis
+  setRealtimeMode('redis');
+
   let stopEmail: (() => Promise<void>) | null = null;
   if (process.env.SMTP_HOST) {
     const { startEmailWorker, stopEmailWorker } = await import('./email/queue');
@@ -60,6 +72,9 @@ async function main(): Promise<void> {
   runGithubDeliveryJobs();
   const githubDeliveries = setInterval(runGithubDeliveryJobs, APPROVAL_CLEANUP_INTERVAL_MS);
 
+  runGithubReconcile();
+  const githubReconcile = setInterval(runGithubReconcile, APPROVAL_CLEANUP_INTERVAL_MS);
+
   logger.info('Axiom worker running');
 
   const shutdown = async (signal: string) => {
@@ -67,6 +82,7 @@ async function main(): Promise<void> {
     clearInterval(uploadCleanup);
     clearInterval(approvalCleanup);
     clearInterval(githubDeliveries);
+    clearInterval(githubReconcile);
     if (stopEmail) await stopEmail();
     await prisma.$disconnect();
     process.exit(0);

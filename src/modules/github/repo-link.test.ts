@@ -19,6 +19,15 @@ import { seedGithubApp } from '../../test/github-seed';
 
 import { findRepoLinkByProject, findRepoLinkByRepoId } from './repo-link.service';
 
+// Linking starts a reconcile of the new link; its GitHub calls would race with the assertions
+// on the calls linking itself makes. The reconcile has its own tests.
+const reconcile = vi.hoisted(() => ({ repoLinkIds: [] as string[] }));
+vi.mock('./reconcile.service', () => ({
+  reconcileRepo: async (repoLinkId: string) => {
+    reconcile.repoLinkIds.push(repoLinkId);
+  },
+}));
+
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
 const WIDGET = 'acme-labs/widget';
 const GADGET = 'acme-labs/gadget';
@@ -149,6 +158,8 @@ describe('githubRepo.link', () => {
       linkedById: ctx.owner.id,
     });
     expect((await findRepoLinkByRepoId(Number(link!.repoId)))?.projectId).toBe(ctx.projectId);
+    // A fresh link starts reading the repository at once
+    await vi.waitFor(() => expect(reconcile.repoLinkIds).toContain(link!.id));
     // The user's rights were checked as the user, the installation as the App
     expect(fake.requests.map((r) => `${r.method} ${r.path} ${r.headers.authorization}`)).toEqual([
       expect.stringMatching(/^GET \/repos\/acme-labs\/widget user:/),

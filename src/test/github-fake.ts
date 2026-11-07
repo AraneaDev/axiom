@@ -107,7 +107,21 @@ export interface GithubFake {
    * itself, `slow` makes the blob host take {@link SLOW_BLOB_MS} before it answers. Forgotten by `reset`.
    */
   setJobLog(jobId: number, text: string | Buffer, mode?: JobLogMode): void;
-  /** Forgets recorded requests, `on` routes, job logs and the refresh counter and delay; the rest stays */
+  /**
+   * What a repository lists: `GET .../pulls?state=open` (the open ones of `pulls`),
+   * `.../pulls/:number` (any of them), `.../commits/:sha/check-runs` (`checkRuns` by head sha)
+   * and `.../branches`. Lists are cut into pages of `per_page` with Link headers, as GitHub does.
+   * Forgotten by `reset`.
+   */
+  setRepoLists(
+    fullName: string,
+    lists: {
+      pulls?: Array<Record<string, unknown>>;
+      checkRuns?: Record<string, Array<Record<string, unknown>>>;
+      branches?: Array<{ name: string; sha: string }>;
+    },
+  ): void;
+  /** Forgets recorded requests, `on` routes, job logs, repository lists and the refresh counter and delay; the rest stays */
   reset(): void;
   close(): Promise<void>;
 }
@@ -244,6 +258,7 @@ class GithubFakeServer implements GithubFake {
   private oauthClient: { clientId: string; clientSecret: string } | null = null;
   private refreshDelayMs = 0;
   private jobLogs = new Map<number, { text: string | Buffer; mode: JobLogMode }>();
+  private repoLists = new Map<string, Parameters<GithubFake['setRepoLists']>[1]>();
   refreshGrants = 0;
 
   constructor(private readonly scenario: string) {}
@@ -402,10 +417,15 @@ class GithubFakeServer implements GithubFake {
     this.jobLogs.set(jobId, { text, mode });
   }
 
+  setRepoLists(fullName: string, lists: Parameters<GithubFake['setRepoLists']>[1]): void {
+    this.repoLists.set(repoKey(fullName), lists);
+  }
+
   reset(): void {
     this.requests.length = 0;
     this.overrides = [];
     this.jobLogs.clear();
+    this.repoLists.clear();
     this.refreshGrants = 0;
     this.refreshDelayMs = 0;
   }
@@ -564,6 +584,8 @@ class GithubFakeServer implements GithubFake {
     if (this.overrideFor(req)) return null;
     const jobLog = this.jobLogAnswer(req, credential);
     if (jobLog) return jobLog;
+    const listed = this.repoListAnswer(req);
+    if (listed) return listed;
     const tokenRoute = /^\/app\/installations\/(\d+)\/access_tokens$/.exec(req.path);
     if (req.method === 'POST' && tokenRoute) {
       if (!this.installations.has(Number(tokenRoute[1]))) return NOT_FOUND;
@@ -626,6 +648,52 @@ class GithubFakeServer implements GithubFake {
         credential.repos?.has(repoKey(repo.full_name)),
       );
       return { ...answer, body: { ...body, total_count: repositories.length, repositories } };
+    }
+    return null;
+  }
+
+  /**
+   * The list routes of `setRepoLists`, cut into pages with a Link header to the next one.
+   * @param req The recorded request
+   */
+  private repoListAnswer(req: RecordedRequest): FakeReply | null {
+    if (req.method !== 'GET') return null;
+    const match = /^\/repos\/([^/]+)\/([^/]+)\/(.+)$/.exec(req.path);
+    if (!match) return null;
+    const lists = this.repoLists.get(
+      repoKey(`${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`),
+    );
+    if (!lists) return null;
+    const rest = match[3];
+    const page = (items: unknown[], wrap?: (slice: unknown[]) => unknown): FakeReply => {
+      const perPage = Math.min(Number(req.query.per_page) || 30, 100);
+      const number = Math.max(Number(req.query.page) || 1, 1);
+      const slice = items.slice((number - 1) * perPage, number * perPage);
+      const headers: Record<string, string> = {};
+      if (number * perPage < items.length) {
+        const next = new URL(req.path, this.baseUrl);
+        for (const [key, value] of Object.entries(req.query)) next.searchParams.set(key, value);
+        next.searchParams.set('page', String(number + 1));
+        headers.link = `<${next.toString()}>; rel="next"`;
+      }
+      return { status: 200, body: wrap ? wrap(slice) : slice, headers };
+    };
+    if (rest === 'pulls' && lists.pulls) {
+      const wanted = req.query.state ?? 'open';
+      return page(lists.pulls.filter((pr) => wanted === 'all' || pr.state === wanted));
+    }
+    const one = /^pulls\/(\d+)$/.exec(rest);
+    if (one && lists.pulls) {
+      const found = lists.pulls.find((pr) => pr.number === Number(one[1]));
+      return found ? { status: 200, body: found } : NOT_FOUND;
+    }
+    const runs = /^commits\/([^/]+)\/check-runs$/.exec(rest);
+    if (runs && lists.checkRuns) {
+      const all = lists.checkRuns[runs[1]] ?? [];
+      return page(all, (slice) => ({ total_count: all.length, check_runs: slice }));
+    }
+    if (rest === 'branches' && lists.branches) {
+      return page(lists.branches.map((b) => ({ name: b.name, commit: { sha: b.sha } })));
     }
     return null;
   }

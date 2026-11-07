@@ -1,4 +1,4 @@
-import { broadcastToRoom } from '../../realtime/broadcast';
+import { publishRealtime } from '../../realtime/bridge';
 
 import { onGithubOutcome } from './github-outcomes';
 
@@ -7,7 +7,7 @@ import { onGithubOutcome } from './github-outcomes';
 onGithubOutcome(async (outcome) => {
   const issueIds = [...new Set([...outcome.linkedIssueIds, ...outcome.removedIssueIds])];
   if (issueIds.length === 0) return;
-  broadcastToRoom(`project:${outcome.projectId}`, {
+  publishRealtime(`project:${outcome.projectId}`, {
     type: 'issue:development-updated',
     projectId: outcome.projectId,
     issueIds,

@@ -4,7 +4,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
 import { requireGithubAccount } from './github-actor';
-import { getStatus } from './github-app.service';
+import { getGithubAppSecrets, getStatus } from './github-app.service';
 import { githubRequest } from './github-client';
 import { githubIdJson } from './github-errors';
 
@@ -194,4 +194,71 @@ export async function unlinkRepo(projectId: string): Promise<{ unlinked: boolean
     throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
   }
   return { unlinked: true };
+}
+
+const HEALTH_WINDOW_MS = 7 * 24 * 60 * 60_000;
+const HEALTH_FAILURES = 20;
+
+/**
+ * How a project's link is doing: whether the App still reaches the repository, when GitHub last
+ * told us something and when we last asked, and the webhook deliveries of this repository that
+ * failed in the last 7 days (newest 20). Never a payload.
+ * @param projectId The project
+ */
+export async function getLinkHealth(projectId: string) {
+  const link = await findRepoLinkByProject(projectId);
+  const secretsUnreadable = await getGithubAppSecrets().then(
+    () => false,
+    (err: unknown) => err instanceof AppError && err.code === 'GITHUB_SECRET_UNREADABLE',
+  );
+  if (!link) {
+    return {
+      linked: false,
+      appInstalled: false,
+      installationSuspended: false,
+      appSecretUnreadable: secretsUnreadable,
+      lastDeliveryAt: null,
+      lastReconciledAt: null,
+      lastReconcileError: null,
+      recentFailures: [],
+    };
+  }
+  const [installation, failures] = await Promise.all([
+    prisma.githubInstallation.findUnique({ where: { id: link.installationId } }),
+    prisma.githubDelivery.findMany({
+      where: {
+        repoId: link.repoId,
+        status: 'FAILED',
+        receivedAt: { gte: new Date(Date.now() - HEALTH_WINDOW_MS) },
+      },
+      orderBy: { receivedAt: 'desc' },
+      take: HEALTH_FAILURES,
+      select: {
+        id: true,
+        event: true,
+        action: true,
+        error: true,
+        attempts: true,
+        receivedAt: true,
+      },
+    }),
+  ]);
+  return {
+    linked: true,
+    repoFullName: link.fullName,
+    appInstalled: installation !== null,
+    installationSuspended: installation?.suspendedAt != null,
+    appSecretUnreadable: secretsUnreadable,
+    lastDeliveryAt: link.lastDeliveryAt?.toISOString() ?? null,
+    lastReconciledAt: link.lastReconciledAt?.toISOString() ?? null,
+    lastReconcileError: link.lastReconcileError,
+    recentFailures: failures.map((f) => ({
+      deliveryId: f.id,
+      event: f.event,
+      action: f.action,
+      error: f.error,
+      attempts: f.attempts,
+      receivedAt: f.receivedAt.toISOString(),
+    })),
+  };
 }

@@ -4,7 +4,10 @@ import { projectAction, projectRead } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
+import { AppError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
 
+import { reconcileRepo } from './reconcile.service';
 import * as service from './repo-link.service';
 
 const link = z.looseObject({ repoFullName: z.string(), htmlUrl: z.string() });
@@ -52,7 +55,49 @@ registerActions([
     preview: (_ctx, { projectId, repo }) => previews.githubRepoLink(projectId, repo),
     rest: { method: 'POST', path: PATH },
     authorize: manage,
-    handler: async (ctx, { projectId, repo }) => service.linkRepo(ctx.userId, projectId, repo),
+    handler: async (ctx, { projectId, repo }) => {
+      const linked = await service.linkRepo(ctx.userId, projectId, repo);
+      // A fresh link shows its open pull requests now, not after the first round of the worker
+      setImmediate(() => {
+        reconcileRepo(linked.id).catch((err: unknown) => {
+          logger.warn('first github reconcile failed', {
+            repoLinkId: linked.id,
+            error: err instanceof Error ? err.message : 'unknown',
+          });
+        });
+      });
+      return linked;
+    },
+  }),
+  defineAction({
+    name: 'githubRepo.reconcile',
+    area: 'github',
+    kind: 'write',
+    summary: 'Read the linked GitHub repository now and store what the webhooks missed',
+    target: projectTarget,
+    input: projectTarget,
+    output: z.looseObject({ complete: z.boolean() }),
+    rest: { method: 'POST', path: `${PATH}/reconcile` },
+    authorize: manage,
+    handler: async (_ctx, { projectId }) => {
+      const link = await service.findRepoLinkByProject(projectId);
+      if (!link) {
+        throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
+      }
+      return reconcileRepo(link.id);
+    },
+  }),
+  defineAction({
+    name: 'githubRepo.health',
+    area: 'github',
+    kind: 'read',
+    summary: 'How the GitHub link of a project is doing: installation, last delivery, failures',
+    target: projectTarget,
+    input: projectTarget,
+    output: z.looseObject({ linked: z.boolean() }),
+    rest: { method: 'GET', path: `${PATH}/health` },
+    authorize: read,
+    handler: async (_ctx, { projectId }) => service.getLinkHealth(projectId),
   }),
   defineAction({
     name: 'githubRepo.unlink',
