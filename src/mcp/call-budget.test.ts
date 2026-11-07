@@ -15,6 +15,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../config/database';
+import { encryptSecret, secretContext } from '../lib/secret-box';
 import '../modules/github/webhook-handlers';
 import { createPage } from '../modules/wiki/wiki.service';
 import {
@@ -274,6 +275,68 @@ describe('call budgets for the developer loop', () => {
     expect(used).toBe(1);
     // A read answers from what the webhooks stored
     expect(asked).toBe(0);
+  });
+
+  it('works a ticket on GitHub without gh: branch and PR, the PR shown, a merge waiting', async () => {
+    const issue = await createIssue('Ship the widget');
+    const lowerKey = issue.key.toLowerCase();
+    const accountId = `acct-budget-${randomUUID()}`;
+    fake.setGitRefs('acme-labs/widget', { main: HEAD_SHA });
+    const token = fake.issueUserToken('octo-dev', ['acme-labs/widget']);
+    await prisma.githubAccount.create({
+      data: {
+        id: accountId,
+        userId: ctx.owner.id,
+        githubUserId: 9101,
+        login: 'octo-dev',
+        accessToken: encryptSecret(token, secretContext('githubAccount', 'accessToken', accountId)),
+      },
+    });
+    try {
+      const { client, calls } = await counted(ctx.owner);
+      const branch = `${lowerKey}-ship`;
+
+      const opened = await callTool(client, 'act', {
+        batch: [
+          { action: 'githubBranch.create', key: issue.key, input: { name: branch } },
+          {
+            action: 'githubPr.open',
+            key: issue.key,
+            input: { head: branch, title: `${issue.key} Ship` },
+          },
+        ],
+      });
+      expect(opened.isError).toBe(false);
+      expect(opened.data.results.map((r: { ok: boolean }) => r.ok)).toEqual([true, true]);
+      const number = opened.data.results[1].result.number;
+
+      const seen = await callTool(client, 'read', { keys: [issue.key], include: ['development'] });
+      expect(seen.isError).toBe(false);
+      const [pr] = seen.data.items[0].data.development.pullRequests.items;
+      expect(pr).toMatchObject({ number, state: 'open', headRef: branch });
+
+      const merged = await callTool(client, 'act', {
+        batch: [
+          {
+            action: 'githubPr.merge',
+            key: issue.key,
+            input: { pullNumber: number, headSha: pr.headSha, method: 'squash' },
+          },
+        ],
+      });
+      expect(merged.text).toContain('pending_approval');
+      expect(calls()).toBe(3);
+
+      // Only Axiom was called: every GitHub request went out with the user's own credential, and
+      // nothing was merged before a human approved
+      expect(fake.requests.length).toBeGreaterThan(0);
+      expect(fake.requests.every((r) => r.headers.authorization?.startsWith('user:'))).toBe(true);
+      expect(fake.requests.some((r) => r.method === 'PUT' && r.path.endsWith('/merge'))).toBe(
+        false,
+      );
+    } finally {
+      await prisma.githubAccount.delete({ where: { id: accountId } });
+    }
   });
 
   it('finishes a ticket in 1 call: status, comment, time and the PR link', async () => {
