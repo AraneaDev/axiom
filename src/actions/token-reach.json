@@ -106,6 +106,7 @@
   "githubApp.status": ["github:read", "github:write"],
   "githubApp.syncInstallations": [],
   "githubBranch.create": ["github:write"],
+  "githubChecks.rerun": ["github:write"],
   "githubPr.comment": ["github:write"],
   "githubPr.open": ["github:write"],
   "githubPr.requestReviewers": ["github:write"],

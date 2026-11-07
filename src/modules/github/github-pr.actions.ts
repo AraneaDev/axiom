@@ -7,6 +7,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { strictInt } from '../../utils/validation/common-validators';
 
+import { isFailed, newestRuns } from './checks.service';
 import {
   assertRefName,
   githubWrite,
@@ -336,6 +337,82 @@ registerActions([
         ? reply.data.html_url
         : `${link.htmlUrl}/pull/${number}`;
       return { id: String(reply.data.id), url };
+    },
+  }),
+
+  defineAction({
+    name: 'githubChecks.rerun',
+    area: 'github',
+    kind: 'write',
+    summary:
+      'Re-run the failed checks of a pull request linked to an issue, as your own GitHub ' +
+      'account: the failed jobs of each GitHub Actions run, and each failed check of another app.',
+    target: pullTarget,
+    input: pullTarget,
+    output: z.looseObject({
+      rerun: z.array(z.object({ name: z.string(), via: z.enum(['workflow', 'check']) })),
+    }),
+    rest: { method: 'POST', path: `${PULLS}/:pullNumber/checks/rerun` },
+    authorize: githubWrite,
+    handler: async (ctx, { projectId, issueNumber, pullNumber: number }) => {
+      const { issue, link } = await prRepo(projectId, issueNumber);
+      const pr = await linkedPullRequest(issue.id, link.id, number);
+      const rows = await prisma.githubCheckRun.findMany({
+        where: { repoLinkId: link.id, headSha: pr.headSha },
+        select: {
+          id: true,
+          checkSuiteId: true,
+          workflowRunId: true,
+          appSlug: true,
+          name: true,
+          status: true,
+          conclusion: true,
+        },
+      });
+      // Only the newest run of each app, workflow run and name counts: a superseded failure is not re-run
+      const failed = newestRuns(rows).filter((run) => isFailed(run.conclusion));
+      if (!failed.length) {
+        throw new AppError(
+          409,
+          'No check of this pull request has failed, so there is nothing to re-run',
+          'GITHUB_NOTHING_TO_RERUN',
+        );
+      }
+      const { auth } = await userAuth(ctx);
+      const repo = repoPath(link);
+      const workflowRuns = [
+        ...new Set(failed.flatMap((run) => (run.workflowRunId ? [run.workflowRunId] : []))),
+      ];
+      for (const id of workflowRuns) {
+        await githubRequest<unknown>(
+          auth,
+          'POST',
+          `${repo}/actions/runs/${encodeURIComponent(id)}/rerun-failed-jobs`,
+        );
+      }
+      for (const run of failed.filter((r) => !r.workflowRunId)) {
+        await githubRequest<unknown>(
+          auth,
+          'POST',
+          `${repo}/check-runs/${encodeURIComponent(run.id)}/rerequest`,
+        ).catch((err: unknown) => {
+          // An App that was created before Axiom asked for checks: write cannot rerequest a check
+          if (err instanceof AppError && err.code === 'GITHUB_FORBIDDEN') {
+            throw new AppError(
+              409,
+              "The GitHub App needs the checks: write permission; an administrator can accept it in the App's settings on GitHub",
+              'GITHUB_NEEDS_CHECKS_WRITE',
+            );
+          }
+          throw err;
+        });
+      }
+      return {
+        rerun: failed.map((run) => ({
+          name: run.name,
+          via: run.workflowRunId ? ('workflow' as const) : ('check' as const),
+        })),
+      };
     },
   }),
 ]);

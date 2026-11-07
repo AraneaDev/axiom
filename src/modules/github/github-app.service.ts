@@ -105,7 +105,7 @@ export function appManifest(origin: string): Record<string, unknown> {
       metadata: 'read',
       contents: 'write',
       pull_requests: 'write',
-      checks: 'read',
+      checks: 'write',
       actions: 'write',
       issues: 'write',
       statuses: 'read',

@@ -646,13 +646,180 @@ describe('githubPr.comment', () => {
   });
 });
 
+describe('githubChecks.rerun', () => {
+  const HEAD = 'c'.repeat(40);
+  const rerun = (user: TestUser, number: number) =>
+    request(app).post(pullsUrl(number, '/checks/rerun')).set(as(user)).send({});
+  const run = (
+    id: number,
+    name: string,
+    conclusion: string | null,
+    extra: { workflowRunId?: string; appSlug?: string; suite?: bigint; headSha?: string } = {},
+  ) =>
+    prisma.githubCheckRun.create({
+      data: {
+        id: String(id),
+        repoLinkId: linkId,
+        headSha: extra.headSha ?? HEAD,
+        name,
+        appSlug: extra.appSlug ?? 'github-actions',
+        checkSuiteId: extra.suite ?? null,
+        workflowRunId: extra.workflowRunId ?? null,
+        status: conclusion ? 'completed' : 'in_progress',
+        conclusion,
+        htmlUrl: `https://github.com/${WIDGET}/runs/${id}`,
+        githubUpdatedAt: new Date('2026-11-01T10:00:00Z'),
+      },
+    });
+  const calls = () => written().map((r) => `${r.method} ${r.path.replace(`/repos/${WIDGET}`, '')}`);
+
+  beforeEach(async () => {
+    await connectAccount(member);
+    await existingPull(4, headOf(), `${key} Fix`);
+    fake.requests.length = 0;
+  });
+
+  it('re-runs two failed jobs of one workflow run with one request', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    await run(12, 'lint', 'timed_out', { workflowRunId: '900' });
+    await run(13, 'build', 'success', { workflowRunId: '900' });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(201);
+    expect(calls()).toEqual(['POST /actions/runs/900/rerun-failed-jobs']);
+    expect(res.body.rerun).toEqual([
+      { name: 'unit', via: 'workflow' },
+      { name: 'lint', via: 'workflow' },
+    ]);
+    expect(fake.requests[0].headers.authorization).toMatch(/^user:/);
+  });
+
+  it('re-runs each workflow run once and a failed non-Actions check by a rerequest', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    await run(21, 'e2e', 'failure', { workflowRunId: '901' });
+    await run(31, 'deploy-preview', 'failure', { appSlug: 'acme-ci', suite: 7n });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(201);
+    expect(calls()).toEqual([
+      'POST /actions/runs/900/rerun-failed-jobs',
+      'POST /actions/runs/901/rerun-failed-jobs',
+      'POST /check-runs/31/rerequest',
+    ]);
+    expect(res.body.rerun).toContainEqual({ name: 'deploy-preview', via: 'check' });
+  });
+
+  it('leaves out a failed run that a newer run replaced, and runs on other commits', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    // The re-run of the same job in the same workflow run has a new id and passed
+    await run(41, 'unit', 'success', { workflowRunId: '900' });
+    await run(51, 'old-ci', 'failure', { appSlug: 'acme-ci', suite: 8n });
+    await run(52, 'old-ci', 'success', { appSlug: 'acme-ci', suite: 8n });
+    await run(61, 'elsewhere', 'failure', { workflowRunId: '777', headSha: 'e'.repeat(40) });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_NOTHING_TO_RERUN');
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('re-runs the newest failed run of a name, not the one it replaced', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    await run(41, 'unit', 'failure', { workflowRunId: '900' });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(201);
+    expect(res.body.rerun).toEqual([{ name: 'unit', via: 'workflow' }]);
+    expect(calls()).toEqual(['POST /actions/runs/900/rerun-failed-jobs']);
+  });
+
+  it('answers 409 GITHUB_NOTHING_TO_RERUN with passing and running checks only', async () => {
+    await run(11, 'unit', 'success', { workflowRunId: '900' });
+    await run(12, 'lint', null, { workflowRunId: '900' });
+    await run(13, 'skipme', 'skipped', { workflowRunId: '900' });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_NOTHING_TO_RERUN');
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('answers 409 GITHUB_NEEDS_CHECKS_WRITE when GitHub refuses a rerequest with 403', async () => {
+    await run(31, 'deploy-preview', 'failure', { appSlug: 'acme-ci', suite: 7n });
+    fake.on('POST /repos/:owner/:repo/check-runs/:id/rerequest', {
+      status: 403,
+      body: { message: 'Resource not accessible by integration' },
+    });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatchObject({
+      code: 'GITHUB_NEEDS_CHECKS_WRITE',
+      message:
+        "The GitHub App needs the checks: write permission; an administrator can accept it in the App's settings on GitHub",
+    });
+  });
+
+  it('is not affected by checks: write for an Actions re-run', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    fake.on('POST /repos/:owner/:repo/check-runs/:id/rerequest', {
+      status: 403,
+      body: { message: 'no' },
+    });
+    expect((await rerun(member, 4)).status).toBe(201);
+    // An Actions refusal is the usual 403
+    fake.on('POST /repos/:owner/:repo/actions/runs/:id/rerun-failed-jobs', {
+      status: 403,
+      body: { message: 'Resource not accessible by integration' },
+    });
+    const refused = await rerun(member, 4);
+    expect(refused.status).toBe(403);
+    expect(refused.body.error.code).toBe('GITHUB_FORBIDDEN');
+  });
+
+  it('answers 404 GITHUB_NOT_LINKED_TO_ISSUE for a PR of another issue, with no request', async () => {
+    await existingPull(8, `${otherKey.toLowerCase()}-x`, `${otherKey} Other`);
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    fake.requests.length = 0;
+    const res = await rerun(member, 8);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('GITHUB_NOT_LINKED_TO_ISSUE');
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('refuses a viewer, with no request', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    await connectAccount(viewer, { githubUserId: 9301, login: 'view-dev' });
+    expect((await rerun(viewer, 4)).status).toBe(403);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('runs for an API token with github:write without approval', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    const raw = `tk_${crypto.randomBytes(24).toString('hex')}`;
+    await prisma.apiToken.create({
+      data: {
+        userId: member.id,
+        name: 'ci-agent',
+        scopes: ['github:write'],
+        prefix: raw.slice(0, 11),
+        tokenHash: crypto.createHash('sha256').update(raw).digest('hex'),
+      },
+    });
+    const res = await request(app)
+      .post(pullsUrl(4, '/checks/rerun'))
+      .set(CSRF)
+      .set('Authorization', `Token ${raw}`)
+      .send({});
+    expect(res.status).toBe(201);
+    expect(res.body.rerun).toEqual([{ name: 'unit', via: 'workflow' }]);
+    expect(calls()).toEqual(['POST /actions/runs/900/rerun-failed-jobs']);
+    expect(await prisma.agentApproval.count({ where: { userId: member.id } })).toBe(0);
+  });
+});
+
 describe('token reach', () => {
-  it('lists the four PR actions under github:write', () => {
+  it('lists the PR actions and the re-run under github:write', () => {
     const reach = JSON.parse(
       readFileSync(path.join(__dirname, '../../actions/token-reach.json'), 'utf8'),
     ) as Record<string, string[]>;
     for (const name of ['open', 'update', 'requestReviewers', 'comment']) {
       expect(reach[`githubPr.${name}`]).toEqual(['github:write']);
     }
+    expect(reach['githubChecks.rerun']).toEqual(['github:write']);
   });
 });
