@@ -20,7 +20,12 @@ import { useGithubFake } from '../../test/github-fake';
 import { seedGithubApp } from '../../test/github-seed';
 import { logger } from '../../utils/logger';
 
-import { storePullRequest, type PullRequestPayload } from './github-events';
+import {
+  onGithubOutcome,
+  storePullRequest,
+  type GithubEventOutcome,
+  type PullRequestPayload,
+} from './github-events';
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
 const WIDGET = 'acme-labs/widget';
@@ -318,6 +323,7 @@ describe('githubPr.open', () => {
     const res = await open(member, { head: headOf() });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('GITHUB_FORBIDDEN');
+    expect(res.body.error.message).toContain('Resource not accessible by integration');
     expect(written()).toHaveLength(1);
     expect(await prisma.githubPullRequest.count()).toBe(0);
     expect(await prisma.githubIssueLink.count()).toBe(0);
@@ -373,18 +379,24 @@ describe('githubPr.open', () => {
     expect(fake.requests).toEqual([]);
   });
 
-  it('answers 502 GITHUB_NOT_STORED when the store fails after GitHub opened the PR', async () => {
+  it("answers 201 from GitHub's answer when the store fails after GitHub opened the PR", async () => {
     await connectAccount(member);
     const warn = vi.spyOn(logger, 'warn');
-    // A title the store cannot take: the PR exists on GitHub, the webhook repairs the row
+    // A date the store cannot take: the PR exists on GitHub, the webhook repairs the row
     fake.on(`POST /repos/:owner/:repo/pulls`, {
       status: 201,
       body: { ...prPayload(3, headOf(), `${key} x`), created_at: 'not a date' },
     });
     try {
       const res = await open(member, { head: headOf() });
-      expect(res.status).toBe(502);
-      expect(res.body.error.code).toBe('GITHUB_NOT_STORED');
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({
+        number: 3,
+        title: `${key} x`,
+        headRef: headOf(),
+        state: 'open',
+      });
+      expect(await prisma.githubPullRequest.count()).toBe(0);
       expect(warn).toHaveBeenCalledWith(
         'github pull request changed but not stored',
         expect.objectContaining({ repoLinkId: linkId, pullRequest: 3 }),
@@ -392,6 +404,44 @@ describe('githubPr.open', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('answers 201 when the follow-up GET fails after a successful write', async () => {
+    await connectAccount(member);
+    fake.on(`POST /repos/:owner/:repo/pulls`, { status: 201, body: { number: 9 } });
+    fake.on(`GET /repos/:owner/:repo/pulls/:n`, { status: 500, body: { message: 'boom' } });
+    const res = await open(member, { head: headOf() });
+    expect(res.status).toBe(201);
+    expect(res.body.number).toBe(9);
+  });
+
+  it('reports pr_opened with source action, and the webhook that follows reports nothing', async () => {
+    await connectAccount(member);
+    const outcomes: GithubEventOutcome[] = [];
+    const off = onGithubOutcome(async (o) => {
+      if (o.repoLinkId === linkId) outcomes.push(o);
+    });
+    try {
+      const res = await open(member, { head: headOf() });
+      expect(res.status).toBe(201);
+      expect(outcomes.map((o) => [o.source, o.transitions])).toEqual([['action', ['pr_opened']]]);
+      const same = {
+        ...prPayload(1, headOf(), `${key} Fix login timeout!`),
+        updated_at: '2999-01-01T00:00:00Z',
+      };
+      await storePullRequest(linkId, same, { id: 9101, login: 'octo-dev' }, 'webhook');
+      expect(outcomes.slice(1).flatMap((o) => o.transitions)).toEqual([]);
+    } finally {
+      off();
+    }
+  });
+
+  it('reports a fork head as unsupported with a hint', async () => {
+    await connectAccount(member);
+    const res = await open(member, { head: `someone:${key.toLowerCase()}-x` });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/fork/i);
+    expect(fake.requests).toEqual([]);
   });
 });
 
@@ -459,6 +509,7 @@ describe('githubPr.update', () => {
     const res = await update(member, 4, { title: 'x' });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('GITHUB_FORBIDDEN');
+    expect(res.body.error.message).toContain('Resource not accessible by integration');
     const row = await prisma.githubPullRequest.findFirstOrThrow({ where: { number: 4 } });
     expect(row.title).toBe(`${key} Fix`);
   });
@@ -522,13 +573,40 @@ describe('githubPr.requestReviewers', () => {
     expect(fake.requests).toEqual([]);
   });
 
-  it('answers 400 naming a connected user who is outside the org, with no request', async () => {
+  it('answers one generic 400 for an outside user and an unknown id, naming neither', async () => {
     await connectAccount(member);
     await existingPull(4, headOf(), `${key} Fix`);
     fake.requests.length = 0;
-    const res = await reviewers(member, 4, { userIds: [outsideReviewer.id] });
-    expect(res.status).toBe(400);
-    expect(res.body.error.message).toContain(outsideReviewer.username);
+    const generic =
+      "Some reviewers can't be requested: they are not connected to GitHub or not in this organization";
+    const outside = await reviewers(member, 4, { userIds: [outsideReviewer.id] });
+    const unknown = await reviewers(member, 4, { userIds: ['no-such-user-id'] });
+    for (const res of [outside, unknown]) {
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toBe(generic);
+      expect(res.body.error.message).not.toContain(outsideReviewer.username);
+    }
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('answers 422 for the PR author and for someone who is not a collaborator', async () => {
+    await connectAccount(member);
+    await existingPull(4, headOf(), `${key} Fix`);
+    fake.setCollaborators(WIDGET, ['octo-dev', 'review-bot']);
+    const author = await reviewers(member, 4, { logins: ['octo-dev'] });
+    expect(author.status).toBe(422);
+    expect(author.body.error.code).toBe('GITHUB_INVALID');
+    expect(author.body.error.message).toMatch(/author/i);
+    const stranger = await reviewers(member, 4, { logins: ['code-owl'] });
+    expect(stranger.status).toBe(422);
+    expect(stranger.body.error.message).toMatch(/collaborator/i);
+  });
+
+  it('refuses a viewer, with no request', async () => {
+    await existingPull(4, headOf(), `${key} Fix`);
+    await connectAccount(viewer, { githubUserId: 9301, login: 'view-dev' });
+    fake.requests.length = 0;
+    expect((await reviewers(viewer, 4, { logins: ['code-owl'] })).status).toBe(403);
     expect(fake.requests).toEqual([]);
   });
 
@@ -569,6 +647,9 @@ describe('githubPr.requestReviewers', () => {
     const res = await reviewers(member, 4, { logins: ['code-owl'] });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('GITHUB_FORBIDDEN');
+    expect(res.body.error.message).toContain('Resource not accessible by integration');
+    const row = await prisma.githubPullRequest.findFirstOrThrow({ where: { number: 4 } });
+    expect(JSON.stringify(row.requestedReviewers)).not.toContain('code-owl');
   });
 });
 
@@ -610,6 +691,19 @@ describe('githubPr.comment', () => {
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('GITHUB_NOT_LINKED_TO_ISSUE');
     expect(fake.requests).toEqual([]);
+  });
+
+  it("answers 403 with GitHub's reason without push rights, and for a viewer without a request", async () => {
+    await existingPull(4, headOf(), `${key} Fix`);
+    await connectAccount(viewer, { githubUserId: 9301, login: 'view-dev' });
+    fake.requests.length = 0;
+    expect((await comment(viewer, 4, { body: 'Hi' })).status).toBe(403);
+    expect(fake.requests).toEqual([]);
+    await connectAccount(member, { push: [] });
+    const res = await comment(member, 4, { body: 'Hi' });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('GITHUB_FORBIDDEN');
+    expect(res.body.error.message).toContain('Resource not accessible by integration');
   });
 
   it('runs for an API token with github:write without approval, audited with the token name', async () => {
@@ -676,6 +770,7 @@ describe('githubChecks.rerun', () => {
   beforeEach(async () => {
     await connectAccount(member);
     await existingPull(4, headOf(), `${key} Fix`);
+    fake.setWorkflowRuns(WIDGET, [900, 901, 902]);
     fake.requests.length = 0;
   });
 
@@ -693,7 +788,7 @@ describe('githubChecks.rerun', () => {
     expect(fake.requests[0].headers.authorization).toMatch(/^user:/);
   });
 
-  it('re-runs each workflow run once and a failed non-Actions check by a rerequest', async () => {
+  it('re-runs each workflow run once and lists a failed check of another app as not re-runnable', async () => {
     await run(11, 'unit', 'failure', { workflowRunId: '900' });
     await run(21, 'e2e', 'failure', { workflowRunId: '901' });
     await run(31, 'deploy-preview', 'failure', { appSlug: 'acme-ci', suite: 7n });
@@ -702,9 +797,67 @@ describe('githubChecks.rerun', () => {
     expect(calls()).toEqual([
       'POST /actions/runs/900/rerun-failed-jobs',
       'POST /actions/runs/901/rerun-failed-jobs',
-      'POST /check-runs/31/rerequest',
     ]);
-    expect(res.body.rerun).toContainEqual({ name: 'deploy-preview', via: 'check' });
+    expect(res.body.rerun).toEqual([
+      { name: 'unit', via: 'workflow' },
+      { name: 'e2e', via: 'workflow' },
+    ]);
+    expect(res.body.refused).toEqual([]);
+    expect(res.body.notRerunnable).toEqual([
+      {
+        name: 'deploy-preview',
+        url: `https://github.com/${WIDGET}/runs/31`,
+        reason: 'only the app that created this check can re-run it',
+      },
+    ]);
+    expect(fake.requests.some((r) => r.path.includes('rerequest'))).toBe(false);
+  });
+
+  it('answers 201 with only not-rerunnable checks, and asks GitHub for nothing', async () => {
+    await run(31, 'deploy-preview', 'failure', { appSlug: 'acme-ci', suite: 7n });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(201);
+    expect(res.body.rerun).toEqual([]);
+    expect(res.body.notRerunnable).toHaveLength(1);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('keeps what was re-run when a later workflow run is refused', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    await run(21, 'e2e', 'failure', { workflowRunId: '901' });
+    fake.on('POST /repos/:owner/:repo/actions/runs/:id/rerun-failed-jobs', (_req, params) =>
+      params.id === '901'
+        ? { status: 403, body: { message: 'Resource not accessible by integration' } }
+        : { status: 201, body: {} },
+    );
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(201);
+    expect(res.body.rerun).toEqual([{ name: 'unit', via: 'workflow' }]);
+    expect(res.body.refused).toEqual([
+      expect.objectContaining({
+        name: 'e2e',
+        message: expect.stringContaining('Resource not accessible by integration'),
+      }),
+    ]);
+  });
+
+  it('answers the first refusal when every attempt was refused', async () => {
+    await run(11, 'unit', 'failure', { workflowRunId: '900' });
+    fake.on('POST /repos/:owner/:repo/actions/runs/:id/rerun-failed-jobs', {
+      status: 403,
+      body: { message: 'Resource not accessible by integration' },
+    });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('GITHUB_FORBIDDEN');
+    expect(res.body.error.message).toContain('Resource not accessible by integration');
+  });
+
+  it('answers 404 when GitHub does not know the workflow run', async () => {
+    await run(12, 'late', 'failure', { workflowRunId: '999' });
+    const res = await rerun(member, 4);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('GITHUB_NOT_FOUND');
   });
 
   it('leaves out a failed run that a newer run replaced, and runs on other commits', async () => {
@@ -737,38 +890,6 @@ describe('githubChecks.rerun', () => {
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('GITHUB_NOTHING_TO_RERUN');
     expect(fake.requests).toEqual([]);
-  });
-
-  it('answers 409 GITHUB_NEEDS_CHECKS_WRITE when GitHub refuses a rerequest with 403', async () => {
-    await run(31, 'deploy-preview', 'failure', { appSlug: 'acme-ci', suite: 7n });
-    fake.on('POST /repos/:owner/:repo/check-runs/:id/rerequest', {
-      status: 403,
-      body: { message: 'Resource not accessible by integration' },
-    });
-    const res = await rerun(member, 4);
-    expect(res.status).toBe(409);
-    expect(res.body.error).toMatchObject({
-      code: 'GITHUB_NEEDS_CHECKS_WRITE',
-      message:
-        "The GitHub App needs the checks: write permission; an administrator can accept it in the App's settings on GitHub",
-    });
-  });
-
-  it('is not affected by checks: write for an Actions re-run', async () => {
-    await run(11, 'unit', 'failure', { workflowRunId: '900' });
-    fake.on('POST /repos/:owner/:repo/check-runs/:id/rerequest', {
-      status: 403,
-      body: { message: 'no' },
-    });
-    expect((await rerun(member, 4)).status).toBe(201);
-    // An Actions refusal is the usual 403
-    fake.on('POST /repos/:owner/:repo/actions/runs/:id/rerun-failed-jobs', {
-      status: 403,
-      body: { message: 'Resource not accessible by integration' },
-    });
-    const refused = await rerun(member, 4);
-    expect(refused.status).toBe(403);
-    expect(refused.body.error.code).toBe('GITHUB_FORBIDDEN');
   });
 
   it('answers 404 GITHUB_NOT_LINKED_TO_ISSUE for a PR of another issue, with no request', async () => {

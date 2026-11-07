@@ -30,6 +30,8 @@ const MAX_REVIEWERS = 15;
 // A GitHub login: letters, digits and single hyphens inside, up to 39 characters
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 
+const NOT_RERUNNABLE = 'only the app that created this check can re-run it';
+
 const pullNumber = strictInt;
 const pullTarget = issueTarget.extend({ pullNumber });
 
@@ -94,32 +96,69 @@ async function storeAndView(
 ): Promise<PullRequestView> {
   let payload = completePull.safeParse(answer);
   if (!payload.success) {
-    const fetched = await githubRequest<unknown>(auth, 'GET', `${repoPath(link)}/pulls/${number}`);
-    payload = completePull.safeParse(fetched.data);
+    // The write succeeded: a failed GET only costs the stored copy
+    const fetched = await githubRequest<unknown>(
+      auth,
+      'GET',
+      `${repoPath(link)}/pulls/${number}`,
+    ).catch(() => null);
+    if (fetched) payload = completePull.safeParse(fetched.data);
   }
+  let storedOk = false;
   if (payload.success) {
-    await storePullRequest(
+    storedOk = await storePullRequest(
       link.id,
       payload.data as PullRequestPayload,
       { id: account.githubUserId, login: account.login },
       'action',
-    ).catch((err: unknown) => {
-      logger.warn('github pull request changed but not stored', {
-        repoLinkId: link.id,
-        pullRequest: number,
-        error: err instanceof Error ? err.message : 'unknown',
-      });
-    });
-  }
-  const view = await loadPullRequestView(link.id, link.orgId, number);
-  if (!view) {
-    throw new AppError(
-      502,
-      `Pull request #${number} was changed on GitHub, but Axiom could not store it yet. It shows up when GitHub's update arrives.`,
-      'GITHUB_NOT_STORED',
+    ).then(
+      () => true,
+      (err: unknown) => {
+        logger.warn('github pull request changed but not stored', {
+          repoLinkId: link.id,
+          pullRequest: number,
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+        return false;
+      },
     );
   }
-  return view;
+  // A store that failed leaves the old row (or none): GitHub's own answer is the truth
+  const stored = storedOk
+    ? await loadPullRequestView(link.id, link.orgId, number).catch(() => null)
+    : null;
+  if (stored) return stored;
+  return viewFromAnswer(link, { number, ...(payload.success ? payload.data : (answer as object)) });
+}
+
+/**
+ * A pull request view built from GitHub's own object, for when the stored row could not be
+ * written. People are not resolved to Axiom users and there are no reviews.
+ * @param link The repository link
+ * @param raw What GitHub answered with, as far as it is there
+ */
+function viewFromAnswer(link: Link, raw: Record<string, unknown>): PullRequestView {
+  const text = (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback);
+  const ref = (v: unknown) => text((v as { ref?: unknown } | null)?.ref);
+  const login = (v: unknown) => text((v as { login?: unknown } | null)?.login, 'ghost');
+  const number = Number(raw.number);
+  const html = text(raw.html_url);
+  const reviewers = Array.isArray(raw.requested_reviewers) ? raw.requested_reviewers : [];
+  return {
+    number,
+    title: text(raw.title),
+    state:
+      raw.merged_at || raw.merged === true ? 'merged' : raw.state === 'closed' ? 'closed' : 'open',
+    draft: raw.draft === true,
+    url: html.startsWith('https://') ? html : `${link.htmlUrl}/pull/${number}`,
+    author: { login: login(raw.user), user: null },
+    headRef: ref(raw.head),
+    baseRef: ref(raw.base),
+    headSha: text((raw.head as { sha?: unknown } | null)?.sha),
+    mergeableState: typeof raw.mergeable_state === 'string' ? raw.mergeable_state : null,
+    requestedReviewers: reviewers.map((r) => ({ login: login(r), user: null })),
+    reviews: [],
+  };
 }
 
 /**
@@ -166,6 +205,13 @@ registerActions([
     authorize: githubWrite,
     handler: async (ctx, { projectId, issueNumber, head, base: givenBase, title, body, draft }) => {
       const { issue, link } = await prRepo(projectId, issueNumber);
+      if (head.includes(':')) {
+        throw new AppError(
+          400,
+          `Not a valid branch name: fork branches are not supported. Name a branch of ${link.fullName}, without an owner prefix`,
+          'INVALID_BRANCH_NAME',
+        );
+      }
       assertRefName(head);
       if (givenBase !== undefined) assertRefName(givenBase);
       const finalTitle = title ?? `${issue.key} ${issue.title}`.slice(0, MAX_TITLE);
@@ -346,11 +392,14 @@ registerActions([
     kind: 'write',
     summary:
       'Re-run the failed checks of a pull request linked to an issue, as your own GitHub ' +
-      'account: the failed jobs of each GitHub Actions run, and each failed check of another app.',
+      'account: the failed jobs of each GitHub Actions run. A failed check of another app is listed ' +
+      'as not re-runnable, because only the app that created it can re-run it.',
     target: pullTarget,
     input: pullTarget,
     output: z.looseObject({
-      rerun: z.array(z.object({ name: z.string(), via: z.enum(['workflow', 'check']) })),
+      rerun: z.array(z.object({ name: z.string(), via: z.literal('workflow') })),
+      refused: z.array(z.object({ name: z.string(), message: z.string() })),
+      notRerunnable: z.array(z.object({ name: z.string(), url: z.string(), reason: z.string() })),
     }),
     rest: { method: 'POST', path: `${PULLS}/:pullNumber/checks/rerun` },
     authorize: githubWrite,
@@ -367,6 +416,7 @@ registerActions([
           name: true,
           status: true,
           conclusion: true,
+          htmlUrl: true,
         },
       });
       // Only the newest run of each app, workflow run and name counts: a superseded failure is not re-run
@@ -378,41 +428,44 @@ registerActions([
           'GITHUB_NOTHING_TO_RERUN',
         );
       }
+      const actions = failed.filter((run) => run.workflowRunId);
+      // Only the app that created a check can re-run it, and Axiom's App creates none
+      const notRerunnable = failed
+        .filter((run) => !run.workflowRunId)
+        .map((run) => ({
+          name: run.name,
+          url: run.htmlUrl.startsWith('https://') ? run.htmlUrl : '',
+          reason: NOT_RERUNNABLE,
+        }));
       const { auth } = await userAuth(ctx);
       const repo = repoPath(link);
-      const workflowRuns = [
-        ...new Set(failed.flatMap((run) => (run.workflowRunId ? [run.workflowRunId] : []))),
-      ];
-      for (const id of workflowRuns) {
-        await githubRequest<unknown>(
-          auth,
-          'POST',
-          `${repo}/actions/runs/${encodeURIComponent(id)}/rerun-failed-jobs`,
+      const rerun: Array<{ name: string; via: 'workflow' }> = [];
+      const refused: Array<{ name: string; message: string }> = [];
+      let firstRefusal: AppError | null = null;
+      for (const id of new Set(actions.map((run) => run.workflowRunId as string))) {
+        const names = actions.filter((run) => run.workflowRunId === id).map((run) => run.name);
+        try {
+          await githubRequest<unknown>(
+            auth,
+            'POST',
+            `${repo}/actions/runs/${encodeURIComponent(id)}/rerun-failed-jobs`,
+          );
+          rerun.push(...names.map((name) => ({ name, via: 'workflow' as const })));
+        } catch (err) {
+          if (!(err instanceof AppError)) throw err;
+          firstRefusal ??= err;
+          refused.push(...names.map((name) => ({ name, message: err.message })));
+        }
+      }
+      if (!rerun.length && !notRerunnable.length) {
+        if (firstRefusal) throw firstRefusal;
+        throw new AppError(
+          409,
+          'No check of this pull request has failed, so there is nothing to re-run',
+          'GITHUB_NOTHING_TO_RERUN',
         );
       }
-      for (const run of failed.filter((r) => !r.workflowRunId)) {
-        await githubRequest<unknown>(
-          auth,
-          'POST',
-          `${repo}/check-runs/${encodeURIComponent(run.id)}/rerequest`,
-        ).catch((err: unknown) => {
-          // An App that was created before Axiom asked for checks: write cannot rerequest a check
-          if (err instanceof AppError && err.code === 'GITHUB_FORBIDDEN') {
-            throw new AppError(
-              409,
-              "The GitHub App needs the checks: write permission; an administrator can accept it in the App's settings on GitHub",
-              'GITHUB_NEEDS_CHECKS_WRITE',
-            );
-          }
-          throw err;
-        });
-      }
-      return {
-        rerun: failed.map((run) => ({
-          name: run.name,
-          via: run.workflowRunId ? ('workflow' as const) : ('check' as const),
-        })),
-      };
+      return { rerun, refused, notRerunnable };
     },
   }),
 ]);
@@ -426,26 +479,27 @@ registerActions([
  */
 async function loginsOfUsers(userIds: string[], orgId: string): Promise<string[]> {
   if (!userIds.length) return [];
+  // Only people of this organization are looked up: an id outside it, or none at all, is
+  // answered alike, so the answer says nothing about users elsewhere
   const users = await prisma.user.findMany({
-    where: { id: { in: userIds } },
-    select: {
-      id: true,
-      displayName: true,
-      githubAccount: { select: { login: true } },
-      orgMemberships: { where: { orgId }, select: { userId: true } },
-    },
+    where: { id: { in: userIds }, orgMemberships: { some: { orgId } } },
+    select: { id: true, displayName: true, githubAccount: { select: { login: true } } },
   });
   const byId = new Map(users.map((u) => [u.id, u]));
-  return userIds.map((id) => {
-    const user = byId.get(id);
-    if (!user) throw new AppError(400, 'That user does not exist', 'REVIEWER_NOT_CONNECTED');
-    if (!user.orgMemberships.length || !user.githubAccount) {
-      throw new AppError(
-        400,
-        `${user.displayName} has not connected a GitHub account in this organization, so cannot be asked to review`,
-        'REVIEWER_NOT_CONNECTED',
-      );
-    }
-    return user.githubAccount.login;
-  });
+  if (userIds.some((id) => !byId.has(id))) {
+    throw new AppError(
+      400,
+      "Some reviewers can't be requested: they are not connected to GitHub or not in this organization",
+      'REVIEWER_NOT_CONNECTED',
+    );
+  }
+  const unconnected = users.filter((u) => !u.githubAccount);
+  if (unconnected.length) {
+    throw new AppError(
+      400,
+      `${unconnected.map((u) => u.displayName).join(', ')} ${unconnected.length > 1 ? 'have' : 'has'} not connected a GitHub account, so cannot be asked to review`,
+      'REVIEWER_NOT_CONNECTED',
+    );
+  }
+  return userIds.map((id) => byId.get(id)?.githubAccount?.login as string);
 }

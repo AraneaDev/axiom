@@ -139,6 +139,17 @@ export interface GithubFake {
    * of these heads, once heads are set.
    */
   setGitRefs(fullName: string, heads: Record<string, string>): void;
+  /**
+   * The Actions workflow runs of a repository (their ids): `rerun-failed-jobs` of any other id is
+   * 404, as on GitHub. Forgotten by `reset`.
+   */
+  setWorkflowRuns(fullName: string, ids: number[]): void;
+  /**
+   * The users who may be asked to review in a repository. Once set, requesting anyone else is 422
+   * "Reviews may only be requested from collaborators", and so is requesting the PR's author.
+   * Forgotten by `reset`.
+   */
+  setCollaborators(fullName: string, logins: string[]): void;
   /** Forgets recorded requests, `on` routes, job logs, repository lists, the comment counter and the refresh counter and delay; the rest stays */
   reset(): void;
   close(): Promise<void>;
@@ -289,6 +300,8 @@ class GithubFakeServer implements GithubFake {
   private repoLists = new Map<string, Parameters<GithubFake['setRepoLists']>[1]>();
   refreshGrants = 0;
   private commentIds = 0;
+  private workflowRuns = new Map<string, Set<number>>();
+  private collaborators = new Map<string, Set<string>>();
 
   constructor(private readonly scenario: string) {}
 
@@ -460,7 +473,17 @@ class GithubFakeServer implements GithubFake {
     this.gitRefs.set(repoKey(fullName), new Map(Object.entries(heads)));
   }
 
+  setWorkflowRuns(fullName: string, ids: number[]): void {
+    this.workflowRuns.set(repoKey(fullName), new Set(ids));
+  }
+
+  setCollaborators(fullName: string, logins: string[]): void {
+    this.collaborators.set(repoKey(fullName), new Set(logins));
+  }
+
   reset(): void {
+    this.workflowRuns.clear();
+    this.collaborators.clear();
     this.requests.length = 0;
     this.gitRefs.clear();
     this.overrides = [];
@@ -765,9 +788,24 @@ class GithubFakeServer implements GithubFake {
     const fullName = `${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`;
     const key = repoKey(fullName);
     if (credential.push && !credential.push.has(key)) return NOT_ACCESSIBLE;
-    if (rerun || rerequest) return { status: 201, body: {} };
+    if (rerun) {
+      return this.workflowRuns.get(key)?.has(Number(rerun[1]))
+        ? { status: 201, body: {} }
+        : NOT_FOUND;
+    }
+    if (rerequest) {
+      // Only the App that created a check run may rerequest it, and Axiom's App creates none
+      const known = Object.values(this.repoLists.get(key)?.checkRuns ?? {})
+        .flat()
+        .some((r) => Number(r.id) === Number(rerequest[1]));
+      return known ? reply(403, 'Resource not accessible by integration') : NOT_FOUND;
+    }
     const body = (req.body ?? {}) as Record<string, unknown>;
     if (comment) {
+      const known = this.repoLists
+        .get(key)
+        ?.pulls?.some((pr) => Number(pr.number) === Number(comment[1]));
+      if (!known) return NOT_FOUND;
       this.commentIds += 1;
       return {
         status: 201,
@@ -851,6 +889,38 @@ class GithubFakeServer implements GithubFake {
     if (!found) return NOT_FOUND;
     if (reviewers) {
       const logins = Array.isArray(body.reviewers) ? (body.reviewers as string[]) : [];
+      const author = (found.user as { login?: string } | undefined)?.login;
+      if (logins.some((l) => l === author)) {
+        return {
+          status: 422,
+          body: {
+            message: 'Validation Failed',
+            errors: [
+              {
+                resource: 'PullRequestReviewRequest',
+                code: 'custom',
+                message: 'Review cannot be requested from pull request author.',
+              },
+            ],
+          },
+        };
+      }
+      const collaborators = this.collaborators.get(key);
+      if (collaborators && logins.some((l) => !collaborators.has(l))) {
+        return {
+          status: 422,
+          body: {
+            message: 'Validation Failed',
+            errors: [
+              {
+                resource: 'PullRequestReviewRequest',
+                code: 'custom',
+                message: `Reviews may only be requested from collaborators. One or more of the users or teams you specified is not a collaborator of the ${fullName} repository.`,
+              },
+            ],
+          },
+        };
+      }
       const current = (found.requested_reviewers as Array<{ login: string; id: number }>) ?? [];
       for (const login of logins) {
         if (!current.some((r) => r.login === login)) {

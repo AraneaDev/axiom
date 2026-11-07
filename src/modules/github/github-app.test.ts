@@ -195,7 +195,7 @@ describe('starting the manifest flow', () => {
         metadata: 'read',
         contents: 'write',
         pull_requests: 'write',
-        checks: 'write',
+        checks: 'read',
         actions: 'write',
         issues: 'write',
         statuses: 'read',
