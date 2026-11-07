@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import { cleanupTestContext, createTestContext, type TestContext } from '../../test/factory';
@@ -25,6 +25,19 @@ const NAMES = {
   merged: 'GitHub: PR merged moves to done',
   checks: 'GitHub: comment when checks fail',
 };
+
+// A switch to make the n-th rule creation fail
+const failure = vi.hoisted(() => ({ at: -1, count: 0 }));
+vi.mock('../automation/automation.service', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../automation/automation.service')>();
+  return {
+    ...real,
+    createRule: async (...args: Parameters<typeof real.createRule>) => {
+      if (failure.at >= 0 && failure.count++ === failure.at) throw new Error('boom');
+      return real.createRule(...args);
+    },
+  };
+});
 
 const fake = useGithubFake('checks');
 let ctx: TestContext;
@@ -154,6 +167,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  failure.at = -1;
+  failure.count = 0;
   await prisma.githubAccount.deleteMany();
   await prisma.githubInstallation.deleteMany();
   await prisma.githubInstallation.create({
@@ -181,11 +196,12 @@ describe('default rules on link', () => {
     const byName = (n: string) => rules.find((r) => r.name === n)!;
     expect(byName(NAMES.opened)).toMatchObject({
       trigger: 'pr:opened',
-      condition: 'status NOT IN ("Done")',
+      condition: 'done = false',
       actions: [{ type: 'set_status', columnId: columns['In Review'] }],
     });
     expect(byName(NAMES.merged)).toMatchObject({
       trigger: 'pr:merged',
+      condition: 'done = false',
       actions: [
         { type: 'set_status', columnId: columns.Done },
         { type: 'add_comment', body: 'Merged in {{github.pr.url}}' },
@@ -226,13 +242,13 @@ describe('default rules on link', () => {
     expect(await names()).toEqual([NAMES.checks, NAMES.merged].sort());
   });
 
-  it('matches the In review column by trimmed, case-insensitive name and leaves the condition out when nothing is done', async () => {
+  it('matches the In review column by trimmed, case-insensitive name and keeps the done condition when nothing is done', async () => {
     await setup(['To Do', '  in REVIEW '], []);
     await applyDefaultGithubRules(repoLinkId);
     const opened = await prisma.automationRule.findFirstOrThrow({
       where: { projectId: ctx.projectId, name: NAMES.opened },
     });
-    expect(opened.condition).toBeNull();
+    expect(opened.condition).toBe('done = false');
     expect(opened.actions).toEqual([{ type: 'set_status', columnId: columns['  in REVIEW '] }]);
     const merged = await prisma.automationRule.findFirstOrThrow({
       where: { projectId: ctx.projectId, name: NAMES.merged },
@@ -295,5 +311,56 @@ describe('default rules on link', () => {
       createRule('does-not-exist', { name: 'x', trigger: 'pr:opened', actions: [] }),
     ).rejects.toThrow();
     await expect(createDefaultGithubRules('does-not-exist')).rejects.toThrow();
+  });
+
+  it('still blocks the move after a done column is renamed, and for a name with a quote', async () => {
+    await setup(['To Do', 'In Review', 'Done'], ['Done']);
+    await applyDefaultGithubRules(repoLinkId);
+    await prisma.boardColumn.update({ where: { id: columns.Done }, data: { name: 'Shi"pped' } });
+    await prisma.issue.update({ where: { id: doneIssue }, data: { columnId: columns.Done } });
+    await prEvent('opened', pull(34, { head: { ref: `${p}-2-x`, sha: SHA } }));
+    expect(await columnOf(doneIssue)).toBe(columns.Done);
+  });
+
+  it('leaves a ticket in a later done column where it is when a PR merges', async () => {
+    await setup(['To Do', 'In Review', 'Done', 'Released'], ['Done', 'Released']);
+    await applyDefaultGithubRules(repoLinkId);
+    await prisma.issue.update({ where: { id: doneIssue }, data: { columnId: columns.Released } });
+    await prEvent('opened', pull(35, { head: { ref: `${p}-2-x`, sha: SHA } }));
+    await prEvent(
+      'closed',
+      pull(35, {
+        head: { ref: `${p}-2-x`, sha: SHA },
+        state: 'closed',
+        merged: true,
+        merged_at: '2026-11-06T11:00:00Z',
+        closed_at: '2026-11-06T11:00:00Z',
+        updated_at: '2026-11-06T11:00:00Z',
+      }),
+    );
+    expect(await columnOf(doneIssue)).toBe(columns.Released);
+  });
+
+  it('keeps the mark when some rules were made before a failure, and takes it back when none were (M4)', async () => {
+    await setup(['To Do', 'In Review', 'Done'], ['Done']);
+    failure.at = 1;
+    await expect(applyDefaultGithubRules(repoLinkId)).rejects.toThrow('boom');
+    expect(await names()).toHaveLength(1);
+    const mark = async () =>
+      (await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } }))
+        .defaultRulesCreatedAt;
+    expect(await mark()).not.toBeNull();
+    await prisma.automationRule.deleteMany({ where: { projectId: ctx.projectId } });
+    expect(await ensureDefaultGithubRules()).toBe(0);
+    expect(await names()).toHaveLength(0);
+
+    await prisma.githubRepoLink.update({
+      where: { id: repoLinkId },
+      data: { defaultRulesCreatedAt: null },
+    });
+    failure.at = 0;
+    failure.count = 0;
+    await expect(applyDefaultGithubRules(repoLinkId)).rejects.toThrow('boom');
+    expect(await mark()).toBeNull();
   });
 });

@@ -24,6 +24,16 @@ export function broadcastToRoom(room: string, event: RealtimeEvent): void {
     publish(room, event);
     return;
   }
+  broadcastLocal(room, event);
+}
+
+/**
+ * Broadcast an event to the sockets of this process only, never through the bridge. What the
+ * bridge delivers goes this way, so a received event is not published again.
+ * @param room
+ * @param event
+ */
+export function broadcastLocal(room: string, event: RealtimeEvent): void {
   const payload = JSON.stringify(event);
 
   for (const client of getClients() as Set<AuthenticatedSocket>) {

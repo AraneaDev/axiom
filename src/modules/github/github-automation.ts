@@ -112,6 +112,24 @@ export async function claimCommentSlot(
   }
 }
 
+/**
+ * Gives a slot back, when the comment it was taken for could not be written.
+ * @param issueId The issue
+ * @param trigger The trigger
+ * @param subjectKey The pull request or branch id
+ * @param headSha The head commit
+ */
+async function releaseCommentSlot(
+  issueId: string,
+  trigger: AutomationTrigger,
+  subjectKey: string,
+  headSha: string,
+): Promise<void> {
+  await prisma.githubAutomationMark.deleteMany({
+    where: { issueId, trigger, subjectKey, headSha },
+  });
+}
+
 const MARK_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 /**
@@ -125,11 +143,20 @@ export async function cleanupAutomationMarks(): Promise<number> {
   return count;
 }
 
-// The slot is claimed last, once every other guard agrees, so a comment refused for another
-// reason does not use it up
-async function allow(info: CommentGuardInfo): Promise<boolean> {
-  for (const guard of [...commentGuards]) if (!(await guard(info))) return false;
-  return claimCommentSlot(info.issueId, info.trigger, info.subjectKey, info.headSha);
+// Runs the comment write when every guard agrees and the slot is free. The slot is claimed last,
+// so a comment refused for another reason does not use it up, and it is given back when the
+// write fails, so the next event on this head can still comment.
+async function guardedComment(info: CommentGuardInfo, write: () => Promise<void>): Promise<void> {
+  for (const guard of [...commentGuards]) if (!(await guard(info))) return;
+  if (!(await claimCommentSlot(info.issueId, info.trigger, info.subjectKey, info.headSha))) return;
+  try {
+    await write();
+  } catch (err) {
+    await releaseCommentSlot(info.issueId, info.trigger, info.subjectKey, info.headSha).catch(
+      () => undefined,
+    );
+    throw err;
+  }
 }
 
 // The mapped user, when they are a member of the project's org; else the integration user
@@ -292,7 +319,11 @@ async function contextOf(
       if (!pr) return null;
   }
   const subjectKey = pr?.id ?? outcome.pullRequestId ?? outcome.branchId ?? outcome.headSha ?? '';
-  const headSha = github.pr?.headSha ?? github.checks?.headSha ?? '';
+  // Checks belong to the head they ran on, which the PR may have left since
+  const headSha =
+    (transition === 'checks_failed' || transition === 'checks_passed'
+      ? github.checks?.headSha
+      : github.pr?.headSha) ?? '';
   return { github, eventAt, subjectKey, headSha };
 }
 
@@ -351,7 +382,7 @@ export async function fireGithubTriggers(outcome: GithubEventOutcome): Promise<v
             actorId: common.actorId,
             automationDepth: 0,
             github: built.github,
-            commentGuard: () => allow(info),
+            commentGuard: (write) => guardedComment(info, write),
           });
         } catch (err) {
           fail(err, { trigger, issueId });

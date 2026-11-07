@@ -1,5 +1,4 @@
 import { prisma } from '../../config/database';
-import { emailQueue } from '../../email/queue';
 import { assertKnownFields, evaluate, parse, resolveTemplate } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
@@ -77,8 +76,11 @@ export interface AutomationContext {
   issueCreationCount?: number;
   /** What the GitHub event behind the trigger was, for templates as `{{github.pr.url}}` */
   github?: GithubTriggerContext;
-  /** Asked before an add_comment action runs; false skips the comment and nothing else */
-  commentGuard?: () => boolean | Promise<boolean>;
+  /**
+   * Given the write of an add_comment action instead of it running at once: the guard runs it,
+   * or does not, and what it skips is the comment and nothing else
+   */
+  commentGuard?: (write: () => Promise<void>) => Promise<void>;
 }
 
 // Re-export so existing consumers importing from this file keep working
@@ -412,7 +414,8 @@ async function executeActions(
               where: { id: issue.id },
               data: { columnId: action.columnId },
             });
-            await told(projectId, issue.id, 'board:moved');
+            // issue:updated also refreshes an open issue page, which board:moved does not
+            await told(projectId, issue.id, 'issue:updated');
           }
           break;
         case 'set_assignee':
@@ -444,16 +447,20 @@ async function executeActions(
           break;
         case 'add_comment':
           if (action.body) {
-            if (context.commentGuard && !(await context.commentGuard())) break;
-            const resolvedBody = resolveTemplate(action.body, markdownCtx);
-            await prisma.comment.create({
-              data: {
-                issueId: issue.id,
-                authorId: context.actorId,
-                body: resolvedBody,
-              },
-            });
-            await told(projectId, issue.id, 'comment:added');
+            const commentBody = action.body;
+            const write = async () => {
+              const resolvedBody = resolveTemplate(commentBody, markdownCtx);
+              await prisma.comment.create({
+                data: {
+                  issueId: issue.id,
+                  authorId: context.actorId,
+                  body: resolvedBody,
+                },
+              });
+              await told(projectId, issue.id, 'comment:added');
+            };
+            if (context.commentGuard) await context.commentGuard(write);
+            else await write();
           }
           break;
         case 'set_field':
@@ -489,6 +496,8 @@ async function executeActions(
           if (action.to && action.subject) {
             const resolvedSubject = resolveTemplate(action.subject, templateCtx);
             const resolvedEmailBody = action.body ? resolveTemplate(action.body, templateCtx) : '';
+            // Loaded here: the queue connects to Redis, and migrate makes rules without sending
+            const { emailQueue } = await import('../../email/queue');
             await emailQueue.add('automation-email', {
               to: action.to,
               recipientName: action.to,

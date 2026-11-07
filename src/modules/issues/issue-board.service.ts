@@ -118,6 +118,8 @@ export async function moveIssue(
   }
 
   broadcastToRoom(`project:${projectId}`, { type: 'board:moved', projectId, issueId: issue.id });
+  // The board is not the only view of the status: an open issue page refreshes on this
+  broadcastToRoom(`project:${projectId}`, { type: 'issue:updated', projectId, issueId: issue.id });
 
   return updated;
 }

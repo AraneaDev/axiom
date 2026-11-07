@@ -193,7 +193,7 @@ const MERMAID_FENCE = /```mermaid\s*\n([\s\S]*?)```/g;
 // The same rules as src/utils/mentions.ts, which decides who is notified: a mention is `@name`
 // with no letter, digit or underscore right before the `@`; an issue key is `^KEY-1` (or the
 // legacy `#KEY-1`). Nothing inside code is styled, and an escaped sigil is already a plain span.
-const MENTION_OR_REF = /(^|[^A-Za-z0-9_])@([a-zA-Z0-9_-]+)|[#^]([A-Z]+-(\d+))/g;
+const MENTION_OR_REF = /(?<![A-Za-z0-9_])@([a-zA-Z0-9_-]+)|[#^]([A-Z]+-(\d+))/g;
 
 function linkifyMentionsAndRefs(html: string, basePath?: string): string {
   const container = inertContainer(html);
@@ -201,8 +201,14 @@ function linkifyMentionsAndRefs(html: string, basePath?: string): string {
   const walker = doc.createTreeWalker(container, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    // A text node is not inside code when no element on its way up is `code` or `pre`
-    if (!(node.parentElement?.closest('code, pre') ?? null)) nodes.push(node as Text);
+    // Not inside code, and not the text of an autolink or a bare URL: that is an address
+    const anchor = node.parentElement?.closest('a');
+    const isAddress =
+      anchor !== null &&
+      anchor !== undefined &&
+      (anchor.textContent === anchor.getAttribute('href') ||
+        `mailto:${anchor.textContent}` === anchor.getAttribute('href'));
+    if (!(node.parentElement?.closest('code, pre') ?? null) && !isAddress) nodes.push(node as Text);
   }
   for (const node of nodes) {
     const text = node.data;
@@ -211,19 +217,17 @@ function linkifyMentionsAndRefs(html: string, basePath?: string): string {
     let match: RegExpExecArray | null;
     const parts: Node[] = [];
     while ((match = MENTION_OR_REF.exec(text)) !== null) {
-      const before = match[1] ?? '';
-      const start = match.index + before.length;
-      parts.push(doc.createTextNode(text.slice(last, start)));
-      if (match[2] !== undefined) {
+      parts.push(doc.createTextNode(text.slice(last, match.index)));
+      if (match[1] !== undefined) {
         const span = doc.createElement('span');
         span.className = 'mention-ref';
         span.setAttribute('style', 'color:var(--color-primary);font-weight:500');
-        span.textContent = `@${match[2]}`;
+        span.textContent = `@${match[1]}`;
         parts.push(span);
       } else {
-        const key = match[3];
+        const key = match[2];
         const link = doc.createElement('a');
-        link.setAttribute('href', basePath ? `${basePath}/issues/${match[4]}` : `/search?q=${key}`);
+        link.setAttribute('href', basePath ? `${basePath}/issues/${match[3]}` : `/search?q=${key}`);
         link.className = 'issue-ref-badge';
         link.setAttribute(
           'style',

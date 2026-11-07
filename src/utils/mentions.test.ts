@@ -59,6 +59,37 @@ describe('parseMentions', () => {
   });
 });
 
+describe('parseMentions reads text, not markup', () => {
+  it('skips code inside a blockquote, a list continuation and a quoted fence', () => {
+    expect(parseMentions('> line one\n> `@alice` in code')).toEqual([]);
+    expect(parseMentions('- item\n  `@bob` in code')).toEqual([]);
+    expect(parseMentions('> ```\n> @ivan\n> ```')).toEqual([]);
+    expect(parseMentions('> `@x` @quoted')).toEqual(['quoted']);
+    expect(parseMentions('- a\n  - `@carol` @listed')).toEqual(['listed']);
+  });
+
+  it('skips a link destination and raw code HTML, and counts the link text', () => {
+    expect(parseMentions('[x](https://x.invalid/@dave)')).toEqual([]);
+    expect(parseMentions('<code>@erin</code>')).toEqual([]);
+    expect(parseMentions('[@fay](https://x.invalid/a)')).toEqual(['fay']);
+  });
+
+  it('never reads an autolink or a bare URL as a mention', () => {
+    expect(parseMentions('see https://x.invalid/@tim')).toEqual([]);
+    expect(parseMentions('<https://x.invalid/@tim>')).toEqual([]);
+    expect(parseMentions('@gus https://x.invalid/@tim')).toEqual(['gus']);
+  });
+
+  it('reads two mentions joined by a hyphen', () => {
+    expect(parseMentions('@frank-@gina')).toEqual(['frank-', 'gina']);
+  });
+
+  it('reads code in a table cell and a heading', () => {
+    expect(parseMentions('| a |\n|---|\n| `@t` @cell |')).toEqual(['cell']);
+    expect(parseMentions('# `@h` @head')).toEqual(['head']);
+  });
+});
+
 describe('parseIssueRefs', () => {
   it('should parse a single issue ref with ^', () => {
     expect(parseIssueRefs('See ^AXM-123')).toEqual([{ prefix: 'AXM', number: 123 }]);

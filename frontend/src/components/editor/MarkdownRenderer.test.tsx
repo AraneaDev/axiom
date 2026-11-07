@@ -156,4 +156,14 @@ describe('MarkdownRenderer mentions and issue keys agree with the notifier', () 
     const { container } = render(<MarkdownRenderer content={'[x](https://acme.invalid/@tim)'} />);
     expect(container.querySelector('a')?.getAttribute('href')).toBe('https://acme.invalid/@tim');
   });
+
+  it('styles both mentions of @frank-@gina', () => {
+    expect(mentions('@frank-@gina')).toEqual(['@frank-', '@gina']);
+  });
+
+  it('never styles an autolink or a bare URL', () => {
+    expect(mentions('see https://x.invalid/@tim')).toEqual([]);
+    expect(mentions('<https://x.invalid/@tim>')).toEqual([]);
+    expect(mentions('[@fay](https://x.invalid/a)')).toEqual(['@fay']);
+  });
 });

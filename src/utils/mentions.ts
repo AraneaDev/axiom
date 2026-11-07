@@ -1,86 +1,94 @@
 import { marked, type Token } from 'marked';
 
-type TokenWithChildren = Token & {
+type Node = Token & {
   tokens?: Token[];
   items?: Token[];
   header?: Array<{ tokens: Token[] }>;
   rows?: Array<Array<{ tokens: Token[] }>>;
 };
 
-function childrenOf(token: TokenWithChildren): Token[] {
-  if (token.type === 'table') {
-    return [
-      ...(token.header ?? []).flatMap((cell) => cell.tokens),
-      ...(token.rows ?? []).flat().flatMap((cell) => cell.tokens),
-    ];
-  }
-  return token.tokens ?? token.items ?? [];
-}
-
-// The token's source with every code span and block blanked out (same length, newlines kept)
-function withoutCode(token: Token): string {
-  if (token.type === 'code' || token.type === 'codespan') return token.raw.replace(/[^\n]/g, ' ');
-  let rest = token.raw;
-  let out = '';
-  for (const child of childrenOf(token)) {
-    const at = rest.indexOf(child.raw);
-    if (at < 0) continue;
-    out += rest.slice(0, at) + withoutCode(child);
-    rest = rest.slice(at + child.raw.length);
-  }
-  return out + rest;
-}
+// Block tokens put a line break between their children; inline ones run on
+const BLOCK_PARENTS = new Set(['blockquote', 'list_item', 'list']);
 
 /**
- * The text with its code blanked out, so a mention or reference inside inline code, a fenced
- * block or an indented block is not one. The frontend renderer styles by the same rule.
- * @param text The Markdown
+ * The text a reader sees, as one string, for the token tree of some Markdown. Code, raw HTML,
+ * images, link destinations and autolinks give no text (a blank stands in), and an escaped
+ * character stands in as a backslash, which is no word character. The frontend renderer styles
+ * by the same rule: only text outside code and links of the URL itself.
+ * @param tokens The tokens of one level
+ * @param separator What goes between them
  */
-function withoutCodeOf(text: string): string {
+function visible(tokens: Token[], separator: string): string {
+  let out = '';
+  let inCode = false;
+  tokens.forEach((token, at) => {
+    if (at > 0) out += separator;
+    // Raw `<code>` HTML: the text up to its closing tag is code
+    if (token.type === 'html') {
+      if (/^<code[\s>]/i.test(token.raw)) inCode = true;
+      else if (/^<\/code\s*>/i.test(token.raw)) inCode = false;
+      out += ' ';
+      return;
+    }
+    out += inCode ? ' ' : textOf(token as Node);
+  });
+  return out;
+}
+
+function textOf(token: Node): string {
+  switch (token.type) {
+    case 'code':
+    case 'codespan':
+    case 'image':
+    case 'def':
+    case 'hr':
+      return ' ';
+    case 'escape':
+      return '\\';
+    case 'br':
+    case 'space':
+      return '\n';
+    case 'link':
+      // `[text](url)` counts its text; an autolink or a bare URL is the address itself
+      return token.raw.startsWith('[') ? visible(token.tokens ?? [], '') : ' ';
+    case 'table':
+      return [...(token.header ?? []), ...(token.rows ?? []).flat()]
+        .map((cell) => visible(cell.tokens, ''))
+        .join('\n');
+    default: {
+      const children = token.items ?? token.tokens;
+      if (!children) return token.raw;
+      return visible(children, BLOCK_PARENTS.has(token.type) ? '\n' : '');
+    }
+  }
+}
+
+function visibleText(text: string): string {
   try {
-    return marked
-      .lexer(text, { gfm: true })
-      .map((token) => withoutCode(token))
-      .join('');
+    return visible(marked.lexer(text, { gfm: true }), '\n');
   } catch {
     return text;
   }
 }
 
 /**
- * Whether the character at an index is escaped with a backslash, as Markdown reads it: an odd
- * number of backslashes right before it. An escaped sigil is literal text, not a mention or a
- * reference, so what renders and what notifies agree.
- * @param text The text
- * @param index The index of the character
- */
-function isEscaped(text: string, index: number): boolean {
-  let count = 0;
-  while (index - count - 1 >= 0 && text[index - count - 1] === '\\') count++;
-  return count % 2 === 1;
-}
-
-/**
  * Parse `@username` mentions from text.
  * A mention has no letter, digit or underscore right before the `@` (so `a@b.com` mentions
- * nobody), is not escaped with a backslash and is not in code.
+ * nobody), is not escaped with a backslash, and is plain text: not in code, a link address, an
+ * autolink or raw HTML.
  * Returns an array of unique usernames (without the @ prefix).
  * @param text
  */
 export function parseMentions(text: string): string[] {
   const re = /(?<![A-Za-z0-9_])@([a-zA-Z0-9_-]+)/g;
   const usernames = new Set<string>();
-  const visible = withoutCodeOf(text);
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(visible)) !== null) {
-    if (isEscaped(visible, match.index)) continue;
-    usernames.add(match[1]);
-  }
+  for (const match of visibleText(text).matchAll(re)) usernames.add(match[1]);
   return Array.from(usernames);
 }
 
 /**
- * Parse ^PREFIX-123 (or legacy #PREFIX-123) issue references from text.
+ * Parse ^PREFIX-123 (or legacy #PREFIX-123) issue references from text, by the same rule as
+ * mentions.
  * Returns an array of { prefix, number } objects.
  * @param text
  */
@@ -88,10 +96,7 @@ export function parseIssueRefs(text: string): Array<{ prefix: string; number: nu
   const re = /[#^]([A-Z]+-\d+)/g;
   const seen = new Set<string>();
   const refs: Array<{ prefix: string; number: number }> = [];
-  const visible = withoutCodeOf(text);
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(visible)) !== null) {
-    if (isEscaped(visible, match.index)) continue;
+  for (const match of visibleText(text).matchAll(re)) {
     const key = match[1];
     if (seen.has(key)) continue;
     seen.add(key);

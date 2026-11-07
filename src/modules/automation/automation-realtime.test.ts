@@ -80,7 +80,7 @@ describe('automation writes in worker mode', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2));
     const room = `project:${ctx.projectId}`;
     expect(received.map(([r, e]) => [r, e.type, e.issueId])).toEqual([
-      [room, 'board:moved', issueId],
+      [room, 'issue:updated', issueId],
       [room, 'comment:added', issueId],
     ]);
   });

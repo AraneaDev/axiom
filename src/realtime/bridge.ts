@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { REDIS_URL } from '../config/redis';
 import { logger } from '../utils/logger';
 
-import { broadcastToRoom } from './broadcast';
+import { broadcastLocal, broadcastToRoom } from './broadcast';
 import type { RealtimeEvent } from './events';
 import { setPublishHook } from './publish-hook';
 
@@ -23,22 +23,25 @@ export const REALTIME_CHANNEL = 'axiom:realtime';
 
 // What may cross the bridge: the project rooms and the events the worker produces. Anything else
 // is dropped, whoever sent it.
-const message = z.object({
-  room: z.string().regex(/^project:c[a-z0-9]{20,31}$/),
-  event: z.discriminatedUnion('type', [
-    z.object({
-      type: z.literal('issue:development-updated'),
-      projectId: z.string().min(1),
-      issueIds: z.array(z.string().min(1)).max(1000),
-    }),
-    // What the rules of automation write: a move, a change, a comment
-    z.object({
-      type: z.enum(['issue:updated', 'issue:created', 'comment:added', 'board:moved']),
-      projectId: z.string().min(1),
-      issueId: z.string().min(1),
-    }),
-  ]),
-});
+const message = z
+  .object({
+    room: z.string().regex(/^project:c[a-z0-9]{20,31}$/),
+    event: z.discriminatedUnion('type', [
+      z.object({
+        type: z.literal('issue:development-updated'),
+        projectId: z.string().min(1),
+        issueIds: z.array(z.string().min(1)).max(1000),
+      }),
+      // What the rules of automation write: a move, a change, a comment
+      z.object({
+        type: z.enum(['issue:updated', 'issue:created', 'comment:added', 'board:moved']),
+        projectId: z.string().min(1),
+        issueId: z.string().min(1),
+      }),
+    ]),
+  })
+  // An event is about the project whose room it goes to
+  .refine((m) => m.event.projectId === m.room.slice('project:'.length));
 
 type Delivery = (room: string, event: RealtimeEvent) => void;
 
@@ -164,7 +167,7 @@ export type RealtimeSubscriber = {
  * @param opts.url
  */
 export function startRealtimeSubscriber(
-  deliver: Delivery = broadcastToRoom,
+  deliver: Delivery = broadcastLocal,
   opts: { url?: string } = {},
 ): RealtimeSubscriber {
   const name = `axiom-rt-sub-${process.pid}-${randomUUID().slice(0, 8)}`;

@@ -16,16 +16,19 @@ export const redis = new Redis(REDIS_URL, {
 
 let connected = false;
 
-redis
-  .connect()
-  .then(() => {
-    connected = true;
-    logger.info('Redis connected');
-  })
-  .catch((_err) => {
-    connected = false;
-    logger.warn('Redis unavailable, caching disabled');
-  });
+// One-shot scripts (migrate) load modules that import this one but have no use for the cache
+if (process.env.AXIOM_NO_REDIS !== '1') {
+  redis
+    .connect()
+    .then(() => {
+      connected = true;
+      logger.info('Redis connected');
+    })
+    .catch((_err) => {
+      connected = false;
+      logger.warn('Redis unavailable, caching disabled');
+    });
+}
 
 redis.on('error', () => {
   connected = false;

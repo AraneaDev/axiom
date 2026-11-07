@@ -873,8 +873,8 @@ describe('noise limits', () => {
     onTestFinished(() =>
       prisma.approvalGate.delete({ where: { id: gate.id } }).then(() => undefined),
     );
-    const warn = vi.spyOn(logger, 'warn');
-    onTestFinished(() => warn.mockRestore());
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    onTestFinished(() => logged.mockRestore());
     await rule('pr:opened', moveAndSay());
     const deliveryId = randomUUID();
     const body = { action: 'opened', number: 21, pull_request: pr(), repository, sender };
@@ -883,6 +883,7 @@ describe('noise limits', () => {
       const row = await prisma.githubDelivery.findUniqueOrThrow({ where: { id: deliveryId } });
       expect(row.status).toBe('PROCESSED');
     });
+    expect(logged.mock.calls.some(([text]) => String(text).includes('set_status'))).toBe(true);
     expect(await columnOf(issue1)).not.toBe(doneColumn);
     expect(await comments(issue1)).toHaveLength(1);
     await prisma.githubDelivery.update({
@@ -930,5 +931,83 @@ describe('noise limits', () => {
       'action',
     );
     expect((await comments(issue1)).map((c) => c.body)).toEqual(['asked']);
+  });
+
+  it('keeps one comment and one mark for review requests from different deliveries on one head', async () => {
+    await rule('pr:review_requested', say('asked'));
+    await prEvent('opened', pr());
+    await reviewEvent(1);
+    await reviewEvent(2);
+    expect(await comments(issue1)).toHaveLength(1);
+    const marks = await prisma.githubAutomationMark.findMany({ where: { issueId: issue1 } });
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toMatchObject({ trigger: 'pr:review_requested', headSha: SHA_A });
+  });
+
+  it('leaves the slot free when the comment write fails (M6)', async () => {
+    await rule('pr:review_requested', say('asked'));
+    await prEvent('opened', pr());
+    const create = vi.spyOn(prisma.comment, 'create').mockRejectedValueOnce(new Error('disk full'));
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    onTestFinished(() => vi.restoreAllMocks());
+    await reviewEvent(1);
+    expect(create).toHaveBeenCalled();
+    expect(await comments(issue1)).toHaveLength(0);
+    expect(await prisma.githubAutomationMark.count({ where: { issueId: issue1 } })).toBe(0);
+    await reviewEvent(2);
+    expect(await comments(issue1)).toHaveLength(1);
+  });
+
+  it('keys a check comment to the head the checks ran on, not the head the PR has now (M7)', async () => {
+    await prEvent('opened', pr());
+    await checkEvent(run(7801, SHA_A));
+    await prEvent(
+      'synchronize',
+      pr({ head: { ref: `${p}-1-x`, sha: SHA_B }, updated_at: '2026-11-06T11:00:00Z' }),
+    );
+    await rule('checks:failed', say('failed'));
+    const row = await prisma.githubPullRequest.findFirstOrThrow({ where: { repoLinkId } });
+    await fireGithubTriggers({
+      repoLinkId,
+      projectId: ctx.projectId,
+      event: 'check_run',
+      action: 'completed',
+      source: 'webhook',
+      pullRequestId: row.id,
+      headSha: SHA_A,
+      actor: { userId: GITHUB_INTEGRATION_USER_ID, login: 'x', mapped: false },
+      linkedIssueIds: [issue1],
+      removedIssueIds: [],
+      drivingIssueIds: [issue1],
+      transitions: ['checks_failed'],
+      payload: {},
+    });
+    expect(await comments(issue1)).toHaveLength(1);
+    const marks = await prisma.githubAutomationMark.findMany({ where: { issueId: issue1 } });
+    expect(marks.map((m) => m.headSha)).toEqual([SHA_A]);
+  });
+
+  it('comments once when the same outcome is fired twice', async () => {
+    await rule('pr:merged', say('merged'));
+    await prEvent('opened', pr());
+    await prEvent('closed', pr({ ...MERGE }));
+    const row = await prisma.githubPullRequest.findFirstOrThrow({ where: { repoLinkId } });
+    const outcome = {
+      repoLinkId,
+      projectId: ctx.projectId,
+      event: 'pull_request',
+      action: 'closed',
+      source: 'webhook' as const,
+      pullRequestId: row.id,
+      actor: { userId: GITHUB_INTEGRATION_USER_ID, login: 'x', mapped: false },
+      linkedIssueIds: [issue1],
+      removedIssueIds: [],
+      drivingIssueIds: [issue1],
+      transitions: ['pr_merged' as const],
+      payload: {},
+    };
+    await fireGithubTriggers(outcome);
+    await fireGithubTriggers(outcome);
+    expect(await comments(issue1)).toHaveLength(1);
   });
 });

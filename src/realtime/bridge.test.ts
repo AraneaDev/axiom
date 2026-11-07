@@ -21,17 +21,18 @@ import {
 import type { RealtimeEvent } from './events';
 
 const broadcast = vi.hoisted(() => ({ calls: [] as Array<[string, unknown]> }));
-vi.mock('./broadcast', () => ({
-  broadcastToRoom: (room: string, event: unknown) => {
+vi.mock('./broadcast', () => {
+  const record = (room: string, event: unknown) => {
     broadcast.calls.push([room, event]);
-  },
-}));
+  };
+  return { broadcastToRoom: record, broadcastLocal: record };
+});
 
 const ROOM = 'project:cbridgetest00000000000001';
 const event = (n: number): RealtimeEvent => ({
   type: 'issue:development-updated',
-  projectId: `p${n}`,
-  issueIds: ['i1'],
+  projectId: ROOM.slice('project:'.length),
+  issueIds: [`i${n}`],
 });
 const subscribers: RealtimeSubscriber[] = [];
 const received: Array<[string, unknown]> = [];
@@ -111,7 +112,10 @@ describe('realtime bridge', () => {
     const send = (room: string, type: string) =>
       redis.publish(
         REALTIME_CHANNEL,
-        JSON.stringify({ room, event: { type, projectId: 'p', issueId: 'i1' } }),
+        JSON.stringify({
+          room,
+          event: { type, projectId: ROOM.slice('project:'.length), issueId: 'i1' },
+        }),
       );
     for (const type of ['issue:updated', 'issue:created', 'comment:added', 'board:moved']) {
       await send(ROOM, type);
@@ -128,6 +132,27 @@ describe('realtime bridge', () => {
       'comment:added',
       'board:moved',
     ]);
+  });
+
+  it("drops an event whose project is not the room's project", async () => {
+    await subscribe();
+    await redis.publish(
+      REALTIME_CHANNEL,
+      JSON.stringify({
+        room: ROOM,
+        event: { type: 'issue:updated', projectId: 'cother', issueId: 'i1' },
+      }),
+    );
+    await redis.publish(
+      REALTIME_CHANNEL,
+      JSON.stringify({
+        room: ROOM,
+        event: { type: 'issue:updated', projectId: ROOM.slice('project:'.length), issueId: 'i1' },
+      }),
+    );
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(received).toHaveLength(1);
   });
 
   it('keeps receiving after the subscriber lost its connection', async () => {
@@ -156,7 +181,7 @@ describe('realtime bridge', () => {
     await vi.waitFor(
       async () => {
         publishRealtime(ROOM, event(7));
-        expect(received.some(([, e]) => (e as { projectId: string }).projectId === 'p7')).toBe(
+        expect(received.some(([, e]) => (e as { issueIds: string[] }).issueIds[0] === 'i7')).toBe(
           true,
         );
       },

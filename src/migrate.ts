@@ -1,10 +1,10 @@
 import './config/load-env';
+import './config/no-redis';
 
 import { execFileSync } from 'child_process';
 
 import { prisma } from './config/database';
 import { encryptPlainSecrets } from './lib/secret-migration';
-import { ensureDefaultGithubRules } from './modules/github/default-rules';
 import { logger } from './utils/logger';
 
 async function main(): Promise<void> {
@@ -13,6 +13,7 @@ async function main(): Promise<void> {
   const { twoFactor } = await encryptPlainSecrets();
   if (twoFactor > 0) logger.info('Encrypted plain 2FA secrets', { count: twoFactor });
   // Links made before the default GitHub rules existed; each link is served once
+  const { ensureDefaultGithubRules } = await import('./modules/github/default-rules');
   const links = await ensureDefaultGithubRules();
   if (links > 0) logger.info('Created default GitHub rules', { links });
 }
