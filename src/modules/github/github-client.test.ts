@@ -123,6 +123,27 @@ describe('githubRequest', () => {
     expect([error.statusCode, error.code]).toEqual([403, 'GITHUB_FORBIDDEN']);
   });
 
+  it("appends GitHub's own words to a 403 as plain text, cut to 300 characters", async () => {
+    const fixed = 'GitHub refused this request: the connection has no access to it.';
+    fake.on('GET /repos/acme-labs/widget', {
+      status: 403,
+      body: { message: 'Resource not accessible by integration' },
+    });
+    const plain = await thrown(githubRequest(INSTALLATION, 'GET', '/repos/acme-labs/widget'));
+    expect(plain.message).toBe(`${fixed} GitHub says: Resource not accessible by integration`);
+
+    const noisy = `<b>You need</b>\u0007 push\n\n access ghu_${'x'.repeat(30)} ${'y'.repeat(400)}`;
+    fake.on('GET /repos/acme-labs/widget', { status: 403, body: { message: noisy } });
+    const cut = await thrown(githubRequest(INSTALLATION, 'GET', '/repos/acme-labs/widget'));
+    expect(cut.code).toBe('GITHUB_FORBIDDEN');
+    expect(cut.message.startsWith(`${fixed} GitHub says: You need push access [redacted] `)).toBe(
+      true,
+    );
+    expect(cut.message.slice(`${fixed} GitHub says: `.length).length).toBeLessThanOrEqual(300);
+    // eslint-disable-next-line no-control-regex
+    expect(cut.message).not.toMatch(/[<>\u0007\n]|ghu_/);
+  });
+
   it('maps 409 to GITHUB_CONFLICT', async () => {
     fake.on('PUT /repos/acme-labs/widget/pulls/7/merge', {
       status: 409,

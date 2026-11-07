@@ -35,6 +35,26 @@ export function scrubGithubText(text: string, credential?: string): string {
   return clean.length > MAX_MESSAGE_LENGTH ? `${clean.slice(0, MAX_MESSAGE_LENGTH)}...` : clean;
 }
 
+const MAX_REASON_LENGTH = 300;
+
+/**
+ * GitHub's reason for a refusal as plain text to append to a fixed message: tags and control
+ * characters gone, white space collapsed, cut to 300 characters. It is built from the scrubbed
+ * message, so it holds no token, and never from headers.
+ * @param message GitHub's scrubbed message
+ */
+function plainReason(message: string): string {
+  const plain = message
+    .replace(/<[^>]*>/g, '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f<>]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_REASON_LENGTH)
+    .trim();
+  return plain ? ` GitHub says: ${plain}` : '';
+}
+
 /**
  * GitHub's own words: its `message`, with the messages of its `errors` list after it
  * @param body
@@ -114,7 +134,7 @@ export function githubError(
     case 403:
       return new AppError(
         403,
-        'GitHub refused this request: the connection has no access to it.',
+        `GitHub refused this request: the connection has no access to it.${plainReason(message)}`,
         'GITHUB_FORBIDDEN',
       );
     case 404:

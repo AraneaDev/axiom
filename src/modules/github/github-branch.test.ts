@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { runAct } from '../../actions/batch';
+import { executeBatch, runAct } from '../../actions/batch';
 import { prisma } from '../../config/database';
 import app from '../../index';
 import { encryptSecret, secretContext } from '../../lib/secret-box';
@@ -19,8 +19,29 @@ import {
 } from '../../test/factory';
 import { useGithubFake } from '../../test/github-fake';
 import { seedGithubApp } from '../../test/github-seed';
+import { logger } from '../../utils/logger';
 
-import { assertBranchName, assertRefName, branchNameFor } from './github-actions.helpers';
+import {
+  assertBranchName,
+  assertRefName,
+  branchNameFor,
+  linkedBranch,
+  linkedPullRequest,
+} from './github-actions.helpers';
+
+// Lets one test make the store fail after GitHub has created the ref
+const store = vi.hoisted(() => ({ fail: false }));
+vi.mock('./github-events', async (original) => {
+  const actual = await original<typeof import('./github-events')>();
+  return {
+    ...actual,
+    storeBranch: (...args: Parameters<typeof actual.storeBranch>) => {
+      if (!store.fail) return actual.storeBranch(...args);
+      store.fail = false;
+      return Promise.reject(new Error('database down'));
+    },
+  };
+});
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
 const WIDGET = 'acme-labs/widget';
@@ -37,6 +58,7 @@ let key: string;
 let issueId: string;
 let linkId: string;
 const ISSUE = 42;
+const STRANGER_STATUS = 403;
 
 const as = (user: TestUser) => ({ ...CSRF, Authorization: `Bearer ${user.token}` });
 const url = (projectId: string, number = ISSUE) =>
@@ -187,6 +209,10 @@ describe('branch names', () => {
     ['a trailing dot', 'AXM-42.'],
     ['a control character', 'AXM-42\u0007'],
     ['a newline', 'AXM-42\nx'],
+    ['a lone surrogate', 'AXM-42-\uD800'],
+    ['a zero-width space', 'AXM-42\u200B'],
+    ['a right-to-left override', 'AXM-42\u202E'],
+    ['the name HEAD', 'HEAD'],
     ['201 characters', `AXM-42-${'x'.repeat(194)}`],
   ])('refuses a name with %s', (_what, name) => {
     expect(() => assertBranchName(name, 'AXM-42')).toThrow(
@@ -197,6 +223,9 @@ describe('branch names', () => {
   it('accepts a name of 200 characters that names the issue, in any case', () => {
     expect(() => assertBranchName(`feature/axm-42-${'x'.repeat(185)}`, 'AXM-42')).not.toThrow();
     expect(() => assertRefName('release/1.0')).not.toThrow();
+    // Only the exact name is HEAD, as in git
+    expect(() => assertRefName('head')).not.toThrow();
+    expect(() => assertRefName('HEAD-fix')).not.toThrow();
   });
 
   it('refuses a name that does not name the issue, or only a longer key', () => {
@@ -285,9 +314,14 @@ describe('githubBranch.create', () => {
       expect(res.status, name).toBe(400);
       expect(res.body.error.code).toBe('INVALID_BRANCH_NAME');
     }
-    const bad = await create(member, { from: 'main..x' });
-    expect(bad.status).toBe(400);
-    expect(bad.body.error.code).toBe('INVALID_BRANCH_NAME');
+    for (const from of ['main..x', 'main\uD800', 'HEAD', 'main\u200B']) {
+      const bad = await create(member, { from });
+      expect(bad.status, from).toBe(400);
+      expect(bad.body.error.code).toBe('INVALID_BRANCH_NAME');
+    }
+    const lone = await create(member, { name: `${key}-\uD800` });
+    expect(lone.status).toBe(400);
+    expect(lone.body.error.code).toBe('INVALID_BRANCH_NAME');
     expect(fake.requests).toEqual([]);
     expect(await prisma.githubBranch.count()).toBe(0);
   });
@@ -303,7 +337,7 @@ describe('githubBranch.create', () => {
   it('answers without a GitHub request for a stranger and for a wrong issue', async () => {
     await connectAccount(outsider);
     const stranger = await create(outsider);
-    expect([403, 404]).toContain(stranger.status);
+    expect(stranger.status).toBe(STRANGER_STATUS);
     await connectAccount(member).catch(() => undefined);
     const wrong = await create(member, {}, ctx.projectId, 999);
     expect(wrong.status).toBe(404);
@@ -369,6 +403,49 @@ describe('githubBranch.create', () => {
     expect(await prisma.githubBranch.count()).toBe(1);
   });
 
+  it('refuses a viewer by key in act and in a batch, with no GitHub request', async () => {
+    await connectAccount(viewer, { admin: [WIDGET] });
+    const ctxOf = { userId: viewer.id, channel: 'ui' as const };
+    await expect(
+      runAct({ action: 'githubBranch.create', key, input: {} }, ctxOf),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    const batch = await executeBatch([{ action: 'githubBranch.create', key, input: {} }], ctxOf);
+    expect(batch.completed).toBe(0);
+    expect(batch.results[0]).toMatchObject({ ok: false, error: { status: 403 } });
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('runs in a batch for a member', async () => {
+    await connectAccount(member);
+    const batch = await executeBatch([{ action: 'githubBranch.create', key, input: {} }], {
+      userId: member.id,
+      channel: 'ui',
+    });
+    expect(batch.completed).toBe(1);
+    expect(await prisma.githubBranch.count()).toBe(1);
+  });
+
+  it('still answers 201 when the store fails after GitHub made the branch, and logs which', async () => {
+    await connectAccount(member);
+    const warn = vi.spyOn(logger, 'warn');
+    store.fail = true;
+    try {
+      const res = await create(member);
+      const name = `${ctx.projectPrefix.toLowerCase()}-${ISSUE}-fix-login-timeout`;
+      expect(res.status).toBe(201);
+      expect(res.body.name).toBe(name);
+      expect(fake.requests.map((r) => r.method)).toEqual(['GET', 'POST']);
+      expect(await prisma.githubBranch.count()).toBe(0);
+      expect(warn).toHaveBeenCalledWith(
+        'github branch created but not stored',
+        expect.objectContaining({ repoLinkId: linkId, branch: name }),
+      );
+    } finally {
+      store.fail = false;
+      warn.mockRestore();
+    }
+  });
+
   it('runs for an API token with github:write without waiting for approval', async () => {
     await connectAccount(member);
     const raw = `tk_${crypto.randomBytes(24).toString('hex')}`;
@@ -395,5 +472,122 @@ describe('githubBranch.create', () => {
       readFileSync(path.join(__dirname, '../../actions/token-reach.json'), 'utf8'),
     ) as Record<string, string[]>;
     expect(reach['githubBranch.create']).toEqual(['github:write']);
+  });
+});
+
+describe('linked lookups', () => {
+  let otherIssueId: string;
+  let otherLinkId: string;
+  let mine: { prId: string; branchId: string };
+
+  const pr = (repoLinkId: string, number: number) =>
+    prisma.githubPullRequest.create({
+      data: {
+        repoLinkId,
+        number,
+        title: `Pull ${number}`,
+        state: 'OPEN',
+        draft: false,
+        authorLogin: 'octo-dev',
+        headRef: `head-${number}`,
+        headSha: 'c'.repeat(40),
+        baseRef: 'main',
+        requestedReviewers: [],
+        htmlUrl: `https://github.com/${WIDGET}/pull/${number}`,
+        openedAt: new Date('2026-11-01T10:00:00Z'),
+        githubUpdatedAt: new Date('2026-11-01T10:00:00Z'),
+      },
+    });
+  const link = (
+    issue: string,
+    repoLinkId: string,
+    targetType: 'BRANCH' | 'PULL_REQUEST',
+    targetKey: string,
+  ) =>
+    prisma.githubIssueLink.create({
+      data: { issueId: issue, repoLinkId, targetType, targetKey, sources: ['BRANCH_NAME'] },
+    });
+
+  beforeEach(async () => {
+    otherIssueId = (
+      await prisma.issue.create({
+        data: {
+          projectId: ctx.projectId,
+          number: 77,
+          title: 'Other',
+          body: '',
+          creatorId: ctx.owner.id,
+        },
+      })
+    ).id;
+    // Another project's repository link, to hold a branch and a pull request of the same names
+    otherLinkId = (
+      await prisma.githubRepoLink.create({
+        data: {
+          projectId: unlinked.id,
+          repoId: 7302n,
+          installationId: 3301n,
+          owner: 'acme-labs',
+          name: 'gadget',
+          fullName: 'acme-labs/gadget',
+          defaultBranch: 'main',
+          htmlUrl: 'https://github.com/acme-labs/gadget',
+          linkedById: ctx.owner.id,
+        },
+      })
+    ).id;
+    const mineBranch = await prisma.githubBranch.create({
+      data: { repoLinkId: linkId, name: 'axm-42-mine', headSha: MAIN_SHA },
+    });
+    const minePr = await pr(linkId, 5);
+    const theirPr = await pr(linkId, 6);
+    const theirBranch = await prisma.githubBranch.create({
+      data: { repoLinkId: linkId, name: 'axm-77-theirs', headSha: MAIN_SHA },
+    });
+    await link(issueId, linkId, 'PULL_REQUEST', minePr.id);
+    await link(issueId, linkId, 'BRANCH', mineBranch.id);
+    await link(otherIssueId, linkId, 'PULL_REQUEST', theirPr.id);
+    await link(otherIssueId, linkId, 'BRANCH', theirBranch.id);
+    mine = { prId: minePr.id, branchId: mineBranch.id };
+  });
+
+  afterEach(async () => {
+    await prisma.issue.deleteMany({ where: { id: otherIssueId } });
+  });
+
+  const notLinked = { statusCode: 404, code: 'GITHUB_NOT_LINKED_TO_ISSUE' };
+
+  it('gives the pull request and the branch that are linked to the issue', async () => {
+    expect((await linkedPullRequest(issueId, linkId, 5)).id).toBe(mine.prId);
+    expect((await linkedBranch(issueId, linkId, 'axm-42-mine')).id).toBe(mine.branchId);
+  });
+
+  it("refuses another issue's pull request number and branch name", async () => {
+    await expect(linkedPullRequest(issueId, linkId, 6)).rejects.toMatchObject(notLinked);
+    await expect(linkedBranch(issueId, linkId, 'axm-77-theirs')).rejects.toMatchObject(notLinked);
+    await expect(linkedPullRequest(issueId, linkId, 999)).rejects.toMatchObject(notLinked);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('refuses a branch that is deleted', async () => {
+    await prisma.githubBranch.update({
+      where: { id: mine.branchId },
+      data: { deletedAt: new Date() },
+    });
+    await expect(linkedBranch(issueId, linkId, 'axm-42-mine')).rejects.toMatchObject(notLinked);
+  });
+
+  it('refuses a branch or pull request of another repository link, whatever links it', async () => {
+    const foreignBranch = await prisma.githubBranch.create({
+      data: { repoLinkId: otherLinkId, name: 'axm-42-foreign', headSha: MAIN_SHA },
+    });
+    const foreignPr = await pr(otherLinkId, 5);
+    await link(issueId, otherLinkId, 'BRANCH', foreignBranch.id);
+    await link(issueId, otherLinkId, 'PULL_REQUEST', foreignPr.id);
+    await expect(linkedBranch(issueId, linkId, 'axm-42-foreign')).rejects.toMatchObject(notLinked);
+    // Number 5 exists in both links; the one of the named link answers
+    expect((await linkedPullRequest(issueId, linkId, 5)).repoLinkId).toBe(linkId);
+    expect((await linkedPullRequest(issueId, otherLinkId, 5)).id).toBe(foreignPr.id);
+    await expect(linkedPullRequest(issueId, otherLinkId, 6)).rejects.toMatchObject(notLinked);
   });
 });

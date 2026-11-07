@@ -61,20 +61,22 @@ const notLinkedToIssue = (what: string) =>
 /**
  * A pull request of the issue's repository that is linked to the issue.
  * @param issueId The issue
+ * @param repoLinkId The issue's repository link: a pull request of another one never answers
  * @param pullNumber The pull request's number on GitHub
  * @throws {AppError} 404 GITHUB_NOT_LINKED_TO_ISSUE when it is none of the issue's
  */
 export async function linkedPullRequest(
   issueId: string,
+  repoLinkId: string,
   pullNumber: number,
 ): Promise<GithubPullRequest> {
   const links = await prisma.githubIssueLink.findMany({
-    where: { issueId, targetType: 'PULL_REQUEST' },
+    where: { issueId, repoLinkId, targetType: 'PULL_REQUEST' },
     select: { targetKey: true },
   });
   const pr = links.length
     ? await prisma.githubPullRequest.findFirst({
-        where: { id: { in: links.map((l) => l.targetKey) }, number: pullNumber },
+        where: { id: { in: links.map((l) => l.targetKey) }, repoLinkId, number: pullNumber },
       })
     : null;
   if (!pr) throw notLinkedToIssue('pull request');
@@ -84,17 +86,22 @@ export async function linkedPullRequest(
 /**
  * A branch of the issue's repository that is linked to the issue and not deleted.
  * @param issueId The issue
+ * @param repoLinkId The issue's repository link: a branch of another one never answers
  * @param name The branch name
  * @throws {AppError} 404 GITHUB_NOT_LINKED_TO_ISSUE when it is none of the issue's
  */
-export async function linkedBranch(issueId: string, name: string): Promise<GithubBranch> {
+export async function linkedBranch(
+  issueId: string,
+  repoLinkId: string,
+  name: string,
+): Promise<GithubBranch> {
   const links = await prisma.githubIssueLink.findMany({
-    where: { issueId, targetType: 'BRANCH' },
+    where: { issueId, repoLinkId, targetType: 'BRANCH' },
     select: { targetKey: true },
   });
   const branch = links.length
     ? await prisma.githubBranch.findFirst({
-        where: { id: { in: links.map((l) => l.targetKey) }, name, deletedAt: null },
+        where: { id: { in: links.map((l) => l.targetKey) }, repoLinkId, name, deletedAt: null },
       })
     : null;
   if (!branch) throw notLinkedToIssue('branch');
@@ -102,13 +109,16 @@ export async function linkedBranch(issueId: string, name: string): Promise<Githu
 }
 
 /**
- * The credential of a call made as the caller. There is no fallback to the App or a bot.
+ * The credential of a call made as the caller, and the caller's GitHub identity (the sender to
+ * store the answer with). There is no fallback to the App or a bot.
  * @param ctx Who runs the action
  * @throws {AppError} 409 GITHUB_NOT_CONNECTED
  */
-export async function userAuth(ctx: ActionContext): Promise<GithubAuth> {
-  await requireGithubAccount(ctx.userId);
-  return { kind: 'user', userId: ctx.userId };
+export async function userAuth(
+  ctx: ActionContext,
+): Promise<{ auth: GithubAuth; account: { githubUserId: number; login: string } }> {
+  const account = await requireGithubAccount(ctx.userId);
+  return { auth: { kind: 'user', userId: ctx.userId }, account };
 }
 
 /**
@@ -147,10 +157,15 @@ export function assertRefName(name: string): void {
   const bad = (reason: string) =>
     new AppError(400, `Not a valid branch name: ${reason}`, 'INVALID_BRANCH_NAME');
   if (!name) throw bad('it is empty');
+  // A lone surrogate cannot be encoded into a URL, and git has no such name
+  if (/\p{Cs}/u.test(name)) throw bad('it is not well-formed text');
   if (name.length > MAX_BRANCH_NAME) throw bad(`it is longer than ${MAX_BRANCH_NAME} characters`);
   if (REFUSED_CHARACTERS.test(name)) {
     throw bad('it has a space, a control character or one of ~ ^ : ? * [ \\');
   }
+  // Bidi and zero-width characters make names that look like others
+  if (/\p{Cf}/u.test(name)) throw bad('it has an invisible formatting character');
+  if (name === 'HEAD') throw bad('it is "HEAD"');
   if (name.startsWith('-')) throw bad('it starts with "-"');
   if (name === '@' || name.includes('@{')) throw bad('it has "@{" or is "@"');
   if (name.includes('..')) throw bad('it has ".."');

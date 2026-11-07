@@ -15,7 +15,6 @@ import {
   refPath,
   userAuth,
 } from './github-actions.helpers';
-import { requireGithubAccount } from './github-actor';
 import { githubRequest } from './github-client';
 import { storeBranch } from './github-events';
 
@@ -55,8 +54,7 @@ registerActions([
       const name = given ?? branchNameFor(prefix, issueNumber, issue.title);
       assertBranchName(name, issue.key);
       if (from !== undefined) assertRefName(from);
-      const auth = await userAuth(ctx);
-      const account = await requireGithubAccount(ctx.userId);
+      const { auth, account } = await userAuth(ctx);
       const base = from ?? link.defaultBranch;
       const repo = `/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.name)}`;
 
@@ -99,6 +97,7 @@ registerActions([
       ).catch((err: unknown) => {
         logger.warn('github branch created but not stored', {
           repoLinkId: link.id,
+          branch: name,
           error: err instanceof Error ? err.message : 'unknown',
         });
       });
