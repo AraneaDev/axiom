@@ -7,6 +7,7 @@ import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
 import type { GithubTriggerContext } from '../github/github-automation';
+import { safeGithubContext } from '../github/github-template';
 import {
   assertAssignable,
   assertColumnTransition,
@@ -347,7 +348,7 @@ async function buildTemplateContext(context: AutomationContext) {
     trigger:
       context.github?.trigger ??
       (context.from !== undefined ? 'issue:status_changed' : 'issue:created'),
-    github: context.github,
+    github: context.github ? safeGithubContext(context.github) : undefined,
     from: context.from,
     to: context.to,
     label: context.label,

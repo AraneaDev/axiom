@@ -182,6 +182,7 @@ beforeEach(async () => {
         htmlUrl: 'https://github.com/acme-labs/widget',
         linkedById: ctx.owner.id,
         lastReconciledAt: new Date(),
+        createdAt: new Date('2026-11-01T00:00:00Z'),
       },
     })
   ).id;
@@ -305,7 +306,7 @@ describe('pull request triggers', () => {
       repository,
       sender: { id: 7002, login: 'review-bot' },
     });
-    expect((await comments(issue1)).map((c) => c.body)).toEqual(['asked', 'review-bot approved']);
+    expect((await comments(issue1)).map((c) => c.body)).toEqual(['asked', 'review\\-bot approved']);
   });
 
   it('resolves a template over the pull request', async () => {
@@ -325,7 +326,7 @@ describe('pull request triggers', () => {
       }),
     );
     expect((await comments(issue1)).map((c) => c.body)).toEqual([
-      'Merged in https://github.com/acme-labs/widget/pull/21 by voorbeeld-dev on acme-labs/widget',
+      'Merged in https://github.com/acme-labs/widget/pull/21 by voorbeeld\\-dev on acme\\-labs/widget',
     ]);
   });
 
@@ -391,7 +392,7 @@ describe('branch trigger', () => {
       sender,
     });
     expect((await comments(issue1)).map((c) => c.body)).toEqual([
-      `branch ${p}-1-x https://github.com/acme-labs/widget/tree/${p}-1-x`,
+      `branch ${p}\\-1\\-x https://github.com/acme-labs/widget/tree/${p}-1-x`,
     ]);
   });
 });
@@ -486,40 +487,178 @@ describe('comment guard', () => {
   });
 });
 
-describe('first reconcile after a link', () => {
-  it('moves the ticket but posts no comment, then comments in later runs', async () => {
+const OLD = { created_at: '2026-10-01T09:00:00Z', updated_at: '2026-10-01T10:00:00Z' };
+const MERGE = {
+  state: 'closed',
+  merged: true,
+  merged_at: '2026-11-06T11:00:00Z',
+  closed_at: '2026-11-06T11:00:00Z',
+  updated_at: '2026-11-06T11:00:00Z',
+};
+const moveAndSay = (): AutomationAction[] => [
+  { type: 'set_status', columnId: doneColumn },
+  ...say('opened'),
+];
+const columnOf = async (id: string) =>
+  (await prisma.issue.findUniqueOrThrow({ where: { id } })).columnId;
+
+describe('comments by age of the event', () => {
+  it('moves the ticket of a PR opened before the link but posts no comment (webhook first)', async () => {
+    await rule('pr:opened', moveAndSay());
+    await prEvent('opened', pr(OLD));
+    expect(await columnOf(issue1)).toBe(doneColumn);
+    expect(await comments(issue1)).toHaveLength(0);
+  });
+
+  it('comments on a merge after the link of a PR opened before it', async () => {
+    await rule('pr:merged', say('merged'));
+    await prEvent('opened', pr(OLD));
+    await prEvent('closed', pr({ ...OLD, ...MERGE }));
+    expect((await comments(issue1)).map((c) => c.body)).toEqual(['merged']);
+  });
+
+  it('posts no comment for old PRs in a big first sync that runs out of budget, nor in run two', async () => {
     await prisma.githubRepoLink.update({
       where: { id: repoLinkId },
       data: { lastReconciledAt: null },
     });
-    await rule(
-      'pr:opened',
-      [{ type: 'set_status', columnId: doneColumn }, ...say('opened')],
-      'move',
-    );
+    await rule('pr:opened', moveAndSay());
     await rule('checks:failed', say('failed'), 'ci');
-    fake.setJobLog(4706, LOG);
-    fake.setRepoLists('acme-labs/widget', {
-      pulls: [pr()],
+    fake.setJobLog(4710, LOG);
+    const pulls = [
+      pr({ ...OLD }),
+      pr({ ...OLD, number: 22, head: { ref: `${p}-2-y`, sha: SHA_B } }),
+    ];
+    const lists = {
+      pulls,
       branches: [],
-      checkRuns: { [SHA_A]: [run(4706)] },
+      checkRuns: { [SHA_A]: [run(4710, SHA_A, { completed_at: '2026-10-01T10:03:05Z' })] },
+    };
+    fake.setRepoLists('acme-labs/widget', lists);
+    await reconcileRepo(repoLinkId, { callBudget: 2 });
+    await prisma.githubRepoLink.update({
+      where: { id: repoLinkId },
+      data: { reconcileLeaseUntil: null },
     });
     await reconcileRepo(repoLinkId);
-    const moved = await prisma.issue.findUniqueOrThrow({ where: { id: issue1 } });
-    expect(moved.columnId).toBe(doneColumn);
+    expect(await columnOf(issue1)).toBe(doneColumn);
+    expect(await columnOf(issue2)).toBe(doneColumn);
     expect(await comments(issue1)).toHaveLength(0);
+    expect(await comments(issue2)).toHaveLength(0);
+  });
 
-    // A later reconcile is no longer the first: a new PR comments
+  it('always comments on a change after the link, whichever store reports it first', async () => {
+    await rule('pr:opened', say('opened'));
+    const fresh = pr({ created_at: '2026-11-03T09:00:00Z', updated_at: '2026-11-03T09:00:00Z' });
+    fake.setRepoLists('acme-labs/widget', { pulls: [fresh], branches: [], checkRuns: {} });
+    await reconcileRepo(repoLinkId);
+    await prEvent('opened', fresh);
+    expect((await comments(issue1)).map((c) => c.body)).toEqual(['opened']);
+    // and the other way round
+    const second = pr({
+      number: 25,
+      head: { ref: `${p}-2-w`, sha: SHA_B },
+      created_at: '2026-11-03T09:00:00Z',
+      updated_at: '2026-11-03T09:00:00Z',
+    });
+    await prEvent('opened', second);
+    fake.setRepoLists('acme-labs/widget', { pulls: [fresh, second], branches: [], checkRuns: {} });
     await prisma.githubRepoLink.update({
       where: { id: repoLinkId },
       data: { reconcileLeaseUntil: null, lastReconciledAt: new Date(0) },
     });
-    fake.setRepoLists('acme-labs/widget', {
-      pulls: [pr(), pr({ number: 23, head: { ref: `${p}-2-z`, sha: SHA_B } })],
-      branches: [],
-      checkRuns: { [SHA_A]: [run(4706)] },
-    });
     await reconcileRepo(repoLinkId);
     expect((await comments(issue2)).map((c) => c.body)).toEqual(['opened']);
+  });
+
+  it('says GitHub, not ghost, as the actor of a change reconcile found', async () => {
+    await rule('pr:merged', say('by {{github.actorLogin}}'));
+    await prEvent('opened', pr());
+    fake.setRepoLists('acme-labs/widget', { pulls: [pr(MERGE)], branches: [], checkRuns: {} });
+    await reconcileRepo(repoLinkId);
+    const [c] = await comments(issue1);
+    expect(c.body).toBe('by GitHub');
+    expect(c.authorId).toBe(GITHUB_INTEGRATION_USER_ID);
+  });
+});
+
+describe('untrusted text', () => {
+  it('renders a hostile title as literal text', async () => {
+    await rule('pr:opened', say('{{github.pr.title}}'));
+    await prEvent('opened', pr({ title: '![x](https://tracker.invalid/a) @tim ^AXM-1 # Heading' }));
+    const [c] = await comments(issue1);
+    expect(c.body).toBe(
+      '\\!\\[x\\]\\(https://tracker\\.invalid/a\\) \\@tim \\^AXM\\-1 \\# Heading',
+    );
+    expect(c.body).not.toMatch(/(^|[^\\])!\[/);
+    expect(c.body).not.toContain('](');
+  });
+
+  it('collapses newlines and cuts long titles', async () => {
+    await rule('pr:opened', say('{{github.pr.title}}'));
+    await prEvent('opened', pr({ title: `line one\nline two ${'x'.repeat(400)}` }));
+    const [c] = await comments(issue1);
+    expect(c.body).not.toContain('\n');
+    expect(c.body.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('check results after the PR is closed', () => {
+  it('fires no checks transition for a merged PR', async () => {
+    await rule('checks:failed', say('failed'));
+    await prEvent('opened', pr());
+    await prEvent('closed', pr(MERGE));
+    await checkEvent(run(4711));
+    expect(await comments(issue1)).toHaveLength(0);
+  });
+});
+
+describe('the review that fired', () => {
+  it('reads its own review, not the newest', async () => {
+    await rule('pr:review_submitted', say('{{github.review.author}} {{github.review.state}}'));
+    await prEvent('opened', pr());
+    const review = (id: number, login: string, state: string, at: string) =>
+      ({
+        action: 'submitted',
+        review: {
+          id,
+          user: { id: 7000 + id, login },
+          state,
+          body: '',
+          commit_id: SHA_A,
+          submitted_at: at,
+        },
+        pull_request: pr(),
+        repository,
+        sender: { id: 7000 + id, login },
+      }) as Payload;
+    // The newer review is stored first; the older one is delivered after it
+    await deliver(
+      'pull_request_review',
+      review(5002, 'second-dev', 'changes_requested', '2026-11-06T13:00:00Z'),
+    );
+    await deliver(
+      'pull_request_review',
+      review(5001, 'first-dev', 'approved', '2026-11-06T12:00:00Z'),
+    );
+    expect((await comments(issue1)).map((c) => c.body).sort()).toEqual([
+      'first\\-dev approved',
+      'second\\-dev changes\\_requested',
+    ]);
+  });
+});
+
+describe('a rule that throws', () => {
+  it('is logged and the other issue still gets its rules', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    onTestFinished(() => vi.restoreAllMocks());
+    await rule('pr:opened', say('opened'));
+    const real = prisma.automationRule.findMany.bind(prisma.automationRule);
+    vi.spyOn(prisma.automationRule, 'findMany').mockRejectedValueOnce(new Error('boom'));
+    void real;
+    await prEvent('opened', pr({ title: `${ctx.projectPrefix}-2 both` }));
+    const total = (await comments(issue1)).length + (await comments(issue2)).length;
+    expect(total).toBe(1);
+    expect(warn).toHaveBeenCalled();
   });
 });

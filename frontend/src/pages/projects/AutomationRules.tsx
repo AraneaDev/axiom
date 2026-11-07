@@ -29,24 +29,24 @@ import { useMutationWithToast } from '@/hooks/useMutationWithToast';
 import { useProjectContext } from '@/hooks/useProjectContext';
 
 const TRIGGER_OPTIONS = [
-  { value: 'issue:created', label: 'Issue Created' },
-  { value: 'issue:status_changed', label: 'Status Changed' },
-  { value: 'issue:assigned', label: 'Issue Assigned' },
-  { value: 'label:added', label: 'Label Added' },
+  { value: 'issue:created', label: 'Issue created' },
+  { value: 'issue:status_changed', label: 'Status changed' },
+  { value: 'issue:assigned', label: 'Issue assigned' },
+  { value: 'label:added', label: 'Label added' },
   // GitHub
-  { value: 'pr:opened', label: 'Pull request opened' },
-  { value: 'pr:merged', label: 'Pull request merged' },
-  { value: 'pr:closed', label: 'Pull request closed without merging' },
-  { value: 'pr:review_requested', label: 'Review requested' },
-  { value: 'pr:review_submitted', label: 'Review submitted' },
-  { value: 'checks:failed', label: 'Checks failed' },
-  { value: 'checks:passed', label: 'Checks passed' },
-  { value: 'branch:created', label: 'Branch created' },
+  { value: 'pr:opened', label: 'GitHub: Pull request opened' },
+  { value: 'pr:merged', label: 'GitHub: Pull request merged' },
+  { value: 'pr:closed', label: 'GitHub: Pull request closed without merging' },
+  { value: 'pr:review_requested', label: 'GitHub: Review requested' },
+  { value: 'pr:review_submitted', label: 'GitHub: Review submitted' },
+  { value: 'checks:failed', label: 'GitHub: Checks failed' },
+  { value: 'checks:passed', label: 'GitHub: Checks passed' },
+  { value: 'branch:created', label: 'GitHub: Branch created' },
 ];
 
 const GITHUB_VARIABLE_HINT =
   'GitHub triggers fill {{github.repo}}, {{github.actorLogin}}, {{github.pr.url}}, {{github.pr.title}}, ' +
-  '{{github.review.state}}, {{github.checks.failedNames}} and {{github.branch.name}} in comments and other text.';
+  '{{github.review.state}}, {{github.checks.failedNames}}, {{github.checks.headSha}} and {{github.branch.name}} in comments and other text.';
 
 const CONDITION_FIELDS = [
   { value: 'type', label: 'Issue Type' },

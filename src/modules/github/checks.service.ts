@@ -395,7 +395,7 @@ export async function storeCheckRun(
 
       // Read with the write, so a failure to read them cannot lose the transition
       const pullRequests = await tx.githubPullRequest.findMany({
-        where: { repoLinkId, headSha: run.head_sha },
+        where: { repoLinkId, headSha: run.head_sha, state: 'OPEN' },
         select: { id: true },
         orderBy: { number: 'asc' },
       });

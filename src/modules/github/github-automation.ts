@@ -57,8 +57,10 @@ export type CommentGuardInfo = {
   outcome: GithubEventOutcome;
   issueId: string;
   trigger: AutomationTrigger;
-  /** The outcome comes from the first reconcile after the repository was linked */
-  firstReconcile: boolean;
+  /** When the thing that happened happened on GitHub; null when that cannot be told */
+  eventAt: Date | null;
+  /** When the repository was linked: nothing older than this is news */
+  linkedAt: Date;
 };
 export type CommentGuard = (info: CommentGuardInfo) => boolean | Promise<boolean>;
 
@@ -78,22 +80,12 @@ export function registerCommentGuard(guard: CommentGuard): () => void {
   };
 }
 
-// The first sync of a new link reports every PR already open: tickets may move, nobody is told
-registerCommentGuard((info) => !info.firstReconcile);
+// What happened before the repository was linked may move tickets, but nobody is told of it
+registerCommentGuard((info) => info.eventAt !== null && info.eventAt >= info.linkedAt);
 
 async function allow(info: CommentGuardInfo): Promise<boolean> {
   for (const guard of [...commentGuards]) if (!(await guard(info))) return false;
   return true;
-}
-
-// `lastReconciledAt` is written when a run ends, so it is still null for the whole first run
-async function isFirstReconcile(outcome: GithubEventOutcome): Promise<boolean> {
-  if (outcome.source !== 'reconcile') return false;
-  const link = await prisma.githubRepoLink.findUnique({
-    where: { id: outcome.repoLinkId },
-    select: { lastReconciledAt: true },
-  });
-  return link !== null && link.lastReconciledAt === null;
 }
 
 // The mapped user, when they are a member of the project's org; else the integration user
@@ -123,73 +115,6 @@ const prContext = (pr: GithubPullRequest): NonNullable<GithubTriggerContext['pr'
   headSha: pr.headSha,
 });
 
-// The context of one transition, or null when the row it is about is gone or it must not fire
-async function contextOf(
-  outcome: GithubEventOutcome,
-  transition: GithubTransition,
-  repo: { fullName: string; htmlUrl: string },
-): Promise<GithubTriggerContext | null> {
-  const trigger = TRANSITION_TRIGGERS[transition];
-  const context: GithubTriggerContext = {
-    trigger,
-    repo: repo.fullName,
-    actorLogin: outcome.actor.login,
-  };
-  const pr = outcome.pullRequestId
-    ? await prisma.githubPullRequest.findUnique({ where: { id: outcome.pullRequestId } })
-    : null;
-  if (pr) {
-    // A draft PR fires when it becomes ready, not when it is opened
-    if (pr.draft && (transition === 'pr_opened' || transition === 'pr_reopened')) return null;
-    context.pr = prContext(pr);
-  }
-  switch (transition) {
-    case 'review_added': {
-      if (!pr) return null;
-      const review = await prisma.githubReview.findFirst({
-        where: { pullRequestId: pr.id },
-        orderBy: { submittedAt: 'desc' },
-      });
-      if (!review) return null;
-      context.review = {
-        author: review.authorLogin,
-        state: review.state.toLowerCase(),
-        url: `${pr.htmlUrl}#pullrequestreview-${review.id}`,
-      };
-      break;
-    }
-    case 'checks_failed':
-    case 'checks_passed': {
-      if (!outcome.headSha) return null;
-      const runs: Array<Pick<GithubCheckRun, 'failedStep' | 'htmlUrl'> & CountedRun> =
-        await prisma.githubCheckRun.findMany({
-          where: { repoLinkId: outcome.repoLinkId, headSha: outcome.headSha },
-        });
-      const failed = newestRuns(runs)
-        .filter((run) => isFailed(run.conclusion))
-        .map((run) => ({ name: run.name, failedStep: run.failedStep, url: run.htmlUrl }));
-      context.checks = {
-        headSha: outcome.headSha,
-        failedNames: failed.map((run) => run.name).join(', '),
-        failed,
-      };
-      break;
-    }
-    case 'branch_created': {
-      const branch = outcome.branchId
-        ? await prisma.githubBranch.findUnique({ where: { id: outcome.branchId } })
-        : null;
-      if (!branch) return null;
-      const path = branch.name.split('/').map(encodeURIComponent).join('/');
-      context.branch = { name: branch.name, url: `${repo.htmlUrl}/tree/${path}` };
-      break;
-    }
-    default:
-      if (!pr) return null;
-  }
-  return context;
-}
-
 type CountedRun = {
   id: string;
   checkSuiteId: bigint | null;
@@ -199,6 +124,112 @@ type CountedRun = {
   status: string;
   conclusion: string | null;
 };
+
+// The context of one transition and when it happened, or null when the row it is about is gone
+// or it must not fire
+async function contextOf(
+  outcome: GithubEventOutcome,
+  transition: GithubTransition,
+  repo: { fullName: string; htmlUrl: string },
+): Promise<{ github: GithubTriggerContext; eventAt: Date | null } | null> {
+  const trigger = TRANSITION_TRIGGERS[transition];
+  // A change reconcile found has no GitHub sender: it is not "ghost", the account that is gone
+  const actorLogin =
+    outcome.source === 'reconcile' && !outcome.actor.mapped ? 'GitHub' : outcome.actor.login;
+  const github: GithubTriggerContext = { trigger, repo: repo.fullName, actorLogin };
+  let eventAt: Date | null = null;
+  const pr = outcome.pullRequestId
+    ? await prisma.githubPullRequest.findUnique({ where: { id: outcome.pullRequestId } })
+    : null;
+  if (pr) {
+    // A draft PR fires when it becomes ready, not when it is opened
+    if (pr.draft && (transition === 'pr_opened' || transition === 'pr_reopened')) return null;
+    github.pr = prContext(pr);
+  }
+  switch (transition) {
+    case 'pr_opened':
+      eventAt = pr?.openedAt ?? null;
+      break;
+    // These happened when the PR was last updated: it is not the time it was first opened
+    case 'pr_reopened':
+    case 'pr_ready_for_review':
+      eventAt = pr?.githubUpdatedAt ?? null;
+      break;
+    case 'pr_merged':
+      eventAt = pr?.mergedAt ?? pr?.githubUpdatedAt ?? null;
+      break;
+    case 'pr_closed':
+      eventAt = pr?.closedAt ?? pr?.githubUpdatedAt ?? null;
+      break;
+    case 'reviewers_added':
+      // A webhook is told as it happens; a reconcile found it some time after
+      eventAt = outcome.source === 'reconcile' ? (pr?.githubUpdatedAt ?? null) : new Date();
+      break;
+    case 'review_added': {
+      if (!pr) return null;
+      const reviewId = (outcome.payload.review as { id?: unknown } | undefined)?.id;
+      const named =
+        typeof reviewId === 'number' || typeof reviewId === 'string'
+          ? await prisma.githubReview.findFirst({
+              where: { id: String(reviewId), pullRequestId: pr.id },
+            })
+          : null;
+      const review =
+        named ??
+        (await prisma.githubReview.findFirst({
+          where: { pullRequestId: pr.id },
+          orderBy: { submittedAt: 'desc' },
+        }));
+      if (!review) return null;
+      github.review = {
+        author: review.authorLogin,
+        state: review.state.toLowerCase(),
+        url: `${pr.htmlUrl}#pullrequestreview-${review.id}`,
+      };
+      eventAt = review.submittedAt;
+      break;
+    }
+    case 'checks_failed':
+    case 'checks_passed': {
+      if (!outcome.headSha) return null;
+      const runs: Array<Pick<GithubCheckRun, 'failedStep' | 'htmlUrl'> & CountedRun> =
+        await prisma.githubCheckRun.findMany({
+          where: { repoLinkId: outcome.repoLinkId, headSha: outcome.headSha },
+        });
+      const counted = newestRuns(runs);
+      const failed = counted
+        .filter((run) => isFailed(run.conclusion))
+        .map((run) => ({ name: run.name, failedStep: run.failedStep, url: run.htmlUrl }));
+      github.checks = {
+        headSha: outcome.headSha,
+        failedNames: failed.map((run) => run.name).join(', '),
+        failed,
+      };
+      const times = (
+        await prisma.githubCheckRun.findMany({
+          where: { id: { in: counted.map((run) => run.id) } },
+          select: { completedAt: true, githubUpdatedAt: true },
+        })
+      ).map((run) => (run.completedAt ?? run.githubUpdatedAt).getTime());
+      eventAt = times.length ? new Date(Math.max(...times)) : null;
+      break;
+    }
+    case 'branch_created': {
+      const branch = outcome.branchId
+        ? await prisma.githubBranch.findUnique({ where: { id: outcome.branchId } })
+        : null;
+      if (!branch) return null;
+      const path = branch.name.split('/').map(encodeURIComponent).join('/');
+      github.branch = { name: branch.name, url: `${repo.htmlUrl}/tree/${path}` };
+      // The push time; else the row's, which is the event's own time only when a webhook made it
+      eventAt = branch.lastPushedAt ?? (outcome.source === 'reconcile' ? null : branch.createdAt);
+      break;
+    }
+    default:
+      if (!pr) return null;
+  }
+  return { github, eventAt };
+}
 
 /**
  * Runs the rules of the transitions an outcome carries, for each issue the change drives. An
@@ -225,32 +256,34 @@ export async function fireGithubTriggers(outcome: GithubEventOutcome): Promise<v
     if (!common) return;
     for (const transition of outcome.transitions) {
       const trigger = TRANSITION_TRIGGERS[transition];
-      let github: GithubTriggerContext | null;
+      let built: Awaited<ReturnType<typeof contextOf>>;
       try {
-        github = await contextOf(outcome, transition, common.repo);
+        built = await contextOf(outcome, transition, common.repo);
       } catch (err) {
         fail(err, { trigger });
         continue;
       }
-      if (!github) continue;
+      if (!built) continue;
       for (const issueId of outcome.drivingIssueIds) {
         try {
           const issue = await prisma.issue.findUnique({
             where: { id: issueId },
             include: AUTOMATION_ISSUE_INCLUDE,
           });
-          if (!issue) continue;
+          // An issue that moved to another project is no business of this repository's project
+          if (!issue || issue.projectId !== outcome.projectId) continue;
           const info: CommentGuardInfo = {
             outcome,
             issueId,
             trigger,
-            firstReconcile: common.firstReconcile,
+            eventAt: built.eventAt,
+            linkedAt: common.repo.createdAt,
           };
-          await evaluateRules(issue.projectId, trigger, {
+          await evaluateRules(outcome.projectId, trigger, {
             issue: issue as unknown as AutomationContext['issue'],
             actorId: common.actorId,
             automationDepth: 0,
-            github,
+            github: built.github,
             commentGuard: () => allow(info),
           });
         } catch (err) {
@@ -264,14 +297,10 @@ export async function fireGithubTriggers(outcome: GithubEventOutcome): Promise<v
 async function prepare(outcome: GithubEventOutcome) {
   const repo = await prisma.githubRepoLink.findUnique({
     where: { id: outcome.repoLinkId },
-    select: { fullName: true, htmlUrl: true },
+    select: { fullName: true, htmlUrl: true, createdAt: true },
   });
   if (!repo) return null;
-  return {
-    repo,
-    actorId: await actorIdOf(outcome),
-    firstReconcile: await isFirstReconcile(outcome),
-  };
+  return { repo, actorId: await actorIdOf(outcome) };
 }
 
 onGithubOutcome(fireGithubTriggers);
