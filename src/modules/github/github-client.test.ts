@@ -144,6 +144,22 @@ describe('githubRequest', () => {
     expect(cut.message).not.toMatch(/[<>\u0007\n]|ghu_/);
   });
 
+  it('takes the user:password out of any URL, and C1 and format characters out of the text', async () => {
+    const dirty =
+      'See https://alice:s3cr3tpass@proxy.invalid/x and ftp://bob@host.invalid \u0085 right\u202Eleft zero\u200Bwidth';
+    fake.on('GET /repos/acme-labs/widget', { status: 403, body: { message: dirty } });
+    const forbidden = await thrown(githubRequest(INSTALLATION, 'GET', '/repos/acme-labs/widget'));
+    fake.on('GET /repos/acme-labs/widget', { status: 422, body: { message: dirty } });
+    const invalid = await thrown(githubRequest(INSTALLATION, 'GET', '/repos/acme-labs/widget'));
+    for (const error of [forbidden, invalid]) {
+      expect(error.message).not.toMatch(/alice|s3cr3tpass|bob/);
+      expect(error.message).toContain('https://[redacted]@proxy.invalid/x');
+      expect(error.message).toContain('ftp://[redacted]@host.invalid');
+      expect(error.message).not.toMatch(/[\u0080-\u009f\u200b\u202e]/);
+    }
+    expect(forbidden.message).toContain('rightleft zerowidth');
+  });
+
   it('maps 409 to GITHUB_CONFLICT', async () => {
     fake.on('PUT /repos/acme-labs/widget/pulls/7/merge', {
       status: 409,

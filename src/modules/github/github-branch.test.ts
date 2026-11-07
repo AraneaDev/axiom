@@ -314,11 +314,14 @@ describe('githubBranch.create', () => {
       expect(res.status, name).toBe(400);
       expect(res.body.error.code).toBe('INVALID_BRANCH_NAME');
     }
-    for (const from of ['main..x', 'main\uD800', 'HEAD', 'main\u200B']) {
+    for (const from of ['main..x', 'main\uD800', 'HEAD']) {
       const bad = await create(member, { from });
       expect(bad.status, from).toBe(400);
       expect(bad.body.error.code).toBe('INVALID_BRANCH_NAME');
     }
+    const zero = await create(member, { name: `${key}-\u200B` });
+    expect(zero.status).toBe(400);
+    expect(zero.body.error.code).toBe('INVALID_BRANCH_NAME');
     const lone = await create(member, { name: `${key}-\uD800` });
     expect(lone.status).toBe(400);
     expect(lone.body.error.code).toBe('INVALID_BRANCH_NAME');
@@ -388,6 +391,19 @@ describe('githubBranch.create', () => {
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('GITHUB_BASE_NOT_FOUND');
     expect(fake.requests.map((r) => r.method)).toEqual(['GET']);
+  });
+
+  it('lets a base branch have an invisible character: it is read, never created', async () => {
+    await connectAccount(member);
+    fake.setGitRefs(WIDGET, { main: MAIN_SHA, 'release\u200C1': RELEASE_SHA });
+    const res = await create(member, { from: 'release\u200C1' });
+    expect(res.status).toBe(201);
+    expect(res.body.headSha).toBe(RELEASE_SHA);
+    expect(fake.requests[0].path).toBe(`/repos/${WIDGET}/git/ref/heads/release%E2%80%8C1`);
+    // One that is not there is the usual 404, from GitHub, not a 400
+    const gone = await create(member, { from: 'main\u200B', name: `${key}-again` });
+    expect(gone.status).toBe(404);
+    expect(gone.body.error.code).toBe('GITHUB_BASE_NOT_FOUND');
   });
 
   it('takes the issue from a key in act', async () => {

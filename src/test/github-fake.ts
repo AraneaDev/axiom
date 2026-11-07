@@ -71,7 +71,8 @@ export interface GithubFake {
    * answers the repository under the asked name, with `permissions.admin: true` for the ones in
    * `opts.admin` and false for the rest. Without `opts.admin` it answers the fixture as it is.
    * With `opts.push`, writing git refs works only on the repositories listed there; the others
-   * answer 403 as GitHub does for a token without write access. Without it every reachable
+   * answer 403 as GitHub does for a token without write access, and so does opening, updating or
+   * commenting on a pull request and re-running checks. Without it every reachable
    * repository may be written.
    */
   issueUserToken(
@@ -133,9 +134,12 @@ export interface GithubFake {
    * `GET /repos/:o/:r/git/ref/heads/<name>` (404 "Not Found" for a missing one) and extended by
    * `POST /repos/:o/:r/git/refs`, which answers 422 "Reference already exists" for a name that
    * is there and 422 "Object does not exist" for a sha no branch points at. Forgotten by `reset`.
+   * The write routes of pull requests (open, update, request reviewers, comment) and of checks
+   * (`rerun-failed-jobs`, `rerequest`) answer in GitHub's shapes; a branch they name must be one
+   * of these heads, once heads are set.
    */
   setGitRefs(fullName: string, heads: Record<string, string>): void;
-  /** Forgets recorded requests, `on` routes, job logs, repository lists and the refresh counter and delay; the rest stays */
+  /** Forgets recorded requests, `on` routes, job logs, repository lists, the comment counter and the refresh counter and delay; the rest stays */
   reset(): void;
   close(): Promise<void>;
 }
@@ -284,6 +288,7 @@ class GithubFakeServer implements GithubFake {
   private jobLogs = new Map<number, { text: string | Buffer; mode: JobLogMode }>();
   private repoLists = new Map<string, Parameters<GithubFake['setRepoLists']>[1]>();
   refreshGrants = 0;
+  private commentIds = 0;
 
   constructor(private readonly scenario: string) {}
 
@@ -461,6 +466,7 @@ class GithubFakeServer implements GithubFake {
     this.overrides = [];
     this.jobLogs.clear();
     this.repoLists.clear();
+    this.commentIds = 0;
     this.refreshGrants = 0;
     this.refreshDelayMs = 0;
   }
@@ -624,6 +630,8 @@ class GithubFakeServer implements GithubFake {
     if (listed) return listed;
     const ref = this.gitRefAnswer(req, credential);
     if (ref) return ref;
+    const written = this.repoWriteAnswer(req, credential);
+    if (written) return written;
     const tokenRoute = /^\/app\/installations\/(\d+)\/access_tokens$/.exec(req.path);
     if (req.method === 'POST' && tokenRoute) {
       if (!this.installations.has(Number(tokenRoute[1]))) return NOT_FOUND;
@@ -733,6 +741,137 @@ class GithubFakeServer implements GithubFake {
   }
 
   /**
+   * The write routes of a repository, with GitHub's shapes and refusals: opening a pull request
+   * (422 "A pull request already exists" for a head that has an open one), updating it,
+   * requesting reviewers, commenting on an issue or pull request, and re-running Actions jobs and
+   * checks. Pull requests live in the `pulls` of `setRepoLists`, so a later read finds them.
+   * A token whose `push` list lacks the repository answers 403 to every one of them.
+   * @param req The recorded request
+   * @param credential Who the request authenticated as
+   */
+  private repoWriteAnswer(req: RecordedRequest, credential: Credential): FakeReply | null {
+    const match = /^\/repos\/([^/]+)\/([^/]+)\/(.+)$/.exec(req.path);
+    if (!match || !['POST', 'PATCH'].includes(req.method)) return null;
+    const rest = match[3];
+    const open = /^pulls\/(\d+)$/.exec(rest);
+    const reviewers = /^pulls\/(\d+)\/requested_reviewers$/.exec(rest);
+    const comment = /^issues\/(\d+)\/comments$/.exec(rest);
+    const rerun = /^actions\/runs\/(\d+)\/rerun-failed-jobs$/.exec(rest);
+    const rerequest = /^check-runs\/(\d+)\/rerequest$/.exec(rest);
+    const known =
+      (req.method === 'POST' && (rest === 'pulls' || reviewers || comment || rerun || rerequest)) ||
+      (req.method === 'PATCH' && open);
+    if (!known) return null;
+    const fullName = `${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`;
+    const key = repoKey(fullName);
+    if (credential.push && !credential.push.has(key)) return NOT_ACCESSIBLE;
+    if (rerun || rerequest) return { status: 201, body: {} };
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    if (comment) {
+      this.commentIds += 1;
+      return {
+        status: 201,
+        body: {
+          id: 5000 + this.commentIds,
+          html_url: `https://github.com/${fullName}/pull/${comment[1]}#issuecomment-${5000 + this.commentIds}`,
+          body: body.body,
+          user: credential.identity ?? { login: 'octo-dev', id: 9101 },
+        },
+      };
+    }
+
+    let lists = this.repoLists.get(key);
+    if (!lists) {
+      lists = {};
+      this.repoLists.set(key, lists);
+    }
+    const pulls = (lists.pulls ??= []);
+    const heads = this.gitRefs.get(key);
+    const invalid = (field: string, code = 'invalid'): FakeReply => ({
+      status: 422,
+      body: {
+        message: 'Validation Failed',
+        errors: [{ resource: 'PullRequest', field, code }],
+        documentation_url: 'https://docs.github.com/rest/pulls/pulls#create-a-pull-request',
+      },
+    });
+    const who = credential.identity ?? { login: 'octo-dev', id: 9101 };
+    const now = new Date().toISOString();
+
+    if (rest === 'pulls') {
+      if (typeof body.title !== 'string' || !body.title) return invalid('title', 'missing_field');
+      if (typeof body.head !== 'string' || !body.head) return invalid('head', 'missing_field');
+      const base = typeof body.base === 'string' ? body.base : '';
+      // A head may be written owner:branch, as GitHub takes it
+      const head = body.head.includes(':') ? body.head.split(':').slice(1).join(':') : body.head;
+      if (heads && !heads.has(head)) return invalid('head');
+      if (!base || (heads && !heads.has(base))) return invalid('base');
+      if (pulls.some((pr) => pr.state === 'open' && (pr.head as { ref: string }).ref === head)) {
+        return {
+          status: 422,
+          body: {
+            message: 'Validation Failed',
+            errors: [
+              {
+                resource: 'PullRequest',
+                code: 'custom',
+                message: `A pull request already exists for ${match[1]}:${head}.`,
+              },
+            ],
+            documentation_url: 'https://docs.github.com/rest/pulls/pulls#create-a-pull-request',
+          },
+        };
+      }
+      const number = Math.max(0, ...pulls.map((pr) => Number(pr.number))) + 1;
+      const created = {
+        number,
+        title: body.title,
+        body: typeof body.body === 'string' ? body.body : null,
+        state: 'open',
+        draft: body.draft === true,
+        merged: false,
+        user: { login: who.login, id: who.id },
+        head: { ref: head, sha: heads?.get(head) ?? 'f'.repeat(40) },
+        base: { ref: base },
+        mergeable_state: 'unknown',
+        merge_commit_sha: null,
+        requested_reviewers: [],
+        html_url: `https://github.com/${fullName}/pull/${number}`,
+        created_at: now,
+        updated_at: now,
+        merged_at: null,
+        closed_at: null,
+      };
+      pulls.push(created);
+      return { status: 201, body: created };
+    }
+
+    const number = Number((open ?? reviewers)?.[1]);
+    const found = pulls.find((pr) => Number(pr.number) === number);
+    if (!found) return NOT_FOUND;
+    if (reviewers) {
+      const logins = Array.isArray(body.reviewers) ? (body.reviewers as string[]) : [];
+      const current = (found.requested_reviewers as Array<{ login: string; id: number }>) ?? [];
+      for (const login of logins) {
+        if (!current.some((r) => r.login === login)) {
+          current.push({ login, id: this.idOf(login) });
+        }
+      }
+      found.requested_reviewers = current;
+      found.updated_at = now;
+      return { status: 201, body: found };
+    }
+    if (typeof body.title === 'string') found.title = body.title;
+    if (typeof body.body === 'string') found.body = body.body;
+    if (typeof body.base === 'string') {
+      if (heads && !heads.has(body.base)) return invalid('base');
+      found.base = { ref: body.base };
+    }
+    found.updated_at = now;
+    return { status: 200, body: found };
+  }
+
+  /**
    * The list routes of `setRepoLists`, cut into pages with a Link header to the next one.
    * @param req The recorded request
    */
@@ -760,7 +899,15 @@ class GithubFakeServer implements GithubFake {
     };
     if (rest === 'pulls' && lists.pulls) {
       const wanted = req.query.state ?? 'open';
-      return page(lists.pulls.filter((pr) => wanted === 'all' || pr.state === wanted));
+      // `head` is owner:branch, as GitHub takes it
+      const head = req.query.head?.split(':').slice(1).join(':');
+      return page(
+        lists.pulls.filter(
+          (pr) =>
+            (wanted === 'all' || pr.state === wanted) &&
+            (!head || (pr.head as { ref: string }).ref === head),
+        ),
+      );
     }
     const one = /^pulls\/(\d+)$/.exec(rest);
     if (one && lists.pulls) {

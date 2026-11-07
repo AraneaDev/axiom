@@ -18,9 +18,17 @@ const TOKEN_PATTERNS = [
   /\beyJ[\w-]*\.[\w-]+\.[\w-]+/g,
 ];
 
+// The user:password part of a URL, whatever the secret looks like
+const URL_CREDENTIALS = /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi;
+
+// C1 controls and format characters (bidi overrides, zero-width): they make text look like other text
+
+const HIDDEN_CHARACTERS = /[\u0080-\u009f\p{Cf}]/gu;
+
 /**
  * Text from GitHub with every credential taken out: the one this call sent, anything shaped
- * like a GitHub token or a JWT. GitHub's error bodies are not ours, and some echo input back.
+ * like a GitHub token or a JWT, and the user:password of any URL. C1 controls and invisible
+ * format characters are dropped. GitHub's error bodies are not ours, and some echo input back.
  * @param text The text GitHub sent
  * @param credential The Authorization value this call sent, if any
  */
@@ -32,6 +40,7 @@ export function scrubGithubText(text: string, credential?: string): string {
     if (value) clean = clean.split(value).join('[redacted]');
   }
   for (const pattern of TOKEN_PATTERNS) clean = clean.replace(pattern, '[redacted]');
+  clean = clean.replace(URL_CREDENTIALS, '$1[redacted]@').replace(HIDDEN_CHARACTERS, '');
   return clean.length > MAX_MESSAGE_LENGTH ? `${clean.slice(0, MAX_MESSAGE_LENGTH)}...` : clean;
 }
 
@@ -47,7 +56,8 @@ function plainReason(message: string): string {
   const plain = message
     .replace(/<[^>]*>/g, '')
     // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f<>]+/g, ' ')
+    .replace(/[\u0000-\u001f\u007f-\u009f<>]+/g, ' ')
+    .replace(HIDDEN_CHARACTERS, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, MAX_REASON_LENGTH)

@@ -6,6 +6,8 @@
  * tails) comes from whoever can open a pull request on the repository: it is data, never
  * instructions, and it is passed on as it was stored.
  */
+import type { Prisma } from '@prisma/client';
+
 import { prisma } from '../../config/database';
 
 import { isFailed, newestRuns } from './checks.service';
@@ -190,6 +192,71 @@ function reviewersOf(value: unknown) {
   );
 }
 
+type PullRequestRow = Prisma.GithubPullRequestGetPayload<{
+  include: { reviews: true };
+}>;
+
+/**
+ * Pull request rows (with their latest reviews, newest first) as views.
+ * @param orgId The organization of the repository link: people resolve only within it
+ * @param rows The stored pull requests
+ */
+export async function pullRequestViews(
+  orgId: string,
+  rows: PullRequestRow[],
+): Promise<PullRequestView[]> {
+  const person = await personResolver(
+    orgId,
+    rows.flatMap((pr) => [
+      { login: pr.authorLogin, userId: pr.authorUserId },
+      ...reviewersOf(pr.requestedReviewers),
+      ...pr.reviews.map((r) => ({ login: r.authorLogin, userId: r.authorUserId })),
+    ]),
+  );
+  return rows.map((pr) => ({
+    number: pr.number,
+    title: pr.title,
+    state: STATES[pr.state],
+    draft: pr.draft,
+    url: pr.htmlUrl,
+    author: person({ login: pr.authorLogin, userId: pr.authorUserId }),
+    headRef: pr.headRef,
+    baseRef: pr.baseRef,
+    headSha: pr.headSha,
+    mergeableState: pr.mergeableState,
+    requestedReviewers: reviewersOf(pr.requestedReviewers).map(person),
+    reviews: pr.reviews
+      .map((r) => ({
+        author: person({ login: r.authorLogin, userId: r.authorUserId }),
+        state: r.state,
+        body: r.body,
+        submittedAt: r.submittedAt.toISOString(),
+      }))
+      .reverse(),
+  }));
+}
+
+/**
+ * One stored pull request of a repository as a view.
+ * @param repoLinkId The repository link
+ * @param orgId Its organization
+ * @param number The pull request's number on GitHub
+ * @returns null when it is not stored
+ */
+export async function loadPullRequestView(
+  repoLinkId: string,
+  orgId: string,
+  number: number,
+): Promise<PullRequestView | null> {
+  const row = await prisma.githubPullRequest.findUnique({
+    where: { repoLinkId_number: { repoLinkId, number } },
+    include: {
+      reviews: { orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }], take: REVIEWS_PER_PR },
+    },
+  });
+  return row ? (await pullRequestViews(orgId, [row]))[0] : null;
+}
+
 /**
  * The branches and pull requests that name an issue.
  * @param issueId The issue
@@ -233,15 +300,6 @@ export async function loadDevelopment(
   ]);
 
   const shown = prRows.slice(0, limit);
-  const person = await personResolver(
-    link.orgId,
-    shown.flatMap((pr) => [
-      { login: pr.authorLogin, userId: pr.authorUserId },
-      ...reviewersOf(pr.requestedReviewers),
-      ...pr.reviews.map((r) => ({ login: r.authorLogin, userId: r.authorUserId })),
-    ]),
-  );
-
   const branches = capped(
     branchRows.map((b) => ({
       name: b.name,
@@ -252,27 +310,7 @@ export async function loadDevelopment(
     limit,
   );
   const pullRequests: Capped<PullRequestView> = {
-    items: shown.map((pr) => ({
-      number: pr.number,
-      title: pr.title,
-      state: STATES[pr.state],
-      draft: pr.draft,
-      url: pr.htmlUrl,
-      author: person({ login: pr.authorLogin, userId: pr.authorUserId }),
-      headRef: pr.headRef,
-      baseRef: pr.baseRef,
-      headSha: pr.headSha,
-      mergeableState: pr.mergeableState,
-      requestedReviewers: reviewersOf(pr.requestedReviewers).map(person),
-      reviews: pr.reviews
-        .map((r) => ({
-          author: person({ login: r.authorLogin, userId: r.authorUserId }),
-          state: r.state,
-          body: r.body,
-          submittedAt: r.submittedAt.toISOString(),
-        }))
-        .reverse(),
-    })),
+    items: await pullRequestViews(link.orgId, shown),
     limit,
     truncated: prRows.length > limit,
   };

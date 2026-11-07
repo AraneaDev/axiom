@@ -163,8 +163,6 @@ export function assertRefName(name: string): void {
   if (REFUSED_CHARACTERS.test(name)) {
     throw bad('it has a space, a control character or one of ~ ^ : ? * [ \\');
   }
-  // Bidi and zero-width characters make names that look like others
-  if (/\p{Cf}/u.test(name)) throw bad('it has an invisible formatting character');
   if (name === 'HEAD') throw bad('it is "HEAD"');
   if (name.startsWith('-')) throw bad('it starts with "-"');
   if (name === '@' || name.includes('@{')) throw bad('it has "@{" or is "@"');
@@ -180,6 +178,16 @@ export function assertRefName(name: string): void {
 }
 
 /**
+ * Whether a text names the issue by its key, so what carries it links to the issue.
+ * @param text A branch name, title or body
+ * @param key The issue's key, such as AXM-42
+ */
+export function namesIssue(text: string, key: string): boolean {
+  const split = key.lastIndexOf('-');
+  return extractIssueNumbers(text, key.slice(0, split)).includes(Number(key.slice(split + 1)));
+}
+
+/**
  * A branch name the caller chose: valid for git, at most 200 characters, and naming the issue,
  * so the branch links to it.
  * @param name The branch name
@@ -188,11 +196,16 @@ export function assertRefName(name: string): void {
  */
 export function assertBranchName(name: string, key: string): void {
   assertRefName(name);
-  const split = key.lastIndexOf('-');
-  const named = extractIssueNumbers(name, key.slice(0, split)).includes(
-    Number(key.slice(split + 1)),
-  );
-  if (!named) {
+  // Bidi and zero-width characters make names that look like others. Only a name Axiom creates is
+  // held to it: a base branch that exists on GitHub is read, never made
+  if (/\p{Cf}/u.test(name)) {
+    throw new AppError(
+      400,
+      'Not a valid branch name: it has an invisible formatting character',
+      'INVALID_BRANCH_NAME',
+    );
+  }
+  if (!namesIssue(name, key)) {
     throw new AppError(
       400,
       `Not a valid branch name: it must contain the issue key ${key}`,
