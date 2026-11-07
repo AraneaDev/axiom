@@ -18,7 +18,11 @@ type GithubRepository = {
   permissions?: { admin?: boolean };
 };
 
-type GithubRepoInstallation = { id: number; suspended_at?: string | null };
+type GithubRepoInstallation = {
+  id: number;
+  suspended_at?: string | null;
+  account?: { login?: string; type?: string } | null;
+};
 
 /**
  * The link of a GitHub repository, by the id GitHub gave it.
@@ -168,6 +172,20 @@ export async function linkRepo(userId: string, projectId: string, repo: string) 
   }
 
   if (await findRepoLinkByRepoId(repository.id)) throw repoLinked();
+
+  // The worker reads a link only through a known installation: record the one GitHub just named
+  const row = {
+    accountLogin: installation.data.account?.login ?? repository.owner.login,
+    accountType: installation.data.account?.type ?? 'Organization',
+    suspendedAt: installation.data.suspended_at ? new Date(installation.data.suspended_at) : null,
+    removedAt: null,
+    lastEventAt: new Date(),
+  };
+  await prisma.githubInstallation.upsert({
+    where: { id: BigInt(installation.data.id) },
+    update: row,
+    create: { id: BigInt(installation.data.id), ...row },
+  });
 
   try {
     const link = await prisma.githubRepoLink.create({

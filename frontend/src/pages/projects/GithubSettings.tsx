@@ -102,7 +102,7 @@ function LinkForm({ projectId }: { projectId: string }) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: githubRepoKey(projectId) });
       await queryClient.invalidateQueries({ queryKey: githubHealthKey(projectId) });
-      await queryClient.invalidateQueries({ queryKey: ['issue-hydrate', projectId] });
+      await queryClient.invalidateQueries({ queryKey: ['issue-development', projectId] });
     },
   });
 
@@ -285,7 +285,7 @@ function LinkedView({
   });
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: githubHealthKey(projectId) });
-    await queryClient.invalidateQueries({ queryKey: ['issue-hydrate', projectId] });
+    await queryClient.invalidateQueries({ queryKey: ['issue-development', projectId] });
   };
   const reconcile = useMutation({
     mutationFn: () => githubRepoApi.reconcile(projectId),
