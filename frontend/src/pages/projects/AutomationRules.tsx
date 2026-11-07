@@ -33,7 +33,20 @@ const TRIGGER_OPTIONS = [
   { value: 'issue:status_changed', label: 'Status Changed' },
   { value: 'issue:assigned', label: 'Issue Assigned' },
   { value: 'label:added', label: 'Label Added' },
+  // GitHub
+  { value: 'pr:opened', label: 'Pull request opened' },
+  { value: 'pr:merged', label: 'Pull request merged' },
+  { value: 'pr:closed', label: 'Pull request closed without merging' },
+  { value: 'pr:review_requested', label: 'Review requested' },
+  { value: 'pr:review_submitted', label: 'Review submitted' },
+  { value: 'checks:failed', label: 'Checks failed' },
+  { value: 'checks:passed', label: 'Checks passed' },
+  { value: 'branch:created', label: 'Branch created' },
 ];
+
+const GITHUB_VARIABLE_HINT =
+  'GitHub triggers fill {{github.repo}}, {{github.actorLogin}}, {{github.pr.url}}, {{github.pr.title}}, ' +
+  '{{github.review.state}}, {{github.checks.failedNames}} and {{github.branch.name}} in comments and other text.';
 
 const CONDITION_FIELDS = [
   { value: 'type', label: 'Issue Type' },
@@ -130,6 +143,9 @@ function RuleForm({
           onChange={(v) => setTrigger(v as string)}
         />
       </div>
+      {/^(pr|checks|branch):/.test(trigger) && (
+        <p className="text-xs text-text-tertiary">{GITHUB_VARIABLE_HINT}</p>
+      )}
 
       {/* Conditions */}
       <div>

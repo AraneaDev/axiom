@@ -243,6 +243,16 @@ export async function withoutGithubCallLimit<T>(work: () => Promise<T>): Promise
   }
 }
 
+/**
+ * Runs work outside any call counter of the caller: its requests are neither counted nor refused
+ * by a run's budget. For work that happens inside a counted run but is not the run's (the rules
+ * a stored change sets off).
+ * @param work The work
+ */
+export function outsideGithubCallCount<T>(work: () => Promise<T>): Promise<T> {
+  return callCounters.exit(work);
+}
+
 async function send(url: URL, opts: SendOptions): Promise<Response> {
   const signal = AbortSignal.timeout(opts.timeoutMs);
   const api = apiOrigin();

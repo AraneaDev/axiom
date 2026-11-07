@@ -36,6 +36,14 @@ const TRIGGERS = [
   'issue:status_changed',
   'issue:assigned',
   'label:added',
+  'pr:opened',
+  'pr:merged',
+  'pr:closed',
+  'pr:review_requested',
+  'pr:review_submitted',
+  'checks:failed',
+  'checks:passed',
+  'branch:created',
 ] as const;
 const ACTION_TYPES = [
   'set_status',

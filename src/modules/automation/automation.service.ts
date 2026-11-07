@@ -6,6 +6,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { logger } from '../../utils/logger';
+import type { GithubTriggerContext } from '../github/github-automation';
 import {
   assertAssignable,
   assertColumnTransition,
@@ -21,7 +22,15 @@ export type AutomationTrigger =
   | 'issue:created'
   | 'issue:status_changed'
   | 'issue:assigned'
-  | 'label:added';
+  | 'label:added'
+  | 'pr:opened'
+  | 'pr:merged'
+  | 'pr:closed'
+  | 'pr:review_requested'
+  | 'pr:review_submitted'
+  | 'checks:failed'
+  | 'checks:passed'
+  | 'branch:created';
 
 export interface AutomationCondition {
   field: string;
@@ -63,6 +72,10 @@ export interface AutomationContext {
   label?: string;
   automationDepth?: number;
   issueCreationCount?: number;
+  /** What the GitHub event behind the trigger was, for templates as `{{github.pr.url}}` */
+  github?: GithubTriggerContext;
+  /** Asked before an add_comment action runs; false skips the comment and nothing else */
+  commentGuard?: () => boolean | Promise<boolean>;
 }
 
 // Re-export so existing consumers importing from this file keep working
@@ -331,7 +344,10 @@ async function buildTemplateContext(context: AutomationContext) {
       ...withoutEmails(issue),
       labels: (issue.labels as { name: string }[] | undefined)?.map((l) => l.name) ?? [],
     },
-    trigger: context.from !== undefined ? 'issue:status_changed' : 'issue:created',
+    trigger:
+      context.github?.trigger ??
+      (context.from !== undefined ? 'issue:status_changed' : 'issue:created'),
+    github: context.github,
     from: context.from,
     to: context.to,
     label: context.label,
@@ -395,6 +411,7 @@ async function executeActions(
           break;
         case 'add_comment':
           if (action.body) {
+            if (context.commentGuard && !(await context.commentGuard())) break;
             const resolvedBody = resolveTemplate(action.body, templateCtx);
             await prisma.comment.create({
               data: {

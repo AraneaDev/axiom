@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { prisma } from '../../config/database';
 
+import { checkStateOf } from './checks.service';
 import { resolveGithubActor } from './github-actor';
 import { reportOutcome, type GithubEventOutcome, type GithubTransition } from './github-outcomes';
 import {
@@ -277,6 +278,30 @@ function prTransitions(
 }
 
 /**
+ * The check transition of a head a pull request has just been stored with. A run stored before
+ * its PR reported nobody, and a run stored after reports only a change of state, so the state the
+ * new head already has is told once, when the PR first has that head.
+ * @param tx The transaction
+ * @param repoLinkId The repository link
+ * @param before The row before this change, null for a new one
+ * @param before.headSha Its head
+ * @param after The row now
+ * @param after.state Its state
+ * @param after.headSha Its head
+ */
+async function headCheckTransitions(
+  tx: Client,
+  repoLinkId: string,
+  before: { headSha: string } | null,
+  after: { state: GithubPrState; headSha: string },
+): Promise<GithubTransition[]> {
+  if (after.state !== 'OPEN' || before?.headSha === after.headSha) return [];
+  const state = await checkStateOf(repoLinkId, after.headSha, tx);
+  if (state === 'failed') return ['checks_failed'];
+  return state === 'passed' ? ['checks_passed'] : [];
+}
+
+/**
  * Stores a pull request and syncs its issue links (branch name, title and body) in the same
  * transaction. The row is locked while it is read, written and synced, so the links match the
  * stored row, the transitions come from the row before and after, and two deliveries of the
@@ -351,7 +376,10 @@ export async function storePullRequest(
         return {
           row,
           stale: false,
-          transitions: prTransitions(null, row),
+          transitions: [
+            ...prTransitions(null, row),
+            ...(await headCheckTransitions(tx, repoLinkId, null, row)),
+          ],
           links: await sync(row.id),
         };
       }
@@ -389,7 +417,10 @@ export async function storePullRequest(
       return {
         row,
         stale: false,
-        transitions: prTransitions(before, row),
+        transitions: [
+          ...prTransitions(before, row),
+          ...(await headCheckTransitions(tx, repoLinkId, before, row)),
+        ],
         links: await sync(row.id),
       };
     }),
