@@ -9,6 +9,7 @@ import {
 import { cleanupExpiredUploads } from './modules/attachments/upload-intents.service';
 import './modules/github/github-resolvers';
 import './modules/github/webhook-handlers';
+import { cleanupAutomationMarks } from './modules/github/github-automation';
 import { reconcileDueRepos } from './modules/github/reconcile.service';
 import { cleanupDeliveries, retryDueDeliveries } from './modules/github/webhook.service';
 import { closeRealtimePublisher, setRealtimeMode } from './realtime/bridge';
@@ -17,7 +18,9 @@ import { logger } from './utils/logger';
 const UPLOAD_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const APPROVAL_CLEANUP_INTERVAL_MS = 60 * 1000;
 const GITHUB_RECONCILE_TICK_MS = 60 * 1000;
+const GITHUB_MARK_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let reconcileRunning = false;
+let markCleanupRunning = false;
 
 /** Remove expired upload URLs and staged attachments; a failure waits for the next round. */
 function runUploadCleanup(): void {
@@ -60,6 +63,19 @@ function runGithubReconcile(): void {
     });
 }
 
+/** Delete the GitHub comment marks older than 90 days; one run at a time, a failure waits a day. */
+function runGithubMarkCleanup(): void {
+  if (markCleanupRunning) return;
+  markCleanupRunning = true;
+  cleanupAutomationMarks()
+    .catch((err) => {
+      logger.error('GitHub automation mark cleanup failed', {}, err as Error);
+    })
+    .finally(() => {
+      markCleanupRunning = false;
+    });
+}
+
 async function main(): Promise<void> {
   // The worker has no sockets: what it stores reaches browsers through the API over Redis
   setRealtimeMode('redis');
@@ -84,6 +100,9 @@ async function main(): Promise<void> {
   runGithubReconcile();
   const githubReconcile = setInterval(runGithubReconcile, GITHUB_RECONCILE_TICK_MS);
 
+  runGithubMarkCleanup();
+  const githubMarkCleanup = setInterval(runGithubMarkCleanup, GITHUB_MARK_CLEANUP_INTERVAL_MS);
+
   logger.info('Axiom worker running');
 
   const shutdown = async (signal: string) => {
@@ -92,6 +111,7 @@ async function main(): Promise<void> {
     clearInterval(approvalCleanup);
     clearInterval(githubDeliveries);
     clearInterval(githubReconcile);
+    clearInterval(githubMarkCleanup);
     closeRealtimePublisher();
     if (stopEmail) await stopEmail();
     await prisma.$disconnect();

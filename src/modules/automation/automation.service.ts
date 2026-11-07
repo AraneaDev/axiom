@@ -3,8 +3,10 @@ import { emailQueue } from '../../email/queue';
 import { assertKnownFields, evaluate, parse, resolveTemplate } from '../../lib/query-engine';
 import { issueFieldRegistry } from '../../lib/query-engine/fields/issue-fields';
 import { AppError } from '../../middleware/errorHandler';
+import { broadcastToRoom } from '../../realtime/broadcast';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { invalidateIssueCache } from '../../utils/issue-cache';
 import { logger } from '../../utils/logger';
 import type { GithubTriggerContext } from '../github/github-automation';
 import { safeGithubContext } from '../github/github-template';
@@ -365,6 +367,24 @@ async function buildPlainTemplateContext(context: AutomationContext) {
   };
 }
 
+// Browsers learn of an automation write the way they learn of a person's: the issue lists are
+// refetched and the project room hears of it, from the worker too (broadcastToRoom bridges)
+async function told(
+  projectId: string,
+  issueId: string,
+  type: 'board:moved' | 'issue:updated' | 'comment:added',
+): Promise<void> {
+  try {
+    if (type !== 'comment:added') await invalidateIssueCache(projectId);
+    broadcastToRoom(`project:${projectId}`, { type, projectId, issueId });
+  } catch (err) {
+    logger.warn('automation write not announced', {
+      projectId,
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+  }
+}
+
 async function executeActions(
   projectId: string,
   actions: AutomationAction[],
@@ -392,6 +412,7 @@ async function executeActions(
               where: { id: issue.id },
               data: { columnId: action.columnId },
             });
+            await told(projectId, issue.id, 'board:moved');
           }
           break;
         case 'set_assignee':
@@ -402,6 +423,7 @@ async function executeActions(
               where: { id: issue.id },
               data: { assigneeId: action.userId },
             });
+            await told(projectId, issue.id, 'issue:updated');
           }
           break;
         case 'add_label':
@@ -417,6 +439,7 @@ async function executeActions(
                 },
               },
             });
+            await told(projectId, issue.id, 'issue:updated');
           }
           break;
         case 'add_comment':
@@ -430,6 +453,7 @@ async function executeActions(
                 body: resolvedBody,
               },
             });
+            await told(projectId, issue.id, 'comment:added');
           }
           break;
         case 'set_field':
@@ -441,6 +465,7 @@ async function executeActions(
               action.field === 'body' ? markdownCtx : templateCtx,
             );
             await applySetField(projectId, issue.id, action.field, resolvedValue);
+            await told(projectId, issue.id, 'issue:updated');
           }
           break;
         case 'create_issue':

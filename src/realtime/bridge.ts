@@ -17,6 +17,7 @@ import { logger } from '../utils/logger';
 
 import { broadcastToRoom } from './broadcast';
 import type { RealtimeEvent } from './events';
+import { setPublishHook } from './publish-hook';
 
 export const REALTIME_CHANNEL = 'axiom:realtime';
 
@@ -24,11 +25,19 @@ export const REALTIME_CHANNEL = 'axiom:realtime';
 // is dropped, whoever sent it.
 const message = z.object({
   room: z.string().regex(/^project:c[a-z0-9]{20,31}$/),
-  event: z.object({
-    type: z.literal('issue:development-updated'),
-    projectId: z.string().min(1),
-    issueIds: z.array(z.string().min(1)).max(1000),
-  }),
+  event: z.discriminatedUnion('type', [
+    z.object({
+      type: z.literal('issue:development-updated'),
+      projectId: z.string().min(1),
+      issueIds: z.array(z.string().min(1)).max(1000),
+    }),
+    // What the rules of automation write: a move, a change, a comment
+    z.object({
+      type: z.enum(['issue:updated', 'issue:created', 'comment:added', 'board:moved']),
+      projectId: z.string().min(1),
+      issueId: z.string().min(1),
+    }),
+  ]),
 });
 
 type Delivery = (room: string, event: RealtimeEvent) => void;
@@ -76,6 +85,8 @@ let publisherName = '';
  */
 export function setRealtimeMode(next: 'local' | 'redis'): void {
   mode = next;
+  // In the worker every broadcastToRoom goes over the bridge: nothing there has sockets
+  setPublishHook(next === 'redis' ? publishRealtime : null);
   if (next === 'redis' && !publisher) {
     publisherName = `axiom-rt-pub-${process.pid}-${randomUUID().slice(0, 8)}`;
     publisher = connection(publisherName, false);

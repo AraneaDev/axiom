@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 
 import type { RealtimeEvent } from './events';
+import { publishHook } from './publish-hook';
 import { getClients } from './ws-server';
 
 interface AuthenticatedSocket extends WebSocket {
@@ -11,11 +12,18 @@ interface AuthenticatedSocket extends WebSocket {
 
 /**
  * Broadcast an event to all clients subscribed to a given room.
- * Room naming convention: `project:{id}`, `space:{id}`, `user:{id}`
+ * In the worker the event is published through the bridge instead, so a browser
+ * hears it from the API. Room naming convention: `project:{id}`, `space:{id}`, `user:{id}`
  * @param room
  * @param event
  */
 export function broadcastToRoom(room: string, event: RealtimeEvent): void {
+  // The worker has no sockets: it publishes and the API processes broadcast what arrives
+  const publish = publishHook();
+  if (publish) {
+    publish(room, event);
+    return;
+  }
   const payload = JSON.stringify(event);
 
   for (const client of getClients() as Set<AuthenticatedSocket>) {

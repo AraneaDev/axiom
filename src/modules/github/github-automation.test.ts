@@ -25,12 +25,20 @@ import {
   type AutomationTrigger,
 } from '../automation/automation.service';
 
-import { fireGithubTriggers, registerCommentGuard, TRANSITION_TRIGGERS } from './github-automation';
+import {
+  claimCommentSlot,
+  cleanupAutomationMarks,
+  fireGithubTriggers,
+  registerCommentGuard,
+  TRANSITION_TRIGGERS,
+} from './github-automation';
+import { storePullRequest } from './github-events';
 import { onGithubOutcome, type GithubEventOutcome } from './github-outcomes';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
 import './github-resolvers';
 import { reconcileRepo } from './reconcile.service';
 import './webhook-handlers';
+import { processDelivery } from './webhook.service';
 
 const webhook = vi.hoisted(() => ({ calls: [] as unknown[][] }));
 vi.mock('../automation/webhook', async (importOriginal) => ({
@@ -171,6 +179,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await prisma.automationRule.deleteMany({ where: { projectId: ctx.projectId } });
   await prisma.comment.deleteMany({ where: { issue: { projectId: ctx.projectId } } });
+  await prisma.githubAutomationMark.deleteMany({ where: { issue: { projectId: ctx.projectId } } });
   await prisma.githubAccount.deleteMany();
   await prisma.githubInstallation.deleteMany();
   await prisma.githubInstallation.create({
@@ -647,6 +656,8 @@ describe('the review that fired', () => {
       'pull_request_review',
       review(5002, 'second-dev', 'changes_requested', '2026-11-06T13:00:00Z'),
     );
+    // One comment per trigger and head: free the slot to see what the second delivery says
+    await prisma.githubAutomationMark.deleteMany({ where: { issueId: issue1 } });
     await deliver(
       'pull_request_review',
       review(5001, 'first-dev', 'approved', '2026-11-06T12:00:00Z'),
@@ -774,5 +785,150 @@ describe('round 3', () => {
       }),
     );
     expect(await comments(issue1)).toHaveLength(0);
+  });
+});
+
+describe('noise limits', () => {
+  const reviewEvent = (n: number, sha = SHA_A) =>
+    prEvent(
+      'review_requested',
+      pr({
+        head: { ref: `${p}-1-x`, sha },
+        requested_reviewers: Array.from({ length: n }, (_, i) => ({
+          id: 7100 + i,
+          login: `reviewer-${i}`,
+        })),
+        updated_at: `2026-11-06T10:${String(10 + n).padStart(2, '0')}:00Z`,
+      }),
+    );
+
+  it('posts one comment for ten review requests on one head, and another for a new head', async () => {
+    await rule('pr:review_requested', say('asked'));
+    await prEvent('opened', pr());
+    for (let n = 1; n <= 10; n++) await reviewEvent(n);
+    expect(await comments(issue1)).toHaveLength(1);
+    await prEvent(
+      'synchronize',
+      pr({ head: { ref: `${p}-1-x`, sha: SHA_B }, updated_at: '2026-11-06T11:00:00Z' }),
+    );
+    await prEvent(
+      'review_requested',
+      pr({
+        head: { ref: `${p}-1-x`, sha: SHA_B },
+        requested_reviewers: [{ id: 7200, login: 'late-reviewer' }],
+        updated_at: '2026-11-06T11:05:00Z',
+      }),
+    );
+    expect(await comments(issue1)).toHaveLength(2);
+  });
+
+  it('still moves the issue when its comment is suppressed', async () => {
+    await rule('pr:opened', say('first'), 'a');
+    await rule('pr:opened', moveAndSay(), 'b');
+    await prEvent('opened', pr());
+    expect((await comments(issue1)).map((c) => c.body)).toEqual(['first']);
+    expect(await columnOf(issue1)).toBe(doneColumn);
+  });
+
+  it('keeps the slot per issue, trigger and subject', async () => {
+    await rule('pr:opened', say('opened'));
+    await rule('pr:merged', say('merged'));
+    await prEvent('opened', pr());
+    await prEvent('closed', pr({ ...MERGE }));
+    expect((await comments(issue1)).map((c) => c.body)).toEqual(['opened', 'merged']);
+    expect(await prisma.githubAutomationMark.count({ where: { issueId: issue1 } })).toBe(2);
+  });
+
+  it('gives the sender who watches the issue no notification', async () => {
+    const member = await addMemberToContext(ctx);
+    await prisma.githubAccount.create({
+      data: { userId: member.id, githubUserId: 7001n, login: 'voorbeeld-dev', accessToken: 'x' },
+    });
+    await prisma.issueWatcher.create({ data: { issueId: issue1, userId: member.id } });
+    await rule('pr:opened', moveAndSay());
+    await prEvent('opened', pr());
+    expect((await comments(issue1))[0].authorId).toBe(member.id);
+    expect(await columnOf(issue1)).toBe(doneColumn);
+    expect(await prisma.notification.count({ where: { userId: member.id } })).toBe(0);
+  });
+
+  it('writes as the integration user for an unknown sender and notifies it of nothing', async () => {
+    await rule('pr:opened', moveAndSay());
+    await prEvent('opened', pr(), { id: 9999, login: 'stranger' });
+    expect((await comments(issue1))[0].authorId).toBe(GITHUB_INTEGRATION_USER_ID);
+    expect(await prisma.notification.count({ where: { userId: GITHUB_INTEGRATION_USER_ID } })).toBe(
+      0,
+    );
+  });
+
+  it('logs a set_status refused by an approval gate, still comments, and ends PROCESSED with one comment after a forced redelivery', async () => {
+    const other = (
+      await prisma.boardColumn.findMany({
+        where: { projectId: ctx.projectId, id: { not: doneColumn } },
+      })
+    )[0];
+    const gate = await prisma.approvalGate.create({
+      data: { projectId: ctx.projectId, fromColumnId: other.id, toColumnId: doneColumn },
+    });
+    onTestFinished(() =>
+      prisma.approvalGate.delete({ where: { id: gate.id } }).then(() => undefined),
+    );
+    const warn = vi.spyOn(logger, 'warn');
+    onTestFinished(() => warn.mockRestore());
+    await rule('pr:opened', moveAndSay());
+    const deliveryId = randomUUID();
+    const body = { action: 'opened', number: 21, pull_request: pr(), repository, sender };
+    expect((await postWebhook('pull_request', body, { deliveryId })).status).toBe(202);
+    await vi.waitFor(async () => {
+      const row = await prisma.githubDelivery.findUniqueOrThrow({ where: { id: deliveryId } });
+      expect(row.status).toBe('PROCESSED');
+    });
+    expect(await columnOf(issue1)).not.toBe(doneColumn);
+    expect(await comments(issue1)).toHaveLength(1);
+    await prisma.githubDelivery.update({
+      where: { id: deliveryId },
+      data: { status: 'PENDING', nextAttemptAt: null, attempts: 0 },
+    });
+    await processDelivery(deliveryId);
+    expect(
+      (await prisma.githubDelivery.findUniqueOrThrow({ where: { id: deliveryId } })).status,
+    ).toBe('PROCESSED');
+    expect(await comments(issue1)).toHaveLength(1);
+  });
+
+  it('claims a slot once and answers false for the same four values after', async () => {
+    expect(await claimCommentSlot(issue1, 'pr:opened', 'pr-x', SHA_A)).toBe(true);
+    expect(await claimCommentSlot(issue1, 'pr:opened', 'pr-x', SHA_A)).toBe(false);
+    expect(await claimCommentSlot(issue1, 'pr:opened', 'pr-x', SHA_B)).toBe(true);
+    expect(await claimCommentSlot(issue2, 'pr:opened', 'pr-x', SHA_A)).toBe(true);
+  });
+
+  it('deletes marks older than 90 days and no others', async () => {
+    const old = new Date(Date.now() - 91 * 86_400_000);
+    await prisma.githubAutomationMark.createMany({
+      data: [
+        { issueId: issue1, trigger: 'a', subjectKey: 'k', headSha: 'h', createdAt: old },
+        { issueId: issue1, trigger: 'b', subjectKey: 'k', headSha: 'h' },
+      ],
+    });
+    expect(await cleanupAutomationMarks()).toBe(1);
+    expect(await prisma.githubAutomationMark.count({ where: { issueId: issue1 } })).toBe(1);
+  });
+
+  it('comments on a review request an Axiom user made on a PR opened before the link (S1)', async () => {
+    await rule('pr:review_requested', say('asked'));
+    await prEvent('opened', pr(OLD));
+    expect(await comments(issue1)).toHaveLength(0);
+    await storePullRequest(
+      repoLinkId,
+      pr({
+        ...OLD,
+        requested_reviewers: [{ id: 7002, login: 'review-bot' }],
+        updated_at: '2026-10-01T11:00:00Z',
+      }) as never,
+      { id: 7001, login: 'voorbeeld-dev' },
+      'action',
+    );
+    expect((await comments(issue1)).map((c) => c.body)).toEqual(['asked']);
   });
 });

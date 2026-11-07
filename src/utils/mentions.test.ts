@@ -27,9 +27,35 @@ describe('parseMentions', () => {
     expect(parseMentions('')).toEqual([]);
   });
 
-  it('should extract username part from email-like patterns', () => {
-    // The regex matches @host in email@host
-    expect(parseMentions('email@host')).toEqual(['host']);
+  it('does not read an email address as a mention', () => {
+    expect(parseMentions('email@host')).toEqual([]);
+    expect(parseMentions('a@b.com')).toEqual([]);
+    expect(parseMentions('mail a@b.com, @tim')).toEqual(['tim']);
+  });
+
+  it('needs a word boundary or the start of the text before the @', () => {
+    expect(parseMentions('(@alice) "@bob" ,@carl **@dan**')).toEqual([
+      'alice',
+      'bob',
+      'carl',
+      'dan',
+    ]);
+    expect(parseMentions('x_@eve')).toEqual([]);
+  });
+
+  it('notifies after an even number of backslashes and not after an odd number', () => {
+    expect(parseMentions('\\\\@tim')).toEqual(['tim']);
+    expect(parseMentions('\\@tim')).toEqual([]);
+    expect(parseMentions('\\\\\\@tim')).toEqual([]);
+  });
+
+  it('skips inline code, fenced and indented code', () => {
+    expect(parseMentions('`@tim` and ``@ann``')).toEqual([]);
+    expect(parseMentions('```\n@tim\n```\n@bob')).toEqual(['bob']);
+    expect(parseMentions('text\n\n    @indented\n\n@after')).toEqual(['after']);
+    expect(parseMentions('~~~js\n@tim\n~~~')).toEqual([]);
+    expect(parseMentions('> `@tim` @quoted')).toEqual(['quoted']);
+    expect(parseMentions('- item `@tim`\n- @listed')).toEqual(['listed']);
   });
 });
 
@@ -79,5 +105,17 @@ describe('escaped sigils', () => {
     expect(parseIssueRefs('\\#AXM-1')).toEqual([]);
     expect(parseIssueRefs('\\\\^AXM-1')).toEqual([{ prefix: 'AXM', number: 1 }]);
     expect(parseIssueRefs('^AXM-1')).toEqual([{ prefix: 'AXM', number: 1 }]);
+  });
+});
+
+describe('parseIssueRefs in code and with escapes', () => {
+  it('skips code', () => {
+    expect(parseIssueRefs('`^AXM-1` ^AXM-2')).toEqual([{ prefix: 'AXM', number: 2 }]);
+    expect(parseIssueRefs('```\n^AXM-1\n```')).toEqual([]);
+  });
+
+  it('reads an even number of backslashes as no escape', () => {
+    expect(parseIssueRefs('\\\\^AXM-1')).toEqual([{ prefix: 'AXM', number: 1 }]);
+    expect(parseIssueRefs('\\^AXM-1 \\#AXM-2')).toEqual([]);
   });
 });

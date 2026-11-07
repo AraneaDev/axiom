@@ -61,6 +61,10 @@ export type CommentGuardInfo = {
   eventAt: Date | null;
   /** When the repository was linked: nothing older than this is news */
   linkedAt: Date;
+  /** The pull request or branch the comment is about (the head commit alone when neither) */
+  subjectKey: string;
+  /** The head commit it is about, empty for a branch */
+  headSha: string;
 };
 export type CommentGuard = (info: CommentGuardInfo) => boolean | Promise<boolean>;
 
@@ -83,9 +87,49 @@ export function registerCommentGuard(guard: CommentGuard): () => void {
 // What happened before the repository was linked may move tickets, but nobody is told of it
 registerCommentGuard((info) => info.eventAt !== null && info.eventAt >= info.linkedAt);
 
+/**
+ * Takes the one comment a trigger may make for an issue, a subject (pull request or branch) and a
+ * head commit. The first caller gets true; every later one gets false, however many events,
+ * redeliveries or rules ask.
+ * @param issueId The issue
+ * @param trigger The trigger
+ * @param subjectKey The pull request or branch id
+ * @param headSha The head commit
+ * @returns Whether the comment may be made
+ */
+export async function claimCommentSlot(
+  issueId: string,
+  trigger: AutomationTrigger,
+  subjectKey: string,
+  headSha: string,
+): Promise<boolean> {
+  try {
+    await prisma.githubAutomationMark.create({ data: { issueId, trigger, subjectKey, headSha } });
+    return true;
+  } catch (err) {
+    if ((err as { code?: string }).code === 'P2002') return false;
+    throw err;
+  }
+}
+
+const MARK_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * Deletes the comment marks older than 90 days: nothing that old is redelivered or still noisy.
+ * @returns How many it deleted
+ */
+export async function cleanupAutomationMarks(): Promise<number> {
+  const { count } = await prisma.githubAutomationMark.deleteMany({
+    where: { createdAt: { lt: new Date(Date.now() - MARK_TTL_MS) } },
+  });
+  return count;
+}
+
+// The slot is claimed last, once every other guard agrees, so a comment refused for another
+// reason does not use it up
 async function allow(info: CommentGuardInfo): Promise<boolean> {
   for (const guard of [...commentGuards]) if (!(await guard(info))) return false;
-  return true;
+  return claimCommentSlot(info.issueId, info.trigger, info.subjectKey, info.headSha);
 }
 
 // The mapped user, when they are a member of the project's org; else the integration user
@@ -131,7 +175,12 @@ async function contextOf(
   outcome: GithubEventOutcome,
   transition: GithubTransition,
   repo: { fullName: string; htmlUrl: string },
-): Promise<{ github: GithubTriggerContext; eventAt: Date | null } | null> {
+): Promise<{
+  github: GithubTriggerContext;
+  eventAt: Date | null;
+  subjectKey: string;
+  headSha: string;
+} | null> {
   const trigger = TRANSITION_TRIGGERS[transition];
   // A change reconcile found has no GitHub sender: it is not "ghost", the account that is gone
   const actorLogin =
@@ -162,10 +211,12 @@ async function contextOf(
       eventAt = pr?.closedAt ?? pr?.githubUpdatedAt ?? null;
       break;
     case 'reviewers_added':
-      // Only a webhook that says reviewers were requested dates it now; any other event that
-      // carries the request (a first store, a merge, an edit) saw requests as old as the PR
+      // Only a webhook that says reviewers were requested, or a request Axiom made itself, dates
+      // it now; any other event that carries the request (a first store, a merge, an edit) saw
+      // requests as old as the PR
       eventAt =
-        outcome.source !== 'reconcile' && outcome.action === 'review_requested'
+        outcome.source === 'action' ||
+        (outcome.source === 'webhook' && outcome.action === 'review_requested')
           ? new Date()
           : (pr?.openedAt ?? null);
       break;
@@ -240,7 +291,9 @@ async function contextOf(
     default:
       if (!pr) return null;
   }
-  return { github, eventAt };
+  const subjectKey = pr?.id ?? outcome.pullRequestId ?? outcome.branchId ?? outcome.headSha ?? '';
+  const headSha = github.pr?.headSha ?? github.checks?.headSha ?? '';
+  return { github, eventAt, subjectKey, headSha };
 }
 
 /**
@@ -290,6 +343,8 @@ export async function fireGithubTriggers(outcome: GithubEventOutcome): Promise<v
             trigger,
             eventAt: built.eventAt,
             linkedAt: common.repo.createdAt,
+            subjectKey: built.subjectKey,
+            headSha: built.headSha,
           };
           await evaluateRules(outcome.projectId, trigger, {
             issue: issue as unknown as AutomationContext['issue'],

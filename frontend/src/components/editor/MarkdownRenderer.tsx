@@ -77,7 +77,7 @@ const queryEmbedExtension = {
     return `<div data-query-embed="" data-query-target="${encodeURIComponent(target)}"><p>${escapeAttr(`:::query ${target}:::`)}</p></div>`;
   },
 };
-// A backslash-escaped @ or ^ is plain text: the mention and issue key rewrites below run on the
+// A backslash-escaped @, ^ or # is plain text: the mention and issue key rewrites below run on the
 // finished HTML, where they could no longer tell it from a real one, so a span keeps it apart
 const escapedSigilExtension: TokenizerAndRendererExtension = {
   name: 'escapedSigil',
@@ -86,7 +86,7 @@ const escapedSigilExtension: TokenizerAndRendererExtension = {
     return src.indexOf('\\');
   },
   tokenizer(src: string) {
-    const match = /^\\([@^])/.exec(src);
+    const match = /^\\([@^#])/.exec(src);
     return match ? { type: 'escapedSigil', raw: match[0], text: match[1] } : undefined;
   },
   renderer(token: Token) {
@@ -190,18 +190,55 @@ function HtmlContent({ html, className }: { html: string; className?: string }) 
 
 const MERMAID_FENCE = /```mermaid\s*\n([\s\S]*?)```/g;
 
+// The same rules as src/utils/mentions.ts, which decides who is notified: a mention is `@name`
+// with no letter, digit or underscore right before the `@`; an issue key is `^KEY-1` (or the
+// legacy `#KEY-1`). Nothing inside code is styled, and an escaped sigil is already a plain span.
+const MENTION_OR_REF = /(^|[^A-Za-z0-9_])@([a-zA-Z0-9_-]+)|[#^]([A-Z]+-(\d+))/g;
+
 function linkifyMentionsAndRefs(html: string, basePath?: string): string {
-  // Replace @username with styled link
-  let result = html.replace(
-    /(^|[\s(>])@([a-zA-Z0-9_-]+)/g,
-    '$1<span class="mention-ref" style="color:var(--color-primary);font-weight:500">@$2</span>',
-  );
-  // Replace ^PREFIX-123 issue references with styled badge link
-  result = result.replace(/\^([A-Z]+-(\d+))/g, (_match, key, num) => {
-    const href = basePath ? `${basePath}/issues/${num}` : `/search?q=${key}`;
-    return `<a href="${href}" class="issue-ref-badge" style="color:var(--color-primary);font-weight:500;text-decoration:none">${key}</a>`;
-  });
-  return result;
+  const container = inertContainer(html);
+  const doc = container.ownerDocument;
+  const walker = doc.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    // A text node is not inside code when no element on its way up is `code` or `pre`
+    if (!(node.parentElement?.closest('code, pre') ?? null)) nodes.push(node as Text);
+  }
+  for (const node of nodes) {
+    const text = node.data;
+    MENTION_OR_REF.lastIndex = 0;
+    let last = 0;
+    let match: RegExpExecArray | null;
+    const parts: Node[] = [];
+    while ((match = MENTION_OR_REF.exec(text)) !== null) {
+      const before = match[1] ?? '';
+      const start = match.index + before.length;
+      parts.push(doc.createTextNode(text.slice(last, start)));
+      if (match[2] !== undefined) {
+        const span = doc.createElement('span');
+        span.className = 'mention-ref';
+        span.setAttribute('style', 'color:var(--color-primary);font-weight:500');
+        span.textContent = `@${match[2]}`;
+        parts.push(span);
+      } else {
+        const key = match[3];
+        const link = doc.createElement('a');
+        link.setAttribute('href', basePath ? `${basePath}/issues/${match[4]}` : `/search?q=${key}`);
+        link.className = 'issue-ref-badge';
+        link.setAttribute(
+          'style',
+          'color:var(--color-primary);font-weight:500;text-decoration:none',
+        );
+        link.textContent = key;
+        parts.push(link);
+      }
+      last = match.index + match[0].length;
+    }
+    if (parts.length === 0) continue;
+    parts.push(doc.createTextNode(text.slice(last)));
+    node.replaceWith(...parts);
+  }
+  return container.innerHTML;
 }
 
 /**

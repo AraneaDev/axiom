@@ -109,3 +109,51 @@ describe('MarkdownRenderer escaped GitHub text', () => {
     expect(container.querySelector('.issue-ref-badge')).toBeNull();
   });
 });
+
+describe('MarkdownRenderer mentions and issue keys agree with the notifier', () => {
+  const mentions = (content: string) =>
+    Array.from(
+      render(<MarkdownRenderer content={content} basePath="/a/b/AXM" />).container.querySelectorAll(
+        '.mention-ref',
+      ),
+    ).map((el) => el.textContent);
+  const keys = (content: string) =>
+    Array.from(
+      render(<MarkdownRenderer content={content} basePath="/a/b/AXM" />).container.querySelectorAll(
+        'a.issue-ref-badge',
+      ),
+    ).map((el) => el.textContent);
+
+  it('styles a mention at the start, after punctuation and after markup', () => {
+    expect(mentions('@alice')).toEqual(['@alice']);
+    expect(mentions('(@alice) "@bob" ,@carl')).toEqual(['@alice', '@bob', '@carl']);
+    expect(mentions('**@alice**')).toEqual(['@alice']);
+  });
+
+  it('styles nothing for an email address', () => {
+    expect(mentions('mail a@b.com now')).toEqual([]);
+  });
+
+  it('styles a mention after an even number of backslashes', () => {
+    expect(mentions('\\\\@tim')).toEqual(['@tim']);
+    expect(mentions('\\@tim')).toEqual([]);
+    expect(mentions('\\\\\\@tim')).toEqual([]);
+  });
+
+  it('styles nothing inside inline code or a code block', () => {
+    expect(mentions('`@tim` and ```@tim```')).toEqual([]);
+    expect(mentions('```\n@tim ^AXM-1\n```')).toEqual([]);
+    expect(keys('`^AXM-1`')).toEqual([]);
+    expect(mentions('see `x` then @tim')).toEqual(['@tim']);
+  });
+
+  it('styles the key forms the notifier reads, and not an escaped one', () => {
+    expect(keys('^AXM-1 and #AXM-2')).toEqual(['AXM-1', 'AXM-2']);
+    expect(keys('\\^AXM-1 \\#AXM-2')).toEqual([]);
+  });
+
+  it('leaves an attribute alone', () => {
+    const { container } = render(<MarkdownRenderer content={'[x](https://acme.invalid/@tim)'} />);
+    expect(container.querySelector('a')?.getAttribute('href')).toBe('https://acme.invalid/@tim');
+  });
+});

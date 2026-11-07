@@ -106,6 +106,30 @@ describe('realtime bridge', () => {
     expect(received).toEqual([[ROOM, event(4)]]);
   });
 
+  it('delivers the issue, comment and board events automation emits, to project rooms only', async () => {
+    await subscribe();
+    const send = (room: string, type: string) =>
+      redis.publish(
+        REALTIME_CHANNEL,
+        JSON.stringify({ room, event: { type, projectId: 'p', issueId: 'i1' } }),
+      );
+    for (const type of ['issue:updated', 'issue:created', 'comment:added', 'board:moved']) {
+      await send(ROOM, type);
+    }
+    // Not bridged: a person's room, and events no worker rule produces
+    await send('user:cbridgetest00000000000001', 'issue:updated');
+    await send(ROOM, 'wiki:updated');
+    await send(ROOM, 'sprint:updated');
+    await vi.waitFor(() => expect(received).toHaveLength(4));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(received.map(([, e]) => (e as { type: string }).type)).toEqual([
+      'issue:updated',
+      'issue:created',
+      'comment:added',
+      'board:moved',
+    ]);
+  });
+
   it('keeps receiving after the subscriber lost its connection', async () => {
     const subscriber = await subscribe();
     await killConnection(subscriber.name);

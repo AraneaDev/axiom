@@ -313,23 +313,24 @@ enum Priority {
 }
 
 model Issue {
-  id          String            @id @default(cuid())
-  githubLinks GithubIssueLink[]
-  projectId   String
-  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  number      Int // sequential within project
-  title       String
-  body        String // markdown
-  type        IssueType         @default(TASK)
-  priority    Priority          @default(MEDIUM)
-  columnId    String?
-  column      BoardColumn?      @relation(fields: [columnId], references: [id])
-  assigneeId  String?
-  assignee    User?             @relation("assignee", fields: [assigneeId], references: [id])
-  creatorId   String
-  creator     User              @relation("creator", fields: [creatorId], references: [id])
-  dueDate     DateTime?
-  position    Int               @default(0) // ordering within column
+  id                    String                 @id @default(cuid())
+  githubLinks           GithubIssueLink[]
+  githubAutomationMarks GithubAutomationMark[]
+  projectId             String
+  project               Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number                Int // sequential within project
+  title                 String
+  body                  String // markdown
+  type                  IssueType              @default(TASK)
+  priority              Priority               @default(MEDIUM)
+  columnId              String?
+  column                BoardColumn?           @relation(fields: [columnId], references: [id])
+  assigneeId            String?
+  assignee              User?                  @relation("assignee", fields: [assigneeId], references: [id])
+  creatorId             String
+  creator               User                   @relation("creator", fields: [creatorId], references: [id])
+  dueDate               DateTime?
+  position              Int                    @default(0) // ordering within column
 
   // Epic hierarchy & sprint planning
   parentId        String?
@@ -1474,6 +1475,22 @@ model GithubRepoLink {
   checkRuns           GithubCheckRun[]
 
   @@map("github_repo_links")
+}
+
+/// One GitHub comment already made by a rule for an issue, trigger, subject (PR or branch id) and head commit
+model GithubAutomationMark {
+  id         String   @id @default(cuid())
+  issueId    String
+  trigger    String
+  /// The pull request or branch id
+  subjectKey String
+  headSha    String
+  createdAt  DateTime @default(now())
+  issue      Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@unique([issueId, trigger, subjectKey, headSha])
+  @@index([createdAt])
+  @@map("github_automation_marks")
 }
 
 enum GithubLinkTarget {
