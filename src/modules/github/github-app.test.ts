@@ -211,6 +211,7 @@ describe('starting the manifest flow', () => {
         'delete',
         'issues',
         'issue_comment',
+        'repository',
       ],
     });
   });

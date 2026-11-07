@@ -16,6 +16,7 @@ import {
   issueTarget,
   linkedBranch,
   refPath,
+  repoPath,
   userAuth,
 } from './github-actions.helpers';
 import { githubRequest } from './github-client';
@@ -61,7 +62,7 @@ registerActions([
       if (from !== undefined) assertRefName(from);
       const { auth, account } = await userAuth(ctx);
       const base = from ?? link.defaultBranch;
-      const repo = `/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.name)}`;
+      const repo = repoPath(link);
 
       const head = await githubRequest<unknown>(
         auth,
@@ -115,6 +116,7 @@ registerActions([
     area: 'github',
     kind: 'write',
     destructive: true,
+    alwaysApprove: true,
     summary:
       'Delete a branch linked to an issue on the linked GitHub repository, as your own GitHub ' +
       'account. GitHub closes an open pull request that has the branch as its head. The ' +
@@ -134,7 +136,7 @@ registerActions([
       }
       const row = await linkedBranch(issue.id, link.id, branch);
       const { auth, account } = await userAuth(ctx);
-      const repo = `/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.name)}`;
+      const repo = repoPath(link);
       await githubRequest<unknown>(
         auth,
         'DELETE',

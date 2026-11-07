@@ -11,6 +11,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
 import { isFailed, storeCheckRun, type CheckRunPayload } from './checks.service';
+import { repoPath } from './github-actions.helpers';
 import {
   GITHUB_CALL_LIMIT,
   countGithubCalls,
@@ -23,6 +24,7 @@ import { extractIssueNumbers } from './issue-keys';
 
 export const RECONCILE_INTERVAL_MS = 15 * 60_000;
 const repoFacts = z.object({
+  id: z.number(),
   name: z.string().min(1),
   full_name: z.string().min(1),
   default_branch: z.string().min(1),
@@ -239,6 +241,7 @@ async function runReconcile(
     const link = await prisma.githubRepoLink.findUnique({
       where: { id: repoLinkId },
       select: {
+        repoId: true,
         owner: true,
         name: true,
         installationId: true,
@@ -247,7 +250,7 @@ async function runReconcile(
     });
     if (!link) throw new AppError(404, 'The repository is not linked', 'NOT_FOUND');
     const auth: GithubAuth = { kind: 'installation', installationId: Number(link.installationId) };
-    const repoPath = `/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.name)}`;
+    const apiPath = repoPath(link);
     // The branches keep a share of the budget the earlier phases cannot spend
     const reserve = Math.floor(budget / 30);
     const left = (forBranches = false) => budget - counter.calls - (forBranches ? 0 : reserve);
@@ -305,7 +308,7 @@ async function runReconcile(
     const stored = new Map<number, { state: string; headSha: string; githubUpdatedAt: Date }>();
 
     await phase('open pull requests', async () => {
-      const open = await list<PullRequestPayload>(`${repoPath}/pulls`, OPEN_PR_PAGES, {
+      const open = await list<PullRequestPayload>(`${apiPath}/pulls`, OPEN_PR_PAGES, {
         cut: `More than ${OPEN_PR_PAGES * 100} open pull requests: only the first ${OPEN_PR_PAGES * 100} were read`,
       });
       if (!open) return;
@@ -368,7 +371,7 @@ async function runReconcile(
             const { data } = await githubRequest<PullRequestPayload>(
               auth,
               'GET',
-              `${repoPath}/pulls/${candidate.number}`,
+              `${apiPath}/pulls/${candidate.number}`,
             );
             await storePullRequest(repoLinkId, data, null, 'reconcile');
             await prisma.githubPullRequest.updateMany({
@@ -405,7 +408,7 @@ async function runReconcile(
       for (const headSha of heads) {
         await extendLease(repoLinkId, token);
         const runs = await list<CheckRunPayload>(
-          `${repoPath}/commits/${encodeURIComponent(headSha)}/check-runs`,
+          `${apiPath}/commits/${encodeURIComponent(headSha)}/check-runs`,
           CHECK_RUN_PAGES,
           { itemsKey: 'check_runs', cut: 'More check runs than were read' },
         );
@@ -440,7 +443,7 @@ async function runReconcile(
     await phase('branches', async () => {
       // Taken before the list is asked for: a row written later is newer than the list
       const observedAt = new Date();
-      const branches = await list<unknown>(`${repoPath}/branches`, BRANCH_PAGES, {
+      const branches = await list<unknown>(`${apiPath}/branches`, BRANCH_PAGES, {
         forBranches: true,
         cut: `More than ${BRANCH_PAGES * 100} branches: only the first ${BRANCH_PAGES * 100} were read`,
       });
@@ -496,9 +499,10 @@ async function runReconcile(
     // names follow a change on GitHub whose webhook was missed. A failure here costs nothing else.
     if (left(true) > 0) {
       try {
-        const fresh = await githubRequest<unknown>(auth, 'GET', repoPath);
+        const fresh = await githubRequest<unknown>(auth, 'GET', apiPath);
         const facts = repoFacts.safeParse(fresh.data);
-        if (facts.success) {
+        // Read by name: after a rename or a transfer the name may belong to another repository
+        if (facts.success && BigInt(facts.data.id) === link.repoId) {
           await prisma.githubRepoLink.updateMany({
             where: { id: repoLinkId },
             data: {

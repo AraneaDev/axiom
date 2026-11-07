@@ -170,7 +170,11 @@ beforeEach(async () => {
   fake.removeInstallation(3301);
   fake.addInstallation(3301, [WIDGET]);
   fake.setPublicRepos([]);
-  fake.setGitRefs(WIDGET, { main: MAIN_SHA, [headOf()]: 'd'.repeat(40), 'no-key-here': MAIN_SHA });
+  fake.setGitRefs(WIDGET, {
+    main: MAIN_SHA,
+    [headOf()]: 'd'.repeat(40),
+    'no-key-here': 'b'.repeat(40),
+  });
   await prisma.githubInstallation.create({
     data: { id: 3301n, accountLogin: 'acme-labs', accountType: 'Organization' },
   });
@@ -206,6 +210,16 @@ afterAll(async () => {
 });
 
 describe('githubPr.open', () => {
+  it('answers 409 GITHUB_NO_COMMITS for a branch that has no commit of its own yet', async () => {
+    await connectAccount(member);
+    fake.setGitRefs(WIDGET, { main: MAIN_SHA, [headOf()]: MAIN_SHA });
+    const res = await open(member, { head: headOf() });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_NO_COMMITS');
+    expect(res.body.error.message).toContain('Push a commit to it with git');
+    expect(await prisma.githubPullRequest.count({ where: { repoLinkId: linkId } })).toBe(0);
+  });
+
   it('opens with the defaults, stores the PR linked by title and branch, and shows it at once', async () => {
     const token = await connectAccount(member);
     const res = await open(member, { head: headOf() });

@@ -110,6 +110,11 @@ export interface ActionDef<
    * the sight of the rules that bind it.
    */
   permissionChange?(input: z.infer<I>): boolean;
+  /**
+   * Always waits for approval when a token makes the call, whatever an org's or a user's rules
+   * say (merging, closing or deleting on a code host). Unlike `destructive` no policy lifts it.
+   */
+  alwaysApprove?: boolean;
   /** States on purpose that the action belongs to no org (a private dashboard or query) */
   noOrg?: boolean;
   /**

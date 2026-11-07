@@ -33,6 +33,9 @@ const MUST_BE_DESTRUCTIVE = [
   'githubBranch.delete',
 ];
 
+/** Actions that wait for a token's approval whatever any policy says. */
+const MUST_ALWAYS_APPROVE = ['githubPr.merge', 'githubPr.close', 'githubBranch.delete'];
+
 /** Actions that take a list of ids and must count it against the bulk threshold. */
 const MUST_COUNT_BULK = ['issue.bulkUpdate', 'sprint.addIssues'];
 
@@ -73,6 +76,20 @@ describe('action flags', () => {
     const byName = new Map(listActions().map((def) => [def.name, def]));
     const dropped = MUST_BE_DESTRUCTIVE.filter((name) => byName.get(name)?.destructive !== true);
     expect(dropped).toEqual([]);
+  });
+
+  it('flags the code host writes alwaysApprove, and no policy lifts the wait', async () => {
+    const byName = new Map(listActions().map((def) => [def.name, def]));
+    const relaxed = {
+      ...DEFAULT_POLICY,
+      requireFor: { ...DEFAULT_POLICY.requireFor, destructive: false, admin: false },
+      neverRequire: MUST_ALWAYS_APPROVE,
+    };
+    for (const name of MUST_ALWAYS_APPROVE) {
+      const def = byName.get(name);
+      expect(def?.alwaysApprove, name).toBe(true);
+      expect(await needsApproval(def!, {}, token, relaxed), name).toBe(true);
+    }
   });
 
   it.each(MUST_COUNT_BULK)('%s asks for approval over 10 ids and not at 10', async (name) => {

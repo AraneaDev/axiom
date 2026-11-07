@@ -121,6 +121,7 @@ export function appManifest(origin: string): Record<string, unknown> {
       'delete',
       'issues',
       'issue_comment',
+      'repository',
     ],
   };
 }

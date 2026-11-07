@@ -37,6 +37,7 @@ const TOKEN_NAME = 'budget-agent';
 const GITHUB_REPO_ID = 880_700;
 const INSTALLATION_ID = 4301;
 const HEAD_SHA = '1111111111111111111111111111111111111111';
+const PUSHED_SHA = '2222222222222222222222222222222222222222';
 const FIXTURES = path.join(__dirname, '../test/__fixtures__/github');
 const fixture = (name: string) => JSON.parse(readFileSync(path.join(FIXTURES, name), 'utf8'));
 
@@ -277,7 +278,7 @@ describe('call budgets for the developer loop', () => {
     expect(asked).toBe(0);
   });
 
-  it('works a ticket on GitHub without gh: branch and PR, the PR shown, a merge waiting', async () => {
+  it('works a ticket on GitHub without gh in 4 Axiom calls: branch, push with git, open, read, merge waiting', async () => {
     const issue = await createIssue('Ship the widget');
     const lowerKey = issue.key.toLowerCase();
     const accountId = `acct-budget-${randomUUID()}`;
@@ -296,9 +297,19 @@ describe('call budgets for the developer loop', () => {
       const { client, calls } = await counted(ctx.owner);
       const branch = `${lowerKey}-ship`;
 
+      // Step 1 (Axiom call 1): create the branch
+      const created = await callTool(client, 'act', {
+        batch: [{ action: 'githubBranch.create', key: issue.key, input: { name: branch } }],
+      });
+      expect(created.isError).toBe(false);
+      expect(created.data.results.map((r: { ok: boolean }) => r.ok)).toEqual([true]);
+
+      // Step 2 (no Axiom call): the agent commits and pushes with plain git, which moves the branch
+      fake.setGitRefs('acme-labs/widget', { main: HEAD_SHA, [branch]: PUSHED_SHA });
+
+      // Step 3 (Axiom call 2): open the pull request
       const opened = await callTool(client, 'act', {
         batch: [
-          { action: 'githubBranch.create', key: issue.key, input: { name: branch } },
           {
             action: 'githubPr.open',
             key: issue.key,
@@ -307,14 +318,16 @@ describe('call budgets for the developer loop', () => {
         ],
       });
       expect(opened.isError).toBe(false);
-      expect(opened.data.results.map((r: { ok: boolean }) => r.ok)).toEqual([true, true]);
-      const number = opened.data.results[1].result.number;
+      expect(opened.data.results.map((r: { ok: boolean }) => r.ok)).toEqual([true]);
+      const number = opened.data.results[0].result.number;
 
+      // Step 4 (Axiom call 3): read the issue with its development
       const seen = await callTool(client, 'read', { keys: [issue.key], include: ['development'] });
       expect(seen.isError).toBe(false);
       const [pr] = seen.data.items[0].data.development.pullRequests.items;
       expect(pr).toMatchObject({ number, state: 'open', headRef: branch });
 
+      // Step 5 (Axiom call 4): merge, which waits for approval
       const merged = await callTool(client, 'act', {
         batch: [
           {
@@ -325,7 +338,7 @@ describe('call budgets for the developer loop', () => {
         ],
       });
       expect(merged.text).toContain('pending_approval');
-      expect(calls()).toBe(3);
+      expect(calls()).toBe(4);
 
       // Only Axiom was called: every GitHub request went out with the user's own credential, and
       // nothing was merged before a human approved

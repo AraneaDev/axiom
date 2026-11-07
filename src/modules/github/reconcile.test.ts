@@ -379,6 +379,25 @@ describe('reconcileRepo', () => {
     }
   });
 
+  it('skips the refresh when GET /repos/:o/:r answers another repository id', async () => {
+    fake.setRepoLists('acme-labs/widget', { pulls: [], branches: [], checkRuns: {} });
+    fake.on('GET /repos/:owner/:repo', {
+      status: 200,
+      body: {
+        id: REPO_ID + 1,
+        name: 'widget',
+        full_name: 'acme-labs/widget',
+        owner: { login: 'acme-labs' },
+        default_branch: 'elsewhere',
+      },
+    });
+    const result = await reconcileRepo(repoLinkId);
+    expect(result.complete).toBe(true);
+    expect(
+      await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } }),
+    ).toMatchObject({ defaultBranch: 'main', name: 'widget', owner: 'acme-labs' });
+  });
+
   it('does not spend a call past the budget on the refresh, and survives its failure', async () => {
     fake.setRepoLists('acme-labs/widget', { pulls: [], branches: [], checkRuns: {} });
     fake.on('GET /repos/:owner/:repo', { status: 500, body: { message: 'boom' } });

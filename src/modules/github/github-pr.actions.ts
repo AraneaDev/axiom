@@ -16,6 +16,7 @@ import {
   issueTarget,
   linkedPullRequest,
   namesIssue,
+  repoPath,
   userAuth,
 } from './github-actions.helpers';
 import { githubRequest, type GithubAuth } from './github-client';
@@ -54,9 +55,6 @@ const pullView = z.looseObject({
   state: z.string(),
   url: z.string(),
 });
-
-const repoPath = (link: { owner: string; name: string }) =>
-  `/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.name)}`;
 
 type Link = Awaited<ReturnType<typeof issueRepo>>['link'] & { orgId: string };
 
@@ -257,6 +255,17 @@ registerActions([
             existing ? { number: existing } : undefined,
           );
         }
+        if (
+          err instanceof AppError &&
+          err.code === 'GITHUB_INVALID' &&
+          /no commits between/i.test(err.message)
+        ) {
+          throw new AppError(
+            409,
+            `The branch ${head} has no commits of its own yet. Push a commit to it with git, then open the pull request.`,
+            'GITHUB_NO_COMMITS',
+          );
+        }
         throw err;
       });
       const number = completePull.shape.number.safeParse(
@@ -401,6 +410,7 @@ registerActions([
     area: 'github',
     kind: 'write',
     destructive: true,
+    alwaysApprove: true,
     summary:
       'Merge a pull request linked to an issue, as your own GitHub account. headSha is the head ' +
       "commit you reviewed: if the branch has moved, nothing is merged. A token's call waits " +
@@ -416,8 +426,19 @@ registerActions([
       commitMessage: z.string().max(MAX_TEXT).optional(),
     }),
     output: pullView,
-    preview: (_ctx, { projectId, issueNumber, pullNumber: number, headSha, method, commitTitle }) =>
-      previews.githubPrMerge(projectId, issueNumber, number, headSha, method, commitTitle),
+    preview: (
+      _ctx,
+      { projectId, issueNumber, pullNumber: number, headSha, method, commitTitle, commitMessage },
+    ) =>
+      previews.githubPrMerge(
+        projectId,
+        issueNumber,
+        number,
+        headSha,
+        method,
+        commitTitle,
+        commitMessage,
+      ),
     rest: { method: 'PUT', path: `${PULLS}/:pullNumber/merge` },
     authorize: githubWrite,
     handler: async (
@@ -472,6 +493,7 @@ registerActions([
     area: 'github',
     kind: 'write',
     destructive: true,
+    alwaysApprove: true,
     summary:
       'Close a pull request linked to an issue without merging it, as your own GitHub account. ' +
       "A token's call waits for approval in the web UI.",

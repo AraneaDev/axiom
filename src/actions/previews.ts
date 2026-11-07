@@ -1820,6 +1820,7 @@ export const DEFAULT_BRANCH_MESSAGE = "The repository's default branch can't be 
  * @param headSha The head commit the merge is asked for
  * @param method How the commits are merged
  * @param commitTitle The commit title the requester chose, when given
+ * @param commitMessage The commit message the requester chose, when given; its first line shows
  * @throws {AppError} 404 for a pull request that is not linked to the issue
  */
 export async function githubPrMerge(
@@ -1829,6 +1830,7 @@ export async function githubPrMerge(
   headSha: string,
   method: string,
   commitTitle?: string,
+  commitMessage?: string,
 ): Promise<string> {
   const { issue, link } = await issueRepo(projectId, issueNumber);
   const pr = await linkedPullRequest(issue.id, link.id, pullNumber);
@@ -1838,10 +1840,13 @@ export async function githubPrMerge(
       ? ''
       : `; the head Axiom last saw is ${pr.headSha.slice(0, SHORT_SHA)}, not the commit asked for`;
   const title = commitTitle ? `; commit title ${quoted(commitTitle, MAX_COMMIT_TITLE)}` : '';
+  // Only the first line: on a squash the message is the body of the one commit that lands
+  const firstLine = commitMessage?.split(/\r?\n/, 1)[0]?.trim();
+  const message = firstLine ? `; commit message ${quoted(firstLine, MAX_COMMIT_TITLE)}` : '';
   return (
     `Merge pull request #${pr.number} ${quoted(pr.title)} in ${link.fullName} ` +
     `(${plain(pr.headRef)} into ${plain(pr.baseRef)}) at ${headSha.slice(0, SHORT_SHA)} ` +
-    `using ${method}, linked to ${issue.key}${moved}${title}`
+    `using ${method}, linked to ${issue.key}${moved}${title}${message}`
   );
 }
 

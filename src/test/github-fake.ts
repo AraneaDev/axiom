@@ -866,6 +866,23 @@ class GithubFakeServer implements GithubFake {
       const head = body.head.includes(':') ? body.head.split(':').slice(1).join(':') : body.head;
       if (heads && !heads.has(head)) return invalid('head');
       if (!base || (heads && !heads.has(base))) return invalid('base');
+      // As GitHub answers for a head that has no commit of its own yet
+      if (heads && heads.get(head) === heads.get(base)) {
+        return {
+          status: 422,
+          body: {
+            message: 'Validation Failed',
+            errors: [
+              {
+                resource: 'PullRequest',
+                code: 'custom',
+                message: `No commits between ${base} and ${head}`,
+              },
+            ],
+            documentation_url: 'https://docs.github.com/rest/pulls/pulls#create-a-pull-request',
+          },
+        };
+      }
       if (pulls.some((pr) => pr.state === 'open' && (pr.head as { ref: string }).ref === head)) {
         return {
           status: 422,

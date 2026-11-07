@@ -166,6 +166,7 @@ function ruleViolations(def: ActionDef): string[] {
       def.destructiveWhen ||
       def.admin ||
       def.permissionChange ||
+      def.alwaysApprove ||
       def.bulkCount ||
       def.crossContainer) &&
     !def.preview &&
@@ -181,6 +182,7 @@ function ruleViolations(def: ActionDef): string[] {
       def.destructiveWhen ||
       def.admin ||
       def.permissionChange ||
+      def.alwaysApprove ||
       def.bulkCount ||
       def.crossContainer)
   ) {
@@ -228,7 +230,14 @@ function ruleViolations(def: ActionDef): string[] {
         `${def.name}: openToReadOf is for a read or a noOrg write of the caller's own state (R18)`,
       );
     }
-    if (def.destructive || def.destructiveWhen || def.admin || def.permissionChange || def.uiOnly) {
+    if (
+      def.destructive ||
+      def.destructiveWhen ||
+      def.admin ||
+      def.permissionChange ||
+      def.alwaysApprove ||
+      def.uiOnly
+    ) {
       violations.push(
         `${def.name}: openToReadOf can't go with destructive, admin, permissionChange or uiOnly (R18)`,
       );
@@ -374,6 +383,7 @@ describe('registry rules', () => {
       ['a write that reaches an org', { kind: 'write' as const }],
       ['a destructive write', { kind: 'write' as const, noOrg: true, destructive: true }],
       ['an admin write', { kind: 'write' as const, noOrg: true, admin: true }],
+      ['an always-approved write', { kind: 'write' as const, noOrg: true, alwaysApprove: true }],
       ['a read that changes permissions', { kind: 'read' as const, permissionChange: () => true }],
     ])('fails on %s', (_label, extra) => {
       const action = defineAction({ ...own, ...extra, openToReadOf: ['wiki'] });

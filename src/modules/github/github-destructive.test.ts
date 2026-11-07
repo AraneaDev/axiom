@@ -387,6 +387,20 @@ describe('githubPr.merge', () => {
     expect(tail).not.toContain('\n');
   });
 
+  it('shows the first line of the commit message in the preview, quoted and cut to 120 characters', async () => {
+    const res = await merge(HEAD_SHA, 7, {
+      commitMessage: `Ship "it" ${'y'.repeat(200)}\nsecond line\n\nthird`,
+    });
+    expect(res.status).toBe(202);
+    const tail = res.body.preview.split(`linked to ${key}`)[1] as string;
+    expect(tail.startsWith("; commit message \"Ship 'it' yyy")).toBe(true);
+    expect(tail.endsWith('..."')).toBe(true);
+    expect(tail).not.toContain('second line');
+    expect(tail.length).toBeLessThan(160);
+    const none = await merge(HEAD_SHA, 7, { commitMessage: '' });
+    expect(none.body.preview).not.toContain('commit message');
+  });
+
   it('strips invisible and bidi characters from the refs in the preview', async () => {
     await prisma.githubPullRequest.updateMany({
       where: { repoLinkId: linkId, number: 7 },
@@ -692,7 +706,34 @@ describe('flags and reach', () => {
       expect(reach[name], name).toEqual(['github:write']);
       const def = defs.find((d) => d.name === name);
       expect(def?.destructive, name).toBe(true);
+      expect(def?.alwaysApprove, name).toBe(true);
       expect(def?.preview, name).toBeTypeOf('function');
+    }
+  });
+});
+
+describe('no policy lifts the wait', () => {
+  it('still answers 202 for a token merge, close and delete when the org and the user relax everything', async () => {
+    const rules = {
+      destructive: false,
+      neverRequire: ['githubPr.merge', 'githubPr.close', 'githubBranch.delete'],
+    };
+    await prisma.agentPolicy.upsert({
+      where: { orgId: ctx.orgId },
+      create: { orgId: ctx.orgId, rules },
+      update: { rules },
+    });
+    try {
+      await existingPull(7, headOf(), 'Fix login');
+      await existingBranch(headOf());
+      expect((await merge()).status).toBe(202);
+      const close = await request(app).post(closePath(7)).set(asToken()).send({});
+      expect(close.status).toBe(202);
+      const del = await request(app).delete(branchPath(headOf())).set(asToken()).send();
+      expect(del.status).toBe(202);
+      expect(fake.requests).toEqual([]);
+    } finally {
+      await prisma.agentPolicy.deleteMany({ where: { orgId: ctx.orgId } });
     }
   });
 });

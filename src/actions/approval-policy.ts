@@ -65,6 +65,7 @@ export async function needsApproval(
   if (!isToken(ctx)) return false;
   if (def.admin) return true;
   if (def.permissionChange?.(input)) return true;
+  if (def.alwaysApprove) return true;
   if (policy.alsoRequire?.includes(def.name)) return true;
   if (policy.neverRequire?.includes(def.name)) return false;
   const { requireFor } = policy;

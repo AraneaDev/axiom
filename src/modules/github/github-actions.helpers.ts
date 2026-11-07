@@ -123,7 +123,7 @@ export async function userAuth(
 
 /**
  * The branch name for an issue: `<prefix lower>-<number>-<title slug>`. The slug is the title in
- * lower-case ASCII with every other run of characters as one `-`, cut to 40 characters at a `-`.
+ * lower-case ASCII (accents dropped) with every other run of characters as one `-`, cut to 40 characters at a `-`.
  * @param prefix The project's key prefix
  * @param number The issue number
  * @param title The issue title
@@ -131,6 +131,7 @@ export async function userAuth(
 export function branchNameFor(prefix: string, number: number, title: string): string {
   let slug = title
     .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
@@ -219,3 +220,12 @@ export function assertBranchName(name: string, key: string): void {
  * @param name A branch name
  */
 export const refPath = (name: string): string => name.split('/').map(encodeURIComponent).join('/');
+
+/**
+ * The API path of a linked repository, built from its stored owner and name.
+ * @param link - The repository link
+ * @param link.owner
+ * @param link.name
+ */
+export const repoPath = (link: { owner: string; name: string }): string =>
+  `/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.name)}`;

@@ -166,6 +166,9 @@ describe('branch names', () => {
     expect(branchNameFor('AXM', 42, 'Fix login timeout!')).toBe('axm-42-fix-login-timeout');
     expect(branchNameFor('AXM', 7, '!!!')).toBe('axm-7');
     expect(branchNameFor('AXM', 7, 'Zażółć gęślą')).toMatch(/^axm-7-za/);
+    // An accent is dropped, not turned into a separator
+    expect(branchNameFor('AXM', 7, 'Résumé')).toBe('axm-7-resume');
+    expect(branchNameFor('PLAT', 3, 'Café déjà vu')).toBe('plat-3-cafe-deja-vu');
   });
 
   it('cuts a long title at a hyphen within 40 slug characters', () => {
@@ -182,7 +185,7 @@ describe('branch names', () => {
   });
 
   it('names the issue in the default name, so the branch links', () => {
-    for (const title of ['Fix login timeout!', 'x'.repeat(90), 'Ünïcode ✓ title']) {
+    for (const title of ['Fix login timeout!', 'x'.repeat(90), 'Ünïcode ß title']) {
       const name = branchNameFor('AXM', 42, title);
       expect(() => assertBranchName(name, 'AXM-42')).not.toThrow();
     }
