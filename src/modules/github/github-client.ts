@@ -205,7 +205,11 @@ function loggablePath(pathname: string): string {
  * @param url The first URL, on the API host
  * @param opts Method, body, credential, timeout and the redirect rule for the credential
  */
-const callCounters = new AsyncLocalStorage<{ calls: number }>();
+type CallCounter = { calls: number; limit?: number };
+const callCounters = new AsyncLocalStorage<CallCounter>();
+
+/** The code of the error a counted run gets when its limit of calls is spent */
+export const GITHUB_CALL_LIMIT = 'GITHUB_CALL_LIMIT';
 
 /**
  * Runs work and counts every HTTP request the GitHub client makes inside it (redirect hops,
@@ -232,7 +236,16 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
 
   for (let hop = 0; ; hop++) {
     const counter = callCounters.getStore();
-    if (counter) counter.calls++;
+    if (counter) {
+      if (counter.limit !== undefined && counter.calls >= counter.limit) {
+        throw new AppError(
+          429,
+          'The number of GitHub requests allowed for this run is spent',
+          GITHUB_CALL_LIMIT,
+        );
+      }
+      counter.calls++;
+    }
     const headers: Record<string, string> = { ...API_HEADERS };
     if (opts.credential && withAuth) headers.authorization = opts.credential;
     if (opts.rangeAfterRedirect && hop > 0) headers.range = opts.rangeAfterRedirect;
@@ -430,12 +443,15 @@ export async function githubPaginate<T>(
   let url: URL | null = apiUrl(path, { ...opts.query, per_page: 100 });
 
   for (let page = 0; url && page < opts.maxPages; page++) {
-    const { data, headers }: { data: unknown; headers: Headers } = await request<unknown>(
-      auth,
-      'GET',
-      url,
-      {},
-    );
+    let reply: { data: unknown; headers: Headers };
+    try {
+      reply = await request<unknown>(auth, 'GET', url, {});
+    } catch (err) {
+      // A run that spent its requests keeps the pages it has
+      if (page > 0 && err instanceof AppError && err.code === GITHUB_CALL_LIMIT) break;
+      throw err;
+    }
+    const { data, headers } = reply;
     const list = opts.itemsKey ? (data as Record<string, unknown> | null)?.[opts.itemsKey] : data;
     if (Array.isArray(list)) items.push(...(list as T[]));
     const next = nextLink(headers.get('link'));

@@ -44,8 +44,8 @@ function logLimited(kind: string, text: string, extra: Record<string, unknown> =
   logger.warn(text, extra);
 }
 
-function connection(name: string, offlineQueue: boolean): Redis {
-  const client = new Redis(REDIS_URL, {
+function connection(name: string, offlineQueue: boolean, url = REDIS_URL): Redis {
+  const client = new Redis(url, {
     connectionName: name,
     // Never gives up; waits longer each time, to 5 seconds
     retryStrategy: (times) => Math.min(times * 250, 5000),
@@ -59,8 +59,6 @@ function connection(name: string, offlineQueue: boolean): Redis {
   );
   client.on('end', () => logLimited(`${name}:end`, 'realtime bridge connection ended', { name }));
   client.on('ready', () => {
-    // A recovery is always worth a line
-    lastLogged.delete(`${name}:ready`);
     logger.info('realtime bridge connected', { name });
   });
   return client;
@@ -151,10 +149,15 @@ export type RealtimeSubscriber = {
  * this process. Run in the API only. The subscription is retried until Redis answers and is
  * restored by the connection after every outage.
  * @param deliver Where an event goes (the broadcast to local sockets by default)
+ * @param opts `url` overrides the Redis address (tests)
+ * @param opts.url
  */
-export function startRealtimeSubscriber(deliver: Delivery = broadcastToRoom): RealtimeSubscriber {
+export function startRealtimeSubscriber(
+  deliver: Delivery = broadcastToRoom,
+  opts: { url?: string } = {},
+): RealtimeSubscriber {
   const name = `axiom-rt-sub-${process.pid}-${randomUUID().slice(0, 8)}`;
-  const subscriber = connection(name, true);
+  const subscriber = connection(name, true, opts.url);
   let stopped = false;
   subscriber.on('message', (_channel, raw) => {
     // A closing connection still hands over what was already on the wire

@@ -2,9 +2,11 @@
  * The Redis bridge between the worker (which has no sockets) and the API (which has): the worker
  * publishes, the API subscribes and broadcasts. Two clients stand in for the two processes.
  */
+import { createServer, connect, type Server } from 'node:net';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { redis } from '../config/redis';
+import { REDIS_URL, redis } from '../config/redis';
 
 import {
   REALTIME_CHANNEL,
@@ -137,6 +139,48 @@ describe('realtime bridge', () => {
       { timeout: 10_000, interval: 300 },
     );
   });
+
+  it('subscribes once Redis comes up when the API started while it was down', async () => {
+    // A port nobody listens on, as Redis is not there yet
+    const probe = createServer();
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const port = (probe.address() as { port: number }).port;
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+    const url = new URL(REDIS_URL);
+    url.hostname = '127.0.0.1';
+    url.port = String(port);
+    const real = new URL(REDIS_URL);
+
+    const subscriber = startRealtimeSubscriber((room, e) => void received.push([room, e]), {
+      url: url.toString(),
+    });
+    subscribers.push(subscriber);
+    let settled = false;
+    void subscriber.ready.then(() => (settled = true));
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(settled).toBe(false);
+
+    // Redis comes up: a proxy to the real one on that port
+    let proxy: Server | null = null;
+    const sockets = new Set<import('node:net').Socket>();
+    proxy = createServer((client) => {
+      const upstream = connect(Number(real.port || 6379), real.hostname);
+      sockets.add(client).add(upstream);
+      client.pipe(upstream).pipe(client);
+      client.on('error', () => upstream.destroy());
+      upstream.on('error', () => client.destroy());
+    });
+    await new Promise<void>((resolve) => proxy!.listen(port, '127.0.0.1', resolve));
+    try {
+      await vi.waitFor(() => expect(settled).toBe(true), { timeout: 15_000, interval: 200 });
+      await redis.publish(REALTIME_CHANNEL, JSON.stringify({ room: ROOM, event: event(9) }));
+      await vi.waitFor(() => expect(received).toEqual([[ROOM, event(9)]]));
+    } finally {
+      subscriber.stop();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve) => proxy!.close(() => resolve()));
+    }
+  }, 30_000);
 
   it('stops delivering once the subscriber is stopped', async () => {
     const subscriber = await subscribe();

@@ -19,6 +19,7 @@ import { useGithubFake } from '../../test/github-fake';
 import { seedGithubApp } from '../../test/github-seed';
 import { logger } from '../../utils/logger';
 
+import { clearInstallationTokens } from './github-app.service';
 import { onGithubOutcome, storeBranch, type GithubEventOutcome } from './github-events';
 import './github-resolvers';
 import {
@@ -830,6 +831,136 @@ describe('budget and phases', () => {
   }, 60_000);
 });
 
+describe('pull requests GitHub no longer knows', () => {
+  const ghostNumbers = Array.from({ length: 51 }, (_, i) => 200 + i);
+
+  async function seedGhosts() {
+    await prisma.githubPullRequest.createMany({
+      data: ghostNumbers.map((n, i) => ({
+        repoLinkId,
+        number: n,
+        title: `Ghost ${n}`,
+        state: 'OPEN' as const,
+        draft: false,
+        authorLogin: 'voorbeeld-dev',
+        headRef: `ghost-${n}`,
+        headSha: sha(n),
+        baseRef: 'main',
+        requestedReviewers: [],
+        htmlUrl: `https://github.com/acme-labs/widget/pull/${n}`,
+        openedAt: new Date('2026-11-01T09:00:00Z'),
+        githubUpdatedAt: new Date(Date.UTC(2026, 10, 1, 9, i)),
+      })),
+    });
+  }
+
+  it('does not let 50 ghosts block the PR that was really merged, and closes a ghost after 3 misses', async () => {
+    await seedGhosts();
+    // The newest candidate: oldest-first alone would never reach it
+    await seedPr(300, { githubUpdatedAt: new Date('2026-11-05T09:00:00Z') });
+    fake.setRepoLists('acme-labs/widget', {
+      pulls: [
+        pr(300, {
+          state: 'closed',
+          merged: true,
+          merged_at: '2026-11-06T11:00:00Z',
+          closed_at: '2026-11-06T11:00:00Z',
+          updated_at: '2026-11-06T11:00:00Z',
+        }),
+      ],
+      branches: [],
+      checkRuns: {},
+    });
+    const state = (n: number) =>
+      prisma.githubPullRequest.findFirstOrThrow({ where: { repoLinkId, number: n } });
+
+    await reconcileRepo(repoLinkId);
+    expect((await state(300)).state).toBe('OPEN');
+    expect((await state(200)).reconcileCheckedAt).not.toBeNull();
+
+    // Checked ones go to the back of the line: the second round reaches the merged PR
+    await reconcileRepo(repoLinkId);
+    expect((await state(300)).state).toBe('MERGED');
+    expect(outcomes.filter((o) => o.transitions.includes('pr_merged'))).toHaveLength(1);
+
+    await reconcileRepo(repoLinkId);
+    const closed = await prisma.githubPullRequest.count({
+      where: { repoLinkId, state: 'CLOSED', number: { in: ghostNumbers } },
+    });
+    expect(closed).toBeGreaterThan(0);
+    // Closing a ghost is housekeeping: it reports nothing
+    expect(outcomes.some((o) => o.transitions.includes('pr_closed'))).toBe(false);
+    // One that has not answered 404 three times is still open
+    expect(
+      await prisma.githubPullRequest.count({
+        where: { repoLinkId, state: 'OPEN', number: { in: ghostNumbers } },
+      }),
+    ).toBeGreaterThan(0);
+  }, 60_000);
+
+  it('keeps a PR open whose 404 count is reset by an answer', async () => {
+    await seedPr(301, { reconcileMisses: 2 });
+    fake.setRepoLists('acme-labs/widget', {
+      pulls: [pr(301, { updated_at: '2026-11-06T12:00:00Z', state: 'closed' })],
+      branches: [],
+      checkRuns: {},
+    });
+
+    await reconcileRepo(repoLinkId);
+
+    const row = await prisma.githubPullRequest.findFirstOrThrow({
+      where: { repoLinkId, number: 301 },
+    });
+    expect(row).toMatchObject({ state: 'CLOSED', reconcileMisses: 0 });
+  });
+});
+
+describe('the call cap and the lease inside a phase', () => {
+  it('never starts a call past the budget, a log download in the middle of a store included', async () => {
+    fake.setRepoLists('acme-labs/widget', {
+      pulls: [pr(8, { head: { ref: 'feature-8', sha: SHA_A } })],
+      branches: [],
+      checkRuns: { [SHA_A]: [checkRun()] },
+    });
+
+    clearInstallationTokens();
+    // token, pulls, check runs, then the job and the first hop of its log: the sixth is refused
+    const result = await reconcileRepo(repoLinkId, { callBudget: 5 });
+
+    expect(result.calls).toBe(5);
+    expect(fake.requests).toHaveLength(5);
+    expect(result.complete).toBe(false);
+    expect(result.reason).toContain('budget');
+  });
+
+  it('stays within a budget of 3 even when the token costs one', async () => {
+    fake.setRepoLists('acme-labs/widget', {
+      pulls: Array.from({ length: 250 }, (_, i) => pr(i + 1)),
+    });
+    const result = await reconcileRepo(repoLinkId, { callBudget: 3 });
+    expect(result.calls).toBe(3);
+    expect(fake.requests).toHaveLength(3);
+    expect(result.complete).toBe(false);
+  }, 60_000);
+
+  it('extends the lease every 10 records inside the closed PR loop', async () => {
+    for (let n = 400; n < 414; n++) await seedPr(n);
+    fake.setRepoLists('acme-labs/widget', { pulls: [], branches: [], checkRuns: {} });
+    fake.on('GET /repos/:owner/:repo/pulls/:number', { status: 404, body: {}, delayMs: 80 });
+
+    const run = reconcileRepo(repoLinkId);
+    await waitForRequest('/pulls/');
+    await prisma.githubRepoLink.update({
+      where: { id: repoLinkId },
+      data: { reconcileLeaseUntil: new Date(Date.now() + 2_000) },
+    });
+    await vi.waitFor(() => expect(requestsTo('/pulls/').length).toBeGreaterThanOrEqual(11));
+    const link = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } });
+    expect(link.reconcileLeaseUntil!.getTime()).toBeGreaterThan(Date.now() + 5 * 60_000);
+    await run;
+  });
+});
+
 describe('the manual reconcile and links made through the action', () => {
   const url = () => `/api/projects/${ctx.projectId}/github/reconcile`;
   const asOwner = () => ({ ...CSRF, Authorization: `Bearer ${ctx.owner.token}` });
@@ -844,6 +975,7 @@ describe('the manual reconcile and links made through the action', () => {
     expect(again.body.error.code).toBe('GITHUB_RECONCILE_COOLDOWN');
     expect(again.body.error.details.retryAfter).toBeGreaterThan(0);
     expect(again.body.error.details.retryAfter).toBeLessThanOrEqual(60);
+    expect(Number(again.headers['retry-after'])).toBe(again.body.error.details.retryAfter);
   });
 
   it.each([

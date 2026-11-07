@@ -104,7 +104,7 @@ registerActions([
           429,
           'This repository was reconciled a moment ago. Try again in a minute.',
           'GITHUB_RECONCILE_COOLDOWN',
-          { retryAfter: Math.ceil(wait / 1000) },
+          { retryAfter: Math.ceil(wait / 1000), retryAfterSeconds: Math.ceil(wait / 1000) },
         );
       }
       return reconcileRepo(link.id);

@@ -25,6 +25,7 @@ const reconcile = vi.hoisted(() => ({ repoLinkIds: [] as string[] }));
 vi.mock('./reconcile.service', () => ({
   reconcileRepo: async (repoLinkId: string) => {
     reconcile.repoLinkIds.push(repoLinkId);
+    return { pullRequests: 0, checkRuns: 0, branches: 0, calls: 0, complete: true, reason: null };
   },
 }));
 
@@ -165,6 +166,59 @@ describe('githubRepo.link', () => {
       expect.stringMatching(/^GET \/repos\/acme-labs\/widget user:/),
       'GET /repos/acme-labs/widget/installation app',
     ]);
+  });
+
+  it('records the installation, so the link is read by the worker and by a manual reconcile', async () => {
+    await prisma.githubInstallation.deleteMany();
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    const linked = await request(app)
+      .post(url(ctx.projectId))
+      .set(as(ctx.owner))
+      .send({ repo: WIDGET });
+    expect(linked.status).toBeLessThan(300);
+
+    const installation = await prisma.githubInstallation.findUniqueOrThrow({
+      where: { id: 3301n },
+    });
+    expect(installation).toMatchObject({
+      accountLogin: 'acme-labs',
+      suspendedAt: null,
+      removedAt: null,
+    });
+    expect(installation.accountType).toBeTruthy();
+
+    // The real due list, not the mocked reconcile: a never read link with an installation is due
+    const { dueRepoLinkIds } =
+      await vi.importActual<typeof import('./reconcile.service')>('./reconcile.service');
+    const link = await findRepoLinkByProject(ctx.projectId);
+    await prisma.githubRepoLink.update({
+      where: { id: link!.id },
+      data: { lastReconciledAt: null },
+    });
+    expect(await dueRepoLinkIds(1000)).toContain(link!.id);
+
+    const manual = await request(app)
+      .post(`${url(ctx.projectId)}/reconcile`)
+      .set(as(ctx.owner))
+      .send({});
+    expect(manual.status).toBeLessThan(300);
+  });
+
+  it('brings back an installation that was marked removed', async () => {
+    await prisma.githubInstallation.deleteMany();
+    await prisma.githubInstallation.create({
+      data: {
+        id: 3301n,
+        accountLogin: 'acme-labs',
+        accountType: 'Organization',
+        removedAt: new Date(),
+      },
+    });
+    await connectAccount(ctx.owner, [WIDGET], [WIDGET]);
+    await request(app).post(url(ctx.projectId)).set(as(ctx.owner)).send({ repo: WIDGET });
+    expect(
+      (await prisma.githubInstallation.findUniqueOrThrow({ where: { id: 3301n } })).removedAt,
+    ).toBeNull();
   });
 
   it('lets a team ADMIN who is only an org member link', async () => {

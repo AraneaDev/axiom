@@ -1554,6 +1554,10 @@ model GithubPullRequest {
   closedAt           DateTime?
   /// GitHub's `updated_at` of the newest payload applied: an older one never overwrites it
   githubUpdatedAt    DateTime
+  /// When reconcile last asked GitHub for this PR as one stored open but no longer listed
+  reconcileCheckedAt DateTime?
+  /// How many such asks in a row were answered 404 (reset by any other answer)
+  reconcileMisses    Int            @default(0)
   repoLink           GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
   reviews            GithubReview[]
 

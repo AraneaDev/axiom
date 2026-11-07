@@ -11,13 +11,24 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
 import { isFailed, storeCheckRun, type CheckRunPayload } from './checks.service';
-import { countGithubCalls, githubPaginate, githubRequest, type GithubAuth } from './github-client';
+import {
+  GITHUB_CALL_LIMIT,
+  countGithubCalls,
+  githubPaginate,
+  githubRequest,
+  type GithubAuth,
+} from './github-client';
 import { storeBranch, storePullRequest, type PullRequestPayload } from './github-events';
 import { extractIssueNumbers } from './issue-keys';
 
 export const RECONCILE_INTERVAL_MS = 15 * 60_000;
 export const RECONCILE_CALL_BUDGET = 300;
 const LEASE_MS = 10 * 60_000;
+// Inside a long loop the lease is pushed out after this many records or this much time
+const LEASE_EVERY_RECORDS = 10;
+const LEASE_EVERY_MS = 60_000;
+// A pull request GitHub answers 404 this many times in a row is taken for gone
+const MISSES_BEFORE_CLOSING = 3;
 const OPEN_PR_PAGES = 5;
 const MISSING_PR_LIMIT = 50;
 const CHECK_RUN_PAGES = 2;
@@ -154,7 +165,8 @@ export async function reconcileRepo(
   const token = randomUUID();
   await claimLease(repoLinkId, token);
   const budget = opts.callBudget ?? RECONCILE_CALL_BUDGET;
-  const counter = { calls: 0 };
+  // The limit is hard: the client refuses the request that would be the one past the budget
+  const counter = { calls: 0, limit: budget };
   const result: ReconcileResult = {
     pullRequests: 0,
     checkRuns: 0,
@@ -164,6 +176,7 @@ export async function reconcileRepo(
     reason: null,
   };
   const failure: { message: string | null; reasons: string[] } = { message: null, reasons: [] };
+  const isLimit = (err: unknown) => err instanceof AppError && err.code === GITHUB_CALL_LIMIT;
   const incomplete = (reason: string) => {
     result.complete = false;
     if (!failure.reasons.includes(reason)) failure.reasons.push(reason);
@@ -207,6 +220,7 @@ export async function reconcileRepo(
     const reserve = Math.floor(budget / 30);
     const left = (forBranches = false) => budget - counter.calls - (forBranches ? 0 : reserve);
     const itemFailed = (what: string, err: unknown) => {
+      if (isLimit(err)) return incomplete('The call budget ran out');
       failure.message ??= err instanceof Error ? err.message : `${what} failed`;
       incomplete(`A ${what} could not be stored`);
       logger.warn('github reconcile item failed', { repoLinkId, what });
@@ -217,10 +231,23 @@ export async function reconcileRepo(
         await work();
       } catch (err) {
         if (err instanceof AppError && err.code === LEASE_LOST) throw err;
+        if (isLimit(err)) return incomplete('The call budget ran out');
         failure.message ??= err instanceof AppError ? err.message : `The ${name} could not be read`;
         incomplete(`The ${name} could not be read`);
         logger.warn('github reconcile phase failed', { repoLinkId, phase: name });
       }
+    };
+    // Keeps the lease through a long loop: every 10 records or 60 seconds
+    const lease = () => {
+      let records = 0;
+      let last = Date.now();
+      return async () => {
+        records++;
+        if (records < LEASE_EVERY_RECORDS && Date.now() - last < LEASE_EVERY_MS) return;
+        records = 0;
+        last = Date.now();
+        await extendLease(repoLinkId, token);
+      };
     };
     // One list: the pages it may still read
     const list = async <T>(
@@ -279,8 +306,10 @@ export async function reconcileRepo(
     });
 
     // Stored as open, not listed any more: closed or merged while no webhook arrived. Only a
-    // list read to its end can say a pull request is missing from it. The least recently
-    // updated come first, so a few that GitHub no longer knows cannot hold the rest back.
+    // list read to its end can say a pull request is missing from it. The ones asked about
+    // least recently come first (never asked first), so a pull request that GitHub answers 404
+    // goes to the back of the line; after three 404s in a row it is taken for gone and closed
+    // quietly (housekeeping: no outcome is reported, nothing automates from it).
     if (openComplete) {
       await phase('closed pull requests', async () => {
         const listed = returned.flatMap((p) => {
@@ -289,26 +318,47 @@ export async function reconcileRepo(
         });
         const missing = await prisma.githubPullRequest.findMany({
           where: { repoLinkId, state: 'OPEN', number: { notIn: listed } },
-          orderBy: { githubUpdatedAt: 'asc' },
+          orderBy: [
+            { reconcileCheckedAt: { sort: 'asc', nulls: 'first' } },
+            { githubUpdatedAt: 'asc' },
+          ],
           take: MISSING_PR_LIMIT,
-          select: { number: true },
+          select: { id: true, number: true, reconcileMisses: true },
         });
-        for (const { number } of missing) {
+        const keepLease = lease();
+        for (const candidate of missing) {
           if (left() <= 0) {
             incomplete('The call budget ran out');
             break;
           }
+          await keepLease();
           try {
             const { data } = await githubRequest<PullRequestPayload>(
               auth,
               'GET',
-              `${repoPath}/pulls/${number}`,
+              `${repoPath}/pulls/${candidate.number}`,
             );
             await storePullRequest(repoLinkId, data, null, 'reconcile');
+            await prisma.githubPullRequest.updateMany({
+              where: { id: candidate.id },
+              data: { reconcileCheckedAt: new Date(), reconcileMisses: 0 },
+            });
             result.pullRequests++;
           } catch (err) {
-            // A pull request GitHub no longer knows stays as it is
-            if (err instanceof AppError && err.statusCode === 404) continue;
+            if (err instanceof AppError && err.statusCode === 404) {
+              const misses = candidate.reconcileMisses + 1;
+              await prisma.githubPullRequest.updateMany({
+                where: { id: candidate.id, state: 'OPEN' },
+                data: {
+                  reconcileCheckedAt: new Date(),
+                  reconcileMisses: misses,
+                  ...(misses >= MISSES_BEFORE_CLOSING
+                    ? { state: 'CLOSED' as const, closedAt: new Date() }
+                    : {}),
+                },
+              });
+              continue;
+            }
             itemFailed('pull request', err);
           }
         }
@@ -334,9 +384,11 @@ export async function reconcileRepo(
             row,
           ]),
         );
+        const keepLease = lease();
         for (const run of runs.items) {
           const row = known.get(String(run.id));
           if (row && checkRunUnchanged(row, run)) continue;
+          await keepLease();
           // A failed run costs a job and a log request; stop when the budget cannot pay for it
           if (left() <= 0) {
             incomplete('The call budget ran out');
