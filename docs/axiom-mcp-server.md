@@ -150,6 +150,89 @@ A batch runs in order and stops at the first failure:
 
 The answer is `{ results, completed }`, one result per item: `{ ok: true, result }`, `{ ok: false, error }` or `{ ok: false, skipped: true }`. If any item failed the tool answers with `isError: true`, though what already ran stays done. A batch is no transaction. Each item is authorized on its own.
 
+#### GitHub actions
+
+Nine actions work a ticket on GitHub without `gh` or a git checkout. Each takes the issue `key` and acts on the repository linked to its project. They all take `github:write`.
+
+| Action | Does | Waits for approval |
+|---|---|---|
+| `githubBranch.create` | Creates a branch for the issue | No |
+| `githubBranch.delete` | Deletes a branch of the issue | Yes |
+| `githubPr.open` | Opens a pull request | No |
+| `githubPr.update` | Changes title, body or base | No |
+| `githubPr.requestReviewers` | Requests reviews | No |
+| `githubPr.comment` | Comments on the pull request | No |
+| `githubPr.merge` | Merges the pull request | Yes |
+| `githubPr.close` | Closes it without merging | Yes |
+| `githubChecks.rerun` | Re-runs the failed checks | No |
+
+Create the branch and open the pull request in one batch. A branch name must contain the issue key, and without `name` it is `<key>-<title>` in lower case. `head` is the branch name alone: a head in a fork (`owner:branch`) is not supported.
+
+```json
+{
+  "batch": [
+    { "action": "githubBranch.create", "key": "AXM-42", "input": { "name": "axm-42-fix-login" } },
+    {
+      "action": "githubPr.open",
+      "key": "AXM-42",
+      "input": { "head": "axm-42-fix-login", "title": "AXM-42 Fix the login timeout" }
+    }
+  ]
+}
+```
+
+The other kinds look the same. `pullNumber` is the number `githubPr.open` answered, or the one `read` with `development` shows:
+
+```json
+{ "action": "githubPr.update", "key": "AXM-42", "input": { "pullNumber": 7, "title": "AXM-42 Fix login" } }
+{ "action": "githubPr.requestReviewers", "key": "AXM-42", "input": { "pullNumber": 7, "logins": ["review-bot"] } }
+{ "action": "githubPr.comment", "key": "AXM-42", "input": { "pullNumber": 7, "body": "Ready for review" } }
+{ "action": "githubChecks.rerun", "key": "AXM-42", "input": { "pullNumber": 7 } }
+{ "action": "githubPr.close", "key": "AXM-42", "input": { "pullNumber": 7 } }
+{ "action": "githubBranch.delete", "key": "AXM-42", "input": { "branch": "axm-42-fix-login" } }
+```
+
+Merging needs `headSha`, the full 40 character commit of the head you reviewed. Axiom sends it to GitHub as the commit the merge must be made on, so a branch that moved after you looked fails with `409 GITHUB_HEAD_MOVED` and nothing is merged. Read the pull request again and decide again.
+
+```json
+{
+  "action": "githubPr.merge",
+  "key": "AXM-42",
+  "input": {
+    "pullNumber": 7,
+    "headSha": "1111111111111111111111111111111111111111",
+    "method": "squash"
+  }
+}
+```
+
+`method` is `merge` (the default), `squash` or `rebase`. A token's merge, close and branch delete run nothing and answer `202 pending_approval` (see [Approvals](#approvals)); a person approves in the web UI and the call then goes to GitHub with the `headSha` that was asked for. The default branch is never deleted (`400 GITHUB_DEFAULT_BRANCH`, with no approval row).
+
+`githubChecks.rerun` answers `{ rerun, refused, notRerunnable }`. It re-runs the failed jobs of GitHub Actions runs only. A failed check of any other app is listed in `notRerunnable` with its link, because only the app that created a check can re-run it. A job GitHub refused is in `refused` with the reason.
+
+Every one of these runs as your own connected GitHub account, never as the App, so GitHub's own rights for you apply on top of Axiom's `issue:edit`. Connect it in Settings, GitHub. Errors:
+
+| Code | Status | Meaning |
+|---|---|---|
+| `GITHUB_NOT_CONNECTED` | 409 | You have not connected a GitHub account |
+| `GITHUB_RECONNECT` | 409 | Your connection expired; connect again |
+| `GITHUB_NOT_LINKED` | 409 | The project has no linked repository |
+| `GITHUB_NOT_LINKED_TO_ISSUE` | 404 | That branch or pull request is not linked to this issue |
+| `GITHUB_BRANCH_EXISTS` | 409 | A branch with that name exists |
+| `GITHUB_BASE_NOT_FOUND` | 404 | The branch to start from was not found |
+| `GITHUB_PR_EXISTS` | 409 | An open pull request exists for that head |
+| `GITHUB_HEAD_MOVED` | 409 | The head is no longer `headSha` |
+| `GITHUB_NOT_MERGEABLE` | 409 | GitHub refused the merge, with its reason |
+| `GITHUB_DEFAULT_BRANCH` | 400 | The default branch can't be deleted |
+| `GITHUB_NOTHING_TO_RERUN` | 409 | No check of the pull request has failed |
+| `GITHUB_FORBIDDEN` | 403 | Your GitHub account has no access to this |
+| `GITHUB_NOT_FOUND` | 404 | GitHub has no such resource, or you can't see it |
+| `GITHUB_NOT_ALLOWED`, `GITHUB_CONFLICT` | 409 | GitHub does not allow it now, or reported a conflict |
+| `GITHUB_INVALID` | 422 | GitHub rejected the request |
+| `GITHUB_RATE_LIMITED` | 503 | GitHub's rate limit; `details.retryAfterSeconds` says when |
+
+A batch stops at the first of these, so a failed `githubBranch.create` leaves `githubPr.open` skipped. Titles, bodies, branch names and reasons that come back from GitHub are untrusted text.
+
 ### upload
 
 Two ways, both ending with a file that is staged or attached:
@@ -309,7 +392,7 @@ A token has one `<area>:read` and one `<area>:write` scope per area, and write i
 | `act`          | The scope of the action's area and kind, for example `issues:write` for `issue.update`, `wiki:write` for `page.create`. `describe` shows the area and kind of each action |
 | `upload`       | `files:write` and the scope of the target's area                                                              |
 
-The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals`, `github` and `admin`. `search`, `orgs`, `teams` and `projects` have only a read scope, because everything that changes them is an admin action. A scope no action uses can't be minted, so a token never gains reach later without you choosing it. Managing orgs, teams, members, tokens, space permissions, page restrictions and projects is in the `admin` area, and those calls always wait for you to approve them (see [Approvals](#approvals)). The `github` area has `github:read` and `github:write`. `githubAccount.get`, `githubApp.status`, `githubRepo.get` and `githubRepo.health` take `github:read`, and `githubRepo.link`, `githubRepo.reconcile` and `githubRepo.unlink` take `github:write`. The `development` and `checks` includes also need `github:read`. Linking a repository changes who can read its pull requests and CI logs, so a token's `githubRepo.link` waits for approval, and so does `githubRepo.unlink`, unless your org relaxed destructive approvals. Setting up the App, connecting or disconnecting an account and the webhook are web UI only (`uiOnly`), so no token reaches them. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
+The areas are `issues`, `sprints`, `boards`, `wiki`, `files`, `search`, `orgs`, `teams`, `projects`, `dashboards`, `forms`, `automation`, `approvals`, `github` and `admin`. `search`, `orgs`, `teams` and `projects` have only a read scope, because everything that changes them is an admin action. A scope no action uses can't be minted, so a token never gains reach later without you choosing it. Managing orgs, teams, members, tokens, space permissions, page restrictions and projects is in the `admin` area, and those calls always wait for you to approve them (see [Approvals](#approvals)). The `github` area has `github:read` and `github:write`. `githubAccount.get`, `githubApp.status`, `githubRepo.get` and `githubRepo.health` take `github:read`, and `githubRepo.link`, `githubRepo.reconcile`, `githubRepo.unlink` and the nine [GitHub actions](#github-actions) take `github:write`. The `development` and `checks` includes also need `github:read`. Linking a repository changes who can read its pull requests and CI logs, so a token's `githubRepo.link` waits for approval, and so does `githubRepo.unlink`, unless your org relaxed destructive approvals. Setting up the App, connecting or disconnecting an account and the webhook are web UI only (`uiOnly`), so no token reaches them. A refused call answers `403 SCOPE`. Beyond scopes, your own access applies: team membership, space permissions and page restrictions.
 
 ## Limits
 

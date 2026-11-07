@@ -92,7 +92,7 @@ A scope no action uses can't be minted (`400`): `orgs:write`, `teams:write`, `pr
 | `forms`      | `/api/projects/:id/forms`, `intake`                                                                                                                                                                           |
 | `automation` | `/api/projects/:id/automation-rules`                                                                                                                                                                          |
 | `approvals`  | `/api/projects/:id/approval-gates`, `/api/approval-requests`                                                                                                                                                  |
-| `github` | `githubApp.status`, `githubAccount.get`, `githubRepo.get`, `githubRepo.health` (read); `githubRepo.link`, `githubRepo.reconcile`, `githubRepo.unlink` (write). Setting up the App and connecting an account are web UI only |
+| `github` | `githubApp.status`, `githubAccount.get`, `githubRepo.get`, `githubRepo.health` (read); `githubRepo.link`, `githubRepo.reconcile`, `githubRepo.unlink`, `githubBranch.*`, `githubPr.*`, `githubChecks.rerun` (write). Setting up the App and connecting an account are web UI only |
 | `admin` | Orgs, teams, members, invitations, tokens, space permissions, page restrictions, project create, update and delete, and `/api/admin`. Every call waits for approval, see [Approvals](#approvals-for-token-calls) |
 
 Reading your profile, the user search and notifications needs read on `issues` or `wiki`. Search returns only the sections the token covers (`issues:read`, `wiki:read`). An attachment needs `files:<kind>` and the scope of its parent: `issues:<kind>` for an issue's, `wiki:<kind>` for a page's. Managing orgs, teams, members, invitations, tokens, space permissions and page restrictions, creating, changing or deleting projects, and reading under `/api/admin` take the `admin` scope, and every such call waits for a person to approve it. Your own account (changing the profile, the password or 2FA) and resetting another user's password or 2FA stay closed to tokens (`403`); reading the profile is open. Login, refresh, logout and the other sign-in routes are `uiOnly`: a session reaches them, a token never does, and `act` doesn't list them. Invite links are `tokenBlocked`: a normal action for your browser session, refused to every token. Creating a token with any other scope name returns `400`.
@@ -265,6 +265,24 @@ People appear as `{ id, displayName }`. Each include is `{ items, limit, truncat
 | `checks` (issue)      | CI runs on the heads of open pull requests (the heads of its live branches when none is open), failed first, with the failed step and `logTail` (100 lines, 16 KB). Needs `github:read`. Text in it is untrusted                                                    | 50    |
 
 An include the token's scopes don't cover is left out, and named in `data.omittedIncludes`.
+
+### GitHub branches, pull requests and checks
+
+Each acts as the caller's own connected GitHub account on the repository linked to the issue's project, and needs `github:write` and `issue:edit`. `:issueNumber` is the number in the key (`42` for `AXM-42`). The same actions run through `POST /api/act` and the MCP server, see [GitHub actions](axiom-mcp-server.md#github-actions) for inputs, `headSha` and the error codes.
+
+| Route | Action | Token call |
+|---|---|---|
+| `POST /api/projects/:projectId/issues/:issueNumber/github/branches` | `githubBranch.create` | Runs |
+| `DELETE .../github/branches/:branch` | `githubBranch.delete` | Waits for approval |
+| `POST .../github/pulls` | `githubPr.open` | Runs |
+| `PATCH .../github/pulls/:pullNumber` | `githubPr.update` | Runs |
+| `POST .../github/pulls/:pullNumber/reviewers` | `githubPr.requestReviewers` | Runs |
+| `POST .../github/pulls/:pullNumber/comments` | `githubPr.comment` | Runs |
+| `PUT .../github/pulls/:pullNumber/merge` | `githubPr.merge` (needs `headSha`) | Waits for approval |
+| `POST .../github/pulls/:pullNumber/close` | `githubPr.close` | Waits for approval |
+| `POST .../github/pulls/:pullNumber/checks/rerun` | `githubChecks.rerun` (GitHub Actions jobs only) | Runs |
+
+A waiting call answers `202` with `status: "pending_approval"`. A moved head answers `409 GITHUB_HEAD_MOVED`, a connection that is missing `409 GITHUB_NOT_CONNECTED`.
 
 ---
 
