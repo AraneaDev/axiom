@@ -1406,6 +1406,8 @@ model GithubInstallation {
   accountLogin String
   accountType  String
   suspendedAt  DateTime?
+  /// When the installation was deleted, or vanished from the App's list: suspension is separate
+  removedAt    DateTime?
   /// When the newest webhook event applied to this row was received (or the last sync ran)
   lastEventAt  DateTime?
   createdAt    DateTime  @default(now())
@@ -1460,6 +1462,10 @@ model GithubRepoLink {
   lastReconciledAt    DateTime?
   lastReconcileError  String?
   reconcileLeaseUntil DateTime?
+  /// Who holds the lease: only that run extends or clears it
+  reconcileLeaseToken String?
+  /// Why the last reconcile did not read everything (null when it did)
+  lastReconcileNote   String?
   project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   issueLinks          GithubIssueLink[]
   branches            GithubBranch[]

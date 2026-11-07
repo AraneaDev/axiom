@@ -593,15 +593,15 @@ describe('installation tokens', () => {
 });
 
 describe('syncing installations', () => {
-  it('upserts what GitHub lists and marks one that vanished as suspended', async () => {
+  it('upserts what GitHub lists and marks one that vanished as removed, not suspended', async () => {
     await seedGithubApp({ fake });
     fake.addInstallation(4101, ['acme-labs/widget']);
     fake.addInstallation(4102, ['octo-dev/notes'], { login: 'octo-dev', type: 'User' });
     const first = await post(`${BASE}/installations/sync`, admin);
     expect(first.status).toBe(200);
     expect(first.body.installations).toEqual([
-      { id: 4101, accountLogin: 'acme-labs', suspended: false },
-      { id: 4102, accountLogin: 'octo-dev', suspended: false },
+      { id: 4101, accountLogin: 'acme-labs', suspended: false, removed: false },
+      { id: 4102, accountLogin: 'octo-dev', suspended: false, removed: false },
     ]);
     expect(
       (await prisma.githubInstallation.findUniqueOrThrow({ where: { id: 4102 } })).accountType,
@@ -615,9 +615,11 @@ describe('syncing installations', () => {
     // Marking it gone is as fresh as the sync: a late older webhook event cannot undo it
     const gone = await prisma.githubInstallation.findUniqueOrThrow({ where: { id: 4102 } });
     expect(gone.lastEventAt!.getTime()).toBeGreaterThan(firstSync!.getTime());
+    expect(gone.removedAt).not.toBeNull();
+    expect(gone.suspendedAt).toBeNull();
     expect(second.body.installations).toEqual([
-      { id: 4101, accountLogin: 'acme-labs', suspended: false },
-      { id: 4102, accountLogin: 'octo-dev', suspended: true },
+      { id: 4101, accountLogin: 'acme-labs', suspended: false, removed: false },
+      { id: 4102, accountLogin: 'octo-dev', suspended: false, removed: true },
     ]);
     const status = await request(app).get(BASE).set(as(member));
     expect(status.body.installations).toHaveLength(2);
@@ -630,14 +632,14 @@ describe('syncing installations', () => {
       fake.suspendInstallation(4101);
       const suspended = await post(`${BASE}/installations/sync`, admin);
       expect(suspended.body.installations).toEqual([
-        { id: 4101, accountLogin: 'acme-labs', suspended: true },
+        { id: 4101, accountLogin: 'acme-labs', suspended: true, removed: false },
       ]);
     } finally {
       fake.suspendInstallation(4101, false);
     }
     const active = await post(`${BASE}/installations/sync`, admin);
     expect(active.body.installations).toEqual([
-      { id: 4101, accountLogin: 'acme-labs', suspended: false },
+      { id: 4101, accountLogin: 'acme-labs', suspended: false, removed: false },
     ]);
   });
 

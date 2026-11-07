@@ -708,7 +708,31 @@ describe('installation events', () => {
     );
     await done('i-2');
     const stored = await prisma.githubInstallation.findUnique({ where: { id: 5001 } });
-    expect(stored?.suspendedAt).not.toBeNull();
+    expect(stored?.removedAt).not.toBeNull();
+    // Removal is not a suspension
+    expect(stored?.suspendedAt).toBeNull();
+  });
+
+  it('clears the removal when the installation is created again or unsuspended', async () => {
+    await prisma.githubInstallation.upsert({
+      where: { id: 5001 },
+      create: {
+        id: 5001,
+        accountLogin: 'acme-labs',
+        accountType: 'Organization',
+        removedAt: new Date(),
+      },
+      update: { removedAt: new Date() },
+    });
+    await postWebhook(
+      'installation',
+      { action: 'unsuspend', installation: installation() },
+      { deliveryId: 'i-2b' },
+    );
+    await done('i-2b');
+    expect(
+      (await prisma.githubInstallation.findUnique({ where: { id: 5001 } }))?.removedAt,
+    ).toBeNull();
   });
 
   it('suspends and unsuspends', async () => {

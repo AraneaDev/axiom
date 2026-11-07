@@ -48,7 +48,13 @@ export type GithubAppStatus = {
   htmlUrl?: string;
   installUrl?: string;
   /** `id` is a number, or a string in the (unseen) case that GitHub's id exceeds 2^53 - 1 */
-  installations: Array<{ id: number | string; accountLogin: string; suspended: boolean }>;
+  installations: Array<{
+    id: number | string;
+    accountLogin: string;
+    suspended: boolean;
+    /** Deleted on GitHub, or no longer listed by it */
+    removed: boolean;
+  }>;
 };
 
 /**
@@ -248,6 +254,7 @@ export async function getStatus(): Promise<GithubAppStatus> {
       id: githubIdJson(i.id),
       accountLogin: i.accountLogin,
       suspended: i.suspendedAt !== null,
+      removed: i.removedAt !== null,
     })),
   };
 }
@@ -433,14 +440,15 @@ export async function syncInstallations(): Promise<GithubAppStatus> {
           accountLogin: item.account.login,
           accountType: item.account.type,
           suspendedAt,
+          removedAt: null,
           lastEventAt: now,
         },
       });
     }
     if (complete) {
       await tx.githubInstallation.updateMany({
-        where: { id: { notIn: parsed.data.map((i) => i.id) }, suspendedAt: null },
-        data: { suspendedAt: now, lastEventAt: now },
+        where: { id: { notIn: parsed.data.map((i) => i.id) }, removedAt: null },
+        data: { removedAt: now, lastEventAt: now },
       });
     }
   });

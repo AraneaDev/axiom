@@ -2,14 +2,16 @@
 // (a burst answered 429 is never redelivered). Every record goes through the same stores as a
 // webhook, so a missed merge still reports `pr_merged` once, and a log that could not be had is
 // asked for again within its one-hour limit.
+import { randomUUID } from 'node:crypto';
+
 import { z } from 'zod';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
-import { storeCheckRun, type CheckRunPayload } from './checks.service';
-import { githubPaginate, githubRequest, type GithubAuth } from './github-client';
+import { isFailed, storeCheckRun, type CheckRunPayload } from './checks.service';
+import { countGithubCalls, githubPaginate, githubRequest, type GithubAuth } from './github-client';
 import { storeBranch, storePullRequest, type PullRequestPayload } from './github-events';
 import { extractIssueNumbers } from './issue-keys';
 
@@ -28,30 +30,39 @@ export type ReconcileResult = {
   branches: number;
   calls: number;
   complete: boolean;
+  /** Why not everything was read, or null */
+  reason: string | null;
 };
 
 const branchList = z.array(
   z.object({ name: z.string().min(1), commit: z.object({ sha: z.string().min(1) }) }),
 );
-const prNumber = z.object({
+const prHead = z.object({
   number: z.number().int(),
   updated_at: z.string(),
   head: z.object({ sha: z.string() }),
 });
 
+const LEASE_LOST = 'GITHUB_RECONCILE_LEASE_LOST';
+
 /**
- * Claims the right to reconcile a link with one conditional update.
+ * Claims the right to reconcile a link with one conditional update, writing a token that only
+ * this run holds.
  * @param repoLinkId The link
+ * @param token This run's token
  * @throws {AppError} 404 when the link is gone, 409 GITHUB_RECONCILE_RUNNING while another run holds the lease
  */
-async function claimLease(repoLinkId: string): Promise<void> {
+async function claimLease(repoLinkId: string, token: string): Promise<void> {
   const now = new Date();
   const claim = await prisma.githubRepoLink.updateMany({
     where: {
       id: repoLinkId,
       OR: [{ reconcileLeaseUntil: null }, { reconcileLeaseUntil: { lt: now } }],
     },
-    data: { reconcileLeaseUntil: new Date(now.getTime() + LEASE_MS) },
+    data: {
+      reconcileLeaseUntil: new Date(now.getTime() + LEASE_MS),
+      reconcileLeaseToken: token,
+    },
   });
   if (claim.count > 0) return;
   const exists = await prisma.githubRepoLink.findUnique({
@@ -67,31 +78,119 @@ async function claimLease(repoLinkId: string): Promise<void> {
 }
 
 /**
+ * Pushes the lease out again, but only while it is still this run's.
+ * @param repoLinkId The link
+ * @param token This run's token
+ * @throws {AppError} 409 GITHUB_RECONCILE_LEASE_LOST when another run has taken the lease over
+ */
+async function extendLease(repoLinkId: string, token: string): Promise<void> {
+  const { count } = await prisma.githubRepoLink.updateMany({
+    where: { id: repoLinkId, reconcileLeaseToken: token },
+    data: { reconcileLeaseUntil: new Date(Date.now() + LEASE_MS) },
+  });
+  if (count === 0) {
+    throw new AppError(409, 'The reconcile lost its lease to another run', LEASE_LOST);
+  }
+}
+
+type StoredCheckRun = {
+  status: string;
+  conclusion: string | null;
+  completedAt: Date | null;
+  appSlug: string;
+  logTail: string | null;
+  logUnavailable: boolean;
+  logUnavailableReason: string | null;
+};
+
+/**
+ * Whether a check run is what is stored already, and needs nothing more: no change of status,
+ * conclusion or time, and no log that is still to be fetched again.
+ * @param stored The stored run
+ * @param run GitHub's run
+ */
+function checkRunUnchanged(stored: StoredCheckRun, run: CheckRunPayload): boolean {
+  const completed = run.completed_at ? Date.parse(run.completed_at) : null;
+  if (
+    stored.status !== run.status ||
+    (stored.conclusion ?? null) !== (run.conclusion ?? null) ||
+    (stored.completedAt?.getTime() ?? null) !== completed
+  ) {
+    return false;
+  }
+  if (
+    stored.logUnavailable &&
+    ['forbidden', 'unavailable'].includes(stored.logUnavailableReason ?? '')
+  ) {
+    return false;
+  }
+  // A failed Actions run whose log fetch never finished is still owed its failure details
+  return !(
+    isFailed(stored.conclusion) &&
+    stored.appSlug === 'github-actions' &&
+    stored.logTail === null &&
+    !stored.logUnavailable
+  );
+}
+
+/**
  * Reconciles one linked repository with GitHub, as its installation: the open pull requests, the
  * ones stored as open that GitHub no longer lists, the check runs at the head of each open pull
- * request, and the branches. Stops when the call budget is spent. A list that was not read to
- * its end never makes a stored record look gone.
+ * request, and the branches. Each phase has its own share of the call budget (branches always
+ * get some), and a phase that fails ends alone. A list that was not read to its end never makes
+ * a stored record look gone, and a branch written after its list was asked for is left alone.
+ * Every GitHub request of the run counts against the budget, whoever makes it. The lease is
+ * extended between phases and released only by the run that holds it.
  * @param repoLinkId The link
  * @param opts `callBudget` overrides the default budget
  * @param opts.callBudget
  * @returns What was stored, the GitHub calls made, and whether everything was read
- * @throws {AppError} 404 when the link is gone, 409 GITHUB_RECONCILE_RUNNING while another run holds it; a GitHub failure
+ * @throws {AppError} 404 when the link is gone, 409 GITHUB_RECONCILE_RUNNING while another run holds it
  */
 export async function reconcileRepo(
   repoLinkId: string,
   opts: { callBudget?: number } = {},
 ): Promise<ReconcileResult> {
-  await claimLease(repoLinkId);
+  const token = randomUUID();
+  await claimLease(repoLinkId, token);
   const budget = opts.callBudget ?? RECONCILE_CALL_BUDGET;
+  const counter = { calls: 0 };
   const result: ReconcileResult = {
     pullRequests: 0,
     checkRuns: 0,
     branches: 0,
     calls: 0,
     complete: true,
+    reason: null,
   };
-  const failure: { message: string | null } = { message: null };
+  const failure: { message: string | null; reasons: string[] } = { message: null, reasons: [] };
+  const incomplete = (reason: string) => {
+    result.complete = false;
+    if (!failure.reasons.includes(reason)) failure.reasons.push(reason);
+  };
   try {
+    await countGithubCalls(counter, () => run());
+    return result;
+  } catch (err) {
+    failure.message = err instanceof AppError ? err.message : 'The reconcile failed';
+    throw err;
+  } finally {
+    result.calls = counter.calls;
+    result.reason = failure.reasons.length ? failure.reasons.join('; ').slice(0, ERROR_MAX) : null;
+    // Only the run that holds the lease records and releases it; a crashed run's lease runs out
+    await prisma.githubRepoLink.updateMany({
+      where: { id: repoLinkId, reconcileLeaseToken: token },
+      data: {
+        lastReconciledAt: new Date(),
+        lastReconcileError: failure.message ? failure.message.slice(0, ERROR_MAX) : null,
+        lastReconcileNote: result.reason,
+        reconcileLeaseUntil: null,
+        reconcileLeaseToken: null,
+      },
+    });
+  }
+
+  async function run(): Promise<void> {
     const link = await prisma.githubRepoLink.findUnique({
       where: { id: repoLinkId },
       select: {
@@ -104,120 +203,172 @@ export async function reconcileRepo(
     if (!link) throw new AppError(404, 'The repository is not linked', 'NOT_FOUND');
     const auth: GithubAuth = { kind: 'installation', installationId: Number(link.installationId) };
     const repoPath = `/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.name)}`;
-    const left = () => budget - result.calls;
+    // The branches keep a share of the budget the earlier phases cannot spend
+    const reserve = Math.floor(budget / 30);
+    const left = (forBranches = false) => budget - counter.calls - (forBranches ? 0 : reserve);
     const itemFailed = (what: string, err: unknown) => {
       failure.message ??= err instanceof Error ? err.message : `${what} failed`;
-      result.complete = false;
+      incomplete(`A ${what} could not be stored`);
       logger.warn('github reconcile item failed', { repoLinkId, what });
     };
-    // One list: the pages it may still read, counted as calls
-    const list = async <T>(path: string, maxPages: number, itemsKey?: string) => {
-      const pages = Math.min(maxPages, left());
+    const phase = async (name: string, work: () => Promise<void>) => {
+      await extendLease(repoLinkId, token);
+      try {
+        await work();
+      } catch (err) {
+        if (err instanceof AppError && err.code === LEASE_LOST) throw err;
+        failure.message ??= err instanceof AppError ? err.message : `The ${name} could not be read`;
+        incomplete(`The ${name} could not be read`);
+        logger.warn('github reconcile phase failed', { repoLinkId, phase: name });
+      }
+    };
+    // One list: the pages it may still read
+    const list = async <T>(
+      path: string,
+      maxPages: number,
+      opts: { itemsKey?: string; forBranches?: boolean; cut: string },
+    ) => {
+      const pages = Math.min(maxPages, left(opts.forBranches));
       if (pages <= 0) {
-        result.complete = false;
+        incomplete('The call budget ran out');
         return null;
       }
-      const read = await githubPaginate<T>(auth, path, { maxPages: pages, itemsKey });
-      result.calls += read.complete ? Math.max(1, Math.ceil(read.items.length / 100)) : pages;
-      if (!read.complete) result.complete = false;
+      const read = await githubPaginate<T>(auth, path, {
+        maxPages: pages,
+        itemsKey: opts.itemsKey,
+      });
+      if (!read.complete) incomplete(pages < maxPages ? 'The call budget ran out' : opts.cut);
       return read;
     };
 
-    // Open pull requests
-    const open = await list<PullRequestPayload>(`${repoPath}/pulls`, OPEN_PR_PAGES);
-    const returned = open?.items ?? [];
-    const stored = new Map(
-      (
-        await prisma.githubPullRequest.findMany({
-          where: { repoLinkId },
-          select: { number: true, state: true, headSha: true, githubUpdatedAt: true },
-        })
-      ).map((row) => [row.number, row]),
-    );
-    for (const payload of returned) {
-      const head = prNumber.safeParse(payload);
-      const known = head.success ? stored.get(head.data.number) : undefined;
-      if (
-        head.success &&
-        known?.state === 'OPEN' &&
-        known.headSha === head.data.head.sha &&
-        known.githubUpdatedAt.getTime() === Date.parse(head.data.updated_at)
-      ) {
-        continue;
-      }
-      try {
-        await storePullRequest(repoLinkId, payload, null, 'reconcile');
-        result.pullRequests++;
-      } catch (err) {
-        itemFailed('pull request', err);
-      }
-    }
+    let returned: PullRequestPayload[] = [];
+    let openComplete = false;
+    const stored = new Map<number, { state: string; headSha: string; githubUpdatedAt: Date }>();
 
-    // Stored as open, not listed any more: closed or merged while no webhook arrived. Only a
-    // list read to its end can say a pull request is missing from it.
-    if (open?.items && open.complete) {
-      const listed = new Set(
-        returned
-          .map((p) => prNumber.safeParse(p))
-          .flatMap((p) => (p.success ? [p.data.number] : [])),
-      );
-      const missing = [...stored.entries()]
-        .filter(([number, row]) => row.state === 'OPEN' && !listed.has(number))
-        .map(([number]) => number)
-        .slice(0, MISSING_PR_LIMIT);
-      for (const number of missing) {
-        if (left() <= 0) {
-          result.complete = false;
-          break;
+    await phase('open pull requests', async () => {
+      const open = await list<PullRequestPayload>(`${repoPath}/pulls`, OPEN_PR_PAGES, {
+        cut: `More than ${OPEN_PR_PAGES * 100} open pull requests: only the first ${OPEN_PR_PAGES * 100} were read`,
+      });
+      if (!open) return;
+      returned = open.items;
+      openComplete = open.complete;
+      for (const row of await prisma.githubPullRequest.findMany({
+        where: { repoLinkId },
+        select: { number: true, state: true, headSha: true, githubUpdatedAt: true },
+      })) {
+        stored.set(row.number, row);
+      }
+      for (const payload of returned) {
+        const head = prHead.safeParse(payload);
+        const known = head.success ? stored.get(head.data.number) : undefined;
+        if (
+          head.success &&
+          known?.state === 'OPEN' &&
+          known.headSha === head.data.head.sha &&
+          known.githubUpdatedAt.getTime() === Date.parse(head.data.updated_at)
+        ) {
+          continue;
         }
-        result.calls++;
         try {
-          const { data } = await githubRequest<PullRequestPayload>(
-            auth,
-            'GET',
-            `${repoPath}/pulls/${number}`,
-          );
-          await storePullRequest(repoLinkId, data, null, 'reconcile');
+          await storePullRequest(repoLinkId, payload, null, 'reconcile');
           result.pullRequests++;
         } catch (err) {
-          // A pull request GitHub no longer knows stays as it is
-          if (err instanceof AppError && err.statusCode === 404) continue;
           itemFailed('pull request', err);
         }
       }
+    });
+
+    // Stored as open, not listed any more: closed or merged while no webhook arrived. Only a
+    // list read to its end can say a pull request is missing from it. The least recently
+    // updated come first, so a few that GitHub no longer knows cannot hold the rest back.
+    if (openComplete) {
+      await phase('closed pull requests', async () => {
+        const listed = returned.flatMap((p) => {
+          const head = prHead.safeParse(p);
+          return head.success ? [head.data.number] : [];
+        });
+        const missing = await prisma.githubPullRequest.findMany({
+          where: { repoLinkId, state: 'OPEN', number: { notIn: listed } },
+          orderBy: { githubUpdatedAt: 'asc' },
+          take: MISSING_PR_LIMIT,
+          select: { number: true },
+        });
+        for (const { number } of missing) {
+          if (left() <= 0) {
+            incomplete('The call budget ran out');
+            break;
+          }
+          try {
+            const { data } = await githubRequest<PullRequestPayload>(
+              auth,
+              'GET',
+              `${repoPath}/pulls/${number}`,
+            );
+            await storePullRequest(repoLinkId, data, null, 'reconcile');
+            result.pullRequests++;
+          } catch (err) {
+            // A pull request GitHub no longer knows stays as it is
+            if (err instanceof AppError && err.statusCode === 404) continue;
+            itemFailed('pull request', err);
+          }
+        }
+      });
     }
 
     // Check runs at the head of each open pull request
-    const heads = [
-      ...new Set(returned.flatMap((p) => (prNumber.safeParse(p).success ? [p.head.sha] : []))),
-    ];
-    for (const headSha of heads) {
-      const runs = await list<CheckRunPayload>(
-        `${repoPath}/commits/${encodeURIComponent(headSha)}/check-runs`,
-        CHECK_RUN_PAGES,
-        'check_runs',
-      );
-      if (!runs) break;
-      for (const run of runs.items) {
-        try {
-          const { stale } = await storeCheckRun(repoLinkId, run, auth, { source: 'reconcile' });
-          if (!stale) result.checkRuns++;
-        } catch (err) {
-          itemFailed('check run', err);
+    await phase('check runs', async () => {
+      const heads = [
+        ...new Set(returned.flatMap((p) => (prHead.safeParse(p).success ? [p.head.sha] : []))),
+      ];
+      for (const headSha of heads) {
+        await extendLease(repoLinkId, token);
+        const runs = await list<CheckRunPayload>(
+          `${repoPath}/commits/${encodeURIComponent(headSha)}/check-runs`,
+          CHECK_RUN_PAGES,
+          { itemsKey: 'check_runs', cut: 'More check runs than were read' },
+        );
+        if (!runs) break;
+        const known = new Map(
+          (await prisma.githubCheckRun.findMany({ where: { repoLinkId, headSha } })).map((row) => [
+            row.id,
+            row,
+          ]),
+        );
+        for (const run of runs.items) {
+          const row = known.get(String(run.id));
+          if (row && checkRunUnchanged(row, run)) continue;
+          // A failed run costs a job and a log request; stop when the budget cannot pay for it
+          if (left() <= 0) {
+            incomplete('The call budget ran out');
+            return;
+          }
+          try {
+            const { stale } = await storeCheckRun(repoLinkId, run, auth, { source: 'reconcile' });
+            if (!stale) result.checkRuns++;
+          } catch (err) {
+            itemFailed('check run', err);
+          }
         }
       }
-    }
+    });
 
     // Branches: those that name an issue (or are stored already), and the linked ones GitHub lost
-    const branches = await list<unknown>(`${repoPath}/branches`, BRANCH_PAGES);
-    if (branches) {
+    await phase('branches', async () => {
+      // Taken before the list is asked for: a row written later is newer than the list
+      const observedAt = new Date();
+      const branches = await list<unknown>(`${repoPath}/branches`, BRANCH_PAGES, {
+        forBranches: true,
+        cut: `More than ${BRANCH_PAGES * 100} branches: only the first ${BRANCH_PAGES * 100} were read`,
+      });
+      if (!branches) return;
       const parsed = branchList.safeParse(branches.items);
-      if (!parsed.success)
+      if (!parsed.success) {
         throw new AppError(
           502,
           'GitHub answered a branch list that cannot be read',
           'GITHUB_UNAVAILABLE',
         );
+      }
       const rows = await prisma.githubBranch.findMany({ where: { repoLinkId } });
       const byName = new Map(rows.map((row) => [row.name, row]));
       for (const { name, commit } of parsed.data) {
@@ -225,7 +376,9 @@ export async function reconcileRepo(
         if (known && !known.deletedAt && known.headSha === commit.sha) continue;
         if (!known && extractIssueNumbers(name, link.project.prefix).length === 0) continue;
         try {
-          await storeBranch(repoLinkId, { name, sha: commit.sha }, null, 'reconcile');
+          await storeBranch(repoLinkId, { name, sha: commit.sha }, null, 'reconcile', {
+            observedAt,
+          });
           result.branches++;
         } catch (err) {
           itemFailed('branch', err);
@@ -245,7 +398,7 @@ export async function reconcileRepo(
           if (row.deletedAt || listed.has(row.name) || !linked.has(row.id)) continue;
           try {
             await storeBranch(repoLinkId, { name: row.name, sha: null }, null, 'reconcile', {
-              at: new Date(),
+              observedAt,
             });
             result.branches++;
           } catch (err) {
@@ -253,20 +406,6 @@ export async function reconcileRepo(
           }
         }
       }
-    }
-    return result;
-  } catch (err) {
-    failure.message = err instanceof AppError ? err.message : 'The reconcile failed';
-    throw err;
-  } finally {
-    // The lease is cleared on every exit; a crash leaves it to run out
-    await prisma.githubRepoLink.updateMany({
-      where: { id: repoLinkId },
-      data: {
-        lastReconciledAt: new Date(),
-        lastReconcileError: failure.message ? failure.message.slice(0, ERROR_MAX) : null,
-        reconcileLeaseUntil: null,
-      },
     });
   }
 }

@@ -39,6 +39,12 @@ export type StoreMeta = {
   at?: Date | null;
   /** The head a push moved from: with no (or an equal) time it must be the stored head */
   before?: string | null;
+  /**
+   * For a branch read from a list (reconcile): when the list was asked for. A row written after
+   * that moment is newer than the list and is left alone; the change never writes `lastPushedAt`
+   * and is not ordered by it.
+   */
+  observedAt?: Date;
 };
 
 type Client = Prisma.TransactionClient;
@@ -155,10 +161,14 @@ export async function storeBranch(
         where: { repoLinkId_name: { repoLinkId, name } },
       });
       const nothing = { row: before, created: false, links: null as SyncResult | null };
+      // A list is older than any write made after it was asked for
+      if (meta.observedAt && before && before.updatedAt > meta.observedAt)
+        return { ...nothing, stale: true };
       if (before?.lastPushedAt && at && at < before.lastPushedAt)
         return { ...nothing, stale: true };
       // A delete event names no time: it deletes only a branch no ordered push has touched
-      if (branch.sha === null && !at && before?.lastPushedAt) return { ...nothing, stale: true };
+      if (branch.sha === null && !at && !meta.observedAt && before?.lastPushedAt)
+        return { ...nothing, stale: true };
       // A push of the same second (or none named) is ordered by the head it moves from
       if (branch.sha && meta.before != null && before?.headSha && !before.deletedAt) {
         const sameTime =

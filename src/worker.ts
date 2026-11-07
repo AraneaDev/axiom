@@ -11,11 +11,13 @@ import './modules/github/github-resolvers';
 import './modules/github/webhook-handlers';
 import { reconcileDueRepos } from './modules/github/reconcile.service';
 import { cleanupDeliveries, retryDueDeliveries } from './modules/github/webhook.service';
-import { setRealtimeMode } from './realtime/bridge';
+import { closeRealtimePublisher, setRealtimeMode } from './realtime/bridge';
 import { logger } from './utils/logger';
 
 const UPLOAD_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const APPROVAL_CLEANUP_INTERVAL_MS = 60 * 1000;
+const GITHUB_RECONCILE_TICK_MS = 60 * 1000;
+let reconcileRunning = false;
 
 /** Remove expired upload URLs and staged attachments; a failure waits for the next round. */
 function runUploadCleanup(): void {
@@ -46,9 +48,16 @@ function runGithubDeliveryJobs(): void {
 
 /** Reconcile the linked repositories that are due; a failure is on the link and waits for its next round. */
 function runGithubReconcile(): void {
-  reconcileDueRepos().catch((err) => {
-    logger.error('GitHub reconcile failed', {}, err as Error);
-  });
+  // A round of five links can outlast the tick: the next one waits for it
+  if (reconcileRunning) return;
+  reconcileRunning = true;
+  reconcileDueRepos()
+    .catch((err) => {
+      logger.error('GitHub reconcile failed', {}, err as Error);
+    })
+    .finally(() => {
+      reconcileRunning = false;
+    });
 }
 
 async function main(): Promise<void> {
@@ -73,7 +82,7 @@ async function main(): Promise<void> {
   const githubDeliveries = setInterval(runGithubDeliveryJobs, APPROVAL_CLEANUP_INTERVAL_MS);
 
   runGithubReconcile();
-  const githubReconcile = setInterval(runGithubReconcile, APPROVAL_CLEANUP_INTERVAL_MS);
+  const githubReconcile = setInterval(runGithubReconcile, GITHUB_RECONCILE_TICK_MS);
 
   logger.info('Axiom worker running');
 
@@ -83,6 +92,7 @@ async function main(): Promise<void> {
     clearInterval(approvalCleanup);
     clearInterval(githubDeliveries);
     clearInterval(githubReconcile);
+    closeRealtimePublisher();
     if (stopEmail) await stopEmail();
     await prisma.$disconnect();
     process.exit(0);

@@ -11,6 +11,7 @@ import { reconcileRepo } from './reconcile.service';
 import * as service from './repo-link.service';
 
 const link = z.looseObject({ repoFullName: z.string(), htmlUrl: z.string() });
+const RECONCILE_COOLDOWN_MS = 60_000;
 const PATH = '/api/projects/:projectId/github';
 
 // Authorization runs on the id alone (R10); every input extends its target (R11)
@@ -83,6 +84,19 @@ registerActions([
       const link = await service.findRepoLinkByProject(projectId);
       if (!link) {
         throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
+      }
+      // The worker reads every link every 15 minutes: a manual run is for seeing a change now,
+      // not for spending 300 GitHub calls in a loop
+      const wait =
+        link.lastReconciledAt &&
+        RECONCILE_COOLDOWN_MS - (Date.now() - link.lastReconciledAt.getTime());
+      if (wait && wait > 0) {
+        throw new AppError(
+          429,
+          'This repository was reconciled a moment ago. Try again in a minute.',
+          'GITHUB_RECONCILE_COOLDOWN',
+          { retryAfter: Math.ceil(wait / 1000) },
+        );
       }
       return reconcileRepo(link.id);
     },

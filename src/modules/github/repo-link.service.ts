@@ -4,7 +4,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 
 import { requireGithubAccount } from './github-actor';
-import { getGithubAppSecrets, getStatus } from './github-app.service';
+import { getGithubAppSecrets, getStatus, githubAppGeneration } from './github-app.service';
 import { githubRequest } from './github-client';
 import { githubIdJson } from './github-errors';
 
@@ -196,6 +196,22 @@ export async function unlinkRepo(projectId: string): Promise<{ unlinked: boolean
   return { unlinked: true };
 }
 
+// Whether the App's secrets open, kept per App generation: answering a health read must not
+// decrypt the private key each time. A replaced or re-created App is a new generation.
+let secretsReadable: { generation: string; unreadable: boolean } | null = null;
+
+async function appSecretUnreadable(): Promise<boolean> {
+  const generation = await githubAppGeneration();
+  if (generation === null) return false;
+  if (secretsReadable?.generation === generation) return secretsReadable.unreadable;
+  const unreadable = await getGithubAppSecrets().then(
+    () => false,
+    (err: unknown) => err instanceof AppError && err.code === 'GITHUB_SECRET_UNREADABLE',
+  );
+  secretsReadable = { generation, unreadable };
+  return unreadable;
+}
+
 const HEALTH_WINDOW_MS = 7 * 24 * 60 * 60_000;
 const HEALTH_FAILURES = 20;
 
@@ -207,10 +223,7 @@ const HEALTH_FAILURES = 20;
  */
 export async function getLinkHealth(projectId: string) {
   const link = await findRepoLinkByProject(projectId);
-  const secretsUnreadable = await getGithubAppSecrets().then(
-    () => false,
-    (err: unknown) => err instanceof AppError && err.code === 'GITHUB_SECRET_UNREADABLE',
-  );
+  const secretsUnreadable = await appSecretUnreadable();
   if (!link) {
     return {
       linked: false,
@@ -220,6 +233,8 @@ export async function getLinkHealth(projectId: string) {
       lastDeliveryAt: null,
       lastReconciledAt: null,
       lastReconcileError: null,
+      reconcileComplete: true,
+      reconcileIncompleteReason: null,
       recentFailures: [],
     };
   }
@@ -246,12 +261,14 @@ export async function getLinkHealth(projectId: string) {
   return {
     linked: true,
     repoFullName: link.fullName,
-    appInstalled: installation !== null,
+    appInstalled: installation !== null && installation.removedAt === null,
     installationSuspended: installation?.suspendedAt != null,
     appSecretUnreadable: secretsUnreadable,
     lastDeliveryAt: link.lastDeliveryAt?.toISOString() ?? null,
     lastReconciledAt: link.lastReconciledAt?.toISOString() ?? null,
     lastReconcileError: link.lastReconcileError,
+    reconcileComplete: link.lastReconcileNote === null,
+    reconcileIncompleteReason: link.lastReconcileNote,
     recentFailures: failures.map((f) => ({
       deliveryId: f.id,
       event: f.event,

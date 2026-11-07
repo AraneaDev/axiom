@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
@@ -17,8 +17,9 @@ import {
 } from '../../test/factory';
 import { useGithubFake } from '../../test/github-fake';
 import { seedGithubApp } from '../../test/github-seed';
+import { logger } from '../../utils/logger';
 
-import { onGithubOutcome, type GithubEventOutcome } from './github-events';
+import { onGithubOutcome, storeBranch, type GithubEventOutcome } from './github-events';
 import './github-resolvers';
 import {
   RECONCILE_CALL_BUDGET,
@@ -47,6 +48,7 @@ const outcomes: GithubEventOutcome[] = [];
 
 type Payload = Record<string, unknown>;
 
+const PUSHED = new Date('2026-11-06T08:00:00Z');
 const sha = (n: number) => n.toString(16).padStart(40, '0');
 
 function pr(n: number, over: Payload = {}): Payload {
@@ -140,7 +142,13 @@ beforeEach(async () => {
   fake.setJobLog(JOB_ID, LOG);
   await prisma.githubRepoLink.update({
     where: { id: repoLinkId },
-    data: { lastReconciledAt: null, lastReconcileError: null, reconcileLeaseUntil: null },
+    data: {
+      lastReconciledAt: null,
+      lastReconcileError: null,
+      lastReconcileNote: null,
+      reconcileLeaseUntil: null,
+      reconcileLeaseToken: null,
+    },
   });
 });
 
@@ -214,6 +222,22 @@ describe('reconcileRepo', () => {
     expect(row).toMatchObject({ conclusion: 'failure', failedStep: 'Run tests', repoLinkId });
     expect(row.logTail!.split('\n').at(-1)).toBe('##[error]Process completed with exit code 1.');
     expect(outcomes.find((o) => o.transitions.includes('checks_failed'))?.source).toBe('reconcile');
+    // Every request of the run counts, the job and the log included
+    expect(result.calls).toBe(fake.requests.length);
+    expect(requestsTo('/logs').length).toBeGreaterThan(0);
+
+    // A run that has not changed reports nothing and fetches nothing
+    const seen = outcomes.length;
+    const requestsBefore = fake.requests.length;
+    const jobRequests = requestsTo('/actions/jobs').length;
+    await prisma.githubRepoLink.update({
+      where: { id: repoLinkId },
+      data: { lastReconciledAt: null },
+    });
+    await reconcileRepo(repoLinkId);
+    expect(outcomes).toHaveLength(seen);
+    expect(requestsTo('/actions/jobs')).toHaveLength(jobRequests);
+    expect(fake.requests.length).toBeGreaterThan(requestsBefore);
     // As the installation
     expect(requestsTo('/check-runs')[0].headers.authorization).toBe(
       `installation:${INSTALLATION_ID}`,
@@ -244,10 +268,20 @@ describe('reconcileRepo', () => {
 
   it('marks a branch that was deleted on GitHub as deleted, and keeps the ones it still lists', async () => {
     const gone = await prisma.githubBranch.create({
-      data: { repoLinkId, name: `${ctx.projectPrefix}-1-gone`, headSha: sha(90) },
+      data: {
+        repoLinkId,
+        name: `${ctx.projectPrefix}-1-gone`,
+        headSha: sha(90),
+        lastPushedAt: PUSHED,
+      },
     });
     const kept = await prisma.githubBranch.create({
-      data: { repoLinkId, name: `${ctx.projectPrefix}-2-kept`, headSha: sha(91) },
+      data: {
+        repoLinkId,
+        name: `${ctx.projectPrefix}-2-kept`,
+        headSha: sha(91),
+        lastPushedAt: PUSHED,
+      },
     });
     const issue = await prisma.issue.create({
       data: {
@@ -284,6 +318,9 @@ describe('reconcileRepo', () => {
     const rows = await prisma.githubBranch.findMany({ where: { repoLinkId } });
     const byName = new Map(rows.map((r) => [r.name, r]));
     expect(byName.get(gone.name)?.deletedAt).not.toBeNull();
+    // Our clock never becomes the time of a push
+    expect(byName.get(gone.name)?.lastPushedAt).toEqual(PUSHED);
+    expect(byName.get(kept.name)?.lastPushedAt).toEqual(PUSHED);
     expect(byName.get(kept.name)).toMatchObject({ deletedAt: null, headSha: sha(92) });
     // A branch with a key is stored; one that names no issue is not
     expect(byName.get(`${ctx.projectPrefix}-3-new`)?.headSha).toBe(sha(93));
@@ -299,7 +336,10 @@ describe('reconcileRepo', () => {
 
     const result = await reconcileRepo(repoLinkId, { callBudget: 3 });
 
-    expect(result).toMatchObject({ complete: false, calls: 3, pullRequests: 300 });
+    // The installation token request counts too
+    expect(result).toMatchObject({ complete: false, pullRequests: 300 });
+    expect(result.calls).toBe(fake.requests.length);
+    expect(result.reason).toContain('budget');
     const link = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } });
     expect(link.lastReconciledAt).not.toBeNull();
     expect(link.reconcileLeaseUntil).toBeNull();
@@ -335,7 +375,9 @@ describe('reconcileRepo', () => {
   it('frees the lease when it fails, records the message only, and a crashed lease expires', async () => {
     fake.on('GET /repos/:owner/:repo/pulls', { status: 500, body: { message: 'Boom' } });
 
-    await expect(reconcileRepo(repoLinkId)).rejects.toBeInstanceOf(AppError);
+    // A phase that fails ends alone: the run is over, incomplete, and says why
+    const failed = await reconcileRepo(repoLinkId);
+    expect(failed.complete).toBe(false);
 
     const link = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } });
     expect(link.reconcileLeaseUntil).toBeNull();
@@ -508,7 +550,10 @@ describe('githubRepo.reconcile and githubRepo.health', () => {
   it('reports a GitHub App whose secrets cannot be opened', async () => {
     await prisma.githubApp.update({
       where: { id: 1 },
-      data: { privateKey: encryptSecret('x', secretContext('githubApp', 'privateKey', '2')) },
+      data: {
+        privateKey: encryptSecret('x', secretContext('githubApp', 'privateKey', '2')),
+        createdAt: new Date(),
+      },
     });
     try {
       const res = await request(app).get(url('health')).set(asOwner());
@@ -529,6 +574,347 @@ describe('githubRepo.reconcile and githubRepo.health', () => {
       expect(res.body).toMatchObject({ linked: false, recentFailures: [] });
     } finally {
       await cleanupTestContext(unlinked);
+    }
+  });
+});
+
+async function seedLinkedBranch(name: string, headSha: string, lastPushedAt: Date | null = PUSHED) {
+  const branch = await prisma.githubBranch.create({
+    data: { repoLinkId, name, headSha, lastPushedAt },
+  });
+  const issue = await prisma.issue.create({
+    data: {
+      projectId: ctx.projectId,
+      number: Math.floor(Math.random() * 1_000_000) + 100,
+      title: 'Branch issue',
+      body: '',
+      creatorId: ctx.owner.id,
+    },
+  });
+  await prisma.githubIssueLink.create({
+    data: {
+      repoLinkId,
+      issueId: issue.id,
+      targetType: 'BRANCH',
+      targetKey: branch.id,
+      sources: ['BRANCH_NAME'],
+    },
+  });
+  return branch;
+}
+
+const waitForRequest = (fragment: string) =>
+  vi.waitFor(() => expect(requestsTo(fragment).length).toBeGreaterThan(0));
+
+describe('push ordering of branches', () => {
+  afterEach(async () => {
+    await prisma.githubIssueLink.deleteMany({ where: { repoLinkId } });
+    await prisma.issue.deleteMany({ where: { projectId: ctx.projectId } });
+  });
+
+  it('does not delete a branch that was pushed after the list was asked for', async () => {
+    const name = `${ctx.projectPrefix}-5-race`;
+    await seedLinkedBranch(name, sha(60));
+    fake.setRepoLists('acme-labs/widget', { pulls: [], checkRuns: {} });
+    fake.on('GET /repos/:owner/:repo/branches', { status: 200, body: [], delayMs: 400 });
+
+    const run = reconcileRepo(repoLinkId);
+    await waitForRequest('/branches');
+    // The branch was re-created while GitHub was still answering the list
+    await storeBranch(repoLinkId, { name, sha: sha(61) }, null, 'webhook', {
+      event: 'push',
+      at: new Date(Date.now() + 1000),
+    });
+    await run;
+
+    const row = await prisma.githubBranch.findFirstOrThrow({ where: { repoLinkId, name } });
+    expect(row).toMatchObject({ deletedAt: null, headSha: sha(61) });
+  });
+
+  it('does not revive a branch that was deleted after the list was asked for', async () => {
+    const name = `${ctx.projectPrefix}-6-race`;
+    await seedLinkedBranch(name, sha(62));
+    fake.setRepoLists('acme-labs/widget', { pulls: [], checkRuns: {} });
+    fake.on('GET /repos/:owner/:repo/branches', {
+      status: 200,
+      body: [{ name, commit: { sha: sha(63) } }],
+      delayMs: 400,
+    });
+
+    const run = reconcileRepo(repoLinkId);
+    await waitForRequest('/branches');
+    await storeBranch(repoLinkId, { name, sha: null }, null, 'webhook', {
+      event: 'delete',
+      at: new Date(Date.now() + 1000),
+    });
+    await run;
+
+    const row = await prisma.githubBranch.findFirstOrThrow({ where: { repoLinkId, name } });
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.headSha).toBe(sha(62));
+    expect(outcomes.some((o) => o.transitions.includes('branch_created'))).toBe(false);
+  });
+
+  it('revives a branch GitHub lists again when nothing newer was written, keeping its push time', async () => {
+    const name = `${ctx.projectPrefix}-7-back`;
+    const branch = await seedLinkedBranch(name, sha(64));
+    await prisma.githubBranch.update({ where: { id: branch.id }, data: { deletedAt: new Date() } });
+    fake.setRepoLists('acme-labs/widget', {
+      pulls: [],
+      checkRuns: {},
+      branches: [{ name, sha: sha(65) }],
+    });
+
+    await reconcileRepo(repoLinkId);
+
+    const row = await prisma.githubBranch.findFirstOrThrow({ where: { repoLinkId, name } });
+    expect(row).toMatchObject({ deletedAt: null, headSha: sha(65), lastPushedAt: PUSHED });
+  });
+});
+
+describe('the lease', () => {
+  it('does not clear, or write over, a lease another run holds now', async () => {
+    fake.setRepoLists('acme-labs/widget', { checkRuns: {}, branches: [] });
+    fake.on('GET /repos/:owner/:repo/pulls', { status: 200, body: [], delayMs: 400 });
+
+    const run = reconcileRepo(repoLinkId);
+    await waitForRequest('/pulls');
+    // This run's lease ran out and a newer run took the link over
+    const until = new Date(Date.now() + 5 * 60_000);
+    await prisma.githubRepoLink.update({
+      where: { id: repoLinkId },
+      data: { reconcileLeaseToken: 'newer-run', reconcileLeaseUntil: until },
+    });
+
+    await expect(run).rejects.toMatchObject({ code: 'GITHUB_RECONCILE_LEASE_LOST' });
+
+    const link = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } });
+    expect(link).toMatchObject({
+      reconcileLeaseToken: 'newer-run',
+      reconcileLeaseUntil: until,
+      lastReconciledAt: null,
+      lastReconcileError: null,
+    });
+  });
+
+  it('extends the lease between phases', async () => {
+    fake.setRepoLists('acme-labs/widget', { checkRuns: {} });
+    fake.on('GET /repos/:owner/:repo/pulls', { status: 200, body: [], delayMs: 300 });
+    fake.on('GET /repos/:owner/:repo/branches', { status: 200, body: [], delayMs: 500 });
+    const soon = new Date(Date.now() + 2_000);
+
+    const run = reconcileRepo(repoLinkId);
+    await vi.waitFor(async () => {
+      const link = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } });
+      expect(link.reconcileLeaseToken).not.toBeNull();
+    });
+    await prisma.githubRepoLink.update({
+      where: { id: repoLinkId },
+      data: { reconcileLeaseUntil: soon },
+    });
+    await waitForRequest('/branches');
+    const link = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } });
+    expect(link.reconcileLeaseUntil!.getTime()).toBeGreaterThan(Date.now() + 5 * 60_000);
+    await run;
+  });
+});
+
+describe('budget and phases', () => {
+  it('counts a renewed token and its retry', async () => {
+    fake.setRepoLists('acme-labs/widget', { pulls: [pr(1)], branches: [], checkRuns: {} });
+    // GitHub revoked the cached token early: the first request is refused, renewed and repeated
+    fake.revokeInstallationTokens(INSTALLATION_ID);
+
+    const result = await reconcileRepo(repoLinkId);
+
+    expect(result.calls).toBe(fake.requests.length);
+    expect(requestsTo('/access_tokens').length).toBeGreaterThan(0);
+  });
+
+  it('lets a phase that fails end alone, and records the error', async () => {
+    fake.setRepoLists('acme-labs/widget', {
+      pulls: [pr(8, { head: { ref: 'feature-8', sha: SHA_A } })],
+      branches: [{ name: `${ctx.projectPrefix}-9-next`, sha: sha(70) }],
+    });
+    fake.on('GET /repos/:owner/:repo/commits/:sha/check-runs', {
+      status: 403,
+      body: { message: 'Resource not accessible by integration' },
+    });
+
+    const result = await reconcileRepo(repoLinkId);
+
+    expect(result.complete).toBe(false);
+    expect(result.reason).toContain('check runs');
+    expect(await prisma.githubBranch.count({ where: { repoLinkId } })).toBe(1);
+    const link = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } });
+    expect(link.lastReconcileError).toEqual(expect.any(String));
+    expect(link.lastReconcileNote).toContain('check runs');
+  });
+
+  it('keeps a share of the budget for the branches', async () => {
+    const pulls = Array.from({ length: 70 }, (_, i) =>
+      pr(i + 1, { head: { ref: `f-${i}`, sha: sha(1000 + i) } }),
+    );
+    fake.setRepoLists('acme-labs/widget', {
+      pulls,
+      checkRuns: {},
+      branches: [{ name: `${ctx.projectPrefix}-9-last`, sha: sha(71) }],
+    });
+
+    const result = await reconcileRepo(repoLinkId, { callBudget: 60 });
+
+    expect(result.complete).toBe(false);
+    expect(result.reason).toContain('budget');
+    expect(await prisma.githubBranch.count({ where: { repoLinkId } })).toBe(1);
+  }, 60_000);
+
+  it('asks about the least recently updated open PRs first', async () => {
+    for (const [n, hour] of [
+      [10, 12],
+      [11, 11],
+      [12, 9],
+    ] as const) {
+      await seedPr(n, {
+        githubUpdatedAt: new Date(`2026-11-06T${String(hour).padStart(2, '0')}:00:00Z`),
+      });
+    }
+    fake.setRepoLists('acme-labs/widget', { pulls: [], branches: [], checkRuns: {} });
+
+    await reconcileRepo(repoLinkId);
+
+    expect(requestsTo('/pulls/').map((r) => r.path.split('/').pop())).toEqual(['12', '11', '10']);
+  });
+
+  it('says in health that only the first 500 open PRs were read', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    try {
+      // Five full pages that never end: every item is skipped as unreadable, cheaply
+      fake.on('GET /repos/:owner/:repo/pulls', (req) => {
+        const page = Number(req.query.page ?? 1);
+        const headers: Record<string, string> = {};
+        const next = new URL(req.path, fake.url);
+        next.searchParams.set('page', String(page + 1));
+        headers.link = `<${next.toString()}>; rel="next"`;
+        return { status: 200, body: Array.from({ length: 100 }, () => ({})), headers };
+      });
+      fake.setRepoLists('acme-labs/widget', { branches: [], checkRuns: {} });
+
+      const result = await reconcileRepo(repoLinkId);
+      expect(result.complete).toBe(false);
+      expect(result.reason).toContain('first 500');
+    } finally {
+      warn.mockRestore();
+    }
+    const health = await request(app)
+      .get(`/api/projects/${ctx.projectId}/github/health`)
+      .set({ ...CSRF, Authorization: `Bearer ${ctx.owner.token}` });
+    expect(health.body.reconcileComplete).toBe(false);
+    expect(health.body.reconcileIncompleteReason).toContain('first 500');
+  }, 60_000);
+});
+
+describe('the manual reconcile and links made through the action', () => {
+  const url = () => `/api/projects/${ctx.projectId}/github/reconcile`;
+  const asOwner = () => ({ ...CSRF, Authorization: `Bearer ${ctx.owner.token}` });
+
+  it('refuses a second run within a minute with 429 and a retry time', async () => {
+    fake.setRepoLists('acme-labs/widget', { pulls: [], branches: [], checkRuns: {} });
+    expect((await request(app).post(url()).set(asOwner()).send({})).status).toBe(201);
+
+    const again = await request(app).post(url()).set(asOwner()).send({});
+
+    expect(again.status).toBe(429);
+    expect(again.body.error.code).toBe('GITHUB_RECONCILE_COOLDOWN');
+    expect(again.body.error.details.retryAfter).toBeGreaterThan(0);
+    expect(again.body.error.details.retryAfter).toBeLessThanOrEqual(60);
+  });
+
+  it('really reconciles a link made through githubRepo.link', async () => {
+    const linked = await createTestContext('rec4');
+    const accountId = `acct-${linked.owner.id}`;
+    try {
+      fake.addInstallation(INSTALLATION_ID, ['acme-labs/widget', 'acme-labs/gadget']);
+      const userToken = fake.issueUserToken('octo-dev', ['acme-labs/gadget'], {
+        admin: ['acme-labs/gadget'],
+      });
+      await prisma.githubAccount.create({
+        data: {
+          id: accountId,
+          userId: linked.owner.id,
+          githubUserId: 9301,
+          login: 'octo-dev',
+          accessToken: encryptSecret(
+            userToken,
+            secretContext('githubAccount', 'accessToken', accountId),
+          ),
+        },
+      });
+      fake.setRepoLists('acme-labs/gadget', { pulls: [pr(1)], branches: [], checkRuns: {} });
+
+      const res = await request(app)
+        .post(`/api/projects/${linked.projectId}/github`)
+        .set({ ...CSRF, Authorization: `Bearer ${linked.owner.token}` })
+        .send({ repo: 'acme-labs/gadget' });
+      expect(res.status).toBeLessThan(300);
+
+      await vi.waitFor(async () => {
+        expect(
+          await prisma.githubPullRequest.count({
+            where: { repoLink: { projectId: linked.projectId } },
+          }),
+        ).toBe(1);
+      });
+      const link = await prisma.githubRepoLink.findFirstOrThrow({
+        where: { projectId: linked.projectId },
+      });
+      await vi.waitFor(async () => {
+        const fresh = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: link.id } });
+        expect(fresh.lastReconciledAt).not.toBeNull();
+        expect(fresh.lastReconcileError).toBeNull();
+      });
+    } finally {
+      await prisma.githubAccount.deleteMany({ where: { id: accountId } });
+      await cleanupTestContext(linked);
+    }
+  });
+});
+
+describe('health of the installation and the secrets', () => {
+  const health = () =>
+    request(app)
+      .get(`/api/projects/${ctx.projectId}/github/health`)
+      .set({ ...CSRF, Authorization: `Bearer ${ctx.owner.token}` });
+
+  it('tells a removed installation from a suspended one', async () => {
+    await prisma.githubInstallation.create({
+      data: {
+        id: BigInt(INSTALLATION_ID),
+        accountLogin: 'acme-labs',
+        accountType: 'Organization',
+        removedAt: new Date(),
+      },
+    });
+    expect((await health()).body).toMatchObject({
+      appInstalled: false,
+      installationSuspended: false,
+    });
+  });
+
+  it('opens the App secrets once per App generation, not on every read', async () => {
+    await seedGithubApp({ fake });
+    expect((await health()).body.appSecretUnreadable).toBe(false);
+    // The row is spoiled without a new generation: the answer is the cached one
+    await prisma.githubApp.update({
+      where: { id: 1 },
+      data: { privateKey: encryptSecret('x', secretContext('githubApp', 'privateKey', '2')) },
+    });
+    try {
+      expect((await health()).body.appSecretUnreadable).toBe(false);
+      // A re-created App is a new generation and is looked at again
+      await prisma.githubApp.update({ where: { id: 1 }, data: { createdAt: new Date() } });
+      expect((await health()).body.appSecretUnreadable).toBe(true);
+    } finally {
+      await seedGithubApp({ fake });
     }
   });
 });

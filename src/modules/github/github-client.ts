@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { env } from '../../config/env';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
@@ -203,6 +205,22 @@ function loggablePath(pathname: string): string {
  * @param url The first URL, on the API host
  * @param opts Method, body, credential, timeout and the redirect rule for the credential
  */
+const callCounters = new AsyncLocalStorage<{ calls: number }>();
+
+/**
+ * Runs work and counts every HTTP request the GitHub client makes inside it (redirect hops,
+ * token renewals and 401 retries included) in the given counter, even when the work throws.
+ * @param counter Where the count is kept
+ * @param counter.calls
+ * @param work The work
+ */
+export function countGithubCalls<T>(
+  counter: { calls: number },
+  work: () => Promise<T>,
+): Promise<T> {
+  return callCounters.run(counter, work);
+}
+
 async function send(url: URL, opts: SendOptions): Promise<Response> {
   const signal = AbortSignal.timeout(opts.timeoutMs);
   const api = apiOrigin();
@@ -213,6 +231,8 @@ async function send(url: URL, opts: SendOptions): Promise<Response> {
   let leftApi = !withAuth;
 
   for (let hop = 0; ; hop++) {
+    const counter = callCounters.getStore();
+    if (counter) counter.calls++;
     const headers: Record<string, string> = { ...API_HEADERS };
     if (opts.credential && withAuth) headers.authorization = opts.credential;
     if (opts.rangeAfterRedirect && hop > 0) headers.range = opts.rangeAfterRedirect;

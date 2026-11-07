@@ -2,7 +2,7 @@ import Redis from 'ioredis';
 
 import { logger } from '../utils/logger';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+export const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const DEFAULT_TTL = 60;
 
 export const redis = new Redis(REDIS_URL, {

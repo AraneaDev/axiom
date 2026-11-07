@@ -204,11 +204,7 @@ if (require.main === module) {
 
   createWebSocketServer(server);
   // Events the worker produces (delivery retries, reconcile) arrive over Redis
-  startRealtimeSubscriber().catch((err: unknown) => {
-    logger.warn('Realtime subscriber failed to start', {
-      error: err instanceof Error ? err.message : 'unknown',
-    });
-  });
+  const realtime = startRealtimeSubscriber();
 
   server.listen(env.PORT, () => {
     logger.info('Axiom API running', { port: env.PORT, env: env.NODE_ENV });
@@ -219,6 +215,7 @@ if (require.main === module) {
 
   function gracefulShutdown(signal: string) {
     logger.info('Graceful shutdown initiated', { signal });
+    realtime.stop();
     server.close(async () => {
       logger.info('HTTP server closed');
       await prisma.$disconnect();

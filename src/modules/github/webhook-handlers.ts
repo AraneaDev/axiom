@@ -27,11 +27,12 @@ const installationPayload = z.object({
  * the newest one applied (deliveries can be processed late, after a retry); the sync repairs
  * what that leaves behind.
  * @param d The delivery
- * @param suspendedAt What to store as the suspension: the payload's, now, or none
+ * @param change What to store: the suspension (the payload's, now, or none) and the removal; a
+ *   field it leaves out keeps what the row has
  */
 async function writeInstallation(
   d: GithubDeliveryContext,
-  suspendedAt: (fromPayload: Date | null) => Date | null,
+  change: (fromPayload: Date | null) => { suspendedAt?: Date | null; removedAt?: Date | null },
 ): Promise<'processed' | 'ignored'> {
   const parsed = installationPayload.safeParse(d.payload);
   if (!parsed.success) return 'ignored';
@@ -40,7 +41,7 @@ async function writeInstallation(
   const data = {
     accountLogin: installation.account.login,
     accountType: installation.account.type,
-    suspendedAt: suspendedAt(fromPayload),
+    ...change(fromPayload),
   };
   // `lastEventAt` is the receivedAt of the newest event applied (or when the sync last ran), so
   // order follows when GitHub's calls arrived, not when a retry got to them. A tie applies. A
@@ -69,22 +70,25 @@ async function writeInstallation(
 
 onGithubEvent('installation', (d) => {
   switch (d.action) {
-    // GitHub no longer has it: marked suspended, as the sync marks an installation it no longer lists
+    // GitHub no longer has it: marked removed, as the sync marks an installation it no longer lists
     case 'deleted':
-      return writeInstallation(d, () => new Date());
+      return writeInstallation(d, () => ({ removedAt: new Date() }));
     case 'suspend':
-      return writeInstallation(d, (fromPayload) => fromPayload ?? new Date());
+      return writeInstallation(d, (fromPayload) => ({
+        suspendedAt: fromPayload ?? new Date(),
+        removedAt: null,
+      }));
     case 'unsuspend':
-      return writeInstallation(d, () => null);
+      return writeInstallation(d, () => ({ suspendedAt: null, removedAt: null }));
     case 'created':
-      return writeInstallation(d, (fromPayload) => fromPayload);
+      return writeInstallation(d, (fromPayload) => ({ suspendedAt: fromPayload, removedAt: null }));
     default:
       return Promise.resolve('ignored');
   }
 });
 
 onGithubEvent('installation_repositories', (d) =>
-  writeInstallation(d, (fromPayload) => fromPayload),
+  writeInstallation(d, (fromPayload) => ({ suspendedAt: fromPayload, removedAt: null })),
 );
 
 const authorizationPayload = z.object({
