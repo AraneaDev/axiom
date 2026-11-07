@@ -70,8 +70,15 @@ export interface GithubFake {
    * A `ghu_` token for that user, reaching only the given repositories. `GET /repos/:owner/:repo`
    * answers the repository under the asked name, with `permissions.admin: true` for the ones in
    * `opts.admin` and false for the rest. Without `opts.admin` it answers the fixture as it is.
+   * With `opts.push`, writing git refs works only on the repositories listed there; the others
+   * answer 403 as GitHub does for a token without write access. Without it every reachable
+   * repository may be written.
    */
-  issueUserToken(login: string, repos: string[], opts?: { admin?: string[] }): string;
+  issueUserToken(
+    login: string,
+    repos: string[],
+    opts?: { admin?: string[]; push?: string[] },
+  ): string;
   /**
    * The App's OAuth client credentials, which the token endpoint and the revoke call check.
    * With none set, any are accepted.
@@ -121,6 +128,13 @@ export interface GithubFake {
       branches?: Array<{ name: string; sha: string }>;
     },
   ): void;
+  /**
+   * The branch heads of a repository (`name` to commit sha), served by
+   * `GET /repos/:o/:r/git/ref/heads/<name>` (404 "Not Found" for a missing one) and extended by
+   * `POST /repos/:o/:r/git/refs`, which answers 422 "Reference already exists" for a name that
+   * is there and 422 "Object does not exist" for a sha no branch points at. Forgotten by `reset`.
+   */
+  setGitRefs(fullName: string, heads: Record<string, string>): void;
   /** Forgets recorded requests, `on` routes, job logs, repository lists and the refresh counter and delay; the rest stays */
   reset(): void;
   close(): Promise<void>;
@@ -227,6 +241,8 @@ interface Credential {
   repos?: Set<string>;
   /** For `user`: the repositories (lowercased) the person has admin rights on */
   admin?: Set<string>;
+  /** For `user`: the repositories (lowercased) the token may write; unset means all it reaches */
+  push?: Set<string>;
 }
 
 const reply = (status: number, message: string): FakeReply => ({ status, body: { message } });
@@ -249,8 +265,16 @@ class GithubFakeServer implements GithubFake {
   private installationTokens = new Map<string, { installationId: number; expiresAt: number }>();
   private userTokens = new Map<
     string,
-    { repos: Set<string>; admin?: Set<string>; login: string; id: number; expiresAt: number | null }
+    {
+      repos: Set<string>;
+      admin?: Set<string>;
+      push?: Set<string>;
+      login: string;
+      id: number;
+      expiresAt: number | null;
+    }
   >();
+  private gitRefs = new Map<string, Map<string, string>>();
   private repoIds = new Map<string, number>();
   private refreshTokens = new Map<string, { login: string; id: number; repos: string[] }>();
   private authCodes = new Map<string, { login: string; id: number; repos: string[] }>();
@@ -344,8 +368,12 @@ class GithubFakeServer implements GithubFake {
     return token;
   }
 
-  issueUserToken(login: string, repos: string[], opts: { admin?: string[] } = {}): string {
-    return this.mintUserToken(login, this.idOf(login), repos, null, opts.admin);
+  issueUserToken(
+    login: string,
+    repos: string[],
+    opts: { admin?: string[]; push?: string[] } = {},
+  ): string {
+    return this.mintUserToken(login, this.idOf(login), repos, null, opts.admin, opts.push);
   }
 
   setOAuthClient(client: { clientId: string; clientSecret: string } | null): void {
@@ -395,11 +423,13 @@ class GithubFakeServer implements GithubFake {
     repos: string[],
     lifetimeMs: number | null,
     admin?: string[],
+    push?: string[],
   ): string {
     const token = tokenOf('ghu_');
     this.userTokens.set(token, {
       repos: new Set(repos.map(repoKey)),
       admin: admin ? new Set(admin.map(repoKey)) : undefined,
+      push: push ? new Set(push.map(repoKey)) : undefined,
       login,
       id,
       expiresAt: lifetimeMs === null ? null : Date.now() + lifetimeMs,
@@ -421,8 +451,13 @@ class GithubFakeServer implements GithubFake {
     this.repoLists.set(repoKey(fullName), lists);
   }
 
+  setGitRefs(fullName: string, heads: Record<string, string>): void {
+    this.gitRefs.set(repoKey(fullName), new Map(Object.entries(heads)));
+  }
+
   reset(): void {
     this.requests.length = 0;
+    this.gitRefs.clear();
     this.overrides = [];
     this.jobLogs.clear();
     this.repoLists.clear();
@@ -474,6 +509,7 @@ class GithubFakeServer implements GithubFake {
           label: `user:${value.slice(0, 8)}`,
           repos: user.repos,
           admin: user.admin,
+          push: user.push,
           identity: { login: user.login, id: user.id },
         };
       }
@@ -586,6 +622,8 @@ class GithubFakeServer implements GithubFake {
     if (jobLog) return jobLog;
     const listed = this.repoListAnswer(req);
     if (listed) return listed;
+    const ref = this.gitRefAnswer(req, credential);
+    if (ref) return ref;
     const tokenRoute = /^\/app\/installations\/(\d+)\/access_tokens$/.exec(req.path);
     if (req.method === 'POST' && tokenRoute) {
       if (!this.installations.has(Number(tokenRoute[1]))) return NOT_FOUND;
@@ -648,6 +686,48 @@ class GithubFakeServer implements GithubFake {
         credential.repos?.has(repoKey(repo.full_name)),
       );
       return { ...answer, body: { ...body, total_count: repositories.length, repositories } };
+    }
+    return null;
+  }
+
+  /**
+   * The git ref routes of `setGitRefs`: reading a branch head and creating a branch, with
+   * GitHub's shapes and its refusals.
+   * @param req The recorded request
+   * @param credential Who the request authenticated as
+   */
+  private gitRefAnswer(req: RecordedRequest, credential: Credential): FakeReply | null {
+    const match = /^\/repos\/([^/]+)\/([^/]+)\/git\/(ref\/heads\/.+|refs)$/.exec(req.path);
+    if (!match) return null;
+    const key = repoKey(`${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`);
+    const heads = this.gitRefs.get(key);
+    if (!heads) return null;
+    const shape = (name: string, sha: string) => ({
+      ref: `refs/heads/${name}`,
+      node_id: 'REF_kwDOexample',
+      url: `https://api.github.com/repos/${key}/git/refs/heads/${name}`,
+      object: {
+        sha,
+        type: 'commit',
+        url: `https://api.github.com/repos/${key}/git/commits/${sha}`,
+      },
+    });
+    if (req.method === 'GET' && match[3] !== 'refs') {
+      const name = match[3].slice('ref/heads/'.length).split('/').map(decodeURIComponent).join('/');
+      const sha = heads.get(name);
+      return sha ? { status: 200, body: shape(name, sha) } : NOT_FOUND;
+    }
+    if (req.method === 'POST' && match[3] === 'refs') {
+      if (credential.push && !credential.push.has(key)) return NOT_ACCESSIBLE;
+      const { ref, sha } = (req.body ?? {}) as { ref?: unknown; sha?: unknown };
+      if (typeof ref !== 'string' || !ref.startsWith('refs/heads/') || typeof sha !== 'string') {
+        return reply(422, 'Invalid request');
+      }
+      const name = ref.slice('refs/heads/'.length);
+      if (heads.has(name)) return reply(422, 'Reference already exists');
+      if (![...heads.values()].includes(sha)) return reply(422, 'Object does not exist');
+      heads.set(name, sha);
+      return { status: 201, body: shape(name, sha) };
     }
     return null;
   }

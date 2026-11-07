@@ -105,6 +105,7 @@
   "githubApp.startManifest": [],
   "githubApp.status": ["github:read", "github:write"],
   "githubApp.syncInstallations": [],
+  "githubBranch.create": ["github:write"],
   "githubRepo.get": ["github:read", "github:write"],
   "githubRepo.health": ["github:read", "github:write"],
   "githubRepo.link": ["github:write"],
