@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { cn } from '@/lib/utils';
@@ -35,10 +35,18 @@ export function Modal({ open, onClose, title, size = 'md', children }: ModalProp
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+  // The latest onClose, so a parent that passes a new function each render does not re-run the
+  // effect below, which would pull focus back to the first field
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key === 'Tab' && dialogRef.current) {
@@ -60,12 +68,7 @@ export function Modal({ open, onClose, title, size = 'md', children }: ModalProp
           }
         }
       }
-    },
-    [onClose],
-  );
-
-  useEffect(() => {
-    if (!open) return;
+    };
     previousFocusRef.current = document.activeElement as HTMLElement | null;
     window.addEventListener('keydown', handleKeyDown);
 
@@ -81,7 +84,7 @@ export function Modal({ open, onClose, title, size = 'md', children }: ModalProp
       window.removeEventListener('keydown', handleKeyDown);
       previousFocusRef.current?.focus();
     };
-  }, [open, handleKeyDown]);
+  }, [open]);
 
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden';

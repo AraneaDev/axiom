@@ -16,7 +16,7 @@ import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
-import { branchNameFor, prefixOfKey } from '@/lib/github-branch';
+import { branchNameFor, prefixOfKey, shellQuote } from '@/lib/github-branch';
 
 interface CreateBranchModalProps {
   open: boolean;
@@ -120,7 +120,7 @@ export function CreateBranchModal({
         </p>
         <CopyInput
           label="switch command"
-          value={`git fetch origin && git switch ${created.name}`}
+          value={`git fetch origin && git switch ${shellQuote(created.name)}`}
         />
         <div className="flex justify-end">
           <Button variant="secondary" onClick={handleClose}>

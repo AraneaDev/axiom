@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import { Modal, ModalFooter } from './Modal';
@@ -86,6 +86,54 @@ describe('Modal', () => {
       </Modal>,
     );
     expect(document.body.style.overflow).toBe('');
+  });
+});
+
+describe('Modal focus', () => {
+  it('moves focus into the dialog when it opens, and not again when onClose changes identity', async () => {
+    const field = (
+      <>
+        <input aria-label="first" />
+        <input aria-label="second" />
+      </>
+    );
+    const { rerender } = render(
+      <Modal open={true} onClose={() => {}}>
+        {field}
+      </Modal>,
+    );
+    await waitFor(() => expect(screen.getByLabelText('first')).toHaveFocus());
+
+    // The user moves on to the second field
+    screen.getByLabelText('second').focus();
+    expect(screen.getByLabelText('second')).toHaveFocus();
+
+    // A parent that re-renders with a new callback must not pull focus back
+    rerender(
+      <Modal open={true} onClose={() => {}}>
+        {field}
+      </Modal>,
+    );
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(screen.getByLabelText('second')).toHaveFocus();
+  });
+
+  it('calls the latest onClose on Escape', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(
+      <Modal open={true} onClose={first}>
+        <p>Body</p>
+      </Modal>,
+    );
+    rerender(
+      <Modal open={true} onClose={second}>
+        <p>Body</p>
+      </Modal>,
+    );
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
   });
 });
 

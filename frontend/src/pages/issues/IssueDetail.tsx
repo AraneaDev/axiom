@@ -188,7 +188,9 @@ export default function IssueDetail() {
   });
 
   const { user } = useAuthStore();
-  // A team viewer reads only; the server decides for everyone else
+  // A team viewer reads only. The server's issue:edit rule also weighs the org role and project
+  // overrides, which the client has no signal for, so everyone else sees the button and the
+  // server refuses with its own message
   const canEditIssue = teamDetail?.members?.find((m) => m.userId === user?.id)?.role !== 'VIEWER';
 
   const { data: attachments = [] } = useQuery({

