@@ -156,8 +156,9 @@ export function githubError(
     case 410:
       return new AppError(410, 'GitHub no longer has this resource.', 'GITHUB_GONE');
     case 405:
+      // Not a 405 of ours: that would tell a client the route's method is wrong
       return new AppError(
-        405,
+        409,
         `GitHub does not allow this right now.${plainReason(message)}`,
         'GITHUB_NOT_ALLOWED',
       );

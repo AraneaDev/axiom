@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { defineAction } from '../../actions/define';
 import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
+import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
@@ -18,7 +19,7 @@ import {
   userAuth,
 } from './github-actions.helpers';
 import { githubRequest } from './github-client';
-import { storeBranch } from './github-events';
+import { storeBranch, storePullRequest, type PullRequestPayload } from './github-events';
 
 const refReply = z.object({ object: z.object({ sha: z.string().min(1) }) });
 
@@ -162,6 +163,30 @@ registerActions([
           error: err instanceof Error ? err.message : 'unknown',
         });
       });
+      // GitHub closes the open pull request of the branch: shown closed now, not at the webhook
+      const open = await prisma.githubPullRequest.findFirst({
+        where: { repoLinkId: link.id, headRef: row.name, state: 'OPEN' },
+        select: { number: true },
+        orderBy: { number: 'asc' },
+      });
+      if (open) {
+        await githubRequest<unknown>(auth, 'GET', `${repo}/pulls/${open.number}`)
+          .then((fresh) =>
+            storePullRequest(
+              link.id,
+              fresh.data as PullRequestPayload,
+              { id: account.githubUserId, login: account.login },
+              'action',
+            ),
+          )
+          .catch((err: unknown) => {
+            logger.warn('github branch deleted but its pull request not stored', {
+              repoLinkId: link.id,
+              pullRequest: open.number,
+              error: err instanceof Error ? err.message : 'unknown',
+            });
+          });
+      }
       return { name: row.name, deleted: true };
     },
   }),

@@ -759,6 +759,13 @@ class GithubFakeServer implements GithubFake {
         .join('/');
       // GitHub answers 422 for a ref that is not there, and 204 without a body for one deleted
       if (!heads.delete(name)) return reply(422, 'Reference does not exist');
+      // As GitHub does: a pull request whose head is the deleted branch is closed
+      const now = new Date().toISOString();
+      for (const pr of this.repoLists.get(key)?.pulls ?? []) {
+        if (pr.state === 'open' && (pr.head as { ref?: string } | undefined)?.ref === name) {
+          Object.assign(pr, { state: 'closed', closed_at: now, updated_at: now });
+        }
+      }
       return { status: 204 };
     }
     if (req.method === 'POST' && match[3] === 'refs') {

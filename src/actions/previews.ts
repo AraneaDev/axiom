@@ -28,10 +28,25 @@ const MAX_LISTED_KEYS = 10;
 /**
  * Text an agent may have written, on one line, with quotes of its own that can't end the quote.
  * @param text - The text
+ * @param max - The most characters kept
  */
-function quoted(text: string): string {
-  const line = text.replace(/\s+/g, ' ').replace(/"/g, "'").trim();
-  return line.length > MAX_QUOTED_LENGTH ? `"${line.slice(0, MAX_QUOTED_LENGTH)}..."` : `"${line}"`;
+function quoted(text: string, max = MAX_QUOTED_LENGTH): string {
+  const line = plain(text, max + 1).replace(/"/g, "'");
+  return line.length > max ? `"${line.slice(0, max)}..."` : `"${line}"`;
+}
+
+/**
+ * Text from outside on one line: invisible and control characters (bidi overrides, zero-width)
+ * gone, white space collapsed, cut to a length. Used where the text is not quoted, such as a ref.
+ * @param text - The text
+ * @param max - The most characters kept
+ */
+function plain(text: string, max = MAX_QUOTED_LENGTH): string {
+  const line = text
+    .replace(/\s+/g, ' ')
+    .replace(/[\p{Cc}\p{Cf}]/gu, '')
+    .trim();
+  return line.length > max ? `${line.slice(0, max)}...` : line;
 }
 
 /**
@@ -1790,7 +1805,8 @@ export async function githubRepoUnlink(projectId: string): Promise<string> {
   return `Unlink ${link.fullName} from ${await projectLabel(projectId)}: its branches, pull requests and checks disappear from ${amount(issues, 'issue')}`;
 }
 
-const SHORT_SHA = 7;
+const SHORT_SHA = 12;
+const MAX_COMMIT_TITLE = 120;
 
 /** Why the default branch is never deleted from Axiom */
 export const DEFAULT_BRANCH_MESSAGE = "The repository's default branch can't be deleted from Axiom";
@@ -1803,6 +1819,7 @@ export const DEFAULT_BRANCH_MESSAGE = "The repository's default branch can't be 
  * @param pullNumber The pull request's number
  * @param headSha The head commit the merge is asked for
  * @param method How the commits are merged
+ * @param commitTitle The commit title the requester chose, when given
  * @throws {AppError} 404 for a pull request that is not linked to the issue
  */
 export async function githubPrMerge(
@@ -1811,13 +1828,20 @@ export async function githubPrMerge(
   pullNumber: number,
   headSha: string,
   method: string,
+  commitTitle?: string,
 ): Promise<string> {
   const { issue, link } = await issueRepo(projectId, issueNumber);
   const pr = await linkedPullRequest(issue.id, link.id, pullNumber);
+  // The merge goes at the head asked for; the approver is told when Axiom has seen another
+  const moved =
+    headSha === pr.headSha
+      ? ''
+      : `; the head Axiom last saw is ${pr.headSha.slice(0, SHORT_SHA)}, not the commit asked for`;
+  const title = commitTitle ? `; commit title ${quoted(commitTitle, MAX_COMMIT_TITLE)}` : '';
   return (
     `Merge pull request #${pr.number} ${quoted(pr.title)} in ${link.fullName} ` +
-    `(${pr.headRef} into ${pr.baseRef}) at ${headSha.slice(0, SHORT_SHA)} using ${method}, ` +
-    `linked to ${issue.key}`
+    `(${plain(pr.headRef)} into ${plain(pr.baseRef)}) at ${headSha.slice(0, SHORT_SHA)} ` +
+    `using ${method}, linked to ${issue.key}${moved}${title}`
   );
 }
 
@@ -1863,7 +1887,7 @@ export async function githubBranchDelete(
     orderBy: { number: 'asc' },
   });
   return (
-    `Delete branch ${row.name} in ${link.fullName}, linked to ${issue.key}` +
+    `Delete branch ${plain(row.name)} in ${link.fullName}, linked to ${issue.key}` +
     (open ? `; this closes open pull request #${open.number}` : '')
   );
 }

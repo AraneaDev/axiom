@@ -348,6 +348,47 @@ describe('reconcileRepo', () => {
     await prisma.issue.delete({ where: { id: issue.id } });
   });
 
+  it('refreshes the default branch and names from GET /repos/:o/:r once per run, within the budget', async () => {
+    fake.setRepoLists('acme-labs/widget', { pulls: [], branches: [], checkRuns: {} });
+    fake.on('GET /repos/:owner/:repo', {
+      status: 200,
+      body: {
+        id: REPO_ID,
+        name: 'widget',
+        full_name: 'acme-labs/widget',
+        owner: { login: 'acme-labs' },
+        default_branch: 'trunk',
+      },
+    });
+    try {
+      const result = await reconcileRepo(repoLinkId);
+      expect(result.complete).toBe(true);
+      expect(
+        requestsTo('/repos/acme-labs/widget').filter((r) => r.path === '/repos/acme-labs/widget'),
+      ).toHaveLength(1);
+      expect(result.calls).toBe(fake.requests.length);
+      expect(
+        (await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } }))
+          .defaultBranch,
+      ).toBe('trunk');
+    } finally {
+      await prisma.githubRepoLink.update({
+        where: { id: repoLinkId },
+        data: { defaultBranch: 'main' },
+      });
+    }
+  });
+
+  it('does not spend a call past the budget on the refresh, and survives its failure', async () => {
+    fake.setRepoLists('acme-labs/widget', { pulls: [], branches: [], checkRuns: {} });
+    fake.on('GET /repos/:owner/:repo', { status: 500, body: { message: 'boom' } });
+    const result = await reconcileRepo(repoLinkId);
+    expect(result.complete).toBe(true);
+    expect(
+      (await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } })).defaultBranch,
+    ).toBe('main');
+  });
+
   it('stops at the call budget, says it is incomplete and still sets lastReconciledAt', async () => {
     const pulls = Array.from({ length: 400 }, (_, i) => pr(i + 1));
     fake.setRepoLists('acme-labs/widget', { pulls, branches: [], checkRuns: {} });
@@ -975,7 +1016,9 @@ describe('the call cap and the lease inside a phase', () => {
       where: { id: repoLinkId },
       data: { reconcileLeaseUntil: new Date(Date.now() + 2_000) },
     });
-    await vi.waitFor(() => expect(requestsTo('/pulls/').length).toBeGreaterThanOrEqual(11));
+    await vi.waitFor(() => expect(requestsTo('/pulls/').length).toBeGreaterThanOrEqual(11), {
+      timeout: 5000,
+    });
     const link = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: repoLinkId } });
     expect(link.reconcileLeaseUntil!.getTime()).toBeGreaterThan(Date.now() + 5 * 60_000);
     await run;

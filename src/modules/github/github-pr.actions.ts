@@ -416,8 +416,8 @@ registerActions([
       commitMessage: z.string().max(MAX_TEXT).optional(),
     }),
     output: pullView,
-    preview: (_ctx, { projectId, issueNumber, pullNumber: number, headSha, method }) =>
-      previews.githubPrMerge(projectId, issueNumber, number, headSha, method),
+    preview: (_ctx, { projectId, issueNumber, pullNumber: number, headSha, method, commitTitle }) =>
+      previews.githubPrMerge(projectId, issueNumber, number, headSha, method, commitTitle),
     rest: { method: 'PUT', path: `${PULLS}/:pullNumber/merge` },
     authorize: githubWrite,
     handler: async (

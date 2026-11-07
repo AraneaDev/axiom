@@ -25,6 +25,8 @@ import { seedGithubApp } from '../../test/github-seed';
 import { authPost } from '../../test/helpers';
 
 import { storeBranch, storePullRequest, type PullRequestPayload } from './github-events';
+import { handlersFor } from './webhook-dispatch';
+import './webhook-handlers';
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
 const WIDGET = 'acme-labs/widget';
@@ -222,7 +224,7 @@ describe('githubPr.merge', () => {
     expect(res.status).toBe(202);
     expect(res.body.status).toBe('pending_approval');
     expect(res.body.preview).toBe(
-      `Merge pull request #7 "Fix login" in ${WIDGET} (${headOf()} into main) at ccccccc using squash, linked to ${key}`,
+      `Merge pull request #7 "Fix login" in ${WIDGET} (${headOf()} into main) at cccccccccccc using squash, linked to ${key}`,
     );
     expect(fake.requests).toEqual([]);
     expect(await prisma.githubPullRequest.findFirstOrThrow({ where: { number: 7 } })).toMatchObject(
@@ -364,6 +366,61 @@ describe('githubPr.merge', () => {
     expect(fake.requests).toEqual([]);
     expect(await prisma.agentApproval.count({ where: { userId: member.id } })).toBe(0);
   });
+
+  it('says so in the preview when the head asked for is not the head Axiom last saw', async () => {
+    const asked = 'd'.repeat(40);
+    const res = await merge(asked);
+    expect(res.status).toBe(202);
+    expect(res.body.preview).toBe(
+      `Merge pull request #7 "Fix login" in ${WIDGET} (${headOf()} into main) at dddddddddddd using squash, linked to ${key}; ` +
+        'the head Axiom last saw is cccccccccccc, not the commit asked for',
+    );
+  });
+
+  it('shows the commit title in the preview, quoted and cut to 120 characters', async () => {
+    const res = await merge(HEAD_SHA, 7, { commitTitle: `Ship "it"\n${'x'.repeat(200)}` });
+    expect(res.status).toBe(202);
+    const tail = res.body.preview.split(`linked to ${key}`)[1] as string;
+    expect(tail.startsWith("; commit title \"Ship 'it' xxx")).toBe(true);
+    expect(tail.endsWith('..."')).toBe(true);
+    expect(tail.length).toBeLessThan(160);
+    expect(tail).not.toContain('\n');
+  });
+
+  it('strips invisible and bidi characters from the refs in the preview', async () => {
+    await prisma.githubPullRequest.updateMany({
+      where: { repoLinkId: linkId, number: 7 },
+      data: { headRef: 'a\u202Eb\u200Bc\u0007d', baseRef: `m${'n'.repeat(300)}` },
+    });
+    const res = await merge();
+    expect(res.status).toBe(202);
+    expect(res.body.preview).toContain('(abcd into m');
+    for (const hidden of ['\u202E', '\u200B', '\u0007'])
+      expect(res.body.preview).not.toContain(hidden);
+    expect(res.body.preview.length).toBeLessThan(400);
+  });
+
+  it('fails the approval with 409 GITHUB_NOT_LINKED when the repository was unlinked since', async () => {
+    const pending = await merge();
+    await prisma.githubRepoLink.deleteMany({ where: { id: linkId } });
+    const done = await approve(pending.body.approvalId);
+    expect(done.body.status).toBe('FAILED');
+    expect(done.body.error).toMatchObject({ status: 409, code: 'GITHUB_NOT_LINKED' });
+    expect(fake.requests).toEqual([]);
+  });
+
+  it('answers a 405 of GitHub on another call with 409, not 405', async () => {
+    fake.on('PATCH /repos/:owner/:repo/pulls/:n', {
+      status: 405,
+      body: { message: 'Nope' },
+    });
+    const res = await request(app)
+      .patch(`${base()}/pulls/7`)
+      .set(as(member))
+      .send({ title: 'New' });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GITHUB_NOT_ALLOWED');
+  });
 });
 
 describe('githubPr.close', () => {
@@ -471,6 +528,139 @@ describe('githubBranch.delete', () => {
     expect(done.body.status).toBe('FAILED');
     expect(done.body.error).toMatchObject({ status: 404, code: 'GITHUB_NOT_LINKED_TO_ISSUE' });
     expect(written()).toEqual([]);
+  });
+
+  it('fetches and stores the PR GitHub closed with the branch, as an action', async () => {
+    await existingPull(7, headOf(), 'Fix login');
+    fake.setGitRefs(WIDGET, { main: MAIN_SHA, [headOf()]: HEAD_SHA });
+    const pending = await request(app).delete(branchPath(headOf())).set(asToken()).send();
+    await approve(pending.body.approvalId);
+    expect(
+      fake.requests.map((r) => `${r.method} ${r.path.replace(`/repos/${WIDGET}`, '')}`),
+    ).toEqual([`DELETE /git/refs/heads/${headOf()}`, 'GET /pulls/7']);
+    expect(await prisma.githubPullRequest.findFirstOrThrow({ where: { number: 7 } })).toMatchObject(
+      { state: 'CLOSED' },
+    );
+  });
+
+  it('asks for no pull request when none is stored open on the branch', async () => {
+    await request(app).delete(branchPath(headOf())).set(as(member)).send();
+    expect(fake.requests.map((r) => r.method)).toEqual(['DELETE']);
+  });
+
+  it('does not name a closed pull request, or one of another repository link', async () => {
+    await existingPull(7, headOf(), 'Fix login');
+    await prisma.githubPullRequest.updateMany({
+      where: { repoLinkId: linkId, number: 7 },
+      data: { state: 'CLOSED' },
+    });
+    const otherProject = await prisma.project.create({
+      data: { name: 'Other', slug: 'other-ghdes', prefix: 'OTH', teamId: ctx.teamId },
+    });
+    const other = await prisma.githubRepoLink.create({
+      data: {
+        projectId: otherProject.id,
+        repoId: 7302n,
+        installationId: 3301n,
+        owner: 'acme-labs',
+        name: 'gadget',
+        fullName: 'acme-labs/gadget',
+        defaultBranch: 'main',
+        htmlUrl: 'https://github.com/acme-labs/gadget',
+        linkedById: ctx.owner.id,
+      },
+    });
+    try {
+      await storePullRequest(
+        other.id,
+        prPayload(9, headOf(), 'Elsewhere'),
+        { id: 9101, login: 'octo-dev' },
+        'webhook',
+      );
+      const pending = await request(app).delete(branchPath(headOf())).set(asToken()).send();
+      expect(pending.body.preview).toBe(`Delete branch ${headOf()} in ${WIDGET}, linked to ${key}`);
+    } finally {
+      await prisma.githubRepoLink.delete({ where: { id: other.id } });
+      await prisma.project.delete({ where: { id: otherProject.id } });
+    }
+  });
+
+  it('deletes a branch with a slash in its name over REST', async () => {
+    const name = `${key.toLowerCase()}/search`;
+    await existingBranch(name);
+    const pending = await request(app).delete(branchPath(name)).set(asToken()).send();
+    expect(pending.status).toBe(202);
+    expect(pending.body.preview).toBe(`Delete branch ${name} in ${WIDGET}, linked to ${key}`);
+    const done = await approve(pending.body.approvalId);
+    expect(done.body.status).toBe('EXECUTED');
+    expect(written().map((r) => r.path)).toEqual([`/repos/${WIDGET}/git/refs/heads/${name}`]);
+    await existingBranch(`${key.toLowerCase()}/again`);
+    const res = await request(app)
+      .delete(branchPath(`${key.toLowerCase()}/again`))
+      .set(as(member))
+      .send();
+    expect(res.status).toBeLessThan(300);
+  });
+});
+
+describe('the default branch is kept current', () => {
+  const deliver = (payload: Record<string, unknown>, action = 'edited') =>
+    Promise.all(
+      handlersFor('repository').map((h) =>
+        h({
+          deliveryId: `d-${Math.random()}`,
+          event: 'repository',
+          action,
+          installationId: 3301,
+          repoId: 7301,
+          payload: { action, ...payload },
+          receivedAt: new Date(),
+        }),
+      ),
+    );
+  const repository = (over: object = {}) => ({
+    repository: {
+      id: 7301,
+      name: 'widget',
+      full_name: WIDGET,
+      default_branch: 'trunk',
+      owner: { login: 'acme-labs' },
+      ...over,
+    },
+    sender: { id: 9101, login: 'octo-dev' },
+  });
+
+  it('updates default branch, names and owner from a repository edited or renamed event', async () => {
+    expect(await deliver(repository())).toEqual(['processed']);
+    expect(await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: linkId } })).toMatchObject({
+      defaultBranch: 'trunk',
+      fullName: WIDGET,
+    });
+    await deliver(
+      repository({ name: 'gizmo', full_name: 'acme-labs/gizmo', owner: { login: 'acme-labs' } }),
+      'renamed',
+    );
+    expect(await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: linkId } })).toMatchObject({
+      name: 'gizmo',
+      fullName: 'acme-labs/gizmo',
+      owner: 'acme-labs',
+    });
+  });
+
+  it('ignores other actions, other repositories and malformed payloads', async () => {
+    expect(await deliver(repository(), 'archived')).toEqual(['ignored']);
+    expect(await deliver(repository({ id: 999999 }))).toEqual(['ignored']);
+    expect(await deliver({ repository: { id: 7301 } })).toEqual(['ignored']);
+    expect(
+      (await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: linkId } })).defaultBranch,
+    ).toBe('main');
+  });
+
+  it('refuses the new default branch to delete once it is known', async () => {
+    await deliver(repository());
+    await existingBranch('trunk');
+    const res = await request(app).delete(branchPath('trunk')).set(as(member)).send();
+    expect(res.status).toBe(400);
   });
 });
 

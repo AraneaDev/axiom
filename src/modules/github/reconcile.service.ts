@@ -22,6 +22,13 @@ import { storeBranch, storePullRequest, type PullRequestPayload } from './github
 import { extractIssueNumbers } from './issue-keys';
 
 export const RECONCILE_INTERVAL_MS = 15 * 60_000;
+const repoFacts = z.object({
+  name: z.string().min(1),
+  full_name: z.string().min(1),
+  default_branch: z.string().min(1),
+  owner: z.object({ login: z.string().min(1) }),
+});
+
 export const RECONCILE_CALL_BUDGET = 300;
 const LEASE_MS = 10 * 60_000;
 // Inside a long loop the lease is pushed out after this many records or this much time
@@ -484,6 +491,30 @@ async function runReconcile(
         }
       }
     });
+
+    // The repository itself, last so it only spends what the lists left: its default branch and
+    // names follow a change on GitHub whose webhook was missed. A failure here costs nothing else.
+    if (left(true) > 0) {
+      try {
+        const fresh = await githubRequest<unknown>(auth, 'GET', repoPath);
+        const facts = repoFacts.safeParse(fresh.data);
+        if (facts.success) {
+          await prisma.githubRepoLink.updateMany({
+            where: { id: repoLinkId },
+            data: {
+              defaultBranch: facts.data.default_branch,
+              fullName: facts.data.full_name,
+              owner: facts.data.owner.login,
+              name: facts.data.name,
+            },
+          });
+        }
+      } catch (err) {
+        if (err instanceof AppError && err.code === LEASE_LOST) throw err;
+        if (!isLimit(err))
+          logger.warn('github reconcile repository refresh failed', { repoLinkId });
+      }
+    }
   }
 }
 

@@ -108,3 +108,32 @@ onGithubEvent('github_app_authorization', async (d) => {
   });
   return count > 0 ? 'processed' : 'ignored';
 });
+
+const repositoryPayload = z.object({
+  repository: z.object({
+    id: z.number().int(),
+    name: z.string().min(1),
+    full_name: z.string().min(1),
+    default_branch: z.string().min(1),
+    owner: z.object({ login: z.string().min(1) }),
+  }),
+});
+
+// The default branch, name or owner of a linked repository changed on GitHub: the link follows,
+// as the delete guard and the base of new branches and pull requests read them
+onGithubEvent('repository', async (d) => {
+  if (d.action !== 'edited' && d.action !== 'renamed') return 'ignored';
+  const parsed = repositoryPayload.safeParse(d.payload);
+  if (!parsed.success) return 'ignored';
+  const { repository } = parsed.data;
+  const { count } = await prisma.githubRepoLink.updateMany({
+    where: { repoId: BigInt(repository.id) },
+    data: {
+      defaultBranch: repository.default_branch,
+      fullName: repository.full_name,
+      owner: repository.owner.login,
+      name: repository.name,
+    },
+  });
+  return count > 0 ? 'processed' : 'ignored';
+});
