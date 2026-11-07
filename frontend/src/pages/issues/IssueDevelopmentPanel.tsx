@@ -4,10 +4,11 @@ import {
   ChevronRight,
   ExternalLink,
   GitBranch,
+  GitBranchPlus,
   GitMerge,
   GitPullRequest,
 } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useCallback, useId, useState } from 'react';
 
 import {
   githubDevelopmentApi,
@@ -20,6 +21,7 @@ import {
   type GithubPullRequestView,
 } from '@/api/github.api';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { CheckStatusIcon } from '@/components/ui/CheckStatusIcon';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
@@ -27,6 +29,8 @@ import { LogTail } from '@/components/ui/LogTail';
 import { Spinner } from '@/components/ui/Spinner';
 import { checkStateOf } from '@/lib/github-checks';
 import { EXTERNAL_LINK, httpsHref } from '@/lib/github-links';
+
+import { CreateBranchModal } from './CreateBranchModal';
 
 const PR_STATE_VARIANT = {
   open: 'success',
@@ -227,6 +231,11 @@ interface IssueDevelopmentPanelProps {
   issueNumber: string;
   /** The issue id, which `issue:development-updated` names */
   issueId: string;
+  /** The issue key (AXM-7) and title, which the branch name is built from */
+  issueKey?: string;
+  issueTitle?: string;
+  /** Whether the reader may edit the issue; only then is a branch offered */
+  canEdit?: boolean;
 }
 
 /**
@@ -236,12 +245,20 @@ interface IssueDevelopmentPanelProps {
  * @param props.projectId - The issue's project.
  * @param props.issueNumber - The issue number.
  * @param props.issueId - The issue id.
+ * @param props.issueKey - The issue key.
+ * @param props.issueTitle - The issue title.
+ * @param props.canEdit - Whether the reader may create a branch.
  */
 export function IssueDevelopmentPanel({
   projectId,
   issueNumber,
   issueId,
+  issueKey,
+  issueTitle,
+  canEdit,
 }: IssueDevelopmentPanelProps) {
+  const [branchOpen, setBranchOpen] = useState(false);
+  const closeBranch = useCallback(() => setBranchOpen(false), []);
   const repo = useQuery({
     queryKey: githubRepoKey(projectId),
     queryFn: () => githubRepoApi.get(projectId),
@@ -266,11 +283,31 @@ export function IssueDevelopmentPanel({
   return (
     <Card>
       <CardHeader>
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
-          <GitPullRequest className="h-4 w-4 text-text-secondary" />
-          Development
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
+            <GitPullRequest className="h-4 w-4 text-text-secondary" />
+            Development
+          </h2>
+          {canEdit && issueKey && issueTitle !== undefined && (
+            <Button variant="secondary" size="sm" onClick={() => setBranchOpen(true)}>
+              <GitBranchPlus className="h-4 w-4" />
+              Create branch
+            </Button>
+          )}
+        </div>
       </CardHeader>
+      {branchOpen && issueKey && issueTitle !== undefined && repo.data && (
+        <CreateBranchModal
+          open
+          onClose={closeBranch}
+          projectId={projectId}
+          issueNumber={issueNumber}
+          issueId={issueId}
+          issueKey={issueKey}
+          issueTitle={issueTitle}
+          defaultBranch={repo.data.defaultBranch}
+        />
+      )}
       {dev.isLoading && (
         <div className="flex justify-center p-5">
           <Spinner size="sm" />

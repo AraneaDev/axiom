@@ -188,6 +188,8 @@ export default function IssueDetail() {
   });
 
   const { user } = useAuthStore();
+  // A team viewer reads only; the server decides for everyone else
+  const canEditIssue = teamDetail?.members?.find((m) => m.userId === user?.id)?.role !== 'VIEWER';
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['attachments', issue?.id],
@@ -319,6 +321,9 @@ export default function IssueDetail() {
               projectId={currentProject.id}
               issueNumber={num}
               issueId={issue.id}
+              issueKey={issue.key}
+              issueTitle={issue.title}
+              canEdit={canEditIssue}
             />
           </div>
         )}

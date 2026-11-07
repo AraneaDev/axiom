@@ -187,3 +187,14 @@ export const githubDevelopmentApi = {
       `/projects/${projectId}/issues/${issueNumber}/hydrate?include=development&include=checks`,
     ),
 };
+
+export interface GithubBranchCreated {
+  name: string;
+  url: string;
+  headSha: string;
+}
+
+export const githubBranchApi = {
+  create: (projectId: string, issueNumber: number, body: { name?: string; from?: string }) =>
+    post<GithubBranchCreated>(`/projects/${projectId}/issues/${issueNumber}/github/branches`, body),
+};

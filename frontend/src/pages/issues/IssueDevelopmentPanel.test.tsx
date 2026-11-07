@@ -1,12 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const repo = vi.hoisted(() => ({ get: vi.fn() }));
 const dev = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@/api/github.api', () => ({
+  GITHUB_ACCOUNT_KEY: ['github-account'],
+  githubAccountApi: { get: vi.fn().mockResolvedValue({ connected: false }) },
+  githubBranchApi: { create: vi.fn() },
   githubRepoKey: (id: string) => ['github-repo', id],
   issueDevelopmentKey: (id: string, n: string, issueId: string) => [
     'issue-development',
@@ -71,12 +75,14 @@ const check = (over = {}) => ({
 
 const capped = <T,>(items: T[]) => ({ items, limit: 20, truncated: false });
 
-function show() {
+function show(extra: Record<string, unknown> = {}) {
   render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
-      <IssueDevelopmentPanel projectId="p1" issueNumber="7" issueId="i7" />
+      <MemoryRouter>
+        <IssueDevelopmentPanel projectId="p1" issueNumber="7" issueId="i7" {...extra} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -119,6 +125,23 @@ describe('IssueDevelopmentPanel', () => {
     expect(screen.queryByText('commented')).toBeNull();
     expect(screen.getByText('sam-reviews')).toBeInTheDocument();
     expect(screen.getAllByText('axm-1-widget-cache').length).toBeGreaterThan(0);
+  });
+
+  it('offers a branch only to a reader who can edit the issue', async () => {
+    show();
+    await screen.findByText('#42');
+    expect(screen.queryByRole('button', { name: 'Create branch' })).toBeNull();
+  });
+
+  it('opens the branch dialog for an editor', async () => {
+    repo.get.mockResolvedValue({
+      repoFullName: 'acme-labs/widget',
+      htmlUrl: 'https://github.com/acme-labs/widget',
+      defaultBranch: 'main',
+    });
+    show({ canEdit: true, issueKey: 'AXM-7', issueTitle: 'Fix it' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Create branch' }));
+    expect(await screen.findByRole('dialog', { name: 'Create a branch' })).toBeInTheDocument();
   });
 
   it('expands a failed check to its step and log tail', async () => {
