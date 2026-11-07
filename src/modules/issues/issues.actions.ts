@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
+import { isToken } from '../../actions/approval-policy';
 import { ownedByProject, projectAction, projectRead } from '../../actions/authorize';
 import { defineAction, type ActionContext } from '../../actions/define';
 import * as previews from '../../actions/previews';
-import { coversArea } from '../../actions/read.service';
 import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { checkProjectAccess, projectOf } from '../../middleware/requireProjectAccess';
@@ -208,7 +208,7 @@ const issueActions = [
         issueNumber,
         ctx.userId,
         include === undefined ? [] : [include].flat(),
-        coversArea(ctx, 'github'),
+        !isToken(ctx),
       ),
   }),
   defineAction({

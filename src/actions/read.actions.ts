@@ -85,6 +85,7 @@ const pullRequestView = z.strictObject({
 });
 const checkView = z.strictObject({
   pullRequest: z.number().nullable(),
+  pullRequests: z.array(z.number()),
   headSha: z.string(),
   name: githubText(),
   status: z.string(),

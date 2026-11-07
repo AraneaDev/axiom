@@ -38,7 +38,10 @@ export type PullRequestView = {
 };
 
 export type CheckView = {
+  /** The lowest-numbered open pull request with this head */
   pullRequest: number | null;
+  /** Every open pull request with this head, lowest first */
+  pullRequests: number[];
   headSha: string;
   name: string;
   status: string;
@@ -68,28 +71,77 @@ function capped<T>(rows: T[], limit: number): Capped<T> {
   return { items: rows.slice(0, limit), limit, truncated: rows.length > limit };
 }
 
-// The repository link of the project the issue is in, if the project has one
-function linkOf(issueId: string) {
-  return prisma.githubRepoLink.findFirst({
-    where: { project: { issues: { some: { id: issueId } } } },
-    select: { id: true, htmlUrl: true },
-  });
+/** What one read call has looked up already: the link of a project, what names an issue */
+export type GithubReadCache = {
+  links: Map<string, Promise<RepoLink | null>>;
+  targets: Map<string, Promise<Targets>>;
+};
+type RepoLink = { id: string; htmlUrl: string; orgId: string };
+type Targets = { branches: string[]; pullRequests: string[] };
+
+/** Where a read stands: the issue's project, and the cache its call shares */
+export type GithubReadScope = { projectId: string; cache: GithubReadCache };
+
+export const createGithubReadCache = (): GithubReadCache => ({
+  links: new Map(),
+  targets: new Map(),
+});
+
+function memo<T>(map: Map<string, Promise<T>>, key: string, load: () => Promise<T>): Promise<T> {
+  const known = map.get(key);
+  if (known) return known;
+  const loading = load();
+  map.set(key, loading);
+  // A failed lookup is not kept: the next ask tries again
+  loading.catch(() => map.delete(key));
+  return loading;
 }
 
-// The ids of what names the issue, by kind, among the project's current repository link only
-async function targetsOf(issueId: string, repoLinkId: string, type: 'BRANCH' | 'PULL_REQUEST') {
-  const rows = await prisma.githubIssueLink.findMany({
-    where: { issueId, repoLinkId, targetType: type },
-    select: { targetKey: true },
-    take: READ_BOUND,
+/**
+ * The repository link of the issue's project, and what names the issue. With a scope a project's
+ * link and an issue's targets are looked up once for the whole call.
+ * @param issueId
+ * @param scope
+ */
+async function contextOf(issueId: string, scope: GithubReadScope | undefined) {
+  const projectId =
+    scope?.projectId ??
+    (await prisma.issue.findUnique({ where: { id: issueId }, select: { projectId: true } }))
+      ?.projectId;
+  if (!projectId) return null;
+  const cache = scope?.cache ?? createGithubReadCache();
+  const link = await memo(cache.links, projectId, async () => {
+    const row = await prisma.githubRepoLink.findUnique({
+      where: { projectId },
+      select: {
+        id: true,
+        htmlUrl: true,
+        project: { select: { team: { select: { orgId: true } } } },
+      },
+    });
+    return row && { id: row.id, htmlUrl: row.htmlUrl, orgId: row.project.team.orgId };
   });
-  return rows.map((row) => row.targetKey);
+  if (!link) return null;
+  const targets = await memo(cache.targets, issueId, async () => {
+    const rows = await prisma.githubIssueLink.findMany({
+      where: { issueId, repoLinkId: link.id, targetType: { in: ['BRANCH', 'PULL_REQUEST'] } },
+      select: { targetType: true, targetKey: true },
+      take: READ_BOUND,
+    });
+    return {
+      branches: rows.filter((r) => r.targetType === 'BRANCH').map((r) => r.targetKey),
+      pullRequests: rows.filter((r) => r.targetType === 'PULL_REQUEST').map((r) => r.targetKey),
+    };
+  });
+  return { link, targets };
 }
 
 type StoredReviewer = { login?: unknown; githubId?: unknown; userId?: unknown };
 
-// Turns a login into a view: the mapped Axiom user is id and display name only, never an email
+// Turns a login into a view: the mapped Axiom user is id and display name only, never an email, and
+// only a member of the org of the project is shown: anyone else is their GitHub login alone
 async function personResolver(
+  orgId: string,
   logins: Array<{ login: string; userId?: string | null; githubId?: number | null }>,
 ) {
   const githubIds = [
@@ -111,7 +163,7 @@ async function personResolver(
   ];
   const users = ids.length
     ? await prisma.user.findMany({
-        where: { id: { in: ids } },
+        where: { id: { in: ids }, orgMemberships: { some: { orgId } } },
         select: { id: true, displayName: true },
       })
     : [];
@@ -142,22 +194,23 @@ function reviewersOf(value: unknown) {
  * The branches and pull requests that name an issue.
  * @param issueId The issue
  * @param limit The most of each kind
+ * @param scope
  * @returns Empty lists for a project with no repository link
  */
 export async function loadDevelopment(
   issueId: string,
   limit: number,
+  scope?: GithubReadScope,
 ): Promise<{ branches: Capped<BranchView>; pullRequests: Capped<PullRequestView> }> {
-  const link = await linkOf(issueId);
+  const found = await contextOf(issueId, scope);
   const none = {
     branches: emptyCapped<BranchView>(limit),
     pullRequests: emptyCapped<PullRequestView>(limit),
   };
-  if (!link) return none;
-  const [branchIds, prIds] = await Promise.all([
-    targetsOf(issueId, link.id, 'BRANCH'),
-    targetsOf(issueId, link.id, 'PULL_REQUEST'),
-  ]);
+  if (!found) return none;
+  const { link, targets } = found;
+  const branchIds = targets.branches;
+  const prIds = targets.pullRequests;
 
   const [branchRows, prRows] = await Promise.all([
     branchIds.length
@@ -181,6 +234,7 @@ export async function loadDevelopment(
 
   const shown = prRows.slice(0, limit);
   const person = await personResolver(
+    link.orgId,
     shown.flatMap((pr) => [
       { login: pr.authorLogin, userId: pr.authorUserId },
       ...reviewersOf(pr.requestedReviewers),
@@ -235,28 +289,34 @@ const rankOf = (run: { status: string; conclusion: string | null }) =>
  * that a re-run replaced is left out.
  * @param issueId The issue
  * @param limit The most runs
+ * @param scope
  * @returns An empty list for a project with no repository link
  */
-export async function loadChecks(issueId: string, limit: number): Promise<Capped<CheckView>> {
-  const link = await linkOf(issueId);
-  if (!link) return emptyCapped(limit);
-  const [branchIds, prIds] = await Promise.all([
-    targetsOf(issueId, link.id, 'BRANCH'),
-    targetsOf(issueId, link.id, 'PULL_REQUEST'),
-  ]);
+export async function loadChecks(
+  issueId: string,
+  limit: number,
+  scope?: GithubReadScope,
+): Promise<Capped<CheckView>> {
+  const found = await contextOf(issueId, scope);
+  if (!found) return emptyCapped(limit);
+  const { link, targets } = found;
+  const branchIds = targets.branches;
+  const prIds = targets.pullRequests;
 
   // The commit each run is read at, and the pull request that stands for it
-  const heads = new Map<string, number | null>();
+  const heads = new Map<string, number[]>();
   const open = prIds.length
     ? await prisma.githubPullRequest.findMany({
         where: { id: { in: prIds }, repoLinkId: link.id, state: 'OPEN' },
         select: { number: true, headSha: true },
         orderBy: { number: 'desc' },
-        take: MAX_SHAS * 4,
+        take: READ_BOUND,
       })
     : [];
-  for (const pr of open)
-    if (heads.size < MAX_SHAS && !heads.has(pr.headSha)) heads.set(pr.headSha, pr.number);
+  for (const pr of open) {
+    if (heads.size >= MAX_SHAS && !heads.has(pr.headSha)) continue;
+    heads.set(pr.headSha, [...(heads.get(pr.headSha) ?? []), pr.number]);
+  }
   if (open.length === 0 && branchIds.length) {
     const branches = await prisma.githubBranch.findMany({
       where: { id: { in: branchIds }, repoLinkId: link.id, deletedAt: null, headSha: { not: '' } },
@@ -265,7 +325,7 @@ export async function loadChecks(issueId: string, limit: number): Promise<Capped
       take: MAX_SHAS * 4,
     });
     for (const b of branches)
-      if (heads.size < MAX_SHAS && !heads.has(b.headSha)) heads.set(b.headSha, null);
+      if (heads.size < MAX_SHAS && !heads.has(b.headSha)) heads.set(b.headSha, []);
   }
   if (heads.size === 0) return emptyCapped(limit);
 
@@ -310,9 +370,11 @@ export async function loadChecks(issueId: string, limit: number): Promise<Capped
     : [];
   const tailOf = new Map(tails.map((t) => [t.id, t.logTail]));
 
+  const numbersOf = (sha: string) => [...(heads.get(sha) ?? [])].sort((a, b) => a - b);
   return {
     items: shown.map((run) => ({
-      pullRequest: heads.get(run.headSha) ?? null,
+      pullRequest: numbersOf(run.headSha)[0] ?? null,
+      pullRequests: numbersOf(run.headSha),
       headSha: run.headSha,
       name: run.name,
       status: run.status,

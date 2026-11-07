@@ -29,8 +29,9 @@ import { getIssue, getEpicProgress, listIssues } from './issues.service';
  * @param issueNumber - The issue number within the project
  * @param userId - The requesting user (used for vote status)
  * @param include - The GitHub panels to add: `development` and `checks`
- * @param githubCovered - Whether the caller may read GitHub data; without it the panels asked
- *   for are named in `omittedIncludes`
+ * @param githubCovered - Whether the caller gets the GitHub panels here: a session does. A token
+ *   reads them through item.read, which marks GitHub text as untrusted and counts it against its
+ *   byte budget, so the panels asked for are named in `omittedIncludes` with the reason
  */
 export async function hydrateIssueDetail(
   projectId: string,
@@ -70,7 +71,11 @@ export async function hydrateIssueDetail(
     issue,
     ...(development && { development }),
     ...(checks && { checks }),
-    ...(!githubCovered && asked.length > 0 && { omittedIncludes: asked }),
+    ...(!githubCovered &&
+      asked.length > 0 && {
+        omittedIncludes: asked,
+        omittedIncludesReason: 'GitHub data is read with item.read (include development, checks)',
+      }),
     votes: settled(results[0], 'votes'),
     watchers: settled(results[1], 'watchers'),
     links: settled(results[2], 'links'),

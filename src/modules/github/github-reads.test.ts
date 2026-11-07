@@ -4,6 +4,7 @@ import { prisma } from '../../config/database';
 import {
   cleanupTestContext,
   createTestContext,
+  addMemberToContext,
   createTestUser,
   type TestContext,
   type TestUser,
@@ -19,6 +20,7 @@ const SHA_C = 'c'.repeat(40);
 let ctx: TestContext;
 let bare: TestContext;
 let dev: TestUser;
+let outsider: TestUser;
 let devName: string;
 let repoLinkId: string;
 let issueId: string;
@@ -104,13 +106,22 @@ async function makeRun(
 beforeAll(async () => {
   ctx = await createTestContext('grd1');
   bare = await createTestContext('grd2');
-  dev = await createTestUser();
+  dev = await addMemberToContext(ctx);
+  outsider = await createTestUser();
   devName = (await prisma.user.findUniqueOrThrow({ where: { id: dev.id } })).displayName;
   await prisma.githubAccount.create({
     data: {
       userId: dev.id,
       githubUserId: 7_100_001n,
       login: 'review-bot',
+      accessToken: 'enc',
+    },
+  });
+  await prisma.githubAccount.create({
+    data: {
+      userId: outsider.id,
+      githubUserId: 7_100_009n,
+      login: 'other-org-dev',
       accessToken: 'enc',
     },
   });
@@ -145,7 +156,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await prisma.user.deleteMany({ where: { id: dev.id } });
+  await prisma.user.deleteMany({ where: { id: { in: [dev.id, outsider.id] } } });
   await cleanupTestContext(ctx);
   await cleanupTestContext(bare);
 });
@@ -214,6 +225,30 @@ describe('loadDevelopment', () => {
       },
     ]);
     expect(JSON.stringify(result)).not.toContain(dev.email);
+  });
+
+  it('shows an Axiom person only when they are a member of the org of the project', async () => {
+    const pr = await makePr(19, {
+      authorUserId: outsider.id,
+      requestedReviewers: [{ login: 'other-org-dev', githubId: 7_100_009 }],
+    });
+    await prisma.githubReview.create({
+      data: {
+        id: '5002',
+        pullRequestId: pr.id,
+        authorLogin: 'other-org-dev',
+        authorUserId: outsider.id,
+        state: 'commented',
+        body: 'hm',
+        commitSha: SHA_A,
+        submittedAt: new Date('2026-11-01T12:00:00Z'),
+      },
+    });
+    const [view] = (await loadDevelopment(issueId, 20)).pullRequests.items;
+    expect(view.author).toEqual({ login: 'voorbeeld-dev', user: null });
+    expect(view.requestedReviewers).toEqual([{ login: 'other-org-dev', user: null }]);
+    expect(view.reviews[0].author).toEqual({ login: 'other-org-dev', user: null });
+    expect(JSON.stringify(view)).not.toContain(outsider.id);
   });
 
   it('shows the integration user as nobody', async () => {
@@ -299,6 +334,7 @@ describe('loadChecks', () => {
     expect(checks.items.map((c) => c.name)).toEqual(['test', 'lint']);
     expect(checks.items[0]).toEqual({
       pullRequest: 17,
+      pullRequests: [17],
       headSha: SHA_A,
       name: 'test',
       status: 'completed',
@@ -326,6 +362,14 @@ describe('loadChecks', () => {
       ['build', 'failure'],
       ['test', 'success'],
     ]);
+  });
+
+  it('names every open pull request that shares a head, and the lowest as pullRequest', async () => {
+    await makePr(18);
+    await makePr(17);
+    await makeRun(SHA_A, 'test', 'completed', 'failure');
+    const [check] = (await loadChecks(issueId, 50)).items;
+    expect(check).toMatchObject({ pullRequest: 17, pullRequests: [17, 18] });
   });
 
   it('ignores runs of a commit that no open pull request has as its head', async () => {

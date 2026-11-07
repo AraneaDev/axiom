@@ -15,7 +15,9 @@ import { checkProjectAccess } from '../middleware/requireProjectAccess';
 import { scopeAllows, type ScopeArea } from '../middleware/token-scopes';
 import {
   CHECKS_LIMIT,
+  createGithubReadCache,
   DEVELOPMENT_LIMIT,
+  type GithubReadCache,
   loadChecks,
   loadDevelopment,
 } from '../modules/github/github-reads';
@@ -190,7 +192,11 @@ interface Reader {
   viewer: Viewer;
   commentBodies: boolean;
   budget: ReturnType<typeof createByteBudget>;
+  /** What the GitHub includes looked up already in this call */
+  github: GithubReadCache;
 }
+
+const githubScope = (reader: Reader, projectId: string) => ({ projectId, cache: reader.github });
 
 function responseTooLarge(): AppError {
   return new AppError(
@@ -312,6 +318,7 @@ async function issuePages(issue: IssueRef, reader: Reader) {
 /** What the includes of an issue need to know of it. */
 interface IssueRef {
   id: string;
+  projectId: string;
 }
 
 const ISSUE_INCLUDE_LOADERS: {
@@ -471,8 +478,10 @@ const ISSUE_INCLUDE_LOADERS: {
     return capped(rows.map(issueSummary), limit);
   },
   pages: (issue, reader) => issuePages(issue, reader),
-  development: ({ id }) => loadDevelopment(id, ISSUE_INCLUDE_LIMITS.development),
-  checks: ({ id }) => loadChecks(id, ISSUE_INCLUDE_LIMITS.checks),
+  development: ({ id, projectId }, reader) =>
+    loadDevelopment(id, ISSUE_INCLUDE_LIMITS.development, githubScope(reader, projectId)),
+  checks: ({ id, projectId }, reader) =>
+    loadChecks(id, ISSUE_INCLUDE_LIMITS.checks, githubScope(reader, projectId)),
 };
 
 const PAGE_INCLUDE_LOADERS: {
@@ -739,7 +748,8 @@ async function readIssue(
     reader,
     options.include ?? [],
     ISSUE_INCLUDE_LOADERS,
-    (name: IssueInclude) => ISSUE_INCLUDE_LOADERS[name]({ id: issue.id }, reader),
+    (name: IssueInclude) =>
+      ISSUE_INCLUDE_LOADERS[name]({ id: issue.id, projectId: resolved.projectId }, reader),
   );
   return { ...picked, ...includes };
 }
@@ -883,6 +893,7 @@ export async function readItems(ctx: ActionContext, keys: string[], options: Rea
       viewer: createViewer(ctx.userId),
       commentBodies: options.commentBodies ?? true,
       budget: createByteBudget(RESPONSE_BYTE_LIMIT),
+      github: createGithubReadCache(),
     };
     const items = [];
     for (const key of unique.values()) {

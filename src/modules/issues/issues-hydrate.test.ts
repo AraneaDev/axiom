@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from 'node:crypto';
+
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -120,6 +122,32 @@ describe('Issue Detail Hydrate API', () => {
     expect(both.body).toHaveProperty('development');
 
     expect((await get('?include=comments')).status).toBe(400);
+  });
+
+  it('gives a token no GitHub panels on hydrate, and points it at item.read', async () => {
+    for (const scopes of [['issues:read'], ['issues:read', 'github:read']]) {
+      const raw = `tk_${randomBytes(24).toString('hex')}`;
+      await prisma.apiToken.create({
+        data: {
+          userId,
+          name: 'hydrate-test',
+          tokenHash: createHash('sha256').update(raw).digest('hex'),
+          prefix: raw.slice(0, 11),
+          scopes,
+        },
+      });
+      const res = await request(app)
+        .get(
+          `/api/projects/${projectId}/issues/${issueNumber}/hydrate?include=development&include=checks`,
+        )
+        .set('Authorization', `Token ${raw}`)
+        .set('X-Requested-With', 'XMLHttpRequest');
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty('development');
+      expect(res.body).not.toHaveProperty('checks');
+      expect(res.body.omittedIncludes).toEqual(['development', 'checks']);
+      expect(res.body.omittedIncludesReason).toContain('item.read');
+    }
   });
 
   it('should return 404 for non-existent issue', async () => {

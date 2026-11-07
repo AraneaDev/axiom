@@ -87,7 +87,9 @@ const ALL_PAGE_INCLUDES = [
 ];
 
 /** What a call may cost in statements: pinned from a measured run, with little room. */
-const STATEMENTS_50_KEYS = 1920;
+const STATEMENTS_50_KEYS = 1900;
+/** 50 issues of a linked project, each with a PR, a review and a failed run, read with both GitHub includes */
+const STATEMENTS_50_KEYS_LINKED = 880;
 const STATEMENTS_ONE_KEY_30_SPACES = 190;
 
 describe('item.read', () => {
@@ -1415,6 +1417,83 @@ describe('item.read', () => {
       expect(got.development.pullRequests.items).toHaveLength(1);
       expect(got.checks.items).toHaveLength(1);
       expect(got).not.toHaveProperty('omittedIncludes');
+    });
+
+    it('stays within its own statement budget for 50 keys in a linked project', async () => {
+      const issues = await Promise.all(Array.from({ length: 50 }, (_, i) => makeIssue(7200 + i)));
+      for (const [i, issue] of issues.entries()) {
+        const sha = (i + 16).toString(16).padStart(2, '0').repeat(20);
+        const pr = await prisma.githubPullRequest.create({
+          data: {
+            repoLinkId,
+            number: 9100 + i,
+            title: `Change ${i}`,
+            state: 'OPEN',
+            draft: false,
+            authorLogin: 'voorbeeld-dev',
+            authorUserId: member.id,
+            headRef: `cost-${i}`,
+            headSha: sha,
+            baseRef: 'main',
+            requestedReviewers: [],
+            htmlUrl: `https://github.com/acme-labs/widget/pull/${9100 + i}`,
+            openedAt: new Date('2026-11-01T10:00:00Z'),
+            githubUpdatedAt: new Date('2026-11-01T10:00:00Z'),
+          },
+        });
+        await prisma.githubReview.create({
+          data: {
+            id: String(9300 + i),
+            pullRequestId: pr.id,
+            authorLogin: 'voorbeeld-dev',
+            authorUserId: member.id,
+            state: 'approved',
+            body: 'ok',
+            commitSha: sha,
+            submittedAt: new Date('2026-11-01T12:00:00Z'),
+          },
+        });
+        await prisma.githubCheckRun.create({
+          data: {
+            id: String(9400 + i),
+            repoLinkId,
+            headSha: sha,
+            name: 'test',
+            appSlug: 'github-actions',
+            status: 'completed',
+            conclusion: 'failure',
+            htmlUrl: `https://github.com/acme-labs/widget/runs/${9400 + i}`,
+            logTail: 'boom',
+            githubUpdatedAt: new Date('2026-11-06T10:00:00Z'),
+          },
+        });
+        await prisma.githubIssueLink.create({
+          data: {
+            issueId: issue.id,
+            repoLinkId,
+            targetType: 'PULL_REQUEST',
+            targetKey: pr.id,
+            sources: ['PR_TITLE'],
+          },
+        });
+      }
+      try {
+        const keys = issues.map((issue) => `${prefix}-${issue.number}`);
+        let items: Array<{ data?: { checks?: { items: unknown[] } } }> = [];
+        const statements = await countStatements(async () => {
+          const res = await readAs(member, { keys, include: ['development', 'checks'] });
+          expect(res.status).toBe(200);
+          items = res.body.items;
+        });
+        expect(items.every((i) => i.data?.checks?.items.length === 1)).toBe(true);
+        expect(statements).toBeLessThanOrEqual(STATEMENTS_50_KEYS_LINKED);
+      } finally {
+        await prisma.githubPullRequest.deleteMany({
+          where: { repoLinkId, number: { gte: 9100, lt: 9200 } },
+        });
+        await prisma.githubCheckRun.deleteMany({ where: { id: { gte: '9400', lt: '9500' } } });
+        await prisma.issue.deleteMany({ where: { id: { in: issues.map((issue) => issue.id) } } });
+      }
     });
 
     it('counts both against the 10 MB budget of the call', async () => {
