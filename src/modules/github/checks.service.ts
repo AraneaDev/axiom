@@ -395,8 +395,8 @@ export async function storeCheckRun(
 
       // Read with the write, so a failure to read them cannot lose the transition
       const pullRequests = await tx.githubPullRequest.findMany({
-        where: { repoLinkId, headSha: run.head_sha, state: 'OPEN' },
-        select: { id: true },
+        where: { repoLinkId, headSha: run.head_sha },
+        select: { id: true, state: true },
         orderBy: { number: 'asc' },
       });
       const links =
@@ -408,7 +408,7 @@ export async function storeCheckRun(
                 targetType: 'PULL_REQUEST',
                 targetKey: { in: pullRequests.map((pr) => pr.id) },
               },
-              select: { issueId: true, sources: true },
+              select: { issueId: true, sources: true, targetKey: true },
             });
       return { row, stale: false, transitions, fetch, pullRequests, links };
     }),
@@ -440,14 +440,21 @@ export async function storeCheckRun(
   }
 
   const links = stored.links ?? [];
+  // Every PR on the head has its development panel refreshed; only an open one drives automation
+  const open = stored.pullRequests?.filter((pr) => pr.state === 'OPEN') ?? [];
+  const openIds = new Set(open.map((pr) => pr.id));
   const outcome: GithubEventOutcome = {
     ...base,
     event: 'check_run',
     headSha: run.head_sha,
-    pullRequestId: stored.pullRequests?.[0]?.id,
+    pullRequestId: open[0]?.id,
     linkedIssueIds: [...new Set(links.map((l) => l.issueId))],
     drivingIssueIds: [
-      ...new Set(links.filter((l) => drivesAutomation(l.sources)).map((l) => l.issueId)),
+      ...new Set(
+        links
+          .filter((l) => openIds.has(l.targetKey) && drivesAutomation(l.sources))
+          .map((l) => l.issueId),
+      ),
     ],
     transitions: stored.transitions,
   };

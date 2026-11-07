@@ -333,6 +333,15 @@ function withoutEmails<T extends Record<string, unknown>>(issue: T): T {
 }
 
 async function buildTemplateContext(context: AutomationContext) {
+  const plain = await buildPlainTemplateContext(context);
+  // Where Markdown renders (comment bodies, issue descriptions) GitHub's text is escaped
+  const markdown = context.github
+    ? { ...plain, github: safeGithubContext(context.github, true) }
+    : plain;
+  return { plain, markdown };
+}
+
+async function buildPlainTemplateContext(context: AutomationContext) {
   const { issue, actorId } = context;
   // No emails in template output: comments and titles reach the whole team, and emails
   // are for admins only. send_email takes its recipient as written, not from a template.
@@ -348,7 +357,7 @@ async function buildTemplateContext(context: AutomationContext) {
     trigger:
       context.github?.trigger ??
       (context.from !== undefined ? 'issue:status_changed' : 'issue:created'),
-    github: context.github ? safeGithubContext(context.github) : undefined,
+    github: context.github ? safeGithubContext(context.github, false) : undefined,
     from: context.from,
     to: context.to,
     label: context.label,
@@ -364,7 +373,7 @@ async function executeActions(
   const issue = context.issue;
   if (!issue?.id) return;
 
-  const templateCtx = await buildTemplateContext(context);
+  const { plain: templateCtx, markdown: markdownCtx } = await buildTemplateContext(context);
 
   for (const action of actions) {
     try {
@@ -413,7 +422,7 @@ async function executeActions(
         case 'add_comment':
           if (action.body) {
             if (context.commentGuard && !(await context.commentGuard())) break;
-            const resolvedBody = resolveTemplate(action.body, templateCtx);
+            const resolvedBody = resolveTemplate(action.body, markdownCtx);
             await prisma.comment.create({
               data: {
                 issueId: issue.id,
@@ -437,7 +446,7 @@ async function executeActions(
             if (depth >= 1 || count >= 5) break;
             const resolvedTitle = resolveTemplate(action.title, templateCtx);
             const resolvedIssueBody = action.body
-              ? resolveTemplate(action.body, templateCtx)
+              ? resolveTemplate(action.body, markdownCtx)
               : undefined;
             await issuesService.createIssue(
               projectId,

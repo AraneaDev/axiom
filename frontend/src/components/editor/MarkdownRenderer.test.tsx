@@ -86,3 +86,26 @@ describe('MarkdownRenderer live blocks in code', () => {
     expect(container.querySelector('[data-testid="query-block-loading"]')).toBeNull();
   });
 });
+
+describe('MarkdownRenderer escaped GitHub text', () => {
+  // A hostile pull request title as the automation escapes it for a comment
+  const escaped =
+    'https\\://3232235777/login \\:\\:\\:query x\\:\\:\\: \\@tim \\^AXM\\-1 \\# Heading';
+
+  it('renders it as literal text with no link, embed, mention or issue badge', () => {
+    const { container } = render(<MarkdownRenderer content={escaped} basePath="/a/b/AXM" />);
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.querySelector('.mention-ref')).toBeNull();
+    expect(container.querySelector('.issue-ref-badge')).toBeNull();
+    expect(container.querySelector('h1')).toBeNull();
+    expect(container.textContent).toContain('https://3232235777/login');
+    expect(container.textContent).toContain(':::query x:::');
+    expect(container.textContent).toContain('@tim ^AXM-1 # Heading');
+  });
+
+  it('does not style a lone escaped mention or issue key', () => {
+    const { container } = render(<MarkdownRenderer content={'\\@tim \\^AXM-1'} />);
+    expect(container.querySelector('.mention-ref')).toBeNull();
+    expect(container.querySelector('.issue-ref-badge')).toBeNull();
+  });
+});

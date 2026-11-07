@@ -9,7 +9,7 @@ import {
   ChevronRight,
   List as ListIcon,
 } from 'lucide-react';
-import { marked, type Token } from 'marked';
+import { marked, type Token, type TokenizerAndRendererExtension } from 'marked';
 import { useContext, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -77,9 +77,25 @@ const queryEmbedExtension = {
     return `<div data-query-embed="" data-query-target="${encodeURIComponent(target)}"><p>${escapeAttr(`:::query ${target}:::`)}</p></div>`;
   },
 };
+// A backslash-escaped @ or ^ is plain text: the mention and issue key rewrites below run on the
+// finished HTML, where they could no longer tell it from a real one, so a span keeps it apart
+const escapedSigilExtension: TokenizerAndRendererExtension = {
+  name: 'escapedSigil',
+  level: 'inline',
+  start(src: string) {
+    return src.indexOf('\\');
+  },
+  tokenizer(src: string) {
+    const match = /^\\([@^])/.exec(src);
+    return match ? { type: 'escapedSigil', raw: match[0], text: match[1] } : undefined;
+  },
+  renderer(token: Token) {
+    return `<span>${(token as Token & { text: string }).text}</span>`;
+  },
+};
 marked.use({
   renderer: { ...headingRenderer, ...imageRenderer },
-  extensions: [queryEmbedExtension],
+  extensions: [queryEmbedExtension, escapedSigilExtension],
 });
 
 type Segment = { type: 'html'; content: string } | { type: 'mermaid'; content: string };

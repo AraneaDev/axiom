@@ -163,7 +163,12 @@ async function contextOf(
       break;
     case 'reviewers_added':
       // A webhook is told as it happens; a reconcile found it some time after
-      eventAt = outcome.source === 'reconcile' ? (pr?.githubUpdatedAt ?? null) : new Date();
+      // The requests of a PR stored for the first time are as old as the PR
+      eventAt = outcome.transitions.includes('pr_opened')
+        ? (pr?.openedAt ?? null)
+        : outcome.source === 'reconcile'
+          ? (pr?.githubUpdatedAt ?? null)
+          : new Date();
       break;
     case 'review_added': {
       if (!pr) return null;
@@ -207,7 +212,15 @@ async function contextOf(
       };
       const times = (
         await prisma.githubCheckRun.findMany({
-          where: { id: { in: counted.map((run) => run.id) } },
+          // A failure is dated by the runs that failed, a pass by all of them
+          where: {
+            id: {
+              in: (transition === 'checks_failed'
+                ? counted.filter((run) => isFailed(run.conclusion))
+                : counted
+              ).map((run) => run.id),
+            },
+          },
           select: { completedAt: true, githubUpdatedAt: true },
         })
       ).map((run) => (run.completedAt ?? run.githubUpdatedAt).getTime());

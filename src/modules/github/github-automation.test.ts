@@ -6,6 +6,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
+import { emailQueue } from '../../email/queue';
 import app from '../../index';
 import {
   addMemberToContext,
@@ -25,10 +26,19 @@ import {
 } from '../automation/automation.service';
 
 import { fireGithubTriggers, registerCommentGuard, TRANSITION_TRIGGERS } from './github-automation';
+import { onGithubOutcome, type GithubEventOutcome } from './github-outcomes';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
 import './github-resolvers';
 import { reconcileRepo } from './reconcile.service';
 import './webhook-handlers';
+
+const webhook = vi.hoisted(() => ({ calls: [] as unknown[][] }));
+vi.mock('../automation/webhook', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../automation/webhook')>()),
+  executeWebhook: async (...args: unknown[]) => {
+    webhook.calls.push(args);
+  },
+}));
 
 const REPO_ID = 880_700;
 const INSTALLATION_ID = 4701;
@@ -588,7 +598,7 @@ describe('untrusted text', () => {
     await prEvent('opened', pr({ title: '![x](https://tracker.invalid/a) @tim ^AXM-1 # Heading' }));
     const [c] = await comments(issue1);
     expect(c.body).toBe(
-      '\\!\\[x\\]\\(https://tracker\\.invalid/a\\) \\@tim \\^AXM\\-1 \\# Heading',
+      '\\!\\[x\\]\\(https\\://tracker\\.invalid/a\\) \\@tim \\^AXM\\-1 \\# Heading',
     );
     expect(c.body).not.toMatch(/(^|[^\\])!\[/);
     expect(c.body).not.toContain('](');
@@ -660,5 +670,76 @@ describe('a rule that throws', () => {
     const total = (await comments(issue1)).length + (await comments(issue2)).length;
     expect(total).toBe(1);
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe('round 2', () => {
+  it('does not announce the review requests of an old PR first stored after the link', async () => {
+    await rule('pr:review_requested', say('asked'));
+    await prEvent(
+      'edited',
+      pr({ ...OLD, requested_reviewers: [{ id: 7002, login: 'review-bot' }] }),
+    );
+    expect(await comments(issue1)).toHaveLength(0);
+  });
+
+  it('gives an email, a webhook payload and an issue title the raw text', async () => {
+    const title = 'Fix login-bug in v2.1 @tim';
+    webhook.calls.length = 0;
+    const add = vi.spyOn(emailQueue, 'add').mockResolvedValue(undefined as never);
+    onTestFinished(() => vi.restoreAllMocks());
+    await rule('pr:opened', [
+      {
+        type: 'send_email',
+        to: 'dev@github.invalid',
+        subject: '{{github.pr.title}}',
+        body: '{{github.repo}}',
+      },
+      { type: 'create_issue', title: '{{github.pr.title}}', body: '{{github.pr.title}}' },
+      { type: 'webhook', url: 'https://hooks.github.invalid/x' },
+    ]);
+    await prEvent('opened', pr({ title }));
+    const sent = add.mock.calls.map((c) => JSON.stringify(c[1]));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toContain('Fix login-bug in v2.1 @tim');
+    expect(sent[0]).not.toContain('\\\\');
+    expect(webhook.calls).toHaveLength(1);
+    const payload = JSON.stringify(webhook.calls[0][1]);
+    expect(payload).toContain('Fix login-bug in v2.1 @tim');
+    expect(payload).not.toContain('\\\\');
+    const created = await prisma.issue.findFirstOrThrow({
+      where: { projectId: ctx.projectId, title },
+    });
+    expect(created.title).toBe(title);
+    // The description renders Markdown, so there the text is escaped
+    expect(created.body).toContain('\\@tim');
+  });
+
+  it('still tells the development panel of a merged PR about a late check', async () => {
+    const seen: GithubEventOutcome[] = [];
+    const off = onGithubOutcome(async (o) => {
+      if (o.event === 'check_run' && o.repoLinkId === repoLinkId) seen.push(o);
+    });
+    onTestFinished(off);
+    await prEvent('opened', pr());
+    await prEvent('closed', pr(MERGE));
+    await checkEvent(run(4712));
+    expect(seen[0].linkedIssueIds).toEqual([issue1]);
+    expect(seen[0].drivingIssueIds).toEqual([]);
+    expect(seen[0].pullRequestId).toBeUndefined();
+  });
+
+  it('dates a failure by the runs that failed', async () => {
+    await rule('checks:failed', say('failed'));
+    await checkEvent(run(4713, SHA_A, { completed_at: '2026-10-01T10:00:00Z' }));
+    await checkEvent(
+      run(4714, SHA_A, {
+        name: 'lint',
+        conclusion: 'success',
+        completed_at: '2026-11-06T10:00:00Z',
+      }),
+    );
+    await prEvent('opened', pr());
+    expect(await comments(issue1)).toHaveLength(0);
   });
 });
