@@ -9,6 +9,7 @@ import { prisma } from '../config/database';
 import { env } from '../config/env';
 import type { AuthPayload } from '../middleware/auth';
 import { isIntegrationUser } from '../modules/github/integration-user';
+import { isPerson } from '../modules/service-accounts/person';
 import { logger } from '../utils/logger';
 
 import {
@@ -261,7 +262,8 @@ export function createWebSocketServer(server: HttpServer): WebSocketServer {
     const user = await prisma.user
       .findUnique({ where: { id: userId }, select: { deactivatedAt: true } })
       .catch(() => null);
-    if (!user || user.deactivatedAt) {
+    // Only a person holds a session: a bot's JWT is refused like the integration user's
+    if (!user || user.deactivatedAt || !(await isPerson(userId).catch(() => false))) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;

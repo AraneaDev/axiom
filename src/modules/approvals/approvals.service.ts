@@ -268,11 +268,12 @@ export async function createApprovalRequestWithTarget(
     throw new AppError(400, `At least ${gate.minApprovals} approver(s) required for this gate`);
   }
 
-  // Verify approvers are team members
+  // Verify approvers are team members, and people: a bot is never named to decide
   const teamMembers = await prisma.teamMembership.findMany({
     where: {
       teamId: issue.project.teamId,
       userId: { in: approverIds },
+      user: { kind: 'PERSON' },
     },
     select: { userId: true },
   });

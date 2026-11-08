@@ -252,6 +252,9 @@ describe('service accounts: create, list, owners, delete', () => {
     expect(res.status).toBe(204);
 
     expect(await getServiceAccount(botId)).toBeNull();
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: botId } })).deactivatedAt,
+    ).not.toBeNull();
     expect(await prisma.apiToken.count({ where: { userId: botId } })).toBe(0);
     expect(await prisma.orgMembership.count({ where: { userId: botId } })).toBe(0);
     expect(
@@ -267,5 +270,42 @@ describe('service accounts: create, list, owners, delete', () => {
     const list = await authGet(`/api/orgs/${ctx.orgId}/service-accounts`, admin.token);
     expect(list.body.map((b: { id: string }) => b.id)).not.toContain(botId);
     expect((await authGet(`/api/service-accounts/${botId}`, admin.token)).status).toBe(404);
+  });
+
+  it('a platform admin creating a bot in an unknown org gets 404 (M1)', async () => {
+    const platform = await createTestUser({ username: 'voorbeeld-platform-svcacct' });
+    await prisma.user.update({ where: { id: platform.id }, data: { isAdmin: true } });
+    try {
+      const res = await authPost(
+        '/api/orgs/cnosuchorg000000000000000/service-accounts',
+        platform.token,
+        {
+          username: 'acme-nowhere-bot',
+          displayName: 'Nowhere',
+          ownerIds: [member.id],
+        },
+      );
+      expect(res.status).toBe(404);
+    } finally {
+      await prisma.user.delete({ where: { id: platform.id } });
+    }
+  });
+
+  it('concurrent creates with one username: one 201, the other 409 USERNAME_TAKEN (M7)', async () => {
+    const results = await Promise.all([0, 1, 2].map(() => createBot('acme-race-bot', [member.id])));
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses).toEqual([201, 409, 409]);
+    for (const r of results.filter((x) => x.status === 409)) {
+      expect(r.body.error.code).toBe('USERNAME_TAKEN');
+    }
+  });
+
+  it('concurrent deletes: one 204, the other 404 (M7)', async () => {
+    const res = await createBot('acme-twice-bot', [member.id]);
+    expect(res.status).toBe(201);
+    const results = await Promise.all(
+      [0, 1].map(() => authDel(`/api/service-accounts/${res.body.id}`, admin.token)),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([204, 404]);
   });
 });

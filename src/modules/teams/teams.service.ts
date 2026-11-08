@@ -116,7 +116,8 @@ export async function listOrgTeams(
     prisma.team.findMany({
       where,
       include: {
-        _count: { select: { members: true, projects: true } },
+        // A bot is never a seat: only people are counted
+        _count: { select: { members: { where: { user: { kind: 'PERSON' } } }, projects: true } },
         wikiSpaces: {
           select: { id: true, name: true, slug: true, _count: { select: { pages: true } } },
           orderBy: { name: 'asc' },

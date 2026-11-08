@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { orgMember } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
-import { AppError } from '../../middleware/errorHandler';
 import { registerSchema } from '../../utils/validation';
 
 import * as service from './service-accounts.service';
@@ -109,9 +108,6 @@ registerActions([
     rest: { method: 'DELETE', path: '/api/service-accounts/:id' },
     authorize: async (ctx, { id }) => service.assertCanAccess(ctx.userId, id, 'manage'),
     handler: async (_ctx, { id }) => {
-      if (!(await service.getServiceAccount(id))) {
-        throw new AppError(404, 'Service account not found', 'SERVICE_ACCOUNT_NOT_FOUND');
-      }
       await service.deleteServiceAccount(id);
     },
   }),

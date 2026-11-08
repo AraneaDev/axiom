@@ -30,6 +30,7 @@ import { loadEditorCore, markdownToYFragment, yFragmentToMarkdown } from '../lib
 import type { AuthPayload } from '../middleware/auth';
 import { checkWikiSpaceOrgAccess } from '../middleware/rbac';
 import { isIntegrationUser } from '../modules/github/integration-user';
+import { isPerson } from '../modules/service-accounts/person';
 import { restoredVersionOf } from '../modules/wiki/page-versions';
 import { canAccessSpace } from '../modules/wiki/space-permissions.service';
 import { canEditPage, canViewPage } from '../modules/wiki/wiki-permissions.service';
@@ -744,7 +745,8 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
     where: { id: auth.userId },
     select: { deactivatedAt: true },
   });
-  if (!account || account.deactivatedAt) {
+  // Only a person edits: a bot's JWT is refused like the integration user's
+  if (!account || account.deactivatedAt || !(await isPerson(auth.userId))) {
     ws.close(4001, 'Unauthorized');
     return;
   }

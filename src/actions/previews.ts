@@ -712,7 +712,7 @@ export async function orgDelete(orgId: string): Promise<string> {
   const label = await orgLabel(orgId);
   const [teams, members] = await Promise.all([
     prisma.team.count({ where: { orgId } }),
-    prisma.orgMembership.count({ where: { orgId } }),
+    prisma.orgMembership.count({ where: { orgId, user: { kind: 'PERSON' } } }),
   ]);
   const projects = await prisma.project.count({ where: { team: { orgId } } });
   return (
@@ -875,7 +875,7 @@ export async function teamDelete(teamId: string): Promise<string> {
   const [projects, spaces, members] = await Promise.all([
     prisma.project.count({ where: { teamId } }),
     prisma.wikiSpace.count({ where: { teamId } }),
-    prisma.teamMembership.count({ where: { teamId } }),
+    prisma.teamMembership.count({ where: { teamId, user: { kind: 'PERSON' } } }),
   ]);
   return (
     `Delete ${label} with everything in it. As of this request that is ` +

@@ -1,9 +1,11 @@
 import crypto from 'crypto';
 
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { ERR } from '../../utils/error-messages';
+import { findOrThrow } from '../../utils/find-or-throw';
 
 /** Org roles that may own a bot: a person with one of these, not deactivated */
 const OWNER_ROLES = ['OWNER', 'ADMIN', 'MEMBER'] as const;
@@ -144,12 +146,17 @@ export async function assertCanAccess(
  * role OWNER, ADMIN or MEMBER there.
  * @param orgId - The bot's org
  * @param ownerIds - The proposed owners
+ * @param db - The client to read with: the transaction that writes the owners, when there is one
  * @returns The owners, each once
  * @throws {AppError} 400 SERVICE_ACCOUNT_OWNER_INVALID when one is not eligible, or there are none
  */
-async function eligibleOwners(orgId: string, ownerIds: string[]): Promise<string[]> {
+async function eligibleOwners(
+  orgId: string,
+  ownerIds: string[],
+  db: Pick<Prisma.TransactionClient, 'user'> = prisma,
+): Promise<string[]> {
   const unique = [...new Set(ownerIds)];
-  const eligible = await prisma.user.count({
+  const eligible = await db.user.count({
     where: {
       id: { in: unique },
       kind: 'PERSON',
@@ -185,36 +192,50 @@ export async function createServiceAccount(
   actorId: string,
   data: { username: string; displayName: string; description?: string; ownerIds: string[] },
 ) {
+  await findOrThrow(
+    prisma.organization.findUnique({ where: { id: orgId }, select: { id: true } }),
+    ERR.ORGANIZATION_NOT_FOUND,
+  );
   const owners = await eligibleOwners(orgId, data.ownerIds);
+  const usernameTaken = () => new AppError(409, 'Username already taken', 'USERNAME_TAKEN');
   const taken = await prisma.user.findUnique({
     where: { username: data.username },
     select: { id: true },
   });
-  if (taken) throw new AppError(409, 'Username already taken', 'USERNAME_TAKEN');
+  if (taken) throw usernameTaken();
 
-  const row = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        // An address no mail reaches, unique without asking for one
-        email: `bot-${crypto.randomUUID()}@service-accounts.invalid`,
-        username: data.username,
-        displayName: data.displayName,
-        passwordHash: UNUSABLE_PASSWORD_HASH,
-        kind: 'SERVICE',
-        orgMemberships: { create: { orgId, role: 'MEMBER' } },
-      },
+  // A concurrent create can take the username between the check and the insert: the unique
+  // index decides, and its violation answers like the check
+  const row = await prisma
+    .$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          // An address no mail reaches, unique without asking for one
+          email: `bot-${crypto.randomUUID()}@service-accounts.invalid`,
+          username: data.username,
+          displayName: data.displayName,
+          passwordHash: UNUSABLE_PASSWORD_HASH,
+          kind: 'SERVICE',
+          orgMemberships: { create: { orgId, role: 'MEMBER' } },
+        },
+      });
+      return tx.serviceAccount.create({
+        data: {
+          userId: user.id,
+          orgId,
+          createdById: actorId,
+          description: data.description ?? '',
+          owners: { create: owners.map((ownerId) => ({ ownerId })) },
+        },
+        include: SUMMARY_INCLUDE,
+      });
+    })
+    .catch((err: unknown) => {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw usernameTaken();
+      }
+      throw err;
     });
-    return tx.serviceAccount.create({
-      data: {
-        userId: user.id,
-        orgId,
-        createdById: actorId,
-        description: data.description ?? '',
-        owners: { create: owners.map((ownerId) => ({ ownerId })) },
-      },
-      include: SUMMARY_INCLUDE,
-    });
-  });
   return summarize(row);
 }
 
@@ -317,16 +338,18 @@ export async function updateServiceAccount(
 export async function setOwners(id: string, ownerIds: string[]) {
   const account = await getServiceAccount(id);
   if (!account) throw NOT_FOUND();
-  const owners = await eligibleOwners(account.orgId, ownerIds);
-  await prisma.$transaction([
-    prisma.serviceAccountOwner.deleteMany({
+  // Eligibility is read in the transaction that writes, so the owners it checked are the ones
+  // stored
+  await prisma.$transaction(async (tx) => {
+    const owners = await eligibleOwners(account.orgId, ownerIds, tx);
+    await tx.serviceAccountOwner.deleteMany({
       where: { serviceAccountId: id, ownerId: { notIn: owners } },
-    }),
-    prisma.serviceAccountOwner.createMany({
+    });
+    await tx.serviceAccountOwner.createMany({
       data: owners.map((ownerId) => ({ serviceAccountId: id, ownerId })),
       skipDuplicates: true,
-    }),
-  ]);
+    });
+  });
   return describeServiceAccount(id);
 }
 
@@ -335,10 +358,14 @@ export async function setOwners(id: string, ownerIds: string[]) {
  * service account go. The user row stays, deactivated and a member of nothing, so its past
  * activity, comments and issues stay under its name.
  * @param id - The bot's user id
+ * @throws {AppError} 404 when there is no such bot, also for the second of two concurrent deletes
  */
 export async function deleteServiceAccount(id: string): Promise<void> {
   const now = new Date();
   await prisma.$transaction(async (tx) => {
+    // Taken first, under the row lock: of two concurrent deletes, the second finds nothing
+    const gone = await tx.serviceAccount.deleteMany({ where: { userId: id } });
+    if (gone.count === 0) throw NOT_FOUND();
     // Ruling R1: a direct update until cancelPendingFor exists
     await tx.agentApproval.updateMany({
       where: { userId: id, status: 'PENDING' },
@@ -351,7 +378,6 @@ export async function deleteServiceAccount(id: string): Promise<void> {
     await tx.issueWatcher.deleteMany({ where: { userId: id } });
     await tx.starredPage.deleteMany({ where: { userId: id } });
     await tx.orgMembership.deleteMany({ where: { userId: id } });
-    await tx.serviceAccount.delete({ where: { userId: id } });
     await tx.user.update({ where: { id }, data: { deactivatedAt: now } });
   });
 }

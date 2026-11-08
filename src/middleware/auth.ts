@@ -5,6 +5,7 @@ import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { getRequestContext } from '../lib/request-context';
 import { isIntegrationUser } from '../modules/github/integration-user';
+import { isPerson } from '../modules/service-accounts/person';
 
 import { AppError } from './errorHandler';
 
@@ -86,7 +87,8 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     if (header.startsWith('Bearer ')) {
       const token = header.slice(7);
       const payload = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
-      if (isIntegrationUser(payload.userId)) {
+      // Only a person holds a session: the integration user and bots never sign in
+      if (!(await isPerson(payload.userId))) {
         throw new AppError(401, 'Invalid token', 'INVALID_TOKEN');
       }
 
