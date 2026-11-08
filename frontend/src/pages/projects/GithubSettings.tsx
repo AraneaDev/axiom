@@ -35,6 +35,9 @@ import { useProjectContext } from '@/hooks/useProjectContext';
 import { EXTERNAL_LINK, httpsHref, unlinkPreview } from '@/lib/github-links';
 import { formatRelative } from '@/lib/utils';
 
+import { GithubImportSection } from './GithubImportSection';
+import { ReleaseNotesSection } from './ReleaseNotesSection';
+
 const HELP_ITEMS = [
   {
     title: 'Who can link',
@@ -272,10 +275,12 @@ function HealthCard({ health }: { health: GithubLinkHealth }) {
 
 function LinkedView({
   projectId,
+  teamId,
   project,
   link,
 }: {
   projectId: string;
+  teamId: string | undefined;
   project: { prefix: string; name: string };
   link: GithubRepoLink;
 }) {
@@ -359,6 +364,12 @@ function LinkedView({
       {health.isLoading && <PageLoader />}
       {health.error && <ErrorAlert error={health.error} fallback="Could not load the health" />}
       {health.data && <HealthCard health={health.data} />}
+      <GithubImportSection projectId={projectId} />
+      <ReleaseNotesSection
+        projectId={projectId}
+        teamId={teamId}
+        defaultSpaceId={link.releaseNotesSpaceId}
+      />
       <ConfirmDialog
         open={confirming}
         onClose={() => setConfirming(false)}
@@ -374,7 +385,7 @@ function LinkedView({
 
 /** The GitHub settings of a project: link one repository, see how the link is doing, unlink it. */
 export default function GithubSettings() {
-  const { currentProject } = useProjectContext();
+  const { currentProject, currentTeam } = useProjectContext();
   const projectId = currentProject?.id;
   const repo = useQuery({
     queryKey: githubRepoKey(projectId),
@@ -413,6 +424,7 @@ export default function GithubSettings() {
         {projectId && repo.data && (
           <LinkedView
             projectId={projectId}
+            teamId={currentTeam?.id}
             project={{
               prefix: currentProject?.prefix ?? '',
               name: currentProject?.name ?? 'this project',

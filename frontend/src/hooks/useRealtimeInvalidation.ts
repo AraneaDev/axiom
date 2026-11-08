@@ -11,6 +11,7 @@ export type RealtimeEvent =
   | { type: 'issue:created'; projectId: string; issueId: string }
   | { type: 'issue:links-updated'; issueId: string }
   | { type: 'issue:development-updated'; projectId: string; issueIds: string[] }
+  | { type: 'github:import-progress'; projectId: string; runId: string }
   | { type: 'comment:added'; projectId: string; issueId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
   | { type: 'sprint:updated'; projectId: string; sprintId: string }
@@ -83,6 +84,10 @@ export function useRealtimeInvalidation(): void {
           });
           queryClient.invalidateQueries({ queryKey: ['github-repo', event.projectId] });
           queryClient.invalidateQueries({ queryKey: ['github-health', event.projectId] });
+          break;
+
+        case 'github:import-progress':
+          queryClient.invalidateQueries({ queryKey: ['github-import', event.projectId] });
           break;
 
         case 'comment:added':

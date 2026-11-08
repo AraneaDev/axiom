@@ -1,4 +1,4 @@
-import { del, get, post } from './client';
+import { del, get, patch, post, put } from './client';
 
 export interface GithubInstallation {
   /** A number; a string only for an id above 2^53 - 1 */
@@ -129,6 +129,8 @@ export interface GithubRepoLink {
   createdAt: string;
   /** How many issues have branches, pull requests or checks from this link */
   linkedIssueCount: number;
+  /** The wiki space release notes go to by default */
+  releaseNotesSpaceId?: string | null;
 }
 
 export interface GithubDeliveryFailure {
@@ -197,4 +199,71 @@ export interface GithubBranchCreated {
 export const githubBranchApi = {
   create: (projectId: string, issueNumber: number, body: { name?: string; from?: string }) =>
     post<GithubBranchCreated>(`/projects/${projectId}/issues/${issueNumber}/github/branches`, body),
+};
+
+export type GithubImportStatusName =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'PAUSED'
+  | 'DONE'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export interface GithubImportRun {
+  status: GithubImportStatusName;
+  /** Null while the open issues are still being counted */
+  total: number | null;
+  done: number;
+  failed: number;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  /** Plain text, from GitHub or the server: never render it as Markdown or HTML */
+  error: string | null;
+  resumeAt?: string | null;
+  linkCommentsWaitUntil?: string | null;
+}
+
+export interface GithubImportState {
+  enabled: boolean;
+  run: GithubImportRun | null;
+  liveCap: { paused: boolean; resumesAt: string | null } | null;
+}
+
+export const githubImportKey = (projectId: string | undefined) => ['github-import', projectId];
+
+export const githubImportApi = {
+  status: (projectId: string) => get<GithubImportState>(`/projects/${projectId}/github/import`),
+  configure: (projectId: string, enabled: boolean) =>
+    put<{ enabled: boolean; queued: boolean; run: GithubImportRun | null }>(
+      `/projects/${projectId}/github/import`,
+      { enabled },
+    ),
+};
+
+export const githubSettingsApi = {
+  setReleaseNotesSpace: (projectId: string, releaseNotesSpaceId: string | null) =>
+    patch<{ repoFullName: string; releaseNotesSpaceId: string | null }>(
+      `/projects/${projectId}/github`,
+      { releaseNotesSpaceId },
+    ),
+};
+
+export interface ReleaseNotesInput {
+  tag: string;
+  previousTag?: string;
+  spaceId?: string;
+  replaceBody?: boolean;
+}
+
+export interface ReleaseNotesResult {
+  pageUrl: string;
+  releaseUrl: string;
+  pullRequests: number;
+  tickets: number;
+  truncated: boolean;
+}
+
+export const githubReleaseApi = {
+  writeNotes: (projectId: string, body: ReleaseNotesInput) =>
+    post<ReleaseNotesResult>(`/projects/${projectId}/github/release-notes`, body),
 };

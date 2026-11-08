@@ -32,6 +32,8 @@ vi.mock('@/hooks/useProjectContext', () => ({
     projectSlug: 'widget',
   }),
 }));
+vi.mock('./GithubImportSection', () => ({ GithubImportSection: () => null }));
+vi.mock('./ReleaseNotesSection', () => ({ ReleaseNotesSection: () => null }));
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => toast }));
 
 import GithubSettings from './GithubSettings';
