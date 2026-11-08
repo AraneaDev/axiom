@@ -2,12 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { Prisma, type AgentApproval, type AgentApprovalStatus } from '@prisma/client';
 
-import {
-  isToken,
-  needsApproval,
-  PendingApproval,
-  type EffectivePolicy,
-} from '../../actions/approval-policy';
+import { isToken, needsApproval, PendingApproval } from '../../actions/approval-policy';
 import type { ActionContext, ActionDef } from '../../actions/define';
 import { prisma } from '../../config/database';
 import { containsNul } from '../../lib/text-guard';
@@ -15,8 +10,9 @@ import { AppError } from '../../middleware/errorHandler';
 import { broadcastToUser } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 import { createNotification } from '../notifications/notifications.service';
+import { isPerson } from '../service-accounts/person';
 
-import { policyForCall, rawNamedRefusal } from './agent-policy.service';
+import { policyForCall, rawNamedRefusal, type FullPolicy } from './agent-policy.service';
 
 /*
  * The approval gate of executeAction, apart from the service that lists, approves and runs the
@@ -142,19 +138,47 @@ async function previewOf(
 }
 
 /**
- * Tell a user's open pages that a request changed.
+ * Who decides a user's requests: the user, or the owners of a bot. A bot is told nothing, it is
+ * never the target of a notification.
+ * @param userId - Who asked
+ */
+async function decidersOf(userId: string): Promise<string[]> {
+  if (await isPerson(userId)) return [userId];
+  const owners = await prisma.serviceAccountOwner.findMany({
+    where: { serviceAccountId: userId },
+    select: { ownerId: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  return owners.map((o) => o.ownerId);
+}
+
+/**
+ * Tell the open pages of the user, or of the bot's owners, that a request changed. The bot's own
+ * pages get it too: a session never belongs to a bot, so nothing listens there.
  * @param row - The request
  * @param row.userId
  * @param row.id
  * @param row.status
  */
-export function announce(row: { userId: string; id: string; status: AgentApprovalStatus }): void {
-  broadcastToUser(row.userId, {
-    type: 'agent:approval',
-    userId: row.userId,
-    approvalId: row.id,
-    status: row.status,
-  });
+export async function announce(row: {
+  userId: string;
+  id: string;
+  status: AgentApprovalStatus;
+}): Promise<void> {
+  // Telling is best effort: the row is what holds, and a failure here must not undo a decision
+  try {
+    const deciders = await decidersOf(row.userId);
+    for (const to of new Set([row.userId, ...deciders])) {
+      broadcastToUser(to, {
+        type: 'agent:approval',
+        userId: to,
+        approvalId: row.id,
+        status: row.status,
+      });
+    }
+  } catch (err) {
+    logger.error('announcing an agent approval failed', { id: row.id }, err as Error);
+  }
 }
 
 /**
@@ -181,6 +205,18 @@ function createWithinCap(data: Prisma.AgentApprovalUncheckedCreateInput): Promis
 }
 
 /**
+ * The name a bot's owners know it by.
+ * @param userId - The bot's user id
+ */
+async function botName(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { displayName: true },
+  });
+  return user?.displayName ?? 'A service account';
+}
+
+/**
  * A preview as a notification title holds it.
  * @param preview - The preview
  */
@@ -204,7 +240,7 @@ async function requestApproval(
   rawInput: unknown,
   input: unknown,
   ctx: ActionContext,
-  policy: EffectivePolicy,
+  policy: FullPolicy,
 ): Promise<PendingApproval> {
   if (def.rest?.raw) {
     // Only a rule that names it gets here (registry rules keep the others out). It can't be queued
@@ -219,6 +255,9 @@ async function requestApproval(
     throw new AppError(400, 'This request is too large to wait for approval', 'INPUT_TOO_LARGE');
   }
   const preview = await previewOf(def, input, stored, ctx);
+  // A bot's owners decide, and they may not be around within the hour an agent's user is
+  const person = await isPerson(ctx.userId);
+  const minutes = person ? policy.expiresMinutes : policy.botExpiresMinutes;
   const row = await createWithinCap({
     userId: ctx.userId,
     apiTokenId: ctx.apiTokenId,
@@ -227,26 +266,27 @@ async function requestApproval(
     action: def.name,
     input: stored,
     preview,
-    expiresAt: new Date(Date.now() + policy.expiresMinutes * 60_000),
+    expiresAt: new Date(Date.now() + minutes * 60_000),
   });
   const approveUrl = `/approvals/agent/${row.id}`;
-  // The request stands whether or not telling about it works: it is in the user's list
+  // The request stands whether or not telling about it works: it is in the deciders' lists
   try {
-    await createNotification(
-      ctx.userId,
-      'agent:approval',
-      `${ctx.apiTokenName ?? 'An agent'} wants to: ${notifiedPreview(preview)}`,
-      undefined,
-      approveUrl,
-    );
+    const asker = person
+      ? (ctx.apiTokenName ?? 'An agent')
+      : `${await botName(ctx.userId)} (${ctx.apiTokenName ?? 'a token'})`;
+    for (const decider of await decidersOf(ctx.userId)) {
+      await createNotification(
+        decider,
+        'agent:approval',
+        `${asker} wants to: ${notifiedPreview(preview)}`,
+        undefined,
+        approveUrl,
+      );
+    }
   } catch (err) {
     logger.error('telling about an agent approval failed', { id: row.id }, err as Error);
   }
-  try {
-    announce(row);
-  } catch (err) {
-    logger.error('announcing an agent approval failed', { id: row.id }, err as Error);
-  }
+  await announce(row);
   return new PendingApproval({
     status: 'pending_approval',
     approvalId: row.id,

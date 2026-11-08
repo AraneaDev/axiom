@@ -7,9 +7,14 @@ import { listActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
+import { isPerson } from '../service-accounts/person';
 
 export const MIN_EXPIRES_MINUTES = 10;
 export const MAX_EXPIRES_MINUTES = 24 * 60;
+/** How long a bot's request waits: its owners may not be around within the hour an agent's waits */
+export const BOT_DEFAULT_EXPIRES_MINUTES = 7 * 24 * 60;
+export const MIN_BOT_EXPIRES_MINUTES = 60;
+export const MAX_BOT_EXPIRES_MINUTES = 30 * 24 * 60;
 const MAX_BULK_OVER = 1000;
 const MAX_LISTED_ACTIONS = 200;
 const MAX_ACTION_NAME_LENGTH = 100;
@@ -22,6 +27,13 @@ export const rulesSchema = z.strictObject({
   bulkOver: z.number().int().min(0).max(MAX_BULK_OVER).optional(),
   crossContainerMove: z.boolean().optional(),
   expiresMinutes: z.number().int().min(MIN_EXPIRES_MINUTES).max(MAX_EXPIRES_MINUTES).optional(),
+  /** Org only: how long a service account's request waits for its owners */
+  botExpiresMinutes: z
+    .number()
+    .int()
+    .min(MIN_BOT_EXPIRES_MINUTES)
+    .max(MAX_BOT_EXPIRES_MINUTES)
+    .optional(),
   /** Action names */
   alsoRequire: actionNames.optional(),
   /** Org only */
@@ -31,10 +43,22 @@ export type PolicyRules = z.infer<typeof rulesSchema>;
 
 export type PolicyScope = 'org' | 'user';
 
-/** The policy a caller is held to, with the lists the defaults leave empty. */
-export type FullPolicy = EffectivePolicy & { alsoRequire: string[]; neverRequire: string[] };
+/**
+ * The policy a caller is held to, with the lists the defaults leave empty, and the expiry of a
+ * service account's request, which takes the place of expiresMinutes when a bot asks.
+ */
+export type FullPolicy = EffectivePolicy & {
+  alsoRequire: string[];
+  neverRequire: string[];
+  botExpiresMinutes: number;
+};
 
-const BASE: FullPolicy = { ...DEFAULT_POLICY, alsoRequire: [], neverRequire: [] };
+const BASE: FullPolicy = {
+  ...DEFAULT_POLICY,
+  alsoRequire: [],
+  neverRequire: [],
+  botExpiresMinutes: BOT_DEFAULT_EXPIRES_MINUTES,
+};
 
 /**
  * Rules as stored, read defensively: a row that no longer fits the schema counts as empty rather
@@ -68,6 +92,7 @@ function withOrgRules(rules: PolicyRules): FullPolicy {
     expiresMinutes: rules.expiresMinutes ?? BASE.expiresMinutes,
     alsoRequire: rules.alsoRequire ?? [],
     neverRequire: rules.neverRequire ?? [],
+    botExpiresMinutes: rules.botExpiresMinutes ?? BASE.botExpiresMinutes,
   };
 }
 
@@ -89,6 +114,7 @@ function strictest(policies: FullPolicy[]): FullPolicy {
       expiresMinutes: Math.min(all.expiresMinutes, next.expiresMinutes),
       alsoRequire: [...new Set([...all.alsoRequire, ...next.alsoRequire])],
       neverRequire: all.neverRequire.filter((name) => next.neverRequire.includes(name)),
+      botExpiresMinutes: Math.min(all.botExpiresMinutes, next.botExpiresMinutes),
     }),
     first,
   );
@@ -111,6 +137,8 @@ function withUserRules(policy: FullPolicy, rules: PolicyRules): FullPolicy {
     expiresMinutes: Math.min(policy.expiresMinutes, rules.expiresMinutes ?? policy.expiresMinutes),
     alsoRequire: [...new Set([...policy.alsoRequire, ...(rules.alsoRequire ?? [])])],
     neverRequire: policy.neverRequire,
+    // An org setting only: user rules can't hold it
+    botExpiresMinutes: policy.botExpiresMinutes,
   };
 }
 
@@ -252,6 +280,19 @@ export async function assertRawNotNamed(
 }
 
 /**
+ * The org of a service account, which holds its policy whatever its call names. None for a person.
+ * @param userId - Who calls
+ */
+async function botOrgIds(userId: string): Promise<string[]> {
+  if (await isPerson(userId)) return [];
+  const bot = await prisma.serviceAccount.findUnique({
+    where: { userId },
+    select: { orgId: true },
+  });
+  return bot ? [bot.orgId] : [];
+}
+
+/**
  * The policy of one call: the ids in its input and the lookup the action declares decide which
  * orgs count.
  * @param def - The action
@@ -267,7 +308,9 @@ export async function policyForCall(
     orgIdsOfInput(input),
     def.orgIds ? def.orgIds(ctx, input) : [],
   ]);
-  return effectivePolicy(ctx.userId, [...new Set([...named, ...declared])]);
+  return effectivePolicy(ctx.userId, [
+    ...new Set([...named, ...declared, ...(await botOrgIds(ctx.userId))]),
+  ]);
 }
 
 /**
@@ -332,6 +375,13 @@ function assertUserRulesTighten(rules: PolicyRules): void {
   }
   if (rules.neverRequire !== undefined) {
     throw new AppError(400, 'Only an organization owner can exempt actions from approval');
+  }
+  if (rules.botExpiresMinutes !== undefined) {
+    throw new AppError(
+      400,
+      'Only an organization owner sets how long service account requests wait',
+      'ORG_ONLY_RULE',
+    );
   }
   if (rules.bulkOver !== undefined && rules.bulkOver > DEFAULT_POLICY.requireFor.bulkOver) {
     throw new AppError(
@@ -508,6 +558,11 @@ export async function describePolicyChange(
   if (after.expiresMinutes !== before.expiresMinutes) {
     (after.expiresMinutes > before.expiresMinutes ? looser : stricter).push(
       `requests expire after ${after.expiresMinutes} minutes, not ${before.expiresMinutes}`,
+    );
+  }
+  if (after.botExpiresMinutes !== before.botExpiresMinutes) {
+    (after.botExpiresMinutes > before.botExpiresMinutes ? looser : stricter).push(
+      `service account requests expire after ${after.botExpiresMinutes} minutes, not ${before.botExpiresMinutes}`,
     );
   }
   const whose =

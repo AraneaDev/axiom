@@ -56,3 +56,28 @@ export async function clearDecidedAgentApprovals(): Promise<number> {
   });
   return count;
 }
+
+/**
+ * Cancel what a user's tokens wait on: for a bot deleted, suspended or orphaned, whose requests
+ * nobody should approve anymore. A decided request keeps its outcome. Apart from the service, so
+ * the service accounts and orgs that call it don't load the action registry.
+ * @param userId - Whose requests
+ * @param reason - What the approver and the agent read as the error
+ * @param db - A transaction to run in, if the caller has one
+ * @returns How many were cancelled
+ */
+export async function cancelPendingFor(
+  userId: string,
+  reason: string,
+  db: Pick<Prisma.TransactionClient, 'agentApproval'> = prisma,
+): Promise<number> {
+  const { count } = await db.agentApproval.updateMany({
+    where: { userId, status: 'PENDING' },
+    data: {
+      status: 'CANCELLED',
+      decidedAt: new Date(),
+      error: { status: 409, code: 'CANCELLED', message: reason },
+    },
+  });
+  return count;
+}

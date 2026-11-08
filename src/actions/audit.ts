@@ -175,6 +175,7 @@ async function writeRow(
           channel: ctx.channel,
           ...outcomeOf(err, approvalId),
           ...(ctx.approvalRunId ? { approvalId: ctx.approvalRunId } : {}),
+          ...(ctx.approvedById ? { approvedById: ctx.approvedById } : {}),
         },
       }),
     );

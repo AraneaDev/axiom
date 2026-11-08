@@ -8,6 +8,7 @@ import { getAction } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
+import { isPerson } from '../service-accounts/person';
 
 import { OUTCOME_UNKNOWN } from './agent-approvals.cleanup';
 import { announce, runApproved } from './agent-approvals.gate';
@@ -22,6 +23,7 @@ const MAX_LIST_LIMIT = 100;
 /** The columns a list shows: what a request holds is for its detail. */
 const LIST_FIELDS = {
   id: true,
+  userId: true,
   action: true,
   preview: true,
   status: true,
@@ -33,14 +35,60 @@ const LIST_FIELDS = {
 } as const;
 
 /**
- * Who reads the requests: a session sees all of its user's, a token only what it asked itself, as
- * a request can hold what the scopes of another token cover.
+ * The bots a person owns, by id with their names: their requests are the owner's to decide.
+ * @param userId - The person
+ */
+async function ownedBots(userId: string): Promise<Map<string, string>> {
+  const rows = await prisma.serviceAccountOwner.findMany({
+    where: { ownerId: userId },
+    select: {
+      serviceAccountId: true,
+      serviceAccount: { select: { user: { select: { displayName: true } } } },
+    },
+  });
+  return new Map(rows.map((r) => [r.serviceAccountId, r.serviceAccount.user.displayName]));
+}
+
+/** Who reads and decides requests, and the bots whose requests count among them. */
+interface Reader {
+  where: Prisma.AgentApprovalWhereInput;
+  bots: Map<string, string>;
+}
+
+/**
+ * Who reads the requests: a session sees all of its user's and those of every bot the user owns,
+ * a token only what it asked itself, as a request can hold what the scopes of another token cover.
  * @param ctx - Who runs the action
  */
-function ownedBy(ctx: ActionContext): Prisma.AgentApprovalWhereInput {
-  return ctx.apiTokenId === undefined
-    ? { userId: ctx.userId }
-    : { userId: ctx.userId, apiTokenId: ctx.apiTokenId };
+async function readerOf(ctx: ActionContext): Promise<Reader> {
+  if (ctx.apiTokenId !== undefined) {
+    return { where: { userId: ctx.userId, apiTokenId: ctx.apiTokenId }, bots: new Map() };
+  }
+  return deciderOf(ctx.userId);
+}
+
+/**
+ * Whose requests a person decides: their own and those of the bots they own. Approving and
+ * rejecting are web UI only, so this is always a session.
+ * @param userId - The person
+ */
+async function deciderOf(userId: string): Promise<Reader> {
+  const bots = await ownedBots(userId);
+  const where: Prisma.AgentApprovalWhereInput =
+    bots.size === 0 ? { userId } : { userId: { in: [userId, ...bots.keys()] } };
+  return { where, bots };
+}
+
+/**
+ * A request as its reader sees it: one of a bot they own names the bot.
+ * @param row - The row
+ * @param bots - The reader's bots
+ */
+function marked<T extends { userId: string }>(row: T, bots: Map<string, string>) {
+  const name = bots.get(row.userId);
+  return name === undefined
+    ? row
+    : { ...row, serviceAccount: { id: row.userId, displayName: name } };
 }
 
 /**
@@ -93,9 +141,10 @@ export async function listAgentApprovals(
     offset?: number;
   },
 ) {
+  const reader = await readerOf(ctx);
   const where: Prisma.AgentApprovalWhereInput = {
     AND: [
-      ownedBy(ctx),
+      reader.where,
       opts.status ? statusWhere(opts.status) : {},
       opts.state ? stateWhere(opts.state) : {},
     ],
@@ -112,7 +161,12 @@ export async function listAgentApprovals(
     }),
     prisma.agentApproval.count({ where }),
   ]);
-  return { data: rows.map(view), total, limit: take, offset: skip };
+  return {
+    data: rows.map((row) => marked(view(row), reader.bots)),
+    total,
+    limit: take,
+    offset: skip,
+  };
 }
 
 /**
@@ -122,9 +176,10 @@ export async function listAgentApprovals(
  * @throws {AppError} 404 unless it is the caller's
  */
 export async function getAgentApproval(id: string, ctx: ActionContext) {
-  const row = await prisma.agentApproval.findFirst({ where: { id, ...ownedBy(ctx) } });
+  const reader = await readerOf(ctx);
+  const row = await prisma.agentApproval.findFirst({ where: { AND: [{ id }, reader.where] } });
   if (!row) throw new AppError(404, 'Approval request not found');
-  return view(row);
+  return marked(view(row), reader.bots);
 }
 
 /** Long polls running now, per user. Per process: there is one API container (Architecture). */
@@ -167,11 +222,11 @@ export async function waitForAgentApproval(
 /**
  * Why a decision found nothing waiting.
  * @param id - The request
- * @param userId - Who decides
+ * @param decider - Whose requests the caller decides
  */
-async function decisionRefusal(id: string, userId: string): Promise<AppError> {
+async function decisionRefusal(id: string, decider: Reader): Promise<AppError> {
   const row = await prisma.agentApproval.findFirst({
-    where: { id, userId },
+    where: { AND: [{ id }, decider.where] },
     select: { status: true, expiresAt: true },
   });
   if (!row) return new AppError(404, 'Approval request not found');
@@ -183,9 +238,9 @@ async function decisionRefusal(id: string, userId: string): Promise<AppError> {
  * Take a waiting request for this decision. Only one decision gets it, and one past its expiry
  * can't, whether or not the worker has marked it.
  * @param id - The request
- * @param userId - Who decides
+ * @param userId - Who decides: the user who asked, or an owner of the bot that did
  * @param status - The decision
- * @throws {AppError} 404 unless it is theirs, 409 when nothing waits anymore
+ * @throws {AppError} 404 unless it is theirs to decide, 409 when nothing waits anymore
  */
 async function claim(
   id: string,
@@ -193,13 +248,63 @@ async function claim(
   status: 'APPROVED' | 'REJECTED',
 ): Promise<AgentApproval> {
   const now = new Date();
+  const decider = await deciderOf(userId);
   const { count } = await prisma.agentApproval.updateMany({
-    where: { id, userId, status: 'PENDING', expiresAt: { gt: now } },
+    where: { AND: [{ id, status: 'PENDING', expiresAt: { gt: now } }, decider.where] },
     data: { status, decidedAt: now },
   });
-  if (count === 0) throw await decisionRefusal(id, userId);
+  if (count === 0) throw await decisionRefusal(id, decider);
   const row = await prisma.agentApproval.findUniqueOrThrow({ where: { id } });
-  announce(row);
+  await announce(row);
+  return row;
+}
+
+/**
+ * Why a bot's approved request can't run: a bot deleted, suspended or deactivated since does
+ * nothing, whoever approves. Undefined for a person, and for a bot that may run.
+ * @param userId - Who asked
+ */
+async function botRefusal(userId: string): Promise<ActError | undefined> {
+  if (await isPerson(userId)) return undefined;
+  const bot = await prisma.serviceAccount.findUnique({
+    where: { userId },
+    select: { status: true, user: { select: { deactivatedAt: true } } },
+  });
+  if (!bot) {
+    return {
+      status: 403,
+      code: 'SERVICE_ACCOUNT_NOT_FOUND',
+      message: 'The service account that asked for this was deleted',
+    };
+  }
+  if (bot.status === 'SUSPENDED') {
+    return {
+      status: 403,
+      code: 'SERVICE_ACCOUNT_SUSPENDED',
+      message: 'The service account that asked for this is suspended',
+    };
+  }
+  if (bot.user.deactivatedAt) {
+    return {
+      status: 403,
+      code: 'SERVICE_ACCOUNT_DEACTIVATED',
+      message: 'The service account that asked for this is deactivated',
+    };
+  }
+  return undefined;
+}
+
+/**
+ * Close a request that may not run anymore, so it never does.
+ * @param id - The request
+ * @param error - Why
+ */
+async function finishCancelled(id: string, error: ActError): Promise<AgentApproval> {
+  const row = await prisma.agentApproval.update({
+    where: { id },
+    data: { status: 'CANCELLED', error },
+  });
+  await announce(row);
   return row;
 }
 
@@ -208,9 +313,13 @@ async function claim(
  * the original channel, so the audit log says via and names this request. byName makes the run
  * audit per action, as the row the adapter would have written is for the approve request instead.
  * @param row - The request
+ * @param approvedById - Who approved it, for the audit row
  * @returns The context, or undefined when the token is gone or expired
  */
-async function contextOfRun(row: AgentApproval): Promise<ActionContext | undefined> {
+async function contextOfRun(
+  row: AgentApproval,
+  approvedById: string,
+): Promise<ActionContext | undefined> {
   if (!row.apiTokenId) return undefined;
   const token = await prisma.apiToken.findFirst({
     where: { id: row.apiTokenId, userId: row.userId },
@@ -225,6 +334,7 @@ async function contextOfRun(row: AgentApproval): Promise<ActionContext | undefin
     channel: row.channel as ActionContext['channel'],
     byName: {},
     approvalRunId: row.id,
+    approvedById,
   };
 }
 
@@ -238,7 +348,7 @@ async function finishFailed(id: string, error: ActError): Promise<AgentApproval>
     where: { id },
     data: { status: 'FAILED', error },
   });
-  announce(row);
+  await announce(row);
   return row;
 }
 
@@ -273,24 +383,28 @@ async function finishRun(row: AgentApproval, result: unknown) {
       result: result === undefined ? Prisma.DbNull : (JSON.parse(json) as Prisma.InputJsonValue),
     },
   });
-  announce(done);
+  await announce(done);
   // The one place the unredacted result goes: the person who approved it
   return { ...done, result: result ?? null };
 }
 
 /**
  * Approve a request and run its action as the user and token that asked, with their rights now.
+ * A bot's request is approved by one of its owners and runs as the bot, never as the owner; one
+ * whose bot was deleted, suspended or deactivated since ends CANCELLED and never runs.
  * The run's outcome is in the row, so an action refused or failing still answers 200 with FAILED.
  * Whatever goes wrong around the run leaves FAILED OUTCOME_UNKNOWN, as the action may have run: it
  * never runs again. If even that can't be written, the worker closes the row.
  * @param id - The request
  * @param userId - Who approves
- * @throws {AppError} 404 unless it is theirs, 409 when nothing waits anymore
+ * @throws {AppError} 404 unless it is theirs to decide, 409 when nothing waits anymore
  */
 export async function approveAgentApproval(id: string, userId: string) {
   const row = await claim(id, userId, 'APPROVED');
   try {
-    const ctx = await contextOfRun(row);
+    const refusal = await botRefusal(row.userId);
+    if (refusal) return await finishCancelled(id, refusal);
+    const ctx = await contextOfRun(row, userId);
     if (!ctx) {
       return await finishFailed(id, {
         status: 403,
@@ -300,7 +414,7 @@ export async function approveAgentApproval(id: string, userId: string) {
     }
     let result: unknown;
     try {
-      result = await runApproved({ approvalId: id, action: row.action, userId }, () =>
+      result = await runApproved({ approvalId: id, action: row.action, userId: row.userId }, () =>
         executeAction(row.action, row.input, ctx),
       );
     } catch (err) {
@@ -317,7 +431,7 @@ export async function approveAgentApproval(id: string, userId: string) {
  * Reject a request. Its action never runs.
  * @param id - The request
  * @param userId - Who rejects
- * @throws {AppError} 404 unless it is theirs, 409 when nothing waits anymore
+ * @throws {AppError} 404 unless it is theirs to decide, 409 when nothing waits anymore
  */
 export function rejectAgentApproval(id: string, userId: string): Promise<AgentApproval> {
   return claim(id, userId, 'REJECTED');

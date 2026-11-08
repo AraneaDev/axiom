@@ -31,6 +31,8 @@ export interface ActionContext {
    * gate: only the approval service can let a run through.
    */
   approvalRunId?: string;
+  /** Set with approvalRunId: the person who approved the run, which the audit row records */
+  approvedById?: string;
 }
 
 /**

@@ -7,6 +7,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { isMintableScope } from '../../middleware/token-scopes';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { cancelPendingFor } from '../agent-approvals/agent-approvals.cleanup';
 import { generateApiToken } from '../users/users.service';
 
 /** Org roles that may own a bot: a person with one of these, not deactivated */
@@ -369,11 +370,7 @@ export async function deleteServiceAccount(id: string): Promise<void> {
     // Taken first, under the row lock: of two concurrent deletes, the second finds nothing
     const gone = await tx.serviceAccount.deleteMany({ where: { userId: id } });
     if (gone.count === 0) throw NOT_FOUND();
-    // Ruling R1: a direct update until cancelPendingFor exists
-    await tx.agentApproval.updateMany({
-      where: { userId: id, status: 'PENDING' },
-      data: { status: 'CANCELLED', decidedAt: now },
-    });
+    await cancelPendingFor(id, 'The service account was deleted', tx);
     await tx.apiToken.deleteMany({ where: { userId: id } });
     await tx.teamMembership.deleteMany({ where: { userId: id } });
     await tx.spacePermission.deleteMany({ where: { userId: id } });
