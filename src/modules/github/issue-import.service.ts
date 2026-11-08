@@ -26,7 +26,7 @@ import {
   type GithubAuth,
 } from './github-client';
 import { githubUser, text, timestamp } from './github-store';
-import { ImportCappedError, takeImportSlot } from './import-cap';
+import { ImportCappedError, releaseImportSlot, takeImportSlot } from './import-cap';
 import { isIntegrationUser } from './integration-user';
 
 // Axiom's own limits: the issue title and body (issue-validators.ts), a comment body and a label
@@ -154,6 +154,9 @@ const findImport = (repoLinkId: string, githubIssueNumber: number) =>
     where: { repoLinkId_githubIssueNumber: { repoLinkId, githubIssueNumber } },
   });
 
+/** How many lock transactions this process has open, and the most it had at once (for tests) */
+export const issueLockStats = { open: 0, peak: 0 };
+
 // The issue locks this process may hold at once, and the imports waiting for a turn
 let lockHolders = 0;
 const lockQueue: Array<() => void> = [];
@@ -195,11 +198,17 @@ async function underIssueLock<T>(
     try {
       attempt = await prisma.$transaction(
         async (tx) => {
-          const [{ locked }] = await tx.$queryRaw<
-            { locked: boolean }[]
-          >`SELECT pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) AS locked`;
-          if (!locked) return { locked: false as const };
-          return { locked: true as const, value: await work() };
+          issueLockStats.open++;
+          issueLockStats.peak = Math.max(issueLockStats.peak, issueLockStats.open);
+          try {
+            const [{ locked }] = await tx.$queryRaw<
+              { locked: boolean }[]
+            >`SELECT pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) AS locked`;
+            if (!locked) return { locked: false as const };
+            return { locked: true as const, value: await work() };
+          } finally {
+            issueLockStats.open--;
+          }
         },
         { maxWait: 10_000, timeout: LOCK_HOLD_MS },
       );
@@ -415,12 +424,18 @@ export async function importGithubIssue(
     const row = await findImport(link.id, gh.number);
     if (row) return update(row);
     if (gh.state !== 'open') return null;
-    // Taken under the lock, so a duplicate delivery of the same issue does not use up a slot
-    if (opts.live) await takeImportSlot(link.id, 'issues');
+    // Taken under the lock, so a duplicate delivery of the same issue does not use up a slot, and
+    // given back when the issue is not made after all
+    const slot = opts.live ? await takeImportSlot(link.id, 'issues', gh.number) : null;
     try {
       return await createImported(link, gh, opts);
     } catch (err) {
-      if (!(err instanceof AppError && err.code === 'GITHUB_IMPORT_EXISTS')) throw err;
+      const exists = err instanceof AppError && err.code === 'GITHUB_IMPORT_EXISTS';
+      // A failure after the issue and its row were written (the web link, say) used its slot
+      if (slot && (exists || !(await findImport(link.id, gh.number)))) {
+        await releaseImportSlot(link.id, 'issues', slot);
+      }
+      if (!exists) throw err;
       const taken = await findImport(link.id, gh.number);
       return taken ? update(taken) : null;
     }
@@ -518,12 +533,18 @@ export async function importComment(
       });
       return;
     }
-    if (opts.live) await takeImportSlot(importRow.repoLinkId, 'comments');
+    const slot = opts.live ? await takeImportSlot(importRow.repoLinkId, 'comments') : null;
     const writer = await writerOf(gh.user, issue.projectId);
-    const comment = await issuesService.addComment(issue.id, writer.userId, body, {
-      skipMentions: true,
-      externalAuthorLogin: writer.externalAuthorLogin,
-    });
+    let comment: { id: string };
+    try {
+      comment = await issuesService.addComment(issue.id, writer.userId, body, {
+        skipMentions: true,
+        externalAuthorLogin: writer.externalAuthorLogin,
+      });
+    } catch (err) {
+      if (slot) await releaseImportSlot(importRow.repoLinkId, 'comments', slot);
+      throw err;
+    }
     await prisma.githubImportedComment.create({
       data: {
         importId: importRow.id,

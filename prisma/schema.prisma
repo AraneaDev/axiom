@@ -1477,6 +1477,10 @@ model GithubRepoLink {
   defaultRulesCreatedAt DateTime?
   /// Whether the repository's GitHub Issues are imported into the project
   importIssues          Boolean             @default(false)
+  /// How far the reconcile's import catch-up got through the issues GitHub changed (their updated_at)
+  importIssuesSeenAt    DateTime?
+  /// How far it got through the comments GitHub changed
+  importCommentsSeenAt  DateTime?
   project               Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   issueLinks            GithubIssueLink[]
   branches              GithubBranch[]
@@ -1521,15 +1525,17 @@ model GithubIssueImport {
 
 /// What live GitHub events imported into a link in one clock hour, against the hourly cap
 model GithubImportCap {
-  repoLinkId      String
+  repoLinkId          String
   /// The start of the clock hour (UTC)
-  hourStart       DateTime
-  issues          Int            @default(0)
-  comments        Int            @default(0)
+  hourStart           DateTime
+  issues              Int            @default(0)
+  comments            Int            @default(0)
   /// What the cap turned away in that hour
-  skippedIssues   Int            @default(0)
-  skippedComments Int            @default(0)
-  repoLink        GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+  skippedIssues       Int            @default(0)
+  skippedComments     Int            @default(0)
+  /// The issue numbers the cap turned away this hour: each is counted once, however many events
+  skippedIssueNumbers Int[]          @default([])
+  repoLink            GithubRepoLink @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
 
   @@id([repoLinkId, hourStart])
   @@map("github_import_caps")

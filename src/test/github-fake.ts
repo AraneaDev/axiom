@@ -1118,26 +1118,40 @@ class GithubFakeServer implements GithubFake {
     }
     // `since` keeps what was updated at or after it, as GitHub does
     const since = req.query.since ? Date.parse(req.query.since) : null;
-    const fresh = (item: Record<string, unknown>) =>
-      since === null || Date.parse(String(item.updated_at ?? item.created_at)) >= since;
+    const updatedOf = (item: Record<string, unknown>) =>
+      Date.parse(String(item.updated_at ?? item.created_at));
+    const fresh = (item: Record<string, unknown>) => since === null || updatedOf(item) >= since;
+    // `sort=updated` orders by update, newest first unless `direction=asc`, as GitHub does
+    const sorted = (items: Array<Record<string, unknown>>) =>
+      req.query.sort !== 'updated'
+        ? items
+        : [...items].sort((x, y) =>
+            req.query.direction === 'asc'
+              ? updatedOf(x) - updatedOf(y)
+              : updatedOf(y) - updatedOf(x),
+          );
     if (rest === 'issues' && lists.issues) {
       const wanted = req.query.state ?? 'open';
       return page(
-        lists.issues.filter((item) => (wanted === 'all' || item.state === wanted) && fresh(item)),
+        sorted(
+          lists.issues.filter((item) => (wanted === 'all' || item.state === wanted) && fresh(item)),
+        ),
       );
     }
     // Every comment of the repository's issues and pull requests, each with its issue_url
     if (rest === 'issues/comments' && lists.issueComments) {
       const key = repoKey(`${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`);
       return page(
-        Object.entries(lists.issueComments)
-          .flatMap(([number, comments]) =>
-            comments.map((c) => ({
-              issue_url: `https://api.github.com/repos/${key}/issues/${number}`,
-              ...c,
-            })),
-          )
-          .filter(fresh),
+        sorted(
+          Object.entries(lists.issueComments)
+            .flatMap(([number, comments]) =>
+              comments.map((c) => ({
+                issue_url: `https://api.github.com/repos/${key}/issues/${number}`,
+                ...c,
+              })),
+            )
+            .filter(fresh),
+        ),
       );
     }
     const issue = /^issues\/(\d+)$/.exec(rest);

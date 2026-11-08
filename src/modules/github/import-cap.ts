@@ -42,12 +42,20 @@ const COLUMNS = {
 } as const;
 
 /**
- * Takes one new issue or comment of the link's hour, or counts it as turned away.
+ * Takes one new issue or comment of the link's hour, or counts it as turned away. A creation that
+ * then fails gives its slot back with {@link releaseImportSlot}.
  * @param repoLinkId The link
  * @param kind What is about to be imported
+ * @param issueNumber For an issue: its number, so a capped issue counts as skipped once however
+ *   many of its events arrive
+ * @returns The hour the slot belongs to
  * @throws {ImportCappedError} When the hour's cap is reached
  */
-export async function takeImportSlot(repoLinkId: string, kind: ImportCapKind): Promise<void> {
+export async function takeImportSlot(
+  repoLinkId: string,
+  kind: ImportCapKind,
+  issueNumber?: number,
+): Promise<Date> {
   const hourStart = hourStartOf(new Date());
   const { count, skipped } = COLUMNS[kind];
   const taken = await prisma.$queryRaw<{ n: number }[]>`
@@ -64,12 +72,38 @@ export async function takeImportSlot(repoLinkId: string, kind: ImportCapKind): P
         where: { repoLinkId, hourStart: { lt: new Date(hourStart.getTime() - KEEP_MS) } },
       });
     }
-    return;
+    return hourStart;
   }
-  await prisma.$executeRaw`
-    UPDATE github_import_caps SET ${skipped} = ${skipped} + 1
-    WHERE "repoLinkId" = ${repoLinkId} AND "hourStart" = ${hourStart}`;
+  if (kind === 'issues' && issueNumber !== undefined) {
+    await prisma.$executeRaw`
+      UPDATE github_import_caps
+      SET "skippedIssues" = "skippedIssues" + 1,
+          "skippedIssueNumbers" = array_append("skippedIssueNumbers", ${issueNumber})
+      WHERE "repoLinkId" = ${repoLinkId} AND "hourStart" = ${hourStart}
+        AND NOT (${issueNumber} = ANY("skippedIssueNumbers"))`;
+  } else {
+    await prisma.$executeRaw`
+      UPDATE github_import_caps SET ${skipped} = ${skipped} + 1
+      WHERE "repoLinkId" = ${repoLinkId} AND "hourStart" = ${hourStart}`;
+  }
   throw new ImportCappedError(kind, new Date(hourStart.getTime() + HOUR_MS));
+}
+
+/**
+ * Gives back a slot whose creation did not happen (it failed, or another run had made it).
+ * @param repoLinkId The link
+ * @param kind What the slot was for
+ * @param hourStart The hour {@link takeImportSlot} gave it from
+ */
+export async function releaseImportSlot(
+  repoLinkId: string,
+  kind: ImportCapKind,
+  hourStart: Date,
+): Promise<void> {
+  const { count } = COLUMNS[kind];
+  await prisma.$executeRaw`
+    UPDATE github_import_caps SET ${count} = ${count} - 1
+    WHERE "repoLinkId" = ${repoLinkId} AND "hourStart" = ${hourStart} AND ${count} > 0`;
 }
 
 export type ImportCapState = {

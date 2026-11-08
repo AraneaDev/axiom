@@ -45,8 +45,10 @@ const LEASE_MS = 10 * 60_000;
 // Inside a long loop the lease is pushed out after this many records or this much time
 const LEASE_EVERY_RECORDS = 10;
 const LEASE_EVERY_MS = 60_000;
-/** How far back the reconcile looks for live imports it missed: an hour of cap pause and two rounds */
-const IMPORT_CATCH_UP_MS = 2 * 60 * 60_000;
+/** Where the import catch-up starts for a link with no cursor yet: an hour of cap pause and more */
+const IMPORT_LOOKBACK_FIRST_MS = 2 * 60 * 60_000;
+/** The furthest back it reads: GitHub's redelivery window; older belongs to the backfill */
+const IMPORT_LOOKBACK_MAX_MS = 72 * 60 * 60_000;
 // A pull request GitHub answers 404 this many times in a row is taken for gone
 const MISSES_BEFORE_CLOSING = 3;
 const OPEN_PR_PAGES = 5;
@@ -507,53 +509,112 @@ async function runReconcile(
     });
 
     // Live imports that the hourly cap (or an outage) turned away: the open issues and the
-    // comments GitHub changed in the last two hours. A pause ends with its hour and a reconcile
-    // runs every 15 minutes, so what was missed is still in the window. Reads count against the
-    // budget; the link comments these imports post are system writes outside it.
+    // comments GitHub changed since the link's cursors, oldest first. A cursor moves past each item
+    // that was dealt with, and stays where it is when the cap or the budget stops the round, so
+    // the next round resumes there. Reads count against the budget (with the usual reserve for
+    // the branches); the link comments these imports post are system writes outside it.
     const importing = await prisma.githubRepoLink.findUnique({ where: { id: repoLinkId } });
-    if (importing?.importIssues && left(true) > 0) {
+    if (importing?.importIssues && left() > 0) {
       await phase('GitHub issues', async () => {
-        const since = new Date(Date.now() - IMPORT_CATCH_UP_MS).toISOString();
-        const issues = await githubPaginate<Record<string, unknown>>(
-          auth,
+        const tick = lease();
+        const now = Date.now();
+        // A list read to its end leaves its cursor here: a minute back covers a clock a little off
+        const readAt = new Date(now - 60_000);
+        const sinceOf = (cursor: Date | null) => {
+          const floor = now - IMPORT_LOOKBACK_MAX_MS;
+          const want = cursor ? cursor.getTime() : now - IMPORT_LOOKBACK_FIRST_MS;
+          if (want >= floor) return new Date(want);
+          incomplete('Changes older than 72 hours wait for their next update or the backfill');
+          return new Date(floor);
+        };
+        const stopFor = (err: unknown) => {
+          if (err instanceof ImportCappedError) incomplete('The hourly import cap was reached');
+          else if (isLimit(err)) incomplete('The call budget ran out');
+          else return false;
+          return true;
+        };
+        // Reads one list from its cursor and hands each item on, moving the cursor past it;
+        // true when it got through the whole list
+        const catchUp = async (
+          path: string,
+          query: Record<string, string>,
+          cursor: Date | null,
+          field: 'importIssuesSeenAt' | 'importCommentsSeenAt',
+          each: (item: Record<string, unknown>) => Promise<void>,
+        ): Promise<boolean> => {
+          if (left() <= 0) {
+            incomplete('The call budget ran out');
+            return false;
+          }
+          const since = sinceOf(cursor).toISOString();
+          const list = await githubPaginate<Record<string, unknown>>(auth, path, {
+            query: { ...query, sort: 'updated', direction: 'asc', since },
+            maxPages: 2,
+          });
+          let seen = cursor;
+          const move = async (to: Date) => {
+            if (seen && to <= seen) return;
+            seen = to;
+            await prisma.githubRepoLink.updateMany({
+              where: { id: repoLinkId },
+              data: { [field]: to },
+            });
+          };
+          for (const item of list.items) {
+            if (left() <= 0) {
+              incomplete('The call budget ran out');
+              return false;
+            }
+            await tick();
+            try {
+              await each(item);
+            } catch (err) {
+              if (stopFor(err)) return false;
+              // Anything else is passed: it comes back on its next update, and does not hold
+              // every later item back
+              itemFailed('GitHub issue or comment', err);
+            }
+            const at = Date.parse(String(item.updated_at ?? ''));
+            if (!Number.isNaN(at)) await move(new Date(at));
+          }
+          if (!list.complete) return false;
+          await move(readAt);
+          return true;
+        };
+
+        await catchUp(
           `/repositories/${link.repoId}/issues`,
-          { query: { state: 'open', sort: 'updated', direction: 'desc', since }, maxPages: 2 },
-        );
-        for (const item of issues.items) {
-          if (item.pull_request) continue;
-          try {
+          { state: 'open' },
+          importing.importIssuesSeenAt,
+          'importIssuesSeenAt',
+          async (item) => {
+            if (item.pull_request) return;
+            // Made after the link: the `opened` this stands in for would have run the rules
+            const createdAt = Date.parse(String(item.created_at ?? ''));
             await importGithubIssue(importing, item as GithubIssuePayload, {
               withComments: true,
               live: true,
+              runRules: { created: createdAt >= importing.createdAt.getTime(), updated: true },
             });
-          } catch (err) {
-            if (err instanceof ImportCappedError)
-              return incomplete('The hourly import cap was reached');
-            itemFailed('GitHub issue', err);
-          }
-        }
-        const comments = await githubPaginate<Record<string, unknown>>(
-          auth,
-          `/repositories/${link.repoId}/issues/comments`,
-          { query: { sort: 'updated', direction: 'desc', since }, maxPages: 2 },
+          },
         );
-        for (const comment of comments.items) {
-          const number = /\/issues\/(\d+)$/.exec(String(comment.issue_url ?? ''))?.[1];
-          if (!number) continue;
-          const row = await prisma.githubIssueImport.findUnique({
-            where: {
-              repoLinkId_githubIssueNumber: { repoLinkId, githubIssueNumber: Number(number) },
-            },
-          });
-          if (!row?.issueId) continue;
-          try {
+        await catchUp(
+          `/repositories/${link.repoId}/issues/comments`,
+          {},
+          importing.importCommentsSeenAt,
+          'importCommentsSeenAt',
+          async (comment) => {
+            const number = /\/issues\/(\d+)$/.exec(String(comment.issue_url ?? ''))?.[1];
+            if (!number) return;
+            const row = await prisma.githubIssueImport.findUnique({
+              where: {
+                repoLinkId_githubIssueNumber: { repoLinkId, githubIssueNumber: Number(number) },
+              },
+            });
+            if (!row?.issueId) return;
             await importComment(row, comment as GithubCommentPayload, { live: true });
-          } catch (err) {
-            if (err instanceof ImportCappedError)
-              return incomplete('The hourly import cap was reached');
-            itemFailed('GitHub comment', err);
-          }
-        }
+          },
+        );
       });
     }
 

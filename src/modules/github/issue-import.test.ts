@@ -16,12 +16,14 @@ import {
 } from '../../test/factory';
 import { useGithubFake } from '../../test/github-fake';
 import { seedGithubApp } from '../../test/github-seed';
+import { createIssue } from '../issues/issues.service';
 
 import { instanceOrigin } from './github-app.service';
 import { countGithubCalls } from './github-client';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
 import {
   LINK_CLAIM_TTL_MS,
+  issueLockStats,
   importComment,
   importGithubIssue,
   postLinkComment,
@@ -321,6 +323,53 @@ describe('importGithubIssue: a new issue', () => {
     expect(await prisma.githubIssueImport.count({ where: { repoLinkId: link.id } })).toBe(1);
     expect(await prisma.comment.count({ where: { issueId: a!.issueId } })).toBe(1);
     expect(commentPosts()).toHaveLength(1);
+  });
+
+  it('refuses a second import row of the same GitHub Issue as GITHUB_IMPORT_EXISTS', async () => {
+    await importGithubIssue(link, issue(), { withComments: false });
+    const isTaken = async () =>
+      (await prisma.githubIssueImport.count({
+        where: { repoLinkId: link.id, githubIssueNumber: 31 },
+      })) > 0;
+    await expect(
+      createIssue(
+        ctx.projectId,
+        ctx.owner.id,
+        { title: 'Duplicate' },
+        {
+          githubImport: {
+            data: {
+              repoLink: { connect: { id: link.id } },
+              githubIssueNumber: 31,
+              githubIssueId: '2200031',
+              mirroredTitle: 'Duplicate',
+              mirroredBodyHash: sha(''),
+              mirroredLabels: [],
+              githubUpdatedAt: new Date(),
+              lastImportedAt: new Date(),
+            },
+            isTaken,
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'GITHUB_IMPORT_EXISTS' });
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(1);
+  });
+
+  it('holds at most three issue locks of this process at once', async () => {
+    const numbers = [41, 42, 43, 44, 45, 46, 47, 48];
+    fake.setRepoLists(FULL_NAME, {
+      issues: numbers.map((n) => issue({ number: n, id: 2200000 + n })),
+    });
+    issueLockStats.peak = 0;
+    await Promise.all(
+      numbers.map((n) =>
+        importGithubIssue(link, issue({ number: n, id: 2200000 + n }), { withComments: false }),
+      ),
+    );
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(8);
+    expect(issueLockStats.peak).toBeLessThanOrEqual(3);
+    expect(issueLockStats.peak).toBeGreaterThan(0);
   });
 
   it('gives an unmapped commenter the integration user and the login', async () => {

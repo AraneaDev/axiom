@@ -23,6 +23,7 @@ import { hourStartOf, importCapState, LIVE_IMPORT_CAP } from './import-cap';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
 import { importGithubIssue, type GithubIssuePayload } from './issue-import.service';
 import { reconcileRepo } from './reconcile.service';
+import { processDelivery } from './webhook.service';
 import './github-resolvers';
 import './webhook-handlers';
 
@@ -505,5 +506,173 @@ describe('the hourly cap on live imports', () => {
     const state = await importCapState(link.id);
     expect(state.issues.used).toBe(1);
     expect(state.comments.used).toBe(1);
+  });
+});
+
+describe('fix round 3', () => {
+  const HOUR = 3_600_000;
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+  const quiet = () => ({ pulls: [], branches: [], checkRuns: {} });
+  const fillIssues = (issues: number) =>
+    prisma.githubImportCap.upsert({
+      where: { repoLinkId_hourStart: { repoLinkId: link.id, hourStart: hourStartOf(new Date()) } },
+      create: { repoLinkId: link.id, hourStart: hourStartOf(new Date()), issues },
+      update: { issues },
+    });
+  const linkRow = () => prisma.githubRepoLink.findUniqueOrThrow({ where: { id: link.id } });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('imports the comments on the retry of a delivery whose comment read failed', async () => {
+    fake.on('GET /repos/:owner/:repo/issues/:number/comments', {
+      status: 502,
+      body: { message: 'Bad Gateway' },
+    });
+    expect(await issuesEvent('opened', ghIssue())).toBe('FAILED');
+    const failed = lastDeliveryId;
+    fake.reset();
+    fake.setRepoLists(FULL_NAME, { issues: [ghIssue()], issueComments: { '31': [comment()] } });
+    await prisma.githubDelivery.update({ where: { id: failed }, data: { nextAttemptAt: null } });
+    await processDelivery(failed);
+    const row = await prisma.githubDelivery.findUniqueOrThrow({ where: { id: failed } });
+    expect(row.status).toBe('PROCESSED');
+    expect((await imported()).comments.map((c) => c.body)).toEqual([comment().body]);
+  });
+
+  it('lets the reconcile post the link comment of a claim a dead run left', async () => {
+    await issuesEvent('opened', ghIssue());
+    await prisma.githubIssueImport.updateMany({
+      where: { repoLinkId: link.id },
+      data: { linkCommentId: null, linkCommentClaimedAt: new Date(Date.now() - 11 * 60_000) },
+    });
+    fake.setRepoLists(FULL_NAME, { issues: [ghIssue()], issueComments: {}, ...quiet() });
+    fake.requests.length = 0;
+    await reconcileRepo(link.id);
+    const posts = fake.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/comments'));
+    expect(posts).toHaveLength(1);
+    expect((await importOf())?.linkCommentId).not.toBeNull();
+  });
+
+  it('gives the slot back when the creation fails, and counts a capped issue once', async () => {
+    const column = await prisma.boardColumn.findFirstOrThrow({
+      where: { projectId: ctx.projectId, isDefault: true },
+    });
+    const other = await prisma.boardColumn.findFirstOrThrow({
+      where: { projectId: ctx.projectId, isDefault: false },
+    });
+    const gate = await prisma.approvalGate.create({
+      data: { projectId: ctx.projectId, fromColumnId: other.id, toColumnId: column.id },
+    });
+    expect(await issuesEvent('opened', ghIssue())).toBe('FAILED');
+    expect((await importCapState(link.id)).issues.used).toBe(0);
+    await prisma.approvalGate.delete({ where: { id: gate.id } });
+
+    await fillIssues(LIVE_IMPORT_CAP.issues);
+    await issuesEvent('opened', ghIssue({ number: 33, id: 2200033 }));
+    await issuesEvent('labeled', ghIssue({ number: 33, id: 2200033 }), { label: { name: 'bug' } });
+    await issuesEvent('labeled', ghIssue({ number: 33, id: 2200033 }), { label: { name: 'x' } });
+    expect((await importCapState(link.id)).issues.skipped).toBe(1);
+  });
+
+  it('resumes the catch-up from its cursor, oldest first, without advancing past the cap', async () => {
+    const a = ghIssue({
+      number: 51,
+      id: 2200051,
+      created_at: ago(3 * HOUR),
+      updated_at: ago(3 * HOUR),
+    });
+    const b = ghIssue({
+      number: 52,
+      id: 2200052,
+      created_at: ago(2.5 * HOUR),
+      updated_at: ago(2.5 * HOUR),
+    });
+    const c = ghIssue({
+      number: 53,
+      id: 2200053,
+      created_at: ago(60_000),
+      updated_at: ago(60_000),
+    });
+    fake.setRepoLists(FULL_NAME, { issues: [c, a, b], issueComments: {}, ...quiet() });
+    await prisma.githubRepoLink.update({
+      where: { id: link.id },
+      data: { importIssuesSeenAt: new Date(Date.now() - 4 * HOUR) },
+    });
+    await fillIssues(LIVE_IMPORT_CAP.issues - 1);
+    await reconcileRepo(link.id);
+    expect(await importOf(51)).not.toBeNull();
+    expect(await importOf(52)).toBeNull();
+    expect(await importOf(53)).toBeNull();
+    expect((await linkRow()).importIssuesSeenAt?.toISOString()).toBe(a.updated_at);
+    expect((await linkRow()).lastReconcileNote).toMatch(/hourly import cap/);
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(hourStartOf(new Date()).getTime() + HOUR + 1000);
+    await reconcileRepo(link.id);
+    expect(await importOf(52)).not.toBeNull();
+    expect(await importOf(53)).not.toBeNull();
+    expect((await linkRow()).importIssuesSeenAt!.getTime()).toBeGreaterThanOrEqual(
+      Date.parse(c.updated_at),
+    );
+  });
+
+  it('looks back at most 72 hours and says so', async () => {
+    fake.setRepoLists(FULL_NAME, { issues: [], issueComments: {}, ...quiet() });
+    await prisma.githubRepoLink.update({
+      where: { id: link.id },
+      data: { importIssuesSeenAt: new Date(Date.now() - 5 * 24 * HOUR) },
+    });
+    await reconcileRepo(link.id);
+    const read = fake.requests.find(
+      (r) => r.method === 'GET' && r.path === `/repositories/${REPO_ID}/issues`,
+    );
+    expect(Date.parse(read!.query.since)).toBeGreaterThanOrEqual(Date.now() - 72 * HOUR - 60_000);
+    expect(read!.query.direction).toBe('asc');
+    expect((await linkRow()).lastReconcileNote).toMatch(/72 hours/);
+  });
+
+  it('stops the catch-up when the call budget is spent', async () => {
+    fake.setRepoLists(FULL_NAME, { issues: [], issueComments: {}, ...quiet() });
+    await prisma.githubRepoLink.update({ where: { id: link.id }, data: { importIssues: false } });
+    await reconcileRepo(link.id);
+    const baseline = (await reconcileRepo(link.id)).calls;
+    await prisma.githubRepoLink.update({ where: { id: link.id }, data: { importIssues: true } });
+    const a = ghIssue({ number: 61, id: 2200061, updated_at: ago(10 * 60_000) });
+    const b = ghIssue({ number: 62, id: 2200062, updated_at: ago(5 * 60_000) });
+    fake.setRepoLists(FULL_NAME, { issues: [a, b], issueComments: {}, ...quiet() });
+    // The lists before it, and the issue list itself: nothing left for an issue's comment read
+    await reconcileRepo(link.id, { callBudget: baseline });
+    expect(await importOf(62)).toBeNull();
+    expect((await linkRow()).importIssuesSeenAt).toBeNull();
+  });
+
+  it('runs issue:created rules for a caught-up issue made after the link, not for an older one', async () => {
+    await createRule(ctx.projectId, {
+      name: 'welcome',
+      trigger: 'issue:created',
+      actions: [{ type: 'add_comment', body: 'Welcome' }],
+    });
+    const fresh = ghIssue({
+      number: 71,
+      id: 2200071,
+      created_at: ago(HOUR),
+      updated_at: ago(HOUR),
+    });
+    const old = ghIssue({
+      number: 72,
+      id: 2200072,
+      created_at: '2026-10-01T09:00:00Z',
+      updated_at: ago(HOUR),
+    });
+    fake.setRepoLists(FULL_NAME, { issues: [fresh, old], issueComments: {}, ...quiet() });
+    await reconcileRepo(link.id);
+    await vi.waitFor(async () => {
+      expect((await imported(71)).comments.map((c) => c.body)).toEqual(['Welcome']);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect((await imported(72)).comments).toHaveLength(0);
+    expect((await importCapState(link.id)).issues.used).toBe(2);
   });
 });
