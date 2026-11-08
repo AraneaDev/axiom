@@ -292,6 +292,7 @@ export async function describeServiceAccount(id: string) {
         prefix: true,
         scopes: true,
         expiresAt: true,
+        rotatedAt: true,
         lastUsedAt: true,
         createdAt: true,
       },
@@ -397,6 +398,31 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const TOKEN_NOT_FOUND = () => new AppError(404, 'API token not found', 'TOKEN_NOT_FOUND');
 
+const SUSPENDED = () =>
+  new AppError(
+    400,
+    'This service account is suspended: resume it before giving it tokens',
+    'SERVICE_ACCOUNT_SUSPENDED',
+  );
+
+/**
+ * Refuse a token change for a bot that is gone or suspended: a token it can't use is no token.
+ * @param db - The client to read with
+ * @param botId - The bot's user id
+ * @throws {AppError} 404 when there is no such bot, 400 SERVICE_ACCOUNT_SUSPENDED when suspended
+ */
+async function assertActive(
+  db: Pick<Prisma.TransactionClient, 'serviceAccount'>,
+  botId: string,
+): Promise<void> {
+  const account = await db.serviceAccount.findUnique({
+    where: { userId: botId },
+    select: { status: true },
+  });
+  if (!account) throw NOT_FOUND();
+  if (account.status !== 'ACTIVE') throw SUSPENDED();
+}
+
 const TOKEN_SELECT = {
   id: true,
   name: true,
@@ -472,6 +498,7 @@ export async function createBotToken(
   if (!Number.isInteger(days) || days < 1 || days > BOT_TOKEN_MAX_DAYS) {
     throw new AppError(400, `A service account token expires in 1 to ${BOT_TOKEN_MAX_DAYS} days`);
   }
+  await assertActive(prisma, botId);
   return storeBotToken(prisma, botId, {
     name: data.name,
     scopes: [...new Set(data.scopes)],
@@ -481,16 +508,28 @@ export async function createBotToken(
 
 /**
  * Rotate a bot's token: a new one with the same name and scopes and a fresh expiry, as long as
- * the old one was made for, and the old one keeps working for 7 more days at most.
+ * the old one was made for, and the old one keeps working for 7 more days at most. A token is
+ * rotated once: of two concurrent rotations, the second waits on the row lock and is refused.
  * @param botId - The bot's user id
  * @param tokenId - The token to rotate
  * @returns The new token's metadata and its raw token, the only time it is shown
- * @throws {AppError} 404 when the bot has no such token
+ * @throws {AppError} 404 when the bot has no such token, 409 TOKEN_ALREADY_ROTATED when it was
+ * rotated before, 400 SERVICE_ACCOUNT_SUSPENDED when the bot is suspended
  */
 export async function rotateBotToken(botId: string, tokenId: string) {
   return prisma.$transaction(async (tx) => {
+    // Locked before it is read: a concurrent rotation sees this one's rotatedAt once it commits
+    await tx.$queryRaw`SELECT id FROM api_tokens WHERE id = ${tokenId} AND "userId" = ${botId} FOR UPDATE`;
     const old = await tx.apiToken.findFirst({ where: { id: tokenId, userId: botId } });
     if (!old) throw TOKEN_NOT_FOUND();
+    if (old.rotatedAt) {
+      throw new AppError(
+        409,
+        'This token was already rotated: rotate its replacement instead',
+        'TOKEN_ALREADY_ROTATED',
+      );
+    }
+    await assertActive(tx, botId);
     const now = Date.now();
     // The same lifetime as the old token, in whole days within the bounds a new one has
     const lifetimeDays = old.expiresAt
@@ -499,7 +538,10 @@ export async function rotateBotToken(botId: string, tokenId: string) {
     const days = Math.min(Math.max(lifetimeDays, 1), BOT_TOKEN_MAX_DAYS);
     const graceEnd = now + ROTATION_GRACE_MS;
     const oldEnd = old.expiresAt ? Math.min(old.expiresAt.getTime(), graceEnd) : graceEnd;
-    await tx.apiToken.update({ where: { id: old.id }, data: { expiresAt: new Date(oldEnd) } });
+    await tx.apiToken.update({
+      where: { id: old.id },
+      data: { expiresAt: new Date(oldEnd), rotatedAt: new Date(now) },
+    });
     return storeBotToken(tx, botId, {
       name: old.name,
       scopes: old.scopes,

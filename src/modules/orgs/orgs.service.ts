@@ -139,7 +139,8 @@ async function assertOrgExists(orgId: string): Promise<void> {
 
 /**
  * Delete an organization and all its associated data. Its bots go as a deleted bot does: their
- * tokens are revoked and their users stay, deactivated, for the history they left elsewhere.
+ * pending requests are cancelled, their tokens revoked, and their users stay, deactivated, for
+ * the history they left elsewhere.
  * @param orgId - The organization ID
  */
 export async function deleteOrg(orgId: string) {
@@ -149,11 +150,17 @@ export async function deleteOrg(orgId: string) {
   // refuses that too. A batch, not an interactive transaction: the cascade may outlast its timeout
   const bots = await prisma.serviceAccount.findMany({ where: { orgId }, select: { userId: true } });
   const botIds = bots.map((b) => b.userId);
+  const now = new Date();
   await prisma.$transaction([
+    // As deleting one bot does: its waiting requests are cancelled, not left to expire
+    prisma.agentApproval.updateMany({
+      where: { userId: { in: botIds }, status: 'PENDING' },
+      data: { status: 'CANCELLED', decidedAt: now },
+    }),
     prisma.apiToken.deleteMany({ where: { userId: { in: botIds } } }),
     prisma.user.updateMany({
       where: { id: { in: botIds }, deactivatedAt: null },
-      data: { deactivatedAt: new Date() },
+      data: { deactivatedAt: now },
     }),
     prisma.organization.delete({ where: { id: orgId } }),
   ]);

@@ -88,6 +88,8 @@ model ApiToken {
   expiresAt        DateTime?
   /// When the owners were told this token is about to expire
   expiryNotifiedAt DateTime?
+  /// When a bot token was rotated: it is never rotated twice
+  rotatedAt        DateTime?
   createdAt        DateTime  @default(now())
 
   uploadIntents UploadIntent[]

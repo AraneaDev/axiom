@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { prisma } from '../../config/database';
 import app from '../../index';
-import { MINTABLE_SCOPES } from '../../middleware/token-scopes';
+import { MINTABLE_SCOPES, TOKEN_SCOPES } from '../../middleware/token-scopes';
 import {
   cleanupTestContext,
   createTestContext,
@@ -12,7 +12,8 @@ import {
   type TestUser,
 } from '../../test/factory';
 import { authDel, authPost } from '../../test/helpers';
-import { reactivateUser } from '../admin/admin.service';
+import { deactivateUser, reactivateUser } from '../admin/admin.service';
+import { createUploadUrl, findUsableIntent } from '../attachments/upload-intents.service';
 
 const DAY = 24 * 60 * 60 * 1000;
 const MINUTE = 60 * 1000;
@@ -26,8 +27,9 @@ const BOT_SCOPES = MINTABLE_SCOPES.filter((s) => !s.startsWith('admin:'));
  * @param path - The path
  * @param raw - The raw token
  */
-function withToken(method: 'get' | 'post' | 'put' | 'delete', path: string, raw: string) {
-  return request(app)[method](path).set('Authorization', `Token ${raw}`);
+function withToken(method: 'get' | 'post' | 'put' | 'patch' | 'delete', path: string, raw: string) {
+  const req = request(app)[method](path);
+  return req.set('Authorization', `Token ${raw}`).set('X-Requested-With', 'XMLHttpRequest');
 }
 
 describe('service accounts: bot tokens', () => {
@@ -268,49 +270,142 @@ describe('service accounts: bot tokens', () => {
     expect((await withToken('get', issuePath, token.token)).status).toBe(200);
   });
 
-  it('Review Focus 4: the bot token is refused on token, invite and service account writes', async () => {
+  it('Review Focus 4: a real bot token is refused token.create for want of an admin scope', async () => {
+    // A bot can never hold admin:*, and token.create is an admin action: the scope refuses it
     const { token } = await mint(botId);
+    const before = await prisma.apiToken.count({ where: { userId: botId } });
+    const res = await withToken('post', '/api/users/me/tokens', token).send({
+      name: 'Escalate',
+      scopes: ['issues:read'],
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('SCOPE');
+    expect(await prisma.apiToken.count({ where: { userId: botId } })).toBe(before);
+    expect(await prisma.agentApproval.count({ where: { userId: botId } })).toBe(0);
+  });
+
+  it('Review Focus 4: with every scope, only uiOnly or tokenBlocked refuses the bot', async () => {
+    const minted = await mint(botId);
+    // Wider than any bot can be given: no scope check can be what refuses below
+    await prisma.apiToken.update({
+      where: { id: minted.id },
+      data: { scopes: [...TOKEN_SCOPES] },
+    });
+    const token = minted.token;
+    // The token itself works: what refuses below is the action, not the token
+    const control = await withToken('get', `/api/service-accounts/${botId}`, token);
+    expect(control.status).not.toBe(403);
+
     const tokensBefore = await prisma.apiToken.count({ where: { userId: botId } });
     const ownersBefore = await prisma.serviceAccountOwner.findMany({
       where: { serviceAccountId: botId },
     });
+    const profileBefore = await prisma.user.findUniqueOrThrow({ where: { id: botId } });
+    const membershipsBefore = await prisma.orgMembership.count({ where: { userId: botId } });
 
-    const tokenCreate = await withToken('post', '/api/users/me/tokens', token).send({
-      name: 'Escalate',
-      scopes: ['issues:read'],
-    });
-    expect(tokenCreate.status).toBe(403);
-
-    const invite = await withToken('post', `/api/orgs/${ctx.orgId}/invites`, token).send({
-      role: 'MEMBER',
-    });
-    expect(invite.status).toBe(403);
-
-    const create = await withToken('post', `/api/orgs/${ctx.orgId}/service-accounts`, token).send({
-      username: 'acme-bottok-spawn',
-      displayName: 'Spawn',
-      ownerIds: [owner.id],
-    });
-    expect(create.status).toBe(403);
-
-    const setOwners = await withToken('put', `/api/service-accounts/${botId}/owners`, token).send({
-      ownerIds: [stranger.id],
-    });
-    expect(setOwners.status).toBe(403);
-
-    const ownToken = await withToken('post', `/api/service-accounts/${botId}/tokens`, token).send({
-      name: 'Self',
-      scopes: ['issues:read'],
-    });
-    expect(ownToken.status).toBe(403);
+    const refused = [
+      // tokenBlocked
+      withToken('post', `/api/orgs/${ctx.orgId}/invites`, token).send({ role: 'MEMBER' }),
+      withToken('patch', '/api/users/me', token).send({ displayName: 'Renamed by itself' }),
+      withToken('post', '/api/invitations/voorbeeld-invite-code/accept', token).send({}),
+      // uiOnly
+      withToken('post', `/api/orgs/${ctx.orgId}/service-accounts`, token).send({
+        username: 'acme-bottok-spawn',
+        displayName: 'Spawn',
+        ownerIds: [owner.id],
+      }),
+      withToken('put', `/api/service-accounts/${botId}/owners`, token).send({
+        ownerIds: [stranger.id],
+      }),
+      withToken('post', `/api/service-accounts/${botId}/tokens`, token).send({
+        name: 'Self',
+        scopes: ['issues:read'],
+      }),
+      withToken('post', `/api/service-accounts/${botId}/tokens/${minted.id}/rotate`, token),
+      withToken('delete', `/api/service-accounts/${botId}/tokens/${minted.id}`, token),
+    ];
+    for (const pending of refused) {
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('SCOPE');
+    }
 
     expect(await prisma.apiToken.count({ where: { userId: botId } })).toBe(tokensBefore);
+    expect(await prisma.apiToken.count({ where: { id: minted.id } })).toBe(1);
     expect(await prisma.agentApproval.count({ where: { userId: botId } })).toBe(0);
     expect(await prisma.inviteLink.count({ where: { orgId: ctx.orgId } })).toBe(0);
     expect(await prisma.user.count({ where: { username: 'acme-bottok-spawn' } })).toBe(0);
+    expect(await prisma.orgMembership.count({ where: { userId: botId } })).toBe(membershipsBefore);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: botId } })).displayName).toBe(
+      profileBefore.displayName,
+    );
     expect(
       await prisma.serviceAccountOwner.findMany({ where: { serviceAccountId: botId } }),
     ).toEqual(ownersBefore);
+  });
+
+  it('create and rotate refuse a suspended bot with 400', async () => {
+    const minted = await mint(botId);
+    const before = await prisma.apiToken.count({ where: { userId: botId } });
+    await prisma.serviceAccount.update({
+      where: { userId: botId },
+      data: { status: 'SUSPENDED', suspendedReason: 'MANUAL', suspendedAt: new Date() },
+    });
+    try {
+      const create = await createToken(botId, { name: 'While off', scopes: ['issues:read'] });
+      expect(create.status).toBe(400);
+      expect(create.body.error.code).toBe('SERVICE_ACCOUNT_SUSPENDED');
+      const rotate = await authPost(
+        `/api/service-accounts/${botId}/tokens/${minted.id}/rotate`,
+        admin.token,
+      );
+      expect(rotate.status).toBe(400);
+      expect(rotate.body.error.code).toBe('SERVICE_ACCOUNT_SUSPENDED');
+    } finally {
+      await prisma.serviceAccount.update({
+        where: { userId: botId },
+        data: { status: 'ACTIVE', suspendedReason: null, suspendedAt: null },
+      });
+    }
+    expect(await prisma.apiToken.count({ where: { userId: botId } })).toBe(before);
+    const row = await prisma.apiToken.findUniqueOrThrow({ where: { id: minted.id } });
+    expect(row.expiresAt!.toISOString()).toBe(new Date(minted.expiresAt).toISOString());
+  });
+
+  it('of two concurrent rotations of one token, only one makes a new token', async () => {
+    const minted = await mint(botId);
+    const before = await prisma.apiToken.count({ where: { userId: botId } });
+    const path = `/api/service-accounts/${botId}/tokens/${minted.id}/rotate`;
+    const results = await Promise.all([authPost(path, admin.token), authPost(path, owner.token)]);
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses[0]).toBe(201);
+    expect([404, 409]).toContain(statuses[1]);
+    expect(await prisma.apiToken.count({ where: { userId: botId } })).toBe(before + 1);
+
+    // Rotating it again later is refused the same way
+    const again = await authPost(path, admin.token);
+    expect([404, 409]).toContain(again.status);
+    expect(await prisma.apiToken.count({ where: { userId: botId } })).toBe(before + 1);
+  });
+
+  it("a suspended bot's signed upload URL, or one of a bot that is gone, is refused", async () => {
+    const id = await createBot(ctx.orgId, 'acme-bottok-upload', [owner.id], admin.token);
+    const minted = await mint(id);
+    const url = await createUploadUrl(
+      { userId: id, apiTokenId: minted.id },
+      { filename: 'notes.txt', mimeType: 'text/plain', size: 10 },
+    );
+    const sig = new URL(url.uploadUrl, 'https://axiom.invalid').searchParams.get('sig');
+    expect((await findUsableIntent(url.uploadId, sig)).id).toBe(url.uploadId);
+
+    await prisma.serviceAccount.update({
+      where: { userId: id },
+      data: { status: 'SUSPENDED', suspendedReason: 'MANUAL', suspendedAt: new Date() },
+    });
+    await expect(findUsableIntent(url.uploadId, sig)).rejects.toMatchObject({ statusCode: 403 });
+
+    await prisma.serviceAccount.delete({ where: { userId: id } });
+    await expect(findUsableIntent(url.uploadId, sig)).rejects.toMatchObject({ statusCode: 403 });
   });
 
   it('a token of a deactivated bot, or of a bot whose service account is gone, gives 401', async () => {
@@ -346,10 +441,35 @@ describe('service accounts: bot tokens', () => {
         .status,
     ).not.toBe(401);
 
+    const pending = await prisma.agentApproval.create({
+      data: {
+        userId: id,
+        apiTokenId: res.body.id,
+        apiTokenName: 'Org bot',
+        channel: 'rest-token',
+        action: 'issue.delete',
+        input: {},
+        preview: 'Delete an issue',
+        expiresAt: new Date(Date.now() + DAY),
+      },
+    });
+
     const del = await authDel(`/api/orgs/${orgRes.body.id}`, admin.token);
     expect(del.status).toBe(204);
     expect(await prisma.apiToken.count({ where: { userId: id } })).toBe(0);
     expect((await withToken('get', '/api/users/me', res.body.token)).status).toBe(401);
+    const cancelled = await prisma.agentApproval.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(cancelled.status).toBe('CANCELLED');
+    expect(cancelled.decidedAt).not.toBeNull();
+  });
+
+  it('deactivateUser refuses a bot: suspension is the one off switch', async () => {
+    await expect(deactivateUser(botId)).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'SERVICE_ACCOUNT_USE_SUSPEND',
+    });
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: botId } });
+    expect(user.deactivatedAt).toBeNull();
   });
 
   it('reactivateUser refuses a bot', async () => {

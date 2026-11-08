@@ -175,14 +175,20 @@ export async function createUploadUrl(
  * @param sig - The signature in the URL, as the query parsed it
  * @returns The intent, not yet used
  * @throws {AppError} The same 403 for anything wrong: a bad signature, an unknown id, a URL that
- * has expired or was used, a deactivated user or an expired token
+ * has expired or was used, a deactivated user, a bot that is suspended or gone, or an expired
+ * token
  */
 export async function findUsableIntent(uploadId: string, sig: unknown): Promise<UsableIntent> {
   // Ids are generated, and a NUL byte would make the query fail instead of find nothing
   if (!/^[a-z0-9]+$/.test(uploadId)) throw uploadUrlRefusal();
   const intent = await prisma.uploadIntent.findUnique({
     where: { id: uploadId },
-    include: { apiToken: true, user: { select: { deactivatedAt: true } } },
+    include: {
+      apiToken: true,
+      user: {
+        select: { deactivatedAt: true, kind: true, serviceAccount: { select: { status: true } } },
+      },
+    },
   });
   // An unknown id does the same work as a known one
   const expected = signUpload(uploadId, intent?.userId ?? '', intent?.expiresAt ?? new Date(0));
@@ -194,6 +200,8 @@ export async function findUsableIntent(uploadId: string, sig: unknown): Promise<
     intent.usedAt ||
     intent.expiresAt <= now ||
     intent.user.deactivatedAt ||
+    // A bot uploads only while its service account exists and is active, as its token acts
+    (intent.user.kind === 'SERVICE' && intent.user.serviceAccount?.status !== 'ACTIVE') ||
     (intent.apiToken?.expiresAt && intent.apiToken.expiresAt <= now)
   ) {
     throw uploadUrlRefusal();

@@ -286,6 +286,14 @@ export async function deactivateUser(userId: string) {
     ERR.USER_NOT_FOUND,
   );
   if (user.isAdmin) throw new AppError(400, 'Cannot deactivate an admin user');
+  // A bot has one off switch, its suspension, which its owners and org admins can see and undo
+  if (user.kind === 'SERVICE') {
+    throw new AppError(
+      400,
+      'Suspend a service account from its organization instead of deactivating it',
+      'SERVICE_ACCOUNT_USE_SUSPEND',
+    );
+  }
 
   await prisma.$transaction([
     prisma.user.update({ where: { id: userId }, data: { deactivatedAt: new Date() } }),
@@ -302,8 +310,8 @@ export async function deactivateUser(userId: string) {
  */
 export async function reactivateUser(userId: string) {
   assertNotIntegrationUser(userId);
-  // A deactivated bot is a deleted one: reactivating it would bring back a user with no
-  // service account, owners or org
+  // Only a deleted bot is deactivated (deactivateUser refuses bots): reactivating it would bring
+  // back a user with no service account, owners or org
   assertNotServiceAccount(
     await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND),
   );
