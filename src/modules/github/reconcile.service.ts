@@ -25,7 +25,10 @@ import { ImportCappedError } from './import-cap';
 import {
   importComment,
   importGithubIssue,
+  importIssueComments,
+  pendingCommentImports,
   postPendingLinkComments,
+  type CommentReadResult,
   type GithubCommentPayload,
   type GithubIssuePayload,
 } from './issue-import.service';
@@ -49,6 +52,8 @@ const LEASE_EVERY_MS = 60_000;
 const IMPORT_LOOKBACK_FIRST_MS = 2 * 60 * 60_000;
 /** The furthest back it reads: GitHub's redelivery window; older belongs to the backfill */
 const IMPORT_LOOKBACK_MAX_MS = 72 * 60 * 60_000;
+/** How many imported issues a round reads the cut-short comments of */
+const PENDING_COMMENT_READS = 10;
 // A pull request GitHub answers 404 this many times in a row is taken for gone
 const MISSES_BEFORE_CLOSING = 3;
 const OPEN_PR_PAGES = 5;
@@ -56,6 +61,10 @@ const MISSING_PR_LIMIT = 50;
 const CHECK_RUN_PAGES = 2;
 const BRANCH_PAGES = 10;
 const ERROR_MAX = 500;
+
+// GitHub has no such issue (any more), or no issues: asking again changes nothing
+const isGone = (err: unknown) =>
+  err instanceof AppError && (err.code === 'GITHUB_NOT_FOUND' || err.code === 'GITHUB_GONE');
 
 export type ReconcileResult = {
   pullRequests: number;
@@ -508,6 +517,20 @@ async function runReconcile(
       }
     });
 
+    // What stops an import list instead of being passed over: the cap and the budget, and GitHub
+    // refusing or failing every call for now (each later item would fail the same way)
+    const stopFor = (err: unknown) => {
+      if (err instanceof ImportCappedError) incomplete('The hourly import cap was reached');
+      else if (isLimit(err)) incomplete('The call budget ran out');
+      else if (
+        err instanceof AppError &&
+        (err.code === 'GITHUB_RATE_LIMITED' || err.code === 'GITHUB_UNAVAILABLE')
+      ) {
+        incomplete('GitHub was unavailable or rate limited');
+      } else return false;
+      return true;
+    };
+
     // Live imports that the hourly cap (or an outage) turned away: the open issues and the
     // comments GitHub changed since the link's cursors, oldest first. A cursor moves past each item
     // that was dealt with, and stays where it is when the cap or the budget stops the round, so
@@ -526,12 +549,6 @@ async function runReconcile(
           if (want >= floor) return new Date(want);
           incomplete('Changes older than 72 hours wait for their next update or the backfill');
           return new Date(floor);
-        };
-        const stopFor = (err: unknown) => {
-          if (err instanceof ImportCappedError) incomplete('The hourly import cap was reached');
-          else if (isLimit(err)) incomplete('The call budget ran out');
-          else return false;
-          return true;
         };
         // Reads one list from its cursor and hands each item on, moving the cursor past it;
         // true when it got through the whole list
@@ -641,6 +658,34 @@ async function runReconcile(
         if (!isLimit(err))
           logger.warn('github reconcile repository refresh failed', { repoLinkId });
       }
+    }
+
+    // Imported issues whose comment read was cut short (the cap, the budget or GitHub stopped
+    // it), by a webhook or by the catch-up, which has moved past them: their comments are read
+    // again here, a few per round, within the budget, until a read gets through
+    if (importing?.importIssues && left() > 0) {
+      await phase('GitHub issue comments', async () => {
+        for (const row of await pendingCommentImports(repoLinkId, PENDING_COMMENT_READS)) {
+          if (left() <= 0) return incomplete('The call budget ran out');
+          await extendLease(repoLinkId, token);
+          let read: CommentReadResult;
+          try {
+            read = await importIssueComments(importing, row, { live: true });
+          } catch (err) {
+            if (stopFor(err)) return;
+            // GitHub has no such issue (any more): there is nothing left to read
+            if (isGone(err)) {
+              await prisma.githubIssueImport.update({
+                where: { id: row.id },
+                data: { commentsImportedAt: new Date() },
+              });
+            } else itemFailed('GitHub issue comment read', err);
+            continue;
+          }
+          if (read === 'capped') return incomplete('The hourly import cap was reached');
+          if (read === 'cut') return incomplete('The call budget ran out');
+        }
+      });
     }
 
     // Imported issues still owed their link comment (a run died after its claim, and no event

@@ -431,9 +431,14 @@ export async function importGithubIssue(
       return await createImported(link, gh, opts);
     } catch (err) {
       const exists = err instanceof AppError && err.code === 'GITHUB_IMPORT_EXISTS';
-      // A failure after the issue and its row were written (the web link, say) used its slot
-      if (slot && (exists || !(await findImport(link.id, gh.number)))) {
-        await releaseImportSlot(link.id, 'issues', slot);
+      // A failure after the issue and its row were written (the web link, say) used its slot. A
+      // failure to give it back must not hide the error that matters.
+      if (slot) {
+        await (async () => {
+          if (exists || !(await findImport(link.id, gh.number))) {
+            await releaseImportSlot(link.id, 'issues', slot);
+          }
+        })().catch(() => undefined);
       }
       if (!exists) throw err;
       const taken = await findImport(link.id, gh.number);
@@ -444,35 +449,75 @@ export async function importGithubIssue(
 
   if (opts.withComments) {
     const row = await prisma.githubIssueImport.findUnique({ where: { id: done.importId } });
-    // Once per import: a delivery that failed after the issue was made reads them on its retry
+    // Once per import: a delivery that failed after the issue was made reads them on its retry.
+    // A read the cap or the call budget cuts short is finished by the reconcile.
     if (row?.issueId && !row.commentsImportedAt) {
-      const { items } = await githubPaginate<GithubCommentPayload>(
-        installation(link),
-        commentsPath(link, gh.number),
-        { maxPages: COMMENT_PAGES },
-      );
-      let complete = true;
-      for (const comment of items) {
-        try {
-          await importComment(row, comment, { live: opts.live });
-        } catch (err) {
-          // The hour's comments are used up: the rest are read again by the next event or
-          // reconcile, as the issue's comments stay unread
-          if (!(err instanceof ImportCappedError)) throw err;
-          complete = false;
-          break;
-        }
-      }
-      if (complete) {
-        await prisma.githubIssueImport.update({
-          where: { id: row.id },
-          data: { commentsImportedAt: new Date() },
-        });
-      }
+      await importIssueComments(link, row, { live: opts.live });
     }
   }
   if (!done.linkCommentId) await postLinkComment(done.importId);
   return { issueId: done.issueId, created: done.created, conflicts: done.conflicts };
+}
+
+/** How a read of an imported issue's comments ended */
+export type CommentReadResult = 'complete' | 'capped' | 'cut';
+
+/**
+ * Reads the comments of an imported issue from GitHub (3 pages) and imports them. Only a read that
+ * got through notes `commentsImportedAt`; one the hourly cap or the call budget cut short leaves
+ * it unset, so the reconcile reads the issue's comments again ({@link pendingCommentImports}).
+ * What was imported before is recognised by its mirror, so a second read adds only the rest.
+ * @param link The repository link
+ * @param row The import of the issue
+ * @param opts `live` counts new comments against the link's hourly cap
+ * @param opts.live
+ * @returns `complete`, `capped` when the hour's comments ran out, or `cut` when the call budget
+ *   stopped the pages
+ */
+export async function importIssueComments(
+  link: GithubRepoLink,
+  row: GithubIssueImport,
+  opts: { live?: boolean } = {},
+): Promise<CommentReadResult> {
+  const { items, complete } = await githubPaginate<GithubCommentPayload>(
+    installation(link),
+    commentsPath(link, row.githubIssueNumber),
+    { maxPages: COMMENT_PAGES },
+  );
+  // Every page but the last one is full: fewer than all pages' worth with more to come means the
+  // budget stopped the read, while 3 full pages are all that is ever read
+  const cut = !complete && items.length < COMMENT_PAGES * 100;
+  for (const comment of items) {
+    try {
+      await importComment(row, comment, { live: opts.live });
+    } catch (err) {
+      if (err instanceof ImportCappedError) return 'capped';
+      throw err;
+    }
+  }
+  if (cut) return 'cut';
+  await prisma.githubIssueImport.update({
+    where: { id: row.id },
+    data: { commentsImportedAt: new Date() },
+  });
+  return 'complete';
+}
+
+/**
+ * The imports of a link whose comments were never read to the end (the hourly cap, the call
+ * budget or GitHub cut the read short), the longest waiting first.
+ * @param repoLinkId The link
+ * @param limit The most to return
+ */
+export function pendingCommentImports(
+  repoLinkId: string,
+  limit: number,
+): Promise<GithubIssueImport[]> {
+  return prisma.githubIssueImport.findMany({
+    where: { repoLinkId, issueId: { not: null }, commentsImportedAt: null },
+    orderBy: [{ lastImportedAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
 }
 
 /**
@@ -535,25 +580,25 @@ export async function importComment(
     }
     const slot = opts.live ? await takeImportSlot(importRow.repoLinkId, 'comments') : null;
     const writer = await writerOf(gh.user, issue.projectId);
-    let comment: { id: string };
     try {
-      comment = await issuesService.addComment(issue.id, writer.userId, body, {
+      // The mirror is written in the same statement as the comment: there is never an imported
+      // comment without it, so a later read cannot import it a second time
+      await issuesService.addComment(issue.id, writer.userId, body, {
         skipMentions: true,
         externalAuthorLogin: writer.externalAuthorLogin,
+        githubImport: {
+          import: { connect: { id: importRow.id } },
+          githubCommentId,
+          mirroredBodyHash: bodyHash,
+          githubUpdatedAt: updatedAt,
+        },
       });
     } catch (err) {
-      if (slot) await releaseImportSlot(importRow.repoLinkId, 'comments', slot);
+      if (slot) {
+        await releaseImportSlot(importRow.repoLinkId, 'comments', slot).catch(() => undefined);
+      }
       throw err;
     }
-    await prisma.githubImportedComment.create({
-      data: {
-        importId: importRow.id,
-        githubCommentId,
-        commentId: comment.id,
-        mirroredBodyHash: bodyHash,
-        githubUpdatedAt: updatedAt,
-      },
-    });
   });
 }
 

@@ -676,3 +676,164 @@ describe('fix round 3', () => {
     expect((await importCapState(link.id)).issues.used).toBe(2);
   });
 });
+
+describe('fix round 4', () => {
+  const HOUR = 3_600_000;
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+  const quiet = () => ({ pulls: [], branches: [], checkRuns: {} });
+  const fillComments = (comments: number) =>
+    prisma.githubImportCap.upsert({
+      where: { repoLinkId_hourStart: { repoLinkId: link.id, hourStart: hourStartOf(new Date()) } },
+      create: { repoLinkId: link.id, hourStart: hourStartOf(new Date()), comments },
+      update: { comments },
+    });
+  const linkRow = () => prisma.githubRepoLink.findUniqueOrThrow({ where: { id: link.id } });
+  const nextHour = () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(hourStartOf(new Date()).getTime() + HOUR + 1000);
+  };
+  const commentReads = () =>
+    fake.requests
+      .filter((r) => r.method === 'GET')
+      .map((r) => /\/issues\/(\d+)\/comments$/.exec(r.path)?.[1])
+      .filter((n): n is string => n !== undefined)
+      .map(Number);
+  // Old comments: older than the comments catch-up looks back, so only a read of the issue's own
+  // comments finds them
+  const oldComments = [
+    comment({ created_at: '2026-11-01T09:00:00Z', updated_at: '2026-11-01T09:00:00Z' }),
+    comment({
+      id: 9402,
+      body: 'Second',
+      created_at: '2026-11-01T09:05:00Z',
+      updated_at: '2026-11-01T09:05:00Z',
+    }),
+  ];
+  const backfill = async (number: number, lastImportedAt: Date) => {
+    await importGithubIssue(link, ghIssue({ number, id: 2200000 + number }) as GithubIssuePayload, {
+      withComments: false,
+    });
+    await prisma.githubIssueImport.updateMany({
+      where: { repoLinkId: link.id, githubIssueNumber: number },
+      data: { lastImportedAt },
+    });
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reads the rest of the comments the cap cut short on a webhook import', async () => {
+    fake.setRepoLists(FULL_NAME, {
+      issues: [ghIssue()],
+      issueComments: { '31': oldComments },
+      ...quiet(),
+    });
+    await fillComments(LIVE_IMPORT_CAP.comments - 1);
+    expect(await issuesEvent('opened', ghIssue())).toBe('PROCESSED');
+    expect((await imported()).comments).toHaveLength(1);
+    expect((await importOf())?.commentsImportedAt).toBeNull();
+
+    // The issue does not change on GitHub again, so no list brings it back
+    fake.setRepoLists(FULL_NAME, { issues: [], issueComments: { '31': oldComments }, ...quiet() });
+    nextHour();
+    await reconcileRepo(link.id);
+    expect((await imported()).comments.map((c) => c.body)).toEqual([oldComments[0].body, 'Second']);
+    expect((await importOf())?.commentsImportedAt).not.toBeNull();
+  });
+
+  it('reads the rest of the comments the cap cut short on a caught-up issue', async () => {
+    const caught = ghIssue({ created_at: ago(HOUR), updated_at: ago(HOUR) });
+    fake.setRepoLists(FULL_NAME, {
+      issues: [caught],
+      issueComments: { '31': oldComments },
+      ...quiet(),
+    });
+    await fillComments(LIVE_IMPORT_CAP.comments - 1);
+    await reconcileRepo(link.id);
+    expect((await imported()).comments).toHaveLength(1);
+    expect((await importOf())?.commentsImportedAt).toBeNull();
+    expect((await linkRow()).lastReconcileNote).toMatch(/hourly import cap/);
+    // The catch-up moved past the issue: its next round does not list it again
+    expect((await linkRow()).importIssuesSeenAt!.getTime()).toBeGreaterThan(
+      Date.parse(caught.updated_at),
+    );
+
+    nextHour();
+    await reconcileRepo(link.id);
+    expect((await imported()).comments.map((c) => c.body)).toEqual([oldComments[0].body, 'Second']);
+    expect((await importOf())?.commentsImportedAt).not.toBeNull();
+  });
+
+  it('reads at most 10 issues of comments a round, the longest waiting first', async () => {
+    fake.setRepoLists(FULL_NAME, { issues: [], issueComments: {}, ...quiet() });
+    const numbers = Array.from({ length: 11 }, (_, i) => 101 + i);
+    for (const number of numbers) {
+      await backfill(number, new Date(Date.parse('2026-11-07T00:00:00Z') + number * 60_000));
+    }
+    fake.requests.length = 0;
+    await reconcileRepo(link.id);
+    expect(commentReads()).toEqual(numbers.slice(0, 10));
+    const left = await prisma.githubIssueImport.findMany({
+      where: { repoLinkId: link.id, commentsImportedAt: null },
+      select: { githubIssueNumber: true },
+    });
+    expect(left.map((row) => row.githubIssueNumber)).toEqual([111]);
+  });
+
+  it('stops reading comments when the call budget is spent', async () => {
+    fake.setRepoLists(FULL_NAME, { issues: [], issueComments: {}, ...quiet() });
+    await backfill(121, new Date('2026-11-07T01:00:00Z'));
+    await backfill(122, new Date('2026-11-07T02:00:00Z'));
+    await prisma.githubIssueImport.updateMany({
+      where: { repoLinkId: link.id },
+      data: { commentsImportedAt: new Date() },
+    });
+    await reconcileRepo(link.id);
+    const baseline = (await reconcileRepo(link.id)).calls;
+    await prisma.githubIssueImport.updateMany({
+      where: { repoLinkId: link.id },
+      data: { commentsImportedAt: null },
+    });
+    fake.requests.length = 0;
+    // One call more than the rest of the round needs: one issue's comments
+    await reconcileRepo(link.id, { callBudget: baseline + 1 });
+    expect(commentReads()).toEqual([121]);
+    expect((await importOf(121))?.commentsImportedAt).not.toBeNull();
+    expect((await importOf(122))?.commentsImportedAt).toBeNull();
+    expect((await linkRow()).lastReconcileNote).toMatch(/call budget/);
+  });
+
+  it('stops reading the comments of an issue GitHub no longer has', async () => {
+    fake.setRepoLists(FULL_NAME, { issues: [], issueComments: {}, ...quiet() });
+    await backfill(131, new Date('2026-11-07T01:00:00Z'));
+    fake.on('GET /repos/:owner/:repo/issues/:number/comments', {
+      status: 404,
+      body: { message: 'Not Found' },
+    });
+    await reconcileRepo(link.id);
+    expect((await importOf(131))?.commentsImportedAt).not.toBeNull();
+    fake.requests.length = 0;
+    await reconcileRepo(link.id);
+    expect(commentReads()).toEqual([]);
+  });
+
+  it.each([
+    ['rate limited', { status: 429, body: { message: 'Too many requests' } }],
+    ['unavailable', { status: 502, body: { message: 'Bad Gateway' } }],
+  ])('stops the catch-up without moving its cursor when GitHub is %s', async (_, reply) => {
+    const a = ghIssue({ number: 91, id: 2200091, created_at: ago(HOUR), updated_at: ago(HOUR) });
+    const b = ghIssue({
+      number: 92,
+      id: 2200092,
+      created_at: ago(HOUR / 2),
+      updated_at: ago(HOUR / 2),
+    });
+    fake.setRepoLists(FULL_NAME, { issues: [a, b], issueComments: {}, ...quiet() });
+    fake.on('GET /repos/:owner/:repo/issues/:number/comments', reply);
+    await reconcileRepo(link.id);
+    expect(await importOf(92)).toBeNull();
+    expect((await linkRow()).importIssuesSeenAt).toBeNull();
+    expect((await linkRow()).lastReconcileNote).toMatch(/unavailable or rate limited/);
+  });
+});

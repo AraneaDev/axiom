@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { GithubRepoLink } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '../../config/database';
 import {
@@ -20,6 +20,7 @@ import { createIssue } from '../issues/issues.service';
 
 import { instanceOrigin } from './github-app.service';
 import { countGithubCalls } from './github-client';
+import { importCapState } from './import-cap';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
 import {
   LINK_CLAIM_TTL_MS,
@@ -597,6 +598,90 @@ describe('importGithubIssue: an imported issue', () => {
       created_at: '2026-11-07T11:00:00Z',
       updated_at: '2026-11-07T11:00:00Z',
     });
+    expect(await prisma.comment.count({ where: { issueId: result!.issueId } })).toBe(0);
+  });
+});
+
+describe('fix round 4', () => {
+  // The import rows' lookups, `calls` counting them: those `missing` names answer null (as when
+  // another run writes the row just after it was looked for), those `failing` names throw
+  function lookups(opts: { missing?: number[]; failing?: number[] }) {
+    const delegate = prisma.githubIssueImport;
+    const real = delegate.findUnique.bind(delegate);
+    const seen = { calls: 0 };
+    const spy = vi.spyOn(delegate, 'findUnique').mockImplementation(((
+      args: Parameters<typeof real>[0],
+    ) => {
+      seen.calls++;
+      if (opts.missing?.includes(seen.calls)) return Promise.resolve(null);
+      if (opts.failing?.includes(seen.calls)) return Promise.reject(new Error('lookup failed'));
+      return real(args);
+    }) as unknown as typeof delegate.findUnique);
+    return { seen, restore: () => spy.mockRestore() };
+  }
+
+  it('turns a GITHUB_IMPORT_EXISTS of the creation into an update of the row that won', async () => {
+    const first = await importGithubIssue(link, issue(), { withComments: false });
+    // Both lookups before the creation miss the row: the creation then runs into it
+    const spy = lookups({ missing: [1, 2] });
+    let again;
+    try {
+      again = await importGithubIssue(
+        link,
+        issue({ title: 'Renamed on GitHub', updated_at: '2026-11-07T12:00:00Z' }),
+        { withComments: false, live: true },
+      );
+    } finally {
+      spy.restore();
+    }
+    expect(spy.seen.calls).toBeGreaterThan(2);
+    expect(again).toEqual({ issueId: first!.issueId, created: false, conflicts: [] });
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(1);
+    const stored = await prisma.issue.findUniqueOrThrow({ where: { id: first!.issueId } });
+    expect(stored.title).toBe('Renamed on GitHub');
+    // The slot the duplicate took is given back
+    expect((await importCapState(link.id)).issues.used).toBe(0);
+  });
+
+  it('keeps the error of a failed creation when giving the slot back fails too', async () => {
+    const column = await prisma.boardColumn.findFirstOrThrow({
+      where: { projectId: ctx.projectId, isDefault: true },
+    });
+    const other = await prisma.boardColumn.findFirstOrThrow({
+      where: { projectId: ctx.projectId, isDefault: false },
+    });
+    const gate = await prisma.approvalGate.create({
+      data: { projectId: ctx.projectId, fromColumnId: other.id, toColumnId: column.id },
+    });
+    // The lookup after the failed creation, which decides on the slot, fails as well
+    const spy = lookups({ failing: [3] });
+    try {
+      await expect(
+        importGithubIssue(link, issue(), { withComments: false, live: true }),
+      ).rejects.toThrow(/approval gate/);
+    } finally {
+      spy.restore();
+      await prisma.approvalGate.delete({ where: { id: gate.id } });
+    }
+    expect(spy.seen.calls).toBe(3);
+  });
+
+  it('writes an imported comment and its mirror together, or neither', async () => {
+    const result = await importGithubIssue(link, issue(), { withComments: false });
+    const row = await prisma.githubIssueImport.findUniqueOrThrow({
+      where: { issueId: result!.issueId },
+    });
+    // A copy of a row the database no longer has: the mirror cannot be written
+    await prisma.githubIssueImport.delete({ where: { id: row.id } });
+    await expect(
+      importComment(row, {
+        id: 9601,
+        body: 'Seen here too.',
+        user: { login: 'outside-dev', id: 7002, type: 'User' },
+        created_at: '2026-11-07T11:00:00Z',
+        updated_at: '2026-11-07T11:00:00Z',
+      }),
+    ).rejects.toBeDefined();
     expect(await prisma.comment.count({ where: { issueId: result!.issueId } })).toBe(0);
   });
 });

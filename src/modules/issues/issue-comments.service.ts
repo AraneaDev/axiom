@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 import { prisma } from '../../config/database';
 import { broadcastToRoom } from '../../realtime/broadcast';
 import { assertAuthor } from '../../utils/assert-author';
@@ -19,16 +21,28 @@ import { createNotification } from '../notifications/notifications.service';
  * @param options.skipMentions - Notify nobody the body mentions (imported text)
  * @param options.externalAuthorLogin - The GitHub login of an imported comment's author, when the
  *   author is the integration user
+ * @param options.githubImport - The mirror of an imported GitHub comment, written in the same
+ *   statement as the comment
  * @returns The created comment with author relation
  */
 export async function addComment(
   issueId: string,
   authorId: string,
   body: string,
-  options?: { skipMentions?: boolean; externalAuthorLogin?: string },
+  options?: {
+    skipMentions?: boolean;
+    externalAuthorLogin?: string;
+    githubImport?: Prisma.GithubImportedCommentCreateWithoutCommentInput;
+  },
 ) {
   const comment = await prisma.comment.create({
-    data: { issueId, authorId, body, externalAuthorLogin: options?.externalAuthorLogin },
+    data: {
+      issueId,
+      authorId,
+      body,
+      externalAuthorLogin: options?.externalAuthorLogin,
+      githubImport: options?.githubImport ? { create: options.githubImport } : undefined,
+    },
     include: { author: { select: USER_BASIC_SELECT } },
   });
 
