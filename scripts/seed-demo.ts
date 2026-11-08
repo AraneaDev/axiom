@@ -20,7 +20,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-import { createDefaultGithubRules } from '../src/modules/github/default-rules';
+import { applyDefaultGithubRules } from '../src/modules/github/default-rules';
 import { seedGithubDemo } from './seed-github-demo';
 import { seedPageMentions } from './seed-page-mentions';
 
@@ -385,8 +385,14 @@ async function main() {
     if (outcome === 'seeded') {
       console.warn('        GitHub: acme-labs/widget linked to "Dark mode support"');
     }
-    // The rules a real link gets; made by name, so a re-run adds nothing
-    if (outcome === 'seeded') await createDefaultGithubRules(project.id);
+    // The rules a real link gets, claimed once like a real link, so a rule deleted later stays deleted
+    if (outcome === 'seeded') {
+      const link = await prisma.githubRepoLink.findUniqueOrThrow({
+        where: { projectId: project.id },
+        select: { id: true },
+      });
+      await applyDefaultGithubRules(link.id);
+    }
   }
 
   // ────────────────────────────────────────────────────────────

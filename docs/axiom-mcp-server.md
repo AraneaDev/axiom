@@ -263,6 +263,7 @@ The actions can use these template variables:
 | `github.pr.number`, `.title`, `.url`, `.state`, `.draft`, `.author`, `.headRef`, `.baseRef`, `.headSha` | The pull request |
 | `github.review.author`, `.state`, `.url` | The review, on the two review triggers |
 | `github.checks.headSha`, `.failedNames` | The head commit and the comma-separated names of the checks that failed |
+| `github.checks.failed` | The checks that failed, a list whose entries have `.name`, `.failedStep` (null when unknown) and `.url` |
 | `github.branch.name`, `.url` | The branch, on `branch:created` |
 
 Text from GitHub is untrusted. Where it renders as Markdown (a comment body, an issue description, a `set_field` body) every Markdown character is escaped, so it shows as plain text and never as an image, link or mention. Everywhere else (emails, webhook payloads, titles and other fields) it is plain text, on one line and cut to length. Don't put a template variable inside a code span: the escaping backslashes show there. An escaped `\@` is literal and notifies nobody. Mentions are also never read from code, link addresses or bare URLs.
