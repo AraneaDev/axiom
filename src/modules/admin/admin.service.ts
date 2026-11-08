@@ -16,6 +16,7 @@ import { logAudit } from '../audit/audit.service';
 import { disconnect as disconnectGithub } from '../github/github-account.service';
 import { isIntegrationUser } from '../github/integration-user';
 import { assertNotLastOwnerTx } from '../orgs/org-roles';
+import { onOrgRoleChanged, onOwnershipLapseEverywhere } from '../service-accounts/bot-guards';
 
 // ─── Admin Check ────────────────────────────────────────────
 
@@ -233,6 +234,13 @@ export async function updateUser(userId: string, data: { role?: string; disabled
     });
     // A lower role can lose access: re-check the user's live connections
     void revokeLiveAccess({ userId });
+    // In each org: below MEMBER their bots lose them as an owner, and any change can leave a
+    // bot's place without its owner
+    const orgs = await prisma.orgMembership.findMany({
+      where: { userId },
+      select: { orgId: true },
+    });
+    for (const { orgId } of orgs) await onOrgRoleChanged(userId, orgId, role);
   }
 
   return getUser(userId);
@@ -257,6 +265,9 @@ export async function deleteUser(userId: string) {
     }
   };
   await prisma.$transaction(guardLastOwner);
+  // Their bots lose them as an owner before the cascade drops the owner rows unseen: orphans are
+  // suspended, the other bots leave the places only this user was in
+  await onOwnershipLapseEverywhere(userId);
   // The row cascades with the user, and the grant at GitHub would outlive it: revoked first, on
   // a best-effort basis, and only for a delete that is going to happen
   try {
@@ -301,6 +312,9 @@ export async function deactivateUser(userId: string) {
   ]);
   // Access tokens stay valid until they expire, and open sockets never re-authenticate
   disconnectUser(userId);
+  // A deactivated person owns no bot: orphans are suspended, the other bots leave the places
+  // only this user was in
+  await onOwnershipLapseEverywhere(userId);
   return { success: true };
 }
 

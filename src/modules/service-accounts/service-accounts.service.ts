@@ -10,7 +10,8 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { cancelPendingFor } from '../agent-approvals/agent-approvals.cleanup';
 import { generateApiToken } from '../users/users.service';
 
-import { eligibleOwnerWhere } from './owners';
+import { assertPlacesKept, lockEligibleOwners, lockServiceAccount } from './bot-guards';
+import { eligibleOwnerIds, eligibleOwnerWhere } from './owners';
 
 /** Org roles that manage the org's bots */
 const ADMIN_ROLES = ['OWNER', 'ADMIN'] as const;
@@ -96,26 +97,37 @@ export async function getServiceAccount(id: string) {
 }
 
 /**
- * The ids of a bot's owners, oldest first.
+ * The org of a bot, for the approval rules of a call on it: none when there is no such bot.
  * @param id - The bot's user id
  */
-export async function ownersOf(id: string): Promise<string[]> {
-  const rows = await prisma.serviceAccountOwner.findMany({
-    where: { serviceAccountId: id },
-    select: { ownerId: true },
-    orderBy: { createdAt: 'asc' },
-  });
-  return rows.map((r) => r.ownerId);
+export async function orgsOfServiceAccount(id: string): Promise<string[]> {
+  const account = await getServiceAccount(id);
+  return account ? [account.orgId] : [];
 }
 
 /**
- * Whether a user owns a bot.
+ * The ids of a bot's owners who count now, oldest first: an owner row of someone demoted,
+ * deactivated or gone counts for nothing, even before the orphan check removes it.
+ * @param id - The bot's user id
+ */
+export async function ownersOf(id: string): Promise<string[]> {
+  return eligibleOwnerIds(id);
+}
+
+/**
+ * Whether a user owns a bot now: an owner row, and still eligible in the bot's org.
  * @param botId - The bot's user id
  * @param userId - The user
  */
 export async function isOwner(botId: string, userId: string): Promise<boolean> {
-  const row = await prisma.serviceAccountOwner.findUnique({
-    where: { serviceAccountId_ownerId: { serviceAccountId: botId, ownerId: userId } },
+  const account = await getServiceAccount(botId);
+  if (!account) return false;
+  const row = await prisma.serviceAccountOwner.findFirst({
+    where: {
+      serviceAccountId: botId,
+      ownerId: userId,
+      owner: eligibleOwnerWhere(account.orgId),
+    },
     select: { ownerId: true },
   });
   return !!row;
@@ -328,24 +340,90 @@ export async function updateServiceAccount(
 }
 
 /**
- * Replace a bot's owners. There is always at least one, and each is eligible.
+ * Replace a bot's owners. There is always at least one, each is eligible, and each team and space
+ * the bot is in keeps one of them (decision 9). An orphaned bot that gets owners is resumed.
  * @param id - The bot's user id
  * @param ownerIds - The new owners
- * @throws {AppError} 400 SERVICE_ACCOUNT_OWNER_INVALID for an owner who is not eligible
+ * @throws {AppError} 400 SERVICE_ACCOUNT_OWNER_INVALID for an owner who is not eligible, 400
+ * SERVICE_ACCOUNT_OWNER_NEEDED when a place of the bot would have none of them
  */
 export async function setOwners(id: string, ownerIds: string[]) {
-  const account = await getServiceAccount(id);
-  if (!account) throw NOT_FOUND();
-  // Eligibility is read in the transaction that writes, so the owners it checked are the ones
-  // stored
+  // Under the bot's lock, with the owners' membership rows locked: a demotion, removal or leave
+  // committed concurrently either shows here or waits, and its orphan check runs after this
   await prisma.$transaction(async (tx) => {
+    const account = await lockServiceAccount(tx, id);
+    if (!account) throw NOT_FOUND();
+    await lockEligibleOwners(tx, account.orgId, [...new Set(ownerIds)]);
     const owners = await eligibleOwners(account.orgId, ownerIds, tx);
+    await assertPlacesKept(tx, id, owners);
     await tx.serviceAccountOwner.deleteMany({
       where: { serviceAccountId: id, ownerId: { notIn: owners } },
     });
     await tx.serviceAccountOwner.createMany({
       data: owners.map((ownerId) => ({ serviceAccountId: id, ownerId })),
       skipDuplicates: true,
+    });
+    if (account.suspendedReason === 'ORPHANED') {
+      await tx.serviceAccount.update({
+        where: { userId: id },
+        data: { status: 'ACTIVE', suspendedReason: null, suspendedAt: null },
+      });
+    }
+  });
+  return describeServiceAccount(id);
+}
+
+/**
+ * Suspend a bot by hand: its tokens stop working at once and its waiting requests are cancelled.
+ * A bot already suspended stays as it is, an orphan stays an orphan.
+ * @param id - The bot's user id
+ * @throws {AppError} 404 when there is no such bot
+ */
+export async function suspendServiceAccount(id: string) {
+  await prisma.$transaction(async (tx) => {
+    const account = await lockServiceAccount(tx, id);
+    if (!account) throw NOT_FOUND();
+    if (account.status === 'SUSPENDED') return;
+    await tx.serviceAccount.update({
+      where: { userId: id },
+      data: { status: 'SUSPENDED', suspendedReason: 'MANUAL', suspendedAt: new Date() },
+    });
+    await cancelPendingFor(id, 'The service account was suspended', tx);
+  });
+  return describeServiceAccount(id);
+}
+
+/**
+ * Resume a bot suspended by hand. An orphan resumes only by getting an owner (setOwners).
+ * @param id - The bot's user id
+ * @throws {AppError} 404 when there is no such bot, 400 SERVICE_ACCOUNT_ORPHANED for an orphan
+ */
+export async function resumeServiceAccount(id: string) {
+  await prisma.$transaction(async (tx) => {
+    const account = await lockServiceAccount(tx, id);
+    if (!account) throw NOT_FOUND();
+    const owners = await lockEligibleOwners(
+      tx,
+      account.orgId,
+      (
+        await tx.serviceAccountOwner.findMany({
+          where: { serviceAccountId: id },
+          select: { ownerId: true },
+        })
+      ).map((o) => o.ownerId),
+    );
+    // A lapse no orphan check saw still leaves the bot without an owner to answer for it
+    if (account.suspendedReason === 'ORPHANED' || owners.length === 0) {
+      throw new AppError(
+        400,
+        'This service account has no owner: give it an owner to resume it',
+        'SERVICE_ACCOUNT_ORPHANED',
+      );
+    }
+    if (account.status === 'ACTIVE') return;
+    await tx.serviceAccount.update({
+      where: { userId: id },
+      data: { status: 'ACTIVE', suspendedReason: null, suspendedAt: null },
     });
   });
   return describeServiceAccount(id);
@@ -431,6 +509,17 @@ const TOKEN_SELECT = {
  * @throws {AppError} 404 when there is no such bot or the caller is neither
  */
 export async function assertCanManageTokens(userId: string, botId: string): Promise<void> {
+  return assertOwnerOrOrgAdmin(userId, botId);
+}
+
+/**
+ * Authorize a call that an org admin or one of the bot's owners may make: its tokens, suspending
+ * and resuming it. Anyone else is told the bot does not exist.
+ * @param userId - The caller
+ * @param botId - The bot's user id
+ * @throws {AppError} 404 when there is no such bot or the caller is neither
+ */
+export async function assertOwnerOrOrgAdmin(userId: string, botId: string): Promise<void> {
   const account = await getServiceAccount(botId);
   if (!account) throw NOT_FOUND();
   if (await isOrgAdmin(userId, account.orgId)) return;

@@ -5,6 +5,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { ERR } from '../../utils/error-messages';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
+import { assertOwnersSeePage } from '../service-accounts/bot-guards';
 
 /**
  * Check if a user can view a page.
@@ -117,15 +118,15 @@ export async function setRestrictions(
   const page = await prisma.page.findUnique({ where: { id: pageId } });
   if (!page) throw new AppError(404, ERR.PAGE_NOT_FOUND);
 
-  // Delete existing restrictions of this type then create new ones
-  await prisma.$transaction([
-    prisma.pageRestriction.deleteMany({ where: { pageId, type } }),
-    ...userIds.map((userId) =>
-      prisma.pageRestriction.create({
-        data: { pageId, type, userId },
-      }),
-    ),
-  ]);
+  // Delete existing restrictions of this type then create new ones. A bot on the list needs an
+  // owner who can view the page with the list in place (decision 9), checked under its lock
+  await prisma.$transaction(async (tx) => {
+    await assertOwnersSeePage(tx, pageId, type, userIds);
+    await tx.pageRestriction.deleteMany({ where: { pageId, type } });
+    for (const userId of userIds) {
+      await tx.pageRestriction.create({ data: { pageId, type, userId } });
+    }
+  });
   // A restriction hides or locks the page for everyone not listed (re-check not awaited)
   void revokeLiveAccess({ pageId });
 }

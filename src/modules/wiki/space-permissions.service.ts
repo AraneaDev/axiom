@@ -1,4 +1,4 @@
-import { SpacePermissionLevel } from '@prisma/client';
+import { Prisma, SpacePermissionLevel } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
@@ -6,6 +6,13 @@ import { revokeLiveAccess } from '../../realtime/access-revocation';
 import { ERR } from '../../utils/error-messages';
 import { hasPermission, type Action } from '../../utils/permissions';
 import { USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
+import {
+  assertBotRole,
+  assertOwnerPresent,
+  isBotUser,
+  lockServiceAccount,
+  onSpaceChanged,
+} from '../service-accounts/bot-guards';
 
 const LEVEL_HIERARCHY: Record<SpacePermissionLevel, number> = {
   VIEW: 1,
@@ -19,21 +26,28 @@ const LEVEL_ACTION: Record<SpacePermissionLevel, Action> = {
   ADMIN: 'team:manage_members',
 };
 
+/** The reads canAccessSpace makes: the client, or a transaction that wants its own writes seen */
+export type SpaceAccessDb = Pick<
+  Prisma.TransactionClient,
+  'user' | 'wikiSpace' | 'orgMembership' | 'teamMembership' | 'spacePermission'
+>;
+
 async function roleAllowsSpaceLevel(
   spaceId: string,
   userId: string,
   level: SpacePermissionLevel,
+  db: SpaceAccessDb,
 ): Promise<boolean> {
-  const space = await prisma.wikiSpace.findUnique({
+  const space = await db.wikiSpace.findUnique({
     where: { id: spaceId },
     select: { teamId: true, team: { select: { orgId: true } } },
   });
   if (!space) return false;
   const [orgMembership, teamMembership] = await Promise.all([
-    prisma.orgMembership.findUnique({
+    db.orgMembership.findUnique({
       where: { userId_orgId: { userId, orgId: space.team.orgId } },
     }),
-    prisma.teamMembership.findUnique({
+    db.teamMembership.findUnique({
       where: { userId_teamId: { userId, teamId: space.teamId } },
     }),
   ]);
@@ -53,46 +67,48 @@ async function roleAllowsSpaceLevel(
  * @param spaceId - The space to check access for
  * @param userId - The user to check
  * @param requiredLevel - The minimum permission level required
+ * @param db - The client to read with: a transaction, to see its own uncommitted writes
  * @returns True if the user has at least the required level
  */
 export async function canAccessSpace(
   spaceId: string,
   userId: string,
   requiredLevel: SpacePermissionLevel,
+  db: SpaceAccessDb = prisma,
 ): Promise<boolean> {
   // 0. Platform superadmins bypass all permission checks
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  const user = await db.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
   if (user?.isAdmin) return true;
 
   // 1. Count custom permissions on space
-  const permCount = await prisma.spacePermission.count({ where: { spaceId } });
+  const permCount = await db.spacePermission.count({ where: { spaceId } });
 
   // 2. No custom permissions: the role matrix decides (src/utils/permissions.ts). Reading
   // needs wiki:view and editing wiki:edit, by org role or the role in the space's team;
   // administering needs team:manage_members (org OWNER/ADMIN or team ADMIN)
-  if (permCount === 0) return roleAllowsSpaceLevel(spaceId, userId, requiredLevel);
+  if (permCount === 0) return roleAllowsSpaceLevel(spaceId, userId, requiredLevel, db);
 
   // 3. Get user's team role via TeamMember lookup
-  const space = await prisma.wikiSpace.findUnique({
+  const space = await db.wikiSpace.findUnique({
     where: { id: spaceId },
     select: { teamId: true, team: { select: { orgId: true } } },
   });
   if (!space) return false;
 
   // 3b. Org OWNER/ADMIN have full access to all spaces in their org
-  const orgMembership = await prisma.orgMembership.findUnique({
+  const orgMembership = await db.orgMembership.findUnique({
     where: { userId_orgId: { userId, orgId: space.team.orgId } },
   });
   if (orgMembership && (orgMembership.role === 'OWNER' || orgMembership.role === 'ADMIN')) {
     return true;
   }
 
-  const teamMembership = await prisma.teamMembership.findUnique({
+  const teamMembership = await db.teamMembership.findUnique({
     where: { userId_teamId: { userId, teamId: space.teamId } },
   });
 
   // 4. Check direct user permission AND team role permission
-  const permissions = await prisma.spacePermission.findMany({
+  const permissions = await db.spacePermission.findMany({
     where: {
       spaceId,
       OR: [{ userId }, ...(teamMembership ? [{ teamRole: teamMembership.role }] : [])],
@@ -163,19 +179,35 @@ export async function setSpacePermission(
   }
 
   if (data.userId) {
-    const permission = await prisma.spacePermission.upsert({
-      where: { spaceId_userId: { spaceId, userId: data.userId } },
-      create: { spaceId, userId: data.userId, level: data.level },
-      update: { level: data.level },
-      include: {
-        user: {
-          select: USER_WITH_AVATAR_SELECT,
+    const userId = data.userId;
+    const upsert = (db: Pick<Prisma.TransactionClient, 'spacePermission'>) =>
+      db.spacePermission.upsert({
+        where: { spaceId_userId: { spaceId, userId } },
+        create: { spaceId, userId, level: data.level },
+        update: { level: data.level },
+        include: {
+          user: {
+            select: USER_WITH_AVATAR_SELECT,
+          },
         },
-      },
-    });
+      });
+    // A bot holds at most edit, and only where one of its owners can view the space with the
+    // grant in place: the first grant closes the space to everyone not listed (decision 9)
+    const bot = await isBotUser(prisma, userId);
+    if (bot) assertBotRole(data.level);
+    const permission = bot
+      ? await prisma.$transaction(async (tx) => {
+          // Locked before the write: a concurrent check of this bot sees the grant or waits
+          await lockServiceAccount(tx, userId);
+          const granted = await upsert(tx);
+          await assertOwnerPresent(userId, { spaceId }, tx);
+          return granted;
+        })
+      : await upsert(prisma);
     // Any permission can take access away: the first one closes an open space to everyone
     // not listed, and a lower level ends editing (re-check not awaited)
     void revokeLiveAccess({ spaceId });
+    await onSpaceChanged(spaceId);
     return permission;
   }
 
@@ -190,6 +222,8 @@ export async function setSpacePermission(
     },
   });
   void revokeLiveAccess({ spaceId });
+  // A grant to a team role can close the space to a bot's owners
+  await onSpaceChanged(spaceId);
   return permission;
 }
 
@@ -210,4 +244,6 @@ export async function removeSpacePermission(spaceId: string, permissionId: strin
   await prisma.spacePermission.delete({ where: { id: permissionId } });
   // Removing a grant can take access away from its user or team role (not awaited)
   void revokeLiveAccess({ spaceId });
+  // And from a bot's last owner there, so the bot leaves the space too (decision 9)
+  await onSpaceChanged(spaceId);
 }

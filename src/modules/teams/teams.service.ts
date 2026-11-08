@@ -10,6 +10,12 @@ import { parsePagination, parseServicePagination, paginatedResponse } from '../.
 import { USER_BASIC_SELECT, USER_WITH_AVATAR_SELECT } from '../../utils/prisma-selects';
 import { isIntegrationUser } from '../github/integration-user';
 import { viewablePageIdFilter } from '../search/search-access';
+import {
+  assertBotRole,
+  assertOwnerPresent,
+  isBotUser,
+  onOwnerLeft,
+} from '../service-accounts/bot-guards';
 import { canAccessSpace } from '../wiki/space-permissions.service';
 
 /**
@@ -229,22 +235,30 @@ export async function addTeamMember(
   });
   if (!orgMember) throw new AppError(400, 'User must be an org member first');
 
-  return prisma.teamMembership.create({
-    data: { userId, teamId, role },
-    include: {
-      user: {
-        select: {
-          ...USER_BASIC_SELECT,
-          isAdmin: true,
-          // Only the membership in this team's org: a member's other orgs are not shown
-          orgMemberships: {
-            where: { orgId: team.orgId },
-            select: { orgId: true, role: true },
-          },
+  const include = {
+    user: {
+      select: {
+        ...USER_BASIC_SELECT,
+        isAdmin: true,
+        // Only the membership in this team's org: a member's other orgs are not shown
+        orgMemberships: {
+          where: { orgId: team.orgId },
+          select: { orgId: true, role: true },
         },
       },
     },
-  });
+  } as const;
+  // A bot joins as at most a member, and only where one of its owners is (decision 9): checked
+  // and written under the bot's lock
+  if (await isBotUser(prisma, userId)) {
+    assertBotRole(role);
+    return prisma.$transaction(async (tx) => {
+      await assertOwnerPresent(userId, { teamId }, tx);
+      return tx.teamMembership.create({ data: { userId, teamId, role }, include });
+    });
+  }
+
+  return prisma.teamMembership.create({ data: { userId, teamId, role }, include });
 }
 
 /**
@@ -262,6 +276,7 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
     }),
     'Team membership not found',
   );
+  if (await isBotUser(prisma, memberId)) assertBotRole(role);
 
   const updated = await prisma.teamMembership.update({
     where: { id: membership.id },
@@ -269,6 +284,8 @@ export async function updateTeamMemberRole(teamId: string, memberId: string, rol
   });
   // Space permissions can be granted per team role
   void revokeLiveAccess({ userId: memberId });
+  // An owner's new role can take a space of the team away, and their bots with it
+  await onOwnerLeft(memberId, { teamId });
   return updated;
 }
 
@@ -295,6 +312,8 @@ export async function removeTeamMember(teamId: string, memberId: string) {
   ]);
   // Open sockets checked access when they joined: re-check them (not awaited)
   void revokeLiveAccess({ userId: memberId });
+  // A bot whose last owner in the team this was leaves it too (decision 9)
+  await onOwnerLeft(memberId, { teamId });
 }
 
 /**

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { orgMember } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
+import * as previews from '../../actions/previews';
 import { registerActions } from '../../actions/registry';
 import { createApiTokenSchema, registerSchema } from '../../utils/validation';
 
@@ -112,6 +113,40 @@ registerActions([
     handler: async (_ctx, { id }) => {
       await service.deleteServiceAccount(id);
     },
+  }),
+  // An owner or an org admin stops a bot at once, and starts it again. For a token both wait for
+  // a person's approval, the bot's own token included
+  defineAction({
+    name: 'serviceAccount.suspend',
+    admin: true,
+    area: 'orgs',
+    kind: 'write',
+    summary:
+      'Suspend a service account: its tokens stop working and its waiting requests are cancelled',
+    target: botTarget,
+    input: botTarget,
+    output: record,
+    preview: (_ctx, { id }) => previews.serviceAccountSuspend(id),
+    orgIds: async (_ctx, { id }) => service.orgsOfServiceAccount(id),
+    rest: { method: 'POST', path: '/api/service-accounts/:id/suspend', status: 200 },
+    authorize: async (ctx, { id }) => service.assertOwnerOrOrgAdmin(ctx.userId, id),
+    handler: async (_ctx, { id }) => service.suspendServiceAccount(id),
+  }),
+  defineAction({
+    name: 'serviceAccount.resume',
+    admin: true,
+    area: 'orgs',
+    kind: 'write',
+    summary:
+      'Resume a service account suspended by hand. One without an owner resumes when it gets one',
+    target: botTarget,
+    input: botTarget,
+    output: record,
+    preview: (_ctx, { id }) => previews.serviceAccountResume(id),
+    orgIds: async (_ctx, { id }) => service.orgsOfServiceAccount(id),
+    rest: { method: 'POST', path: '/api/service-accounts/:id/resume', status: 200 },
+    authorize: async (ctx, { id }) => service.assertOwnerOrOrgAdmin(ctx.userId, id),
+    handler: async (_ctx, { id }) => service.resumeServiceAccount(id),
   }),
   // A bot's tokens are made, rotated and revoked by an org admin or an owner in the web UI: a
   // token, the bot's own included, could otherwise mint itself more reach or a longer life

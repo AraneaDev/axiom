@@ -7,6 +7,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
 import { cancelPendingArgs } from '../agent-approvals/agent-approvals.cleanup';
 import { isIntegrationUser } from '../github/integration-user';
+import { onOrgRoleChanged, onOwnershipLapse } from '../service-accounts/bot-guards';
 import { assertPersonTarget } from '../service-accounts/person';
 
 import {
@@ -257,6 +258,9 @@ export async function updateOrgMemberRole(
   });
   // A lower role can lose org-wide access (an OWNER or ADMIN sees every space and page)
   void revokeLiveAccess({ userId: memberId });
+  // Below MEMBER the member owns no bot anymore, and a lower role can leave a bot's place
+  // without its owner
+  await onOrgRoleChanged(memberId, orgId, role);
   return updated;
 }
 
@@ -275,6 +279,15 @@ export async function removeOrgMember(orgId: string, memberId: string, actorId?:
     }),
     ERR.MEMBERSHIP_NOT_FOUND,
   );
+  // A bot leaves its org only when it is deleted, with its tokens and requests
+  const member = await prisma.user.findUnique({ where: { id: memberId }, select: { kind: true } });
+  if (member?.kind === 'SERVICE') {
+    throw new AppError(
+      400,
+      'A service account leaves its organization only when it is deleted',
+      'SERVICE_ACCOUNT_MANAGED_BY_ORG',
+    );
+  }
   if (actorId) await assertCanManageOrgMember(orgId, actorId, membership.role);
   // Everything the org granted goes with the membership, in one transaction: team
   // memberships (project access), space permissions and page allow-list entries naming the
@@ -297,6 +310,9 @@ export async function removeOrgMember(orgId: string, memberId: string, actorId?:
   });
   // Open sockets checked access when they joined: re-check them (not awaited)
   void revokeLiveAccess({ userId: memberId });
+  // Their bots lose them as an owner: orphaned bots are suspended, the others leave the places
+  // only this member was in
+  await onOwnershipLapse(memberId, orgId);
 }
 
 // ─── Invite Links ─────────────────────────────────────────────

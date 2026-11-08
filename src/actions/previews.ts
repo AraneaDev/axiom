@@ -783,6 +783,43 @@ export async function orgMemberRemove(
 }
 
 /**
+ * A bot as an approver reads it: its name and username, its org and its status now.
+ * @param id - The bot's user id
+ */
+async function serviceAccountLabel(id: string): Promise<{ label: string; status: string }> {
+  const row = await findOrThrow(
+    prisma.serviceAccount.findUnique({
+      where: { userId: id },
+      select: {
+        orgId: true,
+        status: true,
+        user: { select: { username: true, displayName: true } },
+      },
+    }),
+    'Service account not found',
+  );
+  return {
+    label: `the service account @${row.user.username} ${quoted(row.user.displayName)} in ${await orgLabel(row.orgId)}`,
+    status: row.status === 'ACTIVE' ? 'active' : 'suspended',
+  };
+}
+
+/** @param id - The bot's user id */
+export async function serviceAccountSuspend(id: string): Promise<string> {
+  const { label, status } = await serviceAccountLabel(id);
+  return (
+    `Suspend ${label}, now ${status}: its tokens stop working and its waiting requests are ` +
+    'cancelled'
+  );
+}
+
+/** @param id - The bot's user id */
+export async function serviceAccountResume(id: string): Promise<string> {
+  const { label, status } = await serviceAccountLabel(id);
+  return `Resume ${label}, now ${status}: its tokens work again`;
+}
+
+/**
  * @param orgId - The org
  * @param teamId - Only this team's, if given
  */
