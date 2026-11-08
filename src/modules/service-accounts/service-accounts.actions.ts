@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { orgMember } from '../../actions/authorize';
 import { defineAction } from '../../actions/define';
 import { registerActions } from '../../actions/registry';
-import { registerSchema } from '../../utils/validation';
+import { createApiTokenSchema, registerSchema } from '../../utils/validation';
 
 import * as service from './service-accounts.service';
 
@@ -11,9 +11,11 @@ import * as service from './service-accounts.service';
 const record = z.looseObject({ id: z.string() });
 
 const nothing = z.void();
+const newToken = z.looseObject({ id: z.string(), token: z.string() });
 
 const orgTarget = z.object({ orgId: z.string() });
 const botTarget = z.object({ id: z.string() });
+const botToken = botTarget.extend({ tokenId: z.string() });
 
 const ownerIds = z.array(z.string()).min(1).max(50);
 const description = z.string().max(500);
@@ -109,6 +111,61 @@ registerActions([
     authorize: async (ctx, { id }) => service.assertCanAccess(ctx.userId, id, 'manage'),
     handler: async (_ctx, { id }) => {
       await service.deleteServiceAccount(id);
+    },
+  }),
+  // A bot's tokens are made, rotated and revoked by an org admin or an owner in the web UI: a
+  // token, the bot's own included, could otherwise mint itself more reach or a longer life
+  defineAction({
+    name: 'serviceAccount.createToken',
+    uiOnly: true,
+    area: 'orgs',
+    kind: 'write',
+    summary:
+      'Create a token for a service account: no admin scope, expiring in 1 to 365 days (90 by ' +
+      'default). The raw token is shown once',
+    target: botTarget,
+    input: botTarget.extend({
+      name: createApiTokenSchema.shape.name,
+      scopes: createApiTokenSchema.shape.scopes,
+      expiresInDays: z
+        .number()
+        .int()
+        .min(1)
+        .max(service.BOT_TOKEN_MAX_DAYS)
+        .default(service.BOT_TOKEN_DEFAULT_DAYS),
+    }),
+    output: newToken,
+    rest: { method: 'POST', path: '/api/service-accounts/:id/tokens' },
+    authorize: async (ctx, { id }) => service.assertCanManageTokens(ctx.userId, id),
+    handler: async (_ctx, { id, ...data }) => service.createBotToken(id, data),
+  }),
+  defineAction({
+    name: 'serviceAccount.rotateToken',
+    uiOnly: true,
+    area: 'orgs',
+    kind: 'write',
+    summary:
+      "Rotate a service account's token: a new one with the same name and scopes, and the old " +
+      'one stops within 7 days. The raw token is shown once',
+    input: botToken,
+    output: newToken,
+    rest: { method: 'POST', path: '/api/service-accounts/:id/tokens/:tokenId/rotate' },
+    authorize: async (ctx, { id }) => service.assertCanManageTokens(ctx.userId, id),
+    handler: async (_ctx, { id, tokenId }) => service.rotateBotToken(id, tokenId),
+  }),
+  defineAction({
+    name: 'serviceAccount.revokeToken',
+    uiOnly: true,
+    destructive: true,
+    area: 'orgs',
+    kind: 'write',
+    summary: "Revoke a service account's token, at once",
+    input: botToken,
+    output: nothing,
+    rest: { method: 'DELETE', path: '/api/service-accounts/:id/tokens/:tokenId' },
+    authorize: async (ctx, { id }) => service.assertCanManageTokens(ctx.userId, id),
+    handler: async (_ctx, { id, tokenId }) => {
+      await service.revokeBotToken(id, tokenId);
     },
   }),
 ]);

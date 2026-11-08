@@ -138,12 +138,25 @@ async function assertOrgExists(orgId: string): Promise<void> {
 }
 
 /**
- * Delete an organization and all its associated data.
+ * Delete an organization and all its associated data. Its bots go as a deleted bot does: their
+ * tokens are revoked and their users stay, deactivated, for the history they left elsewhere.
  * @param orgId - The organization ID
  */
 export async function deleteOrg(orgId: string) {
   await assertOrgExists(orgId);
-  await prisma.organization.delete({ where: { id: orgId } });
+  // Read before the delete: the service accounts cascade with the org, the users do not. A bot
+  // made after this read has no service account once the org is gone, and the token lookup
+  // refuses that too. A batch, not an interactive transaction: the cascade may outlast its timeout
+  const bots = await prisma.serviceAccount.findMany({ where: { orgId }, select: { userId: true } });
+  const botIds = bots.map((b) => b.userId);
+  await prisma.$transaction([
+    prisma.apiToken.deleteMany({ where: { userId: { in: botIds } } }),
+    prisma.user.updateMany({
+      where: { id: { in: botIds }, deactivatedAt: null },
+      data: { deactivatedAt: new Date() },
+    }),
+    prisma.organization.delete({ where: { id: orgId } }),
+  ]);
 }
 
 /**

@@ -77,16 +77,18 @@ model User {
 }
 
 model ApiToken {
-  id         String    @id @default(cuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name       String
-  tokenHash  String    @unique
-  prefix     String // first 8 chars for identification
-  scopes     String[] // e.g. ["issues:write", "wiki:read"]
-  lastUsedAt DateTime?
-  expiresAt  DateTime?
-  createdAt  DateTime  @default(now())
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  tokenHash        String    @unique
+  prefix           String // first 8 chars for identification
+  scopes           String[] // e.g. ["issues:write", "wiki:read"]
+  lastUsedAt       DateTime?
+  expiresAt        DateTime?
+  /// When the owners were told this token is about to expire
+  expiryNotifiedAt DateTime?
+  createdAt        DateTime  @default(now())
 
   uploadIntents UploadIntent[]
 

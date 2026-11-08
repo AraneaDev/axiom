@@ -302,7 +302,11 @@ export async function deactivateUser(userId: string) {
  */
 export async function reactivateUser(userId: string) {
   assertNotIntegrationUser(userId);
-  await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND);
+  // A deactivated bot is a deleted one: reactivating it would bring back a user with no
+  // service account, owners or org
+  assertNotServiceAccount(
+    await findOrThrow(prisma.user.findUnique({ where: { id: userId } }), ERR.USER_NOT_FOUND),
+  );
 
   await prisma.user.update({
     where: { id: userId },

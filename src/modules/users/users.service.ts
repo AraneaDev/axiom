@@ -296,6 +296,18 @@ export async function listApiTokens(userId: string) {
 }
 
 /**
+ * A new raw API token, with the hash that is stored and the prefix shown to identify it.
+ * @returns The raw token (shown once, never stored), its sha256 hash and its prefix
+ */
+export function generateApiToken() {
+  // tk_ prefix + 48 random bytes
+  const rawToken = `tk_${crypto.randomBytes(48).toString('hex')}`;
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const prefix = rawToken.slice(0, 11); // "tk_" + first 8 hex chars
+  return { rawToken, tokenHash, prefix };
+}
+
+/**
  * Create a new API token. The raw token is returned only on creation and never stored.
  * @param userId - The user ID
  * @param data - Token creation data including name, scopes, and optional expiry in days
@@ -325,10 +337,7 @@ export async function createApiToken(
     throw new AppError(400, 'Unknown token scope, or one no action uses yet');
   }
 
-  // Generate token: tk_ prefix + 48 random bytes
-  const rawToken = `tk_${crypto.randomBytes(48).toString('hex')}`;
-  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  const prefix = rawToken.slice(0, 11); // "tk_" + first 8 hex chars
+  const { rawToken, tokenHash, prefix } = generateApiToken();
 
   const token = await prisma.apiToken.create({
     data: {

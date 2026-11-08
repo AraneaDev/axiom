@@ -4,8 +4,10 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { isMintableScope } from '../../middleware/token-scopes';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
+import { generateApiToken } from '../users/users.service';
 
 /** Org roles that may own a bot: a person with one of these, not deactivated */
 const OWNER_ROLES = ['OWNER', 'ADMIN', 'MEMBER'] as const;
@@ -380,4 +382,139 @@ export async function deleteServiceAccount(id: string): Promise<void> {
     await tx.orgMembership.deleteMany({ where: { userId: id } });
     await tx.user.update({ where: { id }, data: { deactivatedAt: now } });
   });
+}
+
+// ─── Tokens ─────────────────────────────────────────────────
+
+/** A bot token's lifetime when none is asked for, and the longest one allowed */
+export const BOT_TOKEN_DEFAULT_DAYS = 90;
+export const BOT_TOKEN_MAX_DAYS = 365;
+
+/** How long a rotated token keeps working, at most, so its users can move to the new one */
+const ROTATION_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const TOKEN_NOT_FOUND = () => new AppError(404, 'API token not found', 'TOKEN_NOT_FOUND');
+
+const TOKEN_SELECT = {
+  id: true,
+  name: true,
+  prefix: true,
+  scopes: true,
+  createdAt: true,
+  expiresAt: true,
+} satisfies Prisma.ApiTokenSelect;
+
+/**
+ * Authorize a change to a bot's tokens: an org admin or one of its owners. Anyone else is told
+ * the bot does not exist.
+ * @param userId - The caller
+ * @param botId - The bot's user id
+ * @throws {AppError} 404 when there is no such bot or the caller is neither
+ */
+export async function assertCanManageTokens(userId: string, botId: string): Promise<void> {
+  const account = await getServiceAccount(botId);
+  if (!account) throw NOT_FOUND();
+  if (await isOrgAdmin(userId, account.orgId)) return;
+  if (!(await isOwner(botId, userId))) throw NOT_FOUND();
+}
+
+/**
+ * Store a new token for a bot.
+ * @param db - The client to write with
+ * @param botId - The bot's user id
+ * @param data - Its name, scopes and expiry
+ * @param data.name - Its name
+ * @param data.scopes - Its scopes
+ * @param data.expiresAt - When it stops working
+ * @returns The token's metadata and the raw token, the only time it is shown
+ */
+async function storeBotToken(
+  db: Pick<Prisma.TransactionClient, 'apiToken'>,
+  botId: string,
+  data: { name: string; scopes: string[]; expiresAt: Date },
+) {
+  const { rawToken, tokenHash, prefix } = generateApiToken();
+  const token = await db.apiToken.create({
+    data: { userId: botId, tokenHash, prefix, ...data },
+    select: TOKEN_SELECT,
+  });
+  return { ...token, token: rawToken };
+}
+
+/**
+ * Create a token for a bot. It always expires: 90 days out by default, 365 at most. A bot has no
+ * admin scope: everything that manages the org waits for a person, and a bot is never one.
+ * @param botId - The bot's user id
+ * @param data - The token's name, scopes and lifetime
+ * @param data.name - Its name
+ * @param data.scopes - Its scopes, none of them admin
+ * @param data.expiresInDays - Days until it expires, 1 to 365
+ * @returns The token's metadata and the raw token, the only time it is shown
+ * @throws {AppError} 400 for an admin or unknown scope, or a lifetime out of range
+ */
+export async function createBotToken(
+  botId: string,
+  data: { name: string; scopes: string[]; expiresInDays?: number },
+) {
+  if (data.scopes.some((scope) => scope.startsWith('admin:'))) {
+    throw new AppError(
+      400,
+      'A service account token has no admin scope',
+      'SERVICE_ACCOUNT_ADMIN_SCOPE',
+    );
+  }
+  if (!data.scopes.every(isMintableScope)) {
+    throw new AppError(400, 'Unknown token scope, or one no action uses yet');
+  }
+  const days = data.expiresInDays ?? BOT_TOKEN_DEFAULT_DAYS;
+  if (!Number.isInteger(days) || days < 1 || days > BOT_TOKEN_MAX_DAYS) {
+    throw new AppError(400, `A service account token expires in 1 to ${BOT_TOKEN_MAX_DAYS} days`);
+  }
+  return storeBotToken(prisma, botId, {
+    name: data.name,
+    scopes: [...new Set(data.scopes)],
+    expiresAt: new Date(Date.now() + days * DAY_MS),
+  });
+}
+
+/**
+ * Rotate a bot's token: a new one with the same name and scopes and a fresh expiry, as long as
+ * the old one was made for, and the old one keeps working for 7 more days at most.
+ * @param botId - The bot's user id
+ * @param tokenId - The token to rotate
+ * @returns The new token's metadata and its raw token, the only time it is shown
+ * @throws {AppError} 404 when the bot has no such token
+ */
+export async function rotateBotToken(botId: string, tokenId: string) {
+  return prisma.$transaction(async (tx) => {
+    const old = await tx.apiToken.findFirst({ where: { id: tokenId, userId: botId } });
+    if (!old) throw TOKEN_NOT_FOUND();
+    const now = Date.now();
+    // The same lifetime as the old token, in whole days within the bounds a new one has
+    const lifetimeDays = old.expiresAt
+      ? Math.round((old.expiresAt.getTime() - old.createdAt.getTime()) / DAY_MS)
+      : BOT_TOKEN_DEFAULT_DAYS;
+    const days = Math.min(Math.max(lifetimeDays, 1), BOT_TOKEN_MAX_DAYS);
+    const graceEnd = now + ROTATION_GRACE_MS;
+    const oldEnd = old.expiresAt ? Math.min(old.expiresAt.getTime(), graceEnd) : graceEnd;
+    await tx.apiToken.update({ where: { id: old.id }, data: { expiresAt: new Date(oldEnd) } });
+    return storeBotToken(tx, botId, {
+      name: old.name,
+      scopes: old.scopes,
+      expiresAt: new Date(now + days * DAY_MS),
+    });
+  });
+}
+
+/**
+ * Revoke a bot's token. The next request with it answers 401.
+ * @param botId - The bot's user id
+ * @param tokenId - The token to revoke
+ * @throws {AppError} 404 when the bot has no such token
+ */
+export async function revokeBotToken(botId: string, tokenId: string): Promise<void> {
+  const gone = await prisma.apiToken.deleteMany({ where: { id: tokenId, userId: botId } });
+  if (gone.count === 0) throw TOKEN_NOT_FOUND();
 }

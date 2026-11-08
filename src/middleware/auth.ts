@@ -46,7 +46,19 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       const crypto = await import('crypto');
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-      const apiToken = await prisma.apiToken.findUnique({ where: { tokenHash } });
+      // One query: the token, its user and, for a bot, its service account
+      const apiToken = await prisma.apiToken.findUnique({
+        where: { tokenHash },
+        include: {
+          user: {
+            select: {
+              kind: true,
+              deactivatedAt: true,
+              serviceAccount: { select: { status: true } },
+            },
+          },
+        },
+      });
       if (!apiToken || isIntegrationUser(apiToken.userId)) {
         throw new AppError(401, 'Invalid API token', 'INVALID_TOKEN');
       }
@@ -54,19 +66,26 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
         throw new AppError(401, 'API token expired', 'TOKEN_EXPIRED');
       }
 
+      const { user: apiTokenUser } = apiToken;
+      if (apiTokenUser.kind === 'SERVICE') {
+        // A bot acts only while its service account exists and is active: a deleted bot, one of
+        // a deleted org, or a deactivated one answers like an unknown token
+        const account = apiTokenUser.serviceAccount;
+        if (!account || apiTokenUser.deactivatedAt) {
+          throw new AppError(401, 'Invalid API token', 'INVALID_TOKEN');
+        }
+        if (account.status !== 'ACTIVE') {
+          throw new AppError(401, 'This service account is suspended', 'SERVICE_ACCOUNT_SUSPENDED');
+        }
+      } else if (apiTokenUser.deactivatedAt) {
+        throw new AppError(403, 'Account has been deactivated', 'ACCOUNT_DEACTIVATED');
+      }
+
       // Update last used
       await prisma.apiToken.update({
         where: { id: apiToken.id },
         data: { lastUsedAt: new Date() },
       });
-
-      const apiTokenUser = await prisma.user.findUnique({
-        where: { id: apiToken.userId },
-        select: { deactivatedAt: true },
-      });
-      if (apiTokenUser?.deactivatedAt) {
-        throw new AppError(403, 'Account has been deactivated', 'ACCOUNT_DEACTIVATED');
-      }
 
       // The action this request reaches checks the token's scopes (src/actions/execute.ts)
       req.userId = apiToken.userId;
