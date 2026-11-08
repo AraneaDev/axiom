@@ -727,7 +727,8 @@ async function runReconcile(
           OR: [{ status: { not: 'PAUSED' } }, { error: null }],
         },
       });
-      if (backfilling === 0)
+      // A link with import off posts nothing, not even comments its adopted rows still owe
+      if (importing?.importIssues && backfilling === 0)
         await outsideGithubCallCount(() => postPendingLinkComments(repoLinkId));
     } catch {
       logger.warn('github reconcile link comments failed', { repoLinkId });

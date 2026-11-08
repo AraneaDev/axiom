@@ -412,6 +412,27 @@ describe('import switched off', () => {
     expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(0);
     expect(fake.requests.filter((r) => r.method === 'POST')).toHaveLength(0);
   });
+
+  it('lets the reconcile post no owed link comment', async () => {
+    await issuesEvent('opened', ghIssue());
+    await prisma.githubIssueImport.updateMany({
+      where: { repoLinkId: link.id },
+      data: { linkCommentId: null, linkCommentClaimedAt: null },
+    });
+    await prisma.githubRepoLink.update({ where: { id: link.id }, data: { importIssues: false } });
+    fake.setRepoLists(FULL_NAME, {
+      issues: [ghIssue()],
+      issueComments: {},
+      pulls: [],
+      branches: [],
+      checkRuns: {},
+    });
+    fake.requests.length = 0;
+    await reconcileRepo(link.id);
+    expect(
+      fake.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/comments')),
+    ).toHaveLength(0);
+  });
 });
 
 describe('the hourly cap on live imports', () => {

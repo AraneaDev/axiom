@@ -205,7 +205,8 @@ export function ReleaseNotesSection({
           )}
           {result.truncated && (
             <p className="text-xs text-warning">
-              The list was cut short: it is longer than fits in the notes.
+              The list was cut short: GitHub returned more than Axiom reads, or Axiom ran out of
+              lookups.
             </p>
           )}
           <div className="flex flex-wrap gap-4">
