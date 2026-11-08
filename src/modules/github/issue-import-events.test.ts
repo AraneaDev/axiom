@@ -250,6 +250,65 @@ describe('issues events', () => {
   });
 });
 
+describe('races and Axiom deletes', () => {
+  it('runs issue:created rules when labeled is processed before opened', async () => {
+    await createRule(ctx.projectId, {
+      name: 'welcome',
+      trigger: 'issue:created',
+      actions: [{ type: 'add_comment', body: 'Welcome' }],
+    });
+    expect(await issuesEvent('labeled', ghIssue(), { label: { name: 'bug' } })).toBe('PROCESSED');
+    expect(await issuesEvent('opened', ghIssue())).toBe('PROCESSED');
+    await vi.waitFor(async () => {
+      expect((await imported()).comments.map((c) => c.body)).toEqual(['Welcome']);
+    });
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(1);
+  });
+
+  it('runs no rules for a labeled issue made before the link', async () => {
+    await createRule(ctx.projectId, {
+      name: 'welcome',
+      trigger: 'issue:created',
+      actions: [{ type: 'add_comment', body: 'Welcome' }],
+    });
+    await issuesEvent('labeled', ghIssue({ created_at: '2026-10-01T09:00:00Z' }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect((await imported()).comments).toHaveLength(0);
+  });
+
+  it('makes one issue from opened and labeled delivered at once', async () => {
+    const [a, b] = await Promise.all([
+      issuesEvent('opened', ghIssue()),
+      issuesEvent('labeled', ghIssue(), { label: { name: 'bug' } }),
+    ]);
+    expect([a, b]).toEqual(['PROCESSED', 'PROCESSED']);
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(1);
+    expect(fake.requests.filter((r) => r.method === 'POST')).toHaveLength(1);
+  });
+
+  it('notes a body conflict and keeps the Axiom body', async () => {
+    await issuesEvent('opened', ghIssue());
+    const issue = await imported();
+    await updateIssue(ctx.projectId, issue.number, { body: 'Written in Axiom' }, member.id);
+    await issuesEvent('edited', ghIssue({ body: 'Rewritten', updated_at: '2026-11-07T12:00:00Z' }));
+    expect((await imported()).body).toBe('Written in Axiom');
+    const conflicts = await activities(issue.id, 'import_conflict');
+    expect(conflicts.map((a) => a.details)).toEqual([{ field: 'body' }]);
+  });
+
+  it('leaves an issue deleted in Axiom deleted, whatever GitHub sends', async () => {
+    await issuesEvent('opened', ghIssue());
+    await prisma.issue.deleteMany({ where: { projectId: ctx.projectId } });
+    for (const action of ['edited', 'labeled', 'reopened', 'closed']) {
+      expect(await issuesEvent(action, ghIssue({ updated_at: '2026-11-07T12:00:00Z' }))).toBe(
+        'IGNORED',
+      );
+    }
+    expect(await commentEvent('created', comment())).toBe('IGNORED');
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(0);
+  });
+});
+
 describe('issue_comment events', () => {
   it('imports a comment with its author', async () => {
     await issuesEvent('opened', ghIssue());

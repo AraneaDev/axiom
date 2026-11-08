@@ -134,8 +134,8 @@ export interface GithubFake {
       issues?: Array<Record<string, unknown>>;
       /**
        * The comments of an issue or pull request by number, served by
-       * `GET .../issues/:number/comments`; a comment posted on one is added here. Without it the
-       * fixtures answer that route.
+       * `GET .../issues/:number/comments` (with `since`, as GitHub filters it); a comment posted on
+       * one is added here. Without it the fixtures answer that route.
        */
       issueComments?: Record<string, Array<Record<string, unknown>>>;
     },
@@ -1125,7 +1125,14 @@ class GithubFakeServer implements GithubFake {
     }
     const issueComments = /^issues\/(\d+)\/comments$/.exec(rest);
     if (issueComments && lists.issueComments) {
-      return page(lists.issueComments[issueComments[1]] ?? []);
+      // `since` keeps the comments updated at or after it, as GitHub does
+      const since = req.query.since ? Date.parse(req.query.since) : null;
+      const all = lists.issueComments[issueComments[1]] ?? [];
+      return page(
+        since === null
+          ? all
+          : all.filter((c) => Date.parse(String(c.updated_at ?? c.created_at)) >= since),
+      );
     }
     return null;
   }

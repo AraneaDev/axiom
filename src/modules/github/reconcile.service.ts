@@ -17,9 +17,11 @@ import {
   countGithubCalls,
   githubPaginate,
   githubRequest,
+  outsideGithubCallCount,
   type GithubAuth,
 } from './github-client';
 import { storeBranch, storePullRequest, type PullRequestPayload } from './github-events';
+import { postPendingLinkComments } from './issue-import.service';
 import { extractIssueNumbers } from './issue-keys';
 
 export const RECONCILE_INTERVAL_MS = 15 * 60_000;
@@ -518,6 +520,14 @@ async function runReconcile(
         if (!isLimit(err))
           logger.warn('github reconcile repository refresh failed', { repoLinkId });
       }
+    }
+
+    // Imported issues still owed their link comment (a run died after its claim, and no event
+    // came since). System writes, outside the budget: they never use up what the lists need.
+    try {
+      await outsideGithubCallCount(() => postPendingLinkComments(repoLinkId));
+    } catch {
+      logger.warn('github reconcile link comments failed', { repoLinkId });
     }
   }
 }

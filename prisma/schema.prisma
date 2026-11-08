@@ -1494,7 +1494,8 @@ model GithubIssueImport {
   repoLinkId           String
   githubIssueNumber    Int
   githubIssueId        String
-  issueId              String                  @unique
+  /// Null once the Axiom issue was deleted: the row then keeps the GitHub Issue from coming back
+  issueId              String?                 @unique
   /// The title, SHA-256 of the body and label names last taken from GitHub
   mirroredTitle        String
   mirroredBodyHash     String
@@ -1503,10 +1504,14 @@ model GithubIssueImport {
   linkCommentId        String?
   /// When a run took the posting of the link comment; one older than 10 minutes may be taken again
   linkCommentClaimedAt DateTime?
+  /// When GitHub answered the link comment with 404 or 410: it is not tried again
+  linkCommentGivenUpAt DateTime?
+  /// When the comments GitHub had at the import were all read
+  commentsImportedAt   DateTime?
   githubUpdatedAt      DateTime
   lastImportedAt       DateTime
   repoLink             GithubRepoLink          @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
-  issue                Issue                   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  issue                Issue?                  @relation(fields: [issueId], references: [id], onDelete: SetNull)
   comments             GithubImportedComment[]
 
   @@unique([repoLinkId, githubIssueNumber])
@@ -1515,15 +1520,16 @@ model GithubIssueImport {
 
 /// A GitHub comment imported onto an imported issue, with the hash of the body last taken
 model GithubImportedComment {
-  githubCommentId  String            @id
   importId         String
-  commentId        String            @unique
+  githubCommentId  String
+  /// Null once the Axiom comment was deleted: the GitHub comment is then not imported again
+  commentId        String?           @unique
   mirroredBodyHash String
   githubUpdatedAt  DateTime
   import           GithubIssueImport @relation(fields: [importId], references: [id], onDelete: Cascade)
-  comment          Comment           @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  comment          Comment?          @relation(fields: [commentId], references: [id], onDelete: SetNull)
 
-  @@index([importId])
+  @@id([importId, githubCommentId])
   @@map("github_imported_comments")
 }
 

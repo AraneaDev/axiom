@@ -58,6 +58,10 @@ export { bulkUpdate } from './issue-bulk.service';
  * @param options.skipMentions - Notify nobody the body mentions (imported text)
  * @param options.externalAuthorLogin - The GitHub login of an imported issue's author, when the
  *   creator is the integration user
+ * @param options.githubImport - The import row of an imported issue, written in the same statement
+ *   as the issue, and how to tell that the row's GitHub Issue is imported already
+ * @param options.githubImport.data - The import row
+ * @param options.githubImport.isTaken - Whether another run imported that GitHub Issue already
  * @returns The created issue with assignee, creator, labels, column relations and computed key
  * @throws {AppError} 404 if project not found
  */
@@ -73,7 +77,15 @@ export async function createIssue(
     labels?: string[];
     dueDate?: string;
   },
-  options?: { skipAutomation?: boolean; skipMentions?: boolean; externalAuthorLogin?: string },
+  options?: {
+    skipAutomation?: boolean;
+    skipMentions?: boolean;
+    externalAuthorLogin?: string;
+    githubImport?: {
+      data: Prisma.GithubIssueImportCreateWithoutIssueInput;
+      isTaken: () => Promise<boolean>;
+    };
+  },
 ) {
   const project = await findOrThrow(
     prisma.project.findUnique({ where: { id: projectId } }),
@@ -112,6 +124,7 @@ export async function createIssue(
           externalAuthorLogin: options?.externalAuthorLogin,
           columnId: defaultColumn?.id,
           dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+          githubImport: options?.githubImport ? { create: options.githubImport.data } : undefined,
           labels: data.labels
             ? {
                 connectOrCreate: data.labels.map((name) => ({
@@ -134,6 +147,10 @@ export async function createIssue(
         err instanceof Prisma.PrismaClientKnownRequestError &&
         (err as { code: string }).code === 'P2002'
       ) {
+        // The GitHub Issue was imported by another run: not a race for the issue number
+        if (options?.githubImport && (await options.githubImport.isTaken())) {
+          throw new AppError(409, 'The GitHub issue is imported already', 'GITHUB_IMPORT_EXISTS');
+        }
         retries--;
         if (retries === 0) throw err;
         continue;

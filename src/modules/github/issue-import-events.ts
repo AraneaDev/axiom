@@ -50,11 +50,13 @@ onGithubEvent('issues', async (d) => {
   const noted = NOTED.get(d.action);
   if (noted) {
     const row = await findImport(link.id, number);
-    if (!row) return 'ignored';
+    // Never imported, or deleted in Axiom since: nothing to note it on
+    if (!row?.issueId) return 'ignored';
+    const issueId = row.issueId;
     // A redelivery notes nothing twice
     const seen = await prisma.activity.findFirst({
       where: {
-        resourceId: row.issueId,
+        resourceId: issueId,
         action: noted,
         details: { path: ['deliveryId'], equals: d.deliveryId },
       },
@@ -62,7 +64,7 @@ onGithubEvent('issues', async (d) => {
     });
     if (!seen) {
       const writerId = await orgActorId(await resolveGithubActor(sender), link.projectId);
-      await logActivity('issue', row.issueId, noted, writerId, {
+      await logActivity('issue', issueId, noted, writerId, {
         deliveryId: d.deliveryId,
         githubIssueNumber: number,
         login: sender?.login ?? null,
@@ -72,13 +74,17 @@ onGithubEvent('issues', async (d) => {
   }
   if (!IMPORTING.has(d.action)) return 'ignored';
 
-  const known = (await findImport(link.id, number)) !== null;
-  // Only an issue opened on GitHub after the link is news for the issue:created rules; one found
-  // through an edit, a label or a reopen may be years old (the backfill's rule)
+  // Only an issue made on GitHub after the link is news for the issue:created rules. GitHub sends
+  // `opened` and a `labeled` per label of a new issue at once, and whichever runs first makes
+  // it; one found through an edit or a reopen may be years old (the backfill's rule)
   const createdAt = parsed.data.issue.created_at;
-  const isNew = d.action === 'opened' && !!createdAt && new Date(createdAt) >= link.createdAt;
+  const isNew =
+    (d.action === 'opened' || d.action === 'labeled') &&
+    !!createdAt &&
+    new Date(createdAt) >= link.createdAt;
   const result = await importGithubIssue(link, d.payload.issue as GithubIssuePayload, {
-    withComments: !known,
+    // Read once per import, so a delivery that failed after the issue was made reads them again
+    withComments: true,
     sender,
     runRules: { created: isNew, updated: true },
   });
@@ -93,7 +99,7 @@ onGithubEvent('issue_comment', async (d) => {
   const link = await importingLink(d);
   if (!link) return 'ignored';
   const row = await findImport(link.id, parsed.data.issue.number);
-  if (!row) return 'ignored';
+  if (!row?.issueId) return 'ignored';
   await importComment(row, d.payload.comment as Parameters<typeof importComment>[1]);
   return 'processed';
 });

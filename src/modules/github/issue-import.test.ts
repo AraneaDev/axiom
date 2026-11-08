@@ -18,11 +18,14 @@ import { useGithubFake } from '../../test/github-fake';
 import { seedGithubApp } from '../../test/github-seed';
 
 import { instanceOrigin } from './github-app.service';
+import { countGithubCalls } from './github-client';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
 import {
+  LINK_CLAIM_TTL_MS,
   importComment,
   importGithubIssue,
   postLinkComment,
+  postPendingLinkComments,
   type GithubIssuePayload,
 } from './issue-import.service';
 import './github-resolvers';
@@ -227,7 +230,7 @@ describe('importGithubIssue: a new issue', () => {
         externalAuthorLogin: null,
       }),
     ]);
-    const mirror = await prisma.githubImportedComment.findUniqueOrThrow({
+    const mirror = await prisma.githubImportedComment.findFirstOrThrow({
       where: { githubCommentId: '9301' },
     });
     expect(mirror.commentId).toBe(comments[0].id);
@@ -235,6 +238,89 @@ describe('importGithubIssue: a new issue', () => {
     const read = fake.requests.find((r) => r.method === 'GET' && r.path.endsWith('/comments'));
     expect(read?.path).toBe(`/repositories/${REPO_ID}/issues/31/comments`);
     expect(read?.headers.authorization).toBe(`installation:${INSTALLATION_ID}`);
+  });
+
+  it('notifies nobody an imported comment mentions', async () => {
+    fake.setRepoLists(FULL_NAME, {
+      issues: [issue()],
+      issueComments: {
+        '31': [
+          {
+            id: 9310,
+            body: `Pinging @${member.username}`,
+            user: { login: 'outside-dev', id: 7002, type: 'User' },
+            created_at: '2026-11-07T09:30:00Z',
+            updated_at: '2026-11-07T09:30:00Z',
+          },
+        ],
+      },
+    });
+    const result = await importGithubIssue(link, issue({ body: '' }), { withComments: true });
+    expect(await prisma.comment.count({ where: { issueId: result!.issueId } })).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await prisma.notification.count({ where: { userId: member.id } })).toBe(0);
+  });
+
+  it('reads the comments again on a retry when the first read failed', async () => {
+    fake.on('GET /repos/:owner/:repo/issues/:number/comments', {
+      status: 502,
+      body: { message: 'Bad Gateway' },
+    });
+    await expect(importGithubIssue(link, issue(), { withComments: true })).rejects.toThrow();
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(1);
+    fake.reset();
+    fake.setRepoLists(FULL_NAME, { issues: [issue()] });
+    const result = await importGithubIssue(link, issue(), { withComments: true });
+    expect(result?.created).toBe(false);
+    expect(await prisma.comment.count({ where: { issueId: result!.issueId } })).toBe(1);
+    const row = await prisma.githubIssueImport.findUniqueOrThrow({
+      where: { issueId: result!.issueId },
+    });
+    expect(row.commentsImportedAt).not.toBeNull();
+    // Once read, not read again
+    fake.requests.length = 0;
+    await importGithubIssue(link, issue(), { withComments: true });
+    expect(fake.requests.filter((r) => r.method === 'GET')).toHaveLength(0);
+  });
+
+  it('does not import again an issue or a comment deleted in Axiom', async () => {
+    const result = await importGithubIssue(link, issue(), { withComments: true });
+    const row = await prisma.githubIssueImport.findUniqueOrThrow({
+      where: { issueId: result!.issueId },
+    });
+    const [comment] = await prisma.comment.findMany({ where: { issueId: result!.issueId } });
+    await prisma.comment.delete({ where: { id: comment.id } });
+    await importComment(row, {
+      id: 9301,
+      body: 'Edited on GitHub',
+      user: { login: 'outside-dev', id: 7002, type: 'User' },
+      created_at: '2026-11-07T09:30:00Z',
+      updated_at: '2026-11-07T12:30:00Z',
+    });
+    expect(await prisma.comment.count({ where: { issueId: result!.issueId } })).toBe(0);
+
+    await prisma.issue.delete({ where: { id: result!.issueId } });
+    const tomb = await prisma.githubIssueImport.findUniqueOrThrow({ where: { id: row.id } });
+    expect(tomb.issueId).toBeNull();
+    expect(
+      await importGithubIssue(link, issue({ updated_at: '2026-11-07T12:00:00Z' }), {
+        withComments: true,
+      }),
+    ).toBeNull();
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(0);
+  });
+
+  it('makes one issue when two imports of it run at once', async () => {
+    const [a, b] = await Promise.all([
+      importGithubIssue(link, issue(), { withComments: true }),
+      importGithubIssue(link, issue({ labels: [{ name: 'bug' }] }), { withComments: true }),
+    ]);
+    expect(a?.issueId).toBe(b?.issueId);
+    expect([a?.created, b?.created].sort()).toEqual([false, true]);
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(1);
+    expect(await prisma.githubIssueImport.count({ where: { repoLinkId: link.id } })).toBe(1);
+    expect(await prisma.comment.count({ where: { issueId: a!.issueId } })).toBe(1);
+    expect(commentPosts()).toHaveLength(1);
   });
 
   it('gives an unmapped commenter the integration user and the login', async () => {
@@ -281,20 +367,33 @@ describe('the link comment', () => {
 
   it('takes over a stale claim and keeps the comment the App already made', async () => {
     const result = await importGithubIssue(link, issue(), { withComments: false });
-    const { key, url } = await issueUrl(result!.issueId);
+    const { key } = await issueUrl(result!.issueId);
     const row = await prisma.githubIssueImport.update({
       where: { issueId: result!.issueId },
       data: { linkCommentId: null, linkCommentClaimedAt: new Date(Date.now() - 11 * 60_000) },
     });
+    const old = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
     fake.setRepoLists(FULL_NAME, {
       issues: [issue()],
       issueComments: {
         '31': [
+          // An older comment of the App's, from before the claim: read past, not taken
           {
-            id: 9399,
-            body: `Tracked in Axiom as [${key}](${url})`,
+            id: 9398,
+            body: 'Tracked in Axiom as [OLD-1](https://axiom.invalid/old)',
             user: { login: 'acme-axiom[bot]', id: 9_900_001, type: 'Bot' },
             performed_via_github_app: { id: APP_ID, slug: 'acme-axiom' },
+            created_at: old,
+            updated_at: old,
+          },
+          {
+            id: 9399,
+            // A project renamed since the post still matches: the App and the prefix do
+            body: `Tracked in Axiom as [${key}](https://axiom.invalid/renamed/issues/1)`,
+            user: { login: 'acme-axiom[bot]', id: 9_900_001, type: 'Bot' },
+            performed_via_github_app: { id: APP_ID, slug: 'acme-axiom' },
+            created_at: new Date(Date.now() - 11 * 60_000).toISOString(),
+            updated_at: new Date(Date.now() - 11 * 60_000).toISOString(),
           },
         ],
       },
@@ -304,9 +403,73 @@ describe('the link comment', () => {
     expect(commentPosts()).toHaveLength(0);
     const read = fake.requests.find((r) => r.method === 'GET');
     expect(read?.path).toBe(`/repositories/${REPO_ID}/issues/31/comments`);
+    expect(Date.parse(read!.query.since)).toBeLessThan(Date.now() - 11 * 60_000);
     expect(
       (await prisma.githubIssueImport.findUniqueOrThrow({ where: { id: row.id } })).linkCommentId,
     ).toBe('9399');
+  });
+
+  it('keeps the claim time after a failed post, so the next run looks from there', async () => {
+    fake.on('POST /repos/:owner/:repo/issues/:number/comments', {
+      status: 500,
+      body: { message: 'Server Error' },
+    });
+    const before = Date.now();
+    await expect(importGithubIssue(link, issue(), { withComments: false })).rejects.toThrow();
+    const row = await prisma.githubIssueImport.findFirstOrThrow({ where: { repoLinkId: link.id } });
+    expect(row.linkCommentId).toBeNull();
+    // Stale at once, by exactly the TTL, so the time of the failed claim is kept
+    const claimed = row.linkCommentClaimedAt!.getTime() + LINK_CLAIM_TTL_MS;
+    expect(claimed).toBeGreaterThanOrEqual(before);
+    expect(claimed).toBeLessThanOrEqual(Date.now());
+
+    fake.reset();
+    fake.setRepoLists(FULL_NAME, { issues: [issue()], issueComments: {} });
+    await postLinkComment(row.id);
+    const read = fake.requests.find((r) => r.method === 'GET');
+    expect(Date.parse(read!.query.since)).toBe(claimed - LINK_CLAIM_TTL_MS - 60_000);
+    expect(commentPosts()).toHaveLength(1);
+  });
+
+  it('stops trying when GitHub has no such issue', async () => {
+    fake.on('POST /repos/:owner/:repo/issues/:number/comments', {
+      status: 404,
+      body: { message: 'Not Found' },
+    });
+    const result = await importGithubIssue(link, issue(), { withComments: false });
+    expect(result?.created).toBe(true);
+    const row = await prisma.githubIssueImport.findFirstOrThrow({ where: { repoLinkId: link.id } });
+    expect(row.linkCommentGivenUpAt).not.toBeNull();
+    fake.requests.length = 0;
+    await importGithubIssue(link, issue(), { withComments: false });
+    await postLinkComment(row.id);
+    expect(commentPosts()).toHaveLength(0);
+  });
+
+  it('runs outside the call budget of the run it happens in', async () => {
+    const counter = { calls: 0, limit: 0 };
+    await countGithubCalls(counter, async () => {
+      await importGithubIssue(link, issue(), { withComments: false });
+    });
+    expect(commentPosts()).toHaveLength(1);
+    expect(counter.calls).toBe(0);
+  });
+
+  it('is posted by the reconcile for a claim a dead run left behind', async () => {
+    const result = await importGithubIssue(link, issue(), { withComments: false });
+    await prisma.githubIssueImport.update({
+      where: { issueId: result!.issueId },
+      data: { linkCommentId: null, linkCommentClaimedAt: new Date(Date.now() - 11 * 60_000) },
+    });
+    fake.setRepoLists(FULL_NAME, { issues: [issue()], issueComments: {} });
+    fake.requests.length = 0;
+    expect(await postPendingLinkComments(link.id)).toBe(1);
+    expect(commentPosts()).toHaveLength(1);
+    const row = await prisma.githubIssueImport.findUniqueOrThrow({
+      where: { issueId: result!.issueId },
+    });
+    expect(row.linkCommentId).not.toBeNull();
+    expect(await postPendingLinkComments(link.id)).toBe(0);
   });
 
   it('posts on a stale claim when GitHub has no comment of the App', async () => {
@@ -333,6 +496,37 @@ describe('importGithubIssue: an imported issue', () => {
     expect(older).toMatchObject({ issueId: result!.issueId, created: false, conflicts: [] });
     const row = await prisma.issue.findUniqueOrThrow({ where: { id: result!.issueId } });
     expect(row.title).toBe('The widget forgets its colour after a restart');
+  });
+
+  it('asks GitHub on a same-second snapshot that differs from the last import', async () => {
+    const result = await importGithubIssue(
+      link,
+      issue({ labels: [{ name: 'bug' }], updated_at: '2026-11-07T10:00:00Z' }),
+      { withComments: false },
+    );
+    // GitHub's current state is the labelled one; an older snapshot of the same second arrives
+    fake.setRepoLists(FULL_NAME, {
+      issues: [issue({ labels: [{ name: 'bug' }], updated_at: '2026-11-07T10:00:00Z' })],
+    });
+    fake.requests.length = 0;
+    await importGithubIssue(link, issue({ labels: [], updated_at: '2026-11-07T10:00:00Z' }), {
+      withComments: false,
+    });
+    expect(fake.requests.some((r) => r.path === `/repositories/${REPO_ID}/issues/31`)).toBe(true);
+    const row = await prisma.issue.findUniqueOrThrow({
+      where: { id: result!.issueId },
+      include: { labels: true },
+    });
+    expect(row.labels.map((l) => l.name)).toEqual(['bug']);
+  });
+
+  it('adds the web link again when it is missing', async () => {
+    const result = await importGithubIssue(link, issue(), { withComments: false });
+    await prisma.issueWebLink.deleteMany({ where: { issueId: result!.issueId } });
+    await importGithubIssue(link, issue({ updated_at: '2026-11-07T11:00:00Z' }), {
+      withComments: false,
+    });
+    expect(await prisma.issueWebLink.count({ where: { issueId: result!.issueId } })).toBe(1);
   });
 
   it('skips the App link comment and bot comments in importComment', async () => {
