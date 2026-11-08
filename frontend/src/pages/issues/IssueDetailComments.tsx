@@ -145,7 +145,10 @@ export function IssueDetailComments({
           {sortedComments.map((comment) => (
             <div key={comment.id} className="relative flex gap-3 group">
               <div className="relative z-10 shrink-0">
-                <Avatar name={authorName(comment.author, comment.externalAuthorLogin)} size="sm" />
+                <Avatar
+                  name={comment.externalAuthorLogin ? 'GitHub' : comment.author.displayName}
+                  size="sm"
+                />
               </div>
               <Card className="flex-1 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2 bg-surface-secondary/40 border-b border-border-light">

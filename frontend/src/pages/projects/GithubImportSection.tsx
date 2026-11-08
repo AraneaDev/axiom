@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Info, PauseCircle, RefreshCw } from 'lucide-react';
+import { Activity, AlertTriangle, Info, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -7,6 +7,7 @@ import {
   githubImportKey,
   type GithubImportRun,
   type GithubImportState,
+  type GithubImportStatusName,
 } from '@/api/github.api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -17,6 +18,18 @@ import { Progress } from '@/components/ui/Progress';
 import { Spinner } from '@/components/ui/Spinner';
 
 const ACTIVE = ['QUEUED', 'RUNNING', 'PAUSED'];
+
+/** How often an active run is refetched, so progress moves without the realtime bridge */
+const POLL_MS = 10_000;
+
+const STATUS_LABEL: Record<GithubImportStatusName, string> = {
+  QUEUED: 'Queued',
+  RUNNING: 'Running',
+  PAUSED: 'Paused',
+  DONE: 'Done',
+  FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
+};
 
 const when = (iso: string) => new Date(iso).toLocaleString();
 
@@ -63,10 +76,15 @@ function RunView({ state }: { state: GithubImportState }) {
           <p className="text-sm text-text">{progress.text}</p>
         </div>
       )}
-      {run?.status === 'PAUSED' && (
-        <p className="flex items-center gap-2 text-sm text-text-secondary">
-          <PauseCircle className="h-4 w-4 shrink-0" />
-          {run.resumeAt ? `Paused, resumes at ${when(run.resumeAt)}` : 'Paused'}
+      {run && (
+        <p
+          data-testid="import-status"
+          className="flex items-center gap-2 text-sm text-text-secondary"
+        >
+          <Activity className="h-4 w-4 shrink-0" />
+          {run.status === 'PAUSED' && run.resumeAt
+            ? `Paused, resumes at ${when(run.resumeAt)}`
+            : STATUS_LABEL[run.status]}
         </p>
       )}
       {active && run?.linkCommentsWaitUntil && (
@@ -95,13 +113,18 @@ export function GithubImportSection({ projectId }: { projectId: string }) {
   const status = useQuery({
     queryKey: githubImportKey(projectId),
     queryFn: () => githubImportApi.status(projectId),
+    refetchInterval: (q) => (ACTIVE.includes(q.state.data?.run?.status ?? '') ? POLL_MS : false),
   });
   const configure = useMutation({
     mutationFn: (enabled: boolean) => githubImportApi.configure(projectId, enabled),
     onSuccess: async (result, enabled) => {
       setNote(
         enabled && !result.queued
-          ? 'Import was already on and the last import is done, so nothing new was queued.'
+          ? `Import was already on${
+              result.run
+                ? ` and its last run is ${STATUS_LABEL[result.run.status].toLowerCase()}`
+                : ''
+            }, so nothing new was queued.`
           : null,
       );
       await queryClient.invalidateQueries({ queryKey: githubImportKey(projectId) });

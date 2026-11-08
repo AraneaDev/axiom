@@ -127,3 +127,25 @@ describe('issue:development-updated', () => {
     expect(state(['issue-development', 'p2', '1', 'i1'])).toBe(false);
   });
 });
+
+describe('github:import-progress', () => {
+  it('refetches the import status of that project only', () => {
+    const qc = new QueryClient();
+    qc.setQueryData(['github-import', 'p1'], { run: null });
+    qc.setQueryData(['github-import', 'p2'], { run: null });
+    vi.mocked(useRealtimeListener).mockClear();
+    renderHook(() => useRealtimeInvalidation(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={qc}>
+          <MemoryRouter>{children}</MemoryRouter>
+        </QueryClientProvider>
+      ),
+    });
+    const listener = vi.mocked(useRealtimeListener).mock.calls[0][0] as (e: unknown) => void;
+
+    listener({ type: 'github:import-progress', projectId: 'p1', runId: 'r1' });
+
+    expect(qc.getQueryState(['github-import', 'p1'])?.isInvalidated).toBe(true);
+    expect(qc.getQueryState(['github-import', 'p2'])?.isInvalidated).toBe(false);
+  });
+});

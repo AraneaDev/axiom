@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, FileText, Link as LinkIcon, Replace } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router';
 
 import { ApiError } from '@/api/client';
 import {
@@ -25,13 +26,14 @@ const REPLACEABLE = ['GITHUB_RELEASE_BODY_EXISTS', 'RELEASE_PAGE_EXISTS'];
 const NO_DEFAULT = '';
 
 /**
- * The wiki page is on this instance, so http is fine in development; nothing else is.
+ * The in-app path of the wiki page, only when its URL is on this app's own origin. Anything else
+ * (another origin, a non-http scheme, a bad URL) gives no link.
  * @param url - The page URL the server returned.
  */
-function pageHref(url: string): string | undefined {
+function pagePath(url: string): string | undefined {
   try {
-    const protocol = new URL(url).protocol;
-    return protocol === 'https:' || protocol === 'http:' ? url : undefined;
+    const u = new URL(url);
+    return u.origin === window.location.origin ? u.pathname : undefined;
   } catch {
     return undefined;
   }
@@ -94,7 +96,7 @@ export function ReleaseNotesSection({
   const code = error instanceof ApiError ? error.code : undefined;
   const canReplace = !!code && REPLACEABLE.includes(code);
   const notConnected = code === 'GITHUB_NOT_CONNECTED';
-  const pageLink = result ? pageHref(result.pageUrl) : undefined;
+  const pageLink = result ? pagePath(result.pageUrl) : undefined;
   const releaseLink = result ? httpsHref(result.releaseUrl) : undefined;
 
   function submit(e: FormEvent) {
@@ -112,6 +114,10 @@ export function ReleaseNotesSection({
         <p className="mt-1 text-xs text-text-tertiary">
           Lists the pull requests merged since the previous tag and their tickets, on a wiki page
           and in the body of the GitHub Release.
+        </p>
+        <p className="mt-1 text-xs text-text-tertiary">
+          Ticket titles and statuses are published to the GitHub Release, which is public when the
+          repository is.
         </p>
       </div>
       <div className="w-full max-w-md">
@@ -135,21 +141,30 @@ export function ReleaseNotesSection({
             label="Tag"
             placeholder="v1.2.0"
             value={tag}
-            onChange={(e) => setTag(e.target.value)}
+            onChange={(e) => {
+              write.reset();
+              setTag(e.target.value);
+            }}
             autoComplete="off"
           />
           <Input
             label="Previous tag (optional)"
             placeholder="v1.1.0"
             value={previousTag}
-            onChange={(e) => setPreviousTag(e.target.value)}
+            onChange={(e) => {
+              write.reset();
+              setPreviousTag(e.target.value);
+            }}
             autoComplete="off"
           />
           <Select
             label="Space"
             options={[{ value: NO_DEFAULT, label: 'Default space' }, ...options]}
             value={spaceId}
-            onChange={(v) => setSpaceId(v as string)}
+            onChange={(v) => {
+              write.reset();
+              setSpaceId(v as string);
+            }}
           />
         </div>
         <div>
@@ -183,6 +198,11 @@ export function ReleaseNotesSection({
           <p>
             {`${result.pullRequests} pull ${result.pullRequests === 1 ? 'request' : 'requests'} and ${result.tickets} ${result.tickets === 1 ? 'ticket' : 'tickets'} written.`}
           </p>
+          {result.draft && (
+            <p className="text-xs text-text-secondary">
+              The GitHub Release is a draft and stays one.
+            </p>
+          )}
           {result.truncated && (
             <p className="text-xs text-warning">
               The list was cut short: it is longer than fits in the notes.
@@ -190,13 +210,13 @@ export function ReleaseNotesSection({
           )}
           <div className="flex flex-wrap gap-4">
             {pageLink && (
-              <a
-                href={pageLink}
+              <Link
+                to={pageLink}
                 className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
               >
                 Wiki page
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+                <FileText className="h-3.5 w-3.5" />
+              </Link>
             )}
             {releaseLink && (
               <a

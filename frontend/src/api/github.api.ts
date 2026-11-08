@@ -258,6 +258,8 @@ export interface ReleaseNotesInput {
 export interface ReleaseNotesResult {
   pageUrl: string;
   releaseUrl: string;
+  /** The GitHub Release stayed a draft */
+  draft: boolean;
   pullRequests: number;
   tickets: number;
   truncated: boolean;

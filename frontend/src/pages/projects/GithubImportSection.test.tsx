@@ -121,4 +121,64 @@ describe('GithubImportSection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Switch on' }));
     expect(await screen.findByText(/already on/i)).toBeInTheDocument();
   });
+
+  it.each([
+    ['QUEUED', /queued/i],
+    ['RUNNING', /running/i],
+    ['DONE', /done/i],
+    ['CANCELLED', /cancelled/i],
+    ['FAILED', /failed/i],
+  ])('labels a %s run', async (status, label) => {
+    api.status.mockResolvedValue({
+      enabled: true,
+      run: run({ status, error: status === 'FAILED' ? 'x' : null }),
+      liveCap: null,
+    });
+    show();
+    expect(await screen.findByTestId('import-status')).toHaveTextContent(label);
+  });
+
+  it('labels a paused run', async () => {
+    api.status.mockResolvedValue({ enabled: true, run: run({ status: 'PAUSED' }), liveCap: null });
+    show();
+    expect(await screen.findByTestId('import-status')).toHaveTextContent(/paused/i);
+  });
+
+  it('does not call an active run done when nothing new was queued', async () => {
+    api.status.mockResolvedValue({ enabled: false, run: null, liveCap: null });
+    api.configure.mockResolvedValue({
+      enabled: true,
+      queued: false,
+      run: run({ status: 'RUNNING' }),
+    });
+    show();
+    await userEvent.click(await screen.findByLabelText('Import GitHub Issues'));
+    await userEvent.click(screen.getByRole('button', { name: 'Switch on' }));
+    const note = await screen.findByText(/nothing new was queued/i);
+    expect(note).toHaveTextContent(/running/i);
+    expect(note).not.toHaveTextContent(/is done/i);
+  });
+
+  it('polls every 10 seconds while a run is active, and stops when it is done', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.status
+        .mockResolvedValueOnce({ enabled: true, run: run(), liveCap: null })
+        .mockResolvedValue({
+          enabled: true,
+          run: run({ status: 'DONE', done: 10 }),
+          liveCap: null,
+        });
+      show();
+      await screen.findByTestId('import-status');
+      expect(api.status).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(10_500);
+      await waitFor(() => expect(api.status).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(screen.getByTestId('import-status')).toHaveTextContent(/done/i));
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(api.status).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

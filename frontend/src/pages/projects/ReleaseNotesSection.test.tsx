@@ -45,7 +45,8 @@ function show(defaultSpaceId: string | null = null) {
 }
 
 const done = {
-  pageUrl: 'https://axiom.invalid/acme/core/wiki/docs/release-v1-2-0',
+  pageUrl: `${window.location.origin}/acme/core/wiki/docs/release-v1-2-0?x=1#top`,
+  draft: false,
   releaseUrl: 'https://github.com/acme-labs/widget/releases/tag/v1.2.0',
   pullRequests: 4,
   tickets: 3,
@@ -85,7 +86,7 @@ describe('ReleaseNotesSection', () => {
     await write();
     expect(release.writeNotes).toHaveBeenCalledWith('p1', { tag: 'v1.2.0' });
     const page = await screen.findByRole('link', { name: /wiki page/i });
-    expect(page).toHaveAttribute('href', done.pageUrl);
+    expect(page).toHaveAttribute('href', '/acme/core/wiki/docs/release-v1-2-0');
     const gh = screen.getByRole('link', { name: /github release/i });
     expect(gh).toHaveAttribute('href', done.releaseUrl);
     expect(gh).toHaveAttribute('rel', 'noopener noreferrer');
@@ -152,5 +153,62 @@ describe('ReleaseNotesSection', () => {
     expect(
       await screen.findByRole('link', { name: /connect your github account/i }),
     ).toHaveAttribute('href', '/settings/github');
+  });
+
+  it('shows no wiki link when the page URL is from another origin', async () => {
+    release.writeNotes.mockResolvedValue({
+      ...done,
+      pageUrl: 'https://elsewhere.invalid/acme/core/wiki/docs/x',
+    });
+    show('s1');
+    await write();
+    await screen.findByRole('link', { name: /github release/i });
+    expect(screen.queryByRole('link', { name: /wiki page/i })).toBeNull();
+  });
+
+  it('says the GitHub Release stayed a draft', async () => {
+    release.writeNotes.mockResolvedValue({ ...done, draft: true });
+    show('s1');
+    await write();
+    expect(await screen.findByText(/draft and stays one/i)).toBeInTheDocument();
+  });
+
+  it('does not say draft for a published Release', async () => {
+    release.writeNotes.mockResolvedValue(done);
+    show('s1');
+    await write();
+    await screen.findByRole('link', { name: /github release/i });
+    expect(screen.queryByText(/draft/i)).toBeNull();
+  });
+
+  it('states that ticket titles and statuses are published', async () => {
+    show('s1');
+    expect(await screen.findByText(/ticket titles and statuses/i)).toHaveTextContent(/public/i);
+  });
+
+  it.each([
+    ['Tag', 'x'],
+    ['Previous tag (optional)', 'v1'],
+  ])('drops the replace offer when %s changes', async (label, typed) => {
+    release.writeNotes.mockRejectedValueOnce(
+      new ApiError(409, 'The release has a body', 'GITHUB_RELEASE_BODY_EXISTS'),
+    );
+    show('s1');
+    await write();
+    await screen.findByRole('button', { name: 'Replace the existing body' });
+    await userEvent.type(screen.getByLabelText(label), typed);
+    expect(screen.queryByRole('button', { name: 'Replace the existing body' })).toBeNull();
+  });
+
+  it('drops the replace offer when the space changes', async () => {
+    release.writeNotes.mockRejectedValueOnce(
+      new ApiError(409, 'The release has a body', 'GITHUB_RELEASE_BODY_EXISTS'),
+    );
+    show('s1');
+    await write();
+    await screen.findByRole('button', { name: 'Replace the existing body' });
+    await userEvent.click(screen.getByLabelText('Space'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Releases' }));
+    expect(screen.queryByRole('button', { name: 'Replace the existing body' })).toBeNull();
   });
 });
