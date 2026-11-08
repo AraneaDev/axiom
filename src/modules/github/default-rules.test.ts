@@ -141,9 +141,11 @@ const names = async () =>
   (
     await prisma.automationRule.findMany({
       where: { projectId: ctx.projectId },
-      orderBy: { name: 'asc' },
     })
-  ).map((r) => r.name);
+  )
+    .map((r) => r.name)
+    // Sorted here, not by the database: its collation differs between machines and CI
+    .sort();
 const columnOf = async (id: string) =>
   (await prisma.issue.findUniqueOrThrow({ where: { id } })).columnId;
 
