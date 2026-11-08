@@ -8,6 +8,10 @@ export interface AgentPolicyRules {
   alsoRequire?: string[];
   /** Org rules only. Never lifts admin actions. */
   neverRequire?: string[];
+  /** Org rules only: how long a service account's request waits for its owners. */
+  botExpiresMinutes?: number;
+  /** Rules this form does not know yet: kept as stored, so a save never drops them. */
+  [rule: string]: unknown;
 }
 
 export interface EffectiveAgentPolicy {
@@ -20,6 +24,7 @@ export interface EffectiveAgentPolicy {
   expiresMinutes: number;
   alsoRequire: string[];
   neverRequire: string[];
+  botExpiresMinutes?: number;
 }
 
 export interface AgentPolicy {

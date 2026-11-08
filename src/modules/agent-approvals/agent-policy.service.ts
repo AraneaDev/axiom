@@ -7,7 +7,7 @@ import { listActions } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
-import { isPerson } from '../service-accounts/person';
+import { isServiceAccount } from '../service-accounts/person';
 
 export const MIN_EXPIRES_MINUTES = 10;
 export const MAX_EXPIRES_MINUTES = 24 * 60;
@@ -284,7 +284,7 @@ export async function assertRawNotNamed(
  * @param userId - Who calls
  */
 async function botOrgIds(userId: string): Promise<string[]> {
-  if (await isPerson(userId)) return [];
+  if (!(await isServiceAccount(userId))) return [];
   const bot = await prisma.serviceAccount.findUnique({
     where: { userId },
     select: { orgId: true },
@@ -438,6 +438,23 @@ export async function getPolicy(
 }
 
 /**
+ * Refuse rules of its own for a service account: its org's rules hold, and an approved request
+ * must not add a row the spec says a bot never has.
+ * @param userId - Whose rules
+ * @param scope - org or user
+ * @throws {AppError} 400 SERVICE_ACCOUNT_NO_USER_POLICY
+ */
+async function assertScopeFor(userId: string, scope: PolicyScope): Promise<void> {
+  if (scope === 'user' && (await isServiceAccount(userId))) {
+    throw new AppError(
+      400,
+      "A service account has no approval rules of its own: its organization's rules hold",
+      'SERVICE_ACCOUNT_NO_USER_POLICY',
+    );
+  }
+}
+
+/**
  * The checks a save makes, also run by the preview so no request waits on rules that can't save.
  * @param scope - org or user
  * @param rules - The rules
@@ -463,6 +480,7 @@ export async function savePolicy(
   rules: PolicyRules,
 ): Promise<PolicyView> {
   if (scope === 'org' && !orgId) throw new AppError(400, 'orgId is required for scope org');
+  await assertScopeFor(userId, scope);
   assertRulesAllowed(scope, rules);
   const json = rules as Prisma.InputJsonObject;
   await (scope === 'org'
@@ -508,6 +526,7 @@ export async function describePolicyChange(
   rules: PolicyRules,
 ): Promise<string> {
   // Refuse before a request exists: one that could only fail is not made
+  await assertScopeFor(userId, scope);
   assertRulesAllowed(scope, rules);
   const [org, row] = await Promise.all([
     scope === 'org' && orgId

@@ -200,6 +200,24 @@ const REQUEST_INCLUDE = {
 } as const;
 
 /**
+ * Which of some users count as the requester for self-approval: the requester, and when the
+ * requester is a bot, each of its owners (decision 12). Every owner row counts, eligible or not:
+ * a refusal is never the wrong side to err on.
+ * @param requesterId - Who raised the request
+ * @param userIds - The users to test
+ */
+async function selvesOf(requesterId: string, userIds: string[]): Promise<string[]> {
+  const selves = userIds.filter((id) => id === requesterId);
+  const others = userIds.filter((id) => id !== requesterId);
+  if (others.length === 0) return selves;
+  const owners = await prisma.serviceAccountOwner.findMany({
+    where: { serviceAccountId: requesterId, ownerId: { in: others } },
+    select: { ownerId: true },
+  });
+  return [...selves, ...owners.map((o) => o.ownerId)];
+}
+
+/**
  * Create an approval request for an issue to move to a target column.
  * @param issueId
  * @param targetColumnId
@@ -258,9 +276,13 @@ export async function createApprovalRequestWithTarget(
     throw new AppError(409, 'A pending approval request already exists for this issue');
   }
 
-  // Validate self-approval rule
-  if (!gate.allowSelfApproval && approverIds.includes(requestedById)) {
-    throw new AppError(400, 'Self-approval is not allowed for this gate');
+  // Validate self-approval rule. A bot's owners count as the bot (decision 12)
+  if (!gate.allowSelfApproval && (await selvesOf(requestedById, approverIds)).length > 0) {
+    throw new AppError(
+      400,
+      'Self-approval is not allowed for this gate',
+      'SELF_APPROVAL_NOT_ALLOWED',
+    );
   }
 
   // Validate min approvers count
@@ -453,8 +475,15 @@ export async function castVote(
   ) {
     throw new AppError(403, 'Insufficient permissions: issue:edit');
   }
-  if (!request.approvalGate.allowSelfApproval && request.requestedById === userId) {
-    throw new AppError(403, 'This gate does not allow approving your own request');
+  if (
+    !request.approvalGate.allowSelfApproval &&
+    (await selvesOf(request.requestedById, [userId])).length > 0
+  ) {
+    throw new AppError(
+      403,
+      'This gate does not allow approving your own request, or one your service account raised',
+      'SELF_APPROVAL_NOT_ALLOWED',
+    );
   }
 
   // Check no duplicate vote

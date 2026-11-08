@@ -10,8 +10,7 @@ import { findOrThrow } from '../../utils/find-or-throw';
 import { cancelPendingFor } from '../agent-approvals/agent-approvals.cleanup';
 import { generateApiToken } from '../users/users.service';
 
-/** Org roles that may own a bot: a person with one of these, not deactivated */
-const OWNER_ROLES = ['OWNER', 'ADMIN', 'MEMBER'] as const;
+import { eligibleOwnerWhere } from './owners';
 
 /** Org roles that manage the org's bots */
 const ADMIN_ROLES = ['OWNER', 'ADMIN'] as const;
@@ -160,12 +159,7 @@ async function eligibleOwners(
 ): Promise<string[]> {
   const unique = [...new Set(ownerIds)];
   const eligible = await db.user.count({
-    where: {
-      id: { in: unique },
-      kind: 'PERSON',
-      deactivatedAt: null,
-      orgMemberships: { some: { orgId, role: { in: [...OWNER_ROLES] } } },
-    },
+    where: { id: { in: unique }, ...eligibleOwnerWhere(orgId) },
   });
   if (unique.length === 0 || eligible !== unique.length) {
     throw new AppError(

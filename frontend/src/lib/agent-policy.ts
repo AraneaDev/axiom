@@ -62,9 +62,21 @@ export function problemWith(scope: PolicyScope, values: PolicyFormValues): strin
   return null;
 }
 
+/** The rules this form edits: any other stored rule is kept as it is on save. */
+const FORM_RULES = [
+  'destructive',
+  'crossContainerMove',
+  'bulkOver',
+  'expiresMinutes',
+  'alsoRequire',
+  'neverRequire',
+] as const;
+
 /**
  * The rules to save: only what differs from the defaults, so a later change of a default still
- * reaches whoever never chose a value. A user keeps only stricter choices.
+ * reaches whoever never chose a value. A user keeps only stricter choices. A save replaces every
+ * rule, so the stored rules the form does not show (botExpiresMinutes, or one added later) are
+ * kept.
  * @param scope - Whose rules
  * @param values - The form
  * @param policy - The policy the form started from
@@ -75,7 +87,11 @@ export function rulesFrom(
   policy: AgentPolicy,
 ): AgentPolicyRules {
   const { defaults } = policy;
-  const rules: AgentPolicyRules = {};
+  const rules: AgentPolicyRules = Object.fromEntries(
+    Object.entries(policy.rules).filter(
+      ([key]) => !(FORM_RULES as readonly string[]).includes(key),
+    ),
+  );
   if (scope === 'org') {
     if (values.destructive !== defaults.requireFor.destructive) {
       rules.destructive = values.destructive;

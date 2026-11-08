@@ -8,10 +8,12 @@ import { getAction } from '../../actions/registry';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
-import { isPerson } from '../service-accounts/person';
+import { botsOwnedBy, eligibleOwnerWhere, type OwnedBot } from '../service-accounts/owners';
+import { isServiceAccount } from '../service-accounts/person';
 
 import { OUTCOME_UNKNOWN } from './agent-approvals.cleanup';
 import { announce, runApproved } from './agent-approvals.gate';
+import { canOpenPlace } from './request-place';
 
 const MAX_RESULT_BYTES = 1024 * 1024;
 
@@ -24,6 +26,8 @@ const MAX_LIST_LIMIT = 100;
 const LIST_FIELDS = {
   id: true,
   userId: true,
+  placeTeamIds: true,
+  placeSpaceIds: true,
   action: true,
   preview: true,
   status: true,
@@ -34,61 +38,86 @@ const LIST_FIELDS = {
   createdAt: true,
 } as const;
 
-/**
- * The bots a person owns, by id with their names: their requests are the owner's to decide.
- * @param userId - The person
- */
-async function ownedBots(userId: string): Promise<Map<string, string>> {
-  const rows = await prisma.serviceAccountOwner.findMany({
-    where: { ownerId: userId },
-    select: {
-      serviceAccountId: true,
-      serviceAccount: { select: { user: { select: { displayName: true } } } },
-    },
-  });
-  return new Map(rows.map((r) => [r.serviceAccountId, r.serviceAccount.user.displayName]));
-}
+/** What an owner reads instead of the preview of a request in a place they can't open. */
+export const STUB_PREVIEW = "A request in a place you can't open";
 
 /** Who reads and decides requests, and the bots whose requests count among them. */
 interface Reader {
+  userId: string;
   where: Prisma.AgentApprovalWhereInput;
-  bots: Map<string, string>;
+  bots: Map<string, OwnedBot>;
 }
 
 /**
- * Who reads the requests: a session sees all of its user's and those of every bot the user owns,
- * a token only what it asked itself, as a request can hold what the scopes of another token cover.
+ * Who reads the requests: a session sees all of its user's and those of every bot the user owns
+ * and may answer for, a token only what it asked itself, as a request can hold what the scopes of
+ * another token cover.
  * @param ctx - Who runs the action
  */
 async function readerOf(ctx: ActionContext): Promise<Reader> {
   if (ctx.apiTokenId !== undefined) {
-    return { where: { userId: ctx.userId, apiTokenId: ctx.apiTokenId }, bots: new Map() };
+    return {
+      userId: ctx.userId,
+      where: { userId: ctx.userId, apiTokenId: ctx.apiTokenId },
+      bots: new Map(),
+    };
   }
-  return deciderOf(ctx.userId);
-}
-
-/**
- * Whose requests a person decides: their own and those of the bots they own. Approving and
- * rejecting are web UI only, so this is always a session.
- * @param userId - The person
- */
-async function deciderOf(userId: string): Promise<Reader> {
-  const bots = await ownedBots(userId);
+  const bots = new Map((await botsOwnedBy(ctx.userId)).map((bot) => [bot.id, bot]));
   const where: Prisma.AgentApprovalWhereInput =
-    bots.size === 0 ? { userId } : { userId: { in: [userId, ...bots.keys()] } };
-  return { where, bots };
+    bots.size === 0 ? { userId: ctx.userId } : { userId: { in: [ctx.userId, ...bots.keys()] } };
+  return { userId: ctx.userId, where, bots };
 }
 
+/** The fields a stub keeps: when and what kind of request, never what it holds. */
+type StubSource = Pick<
+  AgentApproval,
+  | 'id'
+  | 'userId'
+  | 'action'
+  | 'status'
+  | 'channel'
+  | 'apiTokenName'
+  | 'decidedAt'
+  | 'expiresAt'
+  | 'createdAt'
+  | 'placeTeamIds'
+  | 'placeSpaceIds'
+>;
+
 /**
- * A request as its reader sees it: one of a bot they own names the bot.
- * @param row - The row
- * @param bots - The reader's bots
+ * Requests as their reader sees them (decision 11): a bot's names the bot, and one in a place the
+ * owner can't open is a stub, without preview, input, result or error.
+ * @param rows - The rows, already limited to what the reader may list
+ * @param reader - Who reads
  */
-function marked<T extends { userId: string }>(row: T, bots: Map<string, string>) {
-  const name = bots.get(row.userId);
-  return name === undefined
-    ? row
-    : { ...row, serviceAccount: { id: row.userId, displayName: name } };
+async function shown<T extends StubSource>(rows: T[], reader: Reader) {
+  const opens = new Map<string, Promise<boolean>>();
+  return Promise.all(
+    rows.map(async (row) => {
+      const viewed = view(row);
+      const bot = reader.bots.get(row.userId);
+      if (!bot) return viewed;
+      const serviceAccount = { id: bot.id, displayName: bot.displayName };
+      const place = { teamIds: row.placeTeamIds, spaceIds: row.placeSpaceIds };
+      const key = JSON.stringify(place);
+      if (!opens.has(key)) opens.set(key, canOpenPlace(reader.userId, place));
+      if (await opens.get(key)) return { ...viewed, serviceAccount };
+      return {
+        id: viewed.id,
+        userId: viewed.userId,
+        action: viewed.action,
+        status: viewed.status,
+        channel: viewed.channel,
+        apiTokenName: viewed.apiTokenName,
+        decidedAt: viewed.decidedAt,
+        expiresAt: viewed.expiresAt,
+        createdAt: viewed.createdAt,
+        preview: STUB_PREVIEW,
+        restricted: true as const,
+        serviceAccount,
+      };
+    }),
+  );
 }
 
 /**
@@ -162,7 +191,7 @@ export async function listAgentApprovals(
     prisma.agentApproval.count({ where }),
   ]);
   return {
-    data: rows.map((row) => marked(view(row), reader.bots)),
+    data: await shown(rows, reader),
     total,
     limit: take,
     offset: skip,
@@ -179,7 +208,8 @@ export async function getAgentApproval(id: string, ctx: ActionContext) {
   const reader = await readerOf(ctx);
   const row = await prisma.agentApproval.findFirst({ where: { AND: [{ id }, reader.where] } });
   if (!row) throw new AppError(404, 'Approval request not found');
-  return marked(view(row), reader.bots);
+  const [one] = await shown([row], reader);
+  return one;
 }
 
 /** Long polls running now, per user. Per process: there is one API container (Architecture). */
@@ -220,13 +250,52 @@ export async function waitForAgentApproval(
 }
 
 /**
+ * Which of the requests a person may decide this one is in: their own, or one of a bot they own
+ * and may answer for now, in a place they can open. The owner condition goes into the claim's own
+ * update, so an owner removed or demoted in the meantime can't win it.
+ * @param id - The request
+ * @param userId - Who decides
+ * @returns The condition, or null when it is not theirs to decide
+ */
+async function decisionScope(
+  id: string,
+  userId: string,
+): Promise<Prisma.AgentApprovalWhereInput | null> {
+  const row = await prisma.agentApproval.findUnique({
+    where: { id },
+    select: { userId: true, placeTeamIds: true, placeSpaceIds: true },
+  });
+  if (!row) return null;
+  if (row.userId === userId) return { userId };
+  const bot = await prisma.serviceAccount.findUnique({
+    where: { userId: row.userId },
+    select: { orgId: true },
+  });
+  if (!bot) return null;
+  if (!(await canOpenPlace(userId, { teamIds: row.placeTeamIds, spaceIds: row.placeSpaceIds }))) {
+    return null;
+  }
+  return {
+    userId: row.userId,
+    user: {
+      serviceAccount: {
+        is: { owners: { some: { ownerId: userId, owner: eligibleOwnerWhere(bot.orgId) } } },
+      },
+    },
+  };
+}
+
+/**
  * Why a decision found nothing waiting.
  * @param id - The request
- * @param decider - Whose requests the caller decides
+ * @param scope - The requests the caller decides
  */
-async function decisionRefusal(id: string, decider: Reader): Promise<AppError> {
+async function decisionRefusal(
+  id: string,
+  scope: Prisma.AgentApprovalWhereInput,
+): Promise<AppError> {
   const row = await prisma.agentApproval.findFirst({
-    where: { AND: [{ id }, decider.where] },
+    where: { AND: [{ id }, scope] },
     select: { status: true, expiresAt: true },
   });
   if (!row) return new AppError(404, 'Approval request not found');
@@ -248,12 +317,13 @@ async function claim(
   status: 'APPROVED' | 'REJECTED',
 ): Promise<AgentApproval> {
   const now = new Date();
-  const decider = await deciderOf(userId);
+  const scope = await decisionScope(id, userId);
+  if (!scope) throw new AppError(404, 'Approval request not found');
   const { count } = await prisma.agentApproval.updateMany({
-    where: { AND: [{ id, status: 'PENDING', expiresAt: { gt: now } }, decider.where] },
+    where: { AND: [{ id, status: 'PENDING', expiresAt: { gt: now } }, scope] },
     data: { status, decidedAt: now },
   });
-  if (count === 0) throw await decisionRefusal(id, decider);
+  if (count === 0) throw await decisionRefusal(id, scope);
   const row = await prisma.agentApproval.findUniqueOrThrow({ where: { id } });
   await announce(row);
   return row;
@@ -265,7 +335,7 @@ async function claim(
  * @param userId - Who asked
  */
 async function botRefusal(userId: string): Promise<ActError | undefined> {
-  if (await isPerson(userId)) return undefined;
+  if (!(await isServiceAccount(userId))) return undefined;
   const bot = await prisma.serviceAccount.findUnique({
     where: { userId },
     select: { status: true, user: { select: { deactivatedAt: true } } },

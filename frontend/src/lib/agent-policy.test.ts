@@ -41,6 +41,15 @@ describe('agent policy form values', () => {
     expect(rulesFrom('user', values, policy)).toEqual({ alsoRequire: ['issue.update'] });
   });
 
+  it('keeps stored rules the form does not show, such as botExpiresMinutes', () => {
+    const stored: AgentPolicy = {
+      ...policy,
+      rules: { botExpiresMinutes: 120, destructive: false, laterRule: 'kept' },
+    };
+    const values = { ...valuesOf(stored), destructive: true };
+    expect(rulesFrom('org', values, stored)).toEqual({ botExpiresMinutes: 120, laterRule: 'kept' });
+  });
+
   it('reads action names one per line, once each', () => {
     expect(parseNames('issue.update\n\n issue.update, page.update ')).toEqual([
       'issue.update',

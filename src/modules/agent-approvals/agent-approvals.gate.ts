@@ -10,9 +10,11 @@ import { AppError } from '../../middleware/errorHandler';
 import { broadcastToUser } from '../../realtime/broadcast';
 import { logger } from '../../utils/logger';
 import { createNotification } from '../notifications/notifications.service';
-import { isPerson } from '../service-accounts/person';
+import { eligibleOwnerIds } from '../service-accounts/owners';
+import { isServiceAccount } from '../service-accounts/person';
 
 import { policyForCall, rawNamedRefusal, type FullPolicy } from './agent-policy.service';
+import { canOpenPlace, placeOfInput, type RequestPlace } from './request-place';
 
 /*
  * The approval gate of executeAction, apart from the service that lists, approves and runs the
@@ -138,23 +140,31 @@ async function previewOf(
 }
 
 /**
- * Who decides a user's requests: the user, or the owners of a bot. A bot is told nothing, it is
- * never the target of a notification.
+ * Who answers for a user's requests: the user, or the eligible owners of a bot. A bot is told
+ * nothing, it is never the target of a notification.
  * @param userId - Who asked
  */
-async function decidersOf(userId: string): Promise<string[]> {
-  if (await isPerson(userId)) return [userId];
-  const owners = await prisma.serviceAccountOwner.findMany({
-    where: { serviceAccountId: userId },
-    select: { ownerId: true },
-    orderBy: { createdAt: 'asc' },
-  });
-  return owners.map((o) => o.ownerId);
+async function answerersOf(userId: string): Promise<string[]> {
+  return (await isServiceAccount(userId)) ? eligibleOwnerIds(userId) : [userId];
 }
 
 /**
- * Tell the open pages of the user, or of the bot's owners, that a request changed. The bot's own
- * pages get it too: a session never belongs to a bot, so nothing listens there.
+ * Who decides a request, and so is notified of it: the user, or the bot's eligible owners who
+ * can open its place (decision 11).
+ * @param userId - Who asked
+ * @param place - Where it acts
+ */
+async function decidersOf(userId: string, place: RequestPlace): Promise<string[]> {
+  if (!(await isServiceAccount(userId))) return [userId];
+  const owners = await eligibleOwnerIds(userId);
+  const open = await Promise.all(owners.map((owner) => canOpenPlace(owner, place)));
+  return owners.filter((_owner, i) => open[i]);
+}
+
+/**
+ * Tell the open pages of the user, or of the bot's owners, that a request changed. Every eligible
+ * owner hears of it, as a stub in their list changes too; the event says no more than the id and
+ * the status. The bot's own pages get it too: a session never belongs to a bot.
  * @param row - The request
  * @param row.userId
  * @param row.id
@@ -167,7 +177,7 @@ export async function announce(row: {
 }): Promise<void> {
   // Telling is best effort: the row is what holds, and a failure here must not undo a decision
   try {
-    const deciders = await decidersOf(row.userId);
+    const deciders = await answerersOf(row.userId);
     for (const to of new Set([row.userId, ...deciders])) {
       broadcastToUser(to, {
         type: 'agent:approval',
@@ -256,8 +266,10 @@ async function requestApproval(
   }
   const preview = await previewOf(def, input, stored, ctx);
   // A bot's owners decide, and they may not be around within the hour an agent's user is
-  const person = await isPerson(ctx.userId);
-  const minutes = person ? policy.expiresMinutes : policy.botExpiresMinutes;
+  const bot = await isServiceAccount(ctx.userId);
+  const minutes = bot ? policy.botExpiresMinutes : policy.expiresMinutes;
+  // Only a bot's request is shown by place: a person's is theirs wherever it acts
+  const place = bot ? await placeOfInput(input) : { teamIds: [], spaceIds: [] };
   const row = await createWithinCap({
     userId: ctx.userId,
     apiTokenId: ctx.apiTokenId,
@@ -267,14 +279,16 @@ async function requestApproval(
     input: stored,
     preview,
     expiresAt: new Date(Date.now() + minutes * 60_000),
+    placeTeamIds: place.teamIds,
+    placeSpaceIds: place.spaceIds,
   });
   const approveUrl = `/approvals/agent/${row.id}`;
   // The request stands whether or not telling about it works: it is in the deciders' lists
   try {
-    const asker = person
-      ? (ctx.apiTokenName ?? 'An agent')
-      : `${await botName(ctx.userId)} (${ctx.apiTokenName ?? 'a token'})`;
-    for (const decider of await decidersOf(ctx.userId)) {
+    const asker = bot
+      ? `${await botName(ctx.userId)} (${ctx.apiTokenName ?? 'a token'})`
+      : (ctx.apiTokenName ?? 'An agent');
+    for (const decider of await decidersOf(ctx.userId, place)) {
       await createNotification(
         decider,
         'agent:approval',

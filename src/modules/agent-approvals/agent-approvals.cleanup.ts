@@ -71,13 +71,26 @@ export async function cancelPendingFor(
   reason: string,
   db: Pick<Prisma.TransactionClient, 'agentApproval'> = prisma,
 ): Promise<number> {
-  const { count } = await db.agentApproval.updateMany({
-    where: { userId, status: 'PENDING' },
+  const { count } = await db.agentApproval.updateMany(cancelPendingArgs([userId], reason));
+  return count;
+}
+
+/**
+ * The update that cancels what some users' tokens wait on, for a caller that batches it with
+ * other writes (deleteOrg). cancelPendingFor runs the same update.
+ * @param userIds - Whose requests
+ * @param reason - What the approver and the agent read as the error
+ */
+export function cancelPendingArgs(
+  userIds: string[],
+  reason: string,
+): Prisma.AgentApprovalUpdateManyArgs {
+  return {
+    where: { userId: { in: userIds }, status: 'PENDING' },
     data: {
       status: 'CANCELLED',
       decidedAt: new Date(),
       error: { status: 409, code: 'CANCELLED', message: reason },
     },
-  });
-  return count;
+  };
 }

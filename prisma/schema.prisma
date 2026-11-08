@@ -1375,23 +1375,27 @@ enum AgentApprovalStatus {
 
 /// A token's call that waits for its user to decide in the web UI. Not the issue approval gates.
 model AgentApproval {
-  id           String              @id @default(cuid())
-  userId       String
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String              @id @default(cuid())
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// No relation: the row outlives the token, and a token that is gone stops the run
-  apiTokenId   String?
-  apiTokenName String?
+  apiTokenId    String?
+  apiTokenName  String?
   /// The channel of the request, which the run keeps so the audit log says via
-  channel      String
-  action       String
-  input        Json
-  preview      String
-  status       AgentApprovalStatus @default(PENDING)
-  result       Json?
-  error        Json?
-  decidedAt    DateTime?
-  expiresAt    DateTime
-  createdAt    DateTime            @default(now())
+  channel       String
+  action        String
+  input         Json
+  preview       String
+  status        AgentApprovalStatus @default(PENDING)
+  result        Json?
+  error         Json?
+  decidedAt     DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime            @default(now())
+  /// Where a bot's request acts (decision 11): only owners who can open every one of these teams
+  /// and spaces see and decide it. Both empty: org level, any owner decides
+  placeTeamIds  String[]            @default([])
+  placeSpaceIds String[]            @default([])
 
   @@index([userId, status])
   @@index([status, expiresAt])

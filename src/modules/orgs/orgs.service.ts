@@ -5,7 +5,7 @@ import { checkUnique } from '../../utils/check-unique';
 import { ERR } from '../../utils/error-messages';
 import { findOrThrow } from '../../utils/find-or-throw';
 import { USER_BASIC_SELECT } from '../../utils/prisma-selects';
-import { cancelPendingFor } from '../agent-approvals/agent-approvals.cleanup';
+import { cancelPendingArgs } from '../agent-approvals/agent-approvals.cleanup';
 import { isIntegrationUser } from '../github/integration-user';
 import { assertPersonTarget } from '../service-accounts/person';
 
@@ -153,6 +153,10 @@ export async function deleteOrg(orgId: string) {
   const botIds = bots.map((b) => b.userId);
   const now = new Date();
   await prisma.$transaction([
+    // As deleting one bot does: its waiting requests are cancelled, not left to expire
+    prisma.agentApproval.updateMany(
+      cancelPendingArgs(botIds, 'The organization of this service account was deleted'),
+    ),
     prisma.apiToken.deleteMany({ where: { userId: { in: botIds } } }),
     prisma.user.updateMany({
       where: { id: { in: botIds }, deactivatedAt: null },
@@ -160,12 +164,6 @@ export async function deleteOrg(orgId: string) {
     }),
     prisma.organization.delete({ where: { id: orgId } }),
   ]);
-  // As deleting one bot does: its waiting requests are cancelled, not left to expire. After the
-  // delete, as its tokens are gone by then and no new request can come; one this misses can't run
-  // either, as a bot with no service account is refused at approval
-  for (const botId of botIds) {
-    await cancelPendingFor(botId, 'The organization of this service account was deleted');
-  }
 }
 
 /**
