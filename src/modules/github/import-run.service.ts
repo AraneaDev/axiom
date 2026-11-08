@@ -73,7 +73,15 @@ const retryAfterMs = (err: AppError) => {
 /** A run's progress, as the status action and the settings page show it */
 export type ImportRunView = Pick<
   GithubImportRun,
-  'status' | 'total' | 'done' | 'failed' | 'startedAt' | 'finishedAt' | 'error' | 'resumeAt'
+  | 'status'
+  | 'total'
+  | 'done'
+  | 'failed'
+  | 'startedAt'
+  | 'finishedAt'
+  | 'error'
+  | 'resumeAt'
+  | 'linkCommentsWaitUntil'
 >;
 
 /**
@@ -89,7 +97,13 @@ function broadcastProgress(projectId: string, runId: string): void {
 type RunChange = Partial<
   Pick<
     GithubImportRun,
-    'status' | 'resumeAt' | 'error' | 'finishedAt' | 'errorTicks' | 'progressAt'
+    | 'status'
+    | 'resumeAt'
+    | 'error'
+    | 'finishedAt'
+    | 'errorTicks'
+    | 'progressAt'
+    | 'linkCommentsWaitUntil'
   >
 >;
 
@@ -220,18 +234,22 @@ export async function runImportTick(runId: string): Promise<void> {
       await release();
       return;
     }
-    const fine = { error: null, errorTicks: 0 };
-    if (comments.outcome === 'waiting') {
-      // The link's hourly ceiling of link comments is reached: not a fault, a wait
-      await release({ ...fine, status: 'PAUSED', resumeAt: comments.resumeAt });
-      return;
-    }
+    // While the link's hourly ceiling is reached only the link comments wait: the run goes on
+    const fine = {
+      error: null,
+      errorTicks: 0,
+      linkCommentsWaitUntil: comments.waitUntil,
+    };
     if (state.pass === PAGES_READ) {
+      // Done once nothing is owed; a comment GitHub refused five times is given up, not owed
       const owed = await pendingLinkCommentIds(link.id, 1);
-      // Every owed link comment was tried and GitHub refused them for another reason than its
-      // limit: they are left to the reconcile, which tries them every round
-      if (owed.length === 0 || comments.outcome === 'all-failed') {
-        await release({ ...fine, status: 'DONE', finishedAt: new Date() });
+      if (owed.length === 0) {
+        await release({
+          ...fine,
+          linkCommentsWaitUntil: null,
+          status: 'DONE',
+          finishedAt: new Date(),
+        });
         return;
       }
     }
@@ -435,20 +453,23 @@ const importedNow = async (repoLinkId: string, githubIssueNumber: number) =>
     select: { id: true },
   })) !== null;
 
-type LinkCommentRound =
-  | { outcome: 'lost' | 'ok' | 'all-failed'; posted: number }
-  | { outcome: 'waiting'; posted: number; resumeAt: Date };
+type LinkCommentRound = {
+  outcome: 'lost' | 'ok';
+  posted: number;
+  /** When the next one may go, while a full window that is longer than a tick holds them */
+  waitUntil: Date | null;
+};
 
 /**
  * Posts the link comments the link owes (the backfill's and any a live import left), within each
  * window of LINK_COMMENT_WINDOWS: 20 a minute, which only the backfill keeps, and 400 an hour,
  * which every link comment of the link counts against. A claim made in a window, by this run or
  * by a live import, counts in it. A full minute leaves the rest for a later tick; a full hour
- * makes the run wait until it frees a place.
+ * holds them until it frees a place, and says when that is.
  * @param repoLinkId The link
  * @param extend Pushes the lease out; false when the run was lost or cancelled
- * @returns `lost` when the run was lost or cancelled meanwhile, `all-failed` when GitHub refused
- *   every owed one, `waiting` with when to go on, else `ok`; with how many went out
+ * @returns `lost` when the run was lost or cancelled meanwhile, else `ok`; how many went out, and
+ *   until when the rest wait
  * @throws {AppError} GITHUB_RATE_LIMITED, which pauses the run; the comment GitHub refused is
  *   posted on resume, after a look for one that may have been made
  */
@@ -464,37 +485,43 @@ async function postOwedLinkComments(
     if (left <= 0 && window.ms > TICK_SCALE_MS) fullWindow = Math.max(fullWindow ?? 0, window.ms);
     room = Math.min(room, Math.max(0, left));
   }
-  const owed = await pendingLinkCommentIds(repoLinkId, room === Infinity ? 1 : room + 1);
   let posted = 0;
-  const wait = async (ms: number): Promise<LinkCommentRound> => ({
-    outcome: 'waiting',
+  const owed = await pendingLinkCommentIds(repoLinkId, room === Infinity ? 1 : room);
+  const held = async (ms: number): Promise<LinkCommentRound> => ({
+    outcome: 'ok',
     posted,
-    resumeAt: await linkCommentWindowOpensAt(repoLinkId, ms),
+    waitUntil: await linkCommentWindowOpensAt(repoLinkId, ms),
   });
-  if (owed.length === 0) return { outcome: 'ok', posted };
-  if (fullWindow !== null) return wait(fullWindow);
-  const ids = owed.slice(0, room);
-  let failed = 0;
-  for (const id of ids) {
-    if (!(await extend())) return { outcome: 'lost', posted };
+  if (fullWindow !== null) {
+    return (await pendingLinkCommentIds(repoLinkId, 1)).length > 0
+      ? held(fullWindow)
+      : { outcome: 'ok', posted, waitUntil: null };
+  }
+  for (const id of owed) {
+    if (!(await extend())) return { outcome: 'lost', posted, waitUntil: null };
     try {
       // A system write, as the App: never counted against a run's budget
       const outcome = await outsideGithubCallCount(() => postLinkComment(id));
       if (outcome === 'posted') posted++;
       // Live imports filled the hour meanwhile
-      if (outcome === 'held') return wait(longestSharedWindow());
+      if (outcome === 'held') return held(longestSharedWindow());
     } catch (err) {
       if (isRateLimited(err)) throw err;
-      failed++;
       logger.warn('github backfill link comment failed', {
         importId: id,
         error: err instanceof AppError ? err.code : 'unknown',
       });
     }
   }
-  // Only a round that tried every owed one says they all failed
-  const everyOne = owed.length <= ids.length;
-  return { outcome: everyOne && failed === ids.length ? 'all-failed' : 'ok', posted };
+  // This round may have filled the hour with more still owed: say until when they wait
+  for (const window of LINK_COMMENT_WINDOWS) {
+    if (window.ms <= TICK_SCALE_MS) continue;
+    const used = await linkCommentsSince(repoLinkId, new Date(Date.now() - window.ms));
+    if (used >= window.limit && (await pendingLinkCommentIds(repoLinkId, 1)).length > 0) {
+      return held(window.ms);
+    }
+  }
+  return { outcome: 'ok', posted, waitUntil: null };
 }
 
 const longestSharedWindow = () =>
@@ -512,7 +539,20 @@ export async function runDueImports(limit = 5): Promise<number> {
     where: {
       OR: [
         { status: 'QUEUED' },
-        { status: 'RUNNING', OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }] },
+        {
+          status: 'RUNNING',
+          OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }],
+          // With only link comments left, nothing to do until the hour frees a place
+          AND: [
+            {
+              OR: [
+                { pass: { not: PAGES_READ } },
+                { linkCommentsWaitUntil: null },
+                { linkCommentsWaitUntil: { lte: now } },
+              ],
+            },
+          ],
+        },
         { status: 'PAUSED', OR: [{ resumeAt: null }, { resumeAt: { lte: now } }] },
       ],
     },
@@ -539,6 +579,7 @@ const viewOf = (run: GithubImportRun): ImportRunView => ({
   finishedAt: run.finishedAt,
   error: run.error,
   resumeAt: run.resumeAt,
+  linkCommentsWaitUntil: run.linkCommentsWaitUntil,
 });
 
 /**

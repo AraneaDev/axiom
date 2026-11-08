@@ -1512,7 +1512,7 @@ model GithubIssueImport {
   linkCommentClaimedAt DateTime?
   /// When GitHub answered the link comment with 404 or 410, or refused it 5 times: it is not tried again
   linkCommentGivenUpAt DateTime?
-  /// How often posting the link comment failed for another reason than a rate limit
+  /// How often GitHub refused the link comment (a 4xx other than 404, 410 and 429)
   linkCommentFailures  Int                     @default(0)
   /// When the comments GitHub had at the import were all read
   commentsImportedAt   DateTime?
@@ -1555,38 +1555,40 @@ enum GithubImportRunStatus {
 
 /// One backfill of the open GitHub Issues of a link, run by the worker a tick at a time
 model GithubImportRun {
-  id             String                @id @default(cuid())
-  repoLinkId     String
+  id                    String                @id @default(cuid())
+  repoLinkId            String
   /// Who switched import on; no relation, so deleting that person leaves the run as it is
-  requestedById  String
-  status         GithubImportRunStatus @default(QUEUED)
+  requestedById         String
+  status                GithubImportRunStatus @default(QUEUED)
   /// The open issues GitHub counted when the run started, null when the count could not be read
-  total          Int?
+  total                 Int?
   /// The open issues read so far that are in Axiom, imported by this run or before it
-  done           Int                   @default(0)
-  failed         Int                   @default(0)
+  done                  Int                   @default(0)
+  failed                Int                   @default(0)
   /// The page of GitHub's open issues (100 each, oldest first) that is read next
-  nextPage       Int                   @default(1)
+  nextPage              Int                   @default(1)
   /// 1: the first read through the pages; 2: one more read, for issues that moved onto a page
   /// already read when earlier ones closed; 3: the pages are read, link comments are left
-  pass           Int                   @default(1)
+  pass                  Int                   @default(1)
   /// `done` of the pages before nextPage in the first pass; in the sweep, its own count of them
-  doneBeforePage Int                   @default(0)
+  doneBeforePage        Int                   @default(0)
   /// The issues whose import failed: this run does not try them again (their next update does)
-  failedNumbers  Int[]                 @default([])
-  resumeAt       DateTime?
+  failedNumbers         Int[]                 @default([])
+  resumeAt              DateTime?
   /// Until when a tick holds the run; the exact value is that tick's token
-  leaseUntil     DateTime?
+  leaseUntil            DateTime?
   /// Set by a failure that may pass; null while the run is fine or only waits for a rate limit
-  error          String?
+  error                 String?
   /// Ticks in a row that failed with `error`; at 10 the run is FAILED
-  errorTicks     Int                   @default(0)
+  errorTicks            Int                   @default(0)
+  /// While the link's hourly ceiling of link comments is reached: when the next one may go
+  linkCommentsWaitUntil DateTime?
   /// When the run last moved on (an issue, a page or a link comment); a day without is FAILED
-  progressAt     DateTime?
-  createdAt      DateTime              @default(now())
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  repoLink       GithubRepoLink        @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+  progressAt            DateTime?
+  createdAt             DateTime              @default(now())
+  startedAt             DateTime?
+  finishedAt            DateTime?
+  repoLink              GithubRepoLink        @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
 
   @@index([repoLinkId, createdAt])
   @@index([status])

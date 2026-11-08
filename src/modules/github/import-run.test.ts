@@ -19,11 +19,7 @@ import { useGithubFake, type RecordedRequest } from '../../test/github-fake';
 import { seedGithubApp } from '../../test/github-seed';
 
 import { IMPORT_PACE, configureImport, runDueImports, runImportTick } from './import-run.service';
-import {
-  importGithubIssue,
-  postLinkComment,
-  postPendingLinkComments,
-} from './issue-import.service';
+import { importGithubIssue, postLinkComment } from './issue-import.service';
 import { reconcileRepo } from './reconcile.service';
 import './github-resolvers';
 
@@ -587,15 +583,8 @@ describe('link comments that GitHub keeps refusing', { timeout: 120_000 }, () =>
     await runImportTick(run.id);
     for (const n of [21, 22, 23, 24, 25]) expect(linkComments(n), `#${n}`).toHaveLength(1);
 
-    // Once a round tried every owed one and all were refused, the run is done and leaves them
+    // The run is done once each refused one was given up after its fifth refusal
     await tickUntil(run.id, 'DONE');
-    expect(
-      await prisma.githubIssueImport.count({
-        where: { repoLinkId: link.id, linkCommentId: null, linkCommentGivenUpAt: null },
-      }),
-    ).toBe(20);
-    // to the reconcile's rounds, which give each up after its fifth refusal
-    for (let i = 0; i < 10 && (await postPendingLinkComments(link.id)) > 0; i++);
     const rows = await prisma.githubIssueImport.findMany({
       where: { repoLinkId: link.id, githubIssueNumber: { lte: 20 } },
     });
@@ -608,20 +597,48 @@ describe('link comments that GitHub keeps refusing', { timeout: 120_000 }, () =>
     expect(tries).toHaveLength(100);
   });
 
-  it('is done when every owed link comment was tried and refused, and leaves them owed', async () => {
+  it('is done only once nothing is owed: refused ones are tried until they are given up', async () => {
     lists = repository(3);
     fake.setRepoLists(FULL_NAME, lists);
     fake.on('POST /repos/:owner/:repo/issues/:number/comments', refused());
     await enable();
     const run = await latestRun();
     await runImportTick(run.id);
-    expect(await latestRun()).toMatchObject({ status: 'DONE', done: 3 });
+    expect(await latestRun()).toMatchObject({ status: 'RUNNING', done: 3 });
+    await tickUntil(run.id, 'DONE');
     const rows = await prisma.githubIssueImport.findMany({ where: { repoLinkId: link.id } });
-    expect(rows.map((row) => [row.linkCommentFailures, row.linkCommentGivenUpAt])).toEqual([
-      [1, null],
-      [1, null],
-      [1, null],
-    ]);
+    for (const row of rows) {
+      expect(row.linkCommentFailures).toBe(5);
+      expect(row.linkCommentGivenUpAt).not.toBeNull();
+    }
+    expect(commentPosts()).toHaveLength(15);
+  });
+
+  it('gives a link comment up after five refusals, never for five failures that may pass', async () => {
+    lists = repository(2);
+    fake.setRepoLists(FULL_NAME, lists);
+    const linked = { ...link, importIssues: true };
+    for (const item of lists.issues.filter((i) => Number(i.number) <= 2)) {
+      await importGithubIssue(linked, item as never, { withComments: false, linkComment: false });
+    }
+    fake.on('POST /repos/:owner/:repo/issues/:number/comments', (_req, params) =>
+      params.number === '1' ? { status: 502 } : refused(),
+    );
+    const rowOf = (n: number) =>
+      prisma.githubIssueImport.findFirstOrThrow({
+        where: { repoLinkId: link.id, githubIssueNumber: n },
+      });
+    for (let i = 0; i < 5; i++) {
+      for (const n of [1, 2]) await expect(postLinkComment((await rowOf(n)).id)).rejects.toThrow();
+    }
+    const transient = await rowOf(1);
+    expect(transient).toMatchObject({ linkCommentFailures: 0, linkCommentGivenUpAt: null });
+    const refusedRow = await rowOf(2);
+    expect(refusedRow.linkCommentFailures).toBe(5);
+    expect(refusedRow.linkCommentGivenUpAt).not.toBeNull();
+    // A 502 still sends the row to the back of the queue
+    expect(transient.lastImportedAt.getTime()).toBeGreaterThan(Date.now() - 10_000);
+    expect(await postLinkComment(refusedRow.id)).toBe('skipped');
   });
 });
 
@@ -838,8 +855,8 @@ describe('one link comment per issue', { timeout: 120_000 }, () => {
     expect(linkComments(1)).toHaveLength(1);
   });
 
-  it('waits when the link has posted 400 link comments in the hour, and goes on after it', async () => {
-    lists = repository(3);
+  it('goes on importing when the link has posted 400 link comments in the hour, and posts them after it', async () => {
+    lists = repository(30);
     fake.setRepoLists(FULL_NAME, lists);
     // 400 link comments of the last hour, the oldest 50 minutes ago (imports deleted since)
     const oldest = new Date(Date.now() - 50 * 60_000);
@@ -857,39 +874,47 @@ describe('one link comment per issue', { timeout: 120_000 }, () => {
         lastImportedAt: new Date(),
       })),
     });
+    const opensAt = new Date(oldest.getTime() + HOUR_MS);
     await enable();
     const run = await latestRun();
     await runImportTick(run.id);
-    const waiting = await latestRun();
-    expect(waiting).toMatchObject({ status: 'PAUSED', error: null, done: 3 });
-    expect(waiting.resumeAt!.getTime()).toBe(oldest.getTime() + HOUR_MS);
+    expect(await latestRun()).toMatchObject({
+      status: 'RUNNING',
+      done: 25,
+      error: null,
+      linkCommentsWaitUntil: opensAt,
+    });
+    await runImportTick(run.id);
+    expect(await latestRun()).toMatchObject({ status: 'RUNNING', done: 30, pass: 3 });
+    expect(await importedIssues()).toBe(30);
     expect(commentPosts()).toEqual([]);
     const status = await request(app).get(url()).set(as(member.token));
     expect(status.body.run).toMatchObject({
-      status: 'PAUSED',
-      resumeAt: new Date(oldest.getTime() + HOUR_MS).toISOString(),
+      status: 'RUNNING',
+      linkCommentsWaitUntil: opensAt.toISOString(),
     });
+    // With only link comments left, the worker leaves it until the hour frees a place
+    expect(await runDueImports()).toBe(0);
 
     // A live import shares the hour: its link comment waits too
-    lists.issues.push(ghIssue(4));
+    lists.issues.push(ghIssue(31));
     const linked = await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: link.id } });
-    await prisma.githubImportRun.update({ where: { id: run.id }, data: { status: 'DONE' } });
-    await importGithubIssue(linked, ghIssue(4) as never, { withComments: false, live: true });
+    await importGithubIssue(linked, ghIssue(31) as never, { withComments: false, live: true });
     expect(commentPosts()).toEqual([]);
-    await prisma.githubImportRun.update({ where: { id: run.id }, data: { status: 'PAUSED' } });
 
-    // The hour passes for the oldest
+    // The hour passes for the oldest 20
     await prisma.$executeRaw`
       UPDATE github_issue_imports SET "linkCommentClaimedAt" = "linkCommentClaimedAt" - interval '11 minutes'
-      WHERE "repoLinkId" = ${link.id} AND "githubIssueNumber" >= 10000 AND "githubIssueNumber" < 10010`;
+      WHERE "repoLinkId" = ${link.id} AND "githubIssueNumber" >= 10000 AND "githubIssueNumber" < 10020`;
     await prisma.githubImportRun.update({
       where: { id: run.id },
-      data: { resumeAt: new Date(Date.now() - 1000) },
+      data: { linkCommentsWaitUntil: new Date(Date.now() - 1000) },
     });
-    await runImportTick(run.id);
-    // Ten went out of the hour: the four owed go out
-    expect(commentPosts()).toHaveLength(4);
-    expect(await latestRun()).toMatchObject({ status: 'DONE' });
+    expect(await runDueImports()).toBe(1);
+    expect(commentPosts()).toHaveLength(20);
+    const after = await latestRun();
+    expect(after.status).toBe('RUNNING');
+    expect(after.linkCommentsWaitUntil).not.toBeNull();
   });
 });
 

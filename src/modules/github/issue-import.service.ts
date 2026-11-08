@@ -43,8 +43,18 @@ const LABEL_NAME_MAX = 100;
 const LABELS_MAX = 20;
 /** A claim on the link comment older than this belongs to a run that died: it may be taken */
 export const LINK_CLAIM_TTL_MS = 10 * 60_000;
-/** Failed posts of one link comment (rate limits not counted) after which it is given up */
+/** Refusals of one link comment after which it is given up */
 const LINK_COMMENT_TRIES = 5;
+/**
+ * GitHub refusing a link comment: a 4xx other than 404 and 410 (given up at once) and 429 (a rate
+ * limit). A 5xx, a timeout or an unreachable GitHub (GITHUB_UNAVAILABLE) never counts.
+ */
+const REFUSALS = new Set([
+  'GITHUB_FORBIDDEN',
+  'GITHUB_INVALID',
+  'GITHUB_CONFLICT',
+  'GITHUB_NOT_ALLOWED',
+]);
 /** How long an import waits for another one of the same issue before it gives up (and retries) */
 const LOCK_WAIT_MS = 30_000;
 /** How long the database part of one import may hold the issue */
@@ -717,8 +727,8 @@ export type LinkCommentOutcome = 'posted' | 'held' | 'skipped';
  * the Axiom link. A run claims it on the import row first, so it is posted once however many
  * runs try. A claim older than 10 minutes without a comment id belongs to a run that died (or
  * failed): the run that takes it over first looks for the comment that run may have made. When
- * GitHub answers 404 or 410, or refuses it 5 times, the row notes it and nothing tries again; a
- * refused one goes to the back of the queue. It is held (left owed) while the link's hourly
+ * GitHub answers 404 or 410, or refuses it 5 times (a 4xx), the row notes it and nothing tries
+ * again; a failed one that was no rate limit goes to the back of the queue. It is held (left owed) while the link's hourly
  * ceiling of link comments is reached, or while a backfill of the link waits for GitHub's rate
  * limit, which then posts it.
  * @param importId The import
@@ -811,19 +821,22 @@ export async function postLinkComment(importId: string): Promise<LinkCommentOutc
     const backdated = new Date(claimedAt.getTime() - LINK_CLAIM_TTL_MS);
     const from = previous && previous < backdated ? previous : backdated;
     const limited = err instanceof AppError && err.code === 'GITHUB_RATE_LIMITED';
+    const refusal = err instanceof AppError && REFUSALS.has(err.code ?? '');
     await (async () => {
       await prisma.githubIssueImport.updateMany({
         where: { id: importId, linkCommentId: null, linkCommentClaimedAt: claimedAt },
-        // A refusal sends it to the back of the queue; a rate limit is no fault of the comment
+        // A rate limit is no fault of the comment: it keeps its place. Any other failure sends
+        // it to the back of the queue, and only GitHub refusing it counts towards giving it up
+        // (a 5xx or a timeout may pass)
         data: limited
           ? { linkCommentClaimedAt: from }
           : {
               linkCommentClaimedAt: from,
-              linkCommentFailures: { increment: 1 },
               lastImportedAt: new Date(),
+              ...(refusal && { linkCommentFailures: { increment: 1 } }),
             },
       });
-      if (limited) return;
+      if (!refusal) return;
       const given = await prisma.githubIssueImport.updateMany({
         where: {
           id: importId,
