@@ -1481,6 +1481,8 @@ model GithubRepoLink {
   importIssuesSeenAt    DateTime?
   /// How far it got through the comments GitHub changed
   importCommentsSeenAt  DateTime?
+  /// The wiki space release notes are written to when a request names none (a space of the project's team)
+  releaseNotesSpaceId   String?
   project               Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   issueLinks            GithubIssueLink[]
   branches              GithubBranch[]

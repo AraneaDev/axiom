@@ -92,6 +92,7 @@ async function present(link: GithubRepoLink) {
     name: link.name,
     htmlUrl: link.htmlUrl,
     defaultBranch: link.defaultBranch,
+    releaseNotesSpaceId: link.releaseNotesSpaceId,
     linkedBy: user,
     createdAt: link.createdAt,
   };

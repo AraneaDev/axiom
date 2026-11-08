@@ -9,6 +9,7 @@ import { logger } from '../../utils/logger';
 
 import { configureImport, importStatus } from './import-run.service';
 import { claimReconcile, reconcileRepo } from './reconcile.service';
+import { setReleaseNotesSpace } from './release-notes.service';
 import * as service from './repo-link.service';
 
 const link = z.looseObject({ repoFullName: z.string(), htmlUrl: z.string() });
@@ -187,6 +188,29 @@ registerActions([
     rest: { method: 'GET', path: `${PATH}/import` },
     authorize: read,
     handler: async (_ctx, { projectId }) => importStatus(projectId),
+  }),
+  defineAction({
+    name: 'githubRepo.update',
+    area: 'github',
+    kind: 'write',
+    summary:
+      "Change the settings of a project's GitHub link: the wiki space release notes go to (a space of the project's team, or null)",
+    target: projectTarget,
+    input: projectTarget.extend({
+      releaseNotesSpaceId: z
+        .string()
+        .min(1)
+        .nullable()
+        .describe("A wiki space of the project's team, or null for none"),
+    }),
+    output: z.looseObject({
+      repoFullName: z.string(),
+      releaseNotesSpaceId: z.string().nullable(),
+    }),
+    rest: { method: 'PATCH', path: PATH },
+    authorize: manage,
+    handler: async (_ctx, { projectId, releaseNotesSpaceId }) =>
+      setReleaseNotesSpace(projectId, releaseNotesSpaceId),
   }),
   defineAction({
     name: 'githubRepo.unlink',

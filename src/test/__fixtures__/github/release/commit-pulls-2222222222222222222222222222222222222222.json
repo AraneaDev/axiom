@@ -1,0 +1,22 @@
+{
+  "route": "GET /repos/:owner/:repo/commits/2222222222222222222222222222222222222222/pulls",
+  "status": 200,
+  "body": [
+    {
+      "number": 7,
+      "title": "Fix the login timeout",
+      "state": "closed",
+      "merged_at": "2026-10-20T09:00:00Z",
+      "user": { "login": "octo-dev", "id": 9101 },
+      "base": { "ref": "main" }
+    },
+    {
+      "number": 20,
+      "title": "Backport the login fix",
+      "state": "closed",
+      "merged_at": "2026-10-21T09:00:00Z",
+      "user": { "login": "octo-dev", "id": 9101 },
+      "base": { "ref": "release/1.x" }
+    }
+  ]
+}

@@ -11,7 +11,7 @@ const MARKDOWN_SPECIAL = /[&\\`*_{}[\]()#+\-.!|<>@^~:]/g;
  * @param max The longest text kept, in characters
  * @param markdown Whether to escape it for Markdown
  */
-function literal(text: string, max: number, markdown: boolean): string {
+export function literal(text: string, max: number, markdown: boolean): string {
   const line = text.replace(/\s+/g, ' ').trim().slice(0, max);
   if (!markdown) return line;
   return line.replace(MARKDOWN_SPECIAL, (c) => `\\${c}`);

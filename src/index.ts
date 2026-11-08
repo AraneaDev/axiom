@@ -79,6 +79,7 @@ import './modules/github/github-resolvers';
 import './modules/github/github-app.actions';
 import './modules/github/github-branch.actions';
 import './modules/github/github-pr.actions';
+import './modules/github/release-notes.actions';
 import './modules/github/repo-link.actions';
 import './modules/github/webhook-handlers';
 import './modules/github/webhook.actions';

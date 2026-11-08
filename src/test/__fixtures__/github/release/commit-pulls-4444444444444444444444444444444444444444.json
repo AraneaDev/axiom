@@ -1,0 +1,14 @@
+{
+  "route": "GET /repos/:owner/:repo/commits/4444444444444444444444444444444444444444/pulls",
+  "status": 200,
+  "body": [
+    {
+      "number": 21,
+      "title": "Bump the build image",
+      "state": "open",
+      "merged_at": null,
+      "user": { "login": "review-bot", "id": 9102 },
+      "base": { "ref": "main" }
+    }
+  ]
+}

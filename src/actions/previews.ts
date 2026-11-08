@@ -1843,6 +1843,30 @@ export async function githubImportConfigure(projectId: string, enabled: boolean)
   return `Import ${issues} GitHub Issues of ${link.fullName} into ${project} and post one link comment on each, as the GitHub App`;
 }
 
+/**
+ * What writing the release notes of a tag does, as the approver reads it. The repository is the
+ * stored one; the tag is the caller's, already held to git's ref rules by the input.
+ * @param projectId The project
+ * @param tag The release tag
+ * @param replaceBody Whether a body a person wrote is replaced
+ * @throws {AppError} 404 when the project is not linked to a GitHub repository
+ */
+export async function githubReleaseNotes(
+  projectId: string,
+  tag: string,
+  replaceBody: boolean,
+): Promise<string> {
+  const link = await prisma.githubRepoLink.findUnique({
+    where: { projectId },
+    select: { fullName: true },
+  });
+  if (!link)
+    throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
+  return replaceBody
+    ? `Replace the body of GitHub release ${tag} in ${link.fullName} with release notes`
+    : `Write the release notes of ${tag} in ${link.fullName} to a wiki page and the GitHub release`;
+}
+
 const SHORT_SHA = 12;
 const MAX_COMMIT_TITLE = 120;
 
