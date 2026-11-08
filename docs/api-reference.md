@@ -1915,7 +1915,7 @@ The body is bounded and typed. An unknown trigger or action type answers `400`, 
 | Field        | Type    | Description                                                                                                                                  |
 | ------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`       | string  | Display name, 1 to 200 characters                                                                                                            |
-| `trigger`    | string  | One of `issue:created`, `issue:status_changed`, `issue:assigned`, `label:added`                                                              |
+| `trigger`    | string  | One of `issue:created`, `issue:status_changed`, `issue:assigned`, `label:added`, `pr:opened`, `pr:merged`, `pr:closed`, `pr:review_requested`, `pr:review_submitted`, `checks:failed`, `checks:passed`, `branch:created` (the GitHub triggers are described in the [MCP server doc](axiom-mcp-server.md#github-automation))                       |
 | `condition`  | string  | Optional query string evaluated before the actions run, up to 2000 characters (e.g. `"type = Bug AND priority IN (High, Critical)"`). Validated on write |
 | `conditions` | array   | **Deprecated.** The older JSON condition format, at most 50 entries. Use `condition` instead                                                  |
 | `actions`    | array   | At most 50 actions, each with a `type` from the table below and the fields that type reads                                                    |

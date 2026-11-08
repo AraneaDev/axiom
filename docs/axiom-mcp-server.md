@@ -253,7 +253,7 @@ A batch stops at the first of these, so a failed `githubBranch.create` leaves `g
 
 #### GitHub automation
 
-`automationRule.create` accepts eight GitHub triggers next to the issue triggers: `pr:opened`, `pr:merged`, `pr:closed`, `pr:review_requested`, `pr:review_submitted`, `checks:failed`, `checks:passed` and `branch:created`. A rule is an ordinary rule, so the same actions, conditions and approval rules apply. A GitHub trigger fires only for an issue whose key is in the branch name or the PR title, never for a key in a PR body or a commit message.
+`automationRule.create` accepts eight GitHub triggers next to the issue triggers: `pr:opened`, `pr:merged`, `pr:closed`, `pr:review_requested`, `pr:review_submitted`, `checks:failed`, `checks:passed` and `branch:created`. The two checks triggers count check runs only (GitHub Actions and other check apps); CI that reports legacy commit statuses alone never fires them. A rule is an ordinary rule, so the same actions, conditions and approval rules apply. A GitHub trigger fires only for an issue whose key is in the branch name or the PR title, never for a key in a PR body or a commit message.
 
 The actions can use these template variables:
 
@@ -269,13 +269,13 @@ Text from GitHub is untrusted. Where it renders as Markdown (a comment body, an 
 
 A GitHub rule is limited so it can't flood a ticket:
 
-- A rule comments once per trigger, pull request or branch, head commit and issue.
-- A rule comments only for GitHub events at or after the time the repository was linked. An older event can still move a ticket.
-- The first sync after linking moves tickets but never comments on old events. It still runs email and webhook actions.
+- A trigger comments once per pull request or branch, head commit and issue, across all rules. When several rules have a comment for it, the first rule in creation order gets the comment.
+- A rule sends email, calls a webhook, creates an issue or comments only for GitHub events at or after the time the repository was linked. An older event can still move a ticket and set fields.
+- The first sync after linking, and a link made again, therefore move tickets but never comment, send email, call a webhook or create an issue for old events.
 - The sender of the event gets no notification.
 - A rule acts as the Axiom user mapped to the GitHub actor when that user is a member of the project's organization, otherwise as the built-in GitHub user.
 
-A project gets four default rules when it links a repository: a pull request opening moves the ticket to In review, a merge moves it to done (both skip a ticket that is done already), a comment when a pull request merges, and a comment when checks fail. They are created once per link. A rule the team deletes does not come back. Read them with `automationRule.list` and change or delete them like any other rule.
+A project gets two to four default rules when it links a repository: a pull request opening moves the ticket to In review (only when the board has a column named In review), a merge moves it to done (only when the board has a done column; both skip a ticket that is done already), a comment when a pull request merges, and a comment when checks fail. They are created once per link. A rule the team deletes stays deleted for that link; linking the repository again creates the missing ones again. Read them with `automationRule.list` and change or delete them like any other rule.
 
 ### upload
 
