@@ -1,4 +1,7 @@
 import {
+  ArrowRightLeft,
+  GitCompare,
+  Import,
   MessageSquare,
   ArrowRight,
   UserPlus,
@@ -32,6 +35,19 @@ const ACTION_CONFIG: Record<string, { icon: React.ElementType; label: string; co
   deleted: { icon: Trash2, label: 'deleted', color: 'text-danger' },
   attachment_added: { icon: Paperclip, label: 'added attachment', color: 'text-success' },
   attachment_removed: { icon: Paperclip, label: 'removed attachment', color: 'text-danger' },
+  imported: { icon: Import, label: 'imported from GitHub', color: 'text-success' },
+  import_conflict: {
+    icon: GitCompare,
+    label: 'kept the Axiom value over a GitHub change of',
+    color: 'text-warning',
+  },
+  github_closed: { icon: XCircle, label: 'closed the GitHub issue', color: 'text-text-secondary' },
+  github_deleted: { icon: Trash2, label: 'deleted the GitHub issue', color: 'text-text-secondary' },
+  github_transferred: {
+    icon: ArrowRightLeft,
+    label: 'moved the GitHub issue to another repository',
+    color: 'text-text-secondary',
+  },
 };
 
 // Unknown actions (including ones from removed features, e.g. old PR rows) still render.
@@ -62,6 +78,12 @@ function formatDetails(action: string, details: Record<string, unknown> | null):
   }
   if (action === 'assigned' && details.to) {
     return '';
+  }
+  if (action === 'imported' && typeof details.githubIssueNumber === 'number') {
+    return `#${details.githubIssueNumber}`;
+  }
+  if (action === 'import_conflict' && details.field) {
+    return String(details.field);
   }
   if (action === 'updated' && details.field) {
     return String(details.field);

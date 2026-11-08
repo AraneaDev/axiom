@@ -23,7 +23,11 @@ export type ActivityAction =
   /** Made from a GitHub Issue */
   | 'imported'
   /** GitHub changed a field Axiom had changed too: the Axiom value was kept */
-  | 'import_conflict';
+  | 'import_conflict'
+  /** The imported GitHub Issue was closed, deleted or moved on GitHub; the Axiom one is unchanged */
+  | 'github_closed'
+  | 'github_deleted'
+  | 'github_transferred';
 
 /**
  * Log an activity event. Non-critical -- silently catches errors to avoid breaking the main flow.

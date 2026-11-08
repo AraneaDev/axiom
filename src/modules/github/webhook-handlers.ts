@@ -11,6 +11,7 @@ import './checks.service';
 import './github-automation';
 import './github-events';
 import './github-realtime';
+import './issue-import-events';
 import { onGithubEvent, type GithubDeliveryContext } from './webhook-dispatch';
 
 const installationPayload = z.object({
