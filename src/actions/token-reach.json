@@ -108,6 +108,8 @@
   "githubBranch.create": ["github:write"],
   "githubBranch.delete": ["github:write"],
   "githubChecks.rerun": ["github:write"],
+  "githubImport.configure": ["github:write"],
+  "githubImport.status": ["github:read", "github:write"],
   "githubPr.close": ["github:write"],
   "githubPr.comment": ["github:write"],
   "githubPr.merge": ["github:write"],

@@ -134,6 +134,32 @@ describe('realtime bridge', () => {
     ]);
   });
 
+  it('delivers the progress of a GitHub Issues backfill to its project room only', async () => {
+    await subscribe();
+    const projectId = ROOM.slice('project:'.length);
+    const progress = { type: 'github:import-progress', projectId, runId: 'r1' };
+    await redis.publish(REALTIME_CHANNEL, JSON.stringify({ room: ROOM, event: progress }));
+    // Not bridged: a person's room, another project's room, and a run without its id
+    await redis.publish(
+      REALTIME_CHANNEL,
+      JSON.stringify({ room: 'user:cbridgetest00000000000001', event: progress }),
+    );
+    await redis.publish(
+      REALTIME_CHANNEL,
+      JSON.stringify({
+        room: 'project:cbridgetest00000000000002',
+        event: progress,
+      }),
+    );
+    await redis.publish(
+      REALTIME_CHANNEL,
+      JSON.stringify({ room: ROOM, event: { type: 'github:import-progress', projectId } }),
+    );
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(received).toEqual([[ROOM, progress]]);
+  });
+
   it("drops an event whose project is not the room's project", async () => {
     await subscribe();
     await redis.publish(

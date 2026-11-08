@@ -22,6 +22,7 @@ import {
 } from './github-client';
 import { storeBranch, storePullRequest, type PullRequestPayload } from './github-events';
 import { ImportCappedError } from './import-cap';
+import { ACTIVE_IMPORT_RUN } from './import-run.service';
 import {
   importComment,
   importGithubIssue,
@@ -711,8 +712,13 @@ async function runReconcile(
 
     // Imported issues still owed their link comment (a run died after its claim, and no event
     // came since). System writes, outside the budget: they never use up what the lists need.
+    // While a backfill is under way it posts them, at its own pace.
     try {
-      await outsideGithubCallCount(() => postPendingLinkComments(repoLinkId));
+      const backfilling = await prisma.githubImportRun.count({
+        where: { repoLinkId, status: { in: [...ACTIVE_IMPORT_RUN] } },
+      });
+      if (backfilling === 0)
+        await outsideGithubCallCount(() => postPendingLinkComments(repoLinkId));
     } catch {
       logger.warn('github reconcile link comments failed', { repoLinkId });
     }

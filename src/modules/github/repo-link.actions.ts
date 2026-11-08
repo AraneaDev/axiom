@@ -7,11 +7,20 @@ import { registerActions } from '../../actions/registry';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
+import { configureImport, importStatus } from './import-run.service';
 import { claimReconcile, reconcileRepo } from './reconcile.service';
 import * as service from './repo-link.service';
 
 const link = z.looseObject({ repoFullName: z.string(), htmlUrl: z.string() });
 const linkWithCount = link.extend({ linkedIssueCount: z.number() });
+const importRun = z
+  .looseObject({
+    status: z.string(),
+    total: z.number().nullable(),
+    done: z.number(),
+    failed: z.number(),
+  })
+  .nullable();
 const RECONCILE_COOLDOWN_MS = 60_000;
 const PATH = '/api/projects/:projectId/github';
 
@@ -141,6 +150,43 @@ registerActions([
     rest: { method: 'GET', path: `${PATH}/health` },
     authorize: read,
     handler: async (_ctx, { projectId }) => service.getLinkHealth(projectId),
+  }),
+  defineAction({
+    name: 'githubImport.configure',
+    // Switching on imports every open issue and writes one comment on each of them on GitHub
+    destructiveWhen: (input) => input.enabled,
+    area: 'github',
+    kind: 'write',
+    summary:
+      "Switch the import of the linked repository's GitHub Issues on or off; on imports every open one",
+    target: projectTarget,
+    input: projectTarget.extend({
+      enabled: z
+        .boolean()
+        .describe('On imports every open GitHub Issue now and new ones as they come'),
+    }),
+    output: z.looseObject({ enabled: z.boolean(), run: importRun }),
+    preview: (_ctx, { projectId, enabled }) => previews.githubImportConfigure(projectId, enabled),
+    rest: { method: 'PUT', path: `${PATH}/import` },
+    authorize: manage,
+    handler: async (ctx, { projectId, enabled }) => configureImport(ctx.userId, projectId, enabled),
+  }),
+  defineAction({
+    name: 'githubImport.status',
+    area: 'github',
+    kind: 'read',
+    summary:
+      'Whether a project imports its GitHub Issues, and how the backfill of the open ones stands',
+    target: projectTarget,
+    input: projectTarget,
+    output: z.looseObject({
+      enabled: z.boolean(),
+      run: importRun,
+      liveCap: z.looseObject({ paused: z.boolean() }).nullable(),
+    }),
+    rest: { method: 'GET', path: `${PATH}/import` },
+    authorize: read,
+    handler: async (_ctx, { projectId }) => importStatus(projectId),
   }),
   defineAction({
     name: 'githubRepo.unlink',

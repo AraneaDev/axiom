@@ -106,6 +106,11 @@ export type ImportOptions = {
    * against the link's hourly LIVE_IMPORT_CAP. The backfill leaves it unset.
    */
   live?: boolean;
+  /**
+   * Post the link comment on GitHub now (the default). The backfill turns it off and posts the
+   * link comments itself, at its own pace.
+   */
+  linkComment?: boolean;
 };
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -455,7 +460,7 @@ export async function importGithubIssue(
       await importIssueComments(link, row, { live: opts.live });
     }
   }
-  if (!done.linkCommentId) await postLinkComment(done.importId);
+  if (!done.linkCommentId && opts.linkComment !== false) await postLinkComment(done.importId);
   return { issueId: done.issueId, created: done.created, conflicts: done.conflicts };
 }
 
@@ -729,20 +734,8 @@ export async function postLinkComment(importId: string): Promise<void> {
  * @returns How many were tried
  */
 export async function postPendingLinkComments(repoLinkId: string, limit = 20): Promise<number> {
-  const stale = new Date(Date.now() - LINK_CLAIM_TTL_MS);
-  const rows = await prisma.githubIssueImport.findMany({
-    where: {
-      repoLinkId,
-      linkCommentId: null,
-      linkCommentGivenUpAt: null,
-      issueId: { not: null },
-      OR: [{ linkCommentClaimedAt: null }, { linkCommentClaimedAt: { lt: stale } }],
-    },
-    orderBy: { lastImportedAt: 'asc' },
-    take: limit,
-    select: { id: true },
-  });
-  for (const { id } of rows) {
+  const ids = await pendingLinkCommentIds(repoLinkId, limit);
+  for (const id of ids) {
     try {
       await postLinkComment(id);
     } catch (err) {
@@ -752,5 +745,29 @@ export async function postPendingLinkComments(repoLinkId: string, limit = 20): P
       });
     }
   }
-  return rows.length;
+  return ids.length;
+}
+
+/**
+ * The imports of a link still owed their link comment that no live claim holds, the longest
+ * waiting first.
+ * @param repoLinkId The link
+ * @param limit The most to return
+ */
+export async function pendingLinkCommentIds(repoLinkId: string, limit: number): Promise<string[]> {
+  if (limit <= 0) return [];
+  const stale = new Date(Date.now() - LINK_CLAIM_TTL_MS);
+  const rows = await prisma.githubIssueImport.findMany({
+    where: {
+      repoLinkId,
+      linkCommentId: null,
+      linkCommentGivenUpAt: null,
+      issueId: { not: null },
+      OR: [{ linkCommentClaimedAt: null }, { linkCommentClaimedAt: { lt: stale } }],
+    },
+    orderBy: [{ lastImportedAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+    select: { id: true },
+  });
+  return rows.map((row) => row.id);
 }

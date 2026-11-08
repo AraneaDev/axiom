@@ -30,7 +30,10 @@ export interface FakeReply {
   delayMs?: number;
 }
 
-type Handler = FakeReply | ((req: RecordedRequest, params: Record<string, string>) => FakeReply);
+/** A function that answers null passes the request on, as if its route were not there */
+type Handler =
+  | FakeReply
+  | ((req: RecordedRequest, params: Record<string, string>) => FakeReply | null);
 
 interface Route {
   method: string;
@@ -41,7 +44,10 @@ interface Route {
 export interface GithubFake {
   readonly url: string;
   readonly requests: RecordedRequest[];
-  /** Answers a route, ahead of the fixtures, until `reset`. `route` as `'GET /repos/:owner/:repo'` */
+  /**
+   * Answers a route, ahead of the fixtures and the built-in routes, until `reset`. `route` as
+   * `'GET /repos/:owner/:repo'`. A function that returns null lets the request through to them.
+   */
   on(route: string, reply: Handler): void;
   /** The App: `/app/*` calls need a JWT issued by this id that verifies against this key */
   setApp(app: { appId: number; publicKey: string } | null): void;
@@ -686,7 +692,10 @@ class GithubFakeServer implements GithubFake {
    * @param credential Who the request authenticated as
    */
   private builtIn(req: RecordedRequest, credential: Credential): FakeReply | null {
-    if (this.overrideFor(req)) return null;
+    const override = this.overrideAnswer(req);
+    if (override) return override;
+    const search = this.searchAnswer(req);
+    if (search) return search;
     const jobLog = this.jobLogAnswer(req, credential);
     if (jobLog) return jobLog;
     const listed = this.repoListAnswer(req);
@@ -1417,25 +1426,56 @@ class GithubFakeServer implements GithubFake {
     return { ...body, body: { ...app, pem: privateKey } };
   }
 
-  private overrideFor(req: RecordedRequest) {
+  /**
+   * The answer of the first `on` route that matches and does not pass. Asked once per request,
+   * by {@link builtIn}, which every request that is not refused reaches before the fixtures.
+   * @param req The recorded request
+   */
+  private overrideAnswer(req: RecordedRequest): FakeReply | null {
     const segments = req.path.split('/').slice(1);
     for (const route of this.overrides) {
       const params = match(route, req.method, segments);
-      if (params) return { route, params };
+      if (!params) continue;
+      const { handler } = route;
+      const answer = typeof handler === 'function' ? handler(req, params) : handler;
+      if (answer) return answer;
     }
     return null;
   }
 
+  /**
+   * `GET /search/issues` for `repo:<owner>/<name> type:issue state:<state>`: the count of the
+   * issues of `setRepoLists`, pull requests left out, with no items. Null for any other search.
+   * @param req The recorded request
+   */
+  private searchAnswer(req: RecordedRequest): FakeReply | null {
+    if (req.method !== 'GET' || req.path !== '/search/issues') return null;
+    const terms = new Map(
+      (req.query.q ?? '')
+        .split(/\s+/)
+        .filter((term) => term.includes(':'))
+        .map((term) => [term.slice(0, term.indexOf(':')), term.slice(term.indexOf(':') + 1)]),
+    );
+    const repo = terms.get('repo');
+    const issues = repo ? this.repoLists.get(repoKey(repo))?.issues : undefined;
+    if (!issues || terms.get('type') !== 'issue') return null;
+    const state = terms.get('state');
+    const total = issues.filter(
+      (item) => !item.pull_request && (state === undefined || item.state === state),
+    ).length;
+    return { status: 200, body: { total_count: total, incomplete_results: false, items: [] } };
+  }
+
+  // The fixtures only: the `on` routes were asked in builtIn
   private fromRoutes(req: RecordedRequest): FakeReply {
     const segments = req.path.split('/').slice(1);
-    const found =
-      this.overrideFor(req) ??
-      this.fixtures
-        .map((route) => ({ route, params: match(route, req.method, segments) }))
-        .find((candidate) => candidate.params !== null);
+    const found = this.fixtures
+      .map((route) => ({ route, params: match(route, req.method, segments) }))
+      .find((candidate) => candidate.params !== null);
     if (!found?.params) return { status: 404, body: { message: 'Not Found' } };
     const { handler } = found.route;
-    return typeof handler === 'function' ? handler(req, found.params) : handler;
+    const answer = typeof handler === 'function' ? handler(req, found.params) : handler;
+    return answer ?? { status: 404, body: { message: 'Not Found' } };
   }
 }
 

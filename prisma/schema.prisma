@@ -1489,6 +1489,7 @@ model GithubRepoLink {
   checkRuns             GithubCheckRun[]
   issueImports          GithubIssueImport[]
   importCaps            GithubImportCap[]
+  importRuns            GithubImportRun[]
 
   @@map("github_repo_links")
 }
@@ -1539,6 +1540,50 @@ model GithubImportCap {
 
   @@id([repoLinkId, hourStart])
   @@map("github_import_caps")
+}
+
+enum GithubImportRunStatus {
+  QUEUED
+  RUNNING
+  PAUSED
+  DONE
+  FAILED
+  CANCELLED
+}
+
+/// One backfill of the open GitHub Issues of a link, run by the worker a tick at a time
+model GithubImportRun {
+  id             String                @id @default(cuid())
+  repoLinkId     String
+  /// Who switched import on; no relation, so deleting that person leaves the run as it is
+  requestedById  String
+  status         GithubImportRunStatus @default(QUEUED)
+  /// The open issues GitHub counted when the run started, null when the count could not be read
+  total          Int?
+  /// The open issues read so far that are in Axiom, imported by this run or before it
+  done           Int                   @default(0)
+  failed         Int                   @default(0)
+  /// The page of GitHub's open issues (100 each, oldest first) that is read next
+  nextPage       Int                   @default(1)
+  /// 1: the first read through the pages; 2: one more read, for issues that moved onto a page
+  /// already read when earlier ones closed; 3: the pages are read, link comments are left
+  pass           Int                   @default(1)
+  /// `done` of the pages before nextPage in the first pass; in the sweep, its own count of them
+  doneBeforePage Int                   @default(0)
+  /// The issues whose import failed: this run does not try them again (their next update does)
+  failedNumbers  Int[]                 @default([])
+  resumeAt       DateTime?
+  /// Until when a tick holds the run; the exact value is that tick's token
+  leaseUntil     DateTime?
+  error          String?
+  createdAt      DateTime              @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  repoLink       GithubRepoLink        @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+
+  @@index([repoLinkId, createdAt])
+  @@index([status])
+  @@map("github_import_runs")
 }
 
 /// A GitHub comment imported onto an imported issue, with the hash of the body last taken

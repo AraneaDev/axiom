@@ -32,6 +32,12 @@ const message = z
         projectId: z.string().min(1),
         issueIds: z.array(z.string().min(1)).max(1000),
       }),
+      // The worker's backfill of GitHub Issues moved on
+      z.object({
+        type: z.literal('github:import-progress'),
+        projectId: z.string().min(1),
+        runId: z.string().min(1),
+      }),
       // What the rules of automation write: a move, a change, a comment
       z.object({
         type: z.enum(['issue:updated', 'issue:created', 'comment:added', 'board:moved']),

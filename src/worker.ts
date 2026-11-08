@@ -11,6 +11,7 @@ import { cleanupExpiredUploads } from './modules/attachments/upload-intents.serv
 import './modules/github/github-resolvers';
 import './modules/github/webhook-handlers';
 import { cleanupAutomationMarks } from './modules/github/github-automation';
+import { runDueImports } from './modules/github/import-run.service';
 import { reconcileDueRepos } from './modules/github/reconcile.service';
 import { cleanupDeliveries, retryDueDeliveries } from './modules/github/webhook.service';
 import { closeRealtimePublisher, setRealtimeMode } from './realtime/bridge';
@@ -20,7 +21,9 @@ const UPLOAD_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const APPROVAL_CLEANUP_INTERVAL_MS = 60 * 1000;
 const GITHUB_RECONCILE_TICK_MS = 60 * 1000;
 const GITHUB_MARK_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const GITHUB_IMPORT_TICK_MS = 15 * 1000;
 let reconcileRunning = false;
+let importRunning = false;
 let markCleanupRunning = false;
 
 /** Remove expired upload URLs and staged attachments; a failure waits for the next round. */
@@ -64,6 +67,20 @@ function runGithubReconcile(): void {
     });
 }
 
+/** Tick the GitHub Issues backfills that are due; a failure is on the run and waits for its next tick. */
+function runGithubImports(): void {
+  // A tick of 25 issues can outlast 15 s: the next one waits for it
+  if (importRunning) return;
+  importRunning = true;
+  runDueImports()
+    .catch((err) => {
+      logger.error('GitHub import backfill failed', {}, err as Error);
+    })
+    .finally(() => {
+      importRunning = false;
+    });
+}
+
 /** Delete the GitHub comment marks older than 90 days; one run at a time, a failure waits a day. */
 function runGithubMarkCleanup(): void {
   if (markCleanupRunning) return;
@@ -102,6 +119,9 @@ async function main(): Promise<void> {
   runGithubReconcile();
   const githubReconcile = setInterval(runGithubReconcile, GITHUB_RECONCILE_TICK_MS);
 
+  runGithubImports();
+  const githubImports = setInterval(runGithubImports, GITHUB_IMPORT_TICK_MS);
+
   runGithubMarkCleanup();
   const githubMarkCleanup = setInterval(runGithubMarkCleanup, GITHUB_MARK_CLEANUP_INTERVAL_MS);
 
@@ -113,6 +133,7 @@ async function main(): Promise<void> {
     clearInterval(approvalCleanup);
     clearInterval(githubDeliveries);
     clearInterval(githubReconcile);
+    clearInterval(githubImports);
     clearInterval(githubMarkCleanup);
     closeRealtimePublisher();
     if (stopEmail) await stopEmail();

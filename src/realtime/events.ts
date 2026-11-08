@@ -9,6 +9,8 @@ export type RealtimeEvent =
   // GitHub branches, pull requests or commits of an issue changed: sent to the project room only
   | { type: 'issue:development-updated'; projectId: string; issueIds: string[] }
   | { type: 'comment:added'; projectId: string; issueId: string }
+  // The backfill of GitHub Issues moved on: sent to the project room only
+  | { type: 'github:import-progress'; projectId: string; runId: string }
   | { type: 'board:moved'; projectId: string; issueId: string }
   // A sprint started or completed
   | { type: 'sprint:updated'; projectId: string; sprintId: string }

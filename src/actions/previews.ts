@@ -1805,6 +1805,34 @@ export async function githubRepoUnlink(projectId: string): Promise<string> {
   return `Unlink ${link.fullName} from ${await projectLabel(projectId)}: its branches, pull requests and checks disappear from ${amount(issues, 'issue')}`;
 }
 
+/**
+ * What switching the import of a project's GitHub Issues on or off does, as the approver reads
+ * it. Built from stored values only: the count of open issues is a previous run's, when one
+ * stored it.
+ * @param projectId The project
+ * @param enabled On or off
+ * @throws {AppError} 404 when the project is not linked to a GitHub repository
+ */
+export async function githubImportConfigure(projectId: string, enabled: boolean): Promise<string> {
+  const link = await prisma.githubRepoLink.findUnique({
+    where: { projectId },
+    select: { id: true, fullName: true },
+  });
+  if (!link)
+    throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
+  const project = await projectLabel(projectId);
+  if (!enabled) {
+    return `Stop importing the GitHub Issues of ${link.fullName} into ${project} and cancel a backfill under way; imported issues stay`;
+  }
+  const counted = await prisma.githubImportRun.findFirst({
+    where: { repoLinkId: link.id, total: { not: null } },
+    orderBy: { createdAt: 'desc' },
+    select: { total: true },
+  });
+  const issues = counted?.total != null ? `the ${counted.total} open` : 'the open';
+  return `Import ${issues} GitHub Issues of ${link.fullName} into ${project} and post one link comment on each, as the GitHub App`;
+}
+
 const SHORT_SHA = 12;
 const MAX_COMMIT_TITLE = 120;
 
