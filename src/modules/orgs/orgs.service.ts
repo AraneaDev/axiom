@@ -215,6 +215,15 @@ export async function updateOrgMemberRole(
     }),
     ERR.MEMBERSHIP_NOT_FOUND,
   );
+  // A bot's org role is MEMBER and never changes
+  const member = await prisma.user.findUnique({ where: { id: memberId }, select: { kind: true } });
+  if (member?.kind === 'SERVICE') {
+    throw new AppError(
+      400,
+      "A service account's organization role is fixed",
+      'SERVICE_ACCOUNT_ROLE_FIXED',
+    );
+  }
   if (actorId) {
     await assertCanManageOrgMember(orgId, actorId, membership.role);
     await assertCanGrantOrgRole(orgId, actorId, role);

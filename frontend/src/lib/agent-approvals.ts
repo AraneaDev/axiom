@@ -23,6 +23,7 @@ export const STATUS_LABELS: Record<AgentApprovalStatus, string> = {
   EXPIRED: 'Expired',
   EXECUTED: 'Executed',
   FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
 };
 
 export const STATUS_VARIANTS: Record<
@@ -35,6 +36,7 @@ export const STATUS_VARIANTS: Record<
   EXPIRED: 'default',
   EXECUTED: 'success',
   FAILED: 'danger',
+  CANCELLED: 'default',
 };
 
 /** How the list and the badge keep up: expiry sends no event, so they ask again. */

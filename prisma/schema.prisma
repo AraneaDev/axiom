@@ -1365,6 +1365,8 @@ enum AgentApprovalStatus {
   EXPIRED
   EXECUTED
   FAILED
+  /// Withdrawn by the system: its service account was deleted or suspended
+  CANCELLED
 }
 
 /// A token's call that waits for its user to decide in the web UI. Not the issue approval gates.

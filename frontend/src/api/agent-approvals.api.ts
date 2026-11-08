@@ -6,7 +6,8 @@ export type AgentApprovalStatus =
   | 'REJECTED'
   | 'EXPIRED'
   | 'EXECUTED'
-  | 'FAILED';
+  | 'FAILED'
+  | 'CANCELLED';
 
 /** A request in the list: what it holds (input, result) comes with the detail. */
 export interface AgentApprovalSummary {

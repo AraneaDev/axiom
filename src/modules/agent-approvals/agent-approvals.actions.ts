@@ -33,7 +33,7 @@ const agentApprovalActions = [
     target: noTarget,
     input: noTarget.extend({
       status: z
-        .enum(['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'EXECUTED', 'FAILED'])
+        .enum(['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'EXECUTED', 'FAILED', 'CANCELLED'])
         .optional(),
       state: z
         .enum(['open', 'decided'])
