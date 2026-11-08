@@ -106,46 +106,52 @@ export async function createIssue(
   let issue: Awaited<ReturnType<typeof prisma.issue.create>> | undefined;
   while (retries > 0) {
     try {
-      issue = await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('issue-number:' || ${projectId}))`;
-        const lastIssue = await tx.issue.findFirst({
-          where: { projectId },
-          orderBy: { number: 'desc' },
-          select: { number: true },
-        });
-        const number = (lastIssue?.number ?? 0) + 1;
+      issue = await prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('issue-number:' || ${projectId}))`;
+          const lastIssue = await tx.issue.findFirst({
+            where: { projectId },
+            orderBy: { number: 'desc' },
+            select: { number: true },
+          });
+          const number = (lastIssue?.number ?? 0) + 1;
 
-        return tx.issue.create({
-          data: {
-            projectId,
-            number,
-            title: data.title,
-            body: data.body ?? '',
-            type: data.type ?? 'TASK',
-            priority: data.priority ?? 'MEDIUM',
-            assigneeId: data.assigneeId,
-            creatorId,
-            externalAuthorLogin: options?.externalAuthorLogin,
-            columnId: defaultColumn?.id,
-            dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
-            githubImport: options?.githubImport ? { create: options.githubImport.data } : undefined,
-            labels: data.labels
-              ? {
-                  connectOrCreate: data.labels.map((name) => ({
-                    where: { projectId_name: { projectId, name } },
-                    create: { projectId, name },
-                  })),
-                }
-              : undefined,
-          },
-          include: {
-            assignee: { select: USER_BASIC_SELECT },
-            creator: { select: USER_BASIC_SELECT },
-            labels: true,
-            column: true,
-          },
-        });
-      });
+          return tx.issue.create({
+            data: {
+              projectId,
+              number,
+              title: data.title,
+              body: data.body ?? '',
+              type: data.type ?? 'TASK',
+              priority: data.priority ?? 'MEDIUM',
+              assigneeId: data.assigneeId,
+              creatorId,
+              externalAuthorLogin: options?.externalAuthorLogin,
+              columnId: defaultColumn?.id,
+              dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+              githubImport: options?.githubImport
+                ? { create: options.githubImport.data }
+                : undefined,
+              labels: data.labels
+                ? {
+                    connectOrCreate: data.labels.map((name) => ({
+                      where: { projectId_name: { projectId, name } },
+                      create: { projectId, name },
+                    })),
+                  }
+                : undefined,
+            },
+            include: {
+              assignee: { select: USER_BASIC_SELECT },
+              creator: { select: USER_BASIC_SELECT },
+              labels: true,
+              column: true,
+            },
+          });
+          // Waiting for the project lock counts toward these, so a burst queues instead of failing
+        },
+        { maxWait: 10_000, timeout: 15_000 },
+      );
       break;
     } catch (err) {
       if (

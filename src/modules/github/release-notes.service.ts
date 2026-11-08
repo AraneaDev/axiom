@@ -1,7 +1,8 @@
 // Release notes: on request, for a tag, the pull requests merged since the previous tag and the
-// tickets linked to them or imported from the GitHub Issues they close, written to a wiki page and to the body of the GitHub Release, as the
-// person who asked. Everything that can refuse does so before the first write, and every check
-// that Axiom can make itself runs before the first GitHub call.
+// tickets linked to them or imported from the GitHub Issues they close, written to a wiki page
+// and to the body of the GitHub Release, as the person who asked. Everything that can refuse
+// does so before the first write, and every check that Axiom can make itself runs before the
+// first GitHub call.
 import { createHash } from 'node:crypto';
 
 import type { GithubRepoLink } from '@prisma/client';
@@ -721,8 +722,8 @@ async function ticketsOf(
  * The order is the refusal order. First what Axiom decides alone: the space (of the project's
  * team, editable), the page (editable, Axiom's unless replaceBody) and the GitHub connection.
  * Then GitHub, read only: push rights on the repository, the tag, a Release body a person wrote
- * or edited, the previous tag, the commits between and the issues their pull requests close. Only then the page and the Release are
- * written. Tickets get no activity and no automation runs (R16).
+ * or edited, the previous tag, the commits between and the issues their pull requests close.
+ * Only then the page and the Release are written. Tickets get no activity and no automation runs (R16).
  * @param ctx Who asks; the action has checked issue edit on the project and edit on a named space
  * @param input What to write
  * @throws {AppError} 409 GITHUB_NOT_LINKED, 400 RELEASE_NOTES_SPACE_REQUIRED or

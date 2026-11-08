@@ -307,7 +307,14 @@ async function createImported(
           githubUpdatedAt: new Date(gh.updated_at),
           lastImportedAt: new Date(),
         },
-        isTaken: async () => (await findImport(link.id, gh.number)) !== null,
+        // Either unique can clash: this link's row, or an unadopted row of the same repo here
+        isTaken: async () =>
+          (await prisma.githubIssueImport.count({
+            where: {
+              githubIssueNumber: gh.number,
+              OR: [{ repoLinkId: link.id }, { projectId: link.projectId, repoId: link.repoId }],
+            },
+          })) > 0,
       },
     },
   );
