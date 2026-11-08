@@ -193,6 +193,8 @@ beforeEach(async () => {
   failing.after = null;
   events.length = 0;
   await prisma.issue.deleteMany({ where: { projectId: ctx.projectId } });
+  // Import rows outlive an unlink
+  await prisma.githubIssueImport.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
   await prisma.githubRepoLink.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
   await prisma.githubInstallation.deleteMany();
   await prisma.githubInstallation.create({
@@ -221,6 +223,8 @@ afterEach(async () => {
 
 afterAll(async () => {
   setPublishHook(null);
+  // Import rows outlive an unlink
+  await prisma.githubIssueImport.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
   await prisma.githubRepoLink.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
   await prisma.githubInstallation.deleteMany();
   await prisma.githubApp.deleteMany();
@@ -504,6 +508,25 @@ describe('the reconcile beside a backfill', () => {
 });
 
 describe('githubImport.configure and githubImport.status', () => {
+  it('notes when import is switched from off to on, and only then', async () => {
+    const enabledAt = async () =>
+      (await prisma.githubRepoLink.findUniqueOrThrow({ where: { id: link.id } })).importEnabledAt;
+    expect(await enabledAt()).toBeNull();
+    const before = Date.now();
+    expect((await enable()).status).toBe(200);
+    const first = await enabledAt();
+    expect(first!.getTime()).toBeGreaterThanOrEqual(before);
+    // On while on: the time stays
+    expect((await enable()).status).toBe(200);
+    expect(await enabledAt()).toEqual(first);
+    // Off keeps it, and on again moves it
+    expect((await enable(ctx.owner.token, false)).status).toBe(200);
+    expect(await enabledAt()).toEqual(first);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect((await enable()).status).toBe(200);
+    expect((await enabledAt())!.getTime()).toBeGreaterThan(first!.getTime());
+  });
+
   it('refuses a team MEMBER, who may still read the status', async () => {
     const res = await enable(member.token);
     expect(res.status).toBe(403);
@@ -863,6 +886,8 @@ describe('one link comment per issue', { timeout: 120_000 }, () => {
     await prisma.githubIssueImport.createMany({
       data: Array.from({ length: IMPORT_PACE.linkCommentsPerHour }, (_, i) => ({
         repoLinkId: link.id,
+        projectId: link.projectId,
+        repoId: link.repoId,
         githubIssueNumber: 10_000 + i,
         githubIssueId: String(9_000_000 + i),
         mirroredTitle: 't',
@@ -999,6 +1024,8 @@ describe('fix round 3', { timeout: 120_000 }, () => {
       await prisma.githubIssueImport.createMany({
         data: Array.from({ length: IMPORT_PACE.linkCommentsPerHour }, (_, i) => ({
           repoLinkId: sibling.id,
+          projectId: other.id,
+          repoId: sibling.repoId,
           githubIssueNumber: 10_000 + i,
           githubIssueId: String(9_100_000 + i),
           mirroredTitle: 't',

@@ -27,6 +27,7 @@ import {
   importComment,
   importGithubIssue,
   importIssueComments,
+  importNewsSince,
   pendingCommentImports,
   postPendingLinkComments,
   type CommentReadResult,
@@ -607,12 +608,16 @@ async function runReconcile(
           'importIssuesSeenAt',
           async (item) => {
             if (item.pull_request) return;
-            // Made after the link: the `opened` this stands in for would have run the rules
+            // Made after the link and after import was switched on: the `opened` this stands in
+            // for would have run the rules
             const createdAt = Date.parse(String(item.created_at ?? ''));
             await importGithubIssue(importing, item as GithubIssuePayload, {
               withComments: true,
               live: true,
-              runRules: { created: createdAt >= importing.createdAt.getTime(), updated: true },
+              runRules: {
+                created: createdAt >= importNewsSince(importing).getTime(),
+                updated: true,
+              },
             });
           },
         );

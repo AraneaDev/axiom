@@ -1,6 +1,7 @@
 // Imports GitHub Issues into the linked project and keeps them current. What each import wrote is
 // remembered per field (title, body hash, labels), so a field changed in Axiom since is recognised
-// and kept: GitHub's value then goes to an `import_conflict` entry, never over the Axiom edit.
+// and kept: an `import_conflict` entry then names the field, and GitHub's value never replaces
+// the Axiom edit.
 // Nothing goes back to GitHub but one comment per issue, as the App, with the Axiom link. An
 // import row whose Axiom issue (or a mirror whose Axiom comment) was deleted stays as a tombstone:
 // what Axiom deleted is never imported again.
@@ -133,6 +134,16 @@ export type ImportOptions = {
 };
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+
+/**
+ * From when a GitHub Issue is news for the issue:created rules: made after the link, and after
+ * import was last switched on. One made before could not have been seen as it was opened.
+ * @param link The repository link
+ */
+export function importNewsSince(link: Pick<GithubRepoLink, 'createdAt' | 'importEnabledAt'>): Date {
+  const enabled = link.importEnabledAt;
+  return enabled && enabled > link.createdAt ? enabled : link.createdAt;
+}
 
 /**
  * Cuts a text to at most `max` UTF-16 units (the unit Axiom's length limits count) without
@@ -286,6 +297,8 @@ async function createImported(
       githubImport: {
         data: {
           repoLink: { connect: { id: link.id } },
+          project: { connect: { id: link.projectId } },
+          repoId: link.repoId,
           githubIssueNumber: gh.number,
           githubIssueId: String(gh.id),
           mirroredTitle: title,
@@ -504,14 +517,27 @@ export async function importIssueComments(
   opts: { live?: boolean } = {},
 ): Promise<CommentReadResult> {
   // Three pages are all that is ever read: only a read the call budget stopped is unfinished
-  const { items, cut } = await githubPaginate<GithubCommentPayload>(
+  const { items, cut } = await githubPaginate<GithubCommentPayload & GithubComment>(
     installation(link),
     commentsPath(link, row.githubIssueNumber),
     { maxPages: COMMENT_PAGES },
   );
+  // The App's link comment from an earlier link of the repository (unlinked since, or linked to
+  // another project) is stored before anything is posted, so the issue never gets a second one
+  let current = row;
+  if (!row.linkCommentId) {
+    const found = linkCommentAmong(items, await appIdentity());
+    if (found) {
+      await prisma.githubIssueImport.updateMany({
+        where: { id: row.id, linkCommentId: null },
+        data: { linkCommentId: found },
+      });
+      current = { ...row, linkCommentId: found };
+    }
+  }
   for (const comment of items) {
     try {
-      await importComment(row, comment, { live: opts.live });
+      await importComment(current, comment, { live: opts.live });
     } catch (err) {
       if (err instanceof ImportCappedError) return 'capped';
       throw err;
@@ -558,8 +584,9 @@ export async function importComment(
   ghComment: GithubCommentPayload,
   opts: { live?: boolean } = {},
 ): Promise<void> {
-  const issueId = importRow.issueId;
-  if (!issueId) return;
+  const { issueId, repoLinkId } = importRow;
+  // A tombstone, or a row whose repository is unlinked: nothing comes in
+  if (!issueId || !repoLinkId) return;
   const parsed = githubCommentSchema.safeParse(ghComment);
   if (!parsed.success) return;
   const gh = parsed.data;
@@ -571,12 +598,13 @@ export async function importComment(
   const updatedAt = new Date(gh.updated_at);
   const key = { importId_githubCommentId: { importId: importRow.id, githubCommentId } };
 
-  await underIssueLock(importRow.repoLinkId, importRow.githubIssueNumber, async () => {
+  await underIssueLock(repoLinkId, importRow.githubIssueNumber, async () => {
     const issue = await prisma.issue.findUnique({
       where: { id: issueId },
       select: { id: true, projectId: true },
     });
-    if (!issue) return;
+    // An issue moved to another project is no longer this repository's business
+    if (!issue || issue.projectId !== importRow.projectId) return;
     const mirror = await prisma.githubImportedComment.findUnique({
       where: key,
       include: { comment: { select: { body: true, authorId: true } } },
@@ -600,7 +628,7 @@ export async function importComment(
       });
       return;
     }
-    const slot = opts.live ? await takeImportSlot(importRow.repoLinkId, 'comments') : null;
+    const slot = opts.live ? await takeImportSlot(repoLinkId, 'comments') : null;
     const writer = await writerOf(gh.user, issue.projectId);
     try {
       // The mirror is written in the same statement as the comment: there is never an imported
@@ -617,7 +645,7 @@ export async function importComment(
       });
     } catch (err) {
       if (slot) {
-        await releaseImportSlot(importRow.repoLinkId, 'comments', slot).catch(() => undefined);
+        await releaseImportSlot(repoLinkId, 'comments', slot).catch(() => undefined);
       }
       throw err;
     }
@@ -631,10 +659,36 @@ type GithubComment = {
   performed_via_github_app?: { id?: number } | null;
 };
 
+type AppIdentity = { appId: string | number | bigint; slug: string } | null;
+
+const appIdentity = (): Promise<AppIdentity> =>
+  prisma.githubApp.findUnique({
+    where: { id: GITHUB_APP_ROW_ID },
+    select: { appId: true, slug: true },
+  });
+
+/**
+ * The App's link comment among some comments, recognised by the App and the comment's start, so a
+ * project or slug renamed since still matches.
+ * @param items The comments
+ * @param app The App, null when there is none
+ * @returns Its id, or null
+ */
+function linkCommentAmong(items: readonly GithubComment[], app: AppIdentity): string | null {
+  if (!app) return null;
+  const found = items.find(
+    (comment) =>
+      typeof comment.body === 'string' &&
+      comment.body.startsWith(LINK_COMMENT_PREFIX) &&
+      (comment.performed_via_github_app?.id === Number(app.appId) ||
+        comment.user?.login === `${app.slug}[bot]`),
+  );
+  return found ? String(found.id) : null;
+}
+
 /**
  * The App's link comment among the comments made or changed since a time: one a run that died
- * may have made before it could store the id. Recognised by the App and the comment's start, so
- * a project or slug renamed since still matches.
+ * may have made before it could store the id.
  * @param auth The installation
  * @param path The issue's comments
  * @param since From when to look
@@ -644,23 +698,13 @@ async function findLinkComment(
   path: string,
   since: Date,
 ): Promise<string | null> {
-  const app = await prisma.githubApp.findUnique({
-    where: { id: GITHUB_APP_ROW_ID },
-    select: { appId: true, slug: true },
-  });
+  const app = await appIdentity();
   if (!app) return null;
   const { items } = await githubPaginate<GithubComment>(auth, path, {
     query: { since: since.toISOString() },
     maxPages: LINK_LOOKUP_PAGES,
   });
-  const found = items.find(
-    (comment) =>
-      typeof comment.body === 'string' &&
-      comment.body.startsWith(LINK_COMMENT_PREFIX) &&
-      (comment.performed_via_github_app?.id === Number(app.appId) ||
-        comment.user?.login === `${app.slug}[bot]`),
-  );
-  return found ? String(found.id) : null;
+  return linkCommentAmong(items, app);
 }
 
 // GitHub has no such issue (any more), or no issues: asking again changes nothing
@@ -770,7 +814,8 @@ export type LinkCommentOutcome = 'posted' | 'held' | 'skipped';
  * GitHub answers 404 or 410, or refuses it 5 times (a 4xx), the row notes it and nothing tries
  * again; a failed one that was no rate limit goes to the back of the queue. It is held (left
  * owed) while the installation's hourly ceiling of link comments is reached, or while a backfill
- * of the link waits for GitHub's rate limit, which then posts it.
+ * of any link of the installation waits for GitHub's rate limit (the backfill of the link then
+ * posts it, the reconcile for any other).
  * @param importId The import
  * @returns `posted` (or found already made), `held`, or `skipped` when there is nothing to do
  */
@@ -789,19 +834,25 @@ export async function postLinkComment(importId: string): Promise<LinkCommentOutc
       },
     },
   });
-  if (!row || row.linkCommentId || row.linkCommentGivenUpAt || !row.issue) return 'skipped';
+  // An unlinked repository's rows wait for a new link of it, which takes them back
+  if (!row || row.linkCommentId || row.linkCommentGivenUpAt || !row.issue || !row.repoLink) {
+    return 'skipped';
+  }
+  const { repoLink } = row;
   const previous = row.linkCommentClaimedAt;
   if (previous && previous.getTime() > Date.now() - LINK_CLAIM_TTL_MS) return 'skipped';
   const claimedAt = new Date();
-  const installationId = row.repoLink.installationId;
+  const installationId = repoLink.installationId;
   const claim = await claimLinkComment(async (tx) => {
     // One claim of the installation at a time, so its windows are never overrun by two at once.
     // The wait is bounded: a burst gives up with a retryable error rather than holding the pool.
     await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '${LINK_COMMENT_LOCK_WAIT_MS}ms'`);
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`github-link-comments:installation:${installationId}`}, 0))`;
+    // GitHub's secondary limit is the installation's: a backfill of any of its links waiting for
+    // it holds back every post
     const waiting = await tx.githubImportRun.count({
       where: {
-        repoLinkId: row.repoLinkId,
+        repoLink: { installationId },
         status: 'PAUSED',
         error: null,
         resumeAt: { gt: claimedAt },
@@ -829,8 +880,8 @@ export async function postLinkComment(importId: string): Promise<LinkCommentOutc
   const { project } = row.issue;
   const key = formatIssueKey(project.prefix, row.issue.number);
   const issueUrl = `${instanceOrigin()}/${project.team.org.slug}/${project.team.slug}/${project.slug}/issues/${row.issue.number}`;
-  const auth = installation(row.repoLink);
-  const path = commentsPath(row.repoLink, row.githubIssueNumber);
+  const auth = installation(repoLink);
+  const path = commentsPath(repoLink, row.githubIssueNumber);
   try {
     // A system write: never counted against, or refused by, the budget of a run it happens in
     await outsideGithubCallCount(async () => {

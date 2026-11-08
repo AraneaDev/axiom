@@ -5,7 +5,9 @@ import path from 'node:path';
 import type { GithubRepoLink } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { githubRepoUnlink } from '../../actions/previews';
 import { prisma } from '../../config/database';
+import { encryptSecret, secretContext } from '../../lib/secret-box';
 import {
   addMemberToContext,
   cleanupTestContext,
@@ -20,7 +22,7 @@ import { createIssue } from '../issues/issues.service';
 
 import { instanceOrigin } from './github-app.service';
 import { countGithubCalls } from './github-client';
-import { importCapState } from './import-cap';
+import { IMPORT_PACE, importCapState } from './import-cap';
 import { GITHUB_INTEGRATION_USER_ID } from './integration-user';
 import {
   LINK_CLAIM_TTL_MS,
@@ -32,6 +34,7 @@ import {
   postPendingLinkComments,
   type GithubIssuePayload,
 } from './issue-import.service';
+import { findRepoLinkByProject, linkRepo, unlinkRepo } from './repo-link.service';
 import './github-resolvers';
 
 const REPO_ID = 880_710;
@@ -87,7 +90,11 @@ beforeEach(async () => {
   await prisma.githubInstallation.create({
     data: { id: BigInt(INSTALLATION_ID), accountLogin: 'acme-labs', accountType: 'Organization' },
   });
-  await prisma.githubRepoLink.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
+  // Import rows outlive an unlink: a new link of the repository would take them back
+  await prisma.githubIssueImport.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
+  await prisma.githubRepoLink.deleteMany({
+    where: { OR: [{ repoId: BigInt(REPO_ID) }, { projectId: ctx.projectId }] },
+  });
   link = await prisma.githubRepoLink.create({
     data: {
       projectId: ctx.projectId,
@@ -342,6 +349,8 @@ describe('importGithubIssue: a new issue', () => {
           githubImport: {
             data: {
               repoLink: { connect: { id: link.id } },
+              project: { connect: { id: ctx.projectId } },
+              repoId: link.repoId,
               githubIssueNumber: 31,
               githubIssueId: '2200031',
               mirroredTitle: 'Duplicate',
@@ -710,5 +719,199 @@ describe('fix round 4', () => {
     expect(await prisma.comment.count({ where: { issueId: result!.issueId } })).toBe(150);
     const after = await prisma.githubIssueImport.findUniqueOrThrow({ where: { id: row.id } });
     expect(after.commentsImportedAt).not.toBeNull();
+  });
+});
+
+describe('final fix wave', () => {
+  // The owner links the repository again from Settings, with admin rights on it
+  async function relink(): Promise<GithubRepoLink> {
+    const id = `acct-relink-${ctx.owner.id}`;
+    const token = fake.issueUserToken('octo-dev', [FULL_NAME], { admin: [FULL_NAME] });
+    await prisma.githubAccount.create({
+      data: {
+        id,
+        userId: ctx.owner.id,
+        githubUserId: 9101,
+        login: 'octo-dev',
+        accessToken: encryptSecret(token, secretContext('githubAccount', 'accessToken', id)),
+      },
+    });
+    // The repository GitHub answers is the one linked before: the same id
+    fake.on('GET /repos/:owner/:repo', {
+      status: 200,
+      body: {
+        id: REPO_ID,
+        name: 'widget',
+        full_name: FULL_NAME,
+        html_url: 'https://github.com/acme-labs/widget',
+        default_branch: 'main',
+        owner: { login: 'acme-labs' },
+        permissions: { admin: true },
+      },
+    });
+    await linkRepo(ctx.owner.id, ctx.projectId, FULL_NAME);
+    const again = await findRepoLinkByProject(ctx.projectId);
+    await prisma.githubRepoLink.update({ where: { id: again!.id }, data: { importIssues: true } });
+    return prisma.githubRepoLink.findUniqueOrThrow({ where: { id: again!.id } });
+  }
+
+  // A second project of the team, with a link of another repository of the same installation
+  async function sibling(slug: string) {
+    const project = await prisma.project.create({
+      data: { name: 'Gadget', slug, prefix: 'GGI', teamId: ctx.teamId },
+    });
+    const siblingLink = await prisma.githubRepoLink.create({
+      data: {
+        projectId: project.id,
+        repoId: BigInt(REPO_ID + 1),
+        installationId: BigInt(INSTALLATION_ID),
+        owner: 'acme-labs',
+        name: 'gadget',
+        fullName: 'acme-labs/gadget',
+        defaultBranch: 'main',
+        htmlUrl: 'https://github.com/acme-labs/gadget',
+        linkedById: ctx.owner.id,
+      },
+    });
+    return { project, siblingLink };
+  }
+
+  it('makes no second issue and no second link comment after an unlink and a relink', async () => {
+    const first = await importGithubIssue(link, issue(), { withComments: true });
+    expect(commentPosts()).toHaveLength(1);
+    await unlinkRepo(ctx.projectId);
+    // The row stays with the project and the repository while nothing links them
+    const kept = await prisma.githubIssueImport.findUniqueOrThrow({
+      where: { issueId: first!.issueId },
+    });
+    expect(kept).toMatchObject({
+      repoLinkId: null,
+      projectId: ctx.projectId,
+      repoId: BigInt(REPO_ID),
+    });
+
+    const again = await relink();
+    fake.requests.length = 0;
+    const second = await importGithubIssue(again, issue(), { withComments: true });
+    expect(second).toMatchObject({ issueId: first!.issueId, created: false });
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(1);
+    expect(commentPosts()).toEqual([]);
+    expect(
+      await prisma.githubIssueImport.findUniqueOrThrow({ where: { id: kept.id } }),
+    ).toMatchObject({ repoLinkId: again.id, linkCommentId: kept.linkCommentId });
+  });
+
+  it('says in the unlink preview that imported issues stay and stop following GitHub', async () => {
+    await importGithubIssue(link, issue(), { withComments: false });
+    expect(await githubRepoUnlink(ctx.projectId)).toMatch(
+      /\. Imported issues \(1\) stay but stop following GitHub; linking acme-labs\/widget to this project again picks them up, and what was deleted in Axiom stays deleted$/,
+    );
+  });
+
+  it('keeps an issue deleted in Axiom deleted after an unlink and a relink', async () => {
+    const first = await importGithubIssue(link, issue(), { withComments: false });
+    await prisma.issue.delete({ where: { id: first!.issueId } });
+    await unlinkRepo(ctx.projectId);
+    const again = await relink();
+    expect(await importGithubIssue(again, issue(), { withComments: true })).toBeNull();
+    expect(await prisma.issue.count({ where: { projectId: ctx.projectId } })).toBe(0);
+  });
+
+  it("stores the App's link comment it finds among the comments, and posts none", async () => {
+    const posted = {
+      id: 9450,
+      body: 'Tracked in Axiom as [OLD-7](https://axiom.invalid/acme/old/issues/7)',
+      user: { login: 'acme-axiom[bot]', id: 9_900_001, type: 'Bot' },
+      performed_via_github_app: { id: APP_ID, slug: 'acme-axiom' },
+      created_at: '2026-11-02T10:00:00Z',
+      updated_at: '2026-11-02T10:00:00Z',
+    };
+    fake.setRepoLists(FULL_NAME, { issues: [issue()], issueComments: { '31': [posted] } });
+    const result = await importGithubIssue(link, issue(), { withComments: true });
+    expect(commentPosts()).toEqual([]);
+    expect(
+      (await prisma.githubIssueImport.findUniqueOrThrow({ where: { issueId: result!.issueId } }))
+        .linkCommentId,
+    ).toBe('9450');
+  });
+
+  it('imports no comment into an issue moved to another project', async () => {
+    const { project } = await sibling('gadget-gim-moved');
+    try {
+      const result = await importGithubIssue(link, issue(), { withComments: false });
+      await prisma.issue.update({
+        where: { id: result!.issueId },
+        data: { projectId: project.id },
+      });
+      const row = await prisma.githubIssueImport.findUniqueOrThrow({
+        where: { issueId: result!.issueId },
+      });
+      await importComment(row, {
+        id: 9600,
+        body: 'Still broken here.',
+        user: { login: 'outside-dev', id: 7002, type: 'User' },
+        created_at: '2026-11-07T11:00:00Z',
+        updated_at: '2026-11-07T11:00:00Z',
+      });
+      expect(await prisma.comment.count({ where: { issueId: result!.issueId } })).toBe(0);
+    } finally {
+      await prisma.project.delete({ where: { id: project.id } });
+    }
+  });
+
+  it('holds a live link comment while a backfill of another link of the installation waits for the rate limit', async () => {
+    const { project, siblingLink } = await sibling('gadget-gim-paused');
+    try {
+      await prisma.githubImportRun.create({
+        data: {
+          repoLinkId: siblingLink.id,
+          requestedById: ctx.owner.id,
+          status: 'PAUSED',
+          resumeAt: new Date(Date.now() + 10 * 60_000),
+        },
+      });
+      const result = await importGithubIssue(link, issue(), { withComments: false });
+      expect(commentPosts()).toEqual([]);
+      const row = await prisma.githubIssueImport.findUniqueOrThrow({
+        where: { issueId: result!.issueId },
+      });
+      expect(await postLinkComment(row.id)).toBe('held');
+      expect(commentPosts()).toEqual([]);
+    } finally {
+      await prisma.project.delete({ where: { id: project.id } });
+    }
+  });
+
+  it('holds a live link comment when another link of the installation posted 400 in the hour', async () => {
+    const { project, siblingLink } = await sibling('gadget-gim-ceiling');
+    try {
+      const oldest = new Date(Date.now() - 50 * 60_000);
+      await prisma.githubIssueImport.createMany({
+        data: Array.from({ length: IMPORT_PACE.linkCommentsPerHour }, (_, i) => ({
+          repoLinkId: siblingLink.id,
+          projectId: project.id,
+          repoId: siblingLink.repoId,
+          githubIssueNumber: 10_000 + i,
+          githubIssueId: String(9_100_000 + i),
+          mirroredTitle: 't',
+          mirroredBodyHash: 'h',
+          mirroredLabels: [],
+          linkCommentId: String(81_000 + i),
+          linkCommentClaimedAt: new Date(oldest.getTime() + i * 1000),
+          githubUpdatedAt: new Date(),
+          lastImportedAt: new Date(),
+        })),
+      });
+      const result = await importGithubIssue(link, issue(), { withComments: false });
+      const row = await prisma.githubIssueImport.findUniqueOrThrow({
+        where: { issueId: result!.issueId },
+      });
+      expect(row.linkCommentId).toBeNull();
+      expect(commentPosts()).toEqual([]);
+      expect(await postLinkComment(row.id)).toBe('held');
+      expect(commentPosts()).toEqual([]);
+    } finally {
+      await prisma.project.delete({ where: { id: project.id } });
+    }
   });
 });

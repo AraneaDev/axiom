@@ -619,7 +619,14 @@ export async function configureImport(
     if (!locked) {
       throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
     }
-    await tx.githubRepoLink.update({ where: { id: locked.id }, data: { importIssues: enabled } });
+    await tx.githubRepoLink.update({
+      where: { id: locked.id },
+      // Off to on: issues GitHub made before now are no news for the issue:created rules
+      data: {
+        importIssues: enabled,
+        ...(enabled && !locked.importIssues && { importEnabledAt: new Date() }),
+      },
+    });
     const latest = () =>
       tx.githubImportRun.findFirst({
         where: { repoLinkId: locked.id },

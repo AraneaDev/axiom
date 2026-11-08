@@ -394,6 +394,18 @@ async function told(
   }
 }
 
+/**
+ * Whether an issue came from a GitHub Issues import (its text was written on GitHub).
+ * @param issueId The issue
+ */
+async function isImportedIssue(issueId: string): Promise<boolean> {
+  const row = await prisma.githubIssueImport.findUnique({
+    where: { issueId },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
 async function executeActions(
   projectId: string,
   actions: AutomationAction[],
@@ -493,12 +505,15 @@ async function executeActions(
             const resolvedIssueBody = action.body
               ? resolveTemplate(action.body, markdownCtx)
               : undefined;
+            // The text of an issue imported from GitHub is a stranger's: what a template copies
+            // of it notifies nobody it mentions, as the import itself does not
+            const imported = await isImportedIssue(issue.id);
             await outbound(async () => {
               await issuesService.createIssue(
                 projectId,
                 context.actorId,
                 { title: resolvedTitle, body: resolvedIssueBody },
-                { skipAutomation: true },
+                { skipAutomation: true, skipMentions: imported },
               );
             });
           }

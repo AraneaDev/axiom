@@ -26,7 +26,7 @@ import { findRepoLinkByProject } from './repo-link.service';
 export const RELEASE_MARKER_PREFIX = '<!-- axiom:release-notes';
 const MARKER_LINE = /^<!-- axiom:release-notes sha256=([0-9a-f]{64}) -->\r?\n/;
 const INCOMPLETE =
-  'These notes may be incomplete: GitHub listed only part of the commits or pull requests between the two tags.';
+  'These notes may be incomplete: GitHub listed only part of the commits between the two tags, or not every commit could be checked for its pull request.';
 
 const COMPARE_PAGES = 10;
 const MAX_COMMIT_LOOKUPS = 100;
@@ -47,7 +47,10 @@ export type ReleaseNotesResult = {
   releaseUrl: string;
   pullRequests: number;
   tickets: number;
-  /** Whether GitHub listed only part of the commits or pull requests */
+  /**
+   * Whether the notes may miss pull requests: GitHub listed only part of the compared commits, or
+   * Axiom's lookup cap stopped before every commit was checked for its pull request
+   */
   truncated: boolean;
   /** Whether the Release written is a draft, a person's, which Axiom left a draft */
   draft: boolean;
@@ -163,7 +166,8 @@ const tagHeading = (tag: string) => (PLAIN_TAG.test(tag) ? tag : codeSpan(tag, T
  * @param pulls The pull requests, with the keys of their tickets
  * @param tickets The tickets
  * @param target Where the text is rendered
- * @param truncated Whether GitHub listed only part of the changes: the notes end saying so
+ * @param truncated Whether GitHub listed only part of the commits, or the lookup cap left some
+ *   unchecked: the notes end saying so
  */
 export function releaseMarkdown(
   tag: string,
@@ -622,7 +626,11 @@ export async function writeReleaseNotes(
     'GET',
     `${repo}/releases/tags/${tagPath(tag)}`,
   ).then(
-    (reply) => releaseReply.parse(reply.data),
+    (reply) => {
+      const parsed = releaseReply.safeParse(reply.data);
+      if (parsed.success) return parsed.data;
+      throw new AppError(502, 'GitHub answered, but not with a release.', 'GITHUB_UNAVAILABLE');
+    },
     (err: unknown) => {
       if (isNotFound(err)) return null;
       throw err;

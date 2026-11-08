@@ -243,14 +243,15 @@ model TeamMembership {
 // ─── Projects & Issues ──────────────────────────────────────
 
 model Project {
-  id             String          @id @default(cuid())
-  githubRepoLink GithubRepoLink?
-  teamId         String
-  team           Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  name           String
-  slug           String
-  description    String? // markdown
-  prefix         String // issue key prefix, e.g. "TICK"
+  id                 String              @id @default(cuid())
+  githubRepoLink     GithubRepoLink?
+  githubIssueImports GithubIssueImport[]
+  teamId             String
+  team               Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  name               String
+  slug               String
+  description        String? // markdown
+  prefix             String // issue key prefix, e.g. "TICK"
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1479,6 +1480,8 @@ model GithubRepoLink {
   defaultRulesCreatedAt DateTime?
   /// Whether the repository's GitHub Issues are imported into the project
   importIssues          Boolean             @default(false)
+  /// When import was last switched from off to on: issues GitHub made before it run no creation rules
+  importEnabledAt       DateTime?
   /// How far the reconcile's import catch-up got through the issues GitHub changed (their updated_at)
   importIssuesSeenAt    DateTime?
   /// How far it got through the comments GitHub changed
@@ -1502,7 +1505,12 @@ model GithubRepoLink {
 /// A GitHub Issue imported into the linked project, with what the last import wrote per field
 model GithubIssueImport {
   id                   String                  @id @default(cuid())
-  repoLinkId           String
+  /// Null while the repository is unlinked: the row stays, and a new link of the same repository in
+  /// the same project takes it back, so its tombstone and link comment survive
+  repoLinkId           String?
+  /// The project and the GitHub repository the row was imported for, which outlive the link
+  projectId            String
+  repoId               BigInt
   githubIssueNumber    Int
   githubIssueId        String
   /// Null once the Axiom issue was deleted: the row then keeps the GitHub Issue from coming back
@@ -1523,11 +1531,14 @@ model GithubIssueImport {
   commentsImportedAt   DateTime?
   githubUpdatedAt      DateTime
   lastImportedAt       DateTime
-  repoLink             GithubRepoLink          @relation(fields: [repoLinkId], references: [id], onDelete: Cascade)
+  repoLink             GithubRepoLink?         @relation(fields: [repoLinkId], references: [id], onDelete: SetNull)
+  project              Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
   issue                Issue?                  @relation(fields: [issueId], references: [id], onDelete: SetNull)
   comments             GithubImportedComment[]
 
   @@unique([repoLinkId, githubIssueNumber])
+  @@unique([projectId, repoId, githubIssueNumber])
+  @@index([repoLinkId, linkCommentClaimedAt])
   @@map("github_issue_imports")
 }
 

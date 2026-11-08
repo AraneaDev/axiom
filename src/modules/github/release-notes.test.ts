@@ -4,6 +4,7 @@ import { marked } from 'marked';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { githubReleaseNotes } from '../../actions/previews';
 import { prisma } from '../../config/database';
 import app from '../../index';
 import { encryptSecret, secretContext } from '../../lib/secret-box';
@@ -23,6 +24,8 @@ import { codeSpan, RELEASE_MARKER_PREFIX, releaseMarkdown } from './release-note
 
 const CSRF = { 'X-Requested-With': 'XMLHttpRequest' };
 const WIDGET = 'acme-labs/widget';
+const PUBLIC_NOTE =
+  'Ticket titles and statuses go into the GitHub release, which anyone can read when the repository is public';
 const REPO_ID = 7301;
 const sha = (digit: number) => String(digit).repeat(40);
 const fake = useGithubFake('release');
@@ -447,7 +450,7 @@ describe('githubRelease.writeNotes', () => {
     expect(res.status).toBe(202);
     expect(res.body.status).toBe('pending_approval');
     expect(res.body.preview).toBe(
-      `Replace the body of GitHub release v1.2.0 in ${WIDGET} with release notes`,
+      `Replace the body of GitHub release v1.2.0 in ${WIDGET} with release notes. ${PUBLIC_NOTE}`,
     );
     expect(fake.requests).toEqual([]);
     expect(await notesPage()).toBeNull();
@@ -663,7 +666,9 @@ describe('githubRelease.writeNotes', () => {
     expect(res.status).toBe(201);
     expect(res.body.truncated).toBe(true);
     expect(fake.requests.filter((r) => r.path.endsWith('/pulls'))).toHaveLength(100);
-    const incomplete = /These notes may be incomplete/;
+    // Axiom's own lookup cap, not GitHub, cut these short: the closing line names that cause too
+    const incomplete =
+      /These notes may be incomplete: GitHub listed only part of the commits between the two tags, or not every commit could be checked for its pull request\.$/;
     expect(releases.get('v1.2.0')?.body.trimEnd().split('\n').at(-1)).toMatch(incomplete);
     expect((await notesPage())?.body.trimEnd().split('\n').at(-1)).toMatch(incomplete);
   });
@@ -684,6 +689,21 @@ describe('githubRelease.writeNotes', () => {
     expect(res.status).toBe(201);
     expect(res.body.truncated).toBe(true);
     expect(fake.requests.filter((r) => r.path.includes('/compare/'))).toHaveLength(10);
+    expect(releases.get('v1.2.0')?.body.trimEnd().split('\n').at(-1)).toMatch(
+      /^These notes may be incomplete: GitHub listed only part of the commits between the two tags/,
+    );
+  });
+
+  it('answers 502 when GitHub answers the Release lookup with something unreadable, and writes nothing', async () => {
+    fake.on('GET /repos/:owner/:repo/releases/tags/:tag', {
+      status: 200,
+      body: { id: 'not-a-number', tag_name: 7 },
+    });
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0' });
+    expect(res.status).toBe(502);
+    expect(res.body.error.code).toBe('GITHUB_UNAVAILABLE');
+    expect(releaseWrites()).toEqual([]);
+    expect(await notesPage()).toBeNull();
   });
 
   it('refuses a hand-written draft Release of the tag, and posts nothing', async () => {
@@ -760,7 +780,20 @@ describe('githubRelease.writeNotes', () => {
     const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0', replaceBody: true }, asToken());
     expect(res.status).toBe(202);
     expect(res.body.preview).toBe(
-      `Replace the body of GitHub release v1.2.0 in ${WIDGET} and the wiki page "Release v1.2.0" in Releases with release notes`,
+      `Replace the body of GitHub release v1.2.0 in ${WIDGET} and the wiki page "Release v1.2.0" in Releases with release notes. ${PUBLIC_NOTE}`,
+    );
+  });
+
+  it('says in the preview that ticket titles and statuses go to the GitHub release', async () => {
+    await prisma.page.create({
+      data: { spaceId, title: 'Release v1.2.0', slug: 'release-v1-2-0', body: 'Our own notes' },
+    });
+    const res = await write({ tag: 'v1.2.0', previousTag: 'v1.1.0', replaceBody: true }, asToken());
+    expect(res.status).toBe(202);
+    expect(res.body.preview).toContain(PUBLIC_NOTE);
+    const plain = await githubReleaseNotes(ctx.projectId, 'v1.2.0', false);
+    expect(plain).toBe(
+      `Write the release notes of v1.2.0 in ${WIDGET} to a wiki page and the GitHub release. ${PUBLIC_NOTE}`,
     );
   });
 

@@ -195,18 +195,27 @@ export async function linkRepo(userId: string, projectId: string, repo: string) 
   });
 
   try {
-    const link = await prisma.githubRepoLink.create({
-      data: {
-        projectId,
-        repoId: BigInt(repository.id),
-        installationId: BigInt(installation.data.id),
-        owner: repository.owner.login,
-        name: repository.name,
-        fullName: repository.full_name,
-        defaultBranch: repository.default_branch,
-        htmlUrl: repository.html_url,
-        linkedById: userId,
-      },
+    const link = await prisma.$transaction(async (tx) => {
+      const created = await tx.githubRepoLink.create({
+        data: {
+          projectId,
+          repoId: BigInt(repository.id),
+          installationId: BigInt(installation.data.id),
+          owner: repository.owner.login,
+          name: repository.name,
+          fullName: repository.full_name,
+          defaultBranch: repository.default_branch,
+          htmlUrl: repository.html_url,
+          linkedById: userId,
+        },
+      });
+      // The import rows an earlier link of this repository left in this project come back: an
+      // issue deleted in Axiom stays deleted, and no GitHub Issue gets a second link comment
+      await tx.githubIssueImport.updateMany({
+        where: { repoLinkId: null, projectId, repoId: created.repoId },
+        data: { repoLinkId: created.id },
+      });
+      return created;
     });
     // Before the first reconcile, which may find pull requests the rules should already see. A
     // failure is logged and left for the next deploy's migrate step; it never undoes the link.
@@ -234,7 +243,9 @@ const repoLinked = () =>
   new AppError(409, 'This repository is linked to another project', 'GITHUB_REPO_LINKED');
 
 /**
- * Removes a project's link. What the later GitHub tables hold for it cascades from the row.
+ * Removes a project's link. What the later GitHub tables hold for it cascades from the row, except
+ * the import rows: they stay with the project and the repository, so a new link of the same
+ * repository in the same project takes them back. Imported issues stop following GitHub meanwhile.
  * @param projectId The project
  */
 export async function unlinkRepo(projectId: string): Promise<{ unlinked: boolean }> {

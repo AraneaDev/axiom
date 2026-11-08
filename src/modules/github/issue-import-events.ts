@@ -9,7 +9,12 @@ import { logActivity } from '../activity/activity.service';
 import { orgActorId, resolveGithubActor } from './github-actor';
 import { senderSchema, timestamp, touchLinkDelivery } from './github-store';
 import { ImportCappedError } from './import-cap';
-import { importComment, importGithubIssue, type GithubIssuePayload } from './issue-import.service';
+import {
+  importComment,
+  importGithubIssue,
+  importNewsSince,
+  type GithubIssuePayload,
+} from './issue-import.service';
 import { onGithubEvent, type GithubDeliveryContext } from './webhook-dispatch';
 
 const issueRef = z.object({
@@ -89,14 +94,15 @@ onGithubEvent('issues', async (d) => {
   }
   if (!IMPORTING.has(d.action)) return 'ignored';
 
-  // Only an issue made on GitHub after the link is news for the issue:created rules. GitHub sends
-  // `opened` and a `labeled` per label of a new issue at once, and whichever runs first makes
-  // it; one found through an edit or a reopen may be years old (the backfill's rule)
+  // Only an issue made on GitHub after the link and after import was switched on is news for the
+  // issue:created rules. GitHub sends `opened` and a `labeled` per label of a new issue at once,
+  // and whichever runs first makes it; one found through an edit or a reopen may be years old
+  // (the backfill's rule)
   const createdAt = parsed.data.issue.created_at;
   const isNew =
     (d.action === 'opened' || d.action === 'labeled') &&
     !!createdAt &&
-    new Date(createdAt) >= link.createdAt;
+    new Date(createdAt) >= importNewsSince(link);
   const result = await capped(() =>
     importGithubIssue(link, d.payload.issue as GithubIssuePayload, {
       // Read once per import, so a delivery that failed after the issue was made reads them again

@@ -116,6 +116,8 @@ beforeEach(async () => {
   await prisma.githubInstallation.create({
     data: { id: BigInt(INSTALLATION_ID), accountLogin: 'acme-labs', accountType: 'Organization' },
   });
+  // Import rows outlive an unlink
+  await prisma.githubIssueImport.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
   await prisma.githubRepoLink.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
   await prisma.githubDelivery.deleteMany();
   link = await prisma.githubRepoLink.create({
@@ -136,6 +138,8 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  // Import rows outlive an unlink
+  await prisma.githubIssueImport.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
   await prisma.githubRepoLink.deleteMany({ where: { repoId: BigInt(REPO_ID) } });
   await prisma.githubInstallation.deleteMany();
   await prisma.githubAccount.deleteMany();
@@ -253,6 +257,26 @@ describe('issues events', () => {
     await issuesEvent('edited', ghIssue({ number: 33, id: 2200033 }));
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect((await imported(33)).comments).toHaveLength(0);
+  });
+});
+
+describe('automation on imported text', () => {
+  it('notifies nobody a create_issue rule copies from an imported body', async () => {
+    await prisma.notification.deleteMany({ where: { userId: member.id } });
+    await createRule(ctx.projectId, {
+      name: 'copy',
+      trigger: 'issue:created',
+      actions: [{ type: 'create_issue', title: 'Follow up', body: 'From GitHub: {{issue.body}}' }],
+    });
+    await issuesEvent('opened', ghIssue({ body: `Ping @${member.username} about this` }));
+    await vi.waitFor(async () => {
+      const copy = await prisma.issue.findFirst({
+        where: { projectId: ctx.projectId, title: 'Follow up' },
+      });
+      expect(copy?.body).toContain(`@${member.username}`);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await prisma.notification.count({ where: { userId: member.id } })).toBe(0);
   });
 });
 
@@ -674,6 +698,53 @@ describe('fix round 3', () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect((await imported(72)).comments).toHaveLength(0);
     expect((await importCapState(link.id)).issues.used).toBe(2);
+  });
+});
+
+describe('import switched on after the link', () => {
+  const HOUR = 3_600_000;
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+  const quiet = () => ({ pulls: [], branches: [], checkRuns: {} });
+
+  // Linked on 1 November, import switched on on 5 November
+  beforeEach(async () => {
+    link = await prisma.githubRepoLink.update({
+      where: { id: link.id },
+      data: { importEnabledAt: new Date('2026-11-05T00:00:00Z') },
+    });
+    await createRule(ctx.projectId, {
+      name: 'welcome',
+      trigger: 'issue:created',
+      actions: [{ type: 'add_comment', body: 'Welcome' }],
+    });
+  });
+
+  it('runs no rules for a labeled issue made between the link and the switch-on', async () => {
+    await issuesEvent('labeled', ghIssue({ created_at: '2026-11-03T09:00:00Z' }), {
+      label: { name: 'bug' },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect((await imported()).comments).toHaveLength(0);
+  });
+
+  it('runs no rules for a caught-up issue made between the link and the switch-on', async () => {
+    const between = ghIssue({
+      number: 73,
+      id: 2200073,
+      created_at: '2026-11-03T09:00:00Z',
+      updated_at: ago(HOUR),
+    });
+    fake.setRepoLists(FULL_NAME, { issues: [between], issueComments: {}, ...quiet() });
+    await reconcileRepo(link.id);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect((await imported(73)).comments).toHaveLength(0);
+  });
+
+  it('still runs them for an issue opened after the switch-on', async () => {
+    await issuesEvent('opened', ghIssue({ created_at: '2026-11-06T09:00:00Z' }));
+    await vi.waitFor(async () => {
+      expect((await imported()).comments.map((c) => c.body)).toEqual(['Welcome']);
+    });
   });
 });
 

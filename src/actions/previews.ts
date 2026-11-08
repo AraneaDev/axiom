@@ -1803,7 +1803,12 @@ export async function githubRepoUnlink(projectId: string): Promise<string> {
   if (!link)
     throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
   const issues = await countLinkedIssues(link.id);
-  return `Unlink ${link.fullName} from ${await projectLabel(projectId)}: its branches, pull requests and checks disappear from ${amount(issues, 'issue')}`;
+  const unlink = `Unlink ${link.fullName} from ${await projectLabel(projectId)}: its branches, pull requests and checks disappear from ${amount(issues, 'issue')}`;
+  const imported = await prisma.githubIssueImport.count({
+    where: { repoLinkId: link.id, issueId: { not: null } },
+  });
+  if (imported === 0) return unlink;
+  return `${unlink}. Imported issues (${imported}) stay but stop following GitHub; linking ${link.fullName} to this project again picks them up, and what was deleted in Axiom stays deleted`;
 }
 
 /**
@@ -1844,6 +1849,10 @@ export async function githubImportConfigure(projectId: string, enabled: boolean)
   return `Import ${issues} GitHub Issues of ${link.fullName} into ${project} and post one link comment on each, as the GitHub App`;
 }
 
+/** The notes publish Axiom's ticket titles and statuses outside Axiom */
+const RELEASE_PUBLIC_NOTE =
+  'Ticket titles and statuses go into the GitHub release, which anyone can read when the repository is public';
+
 /**
  * What writing the release notes of a tag does, as the approver reads it. The repository is the
  * stored one; the tag is the caller's, already held to git's ref rules by the input. With
@@ -1867,7 +1876,7 @@ export async function githubReleaseNotes(
   if (!link)
     throw new AppError(404, 'This project is not linked to a GitHub repository', 'NOT_FOUND');
   if (!replaceBody) {
-    return `Write the release notes of ${tag} in ${link.fullName} to a wiki page and the GitHub release`;
+    return `Write the release notes of ${tag} in ${link.fullName} to a wiki page and the GitHub release. ${RELEASE_PUBLIC_NOTE}`;
   }
   const space = spaceId ?? link.releaseNotesSpaceId;
   const title = `Release ${tag}`;
@@ -1879,9 +1888,10 @@ export async function githubReleaseNotes(
       })
     : null;
   const ownPage = page && !page.body.startsWith(RELEASE_MARKER_PREFIX);
-  return ownPage
+  const replace = ownPage
     ? `Replace the body of GitHub release ${tag} in ${link.fullName} and the wiki page "${title}" in ${page.space.name} with release notes`
     : `Replace the body of GitHub release ${tag} in ${link.fullName} with release notes`;
+  return `${replace}. ${RELEASE_PUBLIC_NOTE}`;
 }
 
 const SHORT_SHA = 12;
